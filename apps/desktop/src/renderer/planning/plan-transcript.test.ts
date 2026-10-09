@@ -31,6 +31,7 @@ function said(count: number): TranscriptRegion {
 }
 
 const roots: Root[] = [];
+const copyNothing = () => Promise.resolve();
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -73,6 +74,7 @@ test("each line is drawn under its speaker, the developer's and Luke's told apar
         ],
       },
       onRetry: () => undefined,
+      copyText: copyNothing,
     }),
   );
   assert.match(drawn, /class="plan-transcript ph-no-capture"/u);
@@ -110,6 +112,7 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
         ],
       },
       onRetry: () => undefined,
+      copyText: copyNothing,
     }),
   );
   assert.doesNotMatch(drawn, /<img/u);
@@ -122,6 +125,7 @@ test("the empty, reading, and failed states each say where the transcript stands
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.EMPTY },
       onRetry: () => undefined,
+      copyText: copyNothing,
     }),
   );
   assert.match(empty, /Nothing said yet — start a call and the transcript appears here\./u);
@@ -130,6 +134,7 @@ test("the empty, reading, and failed states each say where the transcript stands
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.READING },
       onRetry: () => undefined,
+      copyText: copyNothing,
     }),
   );
   assert.match(reading, /aria-busy="true"/u);
@@ -146,6 +151,7 @@ test("the empty, reading, and failed states each say where the transcript stands
         onRetry: () => {
           retried += 1;
         },
+        copyText: copyNothing,
       }),
     ),
   );
@@ -163,7 +169,11 @@ test("a new line keeps the list at its newest, unless the developer scrolled up 
   const root = createRoot(container);
   roots.push(root);
   const draw = (region: TranscriptRegion) =>
-    act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
+    act(() =>
+      root.render(
+        createElement(PlanTranscript, { region, onRetry: () => undefined, copyText: copyNothing }),
+      ),
+    );
 
   draw(said(1));
   const box = scrollBox(container, 1_000);
@@ -183,4 +193,126 @@ test("a new line keeps the list at its newest, unless the developer scrolled up 
   scrollBox(container, 1_400);
   draw(said(4));
   assert.equal(box.scrollTop, 1_400);
+});
+
+/** Two calls on one plan, the second standing, with a run of the developer's lines on the first. */
+const TWO_CALLS: TranscriptRegion = {
+  kind: TRANSCRIPT_REGION.READY,
+  earlierOmitted: false,
+  calls: [
+    {
+      key: "call-1",
+      startedAt: Date.UTC(2026, 9, 8, 15, 30),
+      live: false,
+      messages: [
+        {
+          id: "0",
+          role: TRANSCRIPT_SPEAKER.USER,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Invites should expire." }],
+        },
+        {
+          id: "1",
+          role: TRANSCRIPT_SPEAKER.USER,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "After a week, say." }],
+        },
+        {
+          id: "2",
+          role: TRANSCRIPT_SPEAKER.ASSISTANT,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "A week it is." }],
+        },
+      ],
+    },
+    {
+      key: "call-2",
+      startedAt: Date.UTC(2026, 9, 9, 9, 5),
+      live: true,
+      messages: [
+        {
+          id: "3",
+          role: TRANSCRIPT_SPEAKER.ASSISTANT,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Where were we?" }],
+        },
+      ],
+    },
+  ],
+};
+
+test("each call begins at a divider saying when it started, the standing one marked live, and one speaker's run of lines is one turn", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanTranscript, {
+        region: TWO_CALLS,
+        onRetry: () => undefined,
+        copyText: copyNothing,
+      }),
+    ),
+  );
+  const log = container.querySelector('[role="log"]');
+  assert.ok(log);
+
+  // Two dividers, each a hairline after its words, the live call's saying so.
+  const dividers = [...log.querySelectorAll("[data-checkpoint]")];
+  assert.equal(dividers.length, 2);
+  assert.ok(dividers[0]?.textContent?.includes(":"), "the first divider carries a time");
+  assert.equal(dividers[0]?.textContent?.includes("Live"), false);
+  assert.ok(dividers[1]?.textContent?.endsWith("Live"));
+
+  // The developer's two lines are one turn, in a bubble at the right; Luke's turns stand under his mark.
+  const turns = [...log.querySelectorAll("[data-speaker]")];
+  assert.deepEqual(
+    turns.map((turn) => turn.getAttribute("data-speaker")),
+    [TRANSCRIPT_SPEAKER.USER, TRANSCRIPT_SPEAKER.ASSISTANT, TRANSCRIPT_SPEAKER.ASSISTANT],
+  );
+  const [developer, luke] = turns;
+  assert.ok(developer);
+  assert.ok(developer.classList.contains("is-user"));
+  assert.ok(developer.textContent?.includes("Invites should expire."));
+  assert.ok(developer.textContent?.includes("After a week, say."));
+  assert.equal(developer.querySelector(".luke-face"), null);
+  assert.ok(luke);
+  assert.ok(luke.classList.contains("is-assistant"));
+  assert.ok(luke.querySelector(".luke-face"), "Luke's turn stands under his mark");
+
+  // The call's order is kept: the divider, the developer, Luke, the next divider, Luke.
+  const order = [...log.querySelectorAll("[data-checkpoint], [data-speaker]")].map((element) =>
+    element.hasAttribute("data-checkpoint") ? "call" : element.getAttribute("data-speaker"),
+  );
+  assert.deepEqual(order, ["call", "user", "assistant", "call", "assistant"]);
+});
+
+test("a turn's copy hands the clipboard its lines, a paragraph each, and shows the check once the clipboard took them", async () => {
+  const copied: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanTranscript, {
+        region: TWO_CALLS,
+        onRetry: () => undefined,
+        copyText: (words) => {
+          copied.push(words);
+          return Promise.resolve();
+        },
+      }),
+    ),
+  );
+  const copy = container.querySelector<HTMLButtonElement>(
+    '[data-speaker="user"] button[aria-label="Copy"]',
+  );
+  assert.ok(copy);
+  await act(async () => {
+    copy.click();
+    await Promise.resolve();
+  });
+  assert.deepEqual(copied, ["Invites should expire.\n\nAfter a week, say."]);
+  assert.equal(
+    container.querySelector('[data-speaker="user"] button')?.getAttribute("aria-label"),
+    "Copied",
+  );
 });

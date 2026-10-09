@@ -352,10 +352,13 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
   );
 
   assert.match(markup, /<section class="plan-transcript ph-no-capture" aria-label="Transcript">/u);
-  assert.match(markup, /data-speaker="user">You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su);
   assert.match(
     markup,
-    /data-speaker="assistant">Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
+    /data-speaker="user"[^>]*>.*?>You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su,
+  );
+  assert.match(
+    markup,
+    /data-speaker="assistant"[^>]*>.*?>Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
   );
   assert.match(markup, />Live</u);
 });

@@ -35,4 +35,20 @@
      own literal. */
   --default-transition-duration: var(--duration-quick);
   --default-transition-timing-function: var(--spring);
+
+  /* The one endless loop the components run: the light passing along a
+     Shimmer's words (../ai-elements/shimmer.tsx). Its duration is a literal
+     as DESIGN.md allows a loop with no end of its own, because the element
+     that runs it answers `--loop-motion` with its play state. */
+  --animate-shimmer: shimmer 2s linear infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 100% center;
+    }
+
+    to {
+      background-position: 0% center;
+    }
+  }
 }
