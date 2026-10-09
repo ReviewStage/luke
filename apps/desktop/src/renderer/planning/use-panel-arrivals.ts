@@ -132,6 +132,10 @@ export function usePanelArrivals(input: {
       [SIDE_PANEL_TAB.BOARD]: board,
       [SIDE_PANEL_TAB.CODE]: code,
     } satisfies Record<ArrivingTab, boolean | undefined>;
+    // Note that the panel is followed through the loop as each arrival
+    // leaves it, because two arriving on one read see the same props.
+    let open = panel.open;
+    let shown = panel.tab;
     for (const tab of ARRIVING_TABS) {
       const held = holds[tab];
       if (held === undefined) continue;
@@ -143,14 +147,15 @@ export function usePanelArrivals(input: {
         continue;
       }
       if (!held || !waiting.delete(tab) || !recordArrival(planId, tab)) continue;
-      if (!panel.open) {
+      if (!open) {
         panel.onChoose(tab);
+        open = true;
+        shown = tab;
         continue;
       }
       panel.onAdd(tab);
-      if (panel.tab !== undefined && panel.tab !== tab) {
-        setUnread((was) => withUnread(was, planId, tab));
-      }
+      if (shown === undefined) shown = tab;
+      else if (shown !== tab) setUnread((was) => withUnread(was, planId, tab));
     }
   }, [planId, board, code, panel.open, panel.tab, panel.onChoose, panel.onAdd]);
 

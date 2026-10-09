@@ -40,8 +40,9 @@ function closesTab(key: string): boolean {
 
 /**
  * The strip of tabs. Note that focus follows a tab closed from the keyboard
- * to the one chosen in its place a render later, because the tab it was on
- * is gone by then.
+ * to the tab that took its place a render later, because the tab it was on
+ * is gone by then; with none left, it goes on to the control after the
+ * strip, the side panel's "+".
  */
 export function TabStrip({
   label,
@@ -53,11 +54,17 @@ export function TabStrip({
   children: React.ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
-  const refocus = useRef(false);
+  // Where a tab was closed from the keyboard, until focus has moved on from it.
+  const closedAt = useRef<number | undefined>(undefined);
   useLayoutEffect(() => {
-    if (!refocus.current) return;
-    refocus.current = false;
-    strip.current?.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`)?.focus();
+    const at = closedAt.current;
+    if (at === undefined || strip.current === null) return;
+    closedAt.current = undefined;
+    const tabs = [...strip.current.querySelectorAll<HTMLElement>(TAB)];
+    const after = strip.current.nextElementSibling;
+    const next =
+      tabs[Math.min(at, tabs.length - 1)] ?? (after instanceof HTMLElement ? after : null);
+    next?.focus();
   });
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -65,7 +72,7 @@ export function TabStrip({
     const at = event.target instanceof HTMLElement ? tabs.indexOf(event.target) : -1;
     if (at < 0) return;
     if (closesTab(event.key)) {
-      refocus.current = true;
+      closedAt.current = at;
       return;
     }
     const next = tabAfter(event.key, at, tabs.length);

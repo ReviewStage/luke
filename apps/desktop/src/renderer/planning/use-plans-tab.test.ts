@@ -524,3 +524,16 @@ test("an arrival on an open panel with every tab closed shows the arrival's tab,
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.deepEqual(tab.control().unreadTabs, []);
 });
+
+test("the board and the code arriving on one read of an open panel with every tab closed show the board and dot the code", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD }, voice: ON_CALL });
+  act(() => tab.control().sidePanel.onToggle());
+  for (const closed of [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]) {
+    act(() => tab.control().sidePanel.onClose(closed));
+  }
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1), code: CODE } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);
+});

@@ -956,3 +956,21 @@ test("a panel an earlier version kept, before its tabs could close, opens as it 
   assert.deepEqual(panelTabs(unread), ["Board", "Code", "Transcript"]);
   assert.equal(chosenTab(unread), "Board");
 });
+
+test("Delete on a tab the arrow keys reached closes it and hands focus to the tab after it, and the last tab closed hands it to the +", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const board = tabNamed(page, "Board");
+  act(() => board.focus());
+
+  key(board, "ArrowRight");
+  key(tabNamed(page, "Code"), "Delete");
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+  assert.equal(chosenTab(page), "Board", "closing another tab leaves the chosen one chosen");
+
+  key(tabNamed(page, "Transcript"), "Delete");
+  key(tabNamed(page, "Board"), "Delete");
+  assert.deepEqual(panelTabs(page), []);
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Open a tab");
+});
