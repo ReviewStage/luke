@@ -6,12 +6,20 @@ import { useCallback, useEffect, useState } from "react";
  *
  * The plan's document is always the page's main content; what supports it
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
- * calls) stands in a panel at the
- * window's right that the developer opens and closes, as every devtool
+ * calls, and each coding agent started on the plan) stands in a panel at
+ * the window's right that the developer opens and closes, as every devtool
  * window's secondary sidebar does. The one thing that opens it on its own is
  * Luke first drawing on a plan's board or first showing its code
- * (`use-panel-arrivals.ts`), once per plan and kind. Not to be confused with
- * "the panel", which in this renderer is Luke's whole surface.
+ * (`use-panel-arrivals.ts`), once per plan and kind, and a coding agent
+ * just started, whose tab opens selected. Not to be confused with "the
+ * panel", which in this renderer is Luke's whole surface.
+ *
+ * The three fixed tabs are a constant; the agent tabs are the plan's, one
+ * per agent, and come and go with the plan. A kept tab naming an agent the
+ * open plan has none of reads as the board, so leaving a plan or opening
+ * another never shows a tab with nothing behind it, while the kept value
+ * stands until the next choice: the plan whose agent it names shows it
+ * again.
  *
  * The three facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
@@ -24,21 +32,47 @@ import { useCallback, useEffect, useState } from "react";
  * the document.
  */
 
-/** The panel's tabs. A tab is one entry here, one label below, and one case where the panel draws it. */
+/** The panel's fixed tabs. A tab is one entry here, one label below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   TRANSCRIPT: "transcript",
 } as const;
 
-export type SidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
+export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
-/** The tab strip, in order. */
+/** One coding agent's tab, named by the agent it shows. */
+export interface AgentSidePanelTab {
+  readonly agent: string;
+}
+
+/** A tab of the panel: one of the fixed three, or one agent's. */
+export type SidePanelTab = FixedSidePanelTab | AgentSidePanelTab;
+
+/** The fixed tab strip, in order; the agent tabs follow it. */
 export const SIDE_PANEL_TABS = [
   { tab: SIDE_PANEL_TAB.BOARD, label: "Board" },
   { tab: SIDE_PANEL_TAB.CODE, label: "Code" },
   { tab: SIDE_PANEL_TAB.TRANSCRIPT, label: "Transcript" },
-] as const satisfies readonly { tab: SidePanelTab; label: string }[];
+] as const satisfies readonly { tab: FixedSidePanelTab; label: string }[];
+
+const FIXED_TABS: ReadonlySet<SidePanelTab> = new Set(Object.values(SIDE_PANEL_TAB));
+
+/** Whether a tab is one agent's: any tab that is not one of the fixed three. */
+export function isAgentTab(tab: SidePanelTab): tab is AgentSidePanelTab {
+  return !FIXED_TABS.has(tab);
+}
+
+/** Whether two tabs are the same tab. */
+export function sameTab(a: SidePanelTab, b: SidePanelTab): boolean {
+  if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
+  return a === b;
+}
+
+/** A tab's key for a list that draws one element per tab: a fixed tab's word, or the agent's own id, which no fixed word spells. */
+export function tabKey(tab: SidePanelTab): string {
+  return isAgentTab(tab) ? tab.agent : tab;
+}
 
 /** How wide the panel may be dragged, in CSS pixels, and where it starts. */
 export const SIDE_PANEL_WIDTH = {
@@ -52,7 +86,10 @@ const STORAGE_KEY = "luke.sidePanel";
 
 const sidePanelStateSchema = Schema.Struct({
   open: Schema.Boolean,
-  tab: Schema.Literals(Object.values(SIDE_PANEL_TAB)),
+  tab: Schema.Union([
+    Schema.Literals(Object.values(SIDE_PANEL_TAB)),
+    Schema.Struct({ agent: Schema.String }),
+  ]),
   width: Schema.Number,
 });
 
@@ -105,11 +142,27 @@ function readStored(): SidePanelState {
 }
 
 /**
+ * The tab the panel shows for the one kept: an agent tab whose agent the
+ * open plan has none of reads as the board. With the plan's agents not yet
+ * read, the kept tab stands, so a tab kept across a launch is not swapped
+ * for the board and back while the list is on its way.
+ */
+export function shownTab(kept: SidePanelTab, agents: readonly string[] | undefined): SidePanelTab {
+  if (!isAgentTab(kept) || agents === undefined) return kept;
+  return agents.includes(kept.agent) ? kept : SIDE_PANEL_TAB.BOARD;
+}
+
+/**
  * The side panel's state: the kept preference, kept again on every change,
  * or where a fixture run stages one, that staged state and the presses on
- * it, which are kept nowhere.
+ * it, which are kept nowhere. `agents` are the open plan's agent tabs, by
+ * agent id, or nothing while they have not been read; the tab shown is held
+ * to them.
  */
-export function useSidePanel(staged: SidePanelState | undefined): SidePanelControl {
+export function useSidePanel(
+  staged: SidePanelState | undefined,
+  agents?: readonly string[] | undefined,
+): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
   // arrives, a render after the kept preference was read.
@@ -151,6 +204,7 @@ export function useSidePanel(staged: SidePanelState | undefined): SidePanelContr
   );
   return {
     ...state,
+    tab: shownTab(state.tab, agents),
     fullScreen: state.open && fullScreen,
     onToggle,
     onToggleFullScreen,

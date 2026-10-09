@@ -39,11 +39,22 @@
     },
     "cursor": {
       "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "starting",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ]
     }
   },
   "required": [
     "messages",
-    "cursor"
+    "cursor",
+    "status"
   ],
   "additionalProperties": false
 }

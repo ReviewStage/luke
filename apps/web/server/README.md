@@ -1710,14 +1710,20 @@ Start that named a model writes it as the account's default.
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, and status, read from its newest turn (`coder-host/status.ts`):
 `starting` before one, `running`, `completed`, `failed`, or `cancelled`,
-with a running turn carrying a Stop stamp reading as cancelled already.
+with a running turn carrying a Stop stamp reading as cancelled already, and
+an agent still without a turn row five minutes after its Start
+(`CODER.STARTING_GRACE`) reading as failed rather than starting forever.
 `GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
-conversation's rows past the cursor as `UIMessage`s and the cursor to read
-on from (`coder-host/transcript.ts`): a row is new past a cursor when its
-sequence is higher or it was amended in place at a later journal revision,
-which is how a turn's journal is heard again as it grows; a read with
-nothing new is held open while the newest turn runs, looked at every half
-second and let go at twenty seconds, and an idle agent answers at once.
+conversation's rows past the cursor as `UIMessage`s, the cursor to read on
+from, and the agent's status as the page was read
+(`coder-host/transcript.ts`): a row is new past a cursor when its sequence
+is higher or it was amended in place at a later journal revision, which is
+how a turn's journal is heard again as it grows; a read with nothing new is
+held open while the agent is starting or its newest turn runs, looked at
+every half second and let go at twenty seconds, so the desktop's loop of
+held reads ends on the page whose status says the agent ended and a tab on
+a starting agent costs one held read per hold; an agent that has ended
+answers at once.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.

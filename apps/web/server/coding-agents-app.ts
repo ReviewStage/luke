@@ -6,7 +6,7 @@ import {
 } from "@sidecar/hosted";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { readEither } from "@sidecar/wire/effect";
-import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -161,7 +161,7 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, SqlClient.SqlClient> {
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, [agent.conversationId]));
-  return codingAgentSummary(agent, turns.get(agent.conversationId));
+  return codingAgentSummary(agent, turns.get(agent.conversationId), yield* Clock.currentTimeMillis);
 });
 
 /**
@@ -252,7 +252,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
-    agent: codingAgentSummary(agent, undefined),
+    agent: codingAgentSummary(agent, undefined, yield* Clock.currentTimeMillis),
   });
 });
 
@@ -279,8 +279,9 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
       agents.map((agent) => agent.conversationId),
     ),
   );
+  const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) => codingAgentSummary(agent, turns.get(agent.conversationId))),
+    agents: agents.map((agent) => codingAgentSummary(agent, turns.get(agent.conversationId), now)),
   });
 });
 
@@ -304,7 +305,7 @@ const ownedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** GET reads the agent's transcript past the cursor, held open while the agent runs. */
+/** GET reads the agent's transcript past the cursor, held open while the agent is starting or runs, with the agent's status as the page was read. */
 const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
@@ -317,13 +318,14 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
     unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? CODING_AGENT_CURSOR_START),
   );
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { target } = yield* ownedAgent(seams, request);
+  const { agent, target } = yield* ownedAgent(seams, request);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after.success)),
+    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after.success), agent),
   );
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     messages: page.messages,
     cursor: cursorToWire(page.cursor),
+    status: page.status,
   });
 });
 
@@ -352,12 +354,17 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   const { userId, agent, target } = yield* ownedAgent(seams, request);
   const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, [agent.conversationId]));
   const turn = turns.get(agent.conversationId);
+  const now = yield* Clock.currentTimeMillis;
   if (!stoppable(turn)) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: codingAgentSummary(agent, turn) });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: codingAgentSummary(agent, turn, now),
+    });
   }
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: codingAgentSummary(agent, turn) });
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: codingAgentSummary(agent, turn, now),
+    });
   }
   // The cancel names the turn the row was written for, never the session's turn under way, so a
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and

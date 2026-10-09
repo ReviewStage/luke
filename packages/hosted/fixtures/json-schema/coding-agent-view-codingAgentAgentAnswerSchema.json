@@ -1,0 +1,77 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "agent": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "planId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "model": {
+              "type": "string"
+            },
+            "effort": {
+              "type": "string"
+            },
+            "createdAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "starting",
+                "running",
+                "completed",
+                "failed",
+                "cancelled"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "planId",
+            "model",
+            "effort",
+            "createdAt",
+            "status"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "agent"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-sign-in-required",
+            "invalid-choice"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -3,8 +3,10 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted";
+import { Duration } from "effect";
 import { TURN_STATUS } from "../../core.js";
 import type { CodingAgent, CodingAgentLatestTurn } from "../coding-agent-store.js";
+import { CODER } from "./bounds.js";
 
 /**
  * status.ts -- where a coding agent stands, read from its newest turn.
@@ -13,7 +15,10 @@ import type { CodingAgent, CodingAgentLatestTurn } from "../coding-agent-store.j
  * `starting` before the first turn is queued, `running` while eve runs it,
  * and how it ended after. A turn still running that carries a Stop stamp
  * reads as cancelled already, since the Stop is on its way to eve and
- * nothing the turn still does changes where it ends.
+ * nothing the turn still does changes where it ends. An agent with no turn
+ * row long past its Start (`CODER.STARTING_GRACE`) reads as failed rather
+ * than starting forever: eve took the session, and its first turn lands in
+ * seconds or not at all.
  */
 
 /** The status a turn row's own status word reads as. */
@@ -31,9 +36,28 @@ function isTurnStatusWord(status: string): status is keyof typeof STATUS_OF_TURN
   return STATUS_WORDS.has(status);
 }
 
-/** Where an agent stands, from its newest turn; starting with none. */
-export function codingAgentStatusOf(turn: CodingAgentLatestTurn | undefined): CodingAgentStatus {
-  if (turn === undefined) return CODING_AGENT_STATUS.STARTING;
+/** When the agent was started, and when it is being read, which is what an agent with no turn is judged by. */
+export interface AgentStanding {
+  readonly createdAt: Date;
+  /** Epoch milliseconds now. */
+  readonly now: number;
+}
+
+/** Whether an agent with no turn row is still inside the grace its first turn may land in. */
+function withinStartingGrace(standing: AgentStanding): boolean {
+  return standing.now - standing.createdAt.getTime() <= Duration.toMillis(CODER.STARTING_GRACE);
+}
+
+/** Where an agent stands, from its newest turn; starting with none inside the grace, failed with none past it. */
+export function codingAgentStatusOf(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: AgentStanding,
+): CodingAgentStatus {
+  if (turn === undefined) {
+    return withinStartingGrace(standing)
+      ? CODING_AGENT_STATUS.STARTING
+      : CODING_AGENT_STATUS.FAILED;
+  }
   // A row outside the vocabulary is a write this build does not know, read as the one status that claims nothing.
   if (!isTurnStatusWord(turn.status)) return CODING_AGENT_STATUS.FAILED;
   const status = STATUS_OF_TURN[turn.status];
@@ -42,10 +66,11 @@ export function codingAgentStatusOf(turn: CodingAgentLatestTurn | undefined): Co
     : status;
 }
 
-/** One agent as the tabs draw it. */
+/** One agent as the tabs draw it, its status read at `now`. */
 export function codingAgentSummary(
   agent: CodingAgent,
   turn: CodingAgentLatestTurn | undefined,
+  now: number,
 ): CodingAgentSummary {
   return {
     id: agent.id,
@@ -53,6 +78,6 @@ export function codingAgentSummary(
     model: agent.model,
     effort: agent.effort,
     createdAt: agent.createdAt.getTime(),
-    status: codingAgentStatusOf(turn),
+    status: codingAgentStatusOf(turn, { createdAt: agent.createdAt, now }),
   };
 }

@@ -406,3 +406,21 @@ export function GearIcon(): React.JSX.Element {
     </Glyph>
   );
 }
+
+/** Starts a run: the triangle every transport draws for play. */
+export function PlayIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M8 5.6v12.8l10-6.4z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
+/** Points down into a menu: the half of a split button that opens its choices. */
+export function ChevronDownIcon(): React.JSX.Element {
+  return (
+    <Glyph className="settings-chevron">
+      <path d="m5.8 9.4 6.2 6.2 6.2-6.2" />
+    </Glyph>
+  );
+}

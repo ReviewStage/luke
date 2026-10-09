@@ -142,7 +142,13 @@ afterEach(() => {
 test("typing in the sidebar search turns the page list into results grouped under their pages", () => {
   const container = mount();
   const pages = pageList(container);
-  assert.deepEqual(pages, ["General", "Voice", "Appearance", "Keyboard shortcuts"]);
+  assert.deepEqual(pages, [
+    "General",
+    "Voice",
+    "Appearance",
+    "Keyboard shortcuts",
+    "Coding agents",
+  ]);
 
   type(field(container), "hotkey");
   assert.deepEqual(pageList(container), []);
@@ -211,7 +217,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   act(() => clear.click());
   assert.equal(input.value, "");
   assert.equal(document.activeElement, input, "the cleared field keeps the caret");
-  assert.equal(pageList(container).length, 4);
+  assert.equal(pageList(container).length, 5);
 
   type(input, "voice");
   // An Escape spent dismissing an input method's candidates leaves the query.
@@ -219,7 +225,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   assert.equal(input.value, "voice");
   press(input, "Escape");
   assert.equal(input.value, "");
-  assert.equal(pageList(container).length, 4);
+  assert.equal(pageList(container).length, 5);
   assert.equal(document.activeElement, input, "the first Escape only clears");
 
   press(input, "Escape");

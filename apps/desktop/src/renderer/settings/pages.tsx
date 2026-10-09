@@ -1,5 +1,12 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
-import { BackIcon, ChevronIcon, DisplayIcon, KeyboardIcon, SpeakerIcon } from "@sidecar/panel";
+import {
+  BackIcon,
+  ChevronIcon,
+  DisplayIcon,
+  KeyboardIcon,
+  PlayIcon,
+  SpeakerIcon,
+} from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
@@ -24,6 +31,10 @@ export const SETTINGS_PAGE = {
   [SETTINGS_VIEW.SHORTCUTS]: {
     title: "Keyboard shortcuts",
     icon: <KeyboardIcon />,
+  },
+  [SETTINGS_VIEW.CODING_AGENTS]: {
+    title: "Coding agents",
+    icon: <PlayIcon />,
   },
 };
 

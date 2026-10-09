@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted";
-import { Option, Redacted, Result, Schema } from "effect";
+import { Duration, Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
 import { TURN_STATUS } from "../server/core";
-import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
+import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import {
   type CoderModelSelection,
   coderModel,
@@ -90,19 +90,37 @@ function turn(status: string, cancelRequestedAt: Date | null = null) {
   return { conversationId: "c", id: "t", status, eveTurnId: "turn_0", cancelRequestedAt };
 }
 
+/** An agent started at the epoch, read this long after. */
+const started = (sinceStartMs: number) => ({ createdAt: new Date(0), now: sinceStartMs });
+
 test("an agent's status is its newest turn's: starting before one, and a running turn with a Stop on it reads as cancelled", () => {
-  assert.equal(codingAgentStatusOf(undefined), CODING_AGENT_STATUS.STARTING);
-  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.QUEUED)), CODING_AGENT_STATUS.RUNNING);
-  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.RUNNING)), CODING_AGENT_STATUS.RUNNING);
-  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.SETTLED)), CODING_AGENT_STATUS.COMPLETED);
-  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.FAILED)), CODING_AGENT_STATUS.FAILED);
-  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.CANCELLED)), CODING_AGENT_STATUS.CANCELLED);
+  const just = started(1_000);
+  assert.equal(codingAgentStatusOf(undefined, just), CODING_AGENT_STATUS.STARTING);
+  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.QUEUED), just), CODING_AGENT_STATUS.RUNNING);
+  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.RUNNING), just), CODING_AGENT_STATUS.RUNNING);
+  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.SETTLED), just), CODING_AGENT_STATUS.COMPLETED);
+  assert.equal(codingAgentStatusOf(turn(TURN_STATUS.FAILED), just), CODING_AGENT_STATUS.FAILED);
   assert.equal(
-    codingAgentStatusOf(turn(TURN_STATUS.RUNNING, new Date(0))),
+    codingAgentStatusOf(turn(TURN_STATUS.CANCELLED), just),
     CODING_AGENT_STATUS.CANCELLED,
   );
   assert.equal(
-    codingAgentStatusOf(turn(TURN_STATUS.SETTLED, new Date(0))),
+    codingAgentStatusOf(turn(TURN_STATUS.RUNNING, new Date(0)), just),
+    CODING_AGENT_STATUS.CANCELLED,
+  );
+  assert.equal(
+    codingAgentStatusOf(turn(TURN_STATUS.SETTLED, new Date(0)), just),
     CODING_AGENT_STATUS.COMPLETED,
+  );
+});
+
+test("an agent with no turn row reads as starting inside the grace and as failed past it, so nothing reads starting forever", () => {
+  const grace = Duration.toMillis(CODER.STARTING_GRACE);
+  assert.equal(codingAgentStatusOf(undefined, started(grace)), CODING_AGENT_STATUS.STARTING);
+  assert.equal(codingAgentStatusOf(undefined, started(grace + 1)), CODING_AGENT_STATUS.FAILED);
+  // A turn that lands late is still the agent's status.
+  assert.equal(
+    codingAgentStatusOf(turn(TURN_STATUS.RUNNING), started(grace + 1)),
+    CODING_AGENT_STATUS.RUNNING,
   );
 });

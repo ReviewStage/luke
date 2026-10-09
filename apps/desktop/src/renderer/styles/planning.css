@@ -554,3 +554,130 @@
 .plan-transcript-speaker[data-speaker="user"] {
   color: var(--voice-developer);
 }
+
+/* Coding agents --------------------------------------------------------- */
+
+/* The dot beside an agent's name, on its tab and at its transcript's head:
+   where the agent stands, in the state colours the rest of the window
+   answers in. While the agent may still write it breathes on the skeleton's
+   loop, an endless motion held by `--loop-motion` like every animation with
+   no end of its own. */
+.agent-status-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.agent-status-dot[data-status="running"],
+.agent-status-dot[data-status="starting"] {
+  background: var(--state-working);
+}
+
+.agent-status-dot[data-status="completed"] {
+  background: var(--state-complete);
+}
+
+.agent-status-dot[data-status="failed"] {
+  background: var(--danger);
+}
+
+.agent-status-dot[data-status="cancelled"] {
+  background: var(--state-attention);
+}
+
+.agent-status-dot[data-live="true"] {
+  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* An agent's tab in the strip: its dot before its model's name. */
+.side-panel-agent-tab {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* The agent's tab: its head, then the transcript filling the rest. */
+.agent-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.agent-tab-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px 6px 16px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-tab-title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tab-title strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.agent-tab-separator {
+  color: var(--text-tertiary);
+}
+
+.agent-stop {
+  height: 26px;
+  padding: 0 9px;
+  color: var(--danger-text);
+  font-size: 12px;
+}
+
+.agent-stop:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.agent-stop svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* A step boundary inside one turn: a quiet rule between inferences. */
+.agent-step {
+  width: 100%;
+  margin: 2px 0;
+  border: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.agent-note {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+}
+
+/* A link in the transcript: the pull request opens in the browser, drawn
+   as a link; any other address is drawn as words that go nowhere. */
+.agent-link {
+  color: var(--state-working);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agent-link-inert {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}

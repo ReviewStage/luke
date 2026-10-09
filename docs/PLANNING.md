@@ -38,11 +38,14 @@ A reviewer can hold the build to these as easily as to the layout:
 - The assumption list is read-only: plain text, with nothing to click.
 - The document is the record. What was said on the plan's calls can be read
   back in the side panel's Transcript tab, but nothing there is a second
-  document: it is never copied, edited, or handed to an agent.
+  document: it is never copied, edited, or handed to an agent. The document
+  itself is what Start hands to a coding agent, as the Markdown Copy puts on
+  the clipboard ("From a plan to a pull request" below).
 - The document is always the page. The whiteboard ("Whiteboard" below), the
-  code Luke has on screen, and the transcript stand beside it in a side panel
-  ("Side panel" below) that the developer opens and closes; nothing opens it
-  on its own, and there are no second documents.
+  code Luke has on screen, the transcript, and each coding agent started on
+  the plan stand beside it in a side panel ("Side panel" below) that the
+  developer opens and closes; only a first drawing, first code, or an agent
+  just started opens it on its own, and there are no second documents.
 - No window of its own. Planning lives in Luke's one window (LUKE-347): there
   is no separate planning window, Dock tile, Cmd-Tab entry, or app menu for it.
 
@@ -55,7 +58,7 @@ sidebar, one page at a time:
 ```
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Plans ]   Settings                                        │
- │  ‹  Teammate invitations                          [ Copy ]   │
+ │  ‹  Teammate invitations                 [ ▶ Start ▾ ] [ ⋯ ]   │
  │     acme/relay · main @ 4f2c9e1                              │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
@@ -165,9 +168,19 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   repository… (opens the chip's menu, opening the plan first where it is not
   the open one), Open on GitHub (`https://github.com/owner/repository`, for a
   plan with a repository), and Delete plan, last and red.
-- **Copy**, the one action on the document. It is always enabled, however
-  much of the plan is written. It copies the current document as described in
-  "Copy". It never launches an agent and never asks the model anything.
+- **Start**, a split button (`desktop/start-agent-button.tsx`). Its main
+  part starts a coding agent on the plan with the account's default model and
+  effort; its chevron drops a menu of the models the service offers, each
+  under its provider's mark, the efforts the chosen model lists, and "Start
+  with <model> · <effort>", which the service also keeps as the account's
+  default. A plan with no repository has Start unavailable, saying why on
+  hover. Each press mints a key of its own, and a press asked again after
+  the service did not answer carries the same key, so one press is one agent
+  ("From a plan to a pull request" below).
+- **Copy plan** stands in the ⋯ menu, with its chord ⇧⌘C still the
+  toolbar's. It is always enabled, however much of the plan is written, and
+  copies the current document as described in "Copy". It never launches an
+  agent and never asks the model anything.
 - The side panel's toggle, last on the toolbar ("Show panel" / "Hide panel",
   ⌥⌘B).
 
@@ -224,16 +237,59 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
 - **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke has on
   screen during a call, read by the service from the plan's repository ("How
-  the planning model reads code" below); and `Transcript`, what was said on
-  the plan's calls ("Transcript" below). With none on screen, the Code tab
-  says so quietly rather than going away.
+  the planning model reads code" below); `Transcript`, what was said on the
+  plan's calls ("Transcript" below); and, after them, one tab per coding
+  agent started on the plan, named by its model with a dot for where it
+  stands ("Agent tabs" below). With none on screen, the Code tab says so
+  quietly rather than going away. The strip scrolls where the agents
+  overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it;
   choosing a tab, or Luke putting code up, never opens it. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
-  anything main holds. A fixture run stages its own and keeps nothing.
+  anything main holds. A kept tab naming an agent the open plan has none of
+  reads as the board, so leaving a plan or opening another never shows a tab
+  with nothing behind it. A fixture run stages its own and keeps nothing.
+
+### Agent tabs
+
+Each coding agent started on the plan has a tab of its own
+(`planning/agent-tab.tsx`, `planning/use-coding-agents.ts`), opened and
+selected the moment its Start lands.
+
+- **The head.** The model · the effort · the status, with the dot the tab
+  wears: starting or running (pulsing), completed, failed, or cancelled. A
+  Stop stands while the agent may still write; it asks the service to cancel
+  the turn and stop the sandbox, and anything the agent pushed stays.
+- **The transcript.** The agent's stored `UIMessage`s, drawn with the same
+  AI Elements components as the Transcript tab: the plan it was handed as
+  the one user turn, folded; and each of its own turns with its text as
+  Markdown, its reasoning folded, each tool call folded under its name with
+  the input and the output inside, a call that ended in an error said in
+  red, and a link to the pull request it opened, which opens on GitHub in
+  the browser. The list keeps to its newest line while it is scrolled there.
+- **Live.** While the tab shows and the agent is starting or running, the
+  window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
+  the service's held long-poll (`planning/use-agent-transcript.ts`): each
+  page joins the messages held by id, and each carries the agent's status,
+  so the loop ends on its own when the agent ends. A tab hidden, a plan
+  left, or an agent that ended stops the reads; the agents list is read when
+  the plan opens and after a Start or a Stop, and nothing else polls.
+- **Privacy.** Every word is the agent's or the plan's, so the tab carries
+  `ph-no-capture`, as the Transcript tab does.
+
+### Settings › Coding agents
+
+The model and effort a click on Start runs an agent on are the account's
+one default, kept on the service with the account preferences
+(`/api/account/preferences`'s `codingAgent` part) and shown on the Coding
+agents page of Settings (`settings/coding-agents-page.tsx`): a model menu
+with each provider's mark, and the efforts the chosen model lists. The page
+reads the default as it opens, so a model chosen from Start's chevron, which
+the service keeps as the default too, shows there next. A first-time
+account starts on Claude Opus 5.5 at high.
 
 ### Transcript
 
@@ -270,8 +326,8 @@ under its speaker, `You` or `Luke` (`planning/plan-transcript.tsx`,
   Tailwind utilities, which `scripts/tailwind.mjs` compiles into the one
   stylesheet the renderer ships, over tokens aliased from `base.css`
   (`styles/tailwind.css`); the rest of the renderer stays plain CSS. A
-  coding agent's transcript will be drawn with the same components over the
-  same shape.
+  coding agent's transcript is drawn with the same components over the same
+  shape ("Agent tabs" above).
 - **Following.** The list keeps to its newest line while it is scrolled
   there; scrolling up to read leaves it in place, with a button back to the
   newest line, until the developer scrolls back down.
@@ -489,8 +545,9 @@ Sandbox of its own, implements the plan given as its first message, runs the
 repository's checks, and decides whether to open a pull request. The service,
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
-coding-agent routes"; the desktop's Start button and agent tabs are the
-plan's next step.
+coding-agent routes"; the desktop's Start button ("The Plans tab" above),
+agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
+developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## The journey
 

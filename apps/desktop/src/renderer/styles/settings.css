@@ -780,3 +780,44 @@
   color: var(--error-text);
   font-size: 10px;
 }
+
+/* Coding agents --------------------------------------------------------- */
+
+/* The default model's chip, which drops the same menu the Start button does,
+   because a pop-up of the system's cannot draw a provider's mark; sized to
+   the pop-up column beside it, with the pop-up badge at its end. */
+.settings-model {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.settings-model-chip {
+  width: 190px;
+  height: 28px;
+  padding-right: 28px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+
+.settings-model-chip .provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.settings-model-badge {
+  right: 6px;
+}
+
+.settings-model-menu {
+  right: 0;
+  left: auto;
+  width: 280px;
+}
+
+/* The efforts stand at the row's end, where the pop-up column is. */
+.settings-efforts {
+  padding: 0;
+}

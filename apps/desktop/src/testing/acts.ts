@@ -59,6 +59,28 @@ export const ONE_ACT_OF_EACH_KIND = {
       appliedDrawing: 1,
     },
   },
+  [ACT_KIND.CODING_AGENTS_MODELS]: { kind: ACT_KIND.CODING_AGENTS_MODELS },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: { kind: ACT_KIND.CODING_AGENTS_DEFAULT_READ },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: {
+    kind: ACT_KIND.CODING_AGENTS_DEFAULT_WRITE,
+    payload: { model: "anthropic/claude-opus-5.5", effort: "high" },
+  },
+  [ACT_KIND.CODING_AGENTS_LIST]: {
+    kind: ACT_KIND.CODING_AGENTS_LIST,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
+  [ACT_KIND.CODING_AGENTS_START]: {
+    kind: ACT_KIND.CODING_AGENTS_START,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", idempotencyKey: "press-1" },
+  },
+  [ACT_KIND.CODING_AGENTS_MESSAGES]: {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGES,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", after: "0:0" },
+  },
+  [ACT_KIND.CODING_AGENTS_STOP]: {
+    kind: ACT_KIND.CODING_AGENTS_STOP,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "end-call" },

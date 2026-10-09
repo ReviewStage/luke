@@ -1,11 +1,33 @@
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
+import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../renderer/planning/use-side-panel";
 
 const ignore = () => undefined;
+
+/** A plan with no agents and no repository, every press ignored. */
+export function codingAgentsControl(
+  overrides: Partial<CodingAgentsControl> = {},
+): CodingAgentsControl {
+  return {
+    agents: [],
+    agentIds: [],
+    listFailed: false,
+    onRetryList: ignore,
+    models: undefined,
+    readModels: ignore,
+    readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
+    onStop: () => Promise.resolve(),
+    onStatus: ignore,
+    readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    ...overrides,
+  };
+}
 
 /** A signed-in Plans tab on screen on its new-plan page with no plans, every press ignored. */
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
@@ -36,6 +58,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     board: undefined,
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
+    agents: codingAgentsControl(),
     onSelect: ignore,
     repositories: {
       recent: [],

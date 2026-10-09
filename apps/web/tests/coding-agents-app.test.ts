@@ -11,7 +11,17 @@ import {
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Duration, Effect, Layer, Option, Redacted, Result, type Schema } from "effect";
+import {
+  Clock,
+  Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  type Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -36,6 +46,7 @@ import {
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
+import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { listCodingAgents, readCodingAgent } from "../server/hosted/coding-agent-store";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -204,6 +215,17 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** A forked ask driven to its answer, the clock moved a step at a time so each wait it holds elapses. */
+const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
+  Effect.gen(function* () {
+    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
+      yield* TestClock.adjust(step);
+      yield* Effect.yieldNow;
+    }
+    return yield* Fiber.join(fiber);
+  });
 
 /**
  * An owner who signed in with GitHub and holds one plan on the repository,
@@ -453,13 +475,21 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         const target = { userId: owner, conversationId: stored.value.conversationId };
         const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
         const turnId = randomUUID();
-        // Before any turn the agent is idle, and an empty read answers at once rather than holding.
+        // Before any turn the agent is starting: an empty read is held rather than spinning, and
+        // lets go at the hold with the status the page was read at.
+        const starting = yield* Effect.forkChild(
+          ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        assert.equal(starting.pollUnsafe(), undefined);
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
         const empty = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "0:0" })),
+          yield* driven(starting, CODER.MESSAGES_POLL),
         );
         assert.deepEqual(empty.messages, []);
+        assert.equal(empty.status, CODING_AGENT_STATUS.STARTING);
         yield* writer.enqueueTurn(target, {
           turnId,
           origin: TURN_ORIGIN.TYPED,
@@ -495,6 +525,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(page.messages.length, 1);
         assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
         assert.notEqual(page.cursor, "0:0");
+        assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
 
         assert.deepEqual(
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: "later" })),

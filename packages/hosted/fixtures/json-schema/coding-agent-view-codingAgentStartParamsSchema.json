@@ -1,0 +1,29 @@
+{
+  "type": "object",
+  "properties": {
+    "planId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "effort": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    }
+  },
+  "required": [
+    "planId",
+    "idempotencyKey"
+  ],
+  "additionalProperties": false
+}

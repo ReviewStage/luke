@@ -140,6 +140,7 @@ const SETTINGS_PAGE_WORD = {
   [SETTINGS_PAGE.VOICE]: "Voice page",
   [SETTINGS_PAGE.APPEARANCE]: "Appearance page",
   [SETTINGS_PAGE.SHORTCUTS]: "Settings tab",
+  [SETTINGS_PAGE.CODING_AGENTS]: "Coding agents page",
 } satisfies Record<string, string>;
 
 test("every settings id a field describes is described by that field alone", () => {

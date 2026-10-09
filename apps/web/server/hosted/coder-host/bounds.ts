@@ -26,6 +26,13 @@ export const CODER = {
   MESSAGES_HOLD: Duration.seconds(20),
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
+  /**
+   * How long after its Start an agent with no turn row yet still reads as
+   * starting. eve took the session and its first turn lands in seconds; an
+   * agent still without one past this is read as failed, so nothing reads
+   * starting forever and no transcript read is held for it.
+   */
+  STARTING_GRACE: Duration.minutes(5),
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */
