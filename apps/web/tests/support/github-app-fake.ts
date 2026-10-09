@@ -65,6 +65,17 @@ export interface FakeGitHub {
 /** The App over the fixture settings, which is what every fake stands unless a test hands another. */
 const GITHUB_APP_LAYER: Layer.Layer<GitHubApp> = GitHubApp.layer(GITHUB_APP_SETTINGS);
 
+/** The token the fake App mints for a repository, which is what a test reads for at the sandbox's firewall. */
+export const GITHUB_FIXTURE_INSTALLATION_TOKEN = "ghs_fixture_installation_token";
+
+/** The App over a GitHub nobody reaches: a test whose calls read no repository hands this where production reads GitHub. */
+export const NO_GITHUB: Layer.Layer<GitHubApp | HttpClient.HttpClient> = Layer.suspend(
+  () =>
+    fakeGitHub(() => {
+      throw new Error("this test reaches no GitHub");
+    }).layer,
+);
+
 /** GitHub's token endpoint and API answering from the script given, every request written down, under the App given. */
 export function fakeGitHub(
   answer: (sent: SentToGitHub) => Response | Promise<Response>,
@@ -128,11 +139,12 @@ function sliceOf<A>(items: readonly A[], url: string): readonly A[] {
 }
 
 const INSTALLATION_REPOSITORIES = /^\/user\/installations\/(\d+)\/repositories$/u;
+const INSTALLATION_ACCESS_TOKENS = /^\/app\/installations\/(\d+)\/access_tokens$/u;
 
 /**
  * A GitHub on which the user reaches the installations given, paged the way
- * GitHub pages them, and nothing else: any other request fails. What the
- * App itself asks, as the App, is not scripted here.
+ * GitHub pages them, and the App mints a token for any of those
+ * installations; nothing else: any other request fails.
  */
 export function githubReaching(
   installations: readonly InstallationFixture[],
@@ -140,6 +152,20 @@ export function githubReaching(
 ): FakeGitHub {
   return fakeGitHub((sent) => {
     const { pathname } = new URL(sent.url);
+    const minting = INSTALLATION_ACCESS_TOKENS.exec(pathname);
+    if (minting !== null) {
+      return installations.some((candidate) => String(candidate.id) === minting[1])
+        ? Response.json(
+            {
+              token: GITHUB_FIXTURE_INSTALLATION_TOKEN,
+              expires_at: "2026-10-01T01:00:00Z",
+              permissions: { contents: "read" },
+              repository_selection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+            },
+            { status: 201 },
+          )
+        : Response.json({ message: "Not Found" }, { status: 404 });
+    }
     if (pathname === "/user/installations") {
       return Response.json({
         total_count: installations.length,

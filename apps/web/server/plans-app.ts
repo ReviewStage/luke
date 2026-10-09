@@ -9,8 +9,6 @@ import {
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
-  PLAN_COMMAND_OUTPUT_MAX_CHARS,
-  planCommandResultSchema,
   planCreateRequestSchema,
   planUpdateRequestSchema,
   unparsedWire,
@@ -31,12 +29,11 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
-import { claimPlanCommand, settlePlanCommand } from "./hosted/repository-shell.js";
 import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete, and the Mac's side of the planning model's folder reads.
+ * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, change, and delete.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan id another account
@@ -61,10 +58,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * a repository the App reaches no installation of for the account, are each
  * refused by name, with nothing written.
  *
- * Starting a plan otherwise names nothing of the developer's Mac.
- * The two command paths are the Mac's side of `run_in_repository`
- * (`hosted/repository-shell.ts`): a held claim of the next command the
- * planning model asked for, and the result the Mac posts once it ran it.
+ * Starting a plan otherwise names nothing of the developer's Mac: the
+ * planning model reads the repository in its own sandbox on the service
+ * (`hosted/repository-shell.ts`), and no route here carries a command.
  */
 
 const PLANS_PATH = {
@@ -76,13 +72,7 @@ const PLANS_PATH = {
   BOARD: "/api/plans/board",
   /** GET reads what was said on the plan's calls; the rewrite moves the path's id into the `id` query. */
   TRANSCRIPT: "/api/plans/transcript",
-  /** POST claims the plan's next command, held open until one arrives. */
-  COMMAND_CLAIM: "/api/plans/commands/claim",
-  /** POST settles one claimed command; the rewrite moves its id into the `command` query. */
-  COMMAND: "/api/plans/commands/command",
 } as const;
-
-const COMMAND_ID_QUERY = "command";
 
 const HTTP_METHOD = {
   GET: "GET",
@@ -99,9 +89,6 @@ const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
 /** A save is a scene at its byte bound, with room for the drawing's number around it. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + 1_024;
-
-/** A result is two outputs of at most `PLAN_COMMAND_OUTPUT_MAX_CHARS` each, every character escaped at worst. */
-const MAXIMUM_RESULT_BODY_BYTES = 2 * PLAN_COMMAND_OUTPUT_MAX_CHARS * 6 + 1_024;
 
 export interface PlansAppSeams {
   resolveUserId: UserIdResolver;
@@ -281,42 +268,6 @@ const transcriptEndpoint = /* @__PURE__ */ Effect.fn("web/planTranscriptEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { transcript: transcript.value });
 });
 
-/** POST: the plan's next command, claimed for the caller's Mac, or null once the hold ran out. */
-const commandClaimEndpoint = /* @__PURE__ */ Effect.fn("web/planCommandClaimEndpoint")(function* (
-  seams: PlansAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const planId = yield* idOf(request, PLAN_ID_QUERY);
-  const userId = yield* resolvedUserId(seams, request);
-  const command = yield* hostedStoreOrUnavailable(claimPlanCommand(userId, planId));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { command });
-});
-
-/** POST: what the caller's Mac answered for one command it claimed. */
-const commandSettleEndpoint = /* @__PURE__ */ Effect.fn("web/planCommandSettleEndpoint")(function* (
-  seams: PlansAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const planId = yield* idOf(request, PLAN_ID_QUERY);
-  const commandId = yield* idOf(request, COMMAND_ID_QUERY);
-  const userId = yield* resolvedUserId(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_RESULT_BODY_BYTES);
-  const result = readEither(planCommandResultSchema)(body);
-  if (Result.isFailure(result)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const settled = yield* hostedStoreOrUnavailable(
-    settlePlanCommand(userId, planId, commandId, result.success),
-  );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { settled });
-});
-
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
@@ -324,12 +275,6 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
-    HttpRouter.add(
-      ANY_METHOD,
-      PLANS_PATH.COMMAND_CLAIM,
-      hostedRefusing(commandClaimEndpoint(seams)),
-    ),
-    HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND, hostedRefusing(commandSettleEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

@@ -31,16 +31,24 @@ import {
   readPlan,
   savePlanDocument,
 } from "../../server/hosted/plan-store";
+import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_DELEGATE, SCRIPTED_PLANNING_REPLY } from "../scripted-model";
+import {
+  SCRIPTED_DELEGATE,
+  SCRIPTED_NOT_READ_REPLY,
+  SCRIPTED_PLANNING_REPLY,
+  SCRIPTED_READ,
+} from "../scripted-model";
 
 /**
  * The whole host under eve, end to end: eve's runtime runs a typed ask in a
  * plan's conversation under the scripted fixture model, which is handed the
  * saved document in its standing context and answers in words, leaving the
  * document as the notetaker saved it, and the relay writes the turn into the
- * store through the writer. The eve server runs in this process with the database the
+ * store through the writer. A read of the repository on a plan that has none
+ * is refused ahead of any sandbox, in words the model repeats, so the eval
+ * opens no Vercel Sandbox and needs no GitHub. The eve server runs in this process with the database the
  * environment names, so the eval reads the rows back from the same Postgres.
  * Where no database is named the eval skips rather than pretending: the
  * relay and the writer meet PGlite in the store tests, and this is where
@@ -247,6 +255,29 @@ export default defineEval({
       assert.equal(delegation.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       // The words before the wait and the words after it, in one answer.
       assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);
+
+      // A repository read on a plan with no repository yet runs nothing and
+      // says so: the refusal reaches the model as the tool's result, ahead of
+      // any sandbox, and the model repeats why.
+      const readingPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const readingConversationId = await planConversation(run, readingPlan.id);
+      const reading = await openSession(readingConversationId, `${SCRIPTED_READ}ls`);
+      const readingSession = await t.target.attachSession(reading.sessionId);
+      readingSession.succeeded();
+      const readingRows = await readMessagesByTurn(
+        run,
+        readingConversationId,
+        hostTurnId(reading.sessionId, "turn_0"),
+      );
+      const readingAnswer = readingRows[1];
+      assert.ok(readingAnswer);
+      assert.ok(
+        readingAnswer.parts.some(
+          (part) =>
+            isTextUIPart(part) &&
+            part.text === `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`,
+        ),
+      );
     } finally {
       await runtime.dispose();
     }

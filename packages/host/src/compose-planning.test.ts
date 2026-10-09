@@ -11,7 +11,7 @@ import {
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
-import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -61,12 +61,6 @@ interface FakeService extends PlanningClient {
   createAnswer: PlanCallResult<Plan, typeof PLAN_CALL_FAILURE.UNANSWERED>;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
-  /** The commands waiting for this Mac to claim, oldest first. */
-  commands: PlanCommand[];
-  /** What this Mac posted back, in order. */
-  readonly settled: { planId: string; commandId: string; result: PlanCommandResult }[];
-  /** Done once the first result is posted back. */
-  readonly firstSettle: Deferred.Deferred<void>;
   /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
   /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
@@ -81,9 +75,6 @@ function fakeService(plans: Plan[]): FakeService {
     listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
     reads: [],
-    commands: [],
-    settled: [],
-    firstSettle: Deferred.makeUnsafe<void>(),
     boards: {},
     transcripts: {},
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
@@ -94,20 +85,6 @@ function fakeService(plans: Plan[]): FakeService {
         const board = { ...service.boards[planId], elements, appliedDrawing };
         service.boards[planId] = board;
         return board;
-      }),
-    // An empty queue holds the claim open, as the service does, rather than answering at once.
-    claimCommand: () =>
-      Effect.suspend(() => {
-        const next = service.commands.shift();
-        return next === undefined
-          ? Effect.as(Effect.sleep(Duration.seconds(20)), null)
-          : Effect.succeed(next);
-      }),
-    settleCommand: (planId, commandId, result) =>
-      Effect.sync(() => {
-        service.settled.push({ planId, commandId, result });
-        Deferred.doneUnsafe(service.firstSettle, Effect.void);
-        return true;
       }),
     list: () =>
       Effect.gen(function* () {
@@ -736,127 +713,7 @@ it.effect(
     }),
 );
 
-it.effect("the open plan's command runs in its folder on this Mac and its output goes back", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const folder = yield* temporaryDirectoryScoped("luke-plan-folder-");
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, planning } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-      yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
-      service.commands.push({
-        id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f",
-        command: "pwd && echo invites >&2 && exit 3",
-      });
-
-      yield* planning.lifetime;
-      yield* Deferred.await(service.firstSettle);
-
-      const [settled] = service.settled;
-      assert.equal(settled?.planId, INVITES);
-      assert.equal(settled?.commandId, "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f");
-      assert.equal(settled?.result.exitCode, 3);
-      assert.equal(settled?.result.stdout.trim().endsWith(folder.split("/").at(-1) ?? "?"), true);
-      assert.equal(settled?.result.stderr.trim(), "invites");
-    }),
-  ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
-);
-
-/** The one command `command` run in a fresh plan folder on this Mac, and what it settled. */
-function runInFolder(
-  command: string,
-  prepare: (folder: string) => Effect.Effect<void> = () => Effect.void,
-) {
-  return Effect.gen(function* () {
-    const folder = yield* temporaryDirectoryScoped("luke-plan-folder-");
-    yield* prepare(folder);
-    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { call, planning } = yield* subject(service);
-    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-    yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
-    service.commands.push({ id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f", command });
-    yield* planning.lifetime;
-    yield* Deferred.await(service.firstSettle);
-    const [settled] = service.settled;
-    assert.ok(settled, "the command settled");
-    return { folder, result: settled.result };
-  });
-}
-
 const nodeFiles = Layer.merge(NodeFileSystem.layer, NodePath.layer);
-
-it.effect("a command sees none of Luke's own environment", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      assert.equal(process.env.VITEST, "true");
-      const { result } = yield* runInFolder('echo "${VITEST-none}"');
-      assert.equal(result.stdout.trim(), "none");
-    }),
-  ).pipe(Effect.provide(nodeFiles)),
-);
-
-it.effect.runIf(process.platform === "darwin")(
-  "on macOS a command can neither write, nor read outside the folder or a .env inside it",
-  () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const outside = yield* temporaryDirectoryScoped("luke-plan-outside-");
-        const fs = yield* FileSystem.FileSystem;
-        yield* Effect.orDie(fs.writeFileString(`${outside}/secret`, "hunter2"));
-        const { folder, result } = yield* runInFolder(
-          `cat ${outside}/secret .env.local; echo x > made; echo x > ${outside}/made; ls`,
-          (inside) =>
-            Effect.orDie(
-              Effect.all([
-                fs.writeFileString(`${inside}/notes.md`, "invites"),
-                fs.writeFileString(`${inside}/.env.local`, "STRIPE_KEY=sk_live_x"),
-              ]),
-            ),
-        );
-        assert.equal(result.stdout.trim(), "notes.md");
-        assert.doesNotMatch(result.stdout, /hunter2|sk_live_x/u);
-        assert.equal(yield* Effect.orDie(fs.exists(`${folder}/made`)), false);
-        assert.equal(yield* Effect.orDie(fs.exists(`${outside}/made`)), false);
-      }),
-    ).pipe(Effect.provide(nodeFiles)),
-);
-
-it.effect("with no plan open, no command is claimed", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { planning } = yield* subject(service);
-      service.commands.push({
-        id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f",
-        command: "echo nothing",
-      });
-
-      yield* planning.lifetime;
-      yield* TestClock.adjust(Duration.minutes(1));
-
-      assert.equal(service.commands.length, 1);
-      assert.deepEqual(service.settled, []);
-    }),
-  ),
-);
-
-it.effect("a command for a plan this Mac holds no folder for runs nothing and says why", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, planning } = yield* subject(service);
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-      service.commands.push({ id: "3d8e4f2a-6b1c-4a9d-8e7f-0a1b2c3d4e5f", command: "touch x" });
-
-      yield* planning.lifetime;
-      yield* Deferred.await(service.firstSettle);
-
-      const [settled] = service.settled;
-      assert.equal(settled?.result.exitCode, 1);
-      assert.match(settled?.result.stderr ?? "", /no folder is chosen for this plan on this Mac/u);
-    }),
-  ),
-);
 
 /** A box as the canvas holds one. */
 function box(id: string): BoardElement {

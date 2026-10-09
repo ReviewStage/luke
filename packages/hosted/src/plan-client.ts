@@ -12,14 +12,10 @@ import type { AccountToken } from "./account-token.js";
 import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
 import {
   type Plan,
-  type PlanCommand,
-  type PlanCommandResult,
   type PlanCreateRequest,
   type PlanRenameRequest,
   type PlanSummary,
   planAnswerSchema,
-  planCommandClaimAnswerSchema,
-  planCommandSettleAnswerSchema,
   planCreateRequestSchema,
   planDeleteAnswerSchema,
   planListAnswerSchema,
@@ -29,8 +25,6 @@ import { PLAN_CALL_FAILURE, type PlanCallFailure } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
   planBoardPath,
-  planCommandClaimPath,
-  planCommandPath,
   planPath,
   planTranscriptPath,
 } from "./service-paths.js";
@@ -38,7 +32,7 @@ import { HOSTED_API_ERROR, hostedErrorSchema } from "./service-wire.js";
 import { type PlanTranscript, planTranscriptAnswerSchema } from "./transcript-wire.js";
 
 /**
- * plan-client.ts -- the Plans tab's side of the named plans and the planning model's folder commands, as the host asks the service for them.
+ * plan-client.ts -- the Plans tab's side of the named plans, as the host asks the service for them.
  *
  * Every call is the one account call, so the bearer is read fresh per attempt
  * and a 401 is renewed and retried once. What the window has to say about a
@@ -59,9 +53,6 @@ export interface HostedPlanClientOptions extends AccountToken {
 
 const UNANSWERED = { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
 
-/** A claim is held open by the service for up to 20 s, so its own deadline sits past that. */
-const COMMAND_CLAIM_TIMEOUT_MS = 25_000;
-
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
 }
@@ -74,7 +65,6 @@ function succeeded<Answer>(answer: Answer) {
  */
 export class HostedPlanClient {
   readonly #call: AccountCallEffects;
-  readonly #claimCall: AccountCallEffects;
 
   constructor(options: HostedPlanClientOptions) {
     this.#call = accountCall({
@@ -82,47 +72,6 @@ export class HostedPlanClient {
       credential: accountBearer(options),
       requestTimeoutMs: options.requestTimeoutMs,
     });
-    this.#claimCall = accountCall({
-      baseUrl: options.serviceBaseUrl,
-      credential: accountBearer(options),
-      requestTimeoutMs: COMMAND_CLAIM_TIMEOUT_MS,
-    });
-  }
-
-  /**
-   * The plan's next command the planning model asked to run on this Mac,
-   * claimed; null when none arrived while the service held the claim, and
-   * undefined when the service did not answer.
-   */
-  claimCommand(
-    planId: string,
-  ): Effect.Effect<PlanCommand | null | undefined, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#claimCall.ask(
-        { method: HTTP_METHOD.POST, path: planCommandClaimPath(planId) },
-        planCommandClaimAnswerSchema,
-      ),
-      (answer) => answer?.command,
-    );
-  }
-
-  /** What a claimed command answered, posted back to the planning model waiting on it. */
-  settleCommand(
-    planId: string,
-    commandId: string,
-    result: PlanCommandResult,
-  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
-    return Effect.map(
-      this.#call.ask(
-        {
-          method: HTTP_METHOD.POST,
-          path: planCommandPath(planId, commandId),
-          body: JSON.stringify(result),
-        },
-        planCommandSettleAnswerSchema,
-      ),
-      (answer) => answer?.settled === true,
-    );
   }
 
   /** Every plan the account owns, newest started first. */

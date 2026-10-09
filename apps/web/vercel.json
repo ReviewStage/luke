@@ -13,14 +13,6 @@
           "dest": "/api/default.js?route=auth/[...all]&path=auth/$1"
         },
         {
-          "src": "/api/plans/([^/]+)/commands/claim",
-          "dest": "/api/default.js?route=plans/commands/claim&id=$1"
-        },
-        {
-          "src": "/api/plans/([^/]+)/commands/([^/]+)",
-          "dest": "/api/default.js?route=plans/commands/command&id=$1&command=$2"
-        },
-        {
           "src": "/api/plans/([^/]+)/board",
           "dest": "/api/default.js?route=plans/board&id=$1"
         },

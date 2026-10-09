@@ -28,8 +28,8 @@ import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
+import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { noNetwork } from "./support/no-network";
 import {
   insertConversation,
   readConversationById,
@@ -186,7 +186,7 @@ async function hookedEvent(
         state,
         {},
       )
-      .pipe(Effect.provide(noNetwork)),
+      .pipe(Effect.provide(NO_GITHUB)),
   );
   return true;
 }
@@ -469,7 +469,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
           question,
           toolContext(sessionId, auth),
         )
-        .pipe(Effect.provide(noNetwork)),
+        .pipe(Effect.provide(NO_GITHUB)),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);
@@ -523,7 +523,7 @@ test("a subagent's tool call is admitted through the root it was delegated from:
           question,
           toolContext(CHILD, auth, childOf),
         )
-        .pipe(Effect.provide(noNetwork)),
+        .pipe(Effect.provide(NO_GITHUB)),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);

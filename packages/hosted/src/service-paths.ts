@@ -66,13 +66,3 @@ export function planBoardPath(planId: string): string {
 export function planTranscriptPath(planId: string): string {
   return `${planPath(planId)}/transcript`;
 }
-
-/** The Mac claiming the plan's next command (POST), held open until one arrives or the hold runs out. */
-export function planCommandClaimPath(planId: string): string {
-  return `${planPath(planId)}/commands/claim`;
-}
-
-/** The Mac posting what one claimed command answered (POST). */
-export function planCommandPath(planId: string, commandId: string): string {
-  return `${planPath(planId)}/commands/${encodeURIComponent(commandId)}`;
-}

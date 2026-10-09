@@ -15,6 +15,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { readPlanOfConversation } from "../plan-store.js";
@@ -144,7 +145,7 @@ export interface BrainHost {
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools every turn is offered, as declarations; the eve project binds each to `runTool`. */
   toolDeclarations(): readonly HostedToolDeclaration[];
-  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it. */
+  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it, whose sandbox a repository read runs in. */
   runTool(
     name: string,
     binding: HostedToolBinding,
@@ -153,7 +154,7 @@ export interface BrainHost {
   ): Effect.Effect<
     WireRecord,
     SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
+    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
   >;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;
@@ -259,6 +260,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             ? undefined
             : {
                 plan: { userId: target.userId, planId: plan.plan.id },
+                // The repository as the row holds it now, so a plan given one mid-conversation reads it on its next call.
+                repository: {
+                  plan: { userId: target.userId, planId: plan.plan.id },
+                  repository: plan.plan.repository,
+                  sandbox: () => context.getSandbox(),
+                },
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,
