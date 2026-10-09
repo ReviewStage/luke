@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { unparsedWire } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import { type Duration, Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect, Fiber } from "effect";
 import { user } from "../server/db/auth-schema";
 import { planCommand } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
@@ -17,6 +16,7 @@ import {
   runInRepository,
   settlePlanCommand,
 } from "../server/hosted/repository-shell";
+import { driven, forkClockDriven } from "./support/clock-driven";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -64,23 +64,12 @@ const queuedCommand = (planId: string) =>
     return assert.fail("the tool never queued its command");
   });
 
-/** A forked effect driven to its end, the clock moved a step at a time so each wait it holds elapses. */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
-  Effect.gen(function* () {
-    for (let attempt = 0; attempt < 1_000; attempt += 1) {
-      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* TestClock.adjust(step);
-      yield* Effect.yieldNow;
-    }
-    return yield* Fiber.join(fiber);
-  });
-
 it.layer(testSqlClient)("run_in_repository on the Mac", (it) => {
   it.effect("a command the Mac claims and settles answers what the Mac answered", () =>
     Effect.gen(function* () {
       const { userId, planId, binding } = yield* openPlan;
 
-      const tool = yield* Effect.forkChild(
+      const tool = yield* forkClockDriven(
         runInRepository(binding, unparsedWire({ command: "ls" })),
       );
       const queued = yield* queuedCommand(planId);
@@ -98,7 +87,7 @@ it.layer(testSqlClient)("run_in_repository on the Mac", (it) => {
     Effect.gen(function* () {
       const { planId, binding } = yield* openPlan;
 
-      const tool = yield* Effect.forkChild(
+      const tool = yield* forkClockDriven(
         runInRepository(binding, unparsedWire({ command: "ls" })),
       );
       yield* queuedCommand(planId);
@@ -115,18 +104,18 @@ it.layer(testSqlClient)("run_in_repository on the Mac", (it) => {
     Effect.gen(function* () {
       const { userId, planId, binding } = yield* openPlan;
       const stranger = yield* openStranger;
-      const tool = yield* Effect.forkChild(
+      const tool = yield* forkClockDriven(
         runInRepository(binding, unparsedWire({ command: "ls" })),
       );
       const queued = yield* queuedCommand(planId);
 
-      const strangerClaim = yield* Effect.forkChild(claimPlanCommand(stranger, planId));
+      const strangerClaim = yield* forkClockDriven(claimPlanCommand(stranger, planId));
       const strangerClaimed = yield* driven(strangerClaim, PLAN_COMMAND_WAIT.CLAIM_HOLD);
       const first = yield* claimPlanCommand(userId, planId);
-      const second = yield* Effect.forkChild(claimPlanCommand(userId, planId));
+      const second = yield* forkClockDriven(claimPlanCommand(userId, planId));
       const secondClaimed = yield* driven(second, PLAN_COMMAND_WAIT.CLAIM_HOLD);
       const strangerSettled = yield* settlePlanCommand(stranger, planId, queued.id, LISTING);
-      yield* Fiber.interrupt(tool);
+      yield* Fiber.interrupt(tool.fiber);
 
       assert.equal(strangerClaimed, null);
       assert.equal(first?.id, queued.id);
