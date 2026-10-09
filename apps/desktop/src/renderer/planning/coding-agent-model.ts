@@ -10,7 +10,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
-import { modelLabel } from "#shared/model-label";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 
 /**

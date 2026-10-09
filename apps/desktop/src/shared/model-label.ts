@@ -9,7 +9,7 @@ import type { CatalogModel } from "@sidecar/hosted/models-wire";
  */
 
 /** The one separator a catalog id has between its provider and the model's own name. */
-const CATALOG_ID_SEPARATOR = "/";
+export const CATALOG_ID_SEPARATOR = "/";
 
 /** Words a model's own name is joined by, which its label spaces. */
 const MODEL_NAME_SEPARATOR = "-";
