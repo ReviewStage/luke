@@ -530,9 +530,19 @@ test("a folded sidebar leaves New plan beside its toggle, which opens the new-pl
   assert.equal(composing(), false);
   act(() => button.click());
   assert.equal(composing(), true, "the new-plan page is open");
+  assert.ok(titleBarNewPlan() === null, "the new-plan page offers no way to itself");
 
   press();
   assert.equal(titleBarNewPlan(), null, "unfolding hands New plan back to the sidebar");
+});
+
+test("the sidebar's New plan draws the title bar's compose glyph", () => {
+  show(PANEL_TAB.PLANS);
+  press();
+  const row = sidebar().querySelector("button.sidebar-new-plan svg");
+  const glyph = titleBarNewPlan()?.querySelector("svg");
+  assert.ok(row && glyph, "both New plans draw a glyph");
+  assert.equal(row.innerHTML, glyph.innerHTML);
 });
 
 test("Settings offers no title-bar New plan even over a folded sidebar, and its way out reads Back", () => {

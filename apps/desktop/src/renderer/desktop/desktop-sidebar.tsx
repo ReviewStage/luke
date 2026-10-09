@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { GearIcon, PlusIcon, UserIcon } from "@sidecar/panel";
+import { ComposeIcon, GearIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -200,7 +200,7 @@ export function DesktopSidebar({
         disabled={!plans.signedIn}
         onClick={newPlan}
       >
-        <PlusIcon />
+        <ComposeIcon />
         New plan
         <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
       </button>
