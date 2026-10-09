@@ -431,3 +431,15 @@ test("the panel opening on Luke's first code slides in with the pointed line in 
   );
   assert.equal(find(page, ".code-lines").scrollTop, 210, "the pointed line is centred");
 });
+
+test("lines Luke points at next are centred from their start, even where a long line was scrolled along", () => {
+  motion(MOTION.ON);
+  layOutArrivingCode();
+  const page = show();
+  showCode(CODE);
+  const lines = find(page, ".code-lines");
+  lines.scrollLeft = 120;
+
+  showCode({ ...CODE, ref: { ...CODE.ref, startLine: 2, endLine: 2 } });
+  assert.equal(lines.scrollLeft, 0);
+});
