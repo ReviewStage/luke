@@ -1,10 +1,18 @@
-import { MESSAGE_ROLE, WireValueSchema } from "@sidecar/wire";
-import { verbatimJsonSchema } from "@sidecar/wire/effect";
-import { Schema as EffectSchema } from "effect";
+import {
+  EXCESS_KEYS,
+  MESSAGE_DELIVERY,
+  MESSAGE_ROLE,
+  type StoredMessageMetadata,
+  unparsedWire,
+  type WireValue,
+  WireValueSchema,
+} from "@sidecar/wire";
+import { readEither, verbatimJsonSchema } from "@sidecar/wire/effect";
+import { Schema as EffectSchema, Result } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
- * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, and stops them.
+ * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, messages, and stops them.
  *
  * A coding agent is one cloud session the service runs over a plan: it
  * checks the plan's repository out, implements the plan, and decides on a
@@ -17,7 +25,12 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * a cursor the service hands back with every page beside the agent's status
  * as the page was read, so a tab held open hears each message once as it
  * lands and again when it changes in place, and hears the agent end from
- * the page that ends the hold.
+ * the page that ends the hold. A message to the agent names how it is
+ * delivered where a turn is under way: steering joins that turn, queueing
+ * waits for it to end; an idle agent takes either as its next turn. The
+ * message shows in the transcript at once as a user row carrying its
+ * delivery in `metadata.delivery` until the turn receives it, when the
+ * field is dropped and the row is read again in place.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -29,12 +42,28 @@ export const CODING_AGENT_BOUNDS = {
   MAX_KEY_CHARS: 128,
   /** The most characters a model id or an effort may spell on the way in; the catalog decides whether they name anything. */
   MAX_CHOICE_CHARS: 200,
+  /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
+  MAX_MESSAGE_CHARS: 16_000,
 } as const;
+
+/**
+ * How a message to an agent reaches its model while a turn is under way:
+ * `steer` joins that turn, so the model sees it at its next step and a call
+ * still generating is cut short and run again with it; `queue` waits for the
+ * turn to end and opens the next. An idle agent takes either as a new turn.
+ * The same two words a transcript row carries in `metadata.delivery` while
+ * the message awaits its turn.
+ */
+export const CODING_AGENT_DELIVERY = MESSAGE_DELIVERY;
+
+export type CodingAgentDelivery =
+  (typeof CODING_AGENT_DELIVERY)[keyof typeof CODING_AGENT_DELIVERY];
 
 /** Where an agent stands, read from its newest turn: not yet started, at work, or how it ended. */
 export const CODING_AGENT_STATUS = {
   /** The agent exists and its session has not run a turn yet. */
   STARTING: "starting",
+  /** A turn is under way, or a message of the developer's awaits the turn it will open. */
   RUNNING: "running",
   COMPLETED: "completed",
   FAILED: "failed",
@@ -61,6 +90,31 @@ export const codingAgentStartRequestSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
+
+/**
+ * Messaging an agent (POST): the developer's words, trimmed and bounded, and
+ * how they reach a turn under way. The answer is the agent's summary with
+ * its status read after the message was taken, which is running.
+ */
+export const codingAgentMessageRequestSchema = EffectSchema.Struct({
+  text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  delivery: EffectSchema.Literals(Object.values(CODING_AGENT_DELIVERY)),
+});
+
+/** The one metadata key a message's row carries while it awaits its turn, read with every other key dropped. */
+const awaitedDeliverySchema = EffectSchema.Struct({
+  delivery: EffectSchema.Literals(Object.values(CODING_AGENT_DELIVERY)),
+});
+
+const readAwaitedDelivery = readEither(awaitedDeliverySchema, { excess: EXCESS_KEYS.DROP });
+
+/** The delivery a transcript message still awaits its turn under, or nothing for a line the model has and every other row; read off the wire's message or the stored one alike. */
+export function awaitedDeliveryOf(message: {
+  readonly metadata?: WireValue | StoredMessageMetadata;
+}): CodingAgentDelivery | undefined {
+  const read = readAwaitedDelivery(unparsedWire(message.metadata));
+  return Result.isSuccess(read) ? read.success.delivery : undefined;
+}
 
 /** One agent as the tabs draw it: what it runs on, when it started, and where it stands. */
 export const codingAgentSummarySchema = EffectSchema.Struct({

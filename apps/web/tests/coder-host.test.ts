@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  awaitedDeliveryOf,
+  CODING_AGENT_DELIVERY,
+  CODING_AGENT_STATUS,
+} from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
@@ -44,7 +48,11 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
-import { createCodingAgent, latestTurnsOf } from "../server/hosted/coding-agent-store";
+import {
+  awaitingLinesOf,
+  createCodingAgent,
+  latestTurnsOf,
+} from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { type ConversationTarget, type MessageCursor, storeWriter } from "../server/hosted/store";
@@ -236,6 +244,23 @@ function codingTurn(
 }
 
 const STEP_START = "step-start";
+
+/** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it. */
+const awaitingLine = (
+  target: ConversationTarget,
+  text: string,
+  delivery: (typeof CODING_AGENT_DELIVERY)[keyof typeof CODING_AGENT_DELIVERY],
+) =>
+  Effect.gen(function* () {
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const written = yield* writer.writeAwaitingLine(
+      target,
+      { clientId: `line-${text}`, text, delivery },
+      Effect.succeed(Option.some(`delivery-${text}`)),
+    );
+    assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+    return written.success.value.id;
+  });
 
 /** The id of the provider's model a step was told, read off the SDK's handle; none for a bare id. */
 const readModelId = (model: CoderModelSelection["model"]) =>
@@ -515,6 +540,91 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
 
         assert.deepEqual(page.messages, []);
         assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
+      }),
+  );
+
+  it.effect(
+    "a line the developer sent ahead of its turn is taken by the turn that receives it, in place: its delivery clears, no second row is written, and the agent reads as running from the send until the turn opens on it",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const play = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+          );
+        const statusNow = () =>
+          Effect.gen(function* () {
+            const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+            const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
+            return codingAgentStatusOf(turns.get(target.conversationId), {
+              createdAt: agent.createdAt,
+              now: yield* Clock.currentTimeMillis,
+              lineAwaits: awaiting.has(target.conversationId),
+            });
+          });
+        const lines = () =>
+          Effect.map(transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent), (page) =>
+            page.messages
+              .filter((message) => message.role === MESSAGE_ROLE.USER)
+              .map((message) => ({
+                text: message.parts.find(isTextUIPart)?.text,
+                awaits: awaitedDeliveryOf(message),
+              })),
+          );
+        const first = codingTurn("turn_0", "turn.completed");
+        const [started, received, ...rest] = first;
+        assert.ok(started && received);
+
+        // The turn opens on the plan; a steer sent while it runs stands at once, awaiting it.
+        yield* play([started, received]);
+        yield* awaitingLine(target, "Use the shared helper.", CODING_AGENT_DELIVERY.STEER);
+        assert.deepEqual(yield* lines(), [
+          { text: PLAN_TEXT, awaits: undefined },
+          { text: "Use the shared helper.", awaits: CODING_AGENT_DELIVERY.STEER },
+        ]);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        // The turn receives the steer: the line is its now, in place, and no row is written beside it.
+        yield* play([
+          stamped({
+            type: "message.received",
+            data: { turnId: "turn_0", sequence: 0, message: "Use the shared helper." },
+          }),
+        ]);
+        assert.deepEqual(yield* lines(), [
+          { text: PLAN_TEXT, awaits: undefined },
+          { text: "Use the shared helper.", awaits: undefined },
+        ]);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+        assert.equal(
+          page.messages.filter((message) => message.role === MESSAGE_ROLE.USER).length,
+          2,
+        );
+
+        // A queued line sent while the turn still runs waits for it: the turn ends, and the
+        // agent reads as running on the line's account alone until the next turn opens on it.
+        yield* awaitingLine(target, "Now add the tests.", CODING_AGENT_DELIVERY.QUEUE);
+        yield* play(rest);
+        const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+        assert.equal(turns.get(target.conversationId)?.status, TURN_STATUS.SETTLED);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
+          stamped({
+            type: "message.received",
+            data: { turnId: "turn_1", sequence: 1, message: "Now add the tests." },
+          }),
+        ]);
+        const taken = yield* lines();
+        assert.deepEqual(taken.at(-1), { text: "Now add the tests.", awaits: undefined });
+        assert.equal(taken.length, 3);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        yield* play([stamped({ type: "turn.completed", data: { turnId: "turn_1", sequence: 1 } })]);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.COMPLETED);
       }),
   );
 

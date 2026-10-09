@@ -457,6 +457,54 @@ export function latestTurnsOf(
   );
 }
 
+/** The `jsonb` field a developer's line awaits its turn under, which the builder has no operator for; one fragment, named once. */
+const AWAITED_DELIVERY = sql`${messages.metadata} ->> 'delivery'`;
+
+const AwaitingLinesRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  lines: Schema.Number,
+});
+
+/**
+ * How many of the developer's lines stand in each conversation named with no
+ * turn yet and their delivery still on them: each is a message the session
+ * took and the next turn will receive, which is what reads an idle agent as
+ * running again until that turn opens.
+ */
+const countAwaitingLines = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Result: AwaitingLinesRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .select({
+        conversationId: messages.conversationId,
+        lines: sql<number>`count(*)::int`,
+      })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.userId, userId),
+          inArray(messages.conversationId, [...conversationIds]),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          isNull(messages.turnId),
+          sql`${AWAITED_DELIVERY} is not null`,
+        ),
+      )
+      .groupBy(messages.conversationId),
+});
+
+/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
+export function awaitingLinesOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
+  if (conversationIds.length === 0) return Effect.succeed(new Set());
+  return Effect.map(
+    countAwaitingLines({ userId, conversationIds }),
+    (rows) => new Set(rows.filter((row) => row.lines > 0).map((row) => row.conversationId)),
+  );
+}
+
 /** A turn row is mutable, so its order is the latest instant any of its stamps was set. */
 const TURN_CHANGED_AT = sql`
   greatest(

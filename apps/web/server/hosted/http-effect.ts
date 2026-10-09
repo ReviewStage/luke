@@ -33,6 +33,9 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
   [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -57,6 +60,9 @@ export const RepositoryNotReachableRefusal = refusalSchema(
   HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
 );
 export const NoRepositoryRefusal = refusalSchema(HOSTED_API_ERROR.NO_REPOSITORY);
+export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_LONG);
+export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
+export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -91,6 +97,12 @@ export const HOSTED_REFUSAL = {
   REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
   /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
   NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
+  /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
+  MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
+  /** The agent's session is still coming up; the same message a moment later is taken. */
+  AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
+  /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
+  AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**

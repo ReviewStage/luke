@@ -2,6 +2,7 @@
  * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
+import { MESSAGE_DELIVERY, type MessageDelivery } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -9,6 +10,7 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
+import type { TurnPolicy } from "eve/channels";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
@@ -29,12 +31,17 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * command inbox is still starting with a 409 naming `session_not_ready`, and
  * one to a session it no longer runs with a 409 naming `session_not_active`;
  * the SDK's own client tries the first again for up to twenty seconds and
- * reads the second as terminal at once, and the same stands here. The retry
- * is what makes a wrong "retired" rare; it is not what makes one safe. That
+ * reads the second as terminal at once, and the same stands here. A session
+ * still not ready past the last wait is answered as such, which the
+ * planning ask reads as a retirement and a coding agent's message answers as
+ * a conflict the desktop tries again. The retry is what makes a wrong
+ * "retired" rare; it is not what makes one safe. That
  * is the conversation row's forward-only claim: an inbox slower than the
  * last wait costs a session opened for nothing, which the claim lets the
  * older one lose, and never two sessions writing one conversation. Reopening
- * is never eve's: the host decides it, under that claim.
+ * is never eve's: the host decides it, under that claim. A follow-up may
+ * name how it reaches a turn under way, in eve's own two words for it
+ * (`turnPolicy`): a message naming none takes the channel's policy.
  *
  * Every call is an effect on the `HttpClient` the web runtime builds once
  * per instance, read here once at composition rather than on each call, so
@@ -87,7 +94,7 @@ const EVE_SESSION_REFUSAL = {
  * bump is the moment to check it still matches. The first wait is 250
  * milliseconds, each wait after it is double the last up to two seconds, and
  * the tries end twenty seconds after the first. A session still not ready
- * past the last wait is retired.
+ * past the last wait is answered `not_ready`.
  */
 const NOT_READY_WAIT = { FIRST: Duration.millis(250), LONGEST: Duration.seconds(2) } as const;
 const NOT_READY_TRIES = Duration.seconds(20);
@@ -157,11 +164,13 @@ export function describeUnreachable(failure: EveUnreachable): string {
 /** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */
 class EveSessionNotReady extends Data.TaggedError("EveSessionNotReady") {}
 
-/** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
+/** How eve answered a call: what it accepted, a session it no longer runs, one still coming up, or an answer this build cannot read as any. */
 export const EVE_SEND_OUTCOME = {
   ACCEPTED: "accepted",
-  /** eve does not run the session, or did not come to within the retry schedule; the conversation needs a new one. */
+  /** eve does not run the session: unknown to it, or ended; the conversation needs a new one. */
   RETIRED: "retired",
+  /** eve runs the session but its inbox was not up within the retry schedule; the same message later may be taken. */
+  NOT_READY: "not_ready",
   /** eve refused or answered outside its documented shape; the status travels for the operator. */
   FAILED: "failed",
 } as const;
@@ -177,6 +186,7 @@ type EveSent =
       readonly deliveryId: string;
     }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.RETIRED }
+  | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
 
 /** How eve answered a cancel: its own two words, or an answer this build cannot read as either. */
@@ -191,10 +201,18 @@ type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
 
+/** eve's own word for each way a follow-up reaches a turn under way; the two vocabularies are held to one another here. */
+const TURN_POLICY_OF_DELIVERY = {
+  [MESSAGE_DELIVERY.STEER]: "steer",
+  [MESSAGE_DELIVERY.QUEUE]: "queue",
+} as const satisfies Record<MessageDelivery, TurnPolicy>;
+
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   readonly message: string;
+  /** How the message reaches a turn under way, where the caller names it; the channel's own policy otherwise. A first message opens a turn and names none. */
+  readonly delivery?: MessageDelivery;
 }
 
 export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
@@ -214,9 +232,10 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
 
-/** What the host posts to eve: the message a turn opens with, or the turn a cancel is scoped to. */
+/** What the host posts to eve: the message a turn opens with and how it reaches a turn under way, or the turn a cancel is scoped to. */
 interface EvePostBody {
   readonly message?: string;
+  readonly turnPolicy?: TurnPolicy;
   readonly turnId?: string;
 }
 
@@ -357,16 +376,21 @@ function sessionsOver<Turn extends BrainHostTurn>(
         readOpened,
       ),
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
-    // its last wait is the retirement the caller reads; an unreachable eve is retried nowhere.
+    // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
     send: (sessionId, message) =>
-      post(sessionPath(mount, sessionId), turnHeaders(message), { message: message.message }).pipe(
+      post(sessionPath(mount, sessionId), turnHeaders(message), {
+        message: message.message,
+        ...(message.delivery !== undefined
+          ? { turnPolicy: TURN_POLICY_OF_DELIVERY[message.delivery] }
+          : undefined),
+      }).pipe(
         Effect.flatMap(readSent),
         Effect.retry({
           schedule: SESSION_NOT_READY_RETRY,
           while: (failure) => failure._tag === "EveSessionNotReady",
         }),
         Effect.catchTag("EveSessionNotReady", () =>
-          Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED }),
+          Effect.succeed({ outcome: EVE_SEND_OUTCOME.NOT_READY }),
         ),
       ),
     cancel: (sessionId, eveTurnId) =>

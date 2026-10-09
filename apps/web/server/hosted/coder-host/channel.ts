@@ -17,9 +17,12 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * is the account's bearer and, where eve is a development server, the
  * development principal; the deployment acts for nobody here, since no
  * service of Luke's opens a coding turn without the developer's request in
- * hand. A message that arrives while a turn runs waits for it, because
- * nothing messages a coding agent mid-turn and a steer would cut a model
- * call short.
+ * hand. The developer messages a running agent through the message route
+ * (`coding-agents-app.ts`), which names how each message reaches the turn
+ * under way: a steer joins it, a queue waits for it to end. The channel's
+ * own policy stands for a message naming neither, and it is `queue`,
+ * because a steer cuts a model call short and nothing but the developer's
+ * explicit word should.
  */
 const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.QUEUE;
 

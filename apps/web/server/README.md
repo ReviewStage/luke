@@ -1724,7 +1724,7 @@ runs a turn under the scripted model with no tool call, so no sandbox opens.
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+reads, messages, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -1746,9 +1746,11 @@ Start that named a model writes it as the account's default.
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
 instant, and status, read from its newest turn (`coder-host/status.ts`):
 `starting` before one, `running`, `completed`, `failed`, or `cancelled`,
-with a running turn carrying a Stop stamp reading as cancelled already, and
-an agent still without a turn row five minutes after its Start
-(`CODER.STARTING_GRACE`) reading as failed rather than starting forever.
+with a running turn carrying a Stop stamp reading as cancelled already, an
+agent still without a turn row five minutes after its Start
+(`CODER.STARTING_GRACE`) reading as failed rather than starting forever,
+and an agent with a message of the developer's still awaiting its turn
+(`awaitingLinesOf`) reading as running whatever its newest turn says.
 `GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
 conversation's rows past the cursor as `UIMessage`s, the cursor to read on
 from, and the agent's status as the page was read
@@ -1760,6 +1762,29 @@ every half second and let go at twenty seconds, so the desktop's loop of
 held reads ends on the page whose status says the agent ended and a tab on
 a starting agent costs one held read per hold; an agent that has ended
 answers at once.
+`POST /api/agents/{id}/messages` takes `{ text, delivery }`, the words
+trimmed and at most `CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
+(`message-too-long`, 400, past that) and the delivery `steer` or `queue`:
+a steer joins the turn under way, so the model sees it at its next step and
+a call still generating is cut short and run again with it; a queue waits
+for the turn to end and opens the next; an idle agent opens a new turn on
+either. It confirms the developer still reaches the repository
+(`repository-not-reachable` or `github-sign-in-required`, as a Start does),
+then hands the words to the agent's eve session under the developer's own
+bearer with eve's `turnPolicy` named per message, inside the conversation's
+lock (`writeAwaitingLine`), and writes them as a user row with no turn yet
+and `metadata.delivery` on it once eve has taken them, so the transcript
+shows the line at once and the turn eve opens on it finds the row standing
+when its own first write takes the lock; the relay's receipt of the line
+(`message.received`) takes that row into the turn in place, dropping the
+delivery and bumping the row's revision (`takeAwaitingLine`), rather than
+writing it again, so a reader tells a line still waiting from one the model
+has. An agent whose session has not claimed the conversation, or whose
+session eve answers is still coming up past the client's twenty-second
+loop, is `agent-not-ready` (409, tried again); a session eve no longer runs
+is `agent-retired` (409), since the agent's sandbox lives with its session;
+any other answer is `unavailable`, and none of them leaves a row behind.
+eve offers no way to withdraw a queued message, so there is no DELETE.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.
