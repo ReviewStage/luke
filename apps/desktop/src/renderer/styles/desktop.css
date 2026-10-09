@@ -1782,6 +1782,10 @@ body,
   gap: var(--list-gap);
   overflow-x: auto;
   scrollbar-width: none;
+  /* Room above and below the tabs, given back to the row, for the shadow
+     under a tab being dragged, which the strip's scrolling would clip. */
+  margin-block: calc(-1 * var(--space-8));
+  padding-block: var(--space-8);
 }
 
 .tab {
@@ -1800,9 +1804,12 @@ body,
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 560;
+  /* Its transform is a drag's (use-tab-drag.ts): sliding aside for a tab
+     dragged past it, and home again, on the bounce small elements ride. */
   transition:
     background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+    color var(--duration-hover) ease,
+    transform var(--duration-fast) var(--spring-fast);
   -webkit-app-region: no-drag;
 }
 
@@ -1814,6 +1821,19 @@ body,
 .tab[data-selected="true"] {
   background: var(--raised-strong);
   color: var(--text-primary);
+}
+
+/* A tab being dragged is lifted over the tabs it passes: the chosen tab's
+   fill made opaque on the panel's ground, and a shadow beneath. It follows
+   the pointer frame for frame, so its own transform eases nothing. */
+.tab[data-dragging="true"] {
+  z-index: 1;
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-well);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
 }
 
 /* Only the chosen tab keeps room for its ×, so the strip holds more before

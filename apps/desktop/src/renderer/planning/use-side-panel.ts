@@ -26,6 +26,8 @@ import { useCallback, useEffect, useState } from "react";
  * the ones they do not want, and the "+" or a tab's shortcut opens one again
  * at the end of the strip. Closing the chosen tab chooses its neighbour, and
  * closing the last leaves the panel open and empty rather than shutting it.
+ * A tab dragged or moved from the keyboard to another place in the strip is
+ * kept there.
  *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
@@ -169,6 +171,8 @@ export interface SidePanelControl {
   onAdd: (tab: FixedSidePanelTab) => void;
   /** Closes the tab; closing the chosen one chooses its neighbour, the one after it where there is one. */
   onClose: (tab: FixedSidePanelTab) => void;
+  /** Moves the open fixed tab to the place in the strip's order, leaving the chosen one chosen; the agent tabs keep their place after the fixed ones. */
+  onMove: (tab: FixedSidePanelTab, to: number) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -212,6 +216,15 @@ function withoutTab(
   const next =
     tabs[Math.min(at, tabs.length - 1)] ?? (first === undefined ? undefined : { agent: first });
   return { ...held, tabs, tab: next };
+}
+
+/** The state with the open tab taken out and put back at `to` in the strip's order. */
+function withTabAt(held: SidePanelState, tab: FixedSidePanelTab, to: number): SidePanelState {
+  const at = held.tabs.indexOf(tab);
+  if (at < 0 || to === at) return held;
+  const tabs = held.tabs.filter((each) => each !== tab);
+  tabs.splice(Math.max(0, Math.min(to, tabs.length)), 0, tab);
+  return { ...held, tabs };
 }
 
 /**
@@ -321,6 +334,10 @@ export function useSidePanel(
     (tab: FixedSidePanelTab) => update((held) => withoutTab(held, tab, agents)),
     [update, agents],
   );
+  const onMove = useCallback(
+    (tab: FixedSidePanelTab, to: number) => update((held) => withTabAt(held, tab, to)),
+    [update],
+  );
   const onResize = useCallback(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
     [update],
@@ -336,6 +353,7 @@ export function useSidePanel(
     onChoose,
     onAdd,
     onClose,
+    onMove,
     onResize,
   };
 }

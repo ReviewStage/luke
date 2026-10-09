@@ -1318,3 +1318,177 @@ test("Delete on a tab the arrow keys reached closes it and hands focus to the ta
   assert.deepEqual(panelTabs(page), []);
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Open a tab");
 });
+
+/** How far apart the panel's tabs are laid out, and how wide each is, in CSS pixels. */
+const TAB_PITCH = 100;
+const TAB_WIDTH = 90;
+
+/** Lays the panel's tabs out in a row in their strip's order, the strip room for them all; jsdom lays out nothing. */
+function layOutTabs(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.classList.contains("tab-strip")) return DOMRect.fromRect({ width: 4 * TAB_PITCH });
+    const row = this.classList.contains("tab") ? this.parentElement : null;
+    const at = row === null ? -1 : [...row.querySelectorAll(":scope > .tab")].indexOf(this);
+    return DOMRect.fromRect(at < 0 ? {} : { x: at * TAB_PITCH, width: TAB_WIDTH });
+  });
+}
+
+/** How a drag ends. */
+const DRAG_END = {
+  DROP: "drop",
+  ESCAPE: "escape",
+  CANCEL: "cancel",
+} as const;
+
+type DragEnd = (typeof DRAG_END)[keyof typeof DRAG_END];
+
+/** The tabs standing aside or lifted, by the transform a drag left on them. */
+function tabsMoved(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLElement>(".side-panel .tab")]
+    .filter((tab) => tab.style.transform !== "")
+    .map((tab) => tab.textContent ?? "");
+}
+
+/**
+ * Presses at `from` over `target`, moves through each of `through`, runs
+ * `meanwhile`, and ends the drag the way asked, answering the tabs the drag
+ * had moved before it ended.
+ */
+function dragTab(
+  target: HTMLElement,
+  from: number,
+  through: number[],
+  end: DragEnd,
+  meanwhile: () => void = () => undefined,
+): string[] {
+  const page = document.body;
+  const pointer = (type: string, clientX: number) =>
+    act(() => {
+      target.dispatchEvent(
+        new PointerEvent(type, { clientX, pointerId: 1, bubbles: true, cancelable: true }),
+      );
+    });
+  pointer("pointerdown", from);
+  for (const x of through) pointer("pointermove", x);
+  const moved = tabsMoved(page);
+  meanwhile();
+  if (end === DRAG_END.ESCAPE) keydown({ key: "Escape" });
+  pointer(end === DRAG_END.CANCEL ? "pointercancel" : "pointerup", through.at(-1) ?? from);
+  return moved;
+}
+
+function movedSaid(page: HTMLElement): string | undefined {
+  return page.querySelector(".side-panel [role='status']")?.textContent ?? undefined;
+}
+
+test("a press on a tab that wavers less than a drag is a click: it chooses the tab and moves none", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  const code = tabNamed(page, "Code");
+  assert.deepEqual(dragTab(code, 145, [147, 142], DRAG_END.DROP), []);
+  act(() => code.click());
+
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Code");
+  assert.deepEqual(tabsMoved(page), []);
+});
+
+test("a tab dragged past its neighbour lands there chosen, says where, and the next launch keeps the order", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  dragTab(tabNamed(page, "Board"), 45, [60, 120, 160], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Board");
+  assert.equal(movedSaid(page), "Board moved to position 2 of 4");
+
+  dragTab(tabNamed(page, "Work"), 345, [200, -400], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Work", "Code", "Board", "Transcript"]);
+  assert.equal(chosenTab(page), "Work", "the dragged tab is chosen");
+  unmountAll();
+
+  const next = mountOpenPlan();
+  assert.deepEqual(panelTabs(next), ["Work", "Code", "Board", "Transcript"]);
+});
+
+test("Escape, or the system taking the pointer, puts a dragged tab back and changes nothing", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  const lifted = dragTab(tabNamed(page, "Code"), 145, [200, 360], DRAG_END.ESCAPE);
+  assert.deepEqual(
+    lifted,
+    ["Code", "Transcript", "Work"],
+    "Code is lifted and the two it passed stand aside",
+  );
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Board");
+  assert.deepEqual(tabsMoved(page), [], "every tab is back in its place");
+
+  dragTab(tabNamed(page, "Code"), 145, [360], DRAG_END.CANCEL);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(tabsMoved(page), []);
+});
+
+test("a tab closed under a drag puts the drag back rather than dropping it at a place that moved", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  dragTab(tabNamed(page, "Code"), 145, [260], DRAG_END.DROP, () =>
+    press(page, '[aria-label="Close Work"]'),
+  );
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
+  assert.equal(chosenTab(page), "Board");
+  assert.deepEqual(tabsMoved(page), []);
+
+  // One closed and opened again at the end leaves as many tabs, and the
+  // dragged one where it was, but the places it passed have moved.
+  dragTab(tabNamed(page, "Board"), 45, [160], DRAG_END.DROP, () => {
+    press(page, '[aria-label="Close Code"]');
+    keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+  });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.equal(chosenTab(page), "Code");
+  assert.deepEqual(tabsMoved(page), []);
+});
+
+test("the × on a tab starts no drag", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  const close = page.querySelector<HTMLElement>('[aria-label="Close Board"]');
+  assert.ok(close, "the Board tab has its ×");
+  assert.deepEqual(dragTab(close, 80, [200, 300], DRAG_END.DROP), []);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+});
+
+test("Shift-Command-Arrow moves the focused tab along the strip, focus and choice staying put, and says where", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const right = { key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true };
+  const left = { key: "ArrowLeft", code: "ArrowLeft", metaKey: true, shiftKey: true };
+  assert.equal(keydown(right), false, "with no tab focused the chord is left alone");
+
+  const code = tabNamed(page, "Code");
+  act(() => code.focus());
+  keydown(right);
+  keydown(right);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.equal(document.activeElement, code);
+  assert.equal(chosenTab(page), "Board");
+  assert.equal(movedSaid(page), "Code moved to position 4 of 4");
+
+  keydown(right);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"], "the last stays last");
+  for (const _ of SIDE_PANEL_TABS) keydown(left);
+  assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
+  assert.equal(document.activeElement, code);
+});

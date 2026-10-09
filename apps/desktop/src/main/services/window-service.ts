@@ -3,12 +3,13 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import type { UnparsedWireValue } from "@sidecar/wire";
-import type { Effect } from "effect";
+import { Effect, Exit, Scope } from "effect";
 import {
   app,
   type BrowserWindow,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
+  nativeTheme,
   powerMonitor,
   screen,
   session,
@@ -19,6 +20,7 @@ import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/
 import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AgentPlace } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
+import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
@@ -59,6 +61,12 @@ export interface WindowService extends DesktopService {
    * what `app:state-request` answers it are the same document read twice.
    */
   publishAppState: () => void;
+  /**
+   * Steers the app to the theme the document holds. Run before every publish,
+   * so a window handed new settings already draws under the appearance they
+   * name, and a write that failed — which moves no settings — steers nothing.
+   */
+  applyTheme: () => Effect.Effect<void>;
   /**
    * What one window answers for and the document cannot: which surface it
    * draws, how big it stands, and the display under it. Decided here by which
@@ -145,6 +153,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
   });
   const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+
+  /** Electron's own `nativeTheme`, the one appearance every window here follows. */
+  const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
+  /** What the panels' grounds follow the appearance in; closing it takes the listener back. */
+  const appearanceScope = Scope.makeUnsafe();
+  const applyTheme = (): Effect.Effect<void> =>
+    Effect.suspend(() =>
+      applyThemePreference(state.snapshot().settings?.stored.theme).pipe(withNativeTheme),
+    );
 
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
@@ -308,6 +325,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     hotkeys,
     dock,
     publishAppState,
+    applyTheme,
     windowFactsFor,
     sendToVoice,
     showAgent,
@@ -332,6 +350,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       // this process down; nothing is opened or armed over it. This check sits
       // after every wait that still has a window behind it.
       if (!launchStanding()) return;
+      // The theme is steered before any panel opens, so the first frame of
+      // every window is already drawn in the appearance it will keep.
+      await run(applyThemePreference(settings?.stored.theme).pipe(withNativeTheme));
+      await run(
+        followAppearance((dark) => panels.paint(dark)).pipe(
+          Scope.provide(appearanceScope),
+          withNativeTheme,
+        ),
+      );
       if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
@@ -367,6 +394,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       powerMonitor.removeListener("user-did-become-active", wakeHandlers["user-did-become-active"]);
       for (const wait of pendingWaits) clearTimeout(wait);
       pendingWaits.clear();
+      await run(Scope.close(appearanceScope, Exit.void));
       hotkeys.release();
       voiceWindow.closeForGood();
     },

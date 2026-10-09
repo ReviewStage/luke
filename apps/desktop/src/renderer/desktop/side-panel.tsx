@@ -206,7 +206,11 @@ function AddTabButton({
  * menu, the "+" menu, and on the Keyboard shortcuts page, and an agent's
  * tab wears the dot for where the agent stands in its glyph's place. A tab
  * something arrived on while another was shown, and an agent's whose end no
- * one was looking at, wear the note at their corner until shown.
+ * one was looking at, wear the note at their corner until shown. The fixed
+ * tabs are dragged or stepped into the order the panel keeps; the agent
+ * tabs stand after them in the order the agents started, so a drop among
+ * them, or of one of them, changes nothing, and the "+" stands after all of
+ * them, apart from the strip, so it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
@@ -221,7 +225,14 @@ function PanelTabs({
   const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
   return (
     <div className="side-panel-tabs">
-      <TabStrip label="Panel">
+      <TabStrip
+        label="Panel"
+        onMove={(from, to) => {
+          // Only the fixed tabs move, and only among themselves.
+          const tab = panel.tabs[from];
+          if (tab !== undefined && to < panel.tabs.length) panel.onMove(tab, to);
+        }}
+      >
         {panel.tabs.map((tab) => (
           <Tab
             key={tab}

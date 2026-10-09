@@ -10,6 +10,7 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { APPEARANCE_PAGE, VOICE_PAGE } from "./settings-paths.js";
+import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 
 export {
   SETTING_ROWS,
@@ -38,10 +39,34 @@ function voiceOptionLabel(voice: LiveVoice): string {
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
+/* A theme is said in lowercase, as it is stored; on a control it reads as a name. */
+function themeOptionLabel(theme: Theme): string {
+  return theme.charAt(0).toUpperCase() + theme.slice(1);
+}
+
 /** Voice available and the microphone granted: the whole of what a control needs. */
 const voiceControlDrawn = (view: SettingsVisibility): boolean => view.voiceControlsDrawn;
 
 export const APP_SETTING_SCHEMA = {
+  theme: choiceSetting({
+    field: "theme",
+    id: APP_SETTING_ID.THEME,
+    label: "Theme",
+    description: "Whether Luke's windows are light or dark, or follow the Mac's own appearance.",
+    values: THEME_LIST,
+    say: (theme) => theme,
+    optionLabel: themeOptionLabel,
+    guard: (value: UnparsedWireValue) => optional(value, isTheme),
+    default: THEME.DARK,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 5,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    manual: APPEARANCE_PAGE,
+    // Nothing to run per write: main steers the app from every settings
+    // snapshot it publishes, so a write that failed steers nothing.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+    adjustable: true,
+  }),
   openAtLogin: toggleSetting({
     field: "openAtLogin",
     id: APP_SETTING_ID.OPEN_AT_LOGIN,

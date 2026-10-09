@@ -29,6 +29,8 @@ export const APP_COMMAND = {
   SHOW_CODE: "show-code",
   SHOW_TRANSCRIPT: "show-transcript",
   SHOW_WORK: "show-work",
+  MOVE_TAB_LEFT: "move-tab-left",
+  MOVE_TAB_RIGHT: "move-tab-right",
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
   FIND: "find",
@@ -82,6 +84,14 @@ const SHORTCUT_KEY = {
   FOUR: { accelerator: "4", glyph: "4", key: "4", code: "Digit4" },
   UP: { accelerator: "Up", glyph: "↑", key: "ArrowUp", code: "ArrowUp" },
   DOWN: { accelerator: "Down", glyph: "↓", key: "ArrowDown", code: "ArrowDown" },
+  LEFT: { accelerator: "Left", glyph: "←", key: "ArrowLeft", code: "ArrowLeft", editsText: true },
+  RIGHT: {
+    accelerator: "Right",
+    glyph: "→",
+    key: "ArrowRight",
+    code: "ArrowRight",
+    editsText: true,
+  },
   COMMA: { accelerator: ",", glyph: ",", key: ",", code: "Comma" },
   SLASH: { accelerator: "/", glyph: "/", key: "/", code: "Slash" },
   ENTER: { accelerator: "Enter", glyph: "↩", key: "Enter", code: "Enter" },
@@ -120,8 +130,9 @@ export interface AppShortcut {
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
- * Safari have them, and ⇧⌘↩ to fill the window with a pane as iTerm and Warp
- * have it.
+ * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
+ * have it, and ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
+ * keys VS Code's Move Editor Left and Right end in.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -152,6 +163,14 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.THREE, option: true },
   },
   [APP_COMMAND.SHOW_WORK]: { label: "Show work", chord: { key: SHORTCUT_KEY.FOUR, option: true } },
+  [APP_COMMAND.MOVE_TAB_LEFT]: {
+    label: "Move tab left",
+    chord: { key: SHORTCUT_KEY.LEFT, shift: true },
+  },
+  [APP_COMMAND.MOVE_TAB_RIGHT]: {
+    label: "Move tab right",
+    chord: { key: SHORTCUT_KEY.RIGHT, shift: true },
+  },
   [APP_COMMAND.SETTINGS]: { label: "Settings", chord: { key: SHORTCUT_KEY.COMMA } },
   [APP_COMMAND.KEYBOARD_SHORTCUTS]: {
     label: "Keyboard shortcuts",
@@ -193,6 +212,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SHOW_CODE,
       APP_COMMAND.SHOW_TRANSCRIPT,
       APP_COMMAND.SHOW_WORK,
+      APP_COMMAND.MOVE_TAB_LEFT,
+      APP_COMMAND.MOVE_TAB_RIGHT,
     ],
   },
   {
