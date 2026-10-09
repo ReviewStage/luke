@@ -84,10 +84,11 @@ function TranscriptCalls({
   const now = Date.now();
   // Note that the scroll box has no top padding, because a sticky call
   // header sticks below it and would leave the lines scrolled under it
-  // showing in that band; the list carries the room instead.
+  // showing in that band; the list carries the room instead. Its sides keep
+  // the window's content inset, so the words start under the panel's first tab.
   return (
     <Conversation>
-      <ConversationContent className="pt-0">
+      <ConversationContent className="px-(--content-inset) pt-0">
         {region.earlierOmitted ? (
           <p className="plan-transcript-note">Earlier lines are not shown.</p>
         ) : null}

@@ -14,9 +14,40 @@
   --control-height: 30px;
   --control-radius: 8px;
   --control-glyph: 15px;
-  /* A top row's inset from its column's edges, and the room between its items. */
-  --bar-inset: 12px;
-  --bar-gap: 8px;
+  /* The spacing scale: every padding, margin, and gap in the window is one of
+     these steps or a name below built from them (docs/DESIGN.md). */
+  --space-2: 2px;
+  --space-4: 4px;
+  --space-6: 6px;
+  --space-8: 8px;
+  --space-12: 12px;
+  --space-16: 16px;
+  --space-20: 20px;
+  --space-24: 24px;
+  --space-32: 32px;
+  --space-40: 40px;
+  --space-48: 48px;
+  /* A column's edge to the rows and controls it holds: the sidebar's rows, a
+     top row's first and last control, Settings' page list. */
+  --column-inset: var(--space-12);
+  /* A row's own edge to its glyph or words: a sidebar row, a tab, a menu item. */
+  --row-inset: var(--space-8);
+  /* Where a column's glyphs and words start, which is where a row's padding
+     puts them; words drawn on no row (a page's title, the transcript, the
+     code's path) start there too, so a column reads down one edge. */
+  --content-inset: calc(var(--column-inset) + var(--row-inset));
+  /* Between a glyph and the words beside it, in a row, a tab, or a button. */
+  --glyph-gap: var(--space-8);
+  /* Between two controls in a row, and between two items of a list. */
+  --control-gap: var(--space-8);
+  --list-gap: var(--space-2);
+  /* Between a column's groups: Luke, New plan, and the plans. */
+  --section-gap: var(--space-16);
+  /* A page's content from its column's edges: the document, the call bar
+     under it, the new-plan page, and a Settings page. */
+  --page-inset: var(--space-40);
+  /* A menu's edge to its items, whose own row inset then places their glyphs. */
+  --menu-inset: var(--space-4);
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
   /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
@@ -28,7 +59,7 @@
      the first this far past the green light: about what the lights leave
      between themselves. The buttons stand edge to edge, so each glyph is as
      far from the next as the first is from the light, and the row reads as one. */
-  --title-bar-inset: 8px;
+  --title-bar-inset: var(--space-8);
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
   /* Where the work column's toolbar starts its tab while the sidebar is
      folded: clear of the traffic lights and both buttons beside them, by a
@@ -37,12 +68,12 @@
     var(--title-bar-left) +
     2 *
     var(--control-height) +
-    var(--bar-gap)
+    var(--control-gap)
   );
   /* What a top row at the window's right edge leaves past its last control
      for the side panel's toggle: the toggle, a row's inset from the edge,
      and a row's gap between its items. */
-  --panel-toggle-clearance: calc(var(--bar-inset) + var(--control-height) + var(--bar-gap));
+  --panel-toggle-clearance: calc(var(--column-inset) + var(--control-height) + var(--control-gap));
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
   /* A destructive act's own button, filled: deep enough to carry white words,
@@ -152,7 +183,7 @@ body,
 }
 
 .title-bar-controls[data-edge="end"] {
-  right: var(--bar-inset);
+  right: var(--column-inset);
   left: auto;
 }
 
@@ -160,7 +191,7 @@ body,
   display: flex;
   min-height: 0;
   flex-direction: column;
-  padding: 0 12px 12px;
+  padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
 }
@@ -168,8 +199,8 @@ body,
 .luke-identity {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 2px 8px 18px;
+  gap: var(--space-12);
+  padding: var(--space-2) var(--row-inset) var(--section-gap);
 }
 
 .luke-identity-face {
@@ -191,7 +222,7 @@ body,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-2);
 }
 
 .luke-identity-name {
@@ -203,7 +234,7 @@ body,
 .luke-identity-status {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-6);
   color: var(--text-secondary);
   font-size: 12px;
 }
@@ -238,10 +269,10 @@ body,
 .sidebar-new-plan {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--glyph-gap);
   height: 36px;
-  margin: 0 0 20px;
-  padding: 0 10px;
+  margin: 0 0 var(--section-gap);
+  padding: 0 var(--row-inset);
   border-radius: 9px;
   background: none;
   font-size: 13px;
@@ -272,15 +303,15 @@ body,
 }
 
 .sidebar-heading {
-  margin: 0 0 4px;
-  padding: 0 10px;
+  margin: 0 0 var(--space-4);
+  padding: 0 var(--row-inset);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
 }
 
 .sidebar-note {
-  margin: 4px 10px;
+  margin: var(--space-4) var(--row-inset);
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.45;
@@ -289,7 +320,7 @@ body,
 .sidebar-plans {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -299,8 +330,8 @@ body,
   display: flex;
   width: 100%;
   flex-direction: column;
-  gap: 3px;
-  padding: 9px 10px;
+  gap: var(--space-4);
+  padding: var(--space-8) var(--row-inset);
   border-radius: 9px;
   background: none;
   text-align: left;
@@ -334,8 +365,8 @@ body,
    own line and type, ringed, and the folder stays beneath it. */
 .sidebar-plan-field {
   width: calc(100% + 10px);
-  margin: -2px -5px;
-  padding: 1px 4px;
+  margin: -2px -5px; /* off-scale */
+  padding: 1px 4px; /* off-scale */
   border: 0;
   border-radius: 5px;
   background: var(--desktop-ground);
@@ -356,17 +387,17 @@ body,
 .sidebar-foot {
   display: flex;
   flex-direction: column;
-  padding-top: 8px;
+  padding-top: var(--space-8);
 }
 
 .sidebar-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--glyph-gap);
   width: 100%;
   height: 34px;
-  padding: 0 10px;
+  padding: 0 var(--row-inset);
   border-radius: 8px;
   background: none;
   color: var(--text-secondary);
@@ -393,7 +424,6 @@ body,
    target the height of a plan row so the avatar has room to read as a face. */
 .sidebar-account {
   height: 42px;
-  padding: 0 8px;
   color: var(--text-primary);
 }
 
@@ -464,9 +494,9 @@ body,
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--bar-gap);
+  gap: var(--control-gap);
   min-height: var(--desktop-bar-height);
-  padding: 8px var(--panel-toggle-clearance) 8px 32px;
+  padding: var(--space-8) var(--panel-toggle-clearance) var(--space-8) var(--content-inset);
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
 }
@@ -474,7 +504,7 @@ body,
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
    the window's, and the panel's own row leaves the toggle its room. */
 .desktop-plan[data-panel-open="true"] .desktop-toolbar {
-  padding-right: var(--bar-inset);
+  padding-right: var(--column-inset);
 }
 
 /* A pane sliding in finds the work column already narrowed for it, so the
@@ -503,8 +533,8 @@ body,
 /* Its room reaches 6px left of the words, so the title's own hover fill and
    field ring, which start there, are not clipped. */
 .desktop-toolbar-title {
-  margin: 0 0 0 -6px;
-  padding-left: 6px;
+  margin: 0 0 0 calc(-1 * var(--space-6));
+  padding-left: var(--space-6);
   overflow: hidden;
   font-size: 15px;
   font-weight: 680;
@@ -516,14 +546,14 @@ body,
 /* The plan's toolbar leads with its tab rather than a title, so it starts
    the tab's pill a row's inset in, as the side panel's row starts its own. */
 .desktop-plan-main .desktop-toolbar {
-  padding-left: var(--bar-inset);
+  padding-left: var(--column-inset);
 }
 
 .desktop-toolbar-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: var(--bar-gap);
+  gap: var(--control-gap);
 }
 
 .desktop-toolbar-note {
@@ -547,9 +577,9 @@ body,
 .toolbar-button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--glyph-gap);
   height: var(--control-height);
-  padding: 0 12px;
+  padding: 0 var(--space-12);
   border-radius: var(--control-radius);
   background: none;
   font-size: 12.5px;
@@ -591,7 +621,7 @@ body,
   display: flex;
   min-width: 196px;
   flex-direction: column;
-  padding: 5px;
+  padding: var(--menu-inset);
   border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
   border-radius: 10px;
   background: var(--desktop-sidebar);
@@ -606,9 +636,9 @@ body,
 .plan-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--glyph-gap);
   height: 28px;
-  padding: 0 10px 0 8px;
+  padding: 0 var(--row-inset);
   border-radius: 6px;
   background: none;
   color: var(--text-primary);
@@ -657,7 +687,7 @@ body,
 
 /* An item's shortcut, or why it cannot be chosen now, at its end. */
 .plan-menu-end {
-  margin-left: 24px;
+  margin-left: var(--space-24);
   color: var(--text-tertiary);
   font-size: 12px;
 }
@@ -673,7 +703,7 @@ body,
 
 .plan-menu-rule {
   height: 1px;
-  margin: 5px 6px;
+  margin: var(--menu-inset) var(--row-inset);
   border: 0;
   background: var(--hairline);
 }
@@ -687,9 +717,9 @@ body,
 .primary-button {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--glyph-gap);
   height: 36px;
-  padding: 0 18px;
+  padding: 0 var(--space-16);
   border-radius: 9px;
   background: var(--message-sent);
   color: #fff;
@@ -710,15 +740,15 @@ body,
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 40px;
+  gap: var(--space-12);
+  padding: var(--page-inset);
   color: var(--text-secondary);
   text-align: center;
 }
 
 .desktop-empty p {
   max-width: 400px;
-  margin: 0 0 8px;
+  margin: 0 0 var(--space-8);
   font-size: 13.5px;
   line-height: 1.55;
 }
@@ -733,7 +763,9 @@ body,
 }
 
 .desktop-document .plan-document-scroll {
-  padding: 44px 48px 140px;
+  padding: var(--page-inset);
+  /* Room for the last line to scroll clear of Luke's floating caption. */
+  padding-bottom: 140px; /* off-scale */
   /* Nothing in a plan is wider than the column (its code and tables scroll
      on their own), so a body gliding in from where a pane displaced it
      never draws a scrollbar on the way. */
@@ -781,8 +813,8 @@ body,
 }
 
 .desktop-document .plan-assumptions {
-  margin-top: 44px;
-  padding: 20px 24px;
+  margin-top: var(--space-40);
+  padding: var(--space-20) var(--space-24);
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--desktop-well);
@@ -805,7 +837,7 @@ body,
 .desktop-call-bar {
   position: relative;
   flex: 0 0 auto;
-  padding: 14px 32px;
+  padding: var(--space-12) var(--page-inset);
   border-top: 1px solid var(--hairline);
   background: var(--desktop-well);
 }
@@ -821,7 +853,7 @@ body,
   max-width: var(--reading-width);
   margin: 0 auto;
   padding: 0;
-  gap: 14px;
+  gap: var(--space-12);
   border: 0;
 }
 
@@ -870,7 +902,7 @@ body,
   flex-direction: column;
   justify-content: center;
   overflow-y: auto;
-  padding: 24px 48px 12vh;
+  padding: var(--space-24) var(--page-inset) 12vh;
 }
 
 .plan-compose {
@@ -879,7 +911,7 @@ body,
   max-width: 680px;
   margin: 0 auto;
   flex-direction: column;
-  gap: 22px;
+  gap: var(--space-24);
 }
 
 .plan-compose-title {
@@ -907,7 +939,7 @@ body,
 
 .plan-compose-name {
   width: 100%;
-  padding: 20px 22px 14px;
+  padding: var(--space-20) var(--space-20) var(--space-12);
   border: 0;
   outline: none;
   background: none;
@@ -926,8 +958,8 @@ body,
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 0 12px 12px;
+  gap: var(--space-12);
+  padding: 0 var(--space-12) var(--space-12);
 }
 
 .plan-compose-folder {
@@ -939,9 +971,9 @@ body,
   display: flex;
   max-width: 100%;
   align-items: center;
-  gap: 7px;
+  gap: var(--glyph-gap);
   height: 30px;
-  padding: 0 12px 0 10px;
+  padding: 0 var(--space-12) 0 var(--row-inset);
   border: 1px solid var(--hairline);
   border-radius: 999px;
   background: var(--raised);
@@ -1005,12 +1037,12 @@ body,
 .plan-compose-menu {
   position: absolute;
   z-index: 2;
-  top: calc(100% + 6px);
+  top: calc(100% + var(--space-4));
   left: 0;
   display: flex;
   width: 340px;
   flex-direction: column;
-  padding: 6px;
+  padding: var(--menu-inset);
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
@@ -1019,7 +1051,7 @@ body,
 }
 
 .plan-compose-menu-heading {
-  margin: 4px 8px 6px;
+  margin: var(--space-4) var(--row-inset);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -1028,9 +1060,9 @@ body,
 .plan-compose-menu-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--glyph-gap);
   height: 32px;
-  padding: 0 8px;
+  padding: 0 var(--row-inset);
   border-radius: 8px;
   background: none;
   color: var(--text-primary);
@@ -1058,8 +1090,8 @@ body,
 }
 
 .plan-compose-menu hr {
-  width: 100%;
-  margin: 6px 0;
+  align-self: stretch;
+  margin: var(--menu-inset) var(--row-inset);
   border: 0;
   border-top: 1px solid var(--hairline);
 }
@@ -1082,18 +1114,18 @@ body,
   display: flex;
   min-height: 0;
   flex-direction: column;
-  padding: 0 12px 12px;
+  padding: 0 var(--column-inset) var(--column-inset);
   border-right: 1px solid var(--hairline);
   background: var(--desktop-sidebar);
 }
 
 .settings-pages-back {
   width: auto;
-  margin-bottom: 12px;
+  margin-bottom: var(--space-12);
 }
 
 .settings-pages-title {
-  margin: 0 10px 14px;
+  margin: 0 var(--row-inset) var(--space-12);
   font-size: 20px;
   font-weight: 720;
   letter-spacing: -0.015em;
@@ -1105,15 +1137,15 @@ body,
    beneath it. */
 .settings-search {
   flex: 0 0 auto;
-  margin-bottom: 14px;
+  margin-bottom: var(--section-gap);
 }
 
 .settings-search-well {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: var(--glyph-gap);
   height: 30px;
-  padding: 0 6px 0 9px;
+  padding: 0 var(--space-6) 0 calc(var(--row-inset) - 1px);
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--raised);
@@ -1151,7 +1183,7 @@ body,
 
 /* The search's chord, printed in the empty field until the caret arrives. */
 .settings-search-shortcut {
-  padding-right: 3px;
+  padding-right: 3px; /* off-scale */
 }
 
 .settings-search-well:focus-within .settings-search-shortcut {
@@ -1186,7 +1218,7 @@ body,
 .settings-search-results {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--section-gap);
 }
 
 .settings-search-result {
@@ -1199,7 +1231,7 @@ body,
 .settings-pages ul {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--list-gap);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1216,10 +1248,10 @@ body,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 28px 40px 60px;
+  padding: var(--page-inset);
   /* A landed search result scrolls to the top of this column with the
      column's own top margin above it. */
-  scroll-padding-top: 28px;
+  scroll-padding-top: var(--page-inset);
 }
 
 /* The page scrolls with the column rather than inside a scroller of its own. */
@@ -1254,7 +1286,7 @@ body,
   margin: auto;
   flex-direction: column;
   align-items: center;
-  padding: 36px 32px 28px;
+  padding: var(--space-32);
   border: 1px solid var(--hairline);
   border-radius: 20px;
   background: var(--desktop-sidebar);
@@ -1333,7 +1365,7 @@ body,
   left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   height: auto;
   max-height: var(--caption-max);
-  padding: 14px 18px;
+  padding: var(--space-12) var(--space-16);
   border: 1px solid var(--hairline);
   border-radius: 16px;
   background: rgba(22, 22, 27, 0.97);
@@ -1487,9 +1519,9 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: var(--bar-gap);
+  gap: var(--control-gap);
   min-height: var(--desktop-bar-height);
-  padding: 8px var(--panel-toggle-clearance) 8px var(--bar-inset);
+  padding: var(--space-8) var(--panel-toggle-clearance) var(--space-8) var(--column-inset);
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
 }
@@ -1508,7 +1540,7 @@ body,
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 2px;
+  gap: var(--list-gap);
 }
 
 .side-panel-tabs .toolbar-icon-button[aria-disabled="true"] {
@@ -1525,12 +1557,12 @@ body,
   max-width: 300px;
   flex-direction: column;
   margin: 0 auto;
-  padding: 48px 16px;
+  padding: var(--space-48) var(--space-16);
 }
 
 .side-panel-no-tabs-line {
-  margin: 0 0 8px;
-  padding: 0 8px;
+  margin: 0 0 var(--space-8);
+  padding: 0 var(--row-inset);
   color: var(--text-secondary);
   font-size: 12.5px;
 }
@@ -1562,7 +1594,7 @@ body,
 .side-panel-empty {
   max-width: 260px;
   margin: auto;
-  padding: 24px;
+  padding: var(--space-24);
   color: var(--text-secondary);
   font-size: 12.5px;
   line-height: 1.5;
@@ -1588,7 +1620,7 @@ body,
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 2px;
+  gap: var(--list-gap);
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1596,11 +1628,11 @@ body,
 .tab {
   /* The pill's insets about its glyph and label, and the ×'s box with its
      inset from the pill's end. */
-  --tab-start: 8px;
-  --tab-end: 10px;
-  --tab-gap: 6px;
+  --tab-start: var(--row-inset);
+  --tab-end: var(--space-12);
+  --tab-gap: var(--glyph-gap);
   --tab-close: 20px;
-  --tab-close-inset: 4px;
+  --tab-close-inset: var(--space-4);
   position: relative;
   display: flex;
   flex: none;
@@ -1779,7 +1811,7 @@ body,
   inset: 0;
   display: grid;
   place-items: center;
-  padding: 24px;
+  padding: var(--space-24);
   background: rgba(0, 0, 0, 0.55);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
   -webkit-app-region: no-drag;
@@ -1789,8 +1821,8 @@ body,
   display: flex;
   width: min(400px, 100%);
   flex-direction: column;
-  gap: 8px;
-  padding: 20px;
+  gap: var(--space-8);
+  padding: var(--space-20);
   border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
   border-radius: 14px;
   background: var(--desktop-sidebar);
@@ -1826,14 +1858,14 @@ body,
 .confirm-dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 12px;
+  gap: var(--control-gap);
+  margin-top: var(--space-12);
 }
 
 .confirm-dialog-button {
   height: 32px;
   min-width: 80px;
-  padding: 0 14px;
+  padding: 0 var(--space-12);
   border-radius: 8px;
   background: var(--raised);
   color: var(--text-primary);

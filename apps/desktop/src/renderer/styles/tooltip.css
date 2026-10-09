@@ -16,8 +16,8 @@
   left: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+  gap: var(--glyph-gap);
+  padding: var(--space-4) var(--row-inset);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 7px;
   background: #0b0b0c;
@@ -69,7 +69,7 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-2);
   color: var(--text-tertiary);
   font-size: 12px;
   font-weight: 500;
