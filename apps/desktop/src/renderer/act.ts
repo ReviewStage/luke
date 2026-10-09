@@ -1,7 +1,5 @@
-import { useAtomSet } from "@effect/atom-react/Hooks";
 import type { AppSettingField, AppSettingValue } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import { Effect } from "effect";
 import { useMemo } from "react";
 import {
   ACT,
@@ -14,7 +12,6 @@ import {
   type ActResultFor,
   type SettingUpdatePayload,
 } from "#shared/messages/acts";
-import { rendererRuntime } from "./renderer-runtime";
 
 /** A kind that carries nothing is called with nothing; every other kind carries its own payload. */
 type ActArguments<Kind extends ActKind> =
@@ -47,16 +44,17 @@ function decodedOutcome<Kind extends ActKind>(kind: Kind, outcome: ActOutcome): 
 }
 
 /**
- * The one act channel out of the sandbox, as an `Atom.fn` on the runtime this
- * bundle's root built: setting it sends one `{kind, payload}` over `app:act`,
- * and its own value is the raw outcome the bridge answered, undecoded — every
- * kind shares this one atom, so the guard that turns an outcome into a kind's
- * own value or a rejection lives beside it in {@link decodedOutcome} rather
- * than in the atom itself.
+ * The one act channel out of the sandbox: one invoke over `app:act` carrying
+ * one `{kind, payload}`, answered with the raw outcome the bridge returned,
+ * undecoded — every kind shares this one door, so the guard that turns an
+ * outcome into a kind's own value or a rejection lives beside it in
+ * {@link decodedOutcome} rather than in the door itself. Note that each call
+ * is its own promise rather than a set of one shared atom, because an atom
+ * answers every caller waiting on it with its newest result: an agent's
+ * transcript read is held open by the service for seconds, and any act sent
+ * meanwhile would have handed the reader its answer, and taken the reader's.
  */
-const actAtom = rendererRuntime.fn((request: Act) =>
-  Effect.tryPromise({ try: () => window.sidecar.act(request), catch: (error) => error }),
-);
+const send = (request: Act): Promise<ActOutcome> => window.sidecar.act(request);
 
 async function performAct<Kind extends ActKind>(
   send: (request: Act) => Promise<ActOutcome>,
@@ -92,13 +90,8 @@ export interface ActHandle extends SettingWriteActs {
   tell<Kind extends ActKind>(kind: Kind, ...args: ActArguments<Kind>): void;
 }
 
-/**
- * The channel a component or hook reaches: `useAtomSet` over {@link actAtom},
- * mounted for this render tree's life and run on the registry the root
- * provided rather than on a runtime built here.
- */
+/** What a component or hook reaches the act channel through, in one bundle. */
 export function useAct(): ActHandle {
-  const send = useAtomSet(actAtom, { mode: "promise" });
   return useMemo<ActHandle>(() => {
     function boundAct<Kind extends ActKind>(
       kind: Kind,
@@ -116,5 +109,5 @@ export function useAct(): ActHandle {
       updateSetting: (field, value) =>
         boundAct(ACT_KIND.SETTING_UPDATE, { field, value } as SettingUpdatePayload),
     };
-  }, [send]);
+  }, []);
 }
