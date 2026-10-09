@@ -11,6 +11,18 @@ import { isPointed, rangeLabel, unreadableLine } from "./code-pane-model";
  * file, the lines he means lit and scrolled into view.
  */
 
+/**
+ * Scrolls `lines` alone until `target` stands in its middle. Note that this is
+ * not `scrollIntoView`, because that scrolls every box around the line as
+ * well, and the pane often arrives sliding in from past the window's edge, so
+ * the window's own layout would be scrolled sideways after it.
+ */
+function centreWithin(lines: HTMLElement, target: HTMLElement): void {
+  const box = lines.getBoundingClientRect();
+  const line = target.getBoundingClientRect();
+  lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
+}
+
 /** The file's window of lines, the lines pointed at lit and scrolled into view whenever they change. */
 function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
@@ -18,8 +30,9 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   const { path, startLine, endLine } = code.ref;
 
   useEffect(() => {
-    const target = scroller.current?.querySelector<HTMLElement>("[data-pointed='true']");
-    target?.scrollIntoView({ block: "center" });
+    const lines = scroller.current;
+    const target = lines?.querySelector<HTMLElement>("[data-pointed='true']");
+    if (lines && target) centreWithin(lines, target);
   }, [path, startLine, endLine]);
 
   return (

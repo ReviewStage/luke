@@ -89,9 +89,13 @@ body,
    way, while what the column holds glides to its new place on the same beat
    (pane-motion.tsx). Unfolding is the same slide back in beside a column
    already narrowed. Only the plans' shell folds, so Settings always keeps its
-   page list. */
+   page list. The shell clips what slides past its edges with `clip` rather
+   than `hidden`, because `hidden` makes it a scroll container: a panel sliding
+   in from past the right edge, or the column's bars drawn on past both sides,
+   are room that focus or scrollIntoView would scroll the whole window
+   sideways into and leave it there. */
 .desktop-shell[data-sidebar-collapsed] {
-  overflow: hidden;
+  overflow: clip;
 }
 
 .desktop-shell[data-sidebar-collapsed="true"] {
