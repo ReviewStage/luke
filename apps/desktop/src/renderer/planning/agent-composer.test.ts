@@ -16,6 +16,14 @@ import {
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import {
+  builtStylesheet,
+  type CssRule,
+  cssRules,
+  layerOrder,
+  type OwnDeclaration,
+  ownDeclarations,
+} from "#testing/css-rules";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
 
@@ -24,9 +32,11 @@ import { useAgentComposer } from "./use-agent-composer";
  * same whatever the agent is doing, one button that is Send or Stop, Enter
  * to send, a send that stands in the transcript at once and is reconciled
  * with the service's row, and Retry under the card carrying the failed
- * send's key again. The stylesheet's part, a textarea reset to the panel's
- * font with no border of the browser's, is held as a contract on base.css,
- * since jsdom computes no cascade.
+ * send's key again. The stylesheet's part is held as a contract, since
+ * jsdom computes no cascade: a textarea reset to the panel's font with no
+ * border of the browser's on base.css, and the button's colours on the
+ * sheet the build bundles, where the reset sits in a layer under the
+ * utilities so the arrow is drawn a colour apart from its disc.
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -182,9 +192,10 @@ function mount(initial: Standing) {
       const buttons = [...container.querySelectorAll<HTMLButtonElement>(".agent-composer button")];
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
       assert.equal(buttons.filter((each) => each.textContent !== "Retry").length, 1);
-      return one === undefined
-        ? undefined
-        : { label: one.getAttribute("aria-label"), disabled: one.disabled, type: one.type };
+      if (one === undefined) return undefined;
+      // A button that takes no press says so to assistive technology as well.
+      assert.equal(one.getAttribute("aria-disabled") === "true", one.disabled);
+      return { label: one.getAttribute("aria-label"), disabled: one.disabled, type: one.type };
     },
     send: () => button("Send"),
     stop: () => button("Stop"),
@@ -387,17 +398,160 @@ test("the box takes focus as the tab opens unless the developer is typing elsewh
 
 test("the stylesheet resets a textarea to the panel's font with no border and no surface of the browser's, since Tailwind's preflight is left out, so the box is the card's and never a monospace well", () => {
   const css = readFileSync(join(import.meta.dirname, "..", "styles", "base.css"), "utf8");
-  const rule = /^textarea \{([^}]*)\}/mu.exec(css);
+  const rule = cssRules(css).find((each) => each.selectors.includes("textarea"));
   assert.ok(rule, "base.css resets the textarea element");
-  const declarations = (rule[1] ?? "")
-    .split(";")
-    .map((each) => each.trim())
-    .filter((each) => each !== "");
-  for (const expected of ["font: inherit", "border: 0", "background: none", "color: inherit"]) {
-    assert.ok(declarations.includes(expected), expected);
+  assert.equal(rule.layer, "base");
+  const reset: readonly (readonly [property: string, value: string])[] = [
+    ["font", "inherit"],
+    ["border", "0"],
+    ["background", "none"],
+    ["color", "inherit"],
+  ];
+  for (const [property, expected] of reset) {
+    assert.equal(rule.declarations.get(property), expected, property);
   }
   // Nothing of the box's own names a font: the field is the panel's font by the reset alone.
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   assert.doesNotMatch(tab.field().className, /font-mono|font-\[/u);
   assert.equal(tab.container.querySelector("form.agent-composer-form")?.tagName, "FORM");
+});
+
+/** A selector that styles every element of a kind, which only a reset may: a type or the universal selector, bare or with a pseudo-class. */
+const RESET_SELECTOR = /^(?:\*|[a-z]+)(?::[a-z-]+)?$/u;
+
+/** The custom properties the sheet sets at the root, which a utility's `var()` resolves through. */
+function rootProperties(rules: readonly CssRule[]): ReadonlyMap<string, string> {
+  const properties = new Map<string, string>();
+  for (const rule of rules) {
+    if (
+      !rule.selectors.some((selector) =>
+        selector.split(",").some((each) => each.trim() === ":root"),
+      )
+    )
+      continue;
+    for (const [property, value] of rule.declarations) {
+      if (property.startsWith("--")) properties.set(property, value);
+    }
+  }
+  return properties;
+}
+
+/** A value with every `var()` replaced by what the root sets it to, so two tokens compare as the colours they are. */
+function resolved(value: string, root: ReadonlyMap<string, string>): string {
+  let out = value;
+  for (let round = 0; round < 8 && out.includes("var("); round += 1) {
+    out = out.replace(
+      /var\((--[\w-]+)(?:,\s*([^)]*))?\)/gu,
+      (whole, name: string, fallback?: string) => root.get(name) ?? fallback ?? whole,
+    );
+  }
+  return out;
+}
+
+/** A resolved length in pixels at the root's 16px, for a utility's `rem` or `calc(rem * n)`. */
+function pixels(value: string): number {
+  const length = (text: string): number | undefined => {
+    const px = /^([\d.]+)px$/u.exec(text);
+    if (px?.[1] !== undefined) return Number(px[1]);
+    const rem = /^([\d.]+)rem$/u.exec(text);
+    if (rem?.[1] !== undefined) return Number(rem[1]) * 16;
+    return undefined;
+  };
+  const direct = length(value.trim());
+  if (direct !== undefined) return direct;
+  const product = /^calc\(\s*(\S+)\s*\*\s*([\d.]+)\s*\)$/u.exec(value.trim());
+  const unit = product?.[1] === undefined ? undefined : length(product[1]);
+  assert.ok(product?.[2] !== undefined && unit !== undefined, `a length: ${value}`);
+  return unit * Number(product[2]);
+}
+
+/** What the button's own classes settle a property to in its state: a `:disabled` variant over the plain utility while disabled, the plain utility alone otherwise. */
+function settled(own: readonly OwnDeclaration[], property: string, disabled: boolean): string {
+  const of = (variant: boolean) =>
+    own.filter(
+      (each) => each.property === property && each.selector.includes(":disabled") === variant,
+    );
+  const [winner] = [...(disabled ? of(true) : []), ...of(false)];
+  assert.ok(winner, `${property} is set${disabled ? " while disabled" : ""}`);
+  return winner.value;
+}
+
+test("the submit is one round button that never changes size or place, and the sheet draws its glyph a colour apart from its disc: filled while it takes a press, dimmed on the raised ground while it does not, with the reset in a layer under the utilities so neither colour is the button's inherited one", async () => {
+  const sheet = await builtStylesheet();
+  const rules = cssRules(sheet);
+  const layers = layerOrder(sheet);
+  const utilities = layers.indexOf("utilities");
+  assert.ok(utilities >= 0, `the sheet layers its utilities: ${layers.join(", ")}`);
+  // A rule for every button, or every element, sits in a layer under the utilities or it outranks every utility on one.
+  for (const rule of rules) {
+    for (const selector of rule.selectors) {
+      if (!RESET_SELECTOR.test(selector) || ["html", "body"].includes(selector)) continue;
+      const rank = rule.layer === undefined ? -1 : layers.indexOf(rule.layer);
+      const shape = `${selector} { ${[...rule.declarations.keys()].join("; ")} }`;
+      assert.ok(
+        rank >= 0 && rank < utilities,
+        `${shape} ranks under the utilities (${rule.layer ?? "no layer"})`,
+      );
+    }
+  }
+  const root = rootProperties(rules);
+
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  const buttons: { name: string; button: HTMLButtonElement }[] = [];
+  // A copy of the button as it stands, since React keeps the one element across the states.
+  const hold = (name: string) => {
+    const button = tab.container.querySelector(".agent-composer button")?.cloneNode(true);
+    assert.ok(button instanceof HTMLButtonElement, name);
+    buttons.push({ name, button });
+  };
+  hold("dim");
+  tab.type("Also handle the empty case.");
+  hold("active");
+  tab.type("");
+  await tab.stand({ status: CODING_AGENT_STATUS.RUNNING });
+  hold("stop");
+  assert.deepEqual(
+    buttons.map(({ button }) => button.disabled),
+    [true, false, false],
+  );
+  assert.equal(
+    new Set(buttons.map(({ button }) => button.className)).size,
+    1,
+    "one class list in every state",
+  );
+
+  const discs = new Map<string, string>();
+  for (const { name, button } of buttons) {
+    const own = ownDeclarations(rules, button);
+    const disc = resolved(settled(own, "background-color", button.disabled), root);
+    const ink = resolved(settled(own, "color", button.disabled), root);
+    discs.set(name, disc);
+    assert.doesNotMatch(disc, /var\(/u, `${name}: the disc resolves to a colour: ${disc}`);
+    assert.doesNotMatch(ink, /var\(/u, `${name}: the ink resolves to a colour: ${ink}`);
+    assert.notEqual(disc, ink, `${name}: the glyph is a colour apart from its disc`);
+    assert.equal(settled(own, "border-radius", false), resolved("calc(infinity * 1px)", root));
+    assert.equal(pixels(resolved(settled(own, "width", false), root)), 28, name);
+    assert.equal(pixels(resolved(settled(own, "height", false), root)), 28, name);
+    // The glyph is the button's own colour: nothing on the svg names one, and its box is not zero.
+    const svg = button.querySelector("svg");
+    assert.ok(svg, name);
+    const glyph = ownDeclarations(rules, svg);
+    assert.equal(
+      glyph.find((each) => each.property === "color"),
+      undefined,
+      name,
+    );
+    assert.ok(pixels(resolved(settled(glyph, "width", false), root)) > 0, name);
+    assert.ok(pixels(resolved(settled(glyph, "height", false), root)) > 0, name);
+  }
+  // The dim disc is a lower emphasis of its own, not the filled one seen through an opacity.
+  assert.notEqual(discs.get("dim"), discs.get("active"));
+  assert.equal(discs.get("stop"), discs.get("active"));
+  // Nothing on the button answers a hover: a disabled button has none, and the pressed one reads as it is.
+  for (const { button } of buttons) {
+    assert.equal(
+      ownDeclarations(rules, button).find((each) => each.selector.includes(":hover")),
+      undefined,
+    );
+  }
 });
