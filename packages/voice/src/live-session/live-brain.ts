@@ -1,4 +1,4 @@
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import type { Effect } from "effect";
 
 /**
@@ -73,8 +73,8 @@ export type LiveBrainRunEvent =
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
-      /** Code of the plan's folder the planning model put on screen, by place, for Luke's next words. */
-      readonly ref: CodeRef;
+      /** Code of the plan's repository the planning model put on screen, with its lines, for Luke's next words. */
+      readonly code: ShownCode;
     }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {

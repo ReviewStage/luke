@@ -31,7 +31,7 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.PLANNING_START]: {
     kind: ACT_KIND.PLANNING_START,
-    payload: { name: "Teammate invitations", folderPath: "/Users/dev/relay" },
+    payload: { name: "Teammate invitations", repository: "acme/relay" },
   },
   [ACT_KIND.PLANNING_DELETE]: {
     kind: ACT_KIND.PLANNING_DELETE,
@@ -41,14 +41,14 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_RENAME,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", name: "Team invites" },
   },
-  [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },
-  [ACT_KIND.PLANNING_SET_FOLDER]: {
-    kind: ACT_KIND.PLANNING_SET_FOLDER,
-    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", folderPath: "/Users/dev/relay" },
+  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
+  [ACT_KIND.PLANNING_SET_REPOSITORY]: {
+    kind: ACT_KIND.PLANNING_SET_REPOSITORY,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", repository: "acme/relay" },
   },
-  [ACT_KIND.PLANNING_REVEAL_FOLDER]: {
-    kind: ACT_KIND.PLANNING_REVEAL_FOLDER,
-    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  [ACT_KIND.GITHUB_OPEN]: {
+    kind: ACT_KIND.GITHUB_OPEN,
+    payload: { url: "https://github.com/acme/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {

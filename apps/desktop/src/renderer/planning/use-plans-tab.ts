@@ -1,12 +1,22 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { PLANNING_READ, type PlanCode, type PlanningView } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_CALL_FAILURE,
+  PLANNING_READ,
+  type PlanCode,
+  type PlanningView,
+} from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
-import { FIXTURE_PLANNING_CALL, fixturePlanningView, fixtureSidePanel } from "./planning-fixture";
+import {
+  FIXTURE_PLANNING_CALL,
+  fixturePlanningView,
+  fixtureRepositories,
+  fixtureSidePanel,
+} from "./planning-fixture";
 import {
   type CallStatus,
   COPY_SHOWN,
@@ -25,11 +35,13 @@ import {
   type PlansPage,
   planningCallHoldsPanel,
   plansPage,
-  recentFolders,
+  recentRepositories,
   renamedView,
-  START_FAILED_NOTE,
+  repositoryFailureNote,
+  repositoryPageUrl,
   unsettledRenames,
 } from "./planning-model";
+import type { RepositoryChooser } from "./repository-chip";
 import {
   type HeardCall,
   heardCalls,
@@ -61,8 +73,6 @@ export interface PlansControl {
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
   plans: PlanningView["plans"];
-  /** The folder of this Mac each plan reads, by plan id. */
-  folders: PlanningView["folders"];
   activePlanId: string | undefined;
   listFailed: boolean;
   region: DocumentRegion;
@@ -85,10 +95,16 @@ export interface PlansControl {
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
   onSelect: (planId: string) => void;
-  /** Chooses a plan's folder on this Mac again, through the folder picker. */
-  onChooseFolder: (planId: string) => void;
-  /** Shows a plan's folder on this Mac in Finder. */
-  onRevealFolder: (planId: string) => void;
+  /** What the repository chip offers, in the composer and on the open plan alike. */
+  repositories: RepositoryChooser;
+  /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
+  repositoryMenu: { planId: string; request: number } | undefined;
+  /** Opens a plan's repository chip menu, opening the plan first where it is not the open one. */
+  onChangeRepository: (planId: string) => void;
+  /** Gives a plan its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
+  onSetRepository: (planId: string, repository: string | null) => Promise<string | undefined>;
+  /** Opens a plan's repository on GitHub in the browser. */
+  onOpenOnGitHub: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Leaves any open plan for the new-plan page, and has that page focus its name field. */
@@ -97,12 +113,8 @@ export interface PlansControl {
   newPlan: {
     /** Counts the presses of New plan, so the page focuses its name field on each. */
     presses: number;
-    /** The folders this Mac's plans read, the last one used first. */
-    recentFolders: readonly string[];
-    /** Opens the folder picker, answering the chosen folder or null when it is cancelled. */
-    pickFolder: () => Promise<string | null>;
-    /** Starts the plan, which opens it; answers why it did not start, or nothing once it has. */
-    start: (name: string, folderPath: string) => Promise<string | undefined>;
+    /** Starts the plan on the repository given, or none, which opens it; answers why it did not start, or nothing once it has. */
+    start: (name: string, repository: string | null) => Promise<string | undefined>;
   };
   /** Leaves the open plan for the new-plan page, which ends its call. */
   onLeavePlan: () => void;
@@ -148,6 +160,7 @@ export function usePlansTab(input: {
   const { act, tell } = input.acts;
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
   const [newPlanPresses, setNewPlanPresses] = useState(0);
+  const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -247,15 +260,39 @@ export function usePlansTab(input: {
     panel: sidePanel,
   });
 
-  // A cancelled picker keeps whatever folder the plan had.
-  const chooseFolder = (planId: string) => {
-    act(ACT_KIND.PLANNING_CHOOSE_FOLDER).then(
-      (folderPath) => {
-        if (folderPath !== null) tell(ACT_KIND.PLANNING_SET_FOLDER, { planId, folderPath });
-      },
-      () => undefined,
+  // A fixture's repositories are read from nowhere, as its plans are.
+  const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
+    fixture !== undefined
+      ? Promise.resolve(fixtureRepositories())
+      : act(ACT_KIND.PLANNING_REPOSITORIES).catch(() => ({
+          failure: PLAN_CALL_FAILURE.UNANSWERED,
+        }));
+  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+
+  // A fixture's plans are given no repository, as they are read from nowhere.
+  const setRepository = (
+    planId: string,
+    repository: string | null,
+  ): Promise<string | undefined> => {
+    if (fixture !== undefined) return Promise.resolve(undefined);
+    return act(ACT_KIND.PLANNING_SET_REPOSITORY, { planId, repository }).then(
+      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (refused: Error) => refused.message,
     );
   };
+
+  // The chip's menu stands on the open plan's toolbar, so another plan's is
+  // opened first; the ask is counted so each press opens it again.
+  const changeRepository = (planId: string) => {
+    if (planId !== planning.activePlanId) select(planId);
+    setRepositoryMenu((held) => ({ planId, request: (held?.request ?? 0) + 1 }));
+  };
+
+  const repositoryOf = (planId: string): string | null =>
+    planning.plans.find((plan) => plan.id === planId)?.repository ??
+    (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
+      ? region.plan.repository
+      : null);
 
   // The calls heard on the open plan, each held past its end until the
   // record's copy catches up; a fixture's open plan is drawn with its own
@@ -274,9 +311,12 @@ export function usePlansTab(input: {
   }, [reported.callPlanId, reported.callTranscript, planning.activePlanId]);
 
   // A started plan becomes the host's open one, which turns the page to it.
-  const startPlan = (name: string, folderPath: string): Promise<string | undefined> =>
-    act(ACT_KIND.PLANNING_START, { name, folderPath }).then(
-      (answer) => ("failure" in answer ? START_FAILED_NOTE : undefined),
+  const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
+    act(ACT_KIND.PLANNING_START, {
+      name,
+      ...(repository === null ? undefined : { repository }),
+    }).then(
+      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
 
@@ -294,7 +334,6 @@ export function usePlansTab(input: {
     shown,
     signedIn,
     plans: planning.plans,
-    folders: planning.folders,
     activePlanId: planning.activePlanId,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
@@ -327,10 +366,17 @@ export function usePlansTab(input: {
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
     },
     onSelect: select,
-    onChooseFolder: chooseFolder,
-    // A fixture's folders are named nowhere on this Mac, so none is shown.
-    onRevealFolder: (planId) => {
-      if (fixture === undefined) tell(ACT_KIND.PLANNING_REVEAL_FOLDER, { planId });
+    repositories: {
+      recent: recentRepositories(planning.plans),
+      read: readRepositories,
+      openGitHub,
+    },
+    repositoryMenu,
+    onChangeRepository: changeRepository,
+    onSetRepository: setRepository,
+    onOpenOnGitHub: (planId) => {
+      const repository = repositoryOf(planId);
+      if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
     onRetryDocument: () => {
@@ -342,8 +388,6 @@ export function usePlansTab(input: {
     },
     newPlan: {
       presses: newPlanPresses,
-      recentFolders: recentFolders(planning.plans, planning.folders),
-      pickFolder: () => act(ACT_KIND.PLANNING_CHOOSE_FOLDER),
       start: startPlan,
     },
     onLeavePlan: leavePlan,

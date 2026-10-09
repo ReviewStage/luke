@@ -19,10 +19,14 @@ import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
   type PlanningRenameParams,
-  type PlanningSetFolderParams,
+  type PlanningRepositoriesAnswer,
+  type PlanningSetRepositoryAnswer,
+  type PlanningSetRepositoryParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
+  planningRepositoriesAnswerSchema,
+  planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
@@ -114,14 +118,18 @@ export interface HostOperator {
   planningOpen(planId: string): Effect.Effect<boolean>;
   /** The developer left the open plan: its call ends and no plan is active. */
   planningClose(): Effect.Effect<void>;
-  /** A named plan started on a folder of this Mac and made the active one, or why none started. */
+  /** A named plan started on the repository it names, where it names one, and made the active one; or why none started. */
   planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
   /** One plan deleted; answers whether the service deleted it. */
   planningDelete(planId: string): Effect.Effect<boolean>;
   /** One plan renamed; answers whether the service renamed it. */
   planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
-  /** The folder of this Mac a plan reads, chosen again. */
-  planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
+  /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
+  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
+  planningSetRepository(
+    params: PlanningSetRepositoryParams,
+  ): Effect.Effect<PlanningSetRepositoryAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
@@ -298,18 +306,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RENAME, { planId: params.planId, name: params.name }),
         (answer) => record(answer)?.renamed === true,
       ),
-    planningSetFolder: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {
+    planningRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
+        (answer): PlanningRepositoriesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningSetRepository: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
           planId: params.planId,
-          folderPath: params.folderPath,
+          repository: params.repository,
         }),
+        (answer): PlanningSetRepositoryAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
     planningStart: (request) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
-          folderPath: request.folderPath,
+          ...("repository" in request ? { repository: request.repository } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

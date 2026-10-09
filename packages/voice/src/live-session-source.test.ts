@@ -723,7 +723,13 @@ it.live(
       const shown: PlanCodeFrame = {
         type: VOICE_SERVICE_FRAME.PLAN_CODE,
         planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
-        ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+        code: {
+          ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+          repository: "acme/relay",
+          firstLine: 1,
+          lineCount: 6,
+          lines: ["export function acceptInvite() {", "}"],
+        },
       };
       first.receive(shown);
       first.receive({

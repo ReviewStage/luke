@@ -31,6 +31,7 @@ const PLAN: Plan = {
 
 const CODE: PlanCode = {
   ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+  repository: "acme/relay",
   firstLine: 1,
   lineCount: 1,
   lines: [[{ text: "export function accept() {}" }]],

@@ -8,29 +8,30 @@ import {
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import type { Plan, ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningDocument,
+  type PlanningRepositoriesAnswer,
+  type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   type PlanningView,
   planningBoardSaveParamsSchema,
   planningRenameParamsSchema,
-  planningSetFolderParamsSchema,
+  planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Duration, Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
+import { Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
-import { planCode } from "./plan-code.js";
+import { highlightCode } from "./plan-code.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -50,10 +51,12 @@ import type { RunMode } from "./run-mode.js";
  * whenever a call about it ends, once at the end and once more when the
  * call's last words have had time to reach the record; while a call stands,
  * its words are the voice window's to report.
- * The loops here are those board and transcript reads, and the code Luke
- * puts on screen during a call (`plan-code.ts`), read from the plan's folder.
- * The planning model's own reads of the code run in a sandbox on the
- * service, and nothing of them passes through this Mac.
+ * The loops here are those board and transcript reads. The code Luke puts
+ * on screen during a call arrives on the call's socket with its lines, read
+ * by the service from the plan's repository, and is coloured here
+ * (`plan-code.ts`) and drawn in place; nothing of the repository is read on
+ * this Mac. The repositories the account reaches, and a plan's repository
+ * given or taken away, are the service's too, asked through here.
  */
 
 /**
@@ -68,48 +71,25 @@ const TRANSCRIPT_SETTLE = Duration.seconds(5);
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
-/** One ask to put code on screen, for the plan it was named about. */
-interface CodeAsk {
-  readonly planId: string;
-  readonly ref: CodeRef;
-}
-
-/** The folder of this Mac each plan reads, by plan id, as this Mac alone records it. */
-export type PlanFolders = Readonly<Record<string, string>>;
-
-const PLAN_FOLDERS_FILE = "plan-folders.json";
-
-const planFoldersRecordSchema = Schema.Struct({
-  folders: Schema.Record(Schema.String, Schema.String),
-});
-
-/** The record of each plan's folder, kept in the state root beside this Mac's other records. */
-export function planFoldersFile(
-  directory: () => string,
-  report?: (message: string) => void,
-): JsonStateFile<PlanFolders> {
-  const decode = Schema.decodeUnknownOption(planFoldersRecordSchema);
-  return jsonStateFile<PlanFolders>({
-    directory,
-    fileName: PLAN_FOLDERS_FILE,
-    read: (record) => Option.getOrUndefined(Option.map(decode(record), (read) => read.folders)),
-    write: (folders) => ({ folders }),
-    ...(report !== undefined ? { report } : undefined),
-  });
-}
-
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  "list" | "open" | "create" | "delete" | "rename" | "readBoard" | "saveBoard" | "readTranscript"
+  | "list"
+  | "open"
+  | "create"
+  | "delete"
+  | "rename"
+  | "readBoard"
+  | "saveBoard"
+  | "readTranscript"
+  | "repositories"
+  | "setRepository"
 >;
 
 export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
-  /** The folder of this Mac each plan reads (`planFoldersFile`); the service never holds one. */
-  folders: JsonStateFile<PlanFolders>;
   /**
    * Ends the planning call standing about any plan but `keep`, and waits for
    * it to end; the call about `keep` is left standing.
@@ -138,11 +118,12 @@ export interface PlanningComposer extends Composer {
    */
   showActivity: (activity: PlanActivityFrame) => void;
   /**
-   * Puts code of the open plan's folder on screen, as Luke named it on its
-   * call: read and coloured here, the newest ask replacing any still being
-   * read. An ask about any other plan is dropped.
+   * Puts code on screen as Luke named it on the open plan's call, with the
+   * lines the service read from the plan's repository: coloured here and
+   * drawn in place of whatever was on screen. Code about any other plan is
+   * dropped.
    */
-  showCode: (planId: string, ref: CodeRef) => void;
+  showCode: (planId: string, code: ShownCode) => void;
   /** The call about `planId` ended: the code it put on screen goes with it, and its words are read back from the record. */
   callEnded: (planId: string) => void;
 }
@@ -161,14 +142,8 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, folders, endPlanCall } = dependencies;
-  const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
-
-  /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
-  function recordFolder(planId: string, folderPath: string): void {
-    const recorded = folders.update((current) => ({ ...current, [planId]: folderPath }));
-    write({ folders: recorded });
-  }
+  const { kernel, account, client, endPlanCall } = dependencies;
+  const idleView = (): PlanningView => IDLE_PLANNING_VIEW;
   const gate = () => kernel.runMode.sendsNetwork && account.capabilitiesActive();
 
   /**
@@ -193,12 +168,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /**
-   * Bumped whenever the code on screen is cleared, so a read still out when
-   * the call ended or the plan was left lands on nothing.
-   */
-  let codeGeneration = 0;
-
   /** The view with no activity, no board, no transcript, and no code, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
@@ -207,7 +176,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     code: _code,
     ...rest
   }: PlanningView): PlanningView {
-    codeGeneration += 1;
     return rest;
   }
 
@@ -221,6 +189,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
     const held = view.document.plan;
     return held?.id === planId ? held : undefined;
+  }
+
+  /** A plan's row of the list: everything but its document. */
+  function summaryOf({ document: _document, ...summary }: Plan): PlanningView["plans"][number] {
+    return summary;
   }
 
   const readList = Effect.gen(function* () {
@@ -328,35 +301,32 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     if (drew || stopped) Queue.offerUnsafe(boardReads, planId);
   }
 
-  // Note that only the newest ask is kept, because code named while an older
-  // file is still being read is what the call is looking at now.
-  const codeAsks = yield* Queue.sliding<CodeAsk>(1);
-
-  function showCode(planId: string, ref: CodeRef): void {
+  function showCode(planId: string, code: ShownCode): void {
     if (view.activePlanId !== planId) return;
-    Queue.offerUnsafe(codeAsks, { planId, ref });
+    write({ code: highlightCode(code) });
   }
 
   function callEnded(planId: string): void {
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(transcriptReads, planId);
     if (view.code === undefined) return;
-    codeGeneration += 1;
     const { code: _code, ...rest } = view;
     view = rest;
     publish();
   }
 
-  /** Reads each ask's code from the plan's folder and draws it, unless the call moved on meanwhile. */
-  const serveCode = Effect.forever(
-    Effect.gen(function* () {
-      const ask = yield* Queue.take(codeAsks);
-      const generation = codeGeneration;
-      const code = yield* planCode(view.folders[ask.planId], ask.ref);
-      if (view.activePlanId !== ask.planId || codeGeneration !== generation) return;
-      write({ code });
-    }),
-  );
+  /** Draws `plan` as the service answered it, in the list's row and in the open document where it is the one held. */
+  function takeAnswered(plan: Plan): void {
+    const plans = view.plans.map((row) =>
+      row.id === plan.id ? { ...row, ...summaryOf(plan) } : row,
+    );
+    const held = heldPlanOf(plan.id);
+    write(
+      held === undefined
+        ? { plans }
+        : { plans, document: { status: PLANNING_READ.READY, plan: { ...held, ...plan } } },
+    );
+  }
 
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
@@ -418,19 +388,15 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       Effect.gen(function* () {
         const read = readEither(planningStartRequestSchema)(unparsedWire(params));
         if (Result.isFailure(read)) {
-          return yield* invalid("starting a plan names it and its folder");
+          return yield* invalid("starting a plan names it, and its repository where it has one");
         }
         if (!gate()) return carried<PlanningStartAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         const request = read.success;
         return yield* serial(
           Effect.gen(function* () {
-            const started = yield* Effect.provide(
-              client.create({ name: request.name }),
-              FetchHttpClient.layer,
-            );
+            const started = yield* Effect.provide(client.create(request), FetchHttpClient.layer);
             if (!started.ok) return carried<PlanningStartAnswer>({ failure: started.failure });
             const plan = started.answer;
-            recordFolder(plan.id, request.folderPath);
             // Active before the old call's end is waited on, as for opening;
             // a plan just started has had no call.
             view = {
@@ -459,13 +425,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           Effect.gen(function* () {
             const deleted = yield* Effect.provide(client.delete(planId), FetchHttpClient.layer);
             if (!deleted) return { deleted: false };
-            const kept = folders.update(({ [planId]: _deleted, ...rest } = {}) => rest);
             const plans = view.plans.filter((plan) => plan.id !== planId);
             if (view.activePlanId === planId) {
               const { activePlanId: _deleted, ...rest } = withoutActivity(view);
               view = { ...rest, document: { status: PLANNING_READ.IDLE } };
             }
-            write({ plans, folders: kept });
+            write({ plans });
             yield* readList;
             return { deleted: true };
           }),
@@ -505,13 +470,43 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           }),
         );
       }),
-    [GATEWAY_METHOD.PLANNING_SET_FOLDER]: (params) =>
+    // The list is the service's answer whole, read now and held nowhere: the
+    // panel asks again whenever its chip opens, so an App installed meanwhile
+    // shows on the next opening.
+    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
       Effect.gen(function* () {
-        const read = readEither(planningSetFolderParamsSchema)(unparsedWire(params));
-        if (Result.isFailure(read))
-          return yield* invalid("choosing a folder names a plan and a folder");
-        recordFolder(read.success.planId, read.success.folderPath);
-        return {};
+        if (!gate()) {
+          return carried<PlanningRepositoriesAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const listed = yield* Effect.provide(client.repositories(), FetchHttpClient.layer);
+        return carried<PlanningRepositoriesAnswer>(
+          listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
+        );
+      }),
+    // The service answers the plan as changed, so the list's row and the
+    // open document take it in place and nothing is read again.
+    [GATEWAY_METHOD.PLANNING_SET_REPOSITORY]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningSetRepositoryParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("giving a plan its repository names the plan and the repository");
+        }
+        if (!gate()) {
+          return carried<PlanningSetRepositoryAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { planId, repository } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const changed = yield* Effect.provide(
+              client.setRepository(planId, repository),
+              FetchHttpClient.layer,
+            );
+            if (!changed.ok)
+              return carried<PlanningSetRepositoryAnswer>({ failure: changed.failure });
+            takeAnswered(changed.answer);
+            return carried<PlanningSetRepositoryAnswer>({ repository: changed.answer.repository });
+          }),
+        );
       }),
     // A save of another plan than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>
@@ -552,11 +547,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The board reads a settled draw asks for, the transcript reads a
-    // call's end asks for, and the open plan's code on screen; every other
-    // read of the plans is an ask's.
+    // The board reads a settled draw asks for and the transcript reads a
+    // call's end asks for; every other read of the plans is an ask's.
     lifetime: Effect.gen(function* () {
-      yield* Effect.forkScoped(serveCode);
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (planId) =>

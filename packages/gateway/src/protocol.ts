@@ -19,14 +19,16 @@ export const GATEWAY_METHOD = {
   PLANNING_OPEN: "planning.open",
   /** The developer left the open plan: its call ends and no plan is active. */
   PLANNING_CLOSE: "planning.close",
-  /** A named plan started on a folder of this Mac, and made the active one. */
+  /** A named plan started on the service, on the repository it names where it names one, and made the active one. */
   PLANNING_START: "planning.start",
-  /** One plan deleted on the service, with this Mac's folder record of it; deleting the open plan ends its call and leaves no plan active. */
+  /** One plan deleted on the service; deleting the open plan ends its call and leaves no plan active. */
   PLANNING_DELETE: "planning.delete",
   /** One plan renamed on the service; the list and the open document take the name it answered without reading either again. */
   PLANNING_RENAME: "planning.rename",
-  /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
-  PLANNING_SET_FOLDER: "planning.setFolder",
+  /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
+  PLANNING_REPOSITORIES: "planning.repositories",
+  /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
+  PLANNING_SET_REPOSITORY: "planning.setRepository",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** Everything a window's bootstrap reads of the host, in one answer. */

@@ -167,9 +167,9 @@ test("a page's own name finds everything the page holds", () => {
 test("each of the window's own shortcuts is found by its name, on the Keyboard shortcuts page", () => {
   const entries = settingsSearchEntries(everythingDrawn());
 
-  const reveal = found(searchSettings(entries, "finder"));
-  assert.deepEqual(labels(reveal), ["Reveal in Finder"]);
-  assert.equal(reveal[0]?.page, SETTINGS_VIEW.SHORTCUTS);
+  const remove = found(searchSettings(entries, "delete plan"));
+  assert.deepEqual(labels(remove), ["Delete plan"]);
+  assert.equal(remove[0]?.page, SETTINGS_VIEW.SHORTCUTS);
   // Removing is the two keys' own; no window chord offers it.
   assert.deepEqual(labels(found(searchSettings(entries, "shortcut remove"))), [
     "Talk to Luke",

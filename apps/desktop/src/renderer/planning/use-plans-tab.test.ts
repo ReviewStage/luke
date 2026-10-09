@@ -6,6 +6,7 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
+  PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCode,
   type PlanningView,
@@ -38,7 +39,6 @@ const OPEN: PlanningView = {
   listStatus: PLANNING_READ.READY,
   activePlanId: PLAN.id,
   document: { status: PLANNING_READ.READY, plan: PLAN },
-  folders: {},
 };
 
 interface Standing {
@@ -179,27 +179,85 @@ test("New plan leaves an open plan and asks the new-plan page for its name field
   assert.equal(tab.control().newPlan.presses, before + 2);
 });
 
-test("the new-plan page offers the folders of the plans this Mac holds, the newest started first", () => {
-  const second = { ...PLAN, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", name: "Billing export" };
-  const tab = mount({
-    planning: {
-      ...IDLE_PLANNING_VIEW,
-      plans: [second, PLAN],
-      folders: { [PLAN.id]: "/Users/dev/relay", [second.id]: "/Users/dev/billing" },
+test("the repository chip offers the repositories the account's plans are about, the newest started first, and reads the list from the host", async () => {
+  const second = {
+    ...PLAN,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    name: "Billing export",
+    repository: "acme/billing",
+  };
+  const listed = {
+    repositories: {
+      installed: true,
+      repositories: [],
+      installationUrl: "https://github.com/apps/luke/installations/new",
     },
-  });
+  };
+  const tab = mount(
+    { planning: { ...IDLE_PLANNING_VIEW, plans: [second, { ...PLAN, repository: "acme/relay" }] } },
+    { [ACT_KIND.PLANNING_REPOSITORIES]: () => Promise.resolve(listed) },
+  );
 
-  assert.deepEqual(tab.control().newPlan.recentFolders, ["/Users/dev/billing", "/Users/dev/relay"]);
+  assert.deepEqual(tab.control().repositories.recent, ["acme/billing", "acme/relay"]);
+  assert.deepEqual(await tab.control().repositories.read(), listed);
+  tab.control().repositories.openGitHub("https://github.com/apps/luke/installations/new");
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REPOSITORIES, ACT_KIND.GITHUB_OPEN]);
 });
 
-test("a start the host refuses answers the reason the new-plan page shows", async () => {
-  const tab = mount({ shown: true });
+test("a start the host refuses answers the reason the new-plan page shows, and a repository the service refused says why", async () => {
+  const tab = mount(
+    { shown: true },
+    {
+      [ACT_KIND.PLANNING_START]: () =>
+        Promise.resolve({ failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE }),
+    },
+  );
 
-  assert.equal(
-    await tab.control().newPlan.start("Invites", "/Users/dev/relay"),
-    "Not answered in this test.",
+  assert.match(
+    (await tab.control().newPlan.start("Invites", "acme/relay")) ?? "",
+    /can't see that repository/u,
   );
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_START);
+});
+
+test("a plan's repository is set through the host, and a refusal is answered as the page's words", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.PLANNING_SET_REPOSITORY]: () =>
+        Promise.resolve({ failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED }),
+    },
+  );
+
+  assert.match(
+    (await tab.control().onSetRepository(PLAN.id, "acme/relay")) ?? "",
+    /Sign in with GitHub/u,
+  );
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SET_REPOSITORY);
+});
+
+test("Change repository… asks the open plan's chip to open, opening another plan first; Open on GitHub opens the plan's page", () => {
+  const other = {
+    ...PLAN,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    name: "Billing export",
+    repository: "acme/billing",
+  };
+  const tab = mount({ shown: true, planning: { ...OPEN, plans: [PLAN, other] } });
+
+  act(() => tab.control().onChangeRepository(PLAN.id));
+  assert.deepEqual(tab.control().repositoryMenu, { planId: PLAN.id, request: 1 });
+  act(() => tab.control().onChangeRepository(other.id));
+  assert.deepEqual(tab.control().repositoryMenu, { planId: other.id, request: 2 });
+  tab.control().onOpenOnGitHub(other.id);
+  tab.control().onOpenOnGitHub(PLAN.id);
+
+  // The tab showing read the plans first; a plan with no repository opens no page.
+  assert.deepEqual(tab.told, [
+    ACT_KIND.PLANNING_REFRESH,
+    ACT_KIND.PLANNING_SELECT,
+    ACT_KIND.GITHUB_OPEN,
+  ]);
 });
 
 test("deleting asks for the named plan's delete and answers a refusal, and a fixture's plan is deleted nowhere", async () => {
@@ -371,6 +429,7 @@ function drawnBoard(number: number): Board {
 
 const CODE: PlanCode = {
   ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+  repository: "acme/relay",
   firstLine: 1,
   lineCount: 1,
   lines: [[{ text: "export function accept() {}" }]],

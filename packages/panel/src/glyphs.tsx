@@ -324,24 +324,6 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
-/** A folder on this Mac: the one a plan reads. */
-export function FolderIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M3.8 7.2a1.7 1.7 0 0 1 1.7-1.7h3.9l2 2.2h7.1a1.7 1.7 0 0 1 1.7 1.7v8.1a1.7 1.7 0 0 1-1.7 1.7H5.5a1.7 1.7 0 0 1-1.7-1.7Z" />
-    </Glyph>
-  );
-}
-
-/** The same folder opened: shows where it is on this Mac, in Finder. */
-export function FolderOpenIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M6 14.6 7.4 11.9a1.7 1.7 0 0 1 1.5-.9h10.6a1.4 1.4 0 0 1 1.3 1.8l-1.5 5.1a1.7 1.7 0 0 1-1.6 1.2H5.5a1.7 1.7 0 0 1-1.7-1.7V7.2a1.7 1.7 0 0 1 1.7-1.7h3.9l2 2.2h5.4a1.7 1.7 0 0 1 1.7 1.7V11" />
-    </Glyph>
-  );
-}
-
 /** Sends what was composed, drawn the way every composer draws it: an arrow up. */
 export function ArrowUpIcon(): React.JSX.Element {
   return (

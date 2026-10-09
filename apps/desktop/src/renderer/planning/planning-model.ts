@@ -1,8 +1,10 @@
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
+  PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanningView,
+  type RepositoryCallFailure,
   VOICE_PHASE,
   type VoicePhase,
 } from "@sidecar/hosted/planning-view";
@@ -16,22 +18,19 @@ import { microphoneAccessRow, VOICE_KEYLESS_NOTE } from "../microphone-access";
  *
  * Every decision the tab makes is here and pure, so the components only lay
  * it out: which page shows, which state the document region is in, how the
- * plan's folder reads in the header, what Copy shows, and the word beside the
- * microphone.
+ * repository chip starts on, what a refusal about a repository says, what
+ * Copy shows, and the word beside the microphone.
  */
 
 /** What the assumptions' section says while the list is empty, the words Copy writes there. */
 export const NO_ASSUMPTIONS_LINE = "None recorded";
 
-/** A macOS home folder at the head of a path, which the header shows as `~`. */
-const HOME_PREFIX = /^\/Users\/[^/]+(?=\/|$)/u;
-
-/** How many recent folders the new-plan page offers. */
-const RECENT_FOLDER_LIMIT = 5;
+/** How many recent repositories the chip's menu offers. */
+const RECENT_REPOSITORY_LIMIT = 5;
 
 /** Which of the Plans tab's pages shows. */
 export const PLANS_PAGE = {
-  /** The new plan's name and folder: the tab's home, whenever no plan is open. */
+  /** The new plan's name and repository: the tab's home, whenever no plan is open. */
   NEW: "new",
   /** The open plan's saved document and its microphone. */
   DOCUMENT: "document",
@@ -84,33 +83,25 @@ export function documentRegion(view: PlanningView): DocumentRegion {
   return { kind: DOCUMENT_REGION.READING };
 }
 
-/** The header's folder line: the folder's path, with the home folder as `~`. */
-export function folderLine(folderPath: string): string {
-  return folderPath.replace(HOME_PREFIX, "~");
-}
-
-/** The last segment of a folder's path, the way a chip names it. */
-export function folderName(folderPath: string): string {
-  return folderPath.replace(/\/+$/u, "").split("/").pop() || folderPath;
-}
-
 /**
- * The folders this Mac's plans read, the newest started plan's first and each
- * once, so the new-plan page can offer the folder the last plan was started
- * in and a few before it. The list is already newest started first, and a
- * plan with no folder here adds none.
+ * The repositories the account's plans are about, the newest started plan's
+ * first and each once, so the chip can start on the repository the last
+ * plan was about and offer a few before it. The list is already newest
+ * started first, and a plan with no repository adds none.
  */
-export function recentFolders(
-  plans: PlanningView["plans"],
-  folders: PlanningView["folders"],
-): string[] {
+export function recentRepositories(plans: PlanningView["plans"]): string[] {
   const recent: string[] = [];
   for (const plan of plans) {
-    const folderPath = folders[plan.id];
-    if (folderPath !== undefined && !recent.includes(folderPath)) recent.push(folderPath);
-    if (recent.length === RECENT_FOLDER_LIMIT) break;
+    const { repository } = plan;
+    if (repository !== null && !recent.includes(repository)) recent.push(repository);
+    if (recent.length === RECENT_REPOSITORY_LIMIT) break;
   }
   return recent;
+}
+
+/** The page of a repository on GitHub, which Open on GitHub opens. */
+export function repositoryPageUrl(repository: string): string {
+  return `https://github.com/${repository}`;
 }
 
 /** What the Copy button shows: its resting glyph, the check mark, or the failure beside it. */
@@ -164,6 +155,20 @@ export function copyShown(outcome: CopyOutcome | undefined, document: PlanDocume
 
 /** What the new-plan form says when the service answered no plan. */
 export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
+
+/** What a call that named a repository says when the service refused it, by its reason. */
+const REPOSITORY_FAILURE_NOTES = {
+  [PLAN_CALL_FAILURE.UNANSWERED]: START_FAILED_NOTE,
+  [PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
+    "Luke can't see that repository on GitHub. Choose which repositories Luke can see, then try again.",
+  [PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED]:
+    "Sign in with GitHub again to use a repository with Luke.",
+} as const satisfies Record<RepositoryCallFailure, string>;
+
+/** The sentence the page shows for a start or a repository change the service refused. */
+export function repositoryFailureNote(failure: RepositoryCallFailure): string {
+  return REPOSITORY_FAILURE_NOTES[failure];
+}
 
 /** What a plan's name says, where it was edited, when the service refused the rename. */
 export const RENAME_FAILED_NOTE = "The plan could not be renamed. Try again.";

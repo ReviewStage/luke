@@ -128,22 +128,43 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 1. **Plan name**, the card's large single-line field, focused on arrival,
    whose placeholder, "Name the feature, e.g. Dark mode toggle", reads as an
    example to replace rather than a filled value.
-2. **Folder**, the chip along the card's foot: the folder of this Mac the
-   plan reads, kept on this Mac alone. It starts on the folder of the newest
-   started plan this Mac holds one for, and offers up to five recent
-   folders over `Choose another folder…`, the system's picker. With no recent
-   folder it reads `Choose folder` and opens the picker directly.
-3. **Start**, the round arrow at the card's other end, enabled once both are
-   set; Enter presses it. Pressing it saves the plan with its name and the
-   untouched template as its document, records its folder on this Mac, and
-   opens it. If the service cannot be reached, the reason shows under the
-   card and the button can be pressed again.
+2. **Repository**, the chip along the card's foot: the GitHub mark and the
+   `owner/name` of the repository the plan is about, which the service keeps
+   on the plan (`plan.repository`). It starts on the repository of the newest
+   started plan that has one, and its menu offers up to five recent
+   repositories, then `Search all repositories…`, which filters every
+   repository the Luke GitHub App reaches for the account
+   (`GET /api/github/repositories`), then `Choose which repositories Luke can
+   see ↗`, which opens the App's installation page in the browser. With the
+   App installed nowhere for the account, the chip reads `Install Luke on
+   GitHub ↗` and opens that page directly. With no repository used before it
+   reads `Choose repository`; a plan can start without one and be given one
+   later. The list is read when the chip mounts and again whenever the window
+   takes focus, which is how the chip picks up an App installed in the
+   browser meanwhile; nothing polls. The arrow keys walk the menu, Escape
+   closes it and hands focus back to the chip, and so does focus leaving it.
+3. **Start**, the round arrow at the card's other end, enabled once the name
+   is set; Enter presses it. Pressing it saves the plan with its name, its
+   repository, and the untouched template as its document, and opens it. If
+   the service cannot be reached, or it refuses the repository (the App does
+   not reach it, or the account must sign in with GitHub again), the reason
+   shows under the card and the button can be pressed again.
 
 ### Header
 
 - `‹`, back to the list, which leaves the plan.
 - The plan's name.
-- The repository line, as `owner/repository · branch @ short commit`.
+- The repository chip under it, reading `owner/repository`, or `Choose
+  repository` for a plan with none yet, the 13 plans from before
+  repositories among them. It is the composer's chip, with the same menu:
+  a pick is saved through `PATCH /api/plans/{id}` and drawn in place, and a
+  refusal is said beside the chip. A plan can be used without a repository;
+  the planning model then says it has none.
+- **The plan's menu**, from the toolbar's ⋯ and from a right-click on the
+  plan in the sidebar alike: Copy plan (the open plan alone), Rename, Change
+  repository… (opens the chip's menu, opening the plan first where it is not
+  the open one), Open on GitHub (`https://github.com/owner/repository`, for a
+  plan with a repository), and Delete plan, last and red.
 - **Copy**, the one action on the document. It is always enabled, however
   much of the plan is written. It copies the current document as described in
   "Copy". It never launches an agent and never asks the model anything.
@@ -202,9 +223,10 @@ beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
 - **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke has on
-  screen during a call; and `Transcript`, what was said on the plan's calls
-  ("Transcript" below). With none on screen, the Code tab says so quietly
-  rather than going away.
+  screen during a call, read by the service from the plan's repository ("How
+  the planning model reads code" below); and `Transcript`, what was said on
+  the plan's calls ("Transcript" below). With none on screen, the Code tab
+  says so quietly rather than going away.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it;
   choosing a tab, or Luke putting code up, never opens it. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
@@ -426,7 +448,8 @@ evaluations are outside this work.
 
 ### How the planning model reads code
 
-The planning model reads the plan's repository, never a folder on the Mac.
+The planning model reads the plan's repository, never a folder on the Mac,
+and so does the code it puts on the developer's screen.
 `run_in_repository` runs one bash command in a Vercel Sandbox the planning
 conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
 the plan's GitHub repository (`apps/web/server/hosted/repository-shell.ts`).
@@ -445,6 +468,18 @@ picks one in the app), the developer must sign in with GitHub again, the
 repository is no longer reachable through the App, or the checkout failed;
 in every case nothing of the code has been read, and Luke never describes it
 as read.
+
+`show_code` (`apps/web/server/hosted/show-code.ts`) reads from the same
+checkout: the file named and a window of at most 200 lines around the lines
+pointed at, each line cut to 400 characters, with the path resolved inside
+the checkout root and a `.env` file never read. The lines are the call's
+answer, so they are journaled with the call, told to the voice as the
+`code_shown` turn event once the call has answered, held until Luke next
+starts to speak, and sent to the Mac on the `plan.code` frame with the
+repository they came from; the Mac colours and draws them and reads nothing
+of its own (`packages/host/src/plan-code.ts`). A file that is missing,
+outside the checkout, binary, too large, or secret, and a checkout that
+cannot be reached, answer `rejected` with why, and nothing goes on screen.
 
 ### From a plan to a pull request
 
@@ -469,9 +504,8 @@ instructions.
 
 The developer opens the panel's Plans tab. They press
 `New plan`, connect GitHub once, name the plan "Teammate invitations", pick
-`acme/relay`, and press `Start plan`. The header reads
-`acme/relay · main @ 4f2c9e1`, and the document shows the untouched template,
-every field "Unanswered".
+`acme/relay`, and press `Start plan`. The header's chip reads `acme/relay`,
+and the document shows the untouched template, every field "Unanswered".
 
 They press the microphone. The call opens and Luke speaks first, without
 waiting for them: a few words of greeting and what they have in mind, asked so
@@ -690,7 +724,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, choosing its folder, and the microphone. |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, and the microphone. |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |

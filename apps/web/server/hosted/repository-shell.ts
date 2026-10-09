@@ -26,27 +26,49 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * read.
  */
 
-/** Why a call ran nothing, in words the model can act on. */
-export const REPOSITORY_SHELL_REFUSAL = {
-  UNREADABLE: "Not run: the arguments must be exactly `command`, one shell command.",
+/**
+ * Why the checkout could not be reached, in words the model can act on,
+ * without the verb each tool puts ahead of them: the shell says a command
+ * was not run, `show_code` that lines were not shown.
+ */
+export const REPOSITORY_REFUSAL = {
   NO_REPOSITORY:
-    "Not run: this plan has no repository yet; the developer picks one in the app. " +
+    "this plan has no repository yet; the developer picks one in the app. " +
     "Nothing of the code has been read.",
   SIGN_IN_REQUIRED:
-    "Not run: the developer must sign in with GitHub again before the repository can be read. " +
+    "the developer must sign in with GitHub again before the repository can be read. " +
     "Nothing of the code has been read.",
   NOT_REACHABLE:
-    "Not run: the plan's repository is not reachable for the developer through the Luke GitHub App: " +
+    "the plan's repository is not reachable for the developer through the Luke GitHub App: " +
     "the App may have been removed from it, or the developer's access revoked. " +
     "The developer picks a reachable repository in the app. Nothing of the code has been read.",
   GITHUB_UNAVAILABLE:
-    "Not run: GitHub could not be read to confirm the repository. The call may be made again.",
-  SANDBOX_UNAVAILABLE: "Not run: the sandbox could not be opened. The call may be made again.",
+    "GitHub could not be read to confirm the repository. The call may be made again.",
+  SANDBOX_UNAVAILABLE: "the sandbox could not be opened. The call may be made again.",
   NO_FIREWALL:
-    "Not run: the sandbox cannot carry the repository's credential, so the repository could " +
+    "the sandbox cannot carry the repository's credential, so the repository could " +
     "not be checked out.",
   /** The checkout's own words follow this. */
-  CHECKOUT_FAILED: "Not run: the repository could not be checked out. The call may be made again.",
+  CHECKOUT_FAILED: "the repository could not be checked out. The call may be made again.",
+} as const;
+
+/** The verb the shell puts ahead of every reason it ran nothing. */
+const NOT_RUN = "Not run: ";
+
+/** Each refusal reworded as the shell says it; the keys are the reasons' own. */
+function notRunWording<const Reasons extends Readonly<Record<string, string>>>(
+  reasons: Reasons,
+): { readonly [Key in keyof Reasons]: string } {
+  // SAFETY: the entries are the reasons' own, so the keys are the ones the mapped type names.
+  return Object.fromEntries(
+    Object.entries(reasons).map(([key, reason]) => [key, `${NOT_RUN}${reason}`]),
+  ) as { [Key in keyof Reasons]: string };
+}
+
+/** Why a call ran nothing, in words the model can act on. */
+export const REPOSITORY_SHELL_REFUSAL = {
+  UNREADABLE: `${NOT_RUN}the arguments must be exactly \`command\`, one shell command.`,
+  ...notRunWording(REPOSITORY_REFUSAL),
 } as const;
 
 export const REPOSITORY_SHELL_STATUS = {
@@ -89,6 +111,11 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
     DEPTH: "LUKE_CLONE_DEPTH",
     /** The model's command, which bash reads from the variable and never from shell text. */
     COMMAND: "LUKE_COMMAND",
+    /** The file `show_code` reads, relative to the checkout root, which its scripts read from the variable alone. */
+    FILE: "LUKE_FILE",
+    /** The first and last line of the window `show_code` reads, counted from one. */
+    FIRST_LINE: "LUKE_FIRST_LINE",
+    LAST_LINE: "LUKE_LAST_LINE",
   },
 } as const;
 
@@ -215,8 +242,10 @@ export const RUN_IN_REPOSITORY_TOOL = {
   inputSchema: RUN_IN_REPOSITORY_INPUT,
 } as const;
 
-/** Why a step of the shell ran nothing, carried as the refusal the model reads; the coding agent's checkout answers the same word. */
-export class ShellRefusal extends Data.TaggedError("ShellRefusal")<{ readonly reason: string }> {}
+/** Why the checkout could not be reached or read, as the reason the tool that asked words for the model; a coding agent's checkout answers the same word. */
+export class RepositoryRefusal extends Data.TaggedError("RepositoryRefusal")<{
+  readonly reason: string;
+}> {}
 
 /** The planning checkout is one commit deep: it is read and never pushed from. */
 const PLANNING_CLONE_DEPTH = "1";
@@ -270,14 +299,14 @@ function cloneNetworkPolicy(repository: string, token: Redacted.Redacted) {
 }
 
 /** One run in the sandbox as an effect; a run that threw is the sandbox gone, which is the refusal given. */
-function runInSandbox(
+export function runInSandbox(
   sandbox: RepositorySandbox,
   options: Parameters<SandboxSession["run"]>[0],
   refusal: string,
 ) {
   return Effect.tryPromise({
     try: () => sandbox.run(options),
-    catch: () => new ShellRefusal({ reason: refusal }),
+    catch: () => new RepositoryRefusal({ reason: refusal }),
   });
 }
 
@@ -294,14 +323,14 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   confirmed: CheckoutRepository,
   token: Redacted.Redacted,
   { depth }: CheckoutDepth = {},
-): Effect.fn.Return<void, ShellRefusal> {
+): Effect.fn.Return<void, RepositoryRefusal> {
   const setNetworkPolicy = sandbox.setNetworkPolicy;
   if (setNetworkPolicy === undefined)
-    return yield* new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.NO_FIREWALL });
+    return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_FIREWALL });
   const policy = (next: Parameters<typeof setNetworkPolicy>[0]) =>
     Effect.tryPromise({
       try: () => setNetworkPolicy(next),
-      catch: () => new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED }),
+      catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     });
   const clone = runInSandbox(
     sandbox,
@@ -316,11 +345,11 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
         ...(depth === undefined ? undefined : { [SANDBOX_VARIABLE.DEPTH]: depth }),
       },
     },
-    REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED,
+    REPOSITORY_REFUSAL.CHECKOUT_FAILED,
   ).pipe(
     Effect.timeoutOrElse({
       duration: REPOSITORY_SHELL_BOUNDS.CHECKOUT_TIMEOUT,
-      orElse: () => new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED }),
+      orElse: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.CHECKOUT_FAILED }),
     }),
   );
   yield* policy(cloneNetworkPolicy(confirmed.fullName, token));
@@ -329,11 +358,11 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
   const cloned = yield* Effect.ensuring(clone, Effect.ignore(policy(OPEN_INTERNET)));
   if (cloned.exitCode !== 0) {
     const detail = cloned.stderr.trim().slice(0, REPOSITORY_SHELL_BOUNDS.CHECKOUT_ERROR_MAX_CHARS);
-    return yield* new ShellRefusal({
+    return yield* new RepositoryRefusal({
       reason:
         detail === ""
-          ? REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED
-          : `${REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED} git said: ${detail}`,
+          ? REPOSITORY_REFUSAL.CHECKOUT_FAILED
+          : `${REPOSITORY_REFUSAL.CHECKOUT_FAILED} git said: ${detail}`,
     });
   }
 });
@@ -349,23 +378,60 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
   call: RepositoryCall,
   repository: string,
   sandbox: RepositorySandbox,
-): Effect.fn.Return<void, ShellRefusal, RepositoryShellServices> {
+): Effect.fn.Return<void, RepositoryRefusal, RepositoryShellServices> {
   const app = yield* GitHubApp;
   const reached = yield* app
     .repositoryReadToken(call.plan.userId, repository)
     .pipe(
       Effect.mapError((failure) =>
         failure._tag === "GitHubSignInRequired"
-          ? new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.SIGN_IN_REQUIRED })
-          : new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.GITHUB_UNAVAILABLE }),
+          ? new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SIGN_IN_REQUIRED })
+          : new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE }),
       ),
     );
   if (Option.isNone(reached))
-    return yield* new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.NOT_REACHABLE });
+    return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
   const { repository: confirmed, token } = reached.value;
   yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
     depth: PLANNING_CLONE_DEPTH,
   });
+});
+
+/** The session's sandbox with a checkout standing in it, and which repository the checkout is of. */
+export interface CheckedOutSandbox {
+  readonly sandbox: RepositorySandbox;
+  readonly repository: string;
+}
+
+/**
+ * The session's sandbox with the plan's repository checked out in it: the
+ * checkout made first where none of this repository stands, and reused
+ * after. A plan with no repository is refused ahead of the sandbox, so it
+ * opens none. What stands checked out is the repository's own text, so
+ * every reader of it owes the model the same honesty: a refusal here says
+ * nothing was read.
+ */
+export const checkedOutSandbox = /* @__PURE__ */ Effect.fn("web/checkedOutSandbox")(function* (
+  call: RepositoryCall,
+): Effect.fn.Return<CheckedOutSandbox, RepositoryRefusal, RepositoryShellServices> {
+  const repository = call.repository;
+  if (repository === null)
+    return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NO_REPOSITORY });
+  const sandbox = yield* Effect.tryPromise({
+    try: () => call.sandbox(),
+    catch: () => new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
+  });
+  const standing = yield* runInSandbox(
+    sandbox,
+    {
+      command: CHECKED_OUT_SCRIPT,
+      workingDirectory: SANDBOX_PATH.WORKSPACE,
+      env: { [SANDBOX_VARIABLE.REPOSITORY]: repository },
+    },
+    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+  );
+  if (standing.exitCode !== 0) yield* checkOut(call, repository, sandbox);
+  return { sandbox, repository };
 });
 
 /**
@@ -380,23 +446,7 @@ export function runInRepository(
   const ran = Effect.gen(function* () {
     const read = readInput(input);
     if (Result.isFailure(read)) return notRun(REPOSITORY_SHELL_REFUSAL.UNREADABLE);
-    // The plan's repository is refused ahead of the sandbox, so a plan with none opens no sandbox.
-    const repository = call.repository;
-    if (repository === null) return notRun(REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY);
-    const sandbox = yield* Effect.tryPromise({
-      try: () => call.sandbox(),
-      catch: () => new ShellRefusal({ reason: REPOSITORY_SHELL_REFUSAL.SANDBOX_UNAVAILABLE }),
-    });
-    const standing = yield* runInSandbox(
-      sandbox,
-      {
-        command: CHECKED_OUT_SCRIPT,
-        workingDirectory: SANDBOX_PATH.WORKSPACE,
-        env: { [SANDBOX_VARIABLE.REPOSITORY]: repository },
-      },
-      REPOSITORY_SHELL_REFUSAL.SANDBOX_UNAVAILABLE,
-    );
-    if (standing.exitCode !== 0) yield* checkOut(call, repository, sandbox);
+    const { sandbox } = yield* checkedOutSandbox(call);
     const result = yield* runInSandbox(
       sandbox,
       {
@@ -404,7 +454,7 @@ export function runInRepository(
         workingDirectory: SANDBOX_PATH.CHECKOUT,
         env: { ...COMMAND_ENVIRONMENT, [SANDBOX_VARIABLE.COMMAND]: read.success.command },
       },
-      REPOSITORY_SHELL_REFUSAL.SANDBOX_UNAVAILABLE,
+      REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
     );
     return {
       status: REPOSITORY_SHELL_STATUS.RAN,
@@ -413,5 +463,7 @@ export function runInRepository(
       stderr: truncated(result.stderr),
     } satisfies RepositoryShellResult;
   });
-  return Effect.catchTag(ran, "ShellRefusal", (refusal) => Effect.succeed(notRun(refusal.reason)));
+  return Effect.catchTag(ran, "RepositoryRefusal", (refusal) =>
+    Effect.succeed(notRun(`${NOT_RUN}${refusal.reason}`)),
+  );
 }

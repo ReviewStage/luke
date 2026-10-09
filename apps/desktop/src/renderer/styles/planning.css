@@ -417,6 +417,10 @@
   font-size: 11.5px;
 }
 
+.code-pane-repository {
+  color: var(--text-tertiary);
+}
+
 .code-pane-path {
   overflow: hidden;
   color: var(--text-primary);
@@ -427,12 +431,6 @@
 
 .code-pane-range {
   flex: 0 0 auto;
-  color: var(--text-secondary);
-}
-
-.code-pane-note {
-  margin: 0;
-  padding: 14px 12px;
   color: var(--text-secondary);
 }
 

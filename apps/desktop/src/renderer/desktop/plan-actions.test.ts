@@ -35,8 +35,10 @@ const DIALOG = '[role="alertdialog"]';
 /** What the plan actions asked of the tab, by the plan each named. */
 interface Asked {
   opened: string[];
-  revealed: string[];
-  chosen: string[];
+  /** Each plan whose page Open on GitHub asked for. */
+  openedOnGitHub: string[];
+  /** Each plan whose chip Change repository… asked open. */
+  changed: string[];
   deleted: string[];
   /** Each rename asked, as the plan and the name it was given. */
   renamed: string[][];
@@ -56,20 +58,24 @@ afterEach(unmountAll);
 
 /** The open plan's tab, every per-plan press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
-  folders: Readonly<Record<string, string>> = {},
+  repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   renames: () => Promise<boolean> = () => Promise.resolve(true),
 ) {
-  const asked: Asked = { opened: [], revealed: [], chosen: [], deleted: [], renamed: [] };
+  const asked: Asked = { opened: [], openedOnGitHub: [], changed: [], deleted: [], renamed: [] };
+  const onRepository = (plan: Plan | PlanSummary) => ({
+    ...plan,
+    repository: repositories[plan.id] ?? null,
+  });
+  const open = onRepository(PLAN);
   const plans: PlansControl = plansControl({
     page: PLANS_PAGE.DOCUMENT,
-    plans: [PLAN, OTHER],
-    folders,
+    plans: [onRepository(PLAN), onRepository(OTHER)],
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-    onRevealFolder: (planId) => asked.revealed.push(planId),
-    onChooseFolder: (planId) => asked.chosen.push(planId),
+    region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, ...open } },
+    onOpenOnGitHub: (planId) => asked.openedOnGitHub.push(planId),
+    onChangeRepository: (planId) => asked.changed.push(planId),
     onDeletePlan: (planId) => {
       asked.deleted.push(planId);
       return deletes();
@@ -176,23 +182,28 @@ async function confirmDelete(): Promise<void> {
   await act(async () => remove.click());
 }
 
-test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
-  const folderless = openTab();
-  openMenu(mountToolbar(folderless.plans));
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
+test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
+  const unset = openTab();
+  openMenu(mountToolbar(unset.plans));
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
   const toolbar = document.querySelector(".desktop-toolbar-actions");
-  assert.match(toolbar?.textContent ?? "", /Choose folder.*Copy plan/u);
+  assert.match(toolbar?.textContent ?? "", /Copy plan/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
+  // The plan's chip stands under its title, waiting on a pick.
+  assert.equal(
+    document.querySelector(".desktop-toolbar-heading .plan-compose-chip")?.textContent,
+    "Choose repository",
+  );
 
   unmountAll();
-  const kept = openTab({ [PLAN.id]: "/Users/dev/relay" });
+  const kept = openTab({ [PLAN.id]: "acme/relay" });
   openMenu(mountToolbar(kept.plans));
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
-    "Reveal in Finder",
-    "Change folder",
+    "Change repository…",
+    "Open on GitHub",
     "Delete plan",
   ]);
   for (const item of menuItems()) {
@@ -201,35 +212,36 @@ test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, an
   const deleteItem = menuItems().at(-1);
   assert.equal(deleteItem?.dataset.danger, "true");
   assert.ok(deleteItem?.previousElementSibling instanceof HTMLHRElement);
-  assert.doesNotMatch(
-    document.querySelector(".desktop-toolbar-actions")?.textContent ?? "",
-    /Choose folder/u,
+  assert.equal(
+    document.querySelector(".desktop-toolbar-heading .plan-compose-chip")?.textContent,
+    "acme/relay",
   );
 
-  choose("Reveal in Finder");
-  assert.deepEqual(kept.asked.revealed, [PLAN.id]);
+  choose("Open on GitHub");
+  assert.deepEqual(kept.asked.openedOnGitHub, [PLAN.id]);
   assert.deepEqual(menuItems(), []);
 });
 
 test("a right-click on a sidebar plan offers that plan's actions at the pointer, and acting on it opens nothing", () => {
-  const { plans, asked } = openTab({ [OTHER.id]: "/Users/dev/billing" });
-  const other = mountSidebarPlan(plans, OTHER, asked);
+  const { plans, asked } = openTab({ [OTHER.id]: "acme/billing" });
+  const other = mountSidebarPlan(plans, { ...OTHER, repository: "acme/billing" }, asked);
   const open = mountSidebarPlan(plans, PLAN, asked);
 
   rightClick(other, 40, 60);
   // Copy formats the document drawn, which is the open plan's alone.
-  assert.deepEqual(labels(), ["Rename", "Reveal in Finder", "Change folder", "Delete plan"]);
+  assert.deepEqual(labels(), ["Rename", "Change repository…", "Open on GitHub", "Delete plan"]);
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   assert.equal(menu?.style.left, "40px");
   assert.equal(menu?.style.top, "60px");
-  choose("Change folder");
+  choose("Change repository…");
 
   rightClick(open, 40, 120);
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
-  choose("Choose folder");
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
+  choose("Change repository…");
 
-  assert.deepEqual(asked.chosen, [OTHER.id, PLAN.id]);
+  assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
+  assert.equal(other.textContent, "Billing exportacme/billing");
 });
 
 /** The plan's name field standing now, if one does. */
@@ -707,14 +719,24 @@ test("Command-Delete asks before the open plan is deleted, and leaves a text fie
   assert.deepEqual(asked.deleted, [PLAN.id]);
 });
 
-test("Option-Command-R reveals the open plan's folder, and only once it has one", () => {
-  const folderless = openTab();
-  mountToolbarWithKeys(folderless.plans);
-  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), false);
-  unmountAll();
+test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
+  const { plans } = openTab({ [PLAN.id]: "acme/relay" });
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
 
-  const { plans, asked } = openTab({ [PLAN.id]: "/Users/dean/code/luke" });
-  mountToolbarWithKeys(plans);
-  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), true);
-  assert.deepEqual(asked.revealed, [PLAN.id]);
+  openMenu(more);
+  choose("Change repository…");
+  // The tab counts the ask; the toolbar's chip opens on it.
+  act(() => {
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
+  });
+
+  const chipMenu = container.querySelector('.desktop-toolbar-heading [role="menu"]');
+  assert.ok(chipMenu, "the chip's menu stands under the title");
+  assert.equal(chipMenu.getAttribute("aria-label"), "Repository");
 });

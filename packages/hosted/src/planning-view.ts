@@ -1,6 +1,10 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
 import {
+  githubRepositoriesAnswerSchema,
+  githubRepositoryFullNameSchema,
+} from "./github-repositories-wire.js";
+import {
   codeRefSchema,
   planCreateRequestSchema,
   planRenameRequestSchema,
@@ -17,17 +21,9 @@ import { planTranscriptSchema } from "./transcript-wire.js";
  * window draws from. Exactly one plan is ever active, the one the window has
  * open, and it is the plan a voice session binds to. The view carries plan
  * names, documents, and what was said on the active plan's calls from the
- * service, and the folder each plan reads from this Mac's own record, which
- * never leaves it.
+ * service, and nothing of this Mac's own: a plan's repository is the
+ * service's, named on the plan itself.
  */
-
-/** macOS's own path bound. */
-const MAX_FOLDER_PATH_CHARS = 1_024;
-
-const folderPathSchema = EffectSchema.Trim.check(
-  EffectSchema.isNonEmpty(),
-  EffectSchema.isMaxLength(MAX_FOLDER_PATH_CHARS),
-);
 
 /** Where one read of the service stands, as the window draws it. */
 export const PLANNING_READ = {
@@ -104,20 +100,6 @@ export const planActivitySchema = EffectSchema.Struct({
 
 export type PlanActivity = typeof planActivitySchema.Type;
 
-/** Why a file named for the screen drew no lines. */
-export const CODE_UNREADABLE = {
-  /** The plan has no folder on this Mac to read it from. */
-  NO_FOLDER: "no-folder",
-  /** No such file in the plan's folder. */
-  MISSING: "missing",
-  /** The path leaves the folder, or names a file kept secret, such as a `.env`. */
-  REFUSED: "refused",
-  /** The file is larger than the screen draws, or is not text. */
-  TOO_LARGE: "too-large",
-} as const;
-
-export type CodeUnreadable = (typeof CODE_UNREADABLE)[keyof typeof CODE_UNREADABLE];
-
 /** One run of a line in one colour, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
@@ -129,18 +111,19 @@ export type CodeToken = typeof codeTokenSchema.Type;
 
 /**
  * The code on screen during the call about the active plan: what Luke named,
- * and the file's lines as this Mac read and coloured them, line one
- * first, or why it drew none. It stands for the call alone: nothing of it
- * enters the plan.
+ * the repository the service read it from, and the file's lines as they
+ * arrived and this Mac coloured them, the window's first line first. It
+ * stands for the call alone: nothing of it enters the plan.
  */
 const planCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
+  /** The repository the lines were read from, `owner/name`. */
+  repository: EffectSchema.String,
   /** The file's line the first drawn line is; the screen holds a window of a long file around the lines pointed at. */
-  firstLine: EffectSchema.optionalKey(EffectSchema.Int),
+  firstLine: EffectSchema.Int,
   /** How many lines the whole file has. */
-  lineCount: EffectSchema.optionalKey(EffectSchema.Int),
-  lines: EffectSchema.optionalKey(EffectSchema.Array(EffectSchema.Array(codeTokenSchema))),
-  unreadable: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODE_UNREADABLE))),
+  lineCount: EffectSchema.Int,
+  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
 });
 
 export type PlanCode = typeof planCodeSchema.Type;
@@ -160,8 +143,6 @@ export const planningViewSchema = EffectSchema.Struct({
   transcript: EffectSchema.optionalKey(planningTranscriptSchema),
   /** The code on screen during the call about the active plan; absent with none, and cleared with the activity. */
   code: EffectSchema.optionalKey(planCodeSchema),
-  /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
-  folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });
 
 export type PlanningView = typeof planningViewSchema.Type;
@@ -171,14 +152,10 @@ export const IDLE_PLANNING_VIEW: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.IDLE,
   document: { status: PLANNING_READ.IDLE },
-  folders: {},
 };
 
-/** Starting a plan, as the window asks it: the name the service keeps, and the folder this Mac keeps. */
-export const planningStartRequestSchema = EffectSchema.Struct({
-  ...planCreateRequestSchema.fields,
-  folderPath: folderPathSchema,
-});
+/** Starting a plan, as the window asks it: the name, and the repository it is about where one is chosen; the service keeps both. */
+export const planningStartRequestSchema = planCreateRequestSchema;
 
 export type PlanningStartRequest = typeof planningStartRequestSchema.Type;
 
@@ -190,13 +167,13 @@ export const planningRenameParamsSchema = EffectSchema.Struct({
 
 export type PlanningRenameParams = typeof planningRenameParamsSchema.Type;
 
-/** Choosing a plan's folder again on this Mac. */
-export const planningSetFolderParamsSchema = EffectSchema.Struct({
+/** Giving a plan its repository, or taking it away: the plan, and the repository's full name or null for none. */
+export const planningSetRepositoryParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  folderPath: folderPathSchema,
+  repository: EffectSchema.NullOr(githubRepositoryFullNameSchema),
 });
 
-export type PlanningSetFolderParams = typeof planningSetFolderParamsSchema.Type;
+export type PlanningSetRepositoryParams = typeof planningSetRepositoryParamsSchema.Type;
 
 /** A plan's board as the panel asks it saved: the whole scene, and the number of Luke's drawing it holds. */
 export const planningBoardSaveParamsSchema = EffectSchema.Struct({
@@ -212,14 +189,53 @@ export const PLAN_CALL_FAILURE = {
   UNANSWERED: "unanswered",
   /** The plan is not one the account holds: deleted, or never the caller's. */
   NOT_FOUND: "not-found",
+  /** The repository named is not one the Luke GitHub App reaches for the account. */
+  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
+  /** The account must sign in with GitHub again before the service can read GitHub for it. */
+  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
 } as const;
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
 
+/** Why a call that names a repository answered nothing: the service did not answer, or GitHub's reach refused it. */
+const REPOSITORY_CALL_FAILURES = [
+  PLAN_CALL_FAILURE.UNANSWERED,
+  PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+] as const;
+
+export type RepositoryCallFailure = (typeof REPOSITORY_CALL_FAILURES)[number];
+
+const repositoryCallFailureSchema = EffectSchema.Literals(REPOSITORY_CALL_FAILURES);
+
 /** Starting a plan, as the window hears it: the plan now active, or why none started. */
 export const planningStartAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ planId: EffectSchema.String }),
-  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+  EffectSchema.Struct({ failure: repositoryCallFailureSchema }),
 ]);
 
 export type PlanningStartAnswer = typeof planningStartAnswerSchema.Type;
+
+/** Why the repository list answered nothing: the service did not answer, or the account must sign in with GitHub again. */
+const REPOSITORY_LIST_FAILURES = [
+  PLAN_CALL_FAILURE.UNANSWERED,
+  PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+] as const;
+
+export type RepositoryListFailure = (typeof REPOSITORY_LIST_FAILURES)[number];
+
+/** The repositories the account reaches, as the window hears them: the service's answer whole, or why there is none. */
+export const planningRepositoriesAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ repositories: githubRepositoriesAnswerSchema }),
+  EffectSchema.Struct({ failure: EffectSchema.Literals(REPOSITORY_LIST_FAILURES) }),
+]);
+
+export type PlanningRepositoriesAnswer = typeof planningRepositoriesAnswerSchema.Type;
+
+/** A plan's repository changed, as the window hears it: the repository the plan now names, or why it is unchanged. */
+export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ repository: EffectSchema.NullOr(EffectSchema.String) }),
+  EffectSchema.Struct({ failure: repositoryCallFailureSchema }),
+]);
+
+export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;

@@ -671,7 +671,13 @@ it.effect(
       const shown: PlanCodeFrame = {
         type: VOICE_SERVICE_FRAME.PLAN_CODE,
         planId: INVITES_PLAN,
-        ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+        code: {
+          ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+          repository: "acme/relay",
+          firstLine: 1,
+          lineCount: 6,
+          lines: ["export function acceptInvite() {", "}"],
+        },
       };
       f.tellCode(shown);
       f.tellCode({ ...shown, planId: BILLING_PLAN });

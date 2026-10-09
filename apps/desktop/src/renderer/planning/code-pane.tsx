@@ -1,20 +1,21 @@
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { useEffect, useRef } from "react";
-import { isPointed, rangeLabel, unreadableLine } from "./code-pane-model";
+import { isPointed, rangeLabel } from "./code-pane-model";
 
 /**
  * code-pane.tsx -- the code Luke puts on screen during a planning call: the side panel's Code tab, showing the lines he is talking about.
  *
- * Luke names a file of the plan's folder and the lines that matter as he
- * starts to speak about them; the host reads them from the folder and
- * colours them, and the pane draws them numbered from where they sit in the
- * file, the lines he means lit and scrolled into view.
+ * Luke names a file of the plan's repository and the lines that matter as he
+ * starts to speak about them; the service reads them from its checkout of
+ * the repository, the host colours them, and the pane draws them numbered
+ * from where they sit in the file, the lines he means lit and scrolled into
+ * view, under the repository they came from.
  */
 
 /** The file's window of lines, the lines pointed at lit and scrolled into view whenever they change. */
 function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
-  const first = code.firstLine ?? 1;
+  const first = code.firstLine;
   const { path, startLine, endLine } = code.ref;
 
   useEffect(() => {
@@ -24,7 +25,7 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
 
   return (
     <div className="code-lines" ref={scroller}>
-      {(code.lines ?? []).map((tokens, index) => {
+      {code.lines.map((tokens, index) => {
         const line = first + index;
         return (
           <div
@@ -51,24 +52,18 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   );
 }
 
-/** The pane: a heading naming the file and the lines pointed at, over the lines, or why none were drawn. */
+/** The pane: a heading naming the repository, the file, and the lines pointed at, over the lines. */
 export function CodePane({ code }: { code: PlanCode }): React.JSX.Element {
-  const unreadable = unreadableLine(code);
   const label = rangeLabel(code.ref);
 
   return (
     <section className="code-pane" aria-label="Code on screen">
       <header className="code-pane-header">
+        <span className="code-pane-repository">{code.repository}</span>
         <span className="code-pane-path">{code.ref.path}</span>
         {label === undefined ? null : <span className="code-pane-range">{label}</span>}
       </header>
-      {unreadable !== undefined ? (
-        <p className="code-pane-note" role="alert">
-          {unreadable}
-        </p>
-      ) : (
-        <CodeLines code={code} />
-      )}
+      <CodeLines code={code} />
     </section>
   );
 }
