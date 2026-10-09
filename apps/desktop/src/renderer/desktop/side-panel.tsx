@@ -26,10 +26,11 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * to it, so the panel decides nothing about when it shows.
  *
  * The panel runs the window's full height. Its top row is the window's drag
- * handle above it, holding the tabs at its left and, at its right, the
- * full-screen button and the toggle that hides the panel, which stands in the
- * plan's toolbar only while the panel is hidden. The plan's own actions stay
- * in the plan's toolbar and never come into the panel.
+ * handle above it, holding the tabs at its left and the full-screen button at
+ * its right, which leaves room past itself for the toggle. The toggle is the
+ * window's rather than the panel's (desktop-shell.tsx), so the panel's coming
+ * and going never moves it. The plan's own actions stay in the plan's toolbar
+ * and never come into the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -139,21 +140,24 @@ function TabContent({
 }
 
 /**
- * The last button of whichever top row it stands in, which shows and hides
- * the panel. Exactly one stands beside an open plan, the plan's toolbar's or
- * the panel's own, so it is also what offers the panel's shortcuts: its own,
- * and one to open the panel on each tab. The one in a panel on its way out
- * offers none, because the plan's toolbar already has its own back.
+ * Shows and hides the panel. It stands at the window's top right, beside
+ * neither top row it serves, the way the sidebar's toggle stands beside the
+ * traffic lights: one button in one place whether the panel is hidden,
+ * beside the document, full screen, or still sliding, so a press lands on
+ * it however fast the presses come. It stands on every plan's page, so it
+ * is also what offers the panel's shortcuts: its own, and one to open the
+ * panel on each tab. While the plan is not drawn there is no panel to show,
+ * so it is disabled and offers none.
  */
 export function SidePanelToggle({
   panel,
-  leaving = false,
+  disabled,
 }: {
   panel: SidePanelControl;
-  leaving?: boolean;
+  disabled: boolean;
 }): React.JSX.Element {
   const label = panel.open ? "Hide panel" : "Show panel";
-  const offer = (run: () => void) => (leaving ? undefined : run);
+  const offer = (run: () => void) => (disabled ? undefined : run);
   useAppCommand(APP_COMMAND.TOGGLE_SIDE_PANEL, offer(panel.onToggle));
   useAppCommand(
     APP_COMMAND.SHOW_BOARD,
@@ -175,6 +179,7 @@ export function SidePanelToggle({
         aria-label={label}
         aria-expanded={panel.open}
         data-open={String(panel.open)}
+        disabled={disabled}
         onClick={panel.onToggle}
       >
         <SidePanelIcon />
@@ -386,14 +391,11 @@ export function SidePanel({
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
           <TabStrip tab={panel.tab} unread={unread} onChoose={panel.onChoose} />
-          <div className="side-panel-bar-actions">
-            <FullScreenToggle
-              fullScreen={panel.fullScreen}
-              leaving={leaving !== PANEL_LEAVING.NONE}
-              onToggle={panel.onToggleFullScreen}
-            />
-            <SidePanelToggle panel={panel} leaving={leaving !== PANEL_LEAVING.NONE} />
-          </div>
+          <FullScreenToggle
+            fullScreen={panel.fullScreen}
+            leaving={leaving !== PANEL_LEAVING.NONE}
+            onToggle={panel.onToggleFullScreen}
+          />
         </div>
         <div className="side-panel-content" role="tabpanel" aria-label={label}>
           <TabContent

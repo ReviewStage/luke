@@ -240,6 +240,25 @@ function documentShown(page: HTMLElement): boolean {
   return find(page, ".desktop-plan-main").hidden === false;
 }
 
+/** The side panel's one toggle. */
+function panelToggle(page: HTMLElement): HTMLElement {
+  return find(page, ".side-panel-toggle");
+}
+
+/**
+ * Where the panel stands once every motion has played: beside the document at
+ * the default width, or nowhere.
+ */
+function settled(page: HTMLElement): string {
+  const drawn = panel(page);
+  if (drawn === null) return "hidden";
+  const leaving = drawn.dataset.leaving ?? "";
+  return `beside ${drawn.style.width} full-screen=${drawn.dataset.fullScreen} ${leaving}`.trim();
+}
+
+/** Option-Command-B from anywhere in the window; Option makes the key a symbol, so the chord reads the physical key. */
+const TOGGLE_CHORD = { key: "∫", code: "KeyB", altKey: true, metaKey: true } as const;
+
 /** A pointer event at `x` on `target`, or on the page once a snap has taken the edge away. */
 function pointer(page: HTMLElement, target: HTMLElement, type: string, x: number): void {
   act(() => {
@@ -294,7 +313,7 @@ test("the panel slides in, and hidden it stays drawn, out of reach, beside a doc
   const leaving = find(page, ".side-panel");
   assert.ok(animating(leaving), "it slides out");
   assert.ok(leaving.hasAttribute("inert"), "it takes no presses on its way out");
-  assert.ok(page.querySelector('[aria-label="Show panel"]'), "the toolbar has its toggle back");
+  assert.ok(page.querySelector('[aria-label="Show panel"]'), "the toggle offers it back at once");
   finishAll();
   assert.equal(panel(page), null);
 });
@@ -442,4 +461,75 @@ test("lines Luke points at next are centred from their start, even where a long 
 
   showCode({ ...CODE, ref: { ...CODE.ref, startLine: 2, endLine: 2 } });
   assert.equal(lines.scrollLeft, 0);
+});
+
+test("the panel's toggle is one button standing in the title bar through showing, full screen, hiding, and each motion between", () => {
+  motion(MOTION.ON);
+  const page = show();
+  const toggle = panelToggle(page);
+  const standsWhereItWas = (moment: string) => {
+    assert.equal(panelToggle(page), toggle, `the same button ${moment}`);
+    assert.ok(toggle.parentElement?.matches(".title-bar-controls"), `in the title bar ${moment}`);
+    assert.equal(
+      toggle.closest(".side-panel, .desktop-toolbar"),
+      null,
+      `in neither pane ${moment}`,
+    );
+  };
+  standsWhereItWas("on a first launch");
+
+  act(() => toggle.click());
+  standsWhereItWas("as the panel slides in");
+  press(page, '[aria-label="Expand panel"]');
+  standsWhereItWas("as the panel grows");
+  finishAll();
+  standsWhereItWas("over a full-screen panel");
+  act(() => toggle.click());
+  standsWhereItWas("as the panel slides out");
+  finishAll();
+  standsWhereItWas("once the panel has gone");
+});
+
+test("rapid presses on the toggle each land, mid-motion too: a burst ends shown for an odd count and hidden for an even one, the panel where it belongs", () => {
+  motion(MOTION.ON);
+  layOutPanel();
+  const page = show();
+  const toggle = panelToggle(page);
+  let shown = false;
+  for (const presses of [1, 2, 3, 4, 5, 6, 7]) {
+    for (let each = 0; each < presses; each += 1) act(() => toggle.click());
+    shown = shown !== (presses % 2 === 1);
+    assert.equal(toggle.getAttribute("aria-expanded"), String(shown), `after ${presses} presses`);
+    finishAll();
+    assert.equal(settled(page), shown ? "beside 400px full-screen=false" : "hidden");
+    assert.ok(documentShown(page));
+    assert.equal(running.length, 0, "nothing is left playing");
+  }
+});
+
+test("Option-Command-B held down repeats as presses do, ending where the count says", () => {
+  motion(MOTION.ON);
+  layOutPanel();
+  const page = show();
+  for (const repeats of [5, 2]) {
+    for (let each = 0; each < repeats; each += 1) {
+      assert.equal(keydown(TOGGLE_CHORD), true, "the window takes every repeat");
+    }
+  }
+  // Five repeats leave it shown and two more leave it so.
+  assert.equal(panelToggle(page).getAttribute("aria-expanded"), "true");
+  finishAll();
+  assert.equal(settled(page), "beside 400px full-screen=false");
+
+  press(page, '[aria-label="Expand panel"]');
+  finishAll();
+  for (let each = 0; each < 3; each += 1) keydown(TOGGLE_CHORD);
+  finishAll();
+  assert.equal(settled(page), "hidden", "an odd count from full screen hides it");
+  keydown(TOGGLE_CHORD);
+  assert.equal(
+    settled(page),
+    "beside 400px full-screen=false",
+    "and it comes back beside the document",
+  );
 });

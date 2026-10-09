@@ -20,11 +20,16 @@
      between themselves. The buttons stand edge to edge, so each glyph is as
      far from the next as the first is from the light, and the row reads as one. */
   --title-bar-button: 30px;
-  --title-bar-left: calc(var(--traffic-lights-end) + 8px);
+  --title-bar-inset: 8px;
+  --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
   /* Where the work column's toolbar starts its title while the sidebar is
      folded: clear of the traffic lights and both buttons beside them, by the
      toolbar's own gap between its items. */
   --sidebar-toggle-clearance: calc(var(--title-bar-left) + 2 * var(--title-bar-button) + 16px);
+  /* What a top row at the window's right edge leaves past its last control
+     for the side panel's toggle: the toggle, its inset from the edge, and the
+     toolbar's own gap between its buttons. */
+  --panel-toggle-clearance: calc(var(--title-bar-inset) + var(--title-bar-button) + 8px);
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
   /* A destructive act's own button, filled: deep enough to carry white words,
@@ -121,13 +126,21 @@ body,
 }
 
 /* Beside the traffic lights, centred on them, the sidebar toggle in the same
-   place whichever way the sidebar is and New plan after it while folded. */
+   place whichever way the sidebar is and New plan after it while folded; and
+   level with them at the window's other edge, as far in from it as these are
+   from the lights, the side panel's toggle in the same place whichever way
+   the panel is. */
 .title-bar-controls {
   position: absolute;
   z-index: 2;
   top: calc(var(--traffic-lights-middle) - var(--title-bar-button) / 2);
   left: var(--title-bar-left);
   display: flex;
+}
+
+.title-bar-controls[data-edge="end"] {
+  right: var(--title-bar-inset);
+  left: auto;
 }
 
 .desktop-sidebar {
@@ -440,9 +453,15 @@ body,
   align-items: center;
   gap: 16px;
   min-height: var(--desktop-bar-height);
-  padding: 8px 20px 8px 32px;
+  padding: 8px var(--panel-toggle-clearance) 8px 32px;
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
+}
+
+/* With the panel beside it, the toolbar ends at the panel's edge rather than
+   the window's, and the panel's own row leaves the toggle its room. */
+.desktop-plan[data-panel-open="true"] .desktop-toolbar {
+  padding-right: 20px;
 }
 
 /* A pane sliding in finds the work column already narrowed for it, so the
@@ -1467,7 +1486,8 @@ body,
 }
 
 /* The panel's top row, level with the plan's toolbar and, like it, the
-   window's drag handle wherever no control stands. */
+   window's drag handle wherever no control stands. It runs to the window's
+   right edge, so its full-screen button stops short of the toggle there. */
 .side-panel-bar {
   display: flex;
   flex: 0 0 auto;
@@ -1475,7 +1495,7 @@ body,
   justify-content: space-between;
   gap: 12px;
   min-height: var(--desktop-bar-height);
-  padding: 8px 20px 8px 10px;
+  padding: 8px var(--panel-toggle-clearance) 8px 10px;
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
 }
@@ -1490,13 +1510,6 @@ body,
   display: flex;
   min-width: 0;
   gap: 4px;
-}
-
-.side-panel-bar-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 8px;
 }
 
 .side-panel-tab {

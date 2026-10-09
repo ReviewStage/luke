@@ -17,7 +17,7 @@ import type { PlansControl } from "../planning/use-plans-tab";
 import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
-import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
+import { SidePanel, useSidePanelDrawing } from "./side-panel";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -158,8 +158,10 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { plan } = region;
   const folderPath = plans.folders[plan.id];
   const { sidePanel } = plans;
+  // The panel's toggle is the window's (desktop-shell.tsx); while no panel
+  // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
-    <div className="desktop-plan">
+    <div className="desktop-plan" data-panel-open={String(sidePanel.open)}>
       {/* Note that the document is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
@@ -184,8 +186,6 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           ) : null}
           <CopyButton copy={plans.copy} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
-          {/* The open panel holds its own toggle in its own top row. */}
-          {sidePanel.open ? null : <SidePanelToggle panel={sidePanel} />}
         </Toolbar>
         <section className="desktop-document" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />

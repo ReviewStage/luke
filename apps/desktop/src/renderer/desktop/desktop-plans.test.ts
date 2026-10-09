@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -19,6 +19,7 @@ import {
   useSidePanel,
 } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
+import { SidePanelToggle } from "./side-panel";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -49,12 +50,16 @@ type PanelDrawn = (typeof PANEL)[keyof typeof PANEL];
 /** What the toolbar's Copy was asked to do, across the presses and the chord. */
 let copies = 0;
 
-/** The open plan's page over the real side panel, staged where a fixture run would stage it, with the window's keymap. */
+/**
+ * The open plan's page over the real side panel, staged where a fixture run
+ * would stage it, with the window's keymap and the panel's toggle the window
+ * stands beside the page (desktop-shell.tsx).
+ */
 function Page({ staged }: { staged: SidePanelState | undefined }) {
   const sidePanel = useSidePanel(staged);
   useAppKeymap(true);
   useMenuCommands(true);
-  return createElement(DesktopPlans, {
+  const page = createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,
@@ -68,6 +73,12 @@ function Page({ staged }: { staged: SidePanelState | undefined }) {
       },
     }),
   });
+  return createElement(
+    Fragment,
+    null,
+    page,
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+  );
 }
 
 /** A key pressed anywhere in the window, answering whether the window claimed it. */
@@ -216,14 +227,18 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-test("a first launch shows the document alone, with the panel's toggle last on the toolbar", () => {
+test("a first launch shows the document alone, its toolbar ending at the plan's menu and the panel shut", () => {
   const page = mountOpenPlan();
 
   assert.ok(documentShown(page));
   assert.equal(page.querySelector(".side-panel"), null);
-  const toggle = page.querySelector(".desktop-toolbar-actions")?.lastElementChild;
-  assert.equal(toggle?.getAttribute("aria-label"), "Show panel");
-  assert.equal(toggle?.getAttribute("aria-expanded"), "false");
+  const last = page.querySelector(".desktop-toolbar-actions")?.lastElementChild;
+  assert.equal(last?.getAttribute("aria-label"), "Plan actions");
+  assert.equal(page.querySelector(".desktop-toolbar .side-panel-toggle"), null);
+  assert.equal(
+    page.querySelector('[aria-label="Show panel"]')?.getAttribute("aria-expanded"),
+    "false",
+  );
 });
 
 test("the toggle opens the panel on the board and closes it, the document shown throughout", () => {
@@ -425,25 +440,26 @@ test("the panel's edge widens it from the keyboard, no wider than its bound", ()
   assert.equal(edge.getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.MAX));
 });
 
-test("the open panel holds its own toggle, beside its full-screen button, and none of the plan's actions", () => {
+test("the open panel's row ends at its full-screen button, holding neither the toggle nor any of the plan's actions", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  const actions = page.querySelector(".side-panel-bar-actions");
-  assert.deepEqual(
-    [...(actions?.children ?? [])].map((each) => each.getAttribute("aria-label")),
-    ["Expand panel", "Hide panel"],
-  );
-  assert.equal(page.querySelector('.desktop-toolbar [aria-label="Hide panel"]'), null);
   assert.ok(page.querySelector('.desktop-toolbar [aria-label="Plan actions"]'));
   assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Copy plan/u);
 
   for (const fullScreen of [false, true]) {
     if (fullScreen) press(page, '[aria-label="Expand panel"]');
     const panel = page.querySelector(".side-panel");
+    const last = panel?.querySelector(".side-panel-bar")?.lastElementChild;
+    assert.equal(
+      last?.getAttribute("aria-label"),
+      fullScreen ? "Exit full screen" : "Expand panel",
+    );
+    assert.equal(panel?.querySelector(".side-panel-toggle"), null);
     assert.doesNotMatch(panel?.textContent ?? "", /Copy plan/u);
     assert.equal(panel?.querySelector('[aria-label="Plan actions"]'), null);
   }
+  assert.equal(page.querySelector(".desktop-toolbar .side-panel-toggle"), null);
 });
 
 test("the full-screen button grows the panel over the document, and back to the width it had", () => {
