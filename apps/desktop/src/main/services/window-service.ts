@@ -115,10 +115,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     rendererHtmlPath,
     rendererUrl,
     onAllClosed: () => config.quit(),
-    // A window's mode or display moved without any slice of the document
-    // moving, and both ride the snapshot a window is handed: the document is
-    // re-announced so every window is handed one again.
-    onWindowFactsChanged: () => state.touch(),
   });
   /** The hidden window that holds the live conversation. */
   const voiceWindow = new VoiceWindow({
@@ -158,18 +154,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    if (voiceWindow.owns(sender)) {
-      return { role: WINDOW_ROLE.VOICE, mode: panels.initialMode };
-    }
-    const displayId = panels.displayIdFor(sender);
-    const display =
-      (displayId !== undefined ? panels.display(displayId) : undefined) ??
-      screen.getPrimaryDisplay();
-    return {
-      role: WINDOW_ROLE.PANEL,
-      mode: displayId !== undefined ? panels.modeFor(displayId) : panels.initialMode,
-      display: panels.diagnostic(display),
-    };
+    return { role: voiceWindow.owns(sender) ? WINDOW_ROLE.VOICE : WINDOW_ROLE.PANEL };
   }
 
   function publishAppState(): void {
@@ -266,14 +251,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     afterDelay(DISPLAY_SETTLE_MS, () => panels.reconcile());
   }
 
-  const handleSecondInstance = (_event: Electron.Event, argv: string[]): void => {
+  const handleSecondInstance = (): void => {
     if (!launchStanding()) return;
-    if (argv.includes("--expanded")) {
-      const panel = panels.primaryPanel();
-      const displayId = panel ? panels.displayIdFor(panel.webContents) : undefined;
-      if (displayId !== undefined) panels.setMode(displayId, "expanded", true);
-      return;
-    }
     panels.reconcile();
     panels.focusExpanded();
   };

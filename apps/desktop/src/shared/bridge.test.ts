@@ -46,7 +46,7 @@ test("the act channel takes one act of any kind and nothing else", () => {
   assert.equal(answer(undefined), false);
 });
 
-const WINDOW = { role: "panel", mode: "compact" };
+const WINDOW = { role: "panel" };
 
 test("app state is read on one invoke and delivered on one subscription", () => {
   assert.equal(BRIDGE.requestAppState.kind, "invoke");
@@ -66,8 +66,8 @@ test("app state is read on one invoke and delivered on one subscription", () => 
     // The facts decide which surface draws at all, so a snapshot without
     // them, or naming a role this build has no surface for, is refused.
     assert.equal(guard({ version: 0 }), false);
-    assert.equal(guard({ version: 0, window: { role: "takeover", mode: "compact" } }), false);
-    assert.equal(guard({ version: 0, window: { role: "panel" } }), false);
+    assert.equal(guard({ version: 0, window: { role: "takeover" } }), false);
+    assert.equal(guard({ version: 0, window: {} }), false);
     assert.equal(guard(undefined), false);
   }
 });

@@ -42,7 +42,6 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       onViewChange: setView,
       ...(settings ? { settings } : undefined),
     }),
-    onSearchEngaged: ignore,
     onExit: ignore,
   });
 }

@@ -13,4 +13,4 @@ export {
   VOICE_CAPTION_MAX_HEIGHT,
 } from "./generated/motion-tokens.js";
 export { GITHUB_PATH, GOOGLE_MARK_LAYERS } from "./generated/provider-mark-paths.js";
-export type { Rectangle, WindowMode } from "./geometry.js";
+export type { Rectangle } from "./geometry.js";

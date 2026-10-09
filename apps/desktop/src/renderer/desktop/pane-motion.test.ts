@@ -206,7 +206,6 @@ function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
     history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps(),
-    onSettingsSearchEngaged: ignore,
   });
 }
 

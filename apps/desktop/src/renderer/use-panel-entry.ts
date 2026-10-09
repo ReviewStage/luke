@@ -26,28 +26,12 @@ export function panelEntryOpen<T extends PanelEntryBase>(
 interface PanelEntryHost {
   /** The shape this composer stands the panel down to. Asking to write one thing is asking for one shape. */
   aside: PanelPresentation;
-  pointerInside: () => boolean;
   presentation: () => PanelPresentation;
-  /**
-   * Called when an entry ends while the pointer is already away, so the hold
-   * it had on the panel is released. The pointer cannot leave a second time.
-   */
-  onReleasedWhileAway: () => void;
-  cancelHover: () => void;
   applyPresentation: (next: PanelPresentation) => void;
+  /** Brings the panel back around the place the entry was begun from. */
   restorePanel: () => void;
+  /** Brings the panel back as it stood. */
   leave: () => void;
-  /**
-   * Show the answer, then take the panel's leave — the pointer is usually
-   * still on the button that was pressed, and where it is not, nothing else
-   * would ever ask this panel to close.
-   */
-  settle: () => void;
-  /**
-   * Mirror of whether an entry is held, read by the presentation cluster
-   * without waiting a render.
-   */
-  heldRef: { current: boolean };
 }
 
 /**
@@ -97,23 +81,10 @@ export function usePanelEntry<T extends PanelEntryBase>(
 
   const [entry, setEntry, latest] = useStateWithRef<T | undefined>(undefined);
 
-  const apply = useCallback(
-    (next: T | undefined) => {
-      const host = optionsRef.current;
-      // An entry that ends while the pointer is already away would otherwise
-      // leave the panel held open by nothing, because the pointer cannot
-      // leave a second time.
-      const released = latest() !== undefined && next === undefined;
-      setEntry(next);
-      host.heldRef.current = next !== undefined;
-      if (released && !host.pointerInside()) host.onReleasedWhileAway();
-    },
-    [latest, setEntry],
-  );
+  const apply = useCallback((next: T | undefined) => setEntry(next), [setEntry]);
 
   const standDown = useCallback(() => {
     const host = optionsRef.current;
-    host.cancelHover();
     host.applyPresentation(host.aside);
   }, []);
 
@@ -157,17 +128,11 @@ export function usePanelEntry<T extends PanelEntryBase>(
       host.onDelivered?.();
       // Everything after the delivery reads the host at the moment it runs,
       // not the moment the send landed: a host that holds `finish` through a
-      // confirmation hands back a panel whose pointer may have moved.
+      // confirmation may find the presentation has moved on meanwhile.
       const finish = () => {
         const now = optionsRef.current;
         if (now.presentation() !== now.aside) return;
         now.restorePanel();
-        // Saved from the aside shape, the panel comes back around what was
-        // just done; with the pointer away, nothing else would ever ask it to
-        // close.
-        if (now.pointerInside()) return;
-        now.cancelHover();
-        now.settle();
       };
       if (host.afterDelivery) host.afterDelivery(finish);
       else finish();

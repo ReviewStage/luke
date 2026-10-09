@@ -118,7 +118,6 @@ function Window({
     history,
     sidebar,
     settings: settingsPanelProps({ view, onViewChange: setView }),
-    onSettingsSearchEngaged: ignore,
   });
 }
 

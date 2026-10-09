@@ -22,9 +22,8 @@ import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
-import { PANEL_PRESENTATION } from "./panel-state";
+import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -36,7 +35,6 @@ import { useCaptionPresentation } from "./use-caption-presentation";
 import { useFeedbackComposer } from "./use-feedback-composer";
 import { useMeasuredHeight } from "./use-measured-height";
 import type { PanelEntrySurface } from "./use-panel-entry";
-import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -80,9 +78,6 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  const feedbackHeld = useRef(false);
-  /** Whether a planning call is in progress, mirrored from the voice view below. */
-  const planningHeld = useRef(false);
 
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
@@ -119,9 +114,6 @@ export function App(): React.JSX.Element {
   const accountGated =
     state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
-  /** Whether this window has already opened its one sign-in greeting. */
-  const greeted = useRef(false);
-
   /**
    * The one signed-out Luke's introduction cycle — sway, pirouette, double
    * blink, curious tilt, nod — walked over the sign-in gate. Still while
@@ -129,47 +121,34 @@ export function App(): React.JSX.Element {
    */
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
-  const {
-    presentation,
-    current: presentationOf,
-    pointerInside: pointerIsInside,
-    applyPresentation,
-    applyAuthoritativeMode,
-    changeMode,
-    cancelHover,
-    onHitRegionLeave,
-    changeAskEngagement,
-    settle,
-    leave,
-    expand,
-  } = usePanelPresentation({
-    planningHeld: () => planningHeld.current,
-  });
+  /**
+   * What the window is drawn as: its own content, or that content stood down
+   * to the feedback composer drawn as a sheet over it. Held with a ref because
+   * a composer's reply reads whether it is still the shape on screen.
+   */
+  const [presentation, applyPresentation, presentationOf] = useStateWithRef<PanelPresentation>(
+    PANEL_PRESENTATION.PANEL,
+  );
+  const leave = useCallback(() => applyPresentation(PANEL_PRESENTATION.PANEL), [applyPresentation]);
 
   /**
    * Brings the panel back around the Feedback section a note was begun from —
-   * the settings front page, which changing to the tab lands on — and leaves
-   * it open the way every other way of opening it does.
+   * the settings front page, which changing to the tab lands on.
    */
   const restorePanel = useCallback(() => {
     changeTab(PANEL_TAB.SETTINGS);
-    expand();
-  }, [changeTab, expand]);
+    leave();
+  }, [changeTab, leave]);
 
   /**
    * The panel every composer stands down from and comes back to, gathered
    * once so each composer's hook is handed the same one.
    */
   const panelEntrySurface: PanelEntrySurface = {
-    pointerInside: pointerIsInside,
     presentation: presentationOf,
-    onReleasedWhileAway: onHitRegionLeave,
-    cancelHover,
     applyPresentation,
     restorePanel,
     leave,
-    settle,
-    heldRef: feedbackHeld,
   };
 
   const signIn = useSignIn();
@@ -230,16 +209,6 @@ export function App(): React.JSX.Element {
     requestMicrophoneAccess,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening } = voiceView;
-  const planningCallHeld = planningCallHoldsPanel(voiceView);
-  planningHeld.current = planningCallHeld;
-  // A call ending while the pointer is already away releases its hold the
-  // way letting go of the ask field does: the pointer cannot leave twice.
-  const wasPlanningCallHeld = useRef(false);
-  useEffect(() => {
-    const released = wasPlanningCallHeld.current && !planningCallHeld;
-    wasPlanningCallHeld.current = planningCallHeld;
-    if (released && !pointerIsInside()) onHitRegionLeave();
-  }, [planningCallHeld, pointerIsInside, onHitRegionLeave]);
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
@@ -316,43 +285,15 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * What the panel performs once with the state it opened on: the mode main
-   * decided and the report that it has painted. Once, on the first snapshot
-   * that carries settings. The mode needs no guard against a developer who
-   * moved it meanwhile: the snapshot carries the mode main holds as it
-   * publishes, so it is the same word the lifecycle relay would carry for
-   * whatever moved it.
+   * The report that the window has painted, made once, on the first snapshot
+   * that carries settings.
    */
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    applyAuthoritativeMode(state.window.mode);
     window.sidecar.notifyReady();
-  }, [state, applyAuthoritativeMode]);
-
-  // The mode and the tab main decided for this window.
-  useEffect(() => {
-    const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
-      if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
-      if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
-    });
-    return () => {
-      cancelHover();
-      removeLifecycle();
-    };
-  }, [applyAuthoritativeMode, cancelHover, changeTab]);
-
-  // The one greeting an unauthed launch gets: the panel opens on the sign-in
-  // gate exactly once, then behaves like any panel — Escape, the pointer, and
-  // the window's own close all close it. Signing out later opens no new
-  // greeting — the panel is already forward, showing the gate the sign-out
-  // left behind.
-  useEffect(() => {
-    if (!accountGated || greeted.current) return;
-    greeted.current = true;
-    void changeMode(true);
-  }, [accountGated, changeMode]);
+  }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
@@ -409,19 +350,17 @@ export function App(): React.JSX.Element {
       // Otherwise it closes the nearest thing that is open, one layer at a
       // time: Settings back to wherever it was opened from, then a side panel
       // filling the window back beside its plan, then an open plan back to
-      // the new-plan page, then the panel itself. A menu and the settings
-      // search answer their own Escapes and keep them — the search clearing,
-      // then letting go of the caret — so neither is a layer here.
+      // the new-plan page. A menu and the settings search answer their own
+      // Escapes and keep them — the search clearing, then letting go of the
+      // caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
-      // its call. That page is the home tab, so the press past it closes the
-      // panel.
-      if (!plans.back()) void changeMode(false);
+      // its call. That page is home, so a press there does nothing.
+      plans.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
-    changeMode,
     feedback.control.dismiss,
     presentation,
     signIn.cancelSignIn,
@@ -527,8 +466,6 @@ export function App(): React.JSX.Element {
           plans={plans}
           history={history}
           sidebar={sidebar}
-          // One caret anywhere in the panel is hands being here.
-          onSettingsSearchEngaged={changeAskEngagement}
           settings={{
             account: state.account,
             onSignOut: async () => {

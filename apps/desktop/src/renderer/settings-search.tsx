@@ -8,9 +8,7 @@ import {
   settingIdVisible,
 } from "@sidecar/settings";
 import { useRef } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, APP_SHORTCUT_GROUPS, APP_SHORTCUTS } from "#shared/shortcuts";
-import { useAct } from "./act";
 import { useAppCommand } from "./app-commands";
 import { drawnVisibly, focusSeek } from "./focus-seek";
 import { focusSearchField, Highlighted } from "./search-field";
@@ -290,20 +288,12 @@ export function SettingsSearchField({
   query,
   onQueryChange,
   onSubmit,
-  onEngagedChange,
 }: {
   query: string;
   onQueryChange: (query: string) => void;
   /** Return pressed in the field: the first result is the answer. */
   onSubmit: () => void;
-  /**
-   * Reports the caret being in the field, which holds the panel open against
-   * the pointer wandering off — the same hold a half-typed ask has, for the
-   * same reason: the caret is the signal that hands are here.
-   */
-  onEngagedChange: (engaged: boolean) => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const field = useRef<HTMLInputElement | null>(null);
   useAppCommand(APP_COMMAND.FIND, () => focusSearchField(SETTINGS_SEARCH_INPUT_ID));
   return (
@@ -324,15 +314,10 @@ export function SettingsSearchField({
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
           onFocus={() => {
-            // The panel can be showing without its window being key, and a
-            // field that cannot be typed into is worse than no field.
-            tell(ACT_KIND.WINDOW_FOCUS_PANEL);
-            onEngagedChange(true);
             window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.SEARCH_OPEN, {
               search_surface: PRODUCT_SEARCH_SURFACE.SETTINGS,
             });
           }}
-          onBlur={() => onEngagedChange(false)}
           onKeyDown={(event) => {
             // Note that an Escape is stopped even mid-composition, because the
             // input method spends that press dismissing its candidates, and

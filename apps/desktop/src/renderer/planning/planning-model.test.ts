@@ -18,7 +18,7 @@ import {
   MICROPHONE_PRESS,
   microphoneButton,
   PLANS_PAGE,
-  planningCallHoldsPanel,
+  planningCallInProgress,
   plansPage,
   recentFolders,
 } from "./planning-model";
@@ -281,7 +281,7 @@ test("once a save changes the document, Copy returns to rest until pressed again
 
 test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {
   const on = (voiceStatus: LiveStatus, callPlanId: string | undefined) =>
-    planningCallHoldsPanel({ ...IDLE_VOICE_VIEW, voiceStatus, callPlanId });
+    planningCallInProgress({ ...IDLE_VOICE_VIEW, voiceStatus, callPlanId });
   assert.equal(on(LIVE_STATUS.CONNECTING, INVITES), true);
   assert.equal(on(LIVE_STATUS.LISTENING, INVITES), true);
   assert.equal(on(LIVE_STATUS.SPEAKING, INVITES), true);

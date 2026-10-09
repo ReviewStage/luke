@@ -30,7 +30,6 @@ import {
   SETTINGS_RESET_SCOPE,
 } from "@sidecar/settings";
 import type { SettingsUpdateResult } from "@sidecar/settings/wire";
-import type { WindowMode } from "@sidecar/surface";
 import {
   EXCESS_KEYS,
   isRecord,
@@ -119,7 +118,6 @@ export const ACT_KIND = {
    */
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
-  WINDOW_SET_EXPANDED: "window.setExpanded",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
   FEEDBACK_SEND: "feedback.send",
@@ -436,14 +434,6 @@ export const ACT = {
     refusal: "Could not read the microphone route on this system.",
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
-  [ACT_KIND.WINDOW_SET_EXPANDED]: {
-    payload: record({
-      expanded: EffectSchema.Boolean,
-      focus: EffectSchema.optionalKey(EffectSchema.Boolean),
-    }),
-    result: wireResult<WindowMode>(),
-    refusal: "Could not resize the panel on this system.",
-  },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document is copied through this act, so it admits the
