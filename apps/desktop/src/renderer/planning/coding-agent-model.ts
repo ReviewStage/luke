@@ -10,6 +10,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
 
 /**
@@ -72,33 +73,11 @@ export function startFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
-/** The one separator a catalog id has between its provider and the model's own name. */
-const CATALOG_ID_SEPARATOR = "/";
-
-/** Words a model's own name is joined by, which its label spaces. */
-const MODEL_NAME_SEPARATOR = "-";
-
-/** The one model family whose name is an initialism, drawn in capitals. */
-const GPT = "gpt";
-
 /**
- * A model as a tab or a menu names it: the catalog's own name where the
- * catalog has been read, else the id's own name past its provider with its
- * words capitalised, so a tab never shows a bare id.
+ * A model as a tab or a menu names it, shared with the main process's
+ * notifications so one model is never named two ways (`#shared/model-label`).
  */
-export function modelLabel(modelId: string, models?: readonly CatalogModel[]): string {
-  const listed = models?.find((model) => model.id === modelId);
-  if (listed !== undefined) return listed.name;
-  const separator = modelId.indexOf(CATALOG_ID_SEPARATOR);
-  const name = separator === -1 ? modelId : modelId.slice(separator + 1);
-  return name
-    .split(MODEL_NAME_SEPARATOR)
-    .filter((word) => word.length > 0)
-    .map((word) =>
-      word === GPT ? word.toUpperCase() : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
-    )
-    .join(" ");
-}
+export { modelLabel };
 
 /** The agent's tab label: its model's name. */
 export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {

@@ -260,6 +260,19 @@ export const BRIDGE = {
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
+   * A coding agent's notification clicked: the panel is to open the plan on
+   * that agent's tab. An event rather than a slice of the document, because a
+   * click is an ask the window answers once, not a state it bootstraps from.
+   */
+  onShowAgent: entry({
+    kind: "subscribe",
+    channel: "app:show-agent",
+    args: noArgs,
+    result: result<{ planId: string; agentId: string }>(
+      (value) => isRecord(value) && isWireString(value.planId) && isWireString(value.agentId),
+    ),
+  }),
+  /**
    * A panel's validated command, forwarded by the main process to the voice
    * window alone, carrying the command and nothing else.
    */

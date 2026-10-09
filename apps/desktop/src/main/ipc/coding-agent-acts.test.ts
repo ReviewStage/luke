@@ -33,7 +33,26 @@ const STARTED: CodingAgentAgentAnswer = {
 
 function fixture() {
   const asked: string[] = [];
+  /** What the notices were told, in order. */
+  const noted: string[] = [];
   const rows = codingAgentActRows({
+    notices: {
+      observeAgents: (agents) => {
+        noted.push(`agents:${agents.map((agent) => `${agent.id}=${agent.status}`).join(",")}`);
+      },
+      observeStatus: (agentId, status) => {
+        noted.push(`status:${agentId}=${status}`);
+      },
+      observeModels: (models) => {
+        noted.push(`models:${models.length}`);
+      },
+      observePlanGone: (planId) => {
+        noted.push(`gone:${planId}`);
+      },
+      shown: (agentId) => {
+        noted.push(`shown:${agentId}`);
+      },
+    },
     host: {
       codingAgentModels: () =>
         Effect.sync(() => {
@@ -74,7 +93,7 @@ function fixture() {
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked };
+  return { router, asked, noted };
 }
 
 it.effect(
@@ -154,4 +173,46 @@ it.effect("a Start naming a model without its effort is refused at the boundary"
     assert.equal(outcome.status, ACT_OUTCOME_STATUS.DONE);
     assert.deepEqual(asked, [`start:${PLAN_ID}:press-1`]);
   }),
+);
+
+it.effect(
+  "every answer's agents are noted on their way to the panel, and the panel's shown agent reaches the notices",
+  () =>
+    Effect.gen(function* () {
+      const { router, noted } = fixture();
+
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_START, payload: { planId: PLAN_ID, idempotencyKey: "k" } },
+        PANEL,
+      );
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_MESSAGES, payload: { agentId: AGENT_ID, after: "0:0" } },
+        PANEL,
+      );
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_LIST, payload: { planId: PLAN_ID } },
+        PANEL,
+      );
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID } },
+        PANEL,
+      );
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: null } },
+        PANEL,
+      );
+      const refused = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID } },
+        VOICE,
+      );
+
+      assert.deepEqual(noted, [
+        `agents:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`,
+        `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
+        "agents:",
+        `shown:${AGENT_ID}`,
+        "shown:null",
+      ]);
+      assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
+    }),
 );

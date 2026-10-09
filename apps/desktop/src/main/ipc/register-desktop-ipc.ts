@@ -26,7 +26,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, state, telemetry, native, updates, operator, windows, run } = services;
+  const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
   const { launch } = config;
   const { panels, voiceWindow, hotkeys, dock } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
@@ -89,7 +89,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         );
       },
     }),
-    ...codingAgentActRows({ host: operator.host }),
+    ...codingAgentActRows({ host: operator.host, notices }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

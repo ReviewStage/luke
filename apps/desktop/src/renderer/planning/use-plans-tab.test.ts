@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -13,6 +14,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { Option, Schema } from "effect";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -41,12 +43,18 @@ const OPEN: PlanningView = {
   document: { status: PLANNING_READ.READY, plan: PLAN },
 };
 
+/** The shown act's payload, read back as the act's own schema admits it. */
+const readShown = Schema.decodeUnknownOption(
+  Schema.Struct({ agentId: Schema.NullOr(Schema.String) }),
+);
+
 interface Standing {
   shown: boolean;
   planning: PlanningView;
   profile: string;
   fixtureMode: boolean;
   voice: VoiceView;
+  unseenAgents: readonly string[];
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
@@ -57,6 +65,8 @@ function mount(
   const told: ActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no planning press tells them. */
   const agentActs: ActKind[] = [];
+  /** Which agent's tab main was told is shown, each time it was told. */
+  const shownAgents: (string | null)[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -68,6 +78,7 @@ function mount(
     profile: RUN_PROFILE.IDLE,
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
+    unseenAgents: [],
     ...initial,
   };
   function Probe() {
@@ -85,8 +96,13 @@ function mount(
           if (answer !== undefined) return answer();
           return Promise.reject(new Error("Not answered in this test."));
         },
-        tell: (kind: ActKind, ..._args: unknown[]) => {
+        tell: (kind: ActKind, ...args: unknown[]) => {
           record(kind);
+          // The one told payload the tests read, parsed as the boundary would.
+          const shown = Option.getOrUndefined(readShown(args[0]));
+          if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
+            shownAgents.push(shown.agentId);
+          }
         },
       },
       planning: held.planning,
@@ -95,6 +111,7 @@ function mount(
       voiceAvailable: true,
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
+      unseenAgents: held.unseenAgents,
       voice: { view: held.voice, listening: false, requestMicrophoneAccess: () => undefined },
     });
     return null;
@@ -107,6 +124,7 @@ function mount(
   return {
     told,
     agentActs,
+    shownAgents,
     control: () => {
       assert.ok(control);
       return control;
@@ -546,5 +564,60 @@ test("an arrival while the panel shows another tab leaves it there and dots the 
 
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  assert.deepEqual(tab.control().unreadTabs, []);
+});
+
+const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
+
+const RUNNING_AGENT: CodingAgentSummary = {
+  id: AGENT_ID,
+  planId: PLAN.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  createdAt: 3,
+  status: CODING_AGENT_STATUS.RUNNING,
+};
+
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
+}
+
+test("main is told which agent's tab is shown, and none once the panel moves off it or the tab goes away", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  await settle();
+  assert.deepEqual(tab.shownAgents, [null]);
+
+  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  assert.deepEqual(tab.shownAgents, [null, AGENT_ID]);
+
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  tab.stand({ shown: false });
+  assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null]);
+});
+
+test("a notification's click opens its plan on the agent's tab", () => {
+  const other = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const tab = mount({ shown: true, planning: OPEN });
+
+  act(() => tab.control().onShowAgent(other, AGENT_ID));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: { agent: AGENT_ID } });
+
+  // The open plan is not opened again.
+  act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+});
+
+test("an agent main says ended unseen dots its tab beside the arrivals", () => {
+  const tab = mount({ shown: true, planning: OPEN, unseenAgents: [AGENT_ID] });
+  assert.deepEqual(tab.control().unreadTabs, [{ agent: AGENT_ID }]);
+
+  tab.stand({ unseenAgents: [] });
   assert.deepEqual(tab.control().unreadTabs, []);
 });

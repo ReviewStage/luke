@@ -296,7 +296,22 @@ selected the moment its Start lands.
   page joins the messages held by id, and each carries the agent's status,
   so the loop ends on its own when the agent ends. A tab hidden, a plan
   left, or an agent that ended stops the reads; the agents list is read when
-  the plan opens and after a Start or a Stop, and nothing else polls.
+  the plan opens and after a Start or a Stop. The one other read is main's
+  watch, below.
+- **When it ends.** Main keeps a ledger of where each agent stands
+  (`main/agent-notices.ts`), fed by every coding-agent answer that passes
+  through its acts, and lists a plan's agents again every thirty seconds
+  while one of them is starting or running, so an agent on a plan the
+  developer has left is still watched. An agent that moves from writing to
+  completed or failed is announced once: a macOS notification titled with
+  the plan's name, saying the model's name and "finished" or "failed" and
+  nothing of the transcript, unless the window is focused on that agent's
+  tab; its click brings Luke forward on the plan with that tab open. The
+  agent's tab wears the unseen dot until it is shown or the window comes
+  forward on it. A Stop is the developer's own and is not announced, and an
+  agent first seen already ended, as after a relaunch, is not either. The
+  "opened #N" wording waits on a read of the agent's pull request, and a
+  Settings toggle for the notifications is a follow-up.
 - **Privacy.** Every word is the agent's or the plan's, so the tab carries
   `ph-no-capture`, as the Transcript tab does.
 

@@ -139,6 +139,7 @@ export function initialAppState(
     hotkeys: { talkHeld: true },
     voice: {},
     planning: IDLE_PLANNING_VIEW,
+    codingAgents: { unseen: [] },
     sessionReplay: { permitted: runMode.sendsNetwork, halted: false },
   };
 }
