@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { generateText } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { test } from "vitest";
-import { meteredModel } from "../server/hosted/brain-host/model";
+import {
+  BRAIN_REASONING_SUMMARY,
+  meteredModel,
+  summarizedReasoningModel,
+} from "../server/hosted/brain-host/model";
 
 /** The meter in front of the model: one count per inference, and no count stops an inference. */
 
@@ -58,4 +62,20 @@ test("a meter that cannot be written is reported, and the inference runs anyway"
   assert.equal(text, "ok");
   assert.equal(inner.doGenerateCalls.length, 1);
   assert.deepEqual(reports, ["A hosted inference was not counted: fixture: store down"]);
+});
+
+test("the planning model is asked to summarise its reasoning on every inference, beside the OpenAI options the call already carries", async () => {
+  const inner = answer();
+  const model = summarizedReasoningModel(inner);
+
+  await generateText({ model, prompt: "one", providerOptions: { openai: { store: false } } });
+  await generateText({ model, prompt: "two" });
+
+  assert.deepEqual(
+    inner.doGenerateCalls.map((call) => call.providerOptions?.openai),
+    [
+      { store: false, reasoningSummary: BRAIN_REASONING_SUMMARY.AUTO },
+      { reasoningSummary: BRAIN_REASONING_SUMMARY.AUTO },
+    ],
+  );
 });

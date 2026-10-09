@@ -25,7 +25,9 @@ words alone and never his judgment's record, and holds them in the window's
 memory to show them, beside the words of the call in progress; they go when
 you leave the plan or quit Luke. The other is a plan's Work tab: during a
 planning call, our service sends Luke on your Mac each of the planning model's
-turns as it works, and the turns of the worker it hands research to, what it wrote and each tool it called with the call's input
+turns as it works, and the turns of the worker it hands research to: what
+each wrote, the summary of its reasoning that OpenAI returns for each step,
+and each tool it called with the call's input
 and what the call answered, such as a command's output from the plan's folder
 or a public page's text, each cut short. Luke holds them in the panel's memory
 to show them, never in the voice window and never on disk, and they go when
