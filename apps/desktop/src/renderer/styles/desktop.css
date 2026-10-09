@@ -1054,6 +1054,29 @@ body,
   text-align: center;
 }
 
+/* A switch row: the panel's own switch at the row's end, keyed off the
+   row, which is the switch for the keyboard; a row that cannot be pressed
+   is muted and takes no highlight. */
+.plan-compose-menu-switch {
+  margin-left: auto;
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
+  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
+  transform: translateX(14px);
+}
+
+.plan-compose-menu-row[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-disabled="true"][data-highlighted="true"] {
+  background: none;
+}
+
 /* A submenu stands beside the pinned row that opened it, its first row
    level with that row and its near edge at the menu's own, and turns to
    the menu's other side where the window ends before it does. */

@@ -31,6 +31,12 @@ const MODELS: readonly CatalogModel[] = [
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "xhigh"],
   },
+  {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high", "max"],
+  },
 ];
 
 const roots: Root[] = [];
@@ -109,17 +115,31 @@ function hover(element: Element | null | undefined): void {
   act(() => element?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
 }
 
+/** The hover line the main part shows on a pointer resting on it, or nothing where it shows none. */
+function hoverLine(page: HTMLElement): string | undefined {
+  const main = buttonNamed(page, "Start a coding agent");
+  act(() => main.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+  const pill = document.body.querySelector<HTMLElement>('[role="tooltip"]')?.textContent;
+  act(() => {
+    main.dispatchEvent(
+      new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+    );
+  });
+  return pill ?? undefined;
+}
+
 /** A control over the catalog with Opus at high as the default, every Start and every write recorded. */
-function standing() {
+function standing(stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" }) {
   const presses: (ModelChoice | undefined)[] = [];
   const writes: ModelChoice[] = [];
   const reads: string[] = [];
   const control = codingAgentsControl({
     models: MODELS,
     readModels: () => reads.push("models"),
+    // The service answers the last write, as the real one keeps it.
     readDefault: () => {
       reads.push("default");
-      return Promise.resolve({ choice: { model: "anthropic/claude-opus-5.5", effort: "high" } });
+      return Promise.resolve({ choice: writes.at(-1) ?? stored });
     },
     writeDefault: (choice) => {
       writes.push(choice);
@@ -151,25 +171,34 @@ const effortRow = (menu: HTMLElement): HTMLButtonElement => {
   return row;
 };
 
+const fastRow = (menu: HTMLElement): HTMLButtonElement => {
+  const row = menu.querySelector<HTMLButtonElement>('.plan-compose-menu-foot [role="switch"]');
+  assert.ok(row, "the Fast row is pinned under the list");
+  return row;
+};
+
 const submenuRows = (page: HTMLElement) =>
   [...page.querySelectorAll<HTMLElement>(".plan-compose-submenu [role=option]")].map((row) => [
     row.textContent,
     row.getAttribute("aria-current"),
   ]);
 
-test("the main part starts on the default, naming nothing; the chevron's menu searches the models, newest first under their marks, the default checked with its effort beside it, and one Effort row pinned under the list in place of any Start", async () => {
+test("the main part starts on the default, naming nothing, and says the default on hover; the chevron's menu searches the base models, newest first under their marks, the default checked with its effort beside it, and Effort and Fast rows pinned under the list in place of any Start", async () => {
   const { presses, reads, control } = standing();
   const page = mount(control);
+  await settle();
+  assert.deepEqual(reads, ["models", "default"], "read as the button mounts, for its hover line");
+  assert.equal(hoverLine(page), "Claude Opus 5.5 · High");
 
   act(() => buttonNamed(page, "Start a coding agent").click());
   assert.deepEqual(presses, [undefined]);
 
   const menu = await openMenu(page);
-  assert.deepEqual(reads, ["models", "default"]);
+  assert.deepEqual(reads, ["models", "default", "models", "default"]);
   const search = menu.querySelector<HTMLInputElement>('input[aria-label="Search models"]');
   assert.ok(search, "the search is the menu's first row");
   assert.ok(document.activeElement === search, "the search field holds focus");
-  // Newest first within the provider, and the check on the default as read, not on the first row.
+  // Newest first within the provider, the fast version folded into its model, and the check on the default as read, not on the first row.
   const rows = [...menu.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.deepEqual(
     rows.map((row) => row.querySelector(".plan-compose-menu-name")?.textContent),
@@ -187,24 +216,28 @@ test("the main part starts on the default, naming nothing; the chevron's menu se
   );
   assert.ok(rows[0]?.querySelector(".plan-compose-menu-end svg.credential-check"));
 
-  // The foot is one Effort row naming the effort, and nothing starts from the menu.
+  // The foot is the Effort row naming the effort and the Fast switch, and nothing starts from the menu.
   const foot = menu.querySelector<HTMLElement>(".plan-compose-menu-foot");
   assert.ok(foot, "the foot is drawn");
   assert.equal(foot.closest(".plan-compose-menu-list"), null, "the foot is not in the list");
-  assert.equal(foot.querySelectorAll("button").length, 1);
+  assert.equal(foot.querySelectorAll("button").length, 2);
   assert.equal(effortRow(menu).querySelector(".plan-compose-menu-name")?.textContent, "Effort");
   assert.equal(effortRow(menu).querySelector(".plan-compose-menu-detail")?.textContent, "High");
+  assert.equal(fastRow(menu).getAttribute("aria-checked"), "false");
+  assert.equal(fastRow(menu).getAttribute("aria-disabled"), null, "Opus has a fast version");
   assert.equal(menu.querySelector(".start-agent-with"), null, "no Start in the menu");
   assert.equal(menu.querySelector(".start-agent-efforts"), null, "no effort chips");
   assert.ok(
     [...menu.querySelectorAll("button")].every((button) => !button.textContent.startsWith("Start")),
   );
 
-  // The search finds a model by its name or its provider.
+  // The search finds a model by its name or its provider, and never a fast version on its own.
   type(search, "gpt");
   assert.deepEqual(rowsOf(menu), ["GPT-6.1 Sol"]);
   type(search, "anthropic");
   assert.deepEqual(rowsOf(menu), ["Claude Opus 5.5High", "Claude Fable 5"]);
+  type(search, "fast");
+  assert.deepEqual(rowsOf(menu), []);
   type(search, "zzz");
   assert.deepEqual(rowsOf(menu), []);
   assert.equal(menu.querySelector(".plan-compose-menu-note")?.textContent, "No models match");
@@ -224,9 +257,10 @@ test("a pick of a model keeps it as the default at the effort it was running, or
   );
   assert.deepEqual(presses, [], "a pick starts nothing");
 
+  // The default now stands at low, which Fable lists, so the pick keeps it.
   const again = await openMenu(page);
   act(() => again.querySelectorAll<HTMLElement>('[role="option"]')[1]?.click());
-  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-fable-5", effort: "high" });
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-fable-5", effort: "low" });
 });
 
 test("the Effort row opens a submenu of the chosen model's efforts in sentence case on Right or the pointer, a pick keeps the effort and closes both, and Left or Escape close only the submenu", async () => {
@@ -235,7 +269,8 @@ test("the Effort row opens a submenu of the chosen model's efforts in sentence c
   const menu = await openMenu(page);
   assert.equal(page.querySelector(".plan-compose-submenu"), null);
 
-  // Up from the first row wraps to the pinned row, and Right opens its submenu.
+  // Up from the first row wraps past the Fast row to the Effort row, and Right opens its submenu.
+  press("ArrowUp");
   press("ArrowUp");
   assert.equal(effortRow(menu).dataset["highlighted"], "true");
   press("ArrowRight");
@@ -268,6 +303,55 @@ test("the Effort row opens a submenu of the chosen model's efforts in sentence c
   act(() => low?.click());
   assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "low" });
   assert.equal(page.querySelector(".plan-compose-menu"), null);
+});
+
+test("the Fast switch keeps the model's fast version as the default without closing the menu, and the checked row and the hover line say so", async () => {
+  const { writes, control } = standing();
+  const page = mount(control);
+  const menu = await openMenu(page);
+  act(() => fastRow(menu).click());
+  assert.deepEqual(writes, [{ model: "anthropic/claude-opus-5.5-fast", effort: "high" }]);
+  assert.ok(page.querySelector(".plan-compose-menu"), "the menu stays open");
+  assert.equal(fastRow(menu).getAttribute("aria-checked"), "true");
+  const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Claude Opus 5.5");
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High · Fast");
+
+  // Enter on the highlighted switch turns it back; the menu still stands.
+  press("ArrowUp");
+  assert.equal(
+    fastRow(menu).dataset["highlighted"],
+    "true",
+    "Up from the first row wraps to the last pinned row",
+  );
+  press("Enter");
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "high" });
+  assert.ok(page.querySelector(".plan-compose-menu"));
+  assert.equal(fastRow(menu).getAttribute("aria-checked"), "false");
+});
+
+test("a stored fast version shows its base model checked with Fast on, and a pick of a model without a fast version turns Fast off", async () => {
+  const { writes, control } = standing({ model: "anthropic/claude-opus-5.5-fast", effort: "max" });
+  const page = mount(control);
+  await settle();
+  assert.equal(hoverLine(page), "Claude Opus 5.5 · Max · Fast");
+  const menu = await openMenu(page);
+  const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Claude Opus 5.5");
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "Max · Fast");
+  assert.equal(fastRow(menu).getAttribute("aria-checked"), "true");
+
+  // Fable lists no fast version and no max: the pick stores its base id at its first effort.
+  act(() => menu.querySelectorAll<HTMLElement>('[role="option"]')[1]?.click());
+  assert.deepEqual(writes, [{ model: "anthropic/claude-fable-5", effort: "low" }]);
+  assert.equal(page.querySelector(".plan-compose-menu"), null);
+
+  const again = await openMenu(page);
+  assert.equal(fastRow(again).getAttribute("aria-checked"), "false");
+  assert.equal(fastRow(again).getAttribute("aria-disabled"), "true", "Fable has no fast version");
+  act(() => fastRow(again).click());
+  assert.equal(writes.length, 1, "a muted switch turns nothing");
+  assert.ok(page.querySelector(".plan-compose-menu"));
 });
 
 test("the menu says it is reading until the models arrive, and a default the service could not answer checks no row", async () => {

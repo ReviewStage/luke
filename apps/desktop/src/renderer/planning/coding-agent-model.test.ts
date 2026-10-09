@@ -16,12 +16,16 @@ import {
   applyMessagesPage,
   changesUrl,
   checkoutCommand,
+  choiceLabel,
+  choiceModelId,
   followsAgent,
   modelLabel,
+  offeredModels,
   opensOnGitHub,
   orderedModels,
   publishedSummary,
   pullRequestPillLabel,
+  readModelChoice,
   START_NEEDS_REPOSITORY,
   showsPublishedRow,
   startFailureNote,
@@ -234,4 +238,53 @@ test("the row sums a finished turn up by where the pull request stands and how m
     false,
   );
   assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
+});
+test("a fast version is folded into its base model by its id, read back as the base with Fast on, and named in the choice line", () => {
+  const model = (id: string, name: string) => ({
+    id,
+    name,
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  });
+  const models = [
+    model("anthropic/claude-opus-5.5-fast", "Claude Opus 5.5 (Fast)"),
+    model("anthropic/claude-opus-5.5", "Claude Opus 5.5"),
+    model("anthropic/claude-fable-5", "Claude Fable 5"),
+    // A suffixed id with no base beside it is a model of its own.
+    model("anthropic/claude-haiku-4-fast", "Claude Haiku 4 (Fast)"),
+  ];
+  const offered = offeredModels(models);
+  assert.deepEqual(
+    offered.map((each) => [each.model.id, each.fast?.id]),
+    [
+      ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast"],
+      ["anthropic/claude-fable-5", undefined],
+      ["anthropic/claude-haiku-4-fast", undefined],
+    ],
+  );
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5-fast"), {
+    base: "anthropic/claude-opus-5.5",
+    fast: true,
+  });
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-opus-5.5"), {
+    base: "anthropic/claude-opus-5.5",
+    fast: false,
+  });
+  assert.deepEqual(readModelChoice(models, "anthropic/claude-haiku-4-fast"), {
+    base: "anthropic/claude-haiku-4-fast",
+    fast: false,
+  });
+  const [opus, fable] = offered;
+  assert.ok(opus && fable);
+  assert.equal(choiceModelId(opus, true), "anthropic/claude-opus-5.5-fast");
+  assert.equal(choiceModelId(opus, false), "anthropic/claude-opus-5.5");
+  assert.equal(choiceModelId(fable, true), "anthropic/claude-fable-5", "no fast version to name");
+  assert.equal(
+    choiceLabel({ model: "anthropic/claude-opus-5.5-fast", effort: "high" }, models),
+    "Claude Opus 5.5 · High · Fast",
+  );
+  assert.equal(
+    choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
+    "Claude Fable 5 · Extra high",
+  );
 });

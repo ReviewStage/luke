@@ -472,3 +472,42 @@ test("with no placeholder there is no search: the list holds focus and reads the
   press("Enter");
   assert.deepEqual(menu.picked, ["acme/relay"]);
 });
+
+test("a switch row turns on a press or Enter without closing anything, and a muted one turns nothing", () => {
+  const turns: number[] = [];
+  let on = false;
+  const menu = mount({
+    value: undefined,
+    foot: [
+      { id: "fast", label: "Fast", toggle: { on, onToggle: () => turns.push(1) } },
+      {
+        id: "muted",
+        label: "Muted",
+        toggle: { on: false, onToggle: () => turns.push(2) },
+        disabled: "No fast version of this one",
+      },
+    ],
+  });
+  const [fast, muted] = menu.container.querySelectorAll<HTMLButtonElement>('[role="switch"]');
+  assert.ok(fast && muted);
+  assert.equal(fast.getAttribute("aria-checked"), "false");
+  assert.ok(fast.querySelector(".switch .switch-thumb"), "the panel's own switch at the row's end");
+  act(() => fast.click());
+  assert.deepEqual(turns, [1]);
+  assert.deepEqual(menu.closes, []);
+  assert.deepEqual(menu.picked, []);
+  on = true;
+  menu.restand({
+    foot: [{ id: "fast", label: "Fast", toggle: { on, onToggle: () => turns.push(1) } }],
+  });
+  assert.equal(fast.getAttribute("aria-checked"), "true");
+  press("ArrowUp");
+  assert.equal(menu.highlighted(), "Fast");
+  press("Enter");
+  assert.deepEqual(turns, [1, 1]);
+  assert.deepEqual(menu.closes, []);
+
+  assert.equal(muted.getAttribute("aria-disabled"), "true");
+  act(() => muted.click());
+  assert.deepEqual(turns, [1, 1], "a muted row turns nothing");
+});

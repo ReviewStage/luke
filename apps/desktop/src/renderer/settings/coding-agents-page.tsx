@@ -4,11 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
+  choiceModelId,
   effortFor,
   effortLabel,
   effortsOf,
+  FAST_WORD,
   modelLabel,
-  orderedModels,
+  offeredModels,
+  readModelChoice,
 } from "../planning/coding-agent-model";
 import { ModelProviderMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -21,12 +24,15 @@ import { PickerRow } from "./picker-row";
  * preferences and written by this page and by a Start that named a model
  * alike, so the page reads it afresh as it opens and shows what the last
  * Start wrote. The model row is the same picker every settings row uses,
- * searched because the catalog is long: each model under its provider's
- * mark, the newest first within each provider, the chosen one checked. The
- * effort row is a segmented control over the efforts the chosen model
- * lists. A write is one ask of the service, the rows resting until it
- * answers and a refusal worded under them. With no account signed in there
- * is no default to show, and the page says so.
+ * searched because the catalog is long: each base model under its
+ * provider's mark, the newest first within each provider, every fast
+ * version folded into its model, the chosen one checked. Under it a Fast
+ * switch runs the model's fast version, resting where the model has none;
+ * the stored id is the catalog's own, the fast version's where the switch
+ * is on. The effort row is a segmented control over the efforts the chosen
+ * model lists. A write is one ask of the service, the rows resting until
+ * it answers and a refusal worded under them. With no account signed in
+ * there is no default to show, and the page says so.
  */
 
 /** What the page says while it reads, while it cannot, and with no account. */
@@ -59,6 +65,13 @@ function DefaultRows({
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
   const efforts = offered.length === 0 ? [choice.effort] : offered;
+  const read = readModelChoice(models ?? [], choice.model);
+  const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
+  /** The choice at a catalog id, at the stored effort where the model lists it, else its first. */
+  const choiceAt = (modelId: string): ModelChoice => ({
+    model: modelId,
+    effort: effortFor(effortsOf(models ?? [], modelId), choice.effort) ?? choice.effort,
+  });
   return (
     <>
       <PickerRow
@@ -69,13 +82,13 @@ function DefaultRows({
             <small>What a click on Start runs an agent on.</small>
           </>
         }
-        value={choice.model}
-        valueLabel={modelLabel(choice.model, models)}
+        value={read.base}
+        valueLabel={modelLabel(read.base, models)}
         valueIcon={listed !== undefined ? <ModelProviderMark provider={listed.provider} /> : null}
         rows={
           models === undefined
             ? []
-            : orderedModels(models).map((model) => ({
+            : offeredModels(models).map(({ model }) => ({
                 id: model.id,
                 label: model.name,
                 icon: <ModelProviderMark provider={model.provider} />,
@@ -94,14 +107,36 @@ function DefaultRows({
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
         disabled={busy}
         onPick={(id) => {
-          const model = models?.find((each) => each.id === id);
-          if (model === undefined) return;
-          onChange({
-            model: model.id,
-            effort: effortFor(model.efforts, choice.effort) ?? choice.effort,
-          });
+          // The pick keeps Fast where the model has a fast version, and drops it where it has none.
+          const picked = offeredModels(models ?? []).find((each) => each.model.id === id);
+          if (picked === undefined) return;
+          onChange(choiceAt(choiceModelId(picked, read.fast)));
         }}
       />
+      <div className="settings-row">
+        <span className="settings-copy">
+          <strong>{FAST_WORD}</strong>
+          <small>
+            {base !== undefined && base.fast === undefined
+              ? `No fast version of ${base.model.name}.`
+              : "Run the model's fast version."}
+          </small>
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={read.fast}
+          aria-label={FAST_WORD}
+          className="switch"
+          {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_FAST)}
+          disabled={busy || base?.fast === undefined}
+          onClick={() => {
+            if (base !== undefined) onChange(choiceAt(choiceModelId(base, !read.fast)));
+          }}
+        >
+          <span className="switch-thumb" />
+        </button>
+      </div>
       {/* The segments wrap under the label where the row is narrow rather than clipping. */}
       <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">

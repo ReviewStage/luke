@@ -178,6 +178,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Default effort", "coding agent effort reasoning low medium high max"],
         }
       : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CODING_AGENT_FAST,
+          label: "Fast",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: ["Fast", "coding agent fast version speed quick model"],
+        }
+      : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.
     ...APP_SHORTCUT_GROUPS.flatMap((group) =>
       group.commands.map((command) => ({

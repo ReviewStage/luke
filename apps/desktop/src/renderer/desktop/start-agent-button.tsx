@@ -1,7 +1,17 @@
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { ChevronDownIcon, PlayIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
-import { effortFor, effortLabel, effortsOf, orderedModels } from "../planning/coding-agent-model";
+import {
+  choiceLabel,
+  choiceModelId,
+  effortFor,
+  effortLabel,
+  effortsOf,
+  FAST_WORD,
+  modelLabel,
+  offeredModels,
+  readModelChoice,
+} from "../planning/coding-agent-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { ModelProviderMark } from "../provider-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
@@ -11,19 +21,26 @@ import { Tooltip } from "../tooltip";
  * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
  *
  * The main part starts one on the account's default model and effort, and
- * names neither. The chevron drops the shared searchable menu over the
- * models the service offers, newest first under their provider's mark,
- * the default checked with the effort it runs at beside its name; a pick
- * keeps that model as the account's default, at the effort it was running
- * or the model's first where it lacks that one, and closes the menu.
- * Pinned under the list stands one row, Effort, naming the effort chosen
- * now and opening a submenu of the ones the chosen model lists; a pick
- * there keeps that effort the same way. The menu reads the models and the
- * default as it opens, so it shows the catalog as it stands and the
- * default the last change wrote. A plan with no repository has nothing for
- * an agent to check out, so Start is unavailable and says why on hover.
- * The menu closes on a pick, on Escape, and on focus leaving it; Escape
- * stops there, so it closes the menu and not the plan behind it.
+ * says which on hover: "Claude Opus 5.5 · High · Fast". The chevron drops
+ * the shared searchable menu over the base models the service offers,
+ * newest first under their provider's mark, each fast version folded into
+ * its model, the default checked with its effort and Fast beside its
+ * name; a pick keeps that model as the account's default, at the effort
+ * it was running or the model's first where it lacks that one, and its
+ * fast version where Fast is on and the model has one, and closes the
+ * menu. Pinned under the list stand two rows: Effort, naming the effort
+ * chosen now and opening a submenu of the ones the chosen model lists,
+ * and Fast, a switch to the model's fast version, muted where the model
+ * has none; either keeps its change as the default the same way, the
+ * switch without closing the menu. The stored id is the catalog's own,
+ * the fast version's where Fast is on, so the service checks it as it
+ * checks any. The models and the default are read as the button mounts
+ * and again as the menu opens, so the menu shows the catalog as it stands
+ * and the default the last change wrote. A plan with no repository has
+ * nothing for an agent to check out, so Start is unavailable and says why
+ * on hover instead. The menu closes on a pick, on Escape, and on focus
+ * leaving it; Escape stops there, so it closes the menu and not the plan
+ * behind it.
  */
 
 /** What the menu says in the list's place. */
@@ -36,16 +53,26 @@ const MENU_NOTE = {
 /** The rows pinned under the list. */
 const FOOT_ROW = {
   EFFORT: "effort",
+  FAST: "fast",
 } as const;
 
-/** The menu's rows: each model under its mark, found by its name or its provider, the chosen one saying its effort. */
+/** What the checked row says after its name: the effort, and Fast where the fast version is on. */
+function chosenDetail(effort: string, fast: boolean): string {
+  return fast ? `${effortLabel(effort)} · ${FAST_WORD}` : effortLabel(effort);
+}
+
+/** The menu's rows: each base model under its mark, found by its name or its provider, the chosen one saying its effort. */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
-  return orderedModels(models).map((model) => ({
+  const read = chosen === undefined ? undefined : readModelChoice(models, chosen.model);
+  return offeredModels(models).map(({ model }) => ({
     id: model.id,
     label: model.name,
     icon: <ModelProviderMark provider={model.provider} />,
     terms: [model.provider],
-    detail: model.id === chosen?.model ? effortLabel(chosen.effort) : undefined,
+    detail:
+      chosen !== undefined && model.id === read?.base
+        ? chosenDetail(chosen.effort, read.fast)
+        : undefined,
   }));
 }
 
@@ -59,12 +86,11 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const latest = useRef(control);
   latest.current = control;
 
-  // The menu opening reads the models and the default, and lands on the default.
+  // The models and the default are read as the button mounts, for its hover
+  // line, and again as the menu opens, so the menu lands on the default as
+  // it stands now; what was read before stands until the new read lands.
   useEffect(() => {
-    if (!open) return;
     let live = true;
-    // The menu lands on the default as read now, never on an earlier opening's.
-    setChoice(undefined);
     latest.current.readModels();
     latest.current.readDefault().then((answer) => {
       if (live && !("failure" in answer)) setChoice(answer.choice);
@@ -88,13 +114,29 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const effort = effortFor(efforts, choice?.effort);
   const chosen: ModelChoice | undefined =
     choice !== undefined && effort !== undefined ? { model: choice.model, effort } : undefined;
+  const read =
+    models !== undefined && chosen !== undefined
+      ? readModelChoice(models, chosen.model)
+      : undefined;
+  const offered =
+    models !== undefined && read !== undefined
+      ? offeredModels(models).find((each) => each.model.id === read.base)
+      : undefined;
   const label = start.busy ? "Starting…" : "Start";
   const unavailable = !start.available;
 
-  // A pick closes the menu and keeps the choice as the default the main part starts on.
+  // A change is kept as the default the main part starts on, and drawn at
+  // once; a write that did not take is said beside Start by the control.
   const keep = (next: ModelChoice) => {
-    close();
+    setChoice(next);
     latest.current.writeDefault(next);
+  };
+
+  /** The choice at a model, at the effort chosen where the model lists it, else its first. */
+  const choiceAt = (modelId: string, wanted: string | undefined): ModelChoice | undefined => {
+    if (models === undefined) return undefined;
+    const next = effortFor(effortsOf(models, modelId), wanted);
+    return next === undefined ? undefined : { model: modelId, effort: next };
   };
 
   const press = () => {
@@ -102,6 +144,9 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
     start.onPress();
   };
 
+  const hint =
+    start.reason ??
+    (models !== undefined && chosen !== undefined ? choiceLabel(chosen, models) : undefined);
   const main = (
     <button
       type="button"
@@ -116,7 +161,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   );
 
   const foot: FootRow[] | undefined =
-    chosen === undefined
+    chosen === undefined || read === undefined || models === undefined
       ? undefined
       : [
           {
@@ -127,8 +172,27 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
               label: "Effort",
               rows: efforts.map((each) => ({ id: each, label: effortLabel(each) })),
               value: chosen.effort,
-              onPick: (picked) => keep({ model: chosen.model, effort: picked }),
+              onPick: (picked) => {
+                close();
+                keep({ model: chosen.model, effort: picked });
+              },
             },
+          },
+          {
+            id: FOOT_ROW.FAST,
+            label: FAST_WORD,
+            toggle: {
+              on: read.fast,
+              onToggle: () => {
+                if (offered === undefined) return;
+                const next = choiceAt(choiceModelId(offered, !read.fast), chosen.effort);
+                if (next !== undefined) keep(next);
+              },
+            },
+            disabled:
+              offered?.fast === undefined
+                ? `No fast version of ${modelLabel(read.base, models)}`
+                : undefined,
           },
         ];
 
@@ -140,7 +204,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
         </p>
       ) : null}
       <div className="start-agent-split">
-        {start.reason !== undefined ? <Tooltip label={start.reason}>{main}</Tooltip> : main}
+        {hint !== undefined ? <Tooltip label={hint}>{main}</Tooltip> : main}
         <button
           ref={chevron}
           type="button"
@@ -165,7 +229,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
           placeholder="Search models"
           className="start-agent-menu"
           rows={models === undefined ? [] : modelRows(models, chosen)}
-          value={chosen?.model}
+          value={read?.base}
           note={
             models === undefined ? (
               <p className="plan-compose-menu-note">{MENU_NOTE.READING}</p>
@@ -174,10 +238,14 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
             ) : undefined
           }
           noMatch={MENU_NOTE.NO_MATCH}
-          onPick={(model) => {
-            if (models === undefined) return;
-            const next = effortFor(effortsOf(models, model), chosen?.effort);
-            if (next !== undefined) keep({ model, effort: next });
+          onPick={(base) => {
+            // The pick keeps Fast where the model has a fast version, and drops it where it has none.
+            const picked = offeredModels(models ?? []).find((each) => each.model.id === base);
+            if (picked === undefined) return;
+            const next = choiceAt(choiceModelId(picked, read?.fast ?? false), chosen?.effort);
+            if (next === undefined) return;
+            close();
+            keep(next);
           }}
           onClose={close}
           onLeave={(left) => {

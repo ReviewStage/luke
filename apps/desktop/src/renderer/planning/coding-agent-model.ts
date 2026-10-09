@@ -14,7 +14,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, type WireValue } from "@sidecar/wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -134,6 +134,80 @@ export function orderedModels(models: readonly CatalogModel[]): readonly Catalog
         a.index - b.index,
     )
     .map((each) => each.model);
+}
+
+/** The suffix AI Gateway gives a model's fast version's id: `anthropic/claude-opus-5.5-fast` beside `anthropic/claude-opus-5.5`. */
+const FAST_ID_SUFFIX = "-fast";
+
+/** The word a choice label and the Fast row say for the fast version. */
+export const FAST_WORD = "Fast";
+
+/** What separates the parts of a choice label: "Claude Opus 5.5 · High · Fast". */
+const CHOICE_LABEL_SEPARATOR = " · ";
+
+/** A model as the menus offer it: the base model, and its fast version where the catalog lists one beside it. */
+export interface OfferedModel {
+  readonly model: CatalogModel;
+  readonly fast: CatalogModel | undefined;
+}
+
+/** The id a fast version's id is the fast version of, or nothing for an id without the suffix. */
+function baseIdOf(id: string): string | undefined {
+  return id.endsWith(FAST_ID_SUFFIX) ? id.slice(0, -FAST_ID_SUFFIX.length) : undefined;
+}
+
+/**
+ * The catalog folded to its base models, each with its fast version, in the
+ * menus' order. The signal is the id: a model whose id is another offered
+ * model's with the fast suffix is that model's fast version, and is not
+ * listed on its own. Neither the name's "(Fast)" nor the catalog's `fast`
+ * tag would do: the tag sits on the base and the fast version alike, the
+ * wire carries no tags in any case, and a name is display text. A suffixed
+ * id with no base beside it is a model of its own.
+ */
+export function offeredModels(models: readonly CatalogModel[]): readonly OfferedModel[] {
+  const ids = new Set(models.map((model) => model.id));
+  const fastOf = new Map<string, CatalogModel>();
+  for (const model of models) {
+    const base = baseIdOf(model.id);
+    if (base !== undefined && ids.has(base)) fastOf.set(base, model);
+  }
+  return orderedModels(models)
+    .filter((model) => !isFastVersion(model.id, ids))
+    .map((model) => ({ model, fast: fastOf.get(model.id) }));
+}
+
+/** Whether the id is the fast version of a model the catalog offers. */
+function isFastVersion(id: string, ids: ReadonlySet<string>): boolean {
+  const base = baseIdOf(id);
+  return base !== undefined && ids.has(base);
+}
+
+/** A stored id as the menus draw it: the base model's id, and whether it named the fast version. */
+export interface ModelChoiceRead {
+  readonly base: string;
+  readonly fast: boolean;
+}
+
+export function readModelChoice(models: readonly CatalogModel[], modelId: string): ModelChoiceRead {
+  const offered = offeredModels(models).find(
+    (each) => each.model.id === modelId || each.fast?.id === modelId,
+  );
+  if (offered === undefined) return { base: modelId, fast: false };
+  return { base: offered.model.id, fast: offered.fast?.id === modelId };
+}
+
+/** The catalog id a base and a Fast switch name: the fast version's where it is on and the model has one, else the base's. */
+export function choiceModelId(offered: OfferedModel, fast: boolean): string {
+  return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
+}
+
+/** A choice as one line: "Claude Opus 5.5 · High · Fast". */
+export function choiceLabel(choice: ModelChoice, models: readonly CatalogModel[]): string {
+  const read = readModelChoice(models, choice.model);
+  const parts = [modelLabel(read.base, models), effortLabel(choice.effort)];
+  if (read.fast) parts.push(FAST_WORD);
+  return parts.join(CHOICE_LABEL_SEPARATOR);
 }
 
 /** The efforts a model lists, or nothing for a model the catalog does not offer now. */
