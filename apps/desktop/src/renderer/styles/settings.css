@@ -110,19 +110,16 @@
 }
 
 /* A page's head: the way back beside the page's own name, above the sections
-   it holds. It wraps so the reset's refusal, when there is one, lands on a
-   line of its own under the controls rather than crowding the title. Pinned
-   to the scroller's top edge, so the way back never has to be scrolled back
-   to, in the surface's own fill so the rows slide under it rather than
-   through it. Raised above the sections, whose arrival transforms make each
-   its own stacking context. */
+   it holds. Pinned to the scroller's top edge, so the way back never has to
+   be scrolled back to, in the surface's own fill so the rows slide under it
+   rather than through it. Raised above the sections, whose arrival transforms
+   make each its own stacking context. */
 .settings-header {
   position: sticky;
   z-index: 1;
   top: 0;
   display: flex;
   flex: 0 0 auto;
-  flex-wrap: wrap;
   align-items: center;
   gap: 9px;
   padding: 0 2px;
@@ -149,17 +146,6 @@
   color: var(--text-primary);
   font-size: 12.5px;
   font-weight: 700;
-}
-
-/* The control that returns a group to its defaults rides the right edge,
-   wherever the group's name stands — a page's head or a section's heading. */
-.settings-reset {
-  margin-left: auto;
-}
-
-/* A reset's refusal takes the wrap's next line whole. */
-.settings-reset-refusal {
-  flex-basis: 100%;
 }
 
 /* Where the query's words landed, so a result says why it matched. A wash

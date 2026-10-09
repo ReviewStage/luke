@@ -1,9 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { SETTINGS_RESET_SCOPE } from "@sidecar/settings";
+import { settingsView } from "@sidecar/settings/testing";
+import type { AppSettingsView } from "@sidecar/settings/wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { act, createElement, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
@@ -20,7 +25,7 @@ const ignore = () => undefined;
 let turnPage: (view: SettingsView) => void = ignore;
 
 /** Settings with the page held the way the app holds it, so a press turns it. */
-function Harness(): React.JSX.Element {
+function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Element {
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
   turnPage = setView;
   return createElement(DesktopSettings, {
@@ -30,18 +35,26 @@ function Harness(): React.JSX.Element {
       onToggle: ignore,
       onResize: ignore,
     },
-    settings: settingsPanelProps({ view, onViewChange: setView }),
+    settings: settingsPanelProps({
+      view,
+      onViewChange: setView,
+      ...(settings ? { settings } : undefined),
+    }),
     onSearchEngaged: ignore,
     onBack: ignore,
   });
 }
 
-function mount(): HTMLElement {
+/** Every root a test mounted, unmounted after it so nothing it started outlives it. */
+const mounted: Root[] = [];
+
+function mount(settings?: AppSettingsView): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
+  mounted.push(root);
   act(() => {
-    root.render(createElement(Harness));
+    root.render(createElement(Harness, settings ? { settings } : {}));
   });
   return container;
 }
@@ -95,6 +108,13 @@ function shownPage(container: ParentNode): string {
   return container.querySelector(".desktop-toolbar-title")?.textContent ?? "";
 }
 
+/** The toolbar's button with these words, if it draws one. */
+function toolbarButton(container: ParentNode, words: string): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll<HTMLButtonElement>(".desktop-toolbar button")].find(
+    (button) => button.textContent === words,
+  );
+}
+
 function result(container: ParentNode, label: string): HTMLButtonElement {
   const button = [...sidebar(container).querySelectorAll<HTMLButtonElement>("section button")].find(
     (candidate) => candidate.textContent === label,
@@ -113,6 +133,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  act(() => {
+    for (const root of mounted.splice(0)) root.unmount();
+  });
   document.body.innerHTML = "";
 });
 
@@ -244,4 +267,44 @@ test("Command-F puts the caret in the search, whose empty field prints the chord
   type(input, "voice");
   assert.equal(hint(), null, "a query takes the chord's place");
   act(() => root.unmount());
+});
+
+test("a page off its defaults offers Reset to defaults in the toolbar, not in the page, and says a refusal beside it", async () => {
+  const sent: Act[] = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      recordSurfaceEvent: ignore,
+      act: (request: Act) => {
+        sent.push(request);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: { status: ACTION_RESULT_STATUS.REJECTED, reason: "The settings are busy." },
+        });
+      },
+    },
+  });
+  const container = mount(settingsView({ voiceAvailable: true, showInDock: true }));
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+  const reset = toolbarButton(container, "Reset to defaults");
+  assert.ok(reset, "the toolbar offers the page's reset");
+  const resets = [...container.querySelectorAll("button")].filter((button) =>
+    (button.getAttribute("aria-label") ?? button.textContent ?? "").startsWith("Reset"),
+  );
+  assert.deepEqual(resets, [reset], "the page itself carries no reset of its own");
+
+  await act(async () => reset.click());
+  assert.deepEqual(sent, [
+    { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: SETTINGS_RESET_SCOPE.APPEARANCE } },
+  ]);
+  assert.equal(
+    container.querySelector(".desktop-toolbar [role='alert']")?.textContent,
+    "The settings are busy.",
+  );
+});
+
+test("a page at its defaults offers no reset", () => {
+  const container = mount(settingsView({ voiceAvailable: true }));
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+  assert.equal(toolbarButton(container, "Reset to defaults"), undefined);
 });

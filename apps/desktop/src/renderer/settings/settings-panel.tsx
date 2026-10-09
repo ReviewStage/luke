@@ -20,7 +20,6 @@ import { AppearanceSection } from "./appearance-page";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./controls";
 import { FeedbackSection } from "./feedback-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
-import { pageResetControl } from "./reset";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
 import { VoiceSection } from "./voice-page";
@@ -132,8 +131,6 @@ export function SettingsPanel({
     }
     backControl.current?.focus();
   }, [view, panelOpen]);
-  // The drawn page's reset, absent while that page stands at its defaults.
-  const pageReset = pageResetControl(view, settings, writes);
   return (
     <div className="settings">
       {view !== SETTINGS_VIEW.ROOT ? (
@@ -141,7 +138,6 @@ export function SettingsPanel({
           view={view}
           onBack={() => onViewChange(SETTINGS_VIEW.ROOT)}
           backControl={backControl}
-          {...(pageReset ? { reset: pageReset } : undefined)}
         />
       ) : null}
 
