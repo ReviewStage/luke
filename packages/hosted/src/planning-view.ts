@@ -147,6 +147,8 @@ export const PLAN_WORK_PART = {
  * that read a large file still travels in a frame of tens of kilobytes.
  */
 export const PLAN_WORK_BOUNDS = {
+  /** The most turns of the open plan's calls the view keeps, the newest. */
+  TURNS: 20,
   PARTS: 60,
   TEXT_CHARS: 4_000,
   SUBJECT_CHARS: 300,
@@ -267,6 +269,12 @@ export const planningViewSchema = EffectSchema.Struct({
   transcript: EffectSchema.optionalKey(planningTranscriptSchema),
   /** The code on screen during the call about the active plan; absent with none, and cleared with the activity. */
   code: EffectSchema.optionalKey(planCodeSchema),
+  /**
+   * The planning turns of the active plan's calls since it was opened on
+   * this Mac, oldest first, each as last told; absent before the first, and
+   * cleared with the activity. A call's end keeps them.
+   */
+  work: EffectSchema.optionalKey(EffectSchema.Array(planWorkTurnSchema)),
   /** The folder of this Mac each plan reads, by plan id; a plan this Mac holds no folder for is absent. */
   folders: EffectSchema.Record(EffectSchema.String, EffectSchema.String),
 });

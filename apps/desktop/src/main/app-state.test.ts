@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { runModeFor } from "@sidecar/host";
+import { PLAN_WORK_PART, PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import { Context, Effect, Fiber, Stream } from "effect";
 import { type AppState, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
-import { AppStateStore, bootstrapPatch, initialAppState } from "./app-state";
+import { AppStateStore, bootstrapPatch, initialAppState, voiceWindowState } from "./app-state";
 import type { HostBootstrap } from "./gateway/host-operator";
 
 /**
@@ -197,4 +198,25 @@ it("recording is what the host permitted less what an account's end stood down",
   });
   app.update({ sessionReplay: { ...app.snapshot().sessionReplay, halted: true } });
   assert.equal(sessionReplayBootstrap(app.snapshot()).permitted, false);
+});
+
+it("the voice window is sent the document without the planning turns' work, and the rest of the plan as held", () => {
+  const held = initialAppState(RUN, true);
+  const planning = {
+    ...held.planning,
+    activePlanId: "plan-1",
+    work: [
+      {
+        turnId: "turn-1",
+        startedAt: 0,
+        state: PLAN_WORK_STATE.DONE,
+        earlierOmitted: false,
+        parts: [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+      },
+    ],
+  } as const;
+  const sent = voiceWindowState({ ...held, planning });
+  assert.equal(sent.planning.activePlanId, "plan-1");
+  assert.equal("work" in sent.planning, false);
+  assert.deepEqual(sent.run, held.run);
 });
