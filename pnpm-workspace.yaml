@@ -15,7 +15,7 @@ catalog:
   react: 19.2.8
   react-dom: 19.2.8
   ws: 8.21.3
-  ai: 7.0.97
+  ai: 7.0.135
   vitest: 5.0.0
   "@effect/vitest": 4.0.0-rc.115
 

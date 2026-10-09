@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import agent from "../eve/agent";
-import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import {
+  BRAIN_HOST_TURN_POLICY,
+  brainHostChannelInput,
+  DEPLOYMENT_TURNS,
+} from "../server/hosted/brain-host/channel";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
@@ -20,7 +24,7 @@ test("the agent runs none of eve's default tools and sessions have no lifetime o
   assert.equal(agent.limits?.sessionTimeoutMs, false);
 });
 
-test("follow-ups queue behind a turn under way, and the account bearer is checked before the development principal", () => {
+test("a follow-up steers the turn under way rather than queueing behind it, and the account bearer is checked before the development principal", () => {
   const channel = brainHostChannelInput(
     async () => undefined,
     {
@@ -29,7 +33,7 @@ test("follow-ups queue behind a turn under way, and the account bearer is checke
     },
     { secret: undefined, admits: DEPLOYMENT_TURNS },
   );
-  assert.equal(channel.turnPolicy, "queue");
+  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   assert.equal(Array.isArray(channel.auth), false);
 });
 

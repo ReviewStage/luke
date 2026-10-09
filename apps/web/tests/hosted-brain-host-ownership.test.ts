@@ -220,10 +220,10 @@ function toolContext(sessionId: string, auth: SessionAuth, childOf?: ChildOf): E
     abortSignal: new AbortController().signal,
     callId: "call-1",
     toolName: QUEUE_QUESTION_TOOL.name,
+    messages: [],
     getToken: unreachable,
     requireAuth: unreachable,
     getSandbox: unreachable,
-    getSkill: unreachable,
   };
 }
 

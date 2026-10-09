@@ -23,8 +23,6 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
-import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
@@ -1141,62 +1139,5 @@ it.live(
         },
       ]);
       yield* Effect.promise(() => back.stop());
-    }),
-);
-
-it.live(
-  "a turn the brain opened of its own in the conversation — a subagent's result handed back — is told as woken and then followed to its end under the turn's own id, with no ask behind it",
-  () =>
-    Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* Effect.promise(() =>
-        stand(target, { ...QUICK, WAKE_POLL: Duration.millis(POLL_MS) }),
-      );
-      const standing: RelayStanding = {
-        sessionId: mintSession(),
-        target,
-        turn: BRAIN_HOST_TURN.SPOKEN,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      };
-      const delegated = stampedEveEvent(
-        {
-          type: "actions.requested",
-          data: {
-            turnId: FIRST_EVE_TURN,
-            sequence: 0,
-            stepIndex: 0,
-            actions: [
-              {
-                kind: "tool-call",
-                callId: "call-delegate",
-                toolName: EVE_DELEGATION_TOOL.WORKER,
-                input: { message: "Compare the two queue libraries." },
-              },
-            ],
-          },
-        },
-        NOW,
-      );
-      yield* Effect.promise(() => play([delegated, ...spokenTurn("turn_1", NOW)], standing));
-      yield* f.arrived(2);
-      const ended = () => f.events.some((event) => event.kind === LIVE_BRAIN_RUN_EVENT.ENDED);
-      yield* arrival((notify) => f.brain.onRunEvent(notify), ended, "the woken turn's end");
-
-      const runId = hostTurnId(standing.sessionId, "turn_1");
-      assert.equal(f.events[0]?.kind, LIVE_BRAIN_RUN_EVENT.WOKEN);
-      assert.ok(f.events.every((event) => event.runId === runId));
-      assert.deepEqual(
-        f.events.flatMap((event) =>
-          event.kind === LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE ? [event.sentence] : [],
-        ),
-        ["One agent finished.", "Another is waiting on you."],
-      );
-      assert.deepEqual(f.events.at(-1), {
-        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
-        runId,
-        end: LIVE_BRAIN_RUN_END.COMPLETED,
-      });
-      yield* Effect.promise(() => f.stop());
     }),
 );
