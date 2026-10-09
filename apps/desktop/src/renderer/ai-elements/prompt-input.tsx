@@ -35,6 +35,16 @@ import { cn } from "./utils";
  * `onKeyDown` before its own Enter handling and stops where the owner
  * prevented the default, so an owner can give a modified Enter a meaning
  * of its own without re-stating what plain Enter and Shift+Enter do.
+ *
+ * The submit is drawn the way Claude's and ChatGPT's are: one round
+ * button that never changes size or place, filled in the panel's ink with
+ * its glyph in the surface's own colour while it takes a press, and dimmed
+ * to the raised ground with a muted glyph while it does not. Both are the
+ * tokens above, never an opacity over the filled one, so the glyph stays
+ * a colour apart from its disc in either state. Note that the colours are
+ * utilities on a `button`, which base.css resets in its `base` layer under
+ * them, because a reset outside every layer would outrank them and draw
+ * the arrow in the disc's own colour.
  */
 
 type PromptInputMessage = {
@@ -152,6 +162,7 @@ export type PromptInputSubmitProps = ComponentProps<"button"> & {
 export function PromptInputSubmit({
   className,
   status = PROMPT_INPUT_STATUS.READY,
+  disabled,
   children,
   ...props
 }: PromptInputSubmitProps): ReactNode {
@@ -166,10 +177,12 @@ export function PromptInputSubmit({
     <button
       type="submit"
       aria-label="Send"
+      aria-disabled={disabled === true ? true : undefined}
       className={cn(
-        "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-45",
+        "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
         className,
       )}
+      disabled={disabled}
       {...props}
     >
       {children ?? icon}

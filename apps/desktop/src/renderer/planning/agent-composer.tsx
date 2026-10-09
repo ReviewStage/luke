@@ -111,7 +111,6 @@ export function AgentComposer({
             <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
               <PromptInputSubmit
                 type="button"
-                className="agent-composer-stop"
                 status={PROMPT_INPUT_STATUS.STREAMING}
                 aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
                 disabled={stopping}

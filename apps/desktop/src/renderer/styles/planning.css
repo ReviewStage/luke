@@ -490,12 +490,6 @@
   padding: 10px 16px 12px;
 }
 
-/* The one button at the card's right is Send or Stop, the same round
-   button, so the card never changes shape as the agent's state does. */
-.agent-composer-stop {
-  color: var(--surface-fill);
-}
-
 .agent-composer-note {
   display: flex;
   align-items: center;

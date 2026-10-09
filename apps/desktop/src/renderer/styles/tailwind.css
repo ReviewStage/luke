@@ -3,7 +3,9 @@
    Tailwind's theme and utilities alone: its preflight is left out, because
    base.css is this renderer's reset and a second one would restyle every
    element the panel already draws. The utilities sit in a cascade layer, so a
-   hand-written rule beside them always wins. */
+   hand-written rule beside them always wins, except base.css's element resets,
+   which sit in a `base` layer under this one as the preflight would, so that a
+   utility a component spells on a button or a textarea wins over the reset. */
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 
