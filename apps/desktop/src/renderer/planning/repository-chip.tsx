@@ -132,7 +132,7 @@ export function RepositoryChip(props: {
   // closing takes the focused field away with it.
   const close = () => {
     setOpen(false);
-    (trigger.current ?? opener.current)?.focus();
+    opener.current?.focus();
   };
   const choose = (pick: () => void) => {
     close();

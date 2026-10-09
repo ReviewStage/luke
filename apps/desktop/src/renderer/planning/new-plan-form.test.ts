@@ -220,6 +220,24 @@ test("typing filters the repositories by name, the arrows move the highlight whi
   assert.ok(document.activeElement === page.chip(), "focus is back on the chip");
 });
 
+test("Enter in a search that matches nothing starts no plan and keeps the menu", async () => {
+  const page = mount();
+  await settle();
+  type(page.nameField(), "Invites");
+
+  act(() => page.chip().click());
+  type(page.search(), "does-not-exist");
+  await act(async () => {
+    page
+      .search()
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
+      );
+  });
+  assert.deepEqual(page.started, []);
+  assert.ok(page.menu(), "the menu stands");
+});
+
 test("the menu says it is reading while the list is out, with the recent repositories already listed", async () => {
   const page = mount({}, { recent: [RELAY], read: () => new Promise(() => undefined) });
   await settle();

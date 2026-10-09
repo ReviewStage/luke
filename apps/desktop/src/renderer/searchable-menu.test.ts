@@ -49,22 +49,20 @@ function mount(patch: Partial<Parameters<typeof SearchableMenu>[0]> = {}) {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() =>
-    root.render(
-      createElement(SearchableMenu, {
-        id: "menu",
-        label: "Repository",
-        placeholder: "Search repositories",
-        rows: ROWS,
-        value: "acme/billing",
-        noMatch: "No repositories match",
-        onPick: (id) => picked.push(id),
-        onClose: () => closes.push(1),
-        onLeave: () => undefined,
-        ...patch,
-      }),
-    ),
-  );
+  let props: Parameters<typeof SearchableMenu>[0] = {
+    id: "menu",
+    label: "Repository",
+    placeholder: "Search repositories",
+    rows: ROWS,
+    value: "acme/billing",
+    noMatch: "No repositories match",
+    onPick: (id) => picked.push(id),
+    onClose: () => closes.push(1),
+    onLeave: () => undefined,
+    ...patch,
+  };
+  const render = () => act(() => root.render(createElement(SearchableMenu, props)));
+  render();
   const find = <Element extends HTMLElement>(selector: string): Element => {
     const found = container.querySelector<Element>(selector);
     assert.ok(found, `the menu draws ${selector}`);
@@ -77,6 +75,10 @@ function mount(patch: Partial<Parameters<typeof SearchableMenu>[0]> = {}) {
     find,
     rows: () => [...container.querySelectorAll<HTMLElement>("[role=option]")],
     highlighted: () => container.querySelector("[role=option][aria-selected='true']")?.textContent,
+    restand: (next: Partial<Parameters<typeof SearchableMenu>[0]>) => {
+      props = { ...props, ...next };
+      render();
+    },
   };
 }
 
@@ -136,6 +138,34 @@ test("the highlight starts on the chosen row, the arrows move it with the field 
   assert.deepEqual(menu.picked, ["acme/relay"]);
   press("Escape");
   assert.deepEqual(menu.closes, [1]);
+});
+
+test("a value that arrives after the menu opened takes the highlight, unless the arrows have moved it", () => {
+  const late = mount({ value: undefined });
+  assert.equal(late.highlighted(), "acme/relay");
+  late.restand({ value: "acme/site" });
+  assert.equal(late.highlighted(), "acme/site");
+  press("Enter");
+  assert.deepEqual(late.picked, ["acme/site"]);
+
+  const moved = mount({ value: undefined });
+  press("ArrowDown");
+  moved.restand({ value: "acme/site" });
+  assert.equal(moved.highlighted(), "acme/billing", "the arrows' choice stands");
+});
+
+test("Enter with nothing to pick stays in the menu rather than reaching the form around it", () => {
+  const menu = mount();
+  const field = menu.find<HTMLInputElement>("input[role=combobox]");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, "nothing here");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+  act(() => field.dispatchEvent(enter));
+  assert.equal(enter.defaultPrevented, true, "Enter goes no further than the menu");
+  assert.deepEqual(menu.picked, []);
 });
 
 test("a pointer over a row moves the same highlight, and a press on a row picks it without taking focus", () => {

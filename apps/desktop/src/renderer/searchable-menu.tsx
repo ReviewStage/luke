@@ -74,14 +74,11 @@ export function SearchableMenu(props: {
   const { rows, value, onPick } = props;
   const [query, setQuery] = useState("");
   const matches = matchingRows(rows, query);
-  // The highlight starts on the chosen row, so Enter at once keeps what stands.
-  const [highlight, setHighlight] = useState(() =>
-    Math.max(
-      0,
-      rows.findIndex((row) => row.id === value),
-    ),
-  );
-  const at = Math.min(highlight, Math.max(0, matches.length - 1));
+  // Until the arrows or the pointer move it, the highlight follows the chosen
+  // row, which may arrive after the menu opened, so Enter keeps what stands.
+  const [highlight, setHighlight] = useState<number | undefined>(undefined);
+  const chosen = matches.findIndex((row) => row.id === value);
+  const at = Math.min(highlight ?? Math.max(0, chosen), Math.max(0, matches.length - 1));
   const listId = useId();
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
@@ -104,15 +101,16 @@ export function SearchableMenu(props: {
       props.onClose();
       return;
     }
-    // Enter on a button in the foot is that button's own press.
+    // Enter on a button in the foot is that button's own press; from the field
+    // or the list it picks the highlighted row, and goes no further either way,
+    // so a form around the menu never takes it as its own submit.
     if (
       event.key === "Enter" &&
       (event.target === field.current || event.target === list.current)
     ) {
-      const row = matches[at];
-      if (row === undefined) return;
       event.preventDefault();
-      onPick(row.id);
+      const row = matches[at];
+      if (row !== undefined) onPick(row.id);
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;

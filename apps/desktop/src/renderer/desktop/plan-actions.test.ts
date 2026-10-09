@@ -759,3 +759,27 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   assert.equal(container.querySelector(".plan-compose-menu"), null);
   assert.ok(document.activeElement === more, "focus is back on the plan actions button");
 });
+
+test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
+  const { plans } = openTab();
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
+
+  openMenu(more);
+  choose("Change repository…");
+  act(() => {
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
+  });
+  const search = container.querySelector('input[aria-label="Search repositories"]');
+  assert.ok(search, "the picker opened");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.ok(document.activeElement === more, "focus is back on the plan actions button");
+});
