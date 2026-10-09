@@ -173,8 +173,8 @@ A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
 client: a Preview carrying the App's client id can complete a sign-in only
 while production's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` hold the
-App's client id and secret, which is what the Vercel project is configured
-with. Nothing on the branch is Preview-specific.
+App's client id and secret, a Vercel project setting rather than anything in
+this repository. Nothing on the branch is Preview-specific.
 
 Every function Vercel deploys is plain ESM. The route sources live under
 `server/routes/`, and `scripts/bundle-functions.ts` bundles them into
