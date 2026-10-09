@@ -1,4 +1,5 @@
-import { PLAN_ACTIVITY_ACTION_MAX_CHARS } from "@sidecar/hosted/planning-view";
+import { isDeepStrictEqual } from "node:util";
+import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -47,6 +48,7 @@ import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-events.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
+import { planWorkOf } from "./plan-work.js";
 
 /**
  * The hosted implementation of the live brain: Luke's judgment reached in
@@ -166,11 +168,12 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
   }
 }
 
-/** What a follow has told of its turn so far: the activity last said, how many of its calls were told settled, and whether the turn handed work to a task. */
+/** What a follow has told of its turn so far: the activity last said, how many of its calls were told settled, whether the turn handed work to a task, and its work as last shown. */
 interface FollowTold {
   action: string | undefined;
   settled: number;
   delegated: boolean;
+  work: PlanWorkTurn | undefined;
 }
 
 /** What one look answers the follow: the turn still runs, it ended, or it ran past the bound that applies to it. */
@@ -285,11 +288,15 @@ export interface HostedLiveBrainOptions {
 }
 
 /**
- * The brain as the exchange holds one, which is `LiveBrain` itself: a follow
- * ends when the scope the brain was built in closes, so there is no stop of
- * its own to declare.
+ * The brain as the exchange holds one: `LiveBrain`, and the work of each
+ * turn it follows as that changes, for the Work tab, which no voice hears.
+ * A follow ends when the scope the brain was built in closes, so there is
+ * no stop of its own to declare.
  */
-export type HostedLiveBrain = LiveBrain;
+export interface HostedLiveBrain extends LiveBrain {
+  /** Hears each followed turn's work whenever it changes, its last as the turn ended; answers the unsubscribe. */
+  onWork(listener: (work: PlanWorkTurn) => void): () => void;
+}
 
 export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(function* (
   options: HostedLiveBrainOptions,
@@ -298,6 +305,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   const socket = yield* Effect.scope;
   const bounds = { ...LIVE_BRAIN_FOLLOW_BOUNDS, ...options.bounds };
   const listeners = new Set<(event: LiveBrainRunEvent) => void>();
+  const workListeners = new Set<(work: PlanWorkTurn) => void>();
   /** Each followed ask by its task revision, so the newest of several is known. */
   const followed = new Map<string, number>();
   /** How far each turn a recovered run is on was told by the connection before, as the record holds it. */
@@ -469,6 +477,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       told.action = action;
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
+    // The work is shown by the turn's teller alone, so a turn several asks were folded into is shown once.
+    const work = telling ? planWorkOf(turn, message) : undefined;
+    if (work !== undefined && !isDeepStrictEqual(work, told.work)) {
+      told.work = work;
+      for (const listener of [...workListeners]) listener(work);
+    }
     const last = events.at(-1);
     const ended = last?.kind === TURN_EVENT_KIND.ENDED;
     // Calls settled since the last look are told as one step event, while the turn runs and only by its teller.
@@ -519,7 +533,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   function follow(askId: string, revision: number) {
     if (followed.has(askId)) return Effect.void;
     followed.set(askId, revision);
-    const told: FollowTold = { action: undefined, settled: 0, delegated: false };
+    const told: FollowTold = { action: undefined, settled: 0, delegated: false, work: undefined };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<FollowLook>(),
       Schedule.while(({ input }) => input === FOLLOW_LOOK.RUNNING),
@@ -658,6 +672,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+      };
+    },
+    onWork(listener) {
+      workListeners.add(listener);
+      return () => {
+        workListeners.delete(listener);
       };
     },
   };

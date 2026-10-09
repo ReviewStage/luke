@@ -104,6 +104,113 @@ export const planActivitySchema = EffectSchema.Struct({
 
 export type PlanActivity = typeof planActivitySchema.Type;
 
+/** How far a planning turn, or one call inside it, has got. */
+export const PLAN_WORK_STATE = {
+  RUNNING: "running",
+  DONE: "done",
+  FAILED: "failed",
+} as const;
+
+export type PlanWorkState = (typeof PLAN_WORK_STATE)[keyof typeof PLAN_WORK_STATE];
+
+/**
+ * Which of the planning model's tools a call is, so the Work tab can say it
+ * in words: one kind per tool the planning turn is offered, and `other` for
+ * a tool a newer service offers that this vocabulary does not name yet.
+ */
+export const PLAN_WORK_TOOL = {
+  REPOSITORY: "repository",
+  SEARCH_WEB: "search-web",
+  READ_WEB_PAGE: "read-web-page",
+  SHOW_CODE: "show-code",
+  DRAW_ON_BOARD: "draw-on-board",
+  LOOK_AT_BOARD: "look-at-board",
+  QUEUE_QUESTION: "queue-question",
+  WORKER: "worker",
+  WORKER_WAIT: "worker-wait",
+  WORKER_CANCEL: "worker-cancel",
+  OTHER: "other",
+} as const;
+
+export type PlanWorkTool = (typeof PLAN_WORK_TOOL)[keyof typeof PLAN_WORK_TOOL];
+
+/** The kinds of part a turn's work is made of, in the order the model wrote them. */
+export const PLAN_WORK_PART = {
+  TEXT: "text",
+  REASONING: "reasoning",
+  TOOL: "tool",
+} as const;
+
+/**
+ * How much of a turn one `plan.work` frame carries. The newest parts are
+ * kept, and each text, input, and output is cut to its bound, so a turn
+ * that read a large file still travels in a frame of tens of kilobytes.
+ */
+export const PLAN_WORK_BOUNDS = {
+  PARTS: 60,
+  TEXT_CHARS: 4_000,
+  SUBJECT_CHARS: 300,
+  NAME_CHARS: 64,
+} as const;
+
+const workText = EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.TEXT_CHARS));
+
+const planWorkTextPartSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(PLAN_WORK_PART.TEXT),
+  text: workText,
+});
+
+const planWorkReasoningPartSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(PLAN_WORK_PART.REASONING),
+  text: workText,
+});
+
+/**
+ * One call the planning model made: which tool, by kind and by name; its
+ * state; the one input a reader looks for first (the command, the query, the
+ * page, the file), as its subject; and the whole input and output as text,
+ * each cut to its bound.
+ */
+const planWorkToolPartSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(PLAN_WORK_PART.TOOL),
+  id: EffectSchema.String,
+  tool: EffectSchema.Literals(Object.values(PLAN_WORK_TOOL)),
+  name: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.NAME_CHARS)),
+  state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
+  subject: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_WORK_BOUNDS.SUBJECT_CHARS)),
+  ),
+  input: workText,
+  output: EffectSchema.optionalKey(workText),
+});
+
+const planWorkPartSchema = EffectSchema.Union([
+  planWorkTextPartSchema,
+  planWorkReasoningPartSchema,
+  planWorkToolPartSchema,
+]);
+
+export type PlanWorkPart = typeof planWorkPartSchema.Type;
+
+/**
+ * One planning turn as the Work tab draws it: the turn, when it started,
+ * how far it has got, and the newest of what the model wrote and called,
+ * oldest first. Unlike `plan.activity`, this carries each call's output: the
+ * repository's text the Mac ran the command for, and pages read from the
+ * public web, shown back to the developer on their own Mac.
+ */
+export const planWorkTurnSchema = EffectSchema.Struct({
+  turnId: EffectSchema.String,
+  /** Epoch milliseconds the turn started. */
+  startedAt: EffectSchema.Finite,
+  state: EffectSchema.Literals(Object.values(PLAN_WORK_STATE)),
+  /** Whether older parts than these were left out. */
+  earlierOmitted: EffectSchema.Boolean,
+  parts: EffectSchema.Array(planWorkPartSchema),
+});
+
+export type PlanWorkTurn = typeof planWorkTurnSchema.Type;
+
 /** Why a file named for the screen drew no lines. */
 export const CODE_UNREADABLE = {
   /** The plan has no folder on this Mac to read it from. */

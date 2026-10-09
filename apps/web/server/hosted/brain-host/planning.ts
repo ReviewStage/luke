@@ -333,7 +333,7 @@ const TASK_WAIT_INPUT = Schema.Struct({
 /** What `task_cancel` carries, as eve declares it: the task to cancel. */
 const TASK_CANCEL_INPUT = Schema.Struct({ taskId: Schema.String });
 
-const EVE_DELEGATION_INPUT = {
+export const EVE_DELEGATION_INPUT = {
   [EVE_DELEGATION_TOOL.WORKER]: SUBAGENT_CALL_INPUT,
   [EVE_DELEGATION_TOOL.TASK_WAIT]: TASK_WAIT_INPUT,
   [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,

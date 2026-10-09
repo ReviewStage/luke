@@ -4,7 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
-import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
@@ -230,6 +230,7 @@ async function framesWithin(reader: SocketReader, ms: number): Promise<LiveClien
 const PLAN_FRAMES: readonly unknown[] = [
   VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
   VOICE_SERVICE_FRAME.PLAN_DRAFT,
+  VOICE_SERVICE_FRAME.PLAN_WORK,
 ];
 
 /** The next frame relayed to the desktop, past the service's own word about the plan. */
@@ -1119,6 +1120,54 @@ it.effect(
       assert.deepEqual(told.at(-1), idle);
       assert.ok(told.some((frame) => frame.voice === VOICE_PHASE.ABOUT_TO_ANSWER));
 
+      await hangUp(context, session);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a planning call shows the desktop its turn's work, the repository command it ran with its output, until the turn is done",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const session = await openSession(context, plan.id);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await speak(session.attach.socket, sessionId);
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      const planned = await planConversationOf(context.target.userId, plan.id);
+      const eveSession = await asks.latestSession(context.target.userId, planned ?? "");
+      assert.ok(planned && eveSession);
+      const standing = {
+        sessionId: eveSession,
+        target: { userId: context.target.userId, conversationId: planned },
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of spokenTurn(FIRST_EVE_TURN, NOW))
+        await database.run(relay.handle(event, standing));
+
+      let done: WireRecord | undefined;
+      for (let index = 0; index < 40 && done === undefined; index += 1) {
+        const frame = record(await session.desktop.next(5_000));
+        if (frame.type !== VOICE_SERVICE_FRAME.PLAN_WORK) continue;
+        assert.equal(frame.planId, plan.id);
+        if (isRecord(frame.turn) && frame.turn.state === PLAN_WORK_STATE.DONE) done = frame;
+      }
+      assert.ok(done && isRecord(done.turn) && Array.isArray(done.turn.parts));
+      const [call] = done.turn.parts;
+      assert.ok(isRecord(call));
+      assert.deepEqual(
+        [call.type, call.subject, call.state],
+        [PLAN_WORK_PART.TOOL, "git log --oneline -5", PLAN_WORK_STATE.DONE],
+      );
+
+      // What the service sent up while the turn ran is left unanswered: the call ends here.
+      await framesWithin(session.upstream, QUIET_MS);
       await hangUp(context, session);
       await context.stop();
     }),
