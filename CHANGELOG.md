@@ -36,6 +36,61 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.8.0 — 2026-10-09
+
+### A new home for your plans
+
+Luke opens on a composer for a new plan, beside a sidebar that lists your
+plans newest first. The sidebar resizes, folds away with ⌘B, and opens Settings
+from one account button at its foot. Rename a plan, or delete it after a
+standard confirmation, from one plan menu in the toolbar's ⋯ or a right-click
+in the sidebar.
+
+### A side panel for the board, the code, and the transcript
+
+A plan's whiteboard, the code Luke shows, and the transcript of what was said
+now sit in a right side panel with tabs. The panel runs full height, goes full
+screen, and opens by itself the first time Luke draws or shows code in a plan.
+Luke draws on the whiteboard as he talks, lays it out by Excalidraw's guides,
+then looks at what he drew and fixes what he sees.
+
+### Luke as a planning teammate
+
+Luke plans with you rather than interviewing you: he takes notes live, doesn't
+assume you already know what you want to build, and opens each call on what was
+said on the plan's earlier calls. He hands slow work to a background worker and
+tells you its result at a natural pause, and Stop cancels that work too.
+
+### Improvements
+
+- Keyboard shortcuts cover the whole app and are listed in the menu bar
+- Settings has a search field, a Back button, and Reset to defaults beside the
+  page title
+- Planning replies stream sentence by sentence, never ahead of what Luke has
+  actually done
+- A planning call picks up where it left off after a lost connection
+- The stop key silences Luke at once
+- The sidebar and side panel open and close smoothly, and snap when you drag
+  past their bounds
+- Usage is still counted, but there is no daily allowance anymore
+
+### Fixes
+
+- Fixed one call's end touching the next call
+- Fixed Markdown showing up in Luke's spoken replies
+- Fixed answers crossing between two actions run at the same time
+- Fixed Stop not reaching a planning turn
+- Fixed the voice losing track of a planning turn waiting on background work
+- Fixed a fade band at the top of Settings pages
+- Fixed all-caps labels left in the app
+
+### Misc
+
+- Updated the app icon to sit on Apple's macOS icon grid with its shadow
+  beneath the tile
+- Removed the notch panel, the spoken introduction, the desk voice, calendar,
+  the iOS and Apple Watch app, and other features no longer in use
+
 ## 0.7.1 — 2026-10-07
 
 ### Improvements
