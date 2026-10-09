@@ -41,7 +41,7 @@ import {
 } from "./conversation.js";
 import { eveSessionsComposer } from "./eve-sessions.js";
 import { childConversationId, hostTurnId } from "./ids.js";
-import { meteredModel, openAiBrainModel } from "./model.js";
+import { meteredModel, openAiBrainModel, summarizedReasoningModel } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
@@ -198,7 +198,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
   const modelFor = (admitted: AdmittedConversation): LanguageModel | undefined => {
     const access = seams.openAi();
     if (!access) return undefined;
-    return meteredModel(openAiBrainModel(access.apiKey, access.modelId), {
+    return meteredModel(summarizedReasoningModel(openAiBrainModel(access.apiKey, access.modelId)), {
       spend: () => seams.spend(admitted.target.userId),
       report: (message) => console.warn(message),
     });

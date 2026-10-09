@@ -401,6 +401,10 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
     earlierOmitted: false,
     parts: [
       {
+        type: PLAN_WORK_PART.REASONING,
+        text: "The developer wants admins to withdraw invites too. Before suggesting a library, check whether removal already has an admin check to reuse, and hand the library comparison to the worker so the answer is not held up.",
+      },
+      {
         type: PLAN_WORK_PART.TOOL,
         id: "fixture-call-3",
         tool: PLAN_WORK_TOOL.WORKER,

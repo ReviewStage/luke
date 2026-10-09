@@ -11,6 +11,15 @@ import { Redacted } from "effect";
  * a usage row is for the admin pages and is no reason to fail a turn.
  */
 
+/**
+ * How much of its reasoning the planning model is asked to summarise. OpenAI
+ * never returns a reasoning model's own thinking, only a summary of it, and
+ * only when one is asked for; `auto` lets the model choose how much to say.
+ */
+export const BRAIN_REASONING_SUMMARY = {
+  AUTO: "auto",
+} as const;
+
 /** The meter in front of the model: what counts a use, and where a count that failed is reported. */
 export interface MeterSeams {
   /** Counts one hosted use; nothing to answer, since nothing is refused on the count. */
@@ -52,6 +61,32 @@ export function meteredModel(
 }
 
 /** OpenAI's Responses model on Luke's own key, as the AI SDK reaches it. */
+/**
+ * The model asked to summarise its reasoning on every inference, so each
+ * step's reasoning part carries words the Work tab can show. Note that the
+ * option joins whatever OpenAI options the call already carries rather than
+ * replacing them, because eve sets its own there.
+ */
+export function summarizedReasoningModel(
+  model: Exclude<LanguageModel, string>,
+): Exclude<LanguageModel, string> {
+  return wrapLanguageModel({
+    model,
+    middleware: {
+      transformParams: async ({ params }) => ({
+        ...params,
+        providerOptions: {
+          ...params.providerOptions,
+          openai: {
+            ...params.providerOptions?.openai,
+            reasoningSummary: BRAIN_REASONING_SUMMARY.AUTO,
+          },
+        },
+      }),
+    },
+  });
+}
+
 export function openAiBrainModel(
   apiKey: Redacted.Redacted,
   modelId: string,
