@@ -142,8 +142,21 @@ body,
    place whichever way the sidebar is and New plan after it while folded; and
    level with them at the window's other edge, as far in from it as these are
    from the lights, the side panel's toggle in the same place whichever way
-   the panel is. */
+   the panel is.
+
+   A pane slides beneath them as it opens and shuts, so nothing may show
+   through them on its way past. `--title-bar-ground` is the colour of the bar
+   each cluster rests on, and a button under the pointer draws its translucent fill
+   over that ground rather than over the pane: at rest it looks no different,
+   and in motion it is opaque. The panel's tab row passes beneath the toggle
+   at the right, so that cluster stands on the ground at rest as well, the
+   panel's for as long as the panel is drawn, its exit included; the ground
+   is the cluster's rather than the button's, so a disabled toggle dims its
+   glyph and not the ground. Only the sidebar's own empty edge passes beneath
+   the left cluster, which a ground at rest could match on one side of that
+   edge and never on both. */
 .title-bar-controls {
+  --title-bar-ground: var(--desktop-ground);
   position: absolute;
   z-index: 2;
   top: calc(var(--traffic-lights-middle) - var(--control-height) / 2);
@@ -151,9 +164,25 @@ body,
   display: flex;
 }
 
+.desktop-shell[data-sidebar-collapsed="false"] .title-bar-controls:not([data-edge]) {
+  --title-bar-ground: var(--desktop-sidebar);
+}
+
+.desktop-shell[data-sidebar-collapsed="true"]:has(.side-panel[data-full-screen="true"])
+  .title-bar-controls:not([data-edge]),
+.desktop-shell:has(.side-panel) .title-bar-controls[data-edge="end"] {
+  --title-bar-ground: var(--desktop-well);
+}
+
+.title-bar-controls .toolbar-button:hover:not(:disabled) {
+  background: linear-gradient(var(--selected), var(--selected)) var(--title-bar-ground);
+}
+
 .title-bar-controls[data-edge="end"] {
   right: var(--bar-inset);
   left: auto;
+  border-radius: var(--control-radius);
+  background: var(--title-bar-ground);
 }
 
 .desktop-sidebar {
@@ -1336,7 +1365,8 @@ body,
   padding: 14px 18px;
   border: 1px solid var(--hairline);
   border-radius: 16px;
-  background: rgba(22, 22, 27, 0.97);
+  /* Opaque, because the document scrolls on beneath it. */
+  background: #16161b;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
   clip-path: none;
   animation: none;
