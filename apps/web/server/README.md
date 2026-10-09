@@ -109,9 +109,10 @@ read Luke requires for its account snapshot.
 
 "Sign in with GitHub" is the Luke GitHub App's user authorization: the
 provider's client is the App's (`GITHUB_APP_CLIENT_ID`,
-`GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `server/auth-deployment.ts`),
-so the token a sign-in leaves on the `account` row is a GitHub App user token,
-which reaches only the repositories where the App is installed and the user
+`GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `server/auth-deployment.ts`;
+the admin dashboard's "GitHub sign-in" row reads the same client), so the
+token a sign-in leaves on the `account` row is a GitHub App user token, which
+reaches only the repositories where the App is installed and the user
 has access, under the App's registered permissions (metadata read, contents
 and pull requests read and write, email addresses read). An account that
 signed in through the OAuth App before this is the same GitHub user id, so

@@ -401,6 +401,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           planId: params.planId,
           elements: params.elements,
           appliedDrawing: params.appliedDrawing,
+          ...(params.image === undefined ? undefined : { image: params.image }),
         }),
       ),
     codingAgentModels: () =>

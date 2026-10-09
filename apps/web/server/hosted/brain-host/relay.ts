@@ -29,6 +29,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
+import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
@@ -455,16 +456,15 @@ export class StreamRelay {
       case "action.result": {
         const result = event.data.result;
         if (result.kind !== TOOL_RESULT_KIND) return Effect.void;
+        // Note that a look's image went to the model once and is not kept, because it is no record of the plan.
+        const output = unparsedWire(result.output);
+        const kept =
+          result.toolName === LOOK_AT_BOARD_TOOL.name ? storedLookOutput(output) : output;
         return this.#toolResult(
           event.data.turnId,
           result.callId,
           result.toolName,
-          settlementOf(
-            event.data.status,
-            result.isError,
-            unparsedWire(result.output),
-            event.data.error?.message,
-          ),
+          settlementOf(event.data.status, result.isError, kept, event.data.error?.message),
           standing,
         );
       }

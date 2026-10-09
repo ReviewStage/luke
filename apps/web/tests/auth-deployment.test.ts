@@ -8,6 +8,8 @@ import {
   authSecrets,
   GITHUB_APP_ENVIRONMENT,
   LOCAL_AUTH_URL,
+  type SocialClient,
+  socialClientConfigured,
 } from "../server/auth-deployment";
 import {
   authProxy,
@@ -17,6 +19,24 @@ import {
 } from "../server/auth-proxy";
 
 const PRODUCTION_URL = "https://tryluke.dev";
+
+const GITHUB_APP = {
+  [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: "Iv1.fixture-app-client",
+  [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "fixture-app-client-secret",
+};
+const GITHUB_OAUTH_APP = {
+  GITHUB_CLIENT_ID: "the-oauth-app-from-before",
+  GITHUB_CLIENT_SECRET: "its-secret",
+};
+
+/** A social client as the fixture reads it: the id beside the secret unsealed, or none. */
+function revealed(client: SocialClient) {
+  return {
+    clientId: client.clientId,
+    clientSecret:
+      client.clientSecret === undefined ? undefined : Redacted.value(client.clientSecret),
+  };
+}
 
 test("production names the registered address and trusts nothing beyond it", () => {
   const deployment = authDeployment({
@@ -234,14 +254,47 @@ test("only a preview carries the sign-in hook that names that return, ahead of t
 });
 
 test("the GitHub sign-in's client is the Luke GitHub App's, read from the App's own variables", () => {
-  const secrets = authSecrets({
-    [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: "Iv1.fixture-app-client",
-    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "fixture-app-client-secret",
-    GITHUB_CLIENT_ID: "the-oauth-app-from-before",
-    GITHUB_CLIENT_SECRET: "its-secret",
+  const secrets = authSecrets({ ...GITHUB_OAUTH_APP, ...GITHUB_APP });
+
+  assert.deepEqual(revealed(secrets.github), {
+    clientId: "Iv1.fixture-app-client",
+    clientSecret: "fixture-app-client-secret",
+  });
+  assert.equal(socialClientConfigured(secrets.github), true);
+  // The Google client and the session secret are untouched by the GitHub client.
+  assert.deepEqual(revealed(secrets.google), { clientId: "", clientSecret: undefined });
+  assert.equal(secrets.sessionSecret, undefined);
+});
+
+test("the OAuth App from before the App is not read: without the App's client there is no GitHub sign-in", () => {
+  assert.deepEqual(revealed(authSecrets(GITHUB_OAUTH_APP).github), {
+    clientId: "",
+    clientSecret: undefined,
+  });
+  assert.equal(socialClientConfigured(authSecrets(GITHUB_OAUTH_APP).github), false);
+  assert.equal(socialClientConfigured(authSecrets({}).github), false);
+});
+
+test("half an App client is no client: a blank id or secret is absent, never borrowed from the OAuth App", () => {
+  const withoutAppSecret = authSecrets({
+    ...GITHUB_OAUTH_APP,
+    [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: GITHUB_APP[GITHUB_APP_ENVIRONMENT.CLIENT_ID],
+    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "  ",
+  });
+  const withoutAppId = authSecrets({
+    ...GITHUB_OAUTH_APP,
+    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: GITHUB_APP[GITHUB_APP_ENVIRONMENT.CLIENT_SECRET],
   });
 
-  assert.equal(secrets.github.clientId, "Iv1.fixture-app-client");
-  assert.ok(secrets.github.clientSecret);
-  assert.equal(Redacted.value(secrets.github.clientSecret), "fixture-app-client-secret");
+  assert.deepEqual(revealed(withoutAppSecret.github), {
+    clientId: "Iv1.fixture-app-client",
+    clientSecret: undefined,
+  });
+  assert.deepEqual(revealed(withoutAppId.github), {
+    clientId: "",
+    clientSecret: "fixture-app-client-secret",
+  });
+  for (const secrets of [withoutAppSecret, withoutAppId]) {
+    assert.equal(socialClientConfigured(secrets.github), false);
+  }
 });

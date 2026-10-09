@@ -3,6 +3,7 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   Excalidraw,
+  exportToBlob,
   ROUNDNESS,
   restoreElements,
 } from "@excalidraw/excalidraw";
@@ -12,7 +13,12 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE, LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
+import {
+  BOARD_ELEMENT_TYPE,
+  BOARD_IMAGE_MAX_SIDE,
+  DRAWING_ZONE,
+  LUKE_MARK,
+} from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import { createRoot } from "react-dom/client";
 import {
@@ -40,6 +46,10 @@ import {
  * dashed outline drawn behind everything else, titled by a text of its own at
  * its top-left corner, because a label bound to it would sit in its middle
  * over the shapes it holds.
+ *
+ * The bundle also draws a scene the canvas reported as a PNG
+ * (`renderScene`), for the planning model to look at what it drew: in the
+ * canvas's own dark theme, so the model sees what the developer sees.
  *
  * What the board leaves out is everything that could carry a file or a page:
  * the image tool, a pasted file, an embedded page, and every save, export,
@@ -326,8 +336,57 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
       }}
     />,
   );
-  return { show, unmount: () => root.unmount() };
+  return {
+    show,
+    scene: () =>
+      api === undefined || !loaded
+        ? undefined
+        : { elements: api.getSceneElements(), appliedDrawing: applied },
+    unmount: () => root.unmount(),
+  };
 }
 
-const whiteboard: WhiteboardModule = { mount: mountBoard };
+/** How far the drawn scene stands in from the image's edges, in pixels. */
+const RENDER_PADDING = 32;
+
+/** Bytes as base64, a slice at a time, since one call of `fromCharCode` cannot take a whole image. */
+function base64Of(bytes: Uint8Array): string {
+  const SLICE = 0x8000;
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += SLICE) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + SLICE));
+  }
+  return btoa(binary);
+}
+
+/**
+ * A scene the canvas reported, drawn whole as a PNG. Note that Excalidraw's
+ * dark theme is a filter over a white background and everything on it, which
+ * is exactly how the canvas itself is drawn.
+ */
+async function renderScene(reported: readonly object[]): Promise<string | undefined> {
+  // SAFETY: what the canvas reported is Excalidraw's own records, handed back unchanged.
+  const scene = reported as readonly ExcalidrawElement[];
+  const elements = scene.filter((element) => !element.isDeleted);
+  if (elements.length === 0) return undefined;
+  try {
+    const blob = await exportToBlob({
+      elements,
+      appState: {
+        exportBackground: true,
+        viewBackgroundColor: "#ffffff",
+        exportWithDarkMode: true,
+      },
+      files: null,
+      mimeType: "image/png",
+      maxWidthOrHeight: BOARD_IMAGE_MAX_SIDE,
+      exportPadding: RENDER_PADDING,
+    });
+    return base64Of(new Uint8Array(await blob.arrayBuffer()));
+  } catch {
+    return undefined;
+  }
+}
+
+const whiteboard: WhiteboardModule = { mount: mountBoard, render: renderScene };
 window.lukeWhiteboard = whiteboard;

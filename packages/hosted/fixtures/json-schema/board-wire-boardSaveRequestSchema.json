@@ -121,6 +121,11 @@
     "appliedDrawing": {
       "type": "integer",
       "minimum": 0
+    },
+    "image": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 3000000
     }
   },
   "required": [

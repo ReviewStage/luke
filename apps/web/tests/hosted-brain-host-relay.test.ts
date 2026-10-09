@@ -17,6 +17,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
+import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
 import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
@@ -310,6 +311,70 @@ function steering(
 function delegatingTurn(turnId: string, sequence: number): MessageStreamEvent[] {
   return [...parkedTurn(turnId, sequence, NOW), ...resumedTurn(turnId, sequence, 2, NOW)];
 }
+
+/** A turn in which the planning model looks at the board and answers, as eve streams it. */
+function lookTurn(turnId: string, sequence: number, image: string): MessageStreamEvent[] {
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: "draw the flow" } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          { kind: "tool-call", callId: "call-look", toolName: LOOK_AT_BOARD_TOOL.name, input: {} },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-look",
+          toolName: LOOK_AT_BOARD_TOOL.name,
+          output: { status: LOOK_AT_BOARD_STATUS.LOOKED, image },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop", message: "It's drawn." },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+it.effect("a look at the board settles its call in the conversation without the image", () =>
+  Effect.promise(async () => {
+    const target = await conversation();
+    const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk";
+    await play(lookTurn("turn_0", 0, image), standingFor(target, BRAIN_HOST_TURN.TYPED));
+
+    const { messageRows } = await rows(target);
+    const answer = messageRows.find((row) => row.role === MESSAGE_ROLE.ASSISTANT);
+    const toolPart = answer?.parts.find((part) => isToolUIPart(part));
+    assert.ok(toolPart);
+    assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+    assert.ok(!JSON.stringify(messageRows).includes(image));
+  }),
+);
 
 it.effect(
   "a turn eve holds open for the worker it handed work to is one turn on record: the call is kept like any planning call with the receipt as its result, the park tells nothing, and the answer holds the words before the wait and the words after it",

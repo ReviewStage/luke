@@ -118,6 +118,18 @@ function secret(value: string | undefined): Redacted.Redacted | undefined {
   return named === undefined ? undefined : Redacted.make(named);
 }
 
+/** One provider's registration as two variables hold it; a blank id is the empty one Better Auth refuses. */
+function socialClient(
+  variables: Record<string, string | undefined>,
+  idName: string,
+  secretName: string,
+): SocialClient {
+  return {
+    clientId: text(variables[idName]) ?? "",
+    clientSecret: secret(variables[secretName]),
+  };
+}
+
 /** Vercel reports a bare hostname; a value that already names a scheme keeps it. */
 function deploymentOrigin(host: string | undefined): string | undefined {
   const named = text(host);
@@ -140,15 +152,22 @@ function deploymentOrigin(host: string | undefined): string | undefined {
 export function authSecrets(variables: Record<string, string | undefined>): AuthSecrets {
   return {
     sessionSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.SESSION_SECRET]),
-    google: {
-      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID]) ?? "",
-      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET]),
-    },
-    github: {
-      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID]) ?? "",
-      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_SECRET]),
-    },
+    google: socialClient(
+      variables,
+      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID,
+      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET,
+    ),
+    github: socialClient(
+      variables,
+      AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID,
+      AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_SECRET,
+    ),
   };
+}
+
+/** Whether a social client is whole: an id and a secret, which is what a sign-in through it needs. */
+export function socialClientConfigured(client: SocialClient): boolean {
+  return client.clientId !== "" && client.clientSecret !== undefined;
 }
 
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {

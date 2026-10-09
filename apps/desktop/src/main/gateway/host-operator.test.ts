@@ -105,3 +105,28 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
     }
   }),
 );
+
+it.effect(
+  "a board save carries the image of the scene to the host, and a save without one carries none",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const scene = {
+        planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+        elements: [],
+        appliedDrawing: 2,
+      };
+
+      yield* operator.planningBoardSave({ ...scene, image: "iVBORw0KGgo=" });
+      yield* operator.planningBoardSave(scene);
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLANNING_BOARD_SAVE, { ...scene, image: "iVBORw0KGgo=" }],
+          [GATEWAY_METHOD.PLANNING_BOARD_SAVE, scene],
+        ],
+      );
+    }),
+);

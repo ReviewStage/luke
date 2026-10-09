@@ -14,6 +14,13 @@
 export const DRAW_ON_BOARD_TOOL_NAME = "draw_on_board";
 
 /**
+ * The planning model's tool that looks at a board. The Mac reads it off the
+ * planning call's activity the same way, and draws the board it shows for
+ * the look to see.
+ */
+export const LOOK_AT_BOARD_TOOL_NAME = "look_at_board";
+
+/**
  * The mark on every scene element the Mac made from a drawing of Luke's, in
  * the element's `customData`, so his next drawing replaces exactly those and
  * the service can tell them from what the developer drew.
@@ -26,6 +33,12 @@ export const LUKE_MARK = { drawnBy: "luke" } as const;
  * rectangle and a text.
  */
 export const DRAWING_ZONE = "zone";
+
+/**
+ * The longest side, in pixels, of the image the Mac draws of a board for the
+ * planning model to look at: legible, and cheap to send again on later turns.
+ */
+export const BOARD_IMAGE_MAX_SIDE = 1_200;
 
 /** The Excalidraw element types a scene admits. */
 export const BOARD_ELEMENT_TYPE = {
