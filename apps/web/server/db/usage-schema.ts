@@ -2,11 +2,11 @@ import { bigint, doublePrecision, integer, pgTable, primaryKey, text } from "dri
 import { user } from "./auth-schema.js";
 
 /**
- * What one signed-in user spent of the hosted allowance on one UTC day. The
- * hosted endpoints run on Luke's own OpenAI key, so this row is the durable
- * brake that keeps one account from spending everyone's: the counter is
- * incremented atomically before the upstream call and checked against the
- * day's ceiling. One row per user per day; a day with no use has no row.
+ * How much hosted use one signed-in user made on one UTC day. The hosted
+ * endpoints run on Luke's own OpenAI key, so this row is the record the admin
+ * pages read: the counter is incremented atomically before the upstream call,
+ * and nothing is refused on it. One row per user per day; a day with no use
+ * has no row.
  */
 export const hostedUsage = pgTable(
   "hosted_usage",

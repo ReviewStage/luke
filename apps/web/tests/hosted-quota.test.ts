@@ -1,15 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { hostedUsage } from "../server/db/usage-schema";
-import { HOSTED_DAILY_LIMIT, spendHostedMeter, utcDayEnd, utcDayKey } from "../server/hosted/quota";
+import { spendHostedMeter, utcDayKey } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
+
+/** The ceiling the service used to refuse past; the count is what remains, and it stops nowhere. */
+const FORMER_DAILY_LIMIT = 5_000;
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -17,52 +21,40 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-test("a day key is the UTC date and resets at the following midnight", () => {
+test("a day key is the UTC date", () => {
   assert.equal(utcDayKey(NOON_UTC), "2026-08-17");
-  assert.equal(utcDayEnd("2026-08-17"), Date.parse("2026-08-18T00:00:00.000Z"));
 });
 
-test("the emergency ceiling stays high", () => {
-  assert.equal(HOSTED_DAILY_LIMIT, 5_000);
-});
-
-it.layer(testSqlClient)("the quota meters over effect/unstable/sql", (it) => {
-  it.effect("a hosted spend increments the day's one counter", () =>
+it.layer(testSqlClient)("the usage meter over effect/unstable/sql", (it) => {
+  it.effect("a hosted use counts one on the day's one counter", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const spend = yield* spendHostedMeter({ userId, now: NOON_UTC });
-      assert.equal(spend.allowed, true);
-      assert.deepEqual(spend.quota, {
-        used: 1,
-        limit: HOSTED_DAILY_LIMIT,
-        resetsAt: utcDayEnd("2026-08-17"),
-      });
+      assert.equal(yield* spendHostedMeter({ userId, now: NOON_UTC }), 1);
     }),
   );
 
-  it.effect("every hosted operation spends the same counter", () =>
+  it.effect("every hosted operation counts on the same counter", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
       yield* spendHostedMeter({ userId, now: NOON_UTC });
       yield* spendHostedMeter({ userId, now: NOON_UTC });
-      const third = yield* spendHostedMeter({ userId, now: NOON_UTC });
-      assert.equal(third.quota.used, 3);
+      assert.equal(yield* spendHostedMeter({ userId, now: NOON_UTC }), 3);
     }),
   );
 
-  it.effect("the hosted ceiling allows its last use and refuses the next", () =>
+  it.effect("a day past the former ceiling is still counted, and refused nothing", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
       const day = utcDayKey(NOON_UTC);
-      yield* db.insert(hostedUsage).values({ userId, day, calls: HOSTED_DAILY_LIMIT - 1 });
+      yield* db.insert(hostedUsage).values({ userId, day, calls: FORMER_DAILY_LIMIT });
 
-      const atLimit = yield* spendHostedMeter({ userId, now: NOON_UTC });
-      assert.equal(atLimit.allowed, true);
-      assert.equal(atLimit.quota.used, HOSTED_DAILY_LIMIT);
-
-      const overLimit = yield* spendHostedMeter({ userId, now: NOON_UTC });
-      assert.equal(overLimit.allowed, false);
-      assert.equal(overLimit.quota.used, HOSTED_DAILY_LIMIT + 1);
+      assert.equal(yield* spendHostedMeter({ userId, now: NOON_UTC }), FORMER_DAILY_LIMIT + 1);
+      assert.equal(yield* spendHostedMeter({ userId, now: NOON_UTC }), FORMER_DAILY_LIMIT + 2);
+      const rows = yield* db
+        .select({ calls: hostedUsage.calls })
+        .from(hostedUsage)
+        .where(eq(hostedUsage.userId, userId));
+      assert.deepEqual(rows, [{ calls: FORMER_DAILY_LIMIT + 2 }]);
     }),
   );
 });

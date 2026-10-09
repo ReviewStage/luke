@@ -5,7 +5,6 @@ import {
   countDistinct,
   desc,
   eq,
-  gt,
   gte,
   ilike,
   isNotNull,
@@ -24,7 +23,7 @@ import { account, session, user } from "../db/auth-schema.js";
 import { adminFavorite } from "../db/favorite-schema.js";
 import { db } from "../db/query.js";
 import { hostedUsage } from "../db/usage-schema.js";
-import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
+import { utcDayKey } from "../hosted/quota.js";
 import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
@@ -393,68 +392,6 @@ const readRetentionMetrics = /* @__PURE__ */ Effect.fn("web/readRetentionMetrics
   return { cohortSizes, activeByCohortWeek };
 });
 
-/**
- * The counter past its daily ceiling — the row a spend was refused on. The
- * spend that lands exactly on the limit is still allowed, and a refused
- * attempt still increments, so only a count strictly past the limit proves a
- * refusal happened.
- */
-const CEILING_REACHED = gt(hostedUsage.calls, HOSTED_DAILY_LIMIT);
-
-const findQuotaLimitedOnDay = SqlSchema.findOneOption({
-  Request: Schema.Struct({ day: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: CountRowSchema,
-  execute: (request) =>
-    db
-      .select({ value: count() })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(and(eq(hostedUsage.day, request.day), CEILING_REACHED, keptByScope(request.scope))),
-});
-
-const findQuotaLimitedInWindow = SqlSchema.findOneOption({
-  Request: Schema.Struct({ windowStartDay: Schema.String, scope: AdminMetricsScopeSchema }),
-  Result: CountRowSchema,
-  execute: (request) =>
-    db
-      .select({ value: count() })
-      .from(hostedUsage)
-      .innerJoin(user, eq(user.id, hostedUsage.userId))
-      .where(
-        and(
-          gte(hostedUsage.day, request.windowStartDay),
-          CEILING_REACHED,
-          keptByScope(request.scope),
-        ),
-      ),
-});
-
-const readReliabilityMetrics = /* @__PURE__ */ Effect.fn("web/readReliabilityMetrics")(function* (
-  todayKey: string,
-  windowStartDay: string,
-  scope: AdminMetricsScope,
-): Effect.fn.Return<
-  Omit<AdminMetricsSource["reliability"], "analyticsConsoleUrl">,
-  AdminQueryFailure,
-  SqlClient.SqlClient
-> {
-  const [today, window] = yield* Effect.all(
-    [
-      findQuotaLimitedOnDay({ day: todayKey, scope }),
-      findQuotaLimitedInWindow({ windowStartDay, scope }),
-    ],
-    { concurrency: "unbounded" },
-  );
-  const countOf = Option.match({
-    onNone: () => 0,
-    onSome: (row: { value: number }) => row.value,
-  });
-  return {
-    quotaLimitedUserDaysToday: countOf(today),
-    quotaLimitedUserDaysWindow: countOf(window),
-  };
-});
-
 function emptySource(
   integrations: readonly AdminIntegration[],
   database: { reachable: boolean; latencyMs: number },
@@ -468,11 +405,7 @@ function emptySource(
     },
     usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
     retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
-    reliability: {
-      quotaLimitedUserDaysToday: 0,
-      quotaLimitedUserDaysWindow: 0,
-      analyticsConsoleUrl,
-    },
+    reliability: { analyticsConsoleUrl },
     systemHealth: { database, integrations },
   };
 }
@@ -503,12 +436,11 @@ export function readAdminMetricsSource(input: {
     const todayKey = utcDayKey(input.now);
     const fetchStart = new Date(`${fetchStartDay}T00:00:00.000Z`);
 
-    const [users, usage, retention, reliability] = yield* Effect.all(
+    const [users, usage, retention] = yield* Effect.all(
       [
         readUserMetrics(fetchStart, input.scope),
         readUsageMetrics(todayKey, windowStartDay, fetchStartDay, input.scope),
         readRetentionMetrics(input.now, input.scope),
-        readReliabilityMetrics(todayKey, windowStartDay, input.scope),
       ],
       { concurrency: "unbounded" },
     );
@@ -517,7 +449,7 @@ export function readAdminMetricsSource(input: {
       users,
       usage,
       retention,
-      reliability: { ...reliability, analyticsConsoleUrl: input.analyticsConsoleUrl },
+      reliability: { analyticsConsoleUrl: input.analyticsConsoleUrl },
       systemHealth: { database: health, integrations: input.integrations },
     };
   });
@@ -585,22 +517,6 @@ const findAllTimeUsage = SqlSchema.findOneOption({
       })
       .from(hostedUsage)
       .where(eq(hostedUsage.userId, userId)),
-});
-
-const findQuotaLimitedDays = SqlSchema.findOneOption({
-  Request: Schema.Struct({ userId: Schema.String, windowStartDay: Schema.String }),
-  Result: CountRowSchema,
-  execute: (request) =>
-    db
-      .select({ value: count() })
-      .from(hostedUsage)
-      .where(
-        and(
-          eq(hostedUsage.userId, request.userId),
-          gte(hostedUsage.day, request.windowStartDay),
-          CEILING_REACHED,
-        ),
-      ),
 });
 
 const DayAccountRowSchema = Schema.Struct({
@@ -819,27 +735,23 @@ export function readAdminUserSource(input: {
   windowDays: AdminMetricsWindow;
 }): Effect.Effect<AdminUserSource | undefined, AdminQueryFailure, SqlClient.SqlClient> {
   return Effect.gen(function* () {
-    const windowStartDay = lastNDayKeys(input.now, input.windowDays)[0] ?? utcDayKey(input.now);
-    // The daily rows read from the wider bound so the builder's trends hold
-    // both runs; the throttle count below stays on the window's own.
+    // The daily rows read from the wider bound so the builder's trends hold both runs.
     const fetchStartDay =
       lastNDayKeys(input.now, windowFetchDays(input.windowDays))[0] ?? utcDayKey(input.now);
     // The calendar keeps a trailing-year bound of its own, apart from the
     // window, so switching windows never redraws the year.
     const calendarStartDay = calendarDayKeys(input.now)[0] ?? utcDayKey(input.now);
 
-    const [account, signInMethods, windowRows, calendarRows, allTime, quotaLimited] =
-      yield* Effect.all(
-        [
-          findAccount(input.userId),
-          findSignInMethods(input.userId),
-          findUsageSince({ userId: input.userId, sinceDay: fetchStartDay }),
-          findUsageSince({ userId: input.userId, sinceDay: calendarStartDay }),
-          findAllTimeUsage(input.userId),
-          findQuotaLimitedDays({ userId: input.userId, windowStartDay }),
-        ],
-        { concurrency: "unbounded" },
-      );
+    const [account, signInMethods, windowRows, calendarRows, allTime] = yield* Effect.all(
+      [
+        findAccount(input.userId),
+        findSignInMethods(input.userId),
+        findUsageSince({ userId: input.userId, sinceDay: fetchStartDay }),
+        findUsageSince({ userId: input.userId, sinceDay: calendarStartDay }),
+        findAllTimeUsage(input.userId),
+      ],
+      { concurrency: "unbounded" },
+    );
 
     if (Option.isNone(account)) return undefined;
     const row = account.value;
@@ -881,7 +793,6 @@ export function readAdminUserSource(input: {
             onSome: (totals) => totals.calls ?? 0,
           }),
         },
-        quotaLimitedDaysWindow: countOf(quotaLimited),
       },
     };
   });

@@ -581,8 +581,9 @@ or reserved; the check is a lookup ahead of the request, so a DNS answer that
 changes between the two is the case it does not cover. A turn gets at most
 4 searches and 6 page reads, 5 sources a search, and 20,000 characters of a
 page from at most 1 MB read (`PUBLIC_RESEARCH_BOUNDS`). A search is a paid
-inference on Luke's key, so each one spends one of the account's daily hosted
-uses before it is sent, and a spent allowance is answered as not searched.
+inference on Luke's key, so each one is counted as one of the account's hosted
+uses before it is sent; a count that cannot be written is logged and stops
+nothing.
 `tests/public-research.test.ts` holds both against scripted HTTP and DNS.
 `tests/hosted-planning.test.ts` runs the scripted model through the host and
 the relay, and the `brain-host` eval runs a plan conversation through eve.
@@ -764,11 +765,11 @@ is a build-time variable that lets the site's own pages talk to PostHog
 directly, so PostHog sees a visitor's address there. A build without it never
 loads the library at all.
 
-Use is metered per user per UTC day in the Luke-owned `hosted_usage` table:
-one atomic upsert before each upstream call, checked against the ceilings in
-`server/hosted/quota.ts`. The ceilings bound how often calls open, not how
-long they run; a spend limit on the OpenAI project behind the key is the
-backstop and should be configured with it.
+Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
+one atomic upsert before each upstream call (`server/hosted/quota.ts`).
+Nothing is refused on the count, which the admin pages read; a spend limit on
+the OpenAI project behind the key is the backstop and should be configured
+with it.
 
 ## Hosted voice service
 
@@ -784,8 +785,8 @@ A plain request to the path answers 426, since the path is a socket's.
 
 On `/api/voice/sessions` a signed-in Mac's handshake carries its account
 bearer, resolved through the same in-process `/oauth2/userinfo` seam every
-hosted route uses, and its daily allowance is spent by the same `hosted_usage`
-meter before any session exists, so a refused account costs no session. The
+hosted route uses, and one session is counted against it by the same
+`hosted_usage` meter before any session exists. The
 socket's first frame is `session.create` (the SDP offer, a voice, the seed,
 and the id of the plan the call is about); the opener
 (`server/voice/opening.ts`, which is where the first frame becomes a session
@@ -794,7 +795,7 @@ the function creates the session at OpenAI on the deployment's key, writes
 down the session's `voice_sessions` row (the account, the live session id,
 client delegation, and the plan the call is bound to), attaches the trusted sideband, stands the hosted
 exchange on it (below), and answers `session.created` with the id, the SDP
-answer, the quota, and the store's own id for the `voice_sessions` row
+answer, and the store's own id for the `voice_sessions` row
 (`voiceSessionId`), which is what a stored spoken row names as its
 `voice_session_id`. From then on the relay is a pipe: OpenAI frames to the
 device untouched except `session.input_audio.append` and
@@ -1168,8 +1169,7 @@ created — its sideband not attached, or its exchange unable to stand. A close
 writes only an open row, so a second `session.closed` changes nothing. Only the voice
 function and the maintenance sweep write `voice_sessions`; the seconds ledger and it both cascade with
 the user row. The seconds ledger meters nothing on its own: a session still
-spends one call when it opens, until the seconds are what the allowance is
-measured in.
+counts one call when it opens.
 
 ### How a refusal looks
 
@@ -1184,7 +1184,7 @@ or `session.attach`, a create naming no plan, or an attach to a session bound
 to none; `invalid-token` for a
 bearer no account stands behind, and for an attach to a session this account
 did not create; `not-found` for a call naming a plan the account
-does not hold, refused before the allowance is spent; `quota-exhausted` for a spent allowance; `upstream-error` when OpenAI refused the
+does not hold, refused before the session is counted; `upstream-error` when OpenAI refused the
 creation or the sideband could not attach; `upstream-throttled` when OpenAI
 answered 429.
 

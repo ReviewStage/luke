@@ -8,7 +8,6 @@ import { ADMIN_METRICS_SCOPE, ADMIN_METRICS_WINDOW } from "../server/admin/http"
 import { account, user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { hostedUsage } from "../server/db/usage-schema";
-import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -57,6 +56,9 @@ const linkSignIn = (userId: string, providerId: string) =>
     }),
   );
 
+/** A day's count past the ceiling the service used to refuse at, which the aggregates read like any other. */
+const BUSY_DAY_CALLS = 6_000;
+
 const spend = (userId: string, day: string, calls: number) =>
   Effect.asVoid(db.insert(hostedUsage).values({ userId, day, calls }));
 
@@ -81,7 +83,7 @@ const seed = Effect.gen(function* () {
   yield* spend(ordinary.id, TODAY, 3);
   yield* spend(ordinary.id, YESTERDAY, 2);
   yield* spend(quiet.id, YESTERDAY, 1);
-  yield* spend(maintainer.id, TODAY, HOSTED_DAILY_LIMIT + 1);
+  yield* spend(maintainer.id, TODAY, BUSY_DAY_CALLS);
 
   return { ordinary, quiet, maintainer };
 });
@@ -157,9 +159,6 @@ it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (
         ].toSorted(),
       );
 
-      assert.equal(source.reliability.quotaLimitedUserDaysToday, 0);
-      assert.equal(source.reliability.quotaLimitedUserDaysWindow, 0);
-
       const everyone = yield* readSource(ADMIN_METRICS_SCOPE.ALL);
       assert.deepEqual(
         [...everyone.users.signupsByDay].toSorted(),
@@ -172,7 +171,7 @@ it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (
         [...everyone.usage.byDay].toSorted(),
         [
           [YESTERDAY, 3],
-          [TODAY, HOSTED_DAILY_LIMIT + 4],
+          [TODAY, BUSY_DAY_CALLS + 3],
         ].toSorted(),
       );
       assert.equal(everyone.usage.activeUsersToday, 2);
@@ -181,7 +180,7 @@ it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (
         everyone.usage.topUsers.map((row) => [row.id, row.admin, row.activeDays, row.calls]),
         [
           [ordinary.id, false, 2, 5],
-          [maintainer.id, true, 1, HOSTED_DAILY_LIMIT + 1],
+          [maintainer.id, true, 1, BUSY_DAY_CALLS],
           [quiet.id, false, 1, 1],
         ],
       );
@@ -192,8 +191,6 @@ it.layer(testSqlClient)("the dashboard's aggregates over effect/unstable/sql", (
           ["2099-03-09", 2],
         ].toSorted(),
       );
-      assert.equal(everyone.reliability.quotaLimitedUserDaysToday, 1);
-      assert.equal(everyone.reliability.quotaLimitedUserDaysWindow, 1);
     }),
   );
 });

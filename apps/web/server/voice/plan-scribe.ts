@@ -172,14 +172,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     const notesRead = notes.length;
     const stored = yield* readPlan(options.userId, options.planId);
     if (Option.isNone(stored)) return;
-    const spent = yield* spendHostedMeter({
-      userId: options.userId,
-      now: yield* Clock.currentTimeMillis,
-    });
-    if (!spent.allowed) {
-      options.report("The plan's notetaker wrote nothing: the day's allowance is spent");
-      return;
-    }
+    yield* spendHostedMeter({ userId: options.userId, now: yield* Clock.currentTimeMillis });
     const earlier = ledger
       .utterances()
       .filter((line) => line.endMs <= cursor.heardThrough)

@@ -1,10 +1,10 @@
 import type { UserIdResolver } from "../hosted/http-effect.js";
-import type { HostedSpend, QuotaEffect, VoiceSecondsOutcome } from "../hosted/quota.js";
+import type { QuotaEffect, VoiceSecondsOutcome } from "../hosted/quota.js";
 
 /**
  * What the voice function asks of the account side of this same deployment,
- * as direct calls rather than routes: whose socket this is, whether their
- * allowance covers one more session, and what one closed session cost. A
+ * as direct calls rather than routes: whose socket this is, one more session
+ * counted against them, and what one closed session cost. A
  * signed-in device's bearer is resolved exactly as every hosted route resolves
  * the one on its own request, and is held no longer than the handshake it
  * arrived on.
@@ -16,8 +16,8 @@ import type { HostedSpend, QuotaEffect, VoiceSecondsOutcome } from "../hosted/qu
 export interface VoiceAccounts {
   /** The account behind an `Authorization` value, or nothing, yielded on the session's own fiber. */
   resolveUserId: UserIdResolver<string>;
-  /** Spends one session of the account's daily allowance. */
-  spend(userId: string): QuotaEffect<HostedSpend>;
+  /** Counts one session against the account's day. */
+  spend(userId: string): QuotaEffect<void>;
   /** Records a closed session's billed seconds once. */
   recordSeconds(input: {
     userId: string;

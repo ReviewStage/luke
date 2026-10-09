@@ -31,7 +31,6 @@ import {
   adminMetricsWindow,
 } from "../server/admin/http";
 import { posthogProjectConsoleUrl } from "../server/hosted/posthog";
-import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 import { runWithoutDatabase } from "./support/no-database";
 
 const NOON_UTC = Date.parse("2026-08-17T12:00:00.000Z");
@@ -45,7 +44,7 @@ function source(overrides: Partial<AdminMetricsSource> = {}): AdminMetricsSource
     },
     usage: { byDay: new Map(), activeUsersToday: 0, activeUsersWindow: 0, topUsers: [] },
     retention: { cohortSizes: new Map(), activeByCohortWeek: new Map() },
-    reliability: { quotaLimitedUserDaysToday: 0, quotaLimitedUserDaysWindow: 0 },
+    reliability: {},
     systemHealth: { database: { reachable: true, latencyMs: 4 }, integrations: [] },
     ...overrides,
   };
@@ -379,21 +378,10 @@ test("the most active accounts pass through the builder untouched", () => {
   assert.deepEqual(metrics.featureUsage.topUsers, topUsers);
 });
 
-test("the daily ceiling is reported from the hosted quota, not restated", () => {
-  const metrics = buildAdminMetrics(source(), NOON_UTC, ADMIN_METRICS_WINDOW_DEFAULT);
-  assert.equal(metrics.reliability.dailyLimit, HOSTED_DAILY_LIMIT);
-  assert.equal(metrics.windowDays, ADMIN_METRICS_WINDOW_DEFAULT);
-  assert.equal(metrics.generatedAt, NOON_UTC);
-});
-
 test("the analytics console address rides through when configured and stays absent when not", () => {
   const configured = buildAdminMetrics(
     source({
-      reliability: {
-        quotaLimitedUserDaysToday: 0,
-        quotaLimitedUserDaysWindow: 0,
-        analyticsConsoleUrl: posthogProjectConsoleUrl("12345"),
-      },
+      reliability: { analyticsConsoleUrl: posthogProjectConsoleUrl("12345") },
     }),
     NOON_UTC,
     ADMIN_METRICS_WINDOW_DEFAULT,
@@ -403,8 +391,6 @@ test("the analytics console address rides through when configured and stays abse
   const overriddenHost = buildAdminMetrics(
     source({
       reliability: {
-        quotaLimitedUserDaysToday: 0,
-        quotaLimitedUserDaysWindow: 0,
         // A deployment on another region's host must link to its own console.
         analyticsConsoleUrl: posthogProjectConsoleUrl("12345", "https://eu.posthog.com/"),
       },
