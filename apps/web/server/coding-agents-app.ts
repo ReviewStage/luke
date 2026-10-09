@@ -6,7 +6,7 @@ import {
 } from "@sidecar/hosted";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Layer, Option, Redacted, Result } from "effect";
+import { DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -374,10 +374,9 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }
+  const at = yield* DateTime.nowAsDate;
   const stamped = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) =>
-      write.requestTurnCancel(target, { turnId: turn.id, at: new Date(Date.now()) }),
-    ),
+    Effect.flatMap(writer, (write) => write.requestTurnCancel(target, { turnId: turn.id, at })),
   );
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const summary = yield* summaryOf(userId, agent);
