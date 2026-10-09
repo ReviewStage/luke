@@ -5,6 +5,7 @@ import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
 import { useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
+import type { BoardRenderRequest } from "#shared/messages/board-render";
 import { actRequest } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
 import {
@@ -27,6 +28,11 @@ import { admittedElements } from "./board-scene";
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
  * reach.
+ *
+ * The same bundle draws a board for the planning model's look whenever main
+ * asks (`useBoardRenders`), whether or not the board is on screen, and hands
+ * the image back under the request's id. That drawing is never put in the
+ * document, so the recording sees none of it.
  */
 
 /** How long the developer's drawing rests before it is saved. */
@@ -89,6 +95,32 @@ const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
     });
   }),
 );
+
+/**
+ * One board main asked the panel to draw: the bundle loaded if it was not,
+ * the board drawn, and the image, or why there is none, handed back under the
+ * request's id.
+ */
+const boardRenderAtom = rendererRuntime.fn((request: BoardRenderRequest, get) =>
+  Effect.gen(function* () {
+    const module = yield* get.result(whiteboardModuleAtom);
+    const result = yield* Effect.promise(() => module.render(request.board));
+    const payload: ActPayload<typeof ACT_KIND.PLANNING_BOARD_RENDERED> = {
+      requestId: request.requestId,
+      result,
+    };
+    yield* Effect.tryPromise({
+      try: () => window.sidecar.act(actRequest(ACT_KIND.PLANNING_BOARD_RENDERED, payload)),
+      catch: (error) => error,
+    });
+  }),
+);
+
+/** Draws each board main asks for while the panel stands; mounted once, at the panel's root. */
+export function useBoardRenders(): void {
+  const render = useAtomSet(boardRenderAtom);
+  useEffect(() => window.sidecar.onBoardRender(render), [render]);
+}
 
 /** The canvas, once its bundle has loaded: mounted for one plan, and handed each board main holds. */
 function BoardCanvas({

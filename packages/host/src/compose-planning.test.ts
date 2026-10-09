@@ -10,7 +10,7 @@ import {
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
+import type { Board, BoardElement, BoardLook, BoardLookResult } from "@sidecar/hosted/board-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -66,6 +66,12 @@ interface FakeService extends PlanningClient {
   readonly settled: { planId: string; commandId: string; result: PlanCommandResult }[];
   /** Done once the first result is posted back. */
   readonly firstSettle: Deferred.Deferred<void>;
+  /** The looks at the board waiting for this Mac to claim, oldest first. */
+  looks: BoardLook[];
+  /** What this Mac posted back for each look, in order. */
+  readonly lookSettled: { planId: string; lookId: string; result: BoardLookResult }[];
+  /** Done once the first look is posted back. */
+  readonly firstLook: Deferred.Deferred<void>;
   /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
   /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
@@ -83,6 +89,9 @@ function fakeService(plans: Plan[]): FakeService {
     commands: [],
     settled: [],
     firstSettle: Deferred.makeUnsafe<void>(),
+    looks: [],
+    lookSettled: [],
+    firstLook: Deferred.makeUnsafe<void>(),
     boards: {},
     transcripts: {},
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
@@ -106,6 +115,19 @@ function fakeService(plans: Plan[]): FakeService {
       Effect.sync(() => {
         service.settled.push({ planId, commandId, result });
         Deferred.doneUnsafe(service.firstSettle, Effect.void);
+        return true;
+      }),
+    claimBoardLook: () =>
+      Effect.suspend(() => {
+        const next = service.looks.shift();
+        return next === undefined
+          ? Effect.as(Effect.sleep(Duration.seconds(20)), null)
+          : Effect.succeed(next);
+      }),
+    settleBoardLook: (planId, lookId, result) =>
+      Effect.sync(() => {
+        service.lookSettled.push({ planId, lookId, result });
+        Deferred.doneUnsafe(service.firstLook, Effect.void);
         return true;
       }),
     list: () =>
@@ -168,6 +190,11 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
+/** The desktop's drawing of a board: a PNG named for the elements it holds, so a test can see which board was drawn. */
+function drawnBoard(board: Board): Effect.Effect<BoardLookResult> {
+  return Effect.succeed({ image: btoa(board.elements.map((element) => element.id).join(",")) });
+}
+
 function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
@@ -193,6 +220,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
+      renderBoard: drawnBoard,
       folders: recordedFolders,
       endPlanCall: (keep) =>
         Effect.gen(function* () {
@@ -759,6 +787,49 @@ it.effect("the open plan's command runs in its folder on this Mac and its output
       assert.equal(settled?.result.stderr.trim(), "invites");
     }),
   ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
+);
+
+it.effect("a look at the open plan's board is drawn by the desktop and its image goes back", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.boards[INVITES] = {
+        elements: [{ id: "their-sketch", type: "rectangle", x: 0, y: 0, width: 200, height: 80 }],
+        appliedDrawing: 0,
+      };
+      const { call, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      service.looks.push({ id: "5c2a7e1b-9d3f-4b8a-a6c4-1e2f3a4b5c6d" });
+
+      yield* planning.lifetime;
+      yield* Deferred.await(service.firstLook);
+
+      assert.deepEqual(service.lookSettled, [
+        {
+          planId: INVITES,
+          lookId: "5c2a7e1b-9d3f-4b8a-a6c4-1e2f3a4b5c6d",
+          result: { image: btoa("their-sketch") },
+        },
+      ]);
+    }),
+  ),
+);
+
+it.effect("a look whose board the service will not hand over goes back as why", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { call, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      service.looks.push({ id: "5c2a7e1b-9d3f-4b8a-a6c4-1e2f3a4b5c6d" });
+
+      yield* planning.lifetime;
+      yield* Deferred.await(service.firstLook);
+
+      const [settled] = service.lookSettled;
+      assert.ok(settled !== undefined && "failure" in settled.result);
+    }),
+  ),
 );
 
 /** The one command `command` run in a fresh plan folder on this Mac, and what it settled. */

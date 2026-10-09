@@ -1,7 +1,8 @@
 import { WireValueSchema } from "@sidecar/wire";
 import { declareReader, describeWire, emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "./board-vocabulary.js";
+import { BOARD_ELEMENT_TYPE, BOARD_LOOK_MAX_SIDE, DRAWING_ZONE } from "./board-vocabulary.js";
+import { wireUuidSchema } from "./service-wire.js";
 
 /**
  * board-wire.ts -- a plan's whiteboard: the Excalidraw scene on it, and Luke's latest drawing for it, as the service stores them and the Plans tab reads them.
@@ -244,3 +245,48 @@ export const boardSaveRequestSchema = EffectSchema.Struct({
 
 /** The board before anything was drawn on it. */
 export const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
+
+/** How large a look at the board may be. */
+export const BOARD_LOOK_BOUNDS = {
+  /** The longest side of the image the Mac renders, in pixels. */
+  MAX_SIDE: BOARD_LOOK_MAX_SIDE,
+  /** The most characters of base64 one image may spell: a 1200px PNG with room to spare. */
+  MAX_IMAGE_CHARS: 3_000_000,
+  /** The most characters a failed look's reason may spell. */
+  MAX_FAILURE_CHARS: 500,
+} as const;
+
+/** One look the planning model asked for, as the Mac claims it; the Mac reads the board itself. */
+export const boardLookSchema = EffectSchema.Struct({ id: wireUuidSchema });
+
+export type BoardLook = typeof boardLookSchema.Type;
+
+/** A claim (POST): the oldest look waiting for the plan, or null when none arrived in time. */
+export const boardLookClaimAnswerSchema = EffectSchema.Struct({
+  look: EffectSchema.NullOr(boardLookSchema),
+});
+
+/**
+ * What the Mac posts back for a look: the board drawn as a PNG, base64, or
+ * why it could not draw it.
+ */
+export const boardLookResultSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    image: EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(BOARD_LOOK_BOUNDS.MAX_IMAGE_CHARS),
+      EffectSchema.isPattern(/^[A-Za-z0-9+/]+={0,2}$/),
+    ),
+  }),
+  EffectSchema.Struct({
+    failure: EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(BOARD_LOOK_BOUNDS.MAX_FAILURE_CHARS),
+    ),
+  }),
+]);
+
+export type BoardLookResult = typeof boardLookResultSchema.Type;
+
+/** A settled look (POST): whether the result landed on a look the account had claimed. */
+export const boardLookSettleAnswerSchema = EffectSchema.Struct({ settled: EffectSchema.Boolean });

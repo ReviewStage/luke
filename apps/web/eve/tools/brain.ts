@@ -2,6 +2,7 @@ import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
 import { defineDynamic, defineTool } from "eve/tools";
 import { unparsedWire, type WireBoundaryInput } from "../../server/core.js";
+import { lookModelOutput } from "../../server/hosted/board-look.js";
 import { eveTurnIdOf, type HostedToolBinding } from "../../server/hosted/brain-host/host.js";
 import { runWeb } from "../../server/runtime.js";
 import { host } from "../host.js";
@@ -14,7 +15,9 @@ import { host } from "../host.js";
  * A session the host does not admit is offered nothing. A subagent offers
  * the named few of the same tools through `hostedTools`, under the admission
  * its resolver can take (`host.admitDelegated`); each call is admitted again
- * as it runs, through the root eve then names.
+ * as it runs, through the root eve then names. Every result is shown to the
+ * model as the JSON it is, and a look at the board as its image
+ * (`lookModelOutput`).
  */
 export function hostedTools(
   offered?: ReadonlySet<string>,
@@ -45,6 +48,9 @@ export function hostedTools(
                   defineTool({
                     description: declared.description,
                     inputSchema: declared.inputSchema,
+                    // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
+                    toModelOutput: (output) =>
+                      lookModelOutput(unparsedWire(output as WireBoundaryInput)),
                     execute: (input, toolContext) =>
                       runWeb(
                         host.runTool(

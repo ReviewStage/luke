@@ -6,6 +6,7 @@ import {
   layersInOrder,
 } from "@sidecar/host/effect";
 import { Context, Effect, Layer, Stream } from "effect";
+import { channels } from "#shared/bridge";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
@@ -191,6 +192,14 @@ export function composeDesktop(
       operator.link({
         sendToVoice: (channel, payload) => windows.sendToVoice(channel, payload),
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
+      });
+      // The same cycle for a look at a board: the host asks the native node,
+      // which only the panel, built after it, can draw for.
+      native.boardRenderer.link((request) => {
+        const panel = windows.panels.primaryPanel();
+        if (panel === undefined) return false;
+        panel.webContents.send(channels.onBoardRender, request);
+        return true;
       });
 
       return { config, state, telemetry, native, updates, operator, windows, run };

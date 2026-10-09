@@ -1,4 +1,4 @@
-import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
+import type { BoardElement, BoardLookResult, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
@@ -71,6 +71,24 @@ export const planCommand = pgTable("plan_command", {
   claimedAt: instant("claimed_at"),
   /** What the Mac answered: the exit code, stdout, and stderr; null until it does. */
   result: jsonb("result").$type<PlanCommandResult>(),
+});
+
+/**
+ * One look at a plan's whiteboard the planning model asked for, which only
+ * the developer's Mac can draw. The tool inserts it, the Mac claims it
+ * (`claimed_at`), draws the board, and posts the `result` the tool is waiting
+ * on: the image, or why there is none. A table of its own rather than a kind
+ * of `plan_command`, so a Mac that predates it never claims one and runs it
+ * as a shell command. Rows go with their plan.
+ */
+export const planBoardLook = pgTable("plan_board_look", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  planId: uuid("plan_id")
+    .notNull()
+    .references(() => plan.id, { onDelete: "cascade" }),
+  createdAt: instant("created_at").notNull().defaultNow(),
+  claimedAt: instant("claimed_at"),
+  result: jsonb("result").$type<BoardLookResult>(),
 });
 
 /**

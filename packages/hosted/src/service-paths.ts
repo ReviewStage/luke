@@ -42,6 +42,16 @@ export function planBoardPath(planId: string): string {
   return `${planPath(planId)}/board`;
 }
 
+/** The Mac claiming the plan's next look at its board (POST), held open until one arrives or the hold runs out. */
+export function planBoardLookClaimPath(planId: string): string {
+  return `${planBoardPath(planId)}/looks/claim`;
+}
+
+/** The Mac posting the board it drew for one claimed look (POST). */
+export function planBoardLookPath(planId: string, lookId: string): string {
+  return `${planBoardPath(planId)}/looks/${encodeURIComponent(lookId)}`;
+}
+
 /** What was said on one plan's calls (GET). */
 export function planTranscriptPath(planId: string): string {
   return `${planPath(planId)}/transcript`;

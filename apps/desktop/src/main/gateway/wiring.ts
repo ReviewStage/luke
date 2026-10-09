@@ -17,8 +17,10 @@ import {
   HOST_NODE_CAPABILITY,
   HOST_NODE_CAPABILITY_LIST,
 } from "@sidecar/host";
-import { isWireString } from "@sidecar/wire";
-import { Effect, type Scope } from "effect";
+import { type Board, type BoardLookResult, boardSchema } from "@sidecar/hosted/board-wire";
+import { isWireString, unparsedWire } from "@sidecar/wire";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Result, type Scope } from "effect";
 import type { AppStateStore } from "../app-state";
 import { createHostOperator, type HostOperator } from "./host-operator";
 
@@ -32,6 +34,7 @@ export interface GatewayWiringDependencies {
   /** This machine's native capabilities, performed here at the host's ask. */
   node: {
     openExternal: (url: string) => Promise<void>;
+    renderBoard: (board: Board) => Effect.Effect<BoardLookResult>;
   };
 }
 
@@ -58,7 +61,7 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
 
   /**
    * The capabilities this process performs at the host's ask. Each is
-   * validated here before anything native runs — the address a string — and
+   * validated here before anything native runs — the address a string, the board a board — and
    * each answers the host's own result vocabulary, so a refusal is typed and
    * never a throw.
    */
@@ -77,6 +80,14 @@ export const wireGateway = /* @__PURE__ */ Effect.fn("desktop/wireGateway")(func
               value: undefined,
             },
           );
+        }
+        case HOST_NODE_CAPABILITY.RENDER_BOARD: {
+          const board = readEither(boardSchema)(unparsedWire(params.board ?? null));
+          if (Result.isFailure(board)) return failed("render needs a board");
+          return Effect.map(dependencies.node.renderBoard(board.success), (value) => ({
+            status: NODE_CAPABILITY_STATUS.OK,
+            value,
+          }));
         }
         default:
           return Effect.succeed({

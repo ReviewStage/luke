@@ -22,6 +22,7 @@ import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
 import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { useBoardRenders } from "./planning/plan-board";
 import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
@@ -65,6 +66,8 @@ export function App(): React.JSX.Element {
   // window's own facts beside it. There is no second reading to reconcile
   // against: what arrives is the whole document at a version that only rises.
   const state = useAppState();
+  // The planning model's looks at a board are drawn here, whatever tab is on screen.
+  useBoardRenders();
   const account = state?.account;
   const outputAudio = state?.audio.outputAudio;
   const [tab, setTab] = useStateWithRef<PanelTab>(PANEL_TAB.PLANS);

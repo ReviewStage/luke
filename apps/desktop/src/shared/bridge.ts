@@ -20,6 +20,7 @@ import { readEither } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { type Act, type ActOutcome, isActOutcome, parsedAct } from "./messages/acts";
 import { type AppStateSnapshot, isAppStateSnapshot } from "./messages/app-state";
+import { type BoardRenderRequest, isBoardRenderRequest } from "./messages/board-render";
 import {
   isVoiceCommand,
   isVoiceLevels,
@@ -258,6 +259,18 @@ export const BRIDGE = {
     channel: "app:planning-talk-forwarded",
     args: noArgs,
     result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
+   * The planning model's look at a board, asked of the panel by the main
+   * process: the board to draw and the id the panel's
+   * `PLANNING_BOARD_RENDERED` reply names. Nothing in it is the developer's
+   * beyond the board the service already holds.
+   */
+  onBoardRender: entry({
+    kind: "subscribe",
+    channel: "app:board-render-requested",
+    args: noArgs,
+    result: result<BoardRenderRequest>(isBoardRenderRequest),
   }),
   /**
    * A panel's validated command, forwarded by the main process to the voice

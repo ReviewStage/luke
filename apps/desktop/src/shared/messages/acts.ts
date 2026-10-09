@@ -13,6 +13,7 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import { boardLookResultSchema } from "@sidecar/hosted/board-wire";
 import {
   type PlanningStartAnswer,
   planningBoardSaveParamsSchema,
@@ -97,6 +98,7 @@ export const ACT_KIND = {
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  PLANNING_BOARD_RENDERED: "planning.boardRendered",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -384,6 +386,11 @@ export const ACT = {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,
     refusal: "Could not save the board on this system.",
+  },
+  [ACT_KIND.PLANNING_BOARD_RENDERED]: {
+    payload: record({ requestId: exactId, result: boardLookResultSchema }),
+    result: answersNothing,
+    refusal: "Could not hand back the drawn board on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

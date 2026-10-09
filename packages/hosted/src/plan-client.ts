@@ -9,7 +9,15 @@ import {
   callAnswered,
 } from "./account-call.js";
 import type { AccountToken } from "./account-token.js";
-import { type Board, type BoardElement, boardAnswerSchema } from "./board-wire.js";
+import {
+  type Board,
+  type BoardElement,
+  type BoardLook,
+  type BoardLookResult,
+  boardAnswerSchema,
+  boardLookClaimAnswerSchema,
+  boardLookSettleAnswerSchema,
+} from "./board-wire.js";
 import {
   type Plan,
   type PlanCommand,
@@ -28,6 +36,8 @@ import {
 import { PLAN_CALL_FAILURE, type PlanCallFailure } from "./planning-view.js";
 import {
   HOSTED_SERVICE_PATH,
+  planBoardLookClaimPath,
+  planBoardLookPath,
   planBoardPath,
   planCommandClaimPath,
   planCommandPath,
@@ -120,6 +130,42 @@ export class HostedPlanClient {
           body: JSON.stringify(result),
         },
         planCommandSettleAnswerSchema,
+      ),
+      (answer) => answer?.settled === true,
+    );
+  }
+
+  /**
+   * The plan's next look at its board the planning model asked this Mac for,
+   * claimed; null when none arrived while the service held the claim, and
+   * undefined when the service did not answer.
+   */
+  claimBoardLook(
+    planId: string,
+  ): Effect.Effect<BoardLook | null | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#claimCall.ask(
+        { method: HTTP_METHOD.POST, path: planBoardLookClaimPath(planId) },
+        boardLookClaimAnswerSchema,
+      ),
+      (answer) => answer?.look,
+    );
+  }
+
+  /** The board as this Mac drew it for a claimed look, posted back to the planning model waiting on it. */
+  settleBoardLook(
+    planId: string,
+    lookId: string,
+    result: BoardLookResult,
+  ): Effect.Effect<boolean, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.POST,
+          path: planBoardLookPath(planId, lookId),
+          body: JSON.stringify(result),
+        },
+        boardLookSettleAnswerSchema,
       ),
       (answer) => answer?.settled === true,
     );

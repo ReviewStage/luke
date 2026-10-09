@@ -33,6 +33,10 @@ const EFFECT_MODULE_SCHEMAS = {
     boardAnswerSchema: boardWire.boardAnswerSchema,
     boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
     drawingElementsSchema: boardWire.drawingElementsSchema,
+    boardLookSchema: boardWire.boardLookSchema,
+    boardLookClaimAnswerSchema: boardWire.boardLookClaimAnswerSchema,
+    boardLookResultSchema: boardWire.boardLookResultSchema,
+    boardLookSettleAnswerSchema: boardWire.boardLookSettleAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,

@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import type { Board, BoardLookResult } from "@sidecar/hosted/board-wire";
+import { type Effect, Schema } from "effect";
 import { systemPreferences } from "electron";
 import type { AppAudioSlice } from "#shared/messages/app-state";
 import {
@@ -8,6 +9,7 @@ import {
   type OutputAudioState,
 } from "#shared/messages/audio";
 import type { AppStateStore } from "../app-state";
+import { type BoardRenderer, createBoardRenderer } from "../ipc/board-renderer";
 import { MediaDuckController } from "../native/media-duck";
 import {
   microphoneRouteWatcher as createMicrophoneRouteWatcher,
@@ -29,6 +31,8 @@ const readMicrophoneStatusWord = Schema.decodeUnknownSync(
 export interface NativeNodeCapabilities {
   /** Hands an address to the operating system; a throw is an open that did not land. */
   openExternal: (url: string) => Promise<void>;
+  /** Draws a plan's board as the Plans panel shows it, for the planning model's look; every outcome is a result. */
+  renderBoard: (board: Board) => Effect.Effect<BoardLookResult>;
 }
 
 interface NativeNodeDependencies {
@@ -40,6 +44,8 @@ interface NativeNodeDependencies {
 export interface NativeNode extends DesktopService {
   readonly capabilities: NativeNodeCapabilities;
   readonly mediaDuck: MediaDuckController;
+  /** The panel's drawing of a board, linked to the panel once the windows exist. */
+  readonly boardRenderer: BoardRenderer;
   setMediaDuckEnabled: (enabled: boolean) => void;
   /**
    * Reads macOS's own answer now and writes it to the document. The
@@ -60,6 +66,7 @@ export interface NativeNode extends DesktopService {
 export function createNativeNode(dependencies: NativeNodeDependencies): NativeNode {
   const { config, state } = dependencies;
   const mediaDuck = new MediaDuckController();
+  const boardRenderer = createBoardRenderer();
   let outputVolumeWatcher: OutputVolumeWatch | undefined;
   let microphoneRouteWatcher: MicrophoneRouteWatch | undefined;
 
@@ -96,8 +103,10 @@ export function createNativeNode(dependencies: NativeNodeDependencies): NativeNo
     name: "native",
     capabilities: {
       openExternal: config.openExternal,
+      renderBoard: boardRenderer.render,
     },
     mediaDuck,
+    boardRenderer,
     setMediaDuckEnabled: (enabled) => mediaDuck.setEnabled(enabled),
     refreshMicrophoneStatus,
     requestMicrophone: async () => {

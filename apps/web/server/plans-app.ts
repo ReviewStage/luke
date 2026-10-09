@@ -1,4 +1,9 @@
-import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import {
+  BOARD_BOUNDS,
+  BOARD_LOOK_BOUNDS,
+  boardLookResultSchema,
+  boardSaveRequestSchema,
+} from "@sidecar/hosted/board-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import { HttpRouter, HttpServerRequest, type HttpServerResponse } from "effect/unstable/http";
@@ -11,6 +16,7 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
+import { claimBoardLook, settleBoardLook } from "./hosted/board-look.js";
 import { readBoard, writeScene } from "./hosted/board-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -49,6 +55,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * The two command paths are the Mac's side of `run_in_repository`
  * (`hosted/repository-shell.ts`): a held claim of the next command the
  * planning model asked for, and the result the Mac posts once it ran it.
+ * The two look paths are the same for `look_at_board`
+ * (`hosted/board-look.ts`): a held claim of the next look at the board, and
+ * the image the Mac posts once it drew it.
  */
 
 const PLANS_PATH = {
@@ -64,9 +73,14 @@ const PLANS_PATH = {
   COMMAND_CLAIM: "/api/plans/commands/claim",
   /** POST settles one claimed command; the rewrite moves its id into the `command` query. */
   COMMAND: "/api/plans/commands/command",
+  /** POST claims the plan's next look at its board, held open until one arrives. */
+  LOOK_CLAIM: "/api/plans/looks/claim",
+  /** POST settles one claimed look; the rewrite moves its id into the `look` query. */
+  LOOK: "/api/plans/looks/look",
 } as const;
 
 const COMMAND_ID_QUERY = "command";
+const LOOK_ID_QUERY = "look";
 
 const HTTP_METHOD = {
   GET: "GET",
@@ -86,6 +100,9 @@ const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + 1_024;
 
 /** A result is two outputs of at most `PLAN_COMMAND_OUTPUT_MAX_CHARS` each, every character escaped at worst. */
 const MAXIMUM_RESULT_BODY_BYTES = 2 * PLAN_COMMAND_OUTPUT_MAX_CHARS * 6 + 1_024;
+
+/** A look's image is base64, one byte a character, beside a little JSON. */
+const MAXIMUM_LOOK_BODY_BYTES = BOARD_LOOK_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 export interface PlansAppSeams {
   resolveUserId: UserIdResolver;
@@ -265,6 +282,42 @@ const commandSettleEndpoint = /* @__PURE__ */ Effect.fn("web/planCommandSettleEn
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { settled });
 });
 
+/** POST: the plan's next look at its board, claimed for the caller's Mac, or null once the hold ran out. */
+const lookClaimEndpoint = /* @__PURE__ */ Effect.fn("web/planLookClaimEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const look = yield* hostedStoreOrUnavailable(claimBoardLook(userId, planId));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { look });
+});
+
+/** POST: the board the caller's Mac drew for one look it claimed. */
+const lookSettleEndpoint = /* @__PURE__ */ Effect.fn("web/planLookSettleEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const lookId = yield* idOf(request, LOOK_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_LOOK_BODY_BYTES);
+  const result = readEither(boardLookResultSchema)(body);
+  if (Result.isFailure(result)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const settled = yield* hostedStoreOrUnavailable(
+    settleBoardLook(userId, planId, lookId, result.success),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { settled });
+});
+
 /** An endpoint's refusal carried back onto the answer channel, the way the account group does. */
 function refusing<R>(
   endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
@@ -281,6 +334,8 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, refusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND_CLAIM, refusing(commandClaimEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.COMMAND, refusing(commandSettleEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.LOOK_CLAIM, refusing(lookClaimEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.LOOK, refusing(lookSettleEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

@@ -89,6 +89,9 @@ export function registerDesktopIpc(services: DesktopServices): void {
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
       },
+      boardRendered: (requestId, result) => {
+        native.boardRenderer.settle(requestId, result);
+      },
       voiceReady: () => {
         const snapshot = state.snapshot();
         return (

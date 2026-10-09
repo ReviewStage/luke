@@ -1,4 +1,4 @@
-import type { Board } from "@sidecar/hosted/board-wire";
+import type { Board, BoardLookResult } from "@sidecar/hosted/board-wire";
 
 /**
  * contract.ts -- what the panel and the whiteboard bundle say to each other: the one mount call, and the scene rule both sides read.
@@ -39,6 +39,12 @@ export interface WhiteboardHandle {
 /** What the whiteboard bundle sets on `window` once it has loaded. */
 export interface WhiteboardModule {
   readonly mount: (host: HTMLElement, props: WhiteboardProps) => WhiteboardHandle;
+  /**
+   * The board drawn as the canvas would show it, Luke's newest drawing put
+   * in, as a PNG for the planning model's look; mounted or not, and never a
+   * rejection.
+   */
+  readonly render: (board: Board) => Promise<BoardLookResult>;
 }
 
 declare global {

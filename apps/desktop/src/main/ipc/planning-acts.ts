@@ -1,3 +1,4 @@
+import type { BoardLookResult } from "@sidecar/hosted/board-wire";
 import type {
   PlanningBoardSaveParams,
   PlanningRenameParams,
@@ -41,6 +42,8 @@ export interface PlanningActsDependencies {
   talkAboutPlan: (planId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
+  /** The panel's drawing of a board for the look main asked it for (`board-renderer.ts`). */
+  boardRendered: (requestId: string, result: BoardLookResult) => void;
 }
 
 type PlanningActKind =
@@ -54,7 +57,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_SET_FOLDER
   | typeof ACT_KIND.PLANNING_REVEAL_FOLDER
   | typeof ACT_KIND.PLANNING_TALK
-  | typeof ACT_KIND.PLANNING_BOARD_SAVE;
+  | typeof ACT_KIND.PLANNING_BOARD_SAVE
+  | typeof ACT_KIND.PLANNING_BOARD_RENDERED;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -133,6 +137,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
       return host.planningBoardSave(params);
+    },
+    [ACT_KIND.PLANNING_BOARD_RENDERED]: ({ requestId, result }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_RENDERED, sender);
+      dependencies.boardRendered(requestId, result);
     },
   };
 }

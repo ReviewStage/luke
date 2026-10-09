@@ -12,6 +12,14 @@
     "dest": "/api/default.js?route=plans/commands/command&id=$1&command=$2"
   },
   {
+    "src": "/api/plans/([^/]+)/board/looks/claim",
+    "dest": "/api/default.js?route=plans/looks/claim&id=$1"
+  },
+  {
+    "src": "/api/plans/([^/]+)/board/looks/([^/]+)",
+    "dest": "/api/default.js?route=plans/looks/look&id=$1&look=$2"
+  },
+  {
     "src": "/api/plans/([^/]+)/board",
     "dest": "/api/default.js?route=plans/board&id=$1"
   },

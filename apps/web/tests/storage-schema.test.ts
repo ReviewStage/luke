@@ -80,6 +80,7 @@ const DECLARED_TABLES = [
   "observation_pass",
   "plan",
   "plan_board",
+  "plan_board_look",
   "plan_command",
   "provider_cursors",
   "provider_key",

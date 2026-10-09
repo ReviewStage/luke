@@ -15,6 +15,8 @@ export const HOST_NATIVE_NODE_ID = "native";
 export const HOST_NODE_CAPABILITY = {
   /** Hands an address to the operating system, as a row press does: the pressing panel has stood itself down already. */
   OPEN_EXTERNAL: "os.openExternal",
+  /** Draws a plan's board as the Plans panel shows it, answered as a look's result: a PNG, or why there is none. */
+  RENDER_BOARD: "board.render",
 } as const;
 
 export type HostNodeCapability = (typeof HOST_NODE_CAPABILITY)[keyof typeof HOST_NODE_CAPABILITY];

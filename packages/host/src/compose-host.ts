@@ -14,6 +14,7 @@ import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
+import { renderBoardThroughNode } from "./board-looks.js";
 import { composeAccount } from "./compose-account.js";
 import { composeLive } from "./compose-live.js";
 import { composePlanning, planFoldersFile } from "./compose-planning.js";
@@ -105,6 +106,7 @@ export const hostAssemblyLayer: Layer.Layer<
       account,
       folders: planFoldersFile(() => kernel.stateRoot, report),
       endPlanCall: (keep) => live.service.endPlanCall(keep),
+      renderBoard: renderBoardThroughNode(kernel.nodes),
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,

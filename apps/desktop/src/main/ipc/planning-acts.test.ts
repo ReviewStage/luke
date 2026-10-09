@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
-import { Effect } from "effect";
+import { Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
+import type { BoardRenderRequest } from "#shared/messages/board-render";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
+import { createBoardRenderer } from "./board-renderer";
 import { planningActRows } from "./planning-acts";
 
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
@@ -42,6 +45,12 @@ function fixture() {
     answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
   };
+  const renderer = createBoardRenderer();
+  const renders: BoardRenderRequest[] = [];
+  renderer.link((request) => {
+    renders.push(request);
+    return true;
+  });
   const rows = planningActRows({
     host: {
       planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
@@ -85,11 +94,14 @@ function fixture() {
       talked.push(planId);
     },
     voiceReady: () => start.voiceReady,
+    boardRendered: (requestId, result) => {
+      renderer.settle(requestId, result);
+    },
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, revealed, view, start, picker };
+  return { router, asked, talked, revealed, view, start, picker, renderer, renders };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -215,6 +227,64 @@ it.effect("the panel's board save reaches the host with the drawing its scene ho
 
     assert.equal(saved.status, ACT_OUTCOME_STATUS.DONE);
     assert.deepEqual(f.asked, [`board:${PLAN_ID}:3`]);
+  }),
+);
+
+const DRAWN = { image: "iVBORw0KGgo=" } as const;
+
+it.effect(
+  "a board main asks the panel to draw comes back as the image the panel's reply carries",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const board = { elements: [], appliedDrawing: 0 };
+
+      const rendering = yield* Effect.forkChild(f.renderer.render(board));
+      yield* Effect.yieldNow;
+      const [request] = f.renders;
+      assert.deepEqual(request?.board, board);
+      const replied = yield* f.router.performAct(
+        {
+          kind: ACT_KIND.PLANNING_BOARD_RENDERED,
+          payload: { requestId: request?.requestId ?? "", result: DRAWN },
+        },
+        PANEL,
+      );
+
+      assert.equal(replied.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(yield* Fiber.join(rendering), DRAWN);
+    }),
+);
+
+it.effect("a draw only another window answers, or none answers in time, comes back as why", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const rendering = yield* Effect.forkChild(
+      f.renderer.render({ elements: [], appliedDrawing: 0 }),
+    );
+    yield* Effect.yieldNow;
+    const requestId = f.renders[0]?.requestId ?? "";
+
+    const fromVoice = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_BOARD_RENDERED, payload: { requestId, result: DRAWN } },
+      VOICE,
+    );
+    yield* TestClock.adjust("10 seconds");
+
+    assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+    const answered = yield* Fiber.join(rendering);
+    assert.ok("failure" in answered);
+  }),
+);
+
+it.effect("a draw with no panel to ask comes back as why at once", () =>
+  Effect.gen(function* () {
+    const renderer = createBoardRenderer();
+    renderer.link(() => false);
+
+    const answered = yield* renderer.render({ elements: [], appliedDrawing: 0 });
+
+    assert.ok("failure" in answered);
   }),
 );
 

@@ -1,0 +1,32 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 3000000
+        }
+      },
+      "required": [
+        "image"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

@@ -3,6 +3,7 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   Excalidraw,
+  exportToBlob,
   ROUNDNESS,
   restoreElements,
 } from "@excalidraw/excalidraw";
@@ -12,8 +13,13 @@ import type {
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types";
 import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { BOARD_ELEMENT_TYPE, DRAWING_ZONE, LUKE_MARK } from "@sidecar/hosted/board-vocabulary";
-import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
+import {
+  BOARD_ELEMENT_TYPE,
+  BOARD_LOOK_MAX_SIDE,
+  DRAWING_ZONE,
+  LUKE_MARK,
+} from "@sidecar/hosted/board-vocabulary";
+import type { Board, BoardLookResult, DrawingElement } from "@sidecar/hosted/board-wire";
 import { createRoot } from "react-dom/client";
 import {
   sceneSignature,
@@ -40,6 +46,11 @@ import {
  * dashed outline drawn behind everything else, titled by a text of its own at
  * its top-left corner, because a label bound to it would sit in its middle
  * over the shapes it holds.
+ *
+ * The bundle also draws a board without mounting it (`renderBoard`), for the
+ * planning model's look: the scene as the canvas would hold it once Luke's
+ * newest drawing is in, exported as a PNG in the panel's dark theme, so the
+ * model sees what the developer sees.
  *
  * What the board leaves out is everything that could carry a file or a page:
  * the image tool, a pasted file, an embedded page, and every save, export,
@@ -329,5 +340,57 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
   return { show, unmount: () => root.unmount() };
 }
 
-const whiteboard: WhiteboardModule = { mount: mountBoard };
+/** How far the drawn board stands in from the image's edges, in pixels. */
+const RENDER_PADDING = 32;
+
+const RENDER_FAILURE = {
+  EMPTY: "the board is empty.",
+  UNDRAWN: "the board could not be drawn.",
+} as const;
+
+/** Bytes as base64, a slice at a time, since one call of `fromCharCode` cannot take a whole image. */
+function base64Of(bytes: Uint8Array): string {
+  const SLICE = 0x8000;
+  let binary = "";
+  for (let start = 0; start < bytes.length; start += SLICE) {
+    binary += String.fromCharCode(...bytes.subarray(start, start + SLICE));
+  }
+  return btoa(binary);
+}
+
+/**
+ * The board drawn whole as a PNG, as the canvas would show it with Luke's
+ * newest drawing in. Note that it waits for the hand-drawn font first, as the
+ * canvas does, because the converter measures every label as it makes it.
+ * The dark theme is Excalidraw's own: it inverts a white background with
+ * everything on it, exactly as the panel's canvas is drawn.
+ */
+async function renderBoard(board: Board): Promise<BoardLookResult> {
+  try {
+    await document.fonts.load(DRAWING_FONT);
+    const drawing = newerDrawing(board, board.appliedDrawing);
+    const scene = restoredScene(board);
+    const elements = (drawing === undefined ? scene : withDrawing(scene, drawing.elements)).filter(
+      (element) => !element.isDeleted,
+    );
+    if (elements.length === 0) return { failure: RENDER_FAILURE.EMPTY };
+    const blob = await exportToBlob({
+      elements,
+      appState: {
+        exportBackground: true,
+        viewBackgroundColor: "#ffffff",
+        exportWithDarkMode: true,
+      },
+      files: null,
+      mimeType: "image/png",
+      maxWidthOrHeight: BOARD_LOOK_MAX_SIDE,
+      exportPadding: RENDER_PADDING,
+    });
+    return { image: base64Of(new Uint8Array(await blob.arrayBuffer())) };
+  } catch {
+    return { failure: RENDER_FAILURE.UNDRAWN };
+  }
+}
+
+const whiteboard: WhiteboardModule = { mount: mountBoard, render: renderBoard };
 window.lukeWhiteboard = whiteboard;

@@ -26,6 +26,7 @@ import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Duration, Effect, Option, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import { type BoardLooksDependencies, serveBoardLooks } from "./board-looks.js";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -109,6 +110,8 @@ export type PlanningClient = Pick<
   | "rename"
   | "claimCommand"
   | "settleCommand"
+  | "claimBoardLook"
+  | "settleBoardLook"
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
@@ -125,6 +128,8 @@ export interface PlanningDependencies {
    * it to end; the call about `keep` is left standing.
    */
   endPlanCall: (keep: string | undefined) => Effect.Effect<void>;
+  /** The board drawn as the Plans panel shows it, for the planning model's look (`board-looks.ts`). */
+  renderBoard: BoardLooksDependencies["renderBoard"];
 }
 
 export interface PlanningComposer extends Composer {
@@ -171,7 +176,7 @@ export interface PlanningComposer extends Composer {
 export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")(function* (
   dependencies: PlanningDependencies,
 ): Effect.fn.Return<PlanningComposer, never, Scope.Scope> {
-  const { kernel, account, client, folders, endPlanCall } = dependencies;
+  const { kernel, account, client, folders, endPlanCall, renderBoard } = dependencies;
   const idleView = (): PlanningView => ({ ...IDLE_PLANNING_VIEW, folders: folders.read() ?? {} });
 
   /** Records `folderPath` as the plan's folder on this Mac, and draws it. */
@@ -562,7 +567,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The open plan's folder commands, the board reads a settled draw asks
+    // The open plan's folder commands and board looks, the board reads a settled draw asks
     // for, the transcript reads a call's end asks for, and its code on
     // screen; every other read of the plans is an ask's.
     lifetime: Effect.gen(function* () {
@@ -574,6 +579,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           if (!gate() || planId === undefined) return undefined;
           return { planId, folder: view.folders[planId] };
         },
+      });
+      yield* serveBoardLooks({
+        client,
+        openPlan: () => (gate() ? view.activePlanId : undefined),
+        renderBoard,
       });
       yield* Effect.forkScoped(
         Effect.forever(

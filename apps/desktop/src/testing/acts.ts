@@ -59,6 +59,13 @@ export const ONE_ACT_OF_EACH_KIND = {
       appliedDrawing: 1,
     },
   },
+  [ACT_KIND.PLANNING_BOARD_RENDERED]: {
+    kind: ACT_KIND.PLANNING_BOARD_RENDERED,
+    payload: {
+      requestId: "3f1c9a52-8b7e-4d6a-9c0b-2e4f6a8d1b3c",
+      result: { image: "iVBORw0KGgo=" },
+    },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "end-call" },
