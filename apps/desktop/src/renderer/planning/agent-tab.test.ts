@@ -14,6 +14,10 @@ const PLAN: CodingAgentMessage = {
   parts: [{ type: "text", text: "# Teammate invitations\n\nInvite a teammate by email." }],
 };
 
+/** A terminal's bold on and off, which a command's output may carry. */
+const BOLD_ON = `${String.fromCharCode(27)}[1m`;
+const BOLD_OFF = `${String.fromCharCode(27)}[0m`;
+
 const TURN: CodingAgentMessage = {
   id: "m-turn",
   role: "assistant",
@@ -25,11 +29,34 @@ const TURN: CodingAgentMessage = {
       toolCallId: "call_1",
       state: "output-available",
       input: { command: "cat AGENTS.md" },
-      output: "# Agent guide",
+      output: {
+        status: "completed",
+        exitCode: 0,
+        stdout: `${BOLD_ON}# Agent guide${BOLD_OFF}\n`,
+        stderr: "",
+        truncated: false,
+      },
+    },
+    {
+      type: "tool-read_file",
+      toolCallId: "call_2",
+      state: "output-available",
+      input: { filePath: "/workspace/repository/apps/web/server/routes/invite.ts" },
+      output: { content: "export const route = 1;\n" },
+    },
+    {
+      type: "tool-apply_patch",
+      toolCallId: "call_3",
+      state: "input-available",
+      input: {
+        root: "/workspace/repository",
+        patchText:
+          "*** Begin Patch\n*** Update File: apps/web/server/db/schema.ts\n@@\n-  a\n+  b\n*** End Patch",
+      },
     },
     {
       type: "tool-bash",
-      toolCallId: "call_2",
+      toolCallId: "call_4",
       state: "output-error",
       input: { command: "pnpm check" },
       errorText: "exit status 1",
@@ -63,31 +90,11 @@ function drawn(messages: readonly CodingAgentMessage[]): string {
   );
 }
 
-test("the plan stands folded as the one user turn, the reasoning and each tool call fold closed, and the text is markdown", () => {
-  const markup = drawn([PLAN, TURN]);
-  const folds = markup.match(/<details/gu) ?? [];
-  // The plan, the reasoning, and the two calls each fold, and none opens on its own.
-  assert.equal(folds.length, 4);
-  assert.doesNotMatch(markup, /<details[^>]*\sopen/u);
-  assert.match(markup, /<summary[^>]*>[^<]*<span[^>]*>▸<\/span>Plan<\/summary>/u);
-  assert.match(markup, /Reasoning<\/summary>/u);
-  assert.match(markup, /Read AGENTS\.md before anything else\./u);
-  // Each call is named by its tool with its state, and holds its input and its answer.
-  assert.match(markup, /bash<\/span><span[^>]*data-tool-state="output-available"[^>]*>Completed/u);
-  assert.match(markup, /cat AGENTS\.md/u);
-  assert.match(markup, /# Agent guide/u);
-  // A call that ended in an error says so in a live row.
-  assert.match(markup, /data-tool-state="output-error"[^>]*>Error/u);
-  assert.match(markup, /role="alert"[^>]*>exit status 1</u);
-  // The words are markdown: the link is drawn as one.
-  assert.match(markup, /<a href="https:\/\/github\.com\/acme\/relay\/pull\/7" class="agent-link"/u);
-  // A link off GitHub is drawn as words that go nowhere.
-  assert.doesNotMatch(markup, /href="https:\/\/example\.com\/docs"/u);
-  assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
-});
-
-test("the pull request's link opens on GitHub in the browser rather than in the window", () => {
-  const opened: string[] = [];
+/** The transcript mounted live, so a row can be opened. */
+function mounted(
+  messages: readonly CodingAgentMessage[],
+  openGitHub: (url: string) => void = ignore,
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -95,15 +102,139 @@ test("the pull request's link opens on GitHub in the browser rather than in the 
   act(() => {
     root.render(
       createElement(AgentTranscriptView, {
-        messages: [TURN],
+        messages,
         reading: false,
         failed: false,
         onRetry: ignore,
-        openGitHub: (url) => opened.push(url),
+        openGitHub,
       }),
     );
   });
+  return container;
+}
 
+/** Opens the fold whose root the selector names, by the click a reader would make on its line. */
+function open(container: HTMLElement, selector: string): HTMLDetailsElement {
+  const fold = container.querySelector<HTMLDetailsElement>(selector);
+  assert.ok(fold, `no fold at ${selector}`);
+  const summary = fold.querySelector("summary");
+  assert.ok(summary);
+  act(() => summary.click());
+  assert.equal(fold.open, true);
+  return fold;
+}
+
+test("a bash call's row reads as its command behind a prompt, never as the input's JSON", () => {
+  const markup = drawn([TURN]);
+  assert.match(markup, /\$ cat AGENTS\.md<\/span>/u);
+  assert.doesNotMatch(markup, /"command"/u);
+  assert.doesNotMatch(markup, /\{&quot;command&quot;/u);
+});
+
+test("each row says what the call did and where it stands, and the chevron, icon, and mark are 16px", () => {
+  const markup = drawn([TURN]);
+  assert.match(
+    markup,
+    /Read <\/span><span[^>]*>\/workspace\/repository\/apps\/web\/server\/routes\/invite\.ts</u,
+  );
+  assert.match(markup, /Edited <\/span><span[^>]*>apps\/web\/server\/db\/schema\.ts</u);
+  assert.match(markup, /data-tool-state="output-available"[^>]*aria-label="Completed"/u);
+  assert.match(markup, /data-tool-state="input-available"[^>]*aria-label="Running"/u);
+  assert.match(markup, /data-tool-state="output-error"[^>]*aria-label="Failed"/u);
+  // Every svg drawn on a row is the one size, so nothing shifts as a mark changes.
+  const icons = markup.match(/<svg[^>]*class="[^"]*"/gu) ?? [];
+  assert.ok(icons.length >= 8);
+  for (const icon of icons) assert.match(icon, /\bsize-4\b|lucide/u);
+  // Nothing opens on its own, and a closed row draws no body.
+  assert.doesNotMatch(markup, /<details[^>]*\sopen/u);
+  assert.doesNotMatch(markup, /data-tool-output/u);
+});
+
+test("opening a row shows the command's answer with the terminal's escapes taken out, and an error in a live row", () => {
+  const container = mounted([TURN]);
+  assert.equal(container.textContent?.includes("# Agent guide"), false);
+
+  const bash = open(container, '[data-call-id="call_1"]');
+  const output = bash.querySelector("[data-tool-output]");
+  assert.ok(output);
+  assert.equal(output.textContent, "# Agent guide");
+  assert.equal(bash.querySelector("[data-tool-input]")?.textContent, "$ cat AGENTS.md");
+
+  const failed = open(container, '[data-call-id="call_4"]');
+  assert.equal(failed.querySelector('[role="alert"]')?.textContent, "exit status 1");
+});
+
+test("a long answer is cut to its first lines, and Show more shows the rest", () => {
+  const lines = Array.from({ length: 45 }, (_, index) => `line ${index + 1}`);
+  const container = mounted([
+    {
+      id: "m",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-bash",
+          toolCallId: "call_long",
+          state: "output-available",
+          input: { command: "seq 45" },
+          output: {
+            status: "completed",
+            exitCode: 0,
+            stdout: lines.join("\n"),
+            stderr: "",
+            truncated: false,
+          },
+        },
+      ],
+    },
+  ]);
+  const row = open(container, '[data-call-id="call_long"]');
+  const output = () => row.querySelector("[data-tool-output]")?.textContent ?? "";
+  assert.ok(output().includes("line 40"));
+  assert.equal(output().includes("line 41"), false);
+  const more = row.querySelector("button");
+  assert.ok(more);
+  assert.match(more.textContent ?? "", /Show more \(5 more lines\)/u);
+  act(() => more.click());
+  assert.ok(output().includes("line 45"));
+  assert.equal(row.querySelector("button"), null);
+});
+
+test("the reasoning folds under one quiet line and opens on a click", () => {
+  const container = mounted([TURN]);
+  const reasoning = container.querySelector<HTMLDetailsElement>(
+    "details:not([data-call-id]):not([data-plan-card])",
+  );
+  assert.ok(reasoning);
+  assert.equal(reasoning.querySelector("summary")?.textContent, "Thought");
+  assert.equal(container.textContent?.includes("Read AGENTS.md before anything else."), false);
+  open(container, "details:not([data-call-id]):not([data-plan-card])");
+  assert.ok(container.textContent?.includes("Read AGENTS.md before anything else."));
+});
+
+test("the plan is a card across the top of the transcript, folded under its title, not a bubble", () => {
+  const markup = drawn([PLAN, TURN]);
+  assert.match(
+    markup,
+    /<div[^>]*role="log"[^>]*><details[^>]*data-plan-card=""[^>]*><summary[^>]*>.*?Plan · <\/span><span[^>]*>Teammate invitations<\/span>/u,
+  );
+  assert.doesNotMatch(markup, /(?:^|\s)is-user(?:\s|")/u);
+
+  const container = mounted([PLAN, TURN]);
+  assert.equal(container.textContent?.includes("Invite a teammate by email."), false);
+  const card = open(container, "[data-plan-card]");
+  assert.equal(card.querySelector("h1")?.textContent, "Teammate invitations");
+  assert.ok(card.textContent?.includes("Invite a teammate by email."));
+});
+
+test("the words are markdown, with the pull request's link opening on GitHub in the browser rather than in the window", () => {
+  const markup = drawn([TURN]);
+  assert.match(markup, /<a href="https:\/\/github\.com\/acme\/relay\/pull\/7" class="agent-link"/u);
+  // A link off GitHub is drawn as words that go nowhere.
+  assert.doesNotMatch(markup, /href="https:\/\/example\.com\/docs"/u);
+  assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
+
+  const opened: string[] = [];
+  const container = mounted([TURN], (url) => opened.push(url));
   const link = container.querySelector<HTMLAnchorElement>("a.agent-link");
   assert.ok(link);
   const click = new MouseEvent("click", { bubbles: true, cancelable: true });

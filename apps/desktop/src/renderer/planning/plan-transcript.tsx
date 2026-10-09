@@ -6,7 +6,12 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "../ai-elements/message";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  PANEL_MARKDOWN_COMPONENTS,
+} from "../ai-elements/message";
 import {
   callHeading,
   messageText,
@@ -30,11 +35,12 @@ import {
  */
 
 /**
- * How spoken words are drawn: as markdown, but never as an image, because
- * an image is a request to wherever its address points the moment the tab
- * opens, and nothing anyone said on a call should make one.
+ * How spoken words are drawn: as markdown at the panel's scale, but never
+ * as an image, because an image is a request to wherever its address
+ * points the moment the tab opens, and nothing anyone said on a call
+ * should make one.
  */
-const SPOKEN_COMPONENTS: Components = { img: () => null };
+const SPOKEN_COMPONENTS: Components = { ...PANEL_MARKDOWN_COMPONENTS, img: () => null };
 
 /** One line: who said it, and the words. */
 function TranscriptMessage({ message }: { message: UIMessage }): React.JSX.Element {
