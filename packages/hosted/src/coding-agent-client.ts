@@ -27,9 +27,11 @@ import {
   type CodingAgentPullRequestAnswerView,
 } from "./coding-agent-view.js";
 import {
+  type CodingAgentMessageRequest,
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
+  codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentStartRequestSchema,
@@ -91,6 +93,16 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, and the two the turn's checkout needs mended first. */
+const MESSAGE_REFUSALS = {
+  [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
+  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+} satisfies NamedRefusals;
+
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
 const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
@@ -131,8 +143,8 @@ function readAnswer<Answer, Encoded>(
 /**
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
- * one started, one's transcript past a cursor, one stopped, and what one
- * published.
+ * one started, one's transcript past a cursor, one messaged, one stopped,
+ * and what one published.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -229,6 +241,27 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#held.send({ method: HTTP_METHOD.GET, path: agentMessagesPath(agentId, after) }),
       (answer) => readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /**
+   * Sends one agent a message, naming how it reaches a turn under way, and
+   * answers the agent as it then stands, which is running; a message the
+   * service would refuse by shape is refused here without traveling.
+   */
+  message(
+    agentId: string,
+    request: CodingAgentMessageRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(codingAgentMessageRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.POST,
+        path: agentMessagesPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, MESSAGE_REFUSALS),
     );
   }
 

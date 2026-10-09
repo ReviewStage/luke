@@ -5,6 +5,7 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
@@ -94,6 +95,11 @@ function fakeService() {
           status: CODING_AGENT_STATUS.RUNNING,
         };
       }),
+    message: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`message:${agentId}:${request.delivery}:${request.text}`);
+        return { agent: AGENT };
+      }),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
@@ -161,6 +167,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
         status: CODING_AGENT_STATUS.RUNNING,
       },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+        agentId: AGENT_ID,
+        text: "Also expire them after a week.",
+        delivery: CODING_AGENT_DELIVERY.QUEUE,
+      }),
+      { agent: AGENT },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
@@ -176,6 +190,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${PLAN_ID}`,
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `message:${AGENT_ID}:${CODING_AGENT_DELIVERY.QUEUE}:Also expire them after a week.`,
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
     ]);

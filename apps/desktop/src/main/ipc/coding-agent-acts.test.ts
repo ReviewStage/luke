@@ -44,6 +44,9 @@ function fixture() {
       observeStatus: (agentId, status) => {
         noted.push(`status:${agentId}=${status}`);
       },
+      observeMessaged: (agent) => {
+        noted.push(`messaged:${agent.id}=${agent.status}`);
+      },
       observeModels: (models) => {
         noted.push(`models:${models.length}`);
       },
@@ -84,6 +87,11 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`messages:${agentId}:${after}`);
           return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING };
+        }),
+      codingAgentMessage: ({ agentId, text, delivery }) =>
+        Effect.sync(() => {
+          asked.push(`message:${agentId}:${delivery}:${text}`);
+          return STARTED;
         }),
       codingAgentStop: ({ agentId }) =>
         Effect.sync(() => {
@@ -136,6 +144,27 @@ it.effect("a transcript read carries the agent and the cursor the panel stands a
     });
     assert.deepEqual(asked, [`messages:${AGENT_ID}:3:2`]);
   }),
+);
+
+it.effect(
+  "a message carries the agent, the words, and their delivery, and hears the agent back",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked, noted } = fixture();
+
+      const outcome = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+          payload: { agentId: AGENT_ID, text: "Also expire them after a week.", delivery: "queue" },
+        },
+        PANEL,
+      );
+
+      assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
+      assert.deepEqual(asked, [`message:${AGENT_ID}:queue:Also expire them after a week.`]);
+      // The answer is noted as a message's, so the ledger watches for the turn it opens.
+      assert.deepEqual(noted, [`messaged:${AGENT_ID}=${STARTED.agent.status}`]);
+    }),
 );
 
 it.effect(

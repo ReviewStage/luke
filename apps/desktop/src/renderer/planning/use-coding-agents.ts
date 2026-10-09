@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
@@ -14,15 +15,17 @@ import {
   startFailureNote,
   withAgentStatus,
 } from "./coding-agent-model";
+import type { MessageSender } from "./use-agent-composer";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
 
 /**
- * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, the Stop, and the models the menu offers.
+ * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, the Stop, a message to one, and the models the menu offers.
  *
  * The agents are read when a plan opens and again after a Start or a Stop,
  * and never on a clock; an agent's status moves between those reads only
- * as its own transcript page reports it. A Start mints a key of its own
+ * as its own transcript page reports it, or as the service answers a
+ * message to it, which is the agent running. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
  * same key on the next press of the same choice and answers the agent the
  * first press made rather than a second one; a press of another choice is
@@ -64,6 +67,8 @@ export interface CodingAgentsControl {
   };
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
+  /** Sends one agent a message the way named, and takes the agent's status from the answer. */
+  onMessage: MessageSender;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
@@ -232,6 +237,25 @@ export function useCodingAgents(input: {
     readAgain();
   };
 
+  const onMessage = useCallback<MessageSender>(
+    async (agentId, text, delivery) => {
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
+        agentId,
+        text,
+        delivery,
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      if (!("failure" in answer)) {
+        setList((was) =>
+          was.agents === undefined
+            ? was
+            : { ...was, agents: withAgentStatus(was.agents, agentId, answer.agent.status) },
+        );
+      }
+      return answer;
+    },
+    [act],
+  );
+
   const onStatus = useCallback((agentId: string, status: CodingAgentStatus) => {
     setList((was) =>
       was.agents === undefined
@@ -267,6 +291,7 @@ export function useCodingAgents(input: {
       onPress: pressStart,
     },
     onStop,
+    onMessage,
     onStatus,
     readTranscript,
     readPullRequest,

@@ -77,7 +77,10 @@
             "no-repository",
             "repository-not-reachable",
             "github-sign-in-required",
-            "invalid-choice"
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired"
           ]
         }
       },

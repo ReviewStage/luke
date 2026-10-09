@@ -133,7 +133,6 @@ function mountedHead(
         models: undefined,
         published,
         doors,
-        onStop: () => Promise.resolve(),
       }),
     );
   });
@@ -326,23 +325,17 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
 });
 
-test("the head says model · effort · status with the dot, and offers Stop only while a turn runs", () => {
+test("the head says model · effort · status with the dot, and holds no Stop of its own: the composer's is the one", () => {
   const agent = AGENT;
   const running = renderToStaticMarkup(
-    createElement(AgentHeader, {
-      agent,
-      models: undefined,
-      published: undefined,
-      doors: SHUT,
-      onStop: () => Promise.resolve(),
-    }),
+    createElement(AgentHeader, { agent, models: undefined, published: undefined, doors: SHUT }),
   );
   assert.match(running, /class="agent-status-dot" data-status="running" data-live="true"/u);
   assert.match(
     running,
     /Claude Opus 5\.5<\/strong><span[^>]*> · <\/span>high<span[^>]*> · <\/span><span data-status="running">Running/u,
   );
-  assert.match(running, /Stop<\/button>/u);
+  assert.doesNotMatch(running, /<button/u);
 
   const ended = renderToStaticMarkup(
     createElement(AgentHeader, {
@@ -350,24 +343,10 @@ test("the head says model · effort · status with the dot, and offers Stop only
       models: undefined,
       published: undefined,
       doors: SHUT,
-      onStop: () => Promise.resolve(),
     }),
   );
   assert.match(ended, /data-status="completed" data-live="false"/u);
-  assert.doesNotMatch(ended, /Stop<\/button>/u);
-
-  // A starting agent has no turn the service could cancel yet, so Stop waits for one.
-  const starting = renderToStaticMarkup(
-    createElement(AgentHeader, {
-      agent: { ...agent, status: CODING_AGENT_STATUS.STARTING },
-      models: undefined,
-      published: undefined,
-      doors: SHUT,
-      onStop: () => Promise.resolve(),
-    }),
-  );
-  assert.match(starting, /data-status="starting" data-live="true"/u);
-  assert.doesNotMatch(starting, /Stop<\/button>/u);
+  assert.match(ended, /data-status="completed">Completed/u);
 });
 
 test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {
@@ -497,7 +476,6 @@ test("the head wears the pull request's pill in its state's colour with the chec
         models: undefined,
         published,
         doors: SHUT,
-        onStop: () => Promise.resolve(),
       }),
     );
   for (const state of Object.values(PULL_REQUEST_STATE)) {

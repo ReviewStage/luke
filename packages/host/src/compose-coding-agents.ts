@@ -10,6 +10,7 @@ import {
   type CodingAgentPullRequestAnswerView,
   codingAgentDefaultWriteParamsSchema,
   codingAgentListParamsSchema,
+  codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
   codingAgentPullRequestParamsSchema,
   codingAgentStartParamsSchema,
@@ -25,7 +26,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one stopped, what one published.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one stopped, what one published.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -41,7 +42,15 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the agents, as this concern asks it. */
 export type CodingAgentClient = Pick<
   HostedCodingAgentClient,
-  "models" | "readDefault" | "writeDefault" | "list" | "start" | "messages" | "stop" | "pullRequest"
+  | "models"
+  | "readDefault"
+  | "writeDefault"
+  | "list"
+  | "start"
+  | "messages"
+  | "message"
+  | "stop"
+  | "pullRequest"
 >;
 
 export interface CodingAgentsDependencies {
@@ -127,6 +136,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.messages(agentId, after));
         return carried<CodingAgentMessagesAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentMessageParamsSchema,
+          params,
+          "messaging an agent names the agent, its words, and their delivery",
+        );
+        const answer = yield* asked(client.message(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>
       Effect.gen(function* () {

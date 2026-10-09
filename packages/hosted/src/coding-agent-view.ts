@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
   codingAgentStartRequestSchema,
@@ -15,8 +16,9 @@ import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
  * why, and nothing the service said beyond that reaches it. The failures
  * are the few a window can act on: the service never answered, the plan or
  * the agent is gone, the plan names no repository yet, the App does not
- * reach it, the account must sign in with GitHub again, or the choice named
- * is not one the service offers.
+ * reach it, the account must sign in with GitHub again, the choice named is
+ * not one the service offers, or — for a message — the words run past the
+ * bound, the agent's session is still coming up, or it has ended for good.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -33,6 +35,12 @@ export const CODING_AGENT_CALL_FAILURE = {
   GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
   /** The model or effort named is not one the service offers now. */
   INVALID_CHOICE: "invalid-choice",
+  /** The message spells more characters than one message to an agent may; shortened, it is taken. */
+  MESSAGE_TOO_LONG: "message-too-long",
+  /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
+  AGENT_NOT_READY: "agent-not-ready",
+  /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
+  AGENT_RETIRED: "agent-retired",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -108,6 +116,14 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
+
+/** Messaging an agent, as the window asks it: the agent, and the message request the service takes. */
+export const codingAgentMessageParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentMessageRequestSchema.fields,
+});
+
+export type CodingAgentMessageParams = typeof codingAgentMessageParamsSchema.Type;
 
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({

@@ -25,6 +25,7 @@ import {
   codingAgentDefaultWriteParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
+  codingAgentMessageParamsSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentMessagesParamsSchema,
   codingAgentModelsAnswerSchema,
@@ -127,9 +128,9 @@ export const ACT_KIND = {
    * on, the account's default among them read and written, the plan's
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
-   * runs), one stopped, and what one published: its branch and pull
-   * request as GitHub holds them. The window holds what it draws; nothing
-   * here does.
+   * runs), one sent a message naming how it reaches a turn under way, one
+   * stopped, and what one published: its branch and pull request as GitHub
+   * holds them. The window holds what it draws; nothing here does.
    */
   CODING_AGENTS_MODELS: "codingAgents.models",
   CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
@@ -137,6 +138,7 @@ export const ACT_KIND = {
   CODING_AGENTS_LIST: "codingAgents.list",
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_STOP: "codingAgents.stop",
   /**
    * Which agent's tab the panel shows, or none: what main's notification of
@@ -470,6 +472,11 @@ export const ACT = {
       isReadable(codingAgentMessagesAnswerViewSchema),
     ),
     refusal: "Could not read the agent's transcript on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_MESSAGE]: {
+    payload: actSchema(codingAgentMessageParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not message the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     payload: actSchema(codingAgentStopParamsSchema),

@@ -21,6 +21,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
+  type CodingAgentMessageParams,
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
@@ -167,6 +168,8 @@ export interface HostOperator {
   codingAgentMessages(
     params: CodingAgentMessagesParams,
   ): Effect.Effect<CodingAgentMessagesAnswerView>;
+  /** One agent sent a message naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
+  codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -451,6 +454,15 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           after: params.after,
         }),
         codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
+      ),
+    codingAgentMessage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: params.agentId,
+          text: params.text,
+          delivery: params.delivery,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
     codingAgentStop: (params) =>
       Effect.map(
