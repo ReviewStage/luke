@@ -337,6 +337,20 @@ test("a send whose answer was lost and whose row has since landed is read back b
   assert.equal(tab.field().value, "");
 });
 
+test("a send whose row lands while its request is still out, and whose answer is then lost, is read as taken: the box stays clear, nothing says Retry, and the line is drawn once", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.type("Add tests.");
+  tab.key({ key: "Enter" });
+  await tab.stand({ messages: [PLAN, row("m-1", "Add tests.")] });
+  assert.deepEqual(tab.bubbles(), ["Add tests."]);
+  await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(tab.bubbles(), ["Add tests."]);
+  assert.equal(tab.field().value, "");
+  assert.equal(tab.field().disabled, false);
+  assert.equal(tab.note(), undefined);
+  assert.equal(tab.retry(), null);
+});
+
 test("two lines of the same words sent before either is read back are read back one row at a time, across pages", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.type("Add tests.");
