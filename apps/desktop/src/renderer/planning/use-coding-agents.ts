@@ -8,7 +8,12 @@ import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
-import { START_NEEDS_REPOSITORY, startFailureNote, withAgentStatus } from "./coding-agent-model";
+import {
+  MODEL_CHANGE_FAILED,
+  START_NEEDS_REPOSITORY,
+  startFailureNote,
+  withAgentStatus,
+} from "./coding-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
 
@@ -23,7 +28,9 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * first press made rather than a second one; a press of another choice is
  * another request with a key of its own. The models the menu offers and
  * the account's default are read when the menu asks, so the menu shows the
- * catalog as it stands and the default a Start on the service just wrote.
+ * catalog as it stands and the default the last change wrote; a model or
+ * effort picked in the menu is written as the account's default, which is
+ * what the next Start runs on.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
@@ -41,6 +48,8 @@ export interface CodingAgentsControl {
   readModels: () => void;
   /** Reads the account's default now, for a menu opening or the Settings page. */
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
+  /** Keeps a choice as the account's default, which Start runs on; a write that did not take is said beside Start. */
+  writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
   start: {
     /** Whether a Start could run now: the plan names a repository. */
     available: boolean;
@@ -48,7 +57,7 @@ export interface CodingAgentsControl {
     reason: string | undefined;
     /** Whether a Start is out. */
     busy: boolean;
-    /** Why the last Start did not start, said beside the button until the next. */
+    /** Why the last Start did not start, or the last change of model did not take, said beside the button until the next. */
     note: string | undefined;
     /** Starts an agent on the choice given, or on the account's default with none. */
     onPress: (choice?: ModelChoice) => void;
@@ -155,6 +164,17 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const writeDefault = (choice: ModelChoice): Promise<CodingAgentDefaultAnswer> => {
+    setNote(undefined);
+    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choice)
+      .catch((): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
+      .then((answer) => {
+        if ("failure" in answer && planId !== undefined)
+          setNote({ planId, note: MODEL_CHANGE_FAILED });
+        return answer;
+      });
+  };
+
   const pressStart = (choice?: ModelChoice) => {
     if (planId === undefined || repository === null || starting) return;
     // The key is the press's own, and a press asked again after the service
@@ -238,6 +258,7 @@ export function useCodingAgents(input: {
     models,
     readModels,
     readDefault,
+    writeDefault,
     start: {
       available: planId !== undefined && repository !== null,
       reason: planId !== undefined && repository === null ? START_NEEDS_REPOSITORY : undefined,

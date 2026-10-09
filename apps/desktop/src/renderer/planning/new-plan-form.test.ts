@@ -82,7 +82,10 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
     search: () => find<HTMLInputElement>("input[aria-label='Search repositories']"),
     rows: () => [...container.querySelectorAll<HTMLButtonElement>("[role=option]")],
     /** The row the arrows stand on. */
-    highlighted: () => container.querySelector("[role=option][aria-selected='true']")?.textContent,
+    highlighted: () =>
+      container.querySelector(
+        "[role=option][aria-selected='true'], .plan-compose-menu-foot [data-highlighted='true']",
+      )?.textContent,
     note: () => container.querySelector(".plan-compose-menu-note")?.textContent,
     gitHubRow: () => find<HTMLButtonElement>(".plan-compose-menu-foot button"),
     restand: (next: Partial<NewPlan>) => {
@@ -154,7 +157,7 @@ test("start waits for a name alone, and submitting starts the plan on the chosen
   assert.deepEqual(page.started.at(-1), ["Teammate invitations", BILLING]);
 });
 
-test("the menu is the search, the recent repositories first and the rest after, a lock on a private one, a check on the chosen one, and GitHub pinned last, with no heading", async () => {
+test("the menu is the search, the recent repositories first and the rest after under one GitHub mark, a check on the chosen one, and GitHub pinned last, with no heading", async () => {
   const page = mount({}, { recent: [BILLING] });
   await settle();
   assert.equal(page.chip().textContent, BILLING);
@@ -171,8 +174,16 @@ test("the menu is the search, the recent repositories first and the rest after, 
     [BILLING, RELAY],
   );
   const [billing, relay] = page.rows();
-  assert.ok(billing?.querySelector("svg.lock-icon"), "the private repository wears a lock");
-  assert.ok(relay?.querySelector("svg.account-mark"), "the public one wears the GitHub mark");
+  assert.ok(
+    billing?.querySelector("svg.account-mark"),
+    "the private repository wears the GitHub mark",
+  );
+  assert.ok(relay?.querySelector("svg.account-mark"), "and the public one the same");
+  assert.equal(
+    page.container.querySelector("svg.lock-icon"),
+    null,
+    "no lock says which is private",
+  );
   assert.equal(billing?.getAttribute("aria-current"), "true");
   assert.ok(billing?.querySelector("svg.credential-check"), "the chosen row is checked");
   assert.equal(relay?.querySelector("svg.credential-check"), null);
@@ -212,12 +223,34 @@ test("typing filters the repositories by name, the arrows move the highlight whi
   assert.equal(page.highlighted(), BILLING);
   assert.ok(document.activeElement === page.search(), "the field keeps focus");
   press("ArrowDown");
+  assert.equal(page.highlighted(), "GitHub", "the arrows go on into the pinned row");
+  press("ArrowDown");
   assert.equal(page.highlighted(), RELAY, "the arrows wrap");
+  press("ArrowUp");
   press("ArrowUp");
   press("Enter");
   assert.equal(page.chip().textContent, BILLING);
   assert.equal(page.menu(), null);
   assert.ok(document.activeElement === page.chip(), "focus is back on the chip");
+});
+
+test("the pointer over the GitHub row takes the highlight from the last repository, the arrows reach it, and Enter opens the installation page", async () => {
+  const page = mount({}, { recent: [RELAY] });
+  await settle();
+  act(() => page.chip().click());
+  const last = page.rows().at(-1);
+  act(() => last?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+  assert.equal(page.highlighted(), BILLING);
+  act(() => page.gitHubRow().dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+  assert.equal(page.highlighted(), "GitHub");
+  assert.equal(page.container.querySelector("[role=option][aria-selected='true']"), null);
+  act(() => last?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })));
+  assert.equal(page.highlighted(), BILLING);
+  press("ArrowDown");
+  assert.equal(page.highlighted(), "GitHub");
+  press("Enter");
+  assert.deepEqual(page.opened, [INSTALLATION_URL]);
+  assert.equal(page.menu(), null);
 });
 
 test("Enter in a search that matches nothing starts no plan and keeps the menu", async () => {
