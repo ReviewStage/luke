@@ -79,8 +79,9 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 /**
  * What one call tells while the turn runs: a question a planning call queued,
  * code it showed, or a repository command, the one slow step. A queued
- * question or shown code is told once its input is whole, never while it
- * streams, so neither is told twice.
+ * question is told once its input is whole, never while it streams, and
+ * shown code once its call has answered with the lines, so neither is told
+ * twice.
  */
 function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   const name = storedToolName(part);
@@ -90,7 +91,7 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   }
   if (name === SHOW_CODE_TOOL.name) {
     const shown = shownCodeOf(part);
-    return shown === undefined ? undefined : { kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown };
+    return shown === undefined ? undefined : { kind: TURN_EVENT_KIND.CODE_SHOWN, code: shown };
   }
   return name === RUN_IN_REPOSITORY_TOOL.name
     ? { kind: TURN_EVENT_KIND.SLOW_STEP, step: SLOW_STEP_KIND.REPOSITORY_READ }
@@ -102,7 +103,7 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
  * step by step: a step's sentences, then what its calls tell. The slow step,
  * once per run, every question a planning call queued, and all the code it
  * showed, are told the
- * moment their call is on the journal. A sentence is
+ * moment their call is on the journal, the code once its call has answered. A sentence is
  * told while the turn still runs once every call journaled ahead of its step
  * has settled, behind one settled mark, so nothing is said ahead of an action
  * whose result is not on record; the first sentence held back holds back

@@ -514,14 +514,11 @@ body,
   outline: none;
 }
 
+/* The subtitle is the repository chip, whose menu hangs below it, so nothing here clips. */
 .desktop-toolbar-subtitle {
-  margin: 2px 0 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  min-width: 0;
+  margin: 2px 0 0 -7px;
 }
 
 .desktop-toolbar-actions {
@@ -913,9 +910,64 @@ body,
   padding: 0 12px 12px;
 }
 
-.plan-compose-folder {
+.repository-chip {
   position: relative;
   min-width: 0;
+}
+
+/* The chip in the toolbar stands where a subtitle would, so it is drawn
+   smaller and flush with the title's left edge. */
+.repository-chip[data-place="toolbar"] .plan-compose-chip {
+  height: 22px;
+  padding: 0 9px 0 7px;
+  border-color: transparent;
+  background: none;
+  font-size: 11.5px;
+}
+
+.repository-chip[data-place="toolbar"] .plan-compose-chip:hover,
+.repository-chip[data-place="toolbar"] .plan-compose-chip[aria-expanded="true"] {
+  background: var(--raised-strong);
+}
+
+.plan-compose-chip .account-mark,
+.plan-compose-menu-row .account-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The search over every repository: a field at the menu's head, the matches under it. */
+.plan-compose-menu-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  margin-bottom: 4px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-tertiary);
+}
+
+.plan-compose-menu-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.plan-compose-menu-search input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.plan-compose-menu-note {
+  margin: 4px 8px 6px;
+  color: var(--text-tertiary);
+  font-size: 12px;
 }
 
 .plan-compose-chip {
@@ -943,8 +995,7 @@ body,
 }
 
 .plan-compose-chip-name,
-.plan-compose-menu-name,
-.plan-compose-menu-path {
+.plan-compose-menu-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -983,7 +1034,7 @@ body,
   height: 17px;
 }
 
-/* The recent folders open under the chip and enter as the settings search
+/* The repositories open under the chip and enter as the settings search
    does, on the tokens reduced motion zeroes. */
 .plan-compose-menu {
   position: absolute;
@@ -1028,16 +1079,9 @@ body,
 }
 
 .plan-compose-menu-name {
-  flex: 0 1 auto;
-  font-weight: 560;
-}
-
-.plan-compose-menu-path {
   min-width: 0;
   flex: 1;
-  color: var(--text-tertiary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  font-weight: 560;
 }
 
 .plan-compose-menu hr {

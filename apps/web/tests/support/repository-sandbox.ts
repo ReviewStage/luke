@@ -6,8 +6,9 @@
  * sandbox (`REPOSITORY_SANDBOX_CONTRACT`), keeping the one thing a sandbox
  * keeps between calls, which repository stands checked out, and writing
  * down every run and every firewall policy in the order they came. A clone
- * is answered as the test scripts it, and a command from the test's own
- * table. Nothing here runs a shell. Synthetic throughout.
+ * is answered as the test scripts it, a command from the test's own table,
+ * and a file read by `show_code` from the files the test says the checkout
+ * holds. Nothing here runs a shell. Synthetic throughout.
  */
 
 import type { SandboxCommandResult, SandboxNetworkPolicy, SandboxRunOptions } from "eve/sandbox";
@@ -51,7 +52,40 @@ export interface SandboxDouble extends RepositorySandbox {
 /** What a command in the checkout answers, from the test's own table; a command off the table exits 127. */
 export type CommandTable = (command: string) => SandboxCommandResult | undefined;
 
+/** The files the checkout holds, by path relative to its root, as `show_code`'s scripts read them. */
+export type CheckoutFiles = Readonly<Record<string, string>>;
+
+/** The exit codes `show_code`'s file probe answers with, as the shell script spells them. */
+const PROBE_EXIT = { MISSING: 3, NOT_TEXT: 4 } as const;
+
+/** The largest file the probe lets through, as the script bounds it. */
+const PROBE_MAX_FILE_BYTES = 1024 * 1024;
+
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
+
+/** Whether the probe would call the file text: no NUL among its first bytes, and under the bound. */
+function readsAsText(text: string): boolean {
+  return !text.includes("\u0000") && Buffer.byteLength(text) <= PROBE_MAX_FILE_BYTES;
+}
+
+/** The file probe's answer: the line count the screen counts, or the exit the script would take. */
+function probeFile(files: CheckoutFiles, path: string): SandboxCommandResult {
+  const text = files[path];
+  // A path that leaves the checkout resolves to no file of it.
+  if (text === undefined || path.startsWith("/") || path.split("/").includes("..")) {
+    return result(PROBE_EXIT.MISSING);
+  }
+  if (!readsAsText(text)) return result(PROBE_EXIT.NOT_TEXT);
+  return result(EXIT.OK, `${text.split("\n").length}\n`);
+}
+
+/** The window read's answer: the lines first to last as sed prints them, each with its newline. */
+function windowOf(files: CheckoutFiles, path: string, first: number, last: number) {
+  const text = files[path];
+  if (text === undefined) return result(EXIT.FAILED, "", "no such file");
+  const lines = text.split("\n").slice(first - 1, last);
+  return result(EXIT.OK, lines.map((line) => `${line}\n`).join(""));
+}
 
 const OPEN_INTERNET: SandboxNetworkPolicy = "allow-all";
 
@@ -59,11 +93,12 @@ function result(exitCode: number, stdout = "", stderr = ""): SandboxCommandResul
   return { exitCode, stdout, stderr };
 }
 
-/** A sandbox over the command table, with a firewall whose policy can be set. */
+/** A sandbox over the command table and the checkout's files, with a firewall whose policy can be set. */
 export function sandboxDouble(
   commands: CommandTable,
-  options: { readonly firewall?: boolean } = {},
+  options: { readonly firewall?: boolean; readonly files?: CheckoutFiles } = {},
 ): SandboxDouble {
+  const files = options.files ?? {};
   const { PATH, VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
   let policy: SandboxNetworkPolicy = OPEN_INTERNET;
   const double: SandboxDouble = {
@@ -102,14 +137,23 @@ export function sandboxDouble(
         double.checkedOut = env?.[VARIABLE.REPOSITORY];
         return Promise.resolve(result(EXIT.OK));
       }
+      if (run.workingDirectory === PATH.CHECKOUT && double.checkedOut === undefined) {
+        return Promise.resolve(result(EXIT.FAILED, "", "no checkout stands"));
+      }
       // A command from the checkout root, from the table.
       const command = env?.[VARIABLE.COMMAND];
       if (run.workingDirectory === PATH.CHECKOUT && command !== undefined) {
-        if (double.checkedOut === undefined) {
-          return Promise.resolve(result(EXIT.FAILED, "", "no checkout stands"));
-        }
         const answer = commands(command);
         return Promise.resolve(answer ?? result(EXIT.NOT_FOUND, "", "command not found"));
+      }
+      // `show_code`'s two reads of a file: the probe, then the window the probe's count placed.
+      const file = env?.[VARIABLE.FILE];
+      const first = env?.[VARIABLE.FIRST_LINE];
+      const last = env?.[VARIABLE.LAST_LINE];
+      if (run.workingDirectory === PATH.CHECKOUT && file !== undefined) {
+        if (first === undefined || last === undefined)
+          return Promise.resolve(probeFile(files, file));
+        return Promise.resolve(windowOf(files, file, Number(first), Number(last)));
       }
       return Promise.reject(new Error(`the sandbox double was handed a run it does not know`));
     },

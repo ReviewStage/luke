@@ -4,6 +4,7 @@ import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
+import { HOSTED_API_ERROR } from "./service-wire.js";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
@@ -123,24 +124,118 @@ it.effect("a blank rename never travels", () =>
   }),
 );
 
-it.effect("starting a plan names its folder", () =>
+it.effect("starting a plan sends its trimmed name and the repository it is about", () =>
   Effect.gen(function* () {
+    const onRelay = { ...PLAN, repository: "acme/relay" };
     const api = fakeCloudApi({
-      "POST /api/plans": { answer: () => ({ plan: PLAN }) },
+      "POST /api/plans": { answer: () => ({ plan: onRelay }) },
     });
 
     const started = yield* Effect.provide(
-      client().create({
-        name: "  Teammate invitations ",
-      }),
+      client().create({ name: "  Teammate invitations ", repository: "acme/relay" }),
       api.layer,
     );
 
-    assert.deepEqual(started, { ok: true, answer: PLAN });
+    assert.deepEqual(started, { ok: true, answer: onRelay });
     assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
       name: "Teammate invitations",
+      repository: "acme/relay",
     });
   }),
+);
+
+it.effect(
+  "a repository the service does not reach, or a GitHub sign-in it needs, is answered as that refusal",
+  () =>
+    Effect.gen(function* () {
+      const refusing = (error: string) =>
+        fakeCloudApi({
+          "POST /api/plans": { answer: () => ({ error }), status: HTTP_STATUS.FORBIDDEN },
+          [`PATCH /api/plans/${PLAN_ID}`]: {
+            answer: () => ({ error }),
+            status: HTTP_STATUS.FORBIDDEN,
+          },
+        });
+      const unreachable = refusing(HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE);
+      const signedOut = refusing(HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED);
+      const request = { name: "Teammate invitations", repository: "acme/relay" };
+
+      assert.deepEqual(yield* Effect.provide(client().create(request), unreachable.layer), {
+        ok: false,
+        failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+      });
+      assert.deepEqual(
+        yield* Effect.provide(client().setRepository(PLAN_ID, "acme/relay"), signedOut.layer),
+        { ok: false, failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED },
+      );
+    }),
+);
+
+it.effect(
+  "setting a plan's repository sends it alone, null clears it, and the plan answers as changed",
+  () =>
+    Effect.gen(function* () {
+      const onRelay = { ...PLAN, repository: "acme/relay" };
+      const api = fakeCloudApi({
+        [`PATCH /api/plans/${PLAN_ID}`]: { answer: () => ({ plan: onRelay }) },
+      });
+
+      const changed = yield* Effect.provide(
+        client().setRepository(PLAN_ID, " acme/relay "),
+        api.layer,
+      );
+      yield* Effect.provide(client().setRepository(PLAN_ID, null), api.layer);
+      const refused = yield* Effect.provide(
+        client().setRepository(PLAN_ID, "not a repository"),
+        api.layer,
+      );
+
+      assert.deepEqual(changed, { ok: true, answer: onRelay });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "{}")),
+        [{ repository: "acme/relay" }, { repository: null }],
+      );
+      assert.deepEqual(refused, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "the repositories the account reaches are read whole, and a GitHub sign-in the service needs is answered as such",
+  () =>
+    Effect.gen(function* () {
+      const listed = {
+        installed: true,
+        repositories: [
+          {
+            owner: "acme",
+            name: "relay",
+            fullName: "acme/relay",
+            defaultBranch: "main",
+            private: true,
+            updatedAt: 1_800_000_000_000,
+          },
+        ],
+        installationUrl: "https://github.com/apps/luke/installations/new",
+      };
+      const api = fakeCloudApi({
+        "GET /api/github/repositories": { answer: () => listed },
+      });
+      const signedOut = fakeCloudApi({
+        "GET /api/github/repositories": {
+          answer: () => ({ error: HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED }),
+          status: HTTP_STATUS.FORBIDDEN,
+        },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().repositories(), api.layer), {
+        ok: true,
+        answer: listed,
+      });
+      assert.deepEqual(yield* Effect.provide(client().repositories(), signedOut.layer), {
+        ok: false,
+        failure: PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+      });
+    }),
 );
 
 it.effect("a plan with no name never travels", () =>

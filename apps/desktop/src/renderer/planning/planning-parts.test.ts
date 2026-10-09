@@ -33,13 +33,7 @@ const ignore = () => undefined;
 
 const RESTING = { shown: COPY_SHOWN.IDLE, onPress: ignore };
 
-const FOLDERS = { [PLAN.id]: "/Users/dev/relay" };
-
-function documentMarkup(
-  plan: Plan,
-  copied: CopyShown = COPY_SHOWN.IDLE,
-  folders: Readonly<Record<string, string>> = FOLDERS,
-): string {
+function documentMarkup(plan: Plan, copied: CopyShown = COPY_SHOWN.IDLE): string {
   return renderToStaticMarkup(
     createElement(PlanDocumentView, {
       region: { kind: DOCUMENT_REGION.READY, plan },
@@ -47,26 +41,23 @@ function documentMarkup(
       onBack: ignore,
       live: false,
       copy: { shown: copied, onPress: ignore },
-      folders,
-      onChooseFolder: ignore,
     }),
   );
 }
 
-test("the saved body is drawn as Markdown under the plan's name and folder line", () => {
-  const markup = documentMarkup(PLAN);
+test("the saved body is drawn as Markdown under the plan's name and repository line", () => {
+  const markup = documentMarkup({ ...PLAN, repository: "acme/relay" });
 
   assert.match(markup, /<h1 class="plan-title">Teammate invitations<\/h1>/u);
-  assert.match(markup, /<p class="plan-repository">~\/relay<\/p>/u);
+  assert.match(markup, /<p class="plan-repository">acme\/relay<\/p>/u);
   assert.match(markup, /<p class="markdown-heading" data-level="2">Goal<\/p>/u);
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
-test("a plan this Mac holds no folder for offers Choose folder in place of the folder line", () => {
-  const markup = documentMarkup(PLAN, COPY_SHOWN.IDLE, {});
+test("a plan with no repository yet draws no repository line", () => {
+  const markup = documentMarkup(PLAN);
 
   assert.doesNotMatch(markup, /plan-repository/u);
-  assert.match(markup, />Choose folder…<\/button>/u);
 });
 
 test("each assumption is a list item holding its text and nothing to click", () => {
@@ -151,8 +142,6 @@ test("a document that could not be read shows the failure and Try again, never a
       onBack: ignore,
       live: false,
       copy: RESTING,
-      folders: FOLDERS,
-      onChooseFolder: ignore,
     }),
   );
 
@@ -161,12 +150,16 @@ test("a document that could not be read shows the failure and Try again, never a
   assert.doesNotMatch(markup, /plan-body/u);
 });
 
-test("the plan list marks the open plan and names each one's folder", () => {
-  const second = { ...PLAN, id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", name: "Billing export" };
+test("the plan list marks the open plan and names each one's repository", () => {
+  const second = {
+    ...PLAN,
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    name: "Billing export",
+    repository: "acme/relay",
+  };
   const markup = renderToStaticMarkup(
     createElement(PlanList, {
       plans: [PLAN, second],
-      folders: { [second.id]: "/Users/dev/relay" },
       activePlanId: second.id,
       failed: false,
       onSelect: ignore,
@@ -180,7 +173,7 @@ test("the plan list marks the open plan and names each one's folder", () => {
   assert.equal(rows.length, 2);
   assert.doesNotMatch(rows[0] ?? "", /aria-current/u);
   assert.match(rows[1] ?? "", /aria-current="true"/u);
-  assert.match(rows[1] ?? "", /Billing export[\s\S]*~\/relay/u);
+  assert.match(rows[1] ?? "", /Billing export[\s\S]*acme\/relay/u);
   assert.match(markup, /<\/svg>New plan<\/button>/u);
 });
 

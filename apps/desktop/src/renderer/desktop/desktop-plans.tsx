@@ -1,6 +1,6 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CheckIcon, CopyIcon } from "@sidecar/panel";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
@@ -9,10 +9,10 @@ import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   DOCUMENT_REGION,
-  folderLine,
   PLANS_PAGE,
 } from "../planning/planning-model";
 import { MicrophoneRow } from "../planning/planning-parts";
+import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
@@ -26,7 +26,8 @@ import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
  * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions. Its title is
- * the plan's name, and a press on it renames the plan in place.
+ * the plan's name, and a press on it renames the plan in place; under it
+ * stands the plan's repository chip, which names the repository and changes it.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -36,14 +37,14 @@ function Toolbar({
   children,
 }: {
   title: React.ReactNode;
-  subtitle?: string | undefined;
+  subtitle?: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar">
       <div className="desktop-toolbar-heading">
         <h1 className="desktop-toolbar-title">{title}</h1>
-        {subtitle !== undefined ? <p className="desktop-toolbar-subtitle">{subtitle}</p> : null}
+        {subtitle !== undefined ? <div className="desktop-toolbar-subtitle">{subtitle}</div> : null}
       </div>
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
@@ -156,8 +157,20 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { plan } = region;
-  const folderPath = plans.folders[plan.id];
   const { sidePanel } = plans;
+  // A refusal is said beside the chip, under the plan it was about and no other.
+  const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
+  const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
+  const chooseRepository = (repository: string) => {
+    const { id: planId } = plan;
+    setRefusal(undefined);
+    plans.onSetRepository(planId, repository).then(
+      (note) => setRefusal(note === undefined ? undefined : { planId, note }),
+      () => undefined,
+    );
+  };
+  const menuRequest =
+    plans.repositoryMenu?.planId === plan.id ? plans.repositoryMenu.request : undefined;
   return (
     <div className="desktop-plan">
       {/* Note that the document is hidden rather than left out while the
@@ -166,21 +179,26 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
         <Toolbar
           title={<PlanTitle plan={plan} rename={rename} />}
-          subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
+          subtitle={
+            <RepositoryChip
+              key={plan.id}
+              place={CHIP_PLACE.TOOLBAR}
+              value={plan.repository}
+              chooser={plans.repositories}
+              onChoose={chooseRepository}
+              openRequest={menuRequest}
+            />
+          }
         >
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
             </p>
           ) : null}
-          {folderPath === undefined ? (
-            <button
-              type="button"
-              className="toolbar-button"
-              onClick={() => plans.onChooseFolder(plan.id)}
-            >
-              Choose folder
-            </button>
+          {repositoryNote !== undefined ? (
+            <p className="desktop-toolbar-note" role="alert">
+              {repositoryNote}
+            </p>
           ) : null}
           <CopyButton copy={plans.copy} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
@@ -219,7 +237,7 @@ export function DesktopPlans({ plans }: { plans: PlansControl }): React.JSX.Elem
         <>
           <div className="desktop-drag-strip" />
           <div className="desktop-compose">
-            <NewPlanForm newPlan={plans.newPlan} />
+            <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
           </div>
         </>
       );

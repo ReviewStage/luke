@@ -6,6 +6,7 @@ import {
   type CodeToken,
   PLANNING_READ,
   type PlanCode,
+  type PlanningRepositoriesAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
 import {
@@ -27,7 +28,7 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH, type SidePanelState } from "./use-sid
  * the panel opens on Plans, and under the planning profile it also opens the
  * reference journey's plan from `docs/PLANNING.md`, a draft of the fixed
  * template partway through with Luke working on the call about it, which is
- * what the planning capture shows. Every name and folder here is
+ * what the planning capture shows. Every name and repository here is
  * invented; nothing is read from an account.
  */
 
@@ -86,7 +87,7 @@ const FIXTURE_PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
-  repository: null,
+  repository: "acme/relay",
   document: {
     body: planBody({ name: "Teammate invitations" }, FIXTURE_FIELDS),
     assumptions: [
@@ -103,9 +104,40 @@ const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
     name: "Billing export",
     createdAt: 1,
     updatedAt: 1,
-    repository: null,
+    repository: "acme/ledger",
   },
 ];
+
+/** The repositories the fixture account reaches: the two its plans are about, as the service would list them. */
+const FIXTURE_REPOSITORIES: PlanningRepositoriesAnswer = {
+  repositories: {
+    installed: true,
+    repositories: [
+      {
+        owner: "acme",
+        name: "relay",
+        fullName: "acme/relay",
+        defaultBranch: "main",
+        private: true,
+        updatedAt: Date.parse("2026-10-07T16:20:00Z"),
+      },
+      {
+        owner: "acme",
+        name: "ledger",
+        fullName: "acme/ledger",
+        defaultBranch: "main",
+        private: true,
+        updatedAt: Date.parse("2026-10-01T09:00:00Z"),
+      },
+    ],
+    installationUrl: "https://github.com/apps/luke/installations/new",
+  },
+};
+
+/** The repositories a fixture run's chip lists, read from nowhere. */
+export function fixtureRepositories(): PlanningRepositoriesAnswer {
+  return FIXTURE_REPOSITORIES;
+}
 
 const FIXTURE_PLAN_LIST: PlanningView = {
   plans: [
@@ -114,16 +146,12 @@ const FIXTURE_PLAN_LIST: PlanningView = {
       name: FIXTURE_PLAN.name,
       createdAt: FIXTURE_PLAN.createdAt,
       updatedAt: FIXTURE_PLAN.updatedAt,
-      repository: null,
+      repository: FIXTURE_PLAN.repository,
     },
     ...FIXTURE_OTHER_PLANS,
   ],
   listStatus: PLANNING_READ.READY,
   document: { status: PLANNING_READ.IDLE },
-  folders: {
-    [FIXTURE_PLAN.id]: "/Users/dev/code/relay",
-    "1a7b3d5f-9c2e-4f40-8b68-2d3e4f5a6b71": "/Users/dev/code/ledger",
-  },
 };
 
 const KEYWORD = "#ff7b72";
@@ -149,6 +177,7 @@ function fixtureLine(...runs: readonly (string | CodeToken)[]): CodeToken[] {
  */
 const FIXTURE_CODE: PlanCode = {
   ref: { path: "src/members/invite.ts", startLine: 6, endLine: 9 },
+  repository: "acme/relay",
   firstLine: 1,
   lineCount: 14,
   lines: [
@@ -262,7 +291,7 @@ const FIXTURE_TRANSCRIPT: PlanTranscript = {
 };
 
 /**
- * The open plan mid-call, the planning model running a folder command
+ * The open plan mid-call, the planning model running a repository command
  * while the notetaker writes, so the capture shows both of the status row's
  * lines.
  */

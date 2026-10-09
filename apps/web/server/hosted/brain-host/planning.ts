@@ -147,7 +147,7 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
-- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
+- show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - worker does a job in the background, as above.
@@ -260,9 +260,10 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
- * voice a question mid-turn (`queue-question.ts`); `show_code` puts lines of
- * the plan's folder on the developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
- * command in the session's sandbox on a checkout of the plan's repository
+ * voice a question mid-turn (`queue-question.ts`); `show_code` reads lines of
+ * the plan's repository from the session's checkout and puts them on the
+ * developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
+ * command in the same sandbox on the same checkout
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`). Every read's result
@@ -275,7 +276,7 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   },
   {
     ...SHOW_CODE_TOOL,
-    run: (_call, input) => Effect.succeed(runShowCode(input)),
+    run: (call, input) => runShowCode(call.repository, input),
   },
   {
     ...RUN_IN_REPOSITORY_TOOL,

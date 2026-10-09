@@ -83,7 +83,6 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.NEW_PLAN),
         SEPARATOR,
         commandItem(APP_COMMAND.COPY_PLAN),
-        commandItem(APP_COMMAND.REVEAL_FOLDER),
         SEPARATOR,
         commandItem(APP_COMMAND.DELETE_PLAN),
       ],

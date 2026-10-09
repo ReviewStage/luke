@@ -14,10 +14,14 @@ import {
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
 import {
+  type PlanningRepositoriesAnswer,
+  type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   planningBoardSaveParamsSchema,
   planningRenameParamsSchema,
-  planningSetFolderParamsSchema,
+  planningRepositoriesAnswerSchema,
+  planningSetRepositoryAnswerSchema,
+  planningSetRepositoryParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
@@ -77,9 +81,10 @@ export const ACT_KIND = {
   /**
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a folder, and a plan renamed or deleted. The view
-   * arrives on the document rather than as an answer; nothing here writes a
-   * plan's document, which the plan's notetaker alone saves.
+   * plan left, a plan started on a repository, and a plan renamed, given its
+   * repository, or deleted. The view arrives on the document rather than as
+   * an answer; nothing here writes a plan's document, which the plan's
+   * notetaker alone saves.
    */
   PLANNING_REFRESH: "planning.refresh",
   PLANNING_SELECT: "planning.select",
@@ -87,12 +92,12 @@ export const ACT_KIND = {
   PLANNING_START: "planning.start",
   PLANNING_DELETE: "planning.delete",
   PLANNING_RENAME: "planning.rename",
-  /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
-  PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
-  /** A plan's folder on this Mac, chosen again for a plan this Mac holds none for. */
-  PLANNING_SET_FOLDER: "planning.setFolder",
-  /** A plan's folder on this Mac shown in Finder, read from main's own view rather than a path the panel names. */
-  PLANNING_REVEAL_FOLDER: "planning.revealFolder",
+  /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
+  PLANNING_REPOSITORIES: "planning.repositories",
+  /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
+  PLANNING_SET_REPOSITORY: "planning.setRepository",
+  /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
+  GITHUB_OPEN: "github.open",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -240,6 +245,15 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  */
 const exactId = exactText(512);
 
+/** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
+const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
+
+/** An address on GitHub, and nowhere else: what a repository link or the installation link opens. */
+const githubAddress = EffectSchema.String.check(
+  EffectSchema.isMaxLength(2_048),
+  EffectSchema.isPattern(GITHUB_ADDRESS),
+);
+
 /** A setting and a value already parsed for it, which is the pair its field types. */
 export type SettingUpdatePayload = {
   [Field in AppSettingField]: {
@@ -362,22 +376,20 @@ export const ACT = {
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not rename that plan on this system.",
   },
-  [ACT_KIND.PLANNING_CHOOSE_FOLDER]: {
+  [ACT_KIND.PLANNING_REPOSITORIES]: {
     payload: noPayload,
-    result: wireResult<string | null>(
-      (value): value is string | null => value === null || isWireString(value),
-    ),
-    refusal: "Could not open the folder picker on this system.",
+    result: wireResult<PlanningRepositoriesAnswer>(isReadable(planningRepositoriesAnswerSchema)),
+    refusal: "Could not read your GitHub repositories on this system.",
   },
-  [ACT_KIND.PLANNING_SET_FOLDER]: {
-    payload: actSchema(planningSetFolderParamsSchema),
-    result: answersNothing,
-    refusal: "Could not keep that folder on this system.",
+  [ACT_KIND.PLANNING_SET_REPOSITORY]: {
+    payload: actSchema(planningSetRepositoryParamsSchema),
+    result: wireResult<PlanningSetRepositoryAnswer>(isReadable(planningSetRepositoryAnswerSchema)),
+    refusal: "Could not change that plan's repository on this system.",
   },
-  [ACT_KIND.PLANNING_REVEAL_FOLDER]: {
-    payload: record({ planId: exactId }),
+  [ACT_KIND.GITHUB_OPEN]: {
+    payload: record({ url: githubAddress }),
     result: answersNothing,
-    refusal: "Could not show that folder in Finder.",
+    refusal: "Could not open GitHub on this system.",
   },
   [ACT_KIND.PLANNING_TALK]: press("Could not talk about that plan on this system."),
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
