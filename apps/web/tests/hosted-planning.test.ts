@@ -6,6 +6,9 @@ import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {
   generateText,
+  getToolName,
+  isTextUIPart,
+  isToolUIPart,
   type JSONValue,
   jsonSchema,
   type ModelMessage,
@@ -31,6 +34,7 @@ import {
   SCRIPTED_RESEARCH_REPLY,
   scriptedModel,
 } from "../eve/scripted-model";
+import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { GitHubApp } from "../server/github/github-app";
@@ -56,7 +60,11 @@ import {
   readPlan,
   savePlanDocument,
 } from "../server/hosted/plan-store";
-import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
+import {
+  READ_WEB_PAGE_TOOL,
+  SEARCH_WEB_STATUS,
+  SEARCH_WEB_TOOL,
+} from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import {
   REPOSITORY_SHELL_REFUSAL,
@@ -109,6 +117,32 @@ const CORRECTION = "Any member should be able to invite, not only admins.";
 const EXPIRY_QUERY = "Stripe idempotency key expiry";
 const EXPIRY_SOURCE = "https://docs.stripe.com/api/idempotent_requests";
 const EXPIRY_ANSWER = "Stripe keeps idempotency keys for at least 24 hours. (docs.stripe.com)";
+
+const readFoundSearch = Schema.decodeUnknownOption(
+  Schema.Struct({
+    status: Schema.Literal(SEARCH_WEB_STATUS.FOUND),
+    findings: Schema.Array(Schema.Struct({ url: Schema.String })),
+  }),
+);
+
+/** The sources every settled search in these rows cites, whole, in the rows' order. */
+function citedSources(rows: readonly StoredUIMessage[]): readonly string[] {
+  return rows.flatMap((row) =>
+    row.parts.flatMap((part) => {
+      if (!isToolUIPart(part) || getToolName(part) !== SEARCH_WEB_TOOL.name) return [];
+      if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return [];
+      return Option.match(readFoundSearch(part.output), {
+        onNone: () => [],
+        onSome: (found) => found.findings.map((finding) => finding.url),
+      });
+    }),
+  );
+}
+
+/** Every word spoken in these rows, one string per text part, in the rows' order. */
+function spokenWords(rows: readonly StoredUIMessage[]): readonly string[] {
+  return rows.flatMap((row) => row.parts.filter(isTextUIPart).map((part) => part.text));
+}
 
 /** OpenAI's search as a scripted table: one cited answer, or a server error. */
 function searchService(answered: boolean) {
@@ -675,8 +709,9 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           HOSTED_TOOL_SET,
           10,
         );
-        assert.ok(JSON.stringify(askingRows).includes(EXPIRY_SOURCE));
-        assert.ok(!JSON.stringify(otherRows).includes(EXPIRY_SOURCE));
+        assert.deepEqual(citedSources(askingRows), [EXPIRY_SOURCE]);
+        assert.deepEqual(citedSources(otherRows), []);
+        assert.deepEqual(spokenWords(otherRows), [CORRECTION, SCRIPTED_PLANNING_REPLY]);
       }),
   );
 

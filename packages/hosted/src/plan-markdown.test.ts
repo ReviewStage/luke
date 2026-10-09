@@ -95,3 +95,13 @@ test("an assumption spanning lines stays one list item", () => {
 
   assert.ok(copied.endsWith("\n- Invites expire. After 7 days.\n"));
 });
+
+test("a long run of spaces holding no line break is kept as written, however long", () => {
+  const spaces = " ".repeat(300_000);
+  const copied = planMarkdown({
+    body: "",
+    assumptions: [{ text: `Invites expire.${spaces}After 7 days.\nEventually.` }],
+  });
+
+  assert.equal(copied, `## Assumptions\n\n- Invites expire.${spaces}After 7 days. Eventually.\n`);
+});

@@ -49,8 +49,9 @@ code, so **no internal route and no shared secret exist between two deployments.
 **The five run seams and nothing wider — a slow step began, a planning turn
 queued a question, every action settled, one sentence of the reply, the turn
 ended. No tool part, no reasoning, no message.** A queued question is read off
-its `queue_question` call's input, the one call whose words are told, because
-that call exists only to hand the voice its words. The kinds are the brain's own run-stream words spelled here because
+its `queue_question` call's input, because that call exists only to hand the
+voice its words; the one other call whose words are told is `show_code`, whose
+lines travel on the `plan.code` frame rather than as an event. The kinds are the brain's own run-stream words spelled here because
 this package cannot reach the brain; a test in the web app holds the two sets
 equal.
 
