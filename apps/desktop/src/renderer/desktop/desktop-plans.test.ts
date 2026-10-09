@@ -1324,6 +1324,16 @@ test("a tab closed under a drag puts the drag back rather than dropping it at a 
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
   assert.equal(chosenTab(page), "Board");
   assert.deepEqual(tabsMoved(page), []);
+
+  // One closed and opened again at the end leaves as many tabs, and the
+  // dragged one where it was, but the places it passed have moved.
+  dragTab(tabNamed(page, "Board"), 45, [160], DRAG_END.DROP, () => {
+    press(page, '[aria-label="Close Code"]');
+    keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+  });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.equal(chosenTab(page), "Code");
+  assert.deepEqual(tabsMoved(page), []);
 });
 
 test("the × on a tab starts no drag", () => {

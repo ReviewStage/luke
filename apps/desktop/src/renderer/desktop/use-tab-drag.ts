@@ -195,7 +195,7 @@ export function useTabDrag(
       // A tab opened or closed under the drag leaves its places stale, so
       // the drag is put back rather than dropped at a place that moved.
       const now = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
-      if (now.length !== press.tabs.length || now[press.at] !== tab) {
+      if (now.length !== press.tabs.length || now.some((each, at) => each !== press.tabs[at])) {
         lower(press, strip, true);
         return;
       }
