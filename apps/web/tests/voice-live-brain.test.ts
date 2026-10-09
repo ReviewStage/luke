@@ -12,7 +12,7 @@ import {
 import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Deferred, Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
+import { Deferred, Duration, Effect, Exit, Layer, Option, Redacted, Scope } from "effect";
 import { TestClock } from "effect/testing";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
@@ -1329,6 +1329,9 @@ const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget
     },
   };
   const scope = yield* Scope.make();
+  // The client lives as long as the socket's scope: built around the brain alone, a
+  // Postgres pool would close as the brain stood, and every follow's read refused.
+  const sql = yield* Scope.provide(Layer.build(database.sql), scope);
   const brain = yield* Scope.provide(
     hostedLiveBrain({
       userId: target.userId,
@@ -1340,7 +1343,7 @@ const standOnTestClock = Effect.fnUntraced(function* (target: ConversationTarget
       bounds: { POLL },
     }),
     scope,
-  ).pipe(Effect.provide(database.sql));
+  ).pipe(Effect.provide(sql));
   const journaled = (count: number) =>
     arrival(
       (notify) => {
@@ -1455,6 +1458,7 @@ it.effect(
       assert.equal(f.events.length, 2);
       assert.deepEqual(f.reports, []);
       yield* f.polls(1);
+      yield* f.arrived(3);
       assert.deepEqual(toldSoFar(f).slice(2), [
         `${LIVE_BRAIN_RUN_EVENT.ENDED}:${LIVE_BRAIN_RUN_END.FAILED}`,
       ]);
