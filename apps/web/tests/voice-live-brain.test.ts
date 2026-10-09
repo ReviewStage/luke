@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -1072,6 +1073,75 @@ it.live(
           settled: 1,
         },
       ]);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a planning turn's work is shown once per change, its repository command with the output the Mac read, and its last as the turn ended",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      const showing = (count: number) =>
+        arrival(
+          (notify) => f.brain.onWork(notify),
+          () => shown.length >= count,
+          `${count} works`,
+        );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: RUN_IN_REPOSITORY_TOOL.name,
+        input: { command: "ls src" },
+        output: {
+          status: REPOSITORY_SHELL_STATUS.RAN,
+          exitCode: 0,
+          stdout: "invite.ts",
+          stderr: "",
+        },
+      });
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* showing(1);
+      // The journal standing still is read again and again, and shows nothing new.
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.equal(shown.length, 1);
+
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(1);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      const calls = shown.map((work) =>
+        work.parts.flatMap((part) =>
+          part.type === PLAN_WORK_PART.TOOL ? [[part.subject, part.state, part.output]] : [],
+        ),
+      );
+      assert.deepEqual(calls[0], [["ls src", PLAN_WORK_STATE.RUNNING, undefined]]);
+      assert.deepEqual(calls.at(-1), [["ls src", PLAN_WORK_STATE.DONE, "invite.ts"]]);
+      assert.equal(shown.at(-1)?.state, PLAN_WORK_STATE.DONE);
+      assert.equal(
+        new Set(shown.map((work) => JSON.stringify(work))).size,
+        shown.length,
+        "a work was shown twice",
+      );
       yield* Effect.promise(() => f.stop());
     }),
 );
