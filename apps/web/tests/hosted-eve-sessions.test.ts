@@ -85,6 +85,7 @@ function answering(status: number, body: EveAnswer) {
   return answeringEach([{ status, body }]);
 }
 
+const NOT_READY: Answer = { status: 409, body: { ok: false, code: "session_not_ready" } };
 const NOT_ACTIVE: Answer = { status: 409, body: { ok: false, code: "session_not_active" } };
 const ACCEPTED_FOLLOW_UP: Answer = {
   status: 202,
@@ -158,10 +159,10 @@ it.effect(
 );
 
 it.effect(
-  "a not-active follow-up is tried again on the SDK's own schedule, reads as accepted the moment the session's inbox is up, and as retired only past the last wait",
+  "a not-ready follow-up is tried again on the SDK's own loop, reads as accepted the moment the session's inbox is up, and as retired only once the loop's twenty seconds are spent; a not-active one is retired at once",
   () =>
     Effect.gen(function* () {
-      const starting = answeringEach([NOT_ACTIVE, NOT_ACTIVE, ACCEPTED_FOLLOW_UP]);
+      const starting = answeringEach([NOT_READY, NOT_READY, ACCEPTED_FOLLOW_UP]);
       const sending = yield* Effect.forkChild(
         Effect.flatMap(starting.sessions, (eve) => eve.send(SESSION, MESSAGE)),
         { startImmediately: true },
@@ -179,25 +180,38 @@ it.effect(
       });
       assert.equal(starting.seen.length, 3);
 
-      const retired = answeringEach([NOT_ACTIVE]);
+      // Each wait doubles the last up to two seconds, and the loop ends twenty seconds in.
+      const never = answeringEach([NOT_READY]);
       const retiring = yield* Effect.forkChild(
-        Effect.flatMap(retired.sessions, (eve) => eve.send(SESSION, MESSAGE)),
+        Effect.flatMap(never.sessions, (eve) => eve.send(SESSION, MESSAGE)),
         { startImmediately: true },
       );
-      yield* TestClock.adjust("250 millis");
-      yield* TestClock.adjust("500 millis");
-      assert.equal(retired.seen.length, 3);
-      yield* TestClock.adjust("1000 millis");
+      for (const wait of ["250 millis", "500 millis", "1 second", "2 seconds"] as const) {
+        yield* TestClock.adjust(wait);
+      }
+      assert.equal(never.seen.length, 5);
+      yield* TestClock.adjust("2 seconds");
+      assert.equal(never.seen.length, 6);
+      yield* TestClock.adjust("30 seconds");
       assert.deepEqual(yield* Fiber.join(retiring), { outcome: EVE_SEND_OUTCOME.RETIRED });
-      assert.equal(retired.seen.length, 4);
+      const tried = never.seen.length;
+      yield* TestClock.adjust("10 seconds");
+      assert.equal(never.seen.length, tried);
+
+      const retired = answeringEach([NOT_ACTIVE]);
+      assert.deepEqual(
+        yield* Effect.flatMap(retired.sessions, (eve) => eve.send(SESSION, MESSAGE)),
+        { outcome: EVE_SEND_OUTCOME.RETIRED },
+      );
+      assert.equal(retired.seen.length, 1);
     }),
 );
 
 it.effect(
-  "a cancel posts to the session's cancel route naming eve's turn id and the session's background tasks, and reads whether eve had that turn to cancel",
+  "a cancel posts to the session's cancel route naming eve's turn id, and reads whether eve had that turn to cancel",
   () =>
     Effect.gen(function* () {
-      const accepted = answering(200, { ok: true, sessionId: SESSION, status: "accepted" });
+      const accepted = answering(202, { ok: true, sessionId: SESSION, status: "accepted" });
       assert.deepEqual(
         yield* Effect.flatMap(accepted.sessions, (eve) => eve.cancel(SESSION, "turn_4")),
         {
@@ -205,7 +219,7 @@ it.effect(
         },
       );
       assert.equal(accepted.seen[0]?.url, `${ORIGIN}/eve/v1/session/${SESSION}/cancel`);
-      assert.deepEqual(accepted.seen[0]?.body, { turnId: "turn_4", tasks: true });
+      assert.deepEqual(accepted.seen[0]?.body, { turnId: "turn_4" });
 
       const idle = answering(200, { ok: true, status: "no_active_turn" });
       assert.deepEqual(

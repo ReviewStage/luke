@@ -13,6 +13,20 @@
  */
 export const DRAW_ON_BOARD_TOOL_NAME = "draw_on_board";
 
+/**
+ * The mark on every scene element the Mac made from a drawing of Luke's, in
+ * the element's `customData`, so his next drawing replaces exactly those and
+ * the service can tell them from what the developer drew.
+ */
+export const LUKE_MARK = { drawnBy: "luke" } as const;
+
+/**
+ * The drawing's one element that is no Excalidraw type: a dashed outline that
+ * groups shapes, titled at its top-left corner, which the Mac draws as a
+ * rectangle and a text.
+ */
+export const DRAWING_ZONE = "zone";
+
 /** The Excalidraw element types a scene admits. */
 export const BOARD_ELEMENT_TYPE = {
   RECTANGLE: "rectangle",

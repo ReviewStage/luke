@@ -4,6 +4,7 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
+import { layoutFindings } from "./board-layout.js";
 import { writeDrawing } from "./board-store.js";
 import { logStoreFailure } from "./store-failure.js";
 
@@ -11,12 +12,15 @@ import { logStoreFailure } from "./store-failure.js";
  * board-tool.ts -- `draw_on_board`, the planning model's hand on the plan's whiteboard.
  *
  * The model sends the whole diagram each time, in the small vocabulary of
- * `board-wire.ts` (labelled boxes, ellipses, and diamonds, text, and arrows
- * between ids), and it replaces the model's previous drawing. The service only
- * stores it: the developer's Mac converts it with Excalidraw's own converter
- * and puts it on the board in place of the previous one, beside whatever the
- * developer drew. A diagram that names an arrow's end the drawing does not
- * hold is refused, since the converter would drop the arrow without a word.
+ * `board-wire.ts` (labelled boxes, ellipses, and diamonds, text, zones, and
+ * arrows between ids), and it replaces the model's previous drawing. The
+ * service only stores it: the developer's Mac converts it with Excalidraw's
+ * own converter and puts it on the board in place of the previous one, beside
+ * whatever the developer drew. A diagram that names an arrow's end the
+ * drawing does not hold is refused, since the converter would drop the arrow
+ * without a word. A drawn diagram's answer carries what is wrong with its
+ * layout (`board-layout.ts`), since the model never sees the board and has no
+ * other way to learn that two of its boxes overlap.
  *
  * Note that the account and plan it draws on are the binding the service
  * built from the conversation's plan, never an argument, exactly as
@@ -49,7 +53,12 @@ export const DRAW_ON_BOARD_REFUSAL = {
 
 // A type rather than an interface, so a result is a `WireRecord` the model is handed as it stands.
 export type DrawOnBoardResult =
-  | { readonly status: typeof DRAW_ON_BOARD_STATUS.DRAWN; readonly drawing: number }
+  | {
+      readonly status: typeof DRAW_ON_BOARD_STATUS.DRAWN;
+      readonly drawing: number;
+      /** What is wrong with the drawing's layout; absent where nothing is. */
+      readonly layout?: readonly string[];
+    }
   | { readonly status: typeof DRAW_ON_BOARD_STATUS.NOT_DRAWN; readonly reason: string };
 
 const DRAW_ON_BOARD_INPUT = Schema.Struct({ elements: drawingElementsSchema });
@@ -62,9 +71,10 @@ export const DRAW_ON_BOARD_TOOL = {
   description:
     "Draw a diagram on the plan's whiteboard, which the developer sees beside the plan and can " +
     "draw on too. Send the whole diagram every time: it replaces your previous drawing and " +
-    "leaves what the developer drew. Boxes, ellipses, and diamonds take a label; arrows join two " +
-    "ids. Coordinates are pixels: lay boxes about 200x80 with 80px or more between them. " +
-    "Answers `drawn`, or why nothing was drawn.",
+    "leaves what the developer drew. Boxes, ellipses, and diamonds take a label; a zone is a " +
+    "dashed outline that groups shapes under a title; arrows join two ids. Coordinates are " +
+    "pixels. Answers `drawn` with any layout problems under `layout`, which you fix by drawing " +
+    "again, or why nothing was drawn.",
   inputSchema: DRAW_ON_BOARD_INPUT,
 } as const;
 
@@ -95,10 +105,12 @@ export function runDrawOnBoard(
       Effect.map((written) =>
         Option.match(written, {
           onNone: () => notDrawn(DRAW_ON_BOARD_REFUSAL.NO_PLAN),
-          onSome: (board): DrawOnBoardResult => ({
-            status: DRAW_ON_BOARD_STATUS.DRAWN,
-            drawing: board.drawing?.number ?? 0,
-          }),
+          onSome: (board): DrawOnBoardResult => {
+            const drawing = board.drawing?.number ?? 0;
+            const layout = layoutFindings(read.success.elements, board.elements);
+            const drawn = { status: DRAW_ON_BOARD_STATUS.DRAWN, drawing };
+            return layout.length === 0 ? drawn : { ...drawn, layout };
+          },
         }),
       ),
       Effect.tapError(logStoreFailure),

@@ -52,12 +52,11 @@ export function hostTurnId(sessionId: string, eveTurnId: string): string {
   return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate([ID_KIND.TURN, sessionId, eveTurnId]));
 }
 
-/** The client id of the user message a turn was handed; one per turn, since eve delivers one message per turn. */
-export function receivedMessageId(sessionId: string, eveTurnId: string): string {
-  return nameBasedUuid(
-    BRAIN_HOST_ID_NAMESPACE,
-    coordinate([ID_KIND.RECEIVED, sessionId, eveTurnId]),
-  );
+/** The developer's line a turn opened with and, under its ordinal from one, each line that joined the turn under way; the first keeps the coordinate it always had. */
+export function receivedMessageId(sessionId: string, eveTurnId: string, ordinal = 0): string {
+  const parts = [ID_KIND.RECEIVED, sessionId, eveTurnId];
+  if (ordinal > 0) parts.push(String(ordinal));
+  return nameBasedUuid(BRAIN_HOST_ID_NAMESPACE, coordinate(parts));
 }
 
 /** The client id of the assistant message a turn completes; the turn's id is its journal's client id already, so this is another. */

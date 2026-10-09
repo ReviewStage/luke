@@ -118,13 +118,24 @@ Once it is, queue nothing more: any question Luke still holds is moot. Open your
 
 The plan has a whiteboard the developer sees beside the document and can draw on too. Draw on it with draw_on_board when a picture helps the user decide: the components a change touches and how they connect, a flow with its branches, or the options for a decision side by side. Draw when the user asks you to, or when a structure is hard to follow by voice alone, and tell Luke in your return what you drew so he can talk the user through it. Keep a drawing small: a handful of labelled boxes and the arrows between them, laid out left to right or top to bottom. Each call sends the whole diagram and replaces your previous drawing, so to change it, send it again with the change; what the developer drew stays.
 
+Plan the grid before you draw, because you cannot see the board:
+- Make a box 80px tall and 12px wide for each character of its label, never under 160px. Labels of two or three words read best.
+- Leave 100px between rows and 60px between boxes in a row, or 140px where an arrow between them has a label.
+- Label an arrow only when the relationship is not obvious, in at most 12 characters.
+- To group boxes, put them in a zone with a title, at least 40px inside its edges and below its title; never group them with a large labelled box, whose label would sit over them.
+- Keep text at fontSize 16 or more, and a title at 20 or more.
+- Fill boxes from one palette, the same meaning every time: "#a5d8ff" for what exists today, "#b2f2bb" for what this plan adds, "#ffc9c9" for what it removes or a risk, "#fff3bf" for a decision still open, and "#d0bfff" for a service outside the codebase.
+- Put your drawing beside what the developer drew, never over it, unless you are marking one of their shapes on purpose.
+
+When draw_on_board answers with layout problems, draw again with them fixed before you return.
+
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
 ### Working in parallel
 
 You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find.
 
-Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its agentId and the new message; to stop one whose job no longer matters, use task_cancel.
+Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its taskId and the new message; to stop one whose job no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -136,7 +147,7 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - worker does a job in the background, as above.
 - task_cancel stops a worker you no longer need.
-- draw_on_board draws a diagram of shapes, arrows, and text on the plan's whiteboard, replacing your previous one.
+- draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 
 ## Return the result
 
@@ -287,31 +298,37 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
 
 /**
  * The tools eve puts beside the planning tools: one per declared subagent,
- * named by its directory under `eve/subagents/`, and `task_cancel`. eve runs
+ * named by its directory under `eve/subagents/`, and the two task controls
+ * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
  * them, so they are no planning tool, but a turn's rows name them, and the
  * writer holds every row to the hosted tool set.
  */
 export const EVE_DELEGATION_TOOL = {
   WORKER: "worker",
+  TASK_WAIT: "task_wait",
   TASK_CANCEL: "task_cancel",
 } as const;
 
 /**
  * What a subagent's call carries, as eve declares it: the message, and the
- * child to continue or steer. Note that eve's optional output schema is left
- * out, because the planning prompt never asks for structured output and an
- * arbitrary JSON Schema has no form the wire can show.
+ * task of the child to continue or steer.
  */
 const SUBAGENT_CALL_INPUT = Schema.Struct({
   message: Schema.String,
-  agentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
-/** What `task_cancel` carries, as eve declares it: the tasks to cancel. */
-const TASK_CANCEL_INPUT = Schema.Struct({ taskIds: Schema.Array(Schema.String) });
+/** What `task_wait` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
+const TASK_WAIT_INPUT = Schema.Struct({
+  timeoutSeconds: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+});
+
+/** What `task_cancel` carries, as eve declares it: the task to cancel. */
+const TASK_CANCEL_INPUT = Schema.Struct({ taskId: Schema.String });
 
 const EVE_DELEGATION_INPUT = {
   [EVE_DELEGATION_TOOL.WORKER]: SUBAGENT_CALL_INPUT,
+  [EVE_DELEGATION_TOOL.TASK_WAIT]: TASK_WAIT_INPUT,
   [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,
 } as const;
 

@@ -241,10 +241,10 @@ function toolContext(session: Session, name: string): EveToolContext {
     abortSignal: new AbortController().signal,
     callId: "call-1",
     toolName: name,
+    messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
     getSandbox: unreached("getSandbox"),
-    getSkill: unreached("getSkill"),
   };
 }
 

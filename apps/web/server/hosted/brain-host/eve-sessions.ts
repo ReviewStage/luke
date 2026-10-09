@@ -2,9 +2,8 @@
  * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
-import { delayLadder } from "@sidecar/runtime/effect";
 import { readEither } from "@sidecar/wire/effect";
-import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result } from "effect";
+import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
@@ -26,17 +25,16 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * account beside it in the header the door reads it from, so nothing
  * dispatches that the door refuses. The conversation and the kind of turn
  * ride as the headers the door reads them from, and the kinds a client may
- * name are its type parameter. eve answers a follow-up to an unknown, terminal, or
- * not-yet-active session with one 409, so the code alone cannot tell a
- * session whose command inbox is still starting from one eve has retired;
- * the SDK's own client tries three more times, at 250, 500, and 1,000
- * milliseconds, and reads the session as terminal only after the last, and
- * the same schedule stands here. The retry is what makes a wrong "retired"
- * rare; it is not what makes one safe. That is the conversation row's
- * forward-only claim: an inbox slower than the last wait costs a session
- * opened for nothing, which the claim lets the older one lose, and never two
- * sessions writing one conversation. Reopening is never eve's: the host
- * decides it, under that claim.
+ * name are its type parameter. eve answers a follow-up to a session whose
+ * command inbox is still starting with a 409 naming `session_not_ready`, and
+ * one to a session it no longer runs with a 409 naming `session_not_active`;
+ * the SDK's own client tries the first again for up to twenty seconds and
+ * reads the second as terminal at once, and the same stands here. The retry
+ * is what makes a wrong "retired" rare; it is not what makes one safe. That
+ * is the conversation row's forward-only claim: an inbox slower than the
+ * last wait costs a session opened for nothing, which the claim lets the
+ * older one lose, and never two sessions writing one conversation. Reopening
+ * is never eve's: the host decides it, under that claim.
  *
  * Every call is an effect on the `HttpClient` the web runtime builds once
  * per instance, read here once at composition rather than on each call, so
@@ -59,20 +57,28 @@ function sessionPath(sessionId: string): string {
 /** eve's id for a session's first turn, the one the opening message runs: `turn_<sequence>` from zero. */
 export const EVE_FIRST_TURN_ID = "turn_0";
 
-/** The code eve's follow-up route answers for a session it does not run now, beside its 409. */
-const EVE_SESSION_NOT_ACTIVE = "session_not_active";
+/** The codes eve's follow-up route answers beside a 409: a session whose inbox is still starting, and one eve no longer runs. */
+const EVE_SESSION_REFUSAL = {
+  NOT_READY: "session_not_ready",
+  NOT_ACTIVE: "session_not_active",
+} as const;
 
 /**
- * The waits before a not-active follow-up is tried again: a copy of the
- * schedule eve 0.53.1's own client keeps, not a number of ours to tune, so a
- * dependency bump is the moment to check the table still matches. A session
- * not active past the last wait is retired.
+ * The waits before a not-ready follow-up is tried again: a copy of the loop
+ * eve 0.74.0's own client runs, not a number of ours to tune, so a dependency
+ * bump is the moment to check it still matches. The first wait is 250
+ * milliseconds, each wait after it is double the last up to two seconds, and
+ * the tries end twenty seconds after the first. A session still not ready
+ * past the last wait is retired.
  */
-const SESSION_NOT_ACTIVE_RETRY = delayLadder([
-  Duration.millis(250),
-  Duration.millis(500),
-  Duration.millis(1_000),
-]);
+const NOT_READY_WAIT = { FIRST: Duration.millis(250), LONGEST: Duration.seconds(2) } as const;
+const NOT_READY_TRIES = Duration.seconds(20);
+const SESSION_NOT_READY_RETRY = Schedule.exponential(NOT_READY_WAIT.FIRST).pipe(
+  Schedule.modifyDelay(({ duration }) =>
+    Effect.succeed(Duration.min(duration, NOT_READY_WAIT.LONGEST)),
+  ),
+  Schedule.upTo({ duration: NOT_READY_TRIES }),
+);
 
 const ACCEPTED_STATUS = 202;
 /** The statuses `Response.ok` names, which is what a cancel's answer was read under. */
@@ -130,13 +136,13 @@ export function describeUnreachable(failure: EveUnreachable): string {
   return `${failure.cause.message}${beneath}`;
 }
 
-/** A follow-up eve answered `session_not_active`; the retry schedule's own input, and never a caller's. */
-class EveSessionNotActive extends Data.TaggedError("EveSessionNotActive") {}
+/** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */
+class EveSessionNotReady extends Data.TaggedError("EveSessionNotReady") {}
 
 /** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
 export const EVE_SEND_OUTCOME = {
   ACCEPTED: "accepted",
-  /** eve does not run the session, and did not come to after the retry schedule; the conversation needs a new one. */
+  /** eve does not run the session, or did not come to within the retry schedule; the conversation needs a new one. */
   RETIRED: "retired",
   /** eve refused or answered outside its documented shape; the status travels for the operator. */
   FAILED: "failed",
@@ -183,10 +189,9 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
    * no longer under way answers `no_active_turn` and the session's next turn
    * is left running; there is no form of the call that names the session's
    * turn under way, because between a caller's read and eve's answer that
-   * turn can be the one queued after the one the caller meant. Note that the
-   * cancel takes the session's background tasks with it, because a Stop
-   * means everything Luke is doing, and a subagent the stopped turn handed
-   * work to would otherwise go on and wake the session with its result.
+   * turn can be the one queued after the one the caller meant. eve's cancel
+   * takes every task the session has working with it, which is what a Stop
+   * means: a subagent the stopped turn handed work to does not go on.
    */
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
@@ -195,8 +200,6 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
 interface EvePostBody {
   readonly message?: string;
   readonly turnId?: string;
-  /** Whether a cancel takes every background task the session owns with it. */
-  readonly tasks?: boolean;
 }
 
 /** The deployment acting for an account it names. */
@@ -271,12 +274,14 @@ function readOpened({ status, body }: EveAnswer): EveOpened {
   return { outcome: EVE_SEND_OUTCOME.ACCEPTED, sessionId: opened.success.sessionId };
 }
 
-/** A follow-up as eve answered it; a not-active session is the retry's failure rather than an outcome. */
-function readSent({ status, body }: EveAnswer): Effect.Effect<EveSent, EveSessionNotActive> {
+/** A follow-up as eve answered it: a not-ready session is the retry's failure rather than an outcome, and a not-active one is retired. */
+function readSent({ status, body }: EveAnswer): Effect.Effect<EveSent, EveSessionNotReady> {
   if (status === CONFLICT_STATUS) {
     const refused = readEither(refusedSend, DROPPING_EXCESS)(body);
-    if (Result.isSuccess(refused) && refused.success.code === EVE_SESSION_NOT_ACTIVE) {
-      return Effect.fail(new EveSessionNotActive());
+    const code = Result.isSuccess(refused) ? refused.success.code : undefined;
+    if (code === EVE_SESSION_REFUSAL.NOT_READY) return Effect.fail(new EveSessionNotReady());
+    if (code === EVE_SESSION_REFUSAL.NOT_ACTIVE) {
+      return Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED });
     }
   }
   const accepted = readEither(acceptedDelivery, DROPPING_EXCESS)(body);
@@ -317,22 +322,22 @@ function sessionsOver<Turn extends BrainHostTurn>(
         post(EVE_SESSION_PATH, turnHeaders(message), { message: message.message }),
         readOpened,
       ),
-    // The not-active follow-up is tried again on the ladder above, and one still not active past
+    // The not-ready follow-up is tried again on the schedule above, and one still not ready past
     // its last wait is the retirement the caller reads; an unreachable eve is retried nowhere.
     send: (sessionId, message) =>
       post(sessionPath(sessionId), turnHeaders(message), { message: message.message }).pipe(
         Effect.flatMap(readSent),
         Effect.retry({
-          schedule: SESSION_NOT_ACTIVE_RETRY,
-          while: (failure) => failure._tag === "EveSessionNotActive",
+          schedule: SESSION_NOT_READY_RETRY,
+          while: (failure) => failure._tag === "EveSessionNotReady",
         }),
-        Effect.catchTag("EveSessionNotActive", () =>
+        Effect.catchTag("EveSessionNotReady", () =>
           Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED }),
         ),
       ),
     cancel: (sessionId, eveTurnId) =>
       Effect.map(
-        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId, tasks: true }),
+        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId }),
         readCancelled,
       ),
   };
