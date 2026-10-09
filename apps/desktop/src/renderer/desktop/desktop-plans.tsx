@@ -125,6 +125,12 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const rename = usePlanRename(planId, plans.onRenamePlan);
+  // A refusal is said beside the chip, under the plan it was about and no
+  // other. Note that it is held above the states with no document, because
+  // a plan opened from the list is drawn reading before its read lands, and
+  // a hook that only the ready page reached would be one more hook than
+  // the reading page had, which React refuses by unmounting the window.
+  const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.READING
@@ -157,8 +163,6 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   }
   const { plan } = region;
   const { sidePanel } = plans;
-  // A refusal is said beside the chip, under the plan it was about and no other.
-  const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;

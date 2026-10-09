@@ -12,6 +12,7 @@ import { plansControl } from "#testing/plans-control";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_WIDTH,
@@ -735,4 +736,45 @@ test("the menu bar's Exit Full Screen steps out of full screen, and does nothing
   act(() => menuListener?.(APP_COMMAND.EXIT_FULL_SCREEN));
   assert.ok(documentShown(page));
   assert.ok(page.querySelector('.side-panel [aria-label="Expand panel"]'));
+});
+
+/**
+ * The page over a region that moves as the host's does: opening a plan from
+ * the list draws it reading first and ready once the read lands, and
+ * opening another draws the first plan's page reading again.
+ */
+function Opening({ region }: { region: PlansControl["region"] }) {
+  const sidePanel = useSidePanel(undefined);
+  return createElement(DesktopPlans, {
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region,
+      sidePanel,
+    }),
+  });
+}
+
+test("a plan opened from the list, read after the page first drew it reading, draws its document on the repository chip", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // The host publishes the plan reading before its read lands, and ready after.
+  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
+  assert.match(container.textContent ?? "", /Reading the plan…/u);
+
+  act(() =>
+    root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READY, plan: PLAN } })),
+  );
+  assert.ok(documentShown(container));
+  assert.equal(
+    container.querySelector(".repository-chip .plan-compose-chip-name")?.textContent,
+    "Choose repository",
+  );
+
+  // Another plan opening draws the page reading again, with nothing of the first left on it.
+  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
+  assert.equal(documentShown(container), false);
+  assert.match(container.textContent ?? "", /Reading the plan…/u);
 });

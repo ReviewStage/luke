@@ -32,7 +32,8 @@
       "preset": "recommended",
       "correctness": {
         "noUnusedImports": "error",
-        "noUnusedVariables": "error"
+        "noUnusedVariables": "error",
+        "useHookAtTopLevel": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
