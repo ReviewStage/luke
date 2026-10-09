@@ -40,6 +40,18 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
   PROXY_TRUSTED_ORIGINS: "BETTER_AUTH_PROXY_TRUSTED_ORIGINS",
 } as const;
 
+/**
+ * The variables the Luke GitHub App's client is read from. Dean registered
+ * the App under the ReviewStage org, and Vercel holds its client id and
+ * secret for every environment. "Sign in with GitHub" is the App's own user
+ * authorization wherever both are set, so they are the sign-in's social
+ * client ahead of the OAuth App's below.
+ */
+export const GITHUB_APP_ENVIRONMENT = {
+  CLIENT_ID: "GITHUB_APP_CLIENT_ID",
+  CLIENT_SECRET: "GITHUB_APP_CLIENT_SECRET",
+} as const;
+
 /** The variables the auth service's own secrets are read from; a blank value is absent. */
 const AUTH_SECRET_ENVIRONMENT = {
   SESSION_SECRET: "BETTER_AUTH_SECRET",
@@ -91,6 +103,7 @@ export interface AuthSecrets {
   /** The secret that signs this deployment's sessions; absent, Better Auth refuses to sign any, and `auth.ts` says so as it loads. */
   sessionSecret: Redacted.Redacted | undefined;
   google: SocialClient;
+  /** The Luke GitHub App's client where the deployment holds it whole, else the OAuth App's. */
   github: SocialClient;
 }
 
@@ -98,6 +111,40 @@ export interface AuthSecrets {
 function secret(value: string | undefined): Redacted.Redacted | undefined {
   const named = text(value);
   return named === undefined ? undefined : Redacted.make(named);
+}
+
+/** One provider's registration as two variables hold it; a blank id is the empty one Better Auth refuses. */
+function socialClient(
+  variables: Record<string, string | undefined>,
+  idName: string,
+  secretName: string,
+): SocialClient {
+  return {
+    clientId: text(variables[idName]) ?? "",
+    clientSecret: secret(variables[secretName]),
+  };
+}
+
+/**
+ * The GitHub sign-in's client: the Luke GitHub App's when the deployment
+ * holds both its id and its secret, else the OAuth App's pair as it stood
+ * before the App, so the exchange never runs on one client's id and the
+ * other's secret. The round trip is the same OAuth either way, and GitHub
+ * knows the developer by one user id under both, so an account that signed
+ * in through the OAuth App signs in to the same user through the App.
+ */
+function githubClient(variables: Record<string, string | undefined>): SocialClient {
+  const app = socialClient(
+    variables,
+    GITHUB_APP_ENVIRONMENT.CLIENT_ID,
+    GITHUB_APP_ENVIRONMENT.CLIENT_SECRET,
+  );
+  if (socialClientConfigured(app)) return app;
+  return socialClient(
+    variables,
+    AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID,
+    AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_SECRET,
+  );
 }
 
 /** Vercel reports a bare hostname; a value that already names a scheme keeps it. */
@@ -122,15 +169,18 @@ function deploymentOrigin(host: string | undefined): string | undefined {
 export function authSecrets(variables: Record<string, string | undefined>): AuthSecrets {
   return {
     sessionSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.SESSION_SECRET]),
-    google: {
-      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID]) ?? "",
-      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET]),
-    },
-    github: {
-      clientId: text(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_ID]) ?? "",
-      clientSecret: secret(variables[AUTH_SECRET_ENVIRONMENT.GITHUB_CLIENT_SECRET]),
-    },
+    google: socialClient(
+      variables,
+      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_ID,
+      AUTH_SECRET_ENVIRONMENT.GOOGLE_CLIENT_SECRET,
+    ),
+    github: githubClient(variables),
   };
+}
+
+/** Whether a social client is whole: an id and a secret, which is what a sign-in through it needs. */
+export function socialClientConfigured(client: SocialClient): boolean {
+  return client.clientId !== "" && client.clientSecret !== undefined;
 }
 
 export function authDeployment(variables: Record<string, string | undefined>): AuthDeployment {
