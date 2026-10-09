@@ -60,6 +60,11 @@ it wrote. A background worker's whole session opens from its call in the tab.
 - Fixed New plan in the folded sidebar not leaving the new-plan page
 - Fixed the sidebar's plan row missing its rename pencil
 
+### Misc
+
+- Removed the Quit Luke buttons from sign-in and Settings, since ⌘Q in the
+  app menu quits Luke
+
 ## 0.8.0 — 2026-10-09
 
 ### A new home for your plans
