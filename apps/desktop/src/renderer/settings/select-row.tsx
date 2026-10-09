@@ -1,7 +1,5 @@
 import { PopUpIcon } from "@sidecar/panel";
 import type { ActionResult } from "@sidecar/wire";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
 import { useSettingWrite } from "./use-setting-write";
@@ -45,7 +43,6 @@ export function SelectRow<Value extends string | number>({
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const { busy, rejection, run } = useSettingWrite(onChange);
   return (
     <>
@@ -66,11 +63,6 @@ export function SelectRow<Value extends string | number>({
             onChange={(event) => {
               const next = parse(event.target.value);
               if (next !== undefined) run(next);
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              tell(ACT_KIND.WINDOW_FOCUS_PANEL);
             }}
           >
             {options.map((option) => (

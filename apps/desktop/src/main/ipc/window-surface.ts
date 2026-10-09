@@ -7,7 +7,6 @@ import {
   productEventFromWire,
   type RecordProductEvent,
 } from "@sidecar/analytics";
-import { BrowserWindow } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
 import {
   MICROPHONE_STATUS,
@@ -42,38 +41,29 @@ interface WindowSurfaceDependencies {
 }
 
 type WindowSurfaceActKind =
-  | typeof ACT_KIND.WINDOW_SET_EXPANDED
   | typeof ACT_KIND.WINDOW_FOCUS_PANEL
   | typeof ACT_KIND.MICROPHONE_REQUEST
   | typeof ACT_KIND.MICROPHONE_ROUTE;
 
 /**
- * What the panel asks of the window it is drawn in. Each of the first two is
- * a panel's own act and refused from anywhere else: the mode and the focus are
- * both about the display one panel stands on, and no other surface has one.
+ * What the panel asks of the window it is drawn in. The focus is a panel's
+ * own act and refused from anywhere else: it is about the display one panel
+ * stands on, and no other surface has one.
  */
 export function windowSurfaceActRows(
   dependencies: WindowSurfaceDependencies,
 ): Pick<ActRows, WindowSurfaceActKind> {
   const { panels } = dependencies;
   /**
-   * The display the asking panel stands on. One statement of the standing both
-   * kinds below need: a window that is not a panel, and a panel on no display,
-   * are the same refusal, because each of the two is about the display one
-   * panel stands on and no other surface has one.
+   * The display the asking panel stands on: a window that is not a panel, and
+   * a panel on no display, are the same refusal.
    */
-  const panelDisplay = (sender: ActSender, kind: WindowSurfaceActKind): number => {
+  const panelDisplay = (sender: ActSender, kind: typeof ACT_KIND.WINDOW_FOCUS_PANEL): number => {
     const displayId = sender.panel ? panels.displayIdFor(sender.sender) : undefined;
     if (displayId === undefined) throw new ActRefused({ message: ACT[kind].refusal });
     return displayId;
   };
   return {
-    [ACT_KIND.WINDOW_SET_EXPANDED]: ({ expanded, focus }, sender) =>
-      panels.setMode(
-        panelDisplay(sender, ACT_KIND.WINDOW_SET_EXPANDED),
-        expanded ? "expanded" : "compact",
-        focus === true,
-      ),
     [ACT_KIND.WINDOW_FOCUS_PANEL]: (_payload, sender) => {
       panels.focusIfExpanded(panelDisplay(sender, ACT_KIND.WINDOW_FOCUS_PANEL));
     },
@@ -99,13 +89,8 @@ export function windowSurfaceActRows(
 
 export function windowSurfaceReports(
   dependencies: Pick<WindowSurfaceDependencies, "recordProductEvent">,
-): Pick<ReportHandlers, "setPointerInterception" | "recordSurfaceEvent"> {
+): Pick<ReportHandlers, "recordSurfaceEvent"> {
   return {
-    setPointerInterception(context, interceptsPointer) {
-      BrowserWindow.fromWebContents(context.sender)?.setIgnoreMouseEvents(!interceptsPointer, {
-        forward: true,
-      });
-    },
     /**
      * The one counting channel the renderer has. Every other event is emitted
      * where its act happens, in this process; these are surface motion no

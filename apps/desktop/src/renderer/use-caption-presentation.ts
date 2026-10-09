@@ -164,9 +164,8 @@ export function useCaptionPresentation(
    */
   const hoverHeight = useRef(0);
   useEffect(() => {
-    // Forwarded moves arrive even while the window is click-through, which is
-    // what lets a pointer resting on words that take no pointer be seen here
-    // at all.
+    // Note that the window's moves are read rather than the caption's own,
+    // because the words take no pointer and would never hear one.
     const handleMove = (event: MouseEvent) => {
       const caption = element.current;
       setHovered(

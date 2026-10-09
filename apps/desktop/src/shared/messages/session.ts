@@ -1,7 +1,3 @@
-import type { Rectangle } from "@sidecar/surface";
-
-export type { WindowMode } from "@sidecar/surface";
-
 /**
  * Which surface a window exists to draw. Every window loads the same renderer
  * bundle, so the role is what tells the hidden voice window apart from the
@@ -15,14 +11,6 @@ export const WINDOW_ROLE = {
 } as const;
 
 export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];
-
-export interface DisplayDiagnostic {
-  id: number;
-  label: string;
-  bounds: Rectangle;
-  workArea: Rectangle;
-  scaleFactor: number;
-}
 
 /**
  * How screen recording is armed, decided in the main process and carried on

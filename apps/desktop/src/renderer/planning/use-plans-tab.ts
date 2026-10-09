@@ -23,7 +23,7 @@ import {
   type PendingRenames,
   PLANS_PAGE,
   type PlansPage,
-  planningCallHoldsPanel,
+  planningCallInProgress,
   plansPage,
   recentFolders,
   renamedView,
@@ -259,7 +259,7 @@ export function usePlansTab(input: {
     voiceStatus: voice.view.voiceStatus,
   });
   const live =
-    planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId;
+    planningCallInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {

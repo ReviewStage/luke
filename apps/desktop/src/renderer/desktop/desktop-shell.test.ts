@@ -45,7 +45,6 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps(),
-    onSettingsSearchEngaged: ignore,
   });
 }
 
@@ -434,7 +433,6 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
     history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps({ view, onViewChange: setView }),
-    onSettingsSearchEngaged: ignore,
   });
 }
 

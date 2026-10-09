@@ -58,14 +58,11 @@ export function DesktopSettings({
   sidebar,
   history,
   settings,
-  onSearchEngaged,
   onExit,
 }: {
   sidebar: SidebarCollapse;
   history: NavigationHistory;
   settings: SettingsPanelProps;
-  /** The caret entering or leaving the search field, which holds the panel open. */
-  onSearchEngaged: (engaged: boolean) => void;
   /** Leaves Settings for wherever it was opened from. */
   onExit: () => void;
 }): React.JSX.Element {
@@ -132,7 +129,6 @@ export function DesktopSettings({
           onSubmit={() => {
             if (first) openResult(first);
           }}
-          onEngagedChange={onSearchEngaged}
         />
         <div className="sidebar-section">
           {search ? (

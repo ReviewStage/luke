@@ -100,11 +100,6 @@ export const BRIDGE = {
     args: noArgs,
     result: result<AppStateSnapshot>(isAppStateSnapshot),
   }),
-  setPointerInterception: entry({
-    kind: "send",
-    channel: "app:set-pointer-interception",
-    args: oneBoolean,
-  }),
   /**
    * The voice window's whole snapshot of the live conversation, reported on
    * every edge of its own and on none of anything else's: the main process

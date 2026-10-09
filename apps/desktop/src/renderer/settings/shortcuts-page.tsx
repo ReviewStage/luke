@@ -13,7 +13,6 @@ import {
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import {
   APP_COMMANDS,
   APP_SHORTCUT_GROUPS,
@@ -22,7 +21,6 @@ import {
   commandForKey,
   shortcutGlyphs,
 } from "#shared/shortcuts";
-import { useAct } from "../act";
 import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -97,7 +95,6 @@ function ShortcutRow({
   onChange: (accelerator: string | undefined) => Promise<ActionResult>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const [recording, setRecording] = useState(false);
   // The change is a round trip through the settings file and the system's
   // registrar, so the controls rest until the store has answered rather than
@@ -198,11 +195,6 @@ function ShortcutRow({
                 }
                 setRejection(undefined);
                 setRecording(true);
-              }}
-              onFocus={() => {
-                // The panel can be showing without its window being key, and a
-                // recording no keystroke can reach would read as a dead control.
-                tell(ACT_KIND.WINDOW_FOCUS_PANEL);
               }}
               // Focus leaving takes the recording with it: whatever was pressed
               // instead is its own action, not a half-formed chord left armed.

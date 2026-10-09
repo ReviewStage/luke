@@ -142,7 +142,6 @@ export function DesktopShell({
   history,
   sidebar,
   settings,
-  onSettingsSearchEngaged,
 }: {
   gates: DesktopGates;
   identity: LukeIdentityProps;
@@ -152,8 +151,6 @@ export function DesktopShell({
   history: NavigationHistory;
   sidebar: SidebarCollapse;
   settings: SettingsPanelProps;
-  /** The caret entering or leaving the settings search, which holds the panel open. */
-  onSettingsSearchEngaged: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
@@ -187,7 +184,6 @@ export function DesktopShell({
           sidebar={sidebar}
           history={history}
           settings={settings}
-          onSearchEngaged={onSettingsSearchEngaged}
           onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
         />
       </div>
