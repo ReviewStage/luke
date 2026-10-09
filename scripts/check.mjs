@@ -37,12 +37,17 @@ function runScript(script) {
   });
 }
 
+// Note that we set exitCode rather than call process.exit, because on macOS a
+// piped stdout is asynchronous and an exit drops whatever a failing check's
+// output has not yet flushed, which is the part that names the failure.
 const results = await Promise.all(checks.map(runScript));
 const failed = checks.filter((_, index) => !results[index]);
 if (failed.length > 0) {
   process.stderr.write(`\nerror: ${failed.join(", ")} failed\n`);
-  process.exit(1);
+  process.exitCode = 1;
+} else {
+  const build = spawn("pnpm", ["run", "build"], { stdio: "inherit" });
+  build.on("close", (status) => {
+    process.exitCode = status ?? 1;
+  });
 }
-
-const build = spawn("pnpm", ["run", "build"], { stdio: "inherit" });
-build.on("close", (status) => process.exit(status ?? 1));
