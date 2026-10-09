@@ -1,3 +1,9 @@
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
 import { Context, Data, Duration, Effect, Exit, Layer, Result, Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
@@ -26,14 +32,6 @@ export const MODEL_CATALOG_URL = "https://ai-gateway.vercel.sh/v1/models";
 /** How long one instance keeps a read catalog before asking again. */
 export const MODEL_CATALOG_TTL = Duration.hours(1);
 
-/** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
-export const MODEL_PROVIDER = {
-  ANTHROPIC: "anthropic",
-  OPENAI: "openai",
-} as const;
-
-type ModelProvider = (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER];
-
 /** What a first-time account starts an agent on, until it chooses. */
 export const CODING_AGENT_DEFAULT_CHOICE = {
   model: "anthropic/claude-opus-5.5",
@@ -54,21 +52,14 @@ const ANTHROPIC_VERSION_POINT = "-";
 
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
-/** One model as `/api/models` answers it and as a Start is checked against. */
-export interface CatalogModel {
-  readonly id: string;
-  readonly name: string;
-  readonly provider: ModelProvider;
-  /** The efforts the model lists, in the catalog's order. */
-  readonly efforts: readonly string[];
-  /** The model's context window in tokens, as the catalog lists it, which a coding agent's session is told; absent where the catalog says nothing. */
+/**
+ * One model as the service offers it: the wire's model (`@sidecar/hosted/models-wire`),
+ * which `/api/models` answers and a Start is checked against, and beside it
+ * the context window the catalog lists, which a coding agent's session is
+ * told and the wire does not carry; absent where the catalog says nothing.
+ */
+export interface OfferedModel extends CatalogModel {
   readonly contextWindow?: number;
-}
-
-/** A model and an effort, as a Start names them and the account's default stores them. */
-export interface ModelChoice {
-  readonly model: string;
-  readonly effort: string;
 }
 
 /** A model as its provider's own API names it. */
@@ -100,7 +91,7 @@ export class ModelChoiceRefused extends Data.TaggedError("ModelChoiceRefused")<{
 /** The catalog the instance read, offered as a service so one read serves every route that checks against it. */
 export class ModelCatalog extends Context.Service<
   ModelCatalog,
-  { readonly read: Effect.Effect<readonly CatalogModel[], ModelCatalogUnavailable> }
+  { readonly read: Effect.Effect<readonly OfferedModel[], ModelCatalogUnavailable> }
 >()("ModelCatalog") {}
 
 // ------------------------------------------------------------- the boundary
@@ -145,7 +136,7 @@ function providerOf(name: string): ModelProvider | undefined {
 }
 
 /** The entry as an offered model, or nothing for one Luke does not offer. */
-function offeredModel(entry: CatalogEntry): CatalogModel | undefined {
+function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const provider = providerOf(splitCatalogId(entry.id)?.provider ?? "");
   if (provider === undefined) return undefined;
   const tags = entry.tags ?? [];
@@ -164,8 +155,8 @@ function offeredModel(entry: CatalogEntry): CatalogModel | undefined {
 }
 
 /** The catalog's answer filtered to what Luke offers, in the catalog's own order. */
-function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly CatalogModel[] {
-  const offered: CatalogModel[] = [];
+function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly OfferedModel[] {
+  const offered: OfferedModel[] = [];
   for (const entry of answer.data) {
     const model = offeredModel(entry);
     if (model !== undefined) offered.push(model);
@@ -176,7 +167,7 @@ function offeredModels(answer: typeof CatalogAnswerSchema.Type): readonly Catalo
 /** One read of the catalog over the client, answered as the offered models or as unavailable. */
 const fetchOfferedModels = /* @__PURE__ */ Effect.fnUntraced(function* (
   client: HttpClient.HttpClient,
-): Effect.fn.Return<readonly CatalogModel[], ModelCatalogUnavailable> {
+): Effect.fn.Return<readonly OfferedModel[], ModelCatalogUnavailable> {
   const request = HttpClientRequest.get(MODEL_CATALOG_URL).pipe(HttpClientRequest.acceptJson);
   const answer = yield* client.execute(request).pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
@@ -205,7 +196,7 @@ export const modelCatalogLayer: Layer.Layer<ModelCatalog, never, HttpClient.Http
   );
 
 /** A catalog of exactly these models, for a test or a caller that already holds one. */
-export function modelCatalogOf(models: readonly CatalogModel[]): Layer.Layer<ModelCatalog> {
+export function modelCatalogOf(models: readonly OfferedModel[]): Layer.Layer<ModelCatalog> {
   return Layer.succeed(ModelCatalog, { read: Effect.succeed(models) });
 }
 
@@ -213,7 +204,7 @@ export function modelCatalogOf(models: readonly CatalogModel[]): Layer.Layer<Mod
 
 /** The choice as the catalog accepts it, or why it refuses: a model it does not offer, or an effort that model does not list. */
 export function validateModelChoice(
-  catalog: readonly CatalogModel[],
+  catalog: readonly OfferedModel[],
   choice: ModelChoice,
 ): Result.Result<ModelChoice, ModelChoiceRefusal> {
   const model = catalog.find((offered) => offered.id === choice.model);

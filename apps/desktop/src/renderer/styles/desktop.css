@@ -301,7 +301,7 @@ body,
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
-   own line and type, ringed, and the folder stays beneath it. */
+   own line and type, ringed, and the repository stays beneath it. */
 .sidebar-plan-field {
   width: calc(100% + 10px);
   margin: -2px -5px;

@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import { Effect, Layer, Option } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { test } from "vitest";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
-  type CatalogModel,
-  MODEL_PROVIDER,
   ModelCatalog,
   ModelCatalogUnavailable,
   modelCatalogOf,

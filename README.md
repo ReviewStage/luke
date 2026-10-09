@@ -13,9 +13,11 @@
 </p>
 
 Luke is a macOS app for planning a feature by voice before you hand it to a
-coding agent. You describe the feature, Luke reads your code and asks about
-what you left open, and a second model writes the plan during the call. You
-copy the finished plan into Claude Code, Codex, or any other agent.
+coding agent. You describe the feature, Luke reads your repository and asks
+about what you left open, and a second model writes the plan during the call.
+Then you press Start and a coding agent implements the plan in a sandbox and
+opens the pull request, or you copy the plan into Claude Code, Codex, or any
+other agent.
 
 ![Luke's window with the plan "Teammate invitations" open and being written during a voice call.](docs/media/luke-plan.png)
 
@@ -25,16 +27,19 @@ Requires an Apple silicon Mac on macOS 14 or newer.
 
 1. Download [Luke.dmg](https://github.com/ReviewStage/luke/releases/latest/download/Luke.dmg).
 2. Open the DMG and drag **Luke** into **Applications**.
-3. Open Luke and sign in with Google or GitHub.
+3. Open Luke and sign in with Google or GitHub. Planning against a
+   repository needs a GitHub sign-in and the Luke GitHub App installed on it,
+   which Luke offers from the plan's repository chip.
 
 Luke asks for microphone access the first time you start a call.
 
 ## Usage
 
-1. Press **New plan**, name it, and choose your project's folder.
+1. Press **New plan**, name it, and choose its GitHub repository.
 2. Press the microphone and describe the feature.
 3. Answer Luke's questions until the plan is complete.
-4. Press **Copy** and paste the plan into your coding agent.
+4. Press **Start** to have a coding agent implement it and open a pull
+   request, or **Copy plan** to paste it into your own.
 
 ## Plan format
 
@@ -56,11 +61,13 @@ and [Example Mapping](https://cucumber.io/blog/bdd/example-mapping-introduction/
 
 ## Code access
 
-Luke doesn't upload your repository. When the planning model needs a file,
-your Mac runs a read-only command such as `ls`, `grep`, or `cat` in the plan's
-folder. The command runs in a macOS sandbox with no network access, no write
-access, and no access to `.env` files. Only the command's output goes to
-Luke's service. See [PRIVACY.md](PRIVACY.md) for details.
+Nothing reads code on your Mac. Luke's service checks the plan's repository
+out in a Vercel Sandbox, with a token the Luke GitHub App mints for that one
+repository and sets at the sandbox's firewall, never inside it, and the
+planning model runs commands such as `ls`, `grep`, or `cat` there. A coding
+agent you start works in a sandbox of its own, on a full checkout, and pushes
+its branch and pull request through the same App. See
+[PRIVACY.md](PRIVACY.md) for details.
 
 ## Contributing
 

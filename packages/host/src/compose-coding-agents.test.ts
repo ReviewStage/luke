@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
-  CODING_AGENT_CALL_FAILURE,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
-  MODEL_PROVIDER,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-wire";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";

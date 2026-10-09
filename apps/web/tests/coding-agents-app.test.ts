@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
   CODING_AGENT_STATUS,
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
-  HOSTED_API_ERROR,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -50,12 +51,7 @@ import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { listCodingAgents, readCodingAgent } from "../server/hosted/coding-agent-store";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  type CatalogModel,
-  CODING_AGENT_DEFAULT_CHOICE,
-  MODEL_PROVIDER,
-  modelCatalogOf,
-} from "../server/hosted/model-catalog";
+import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
 import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { storeWriter } from "../server/hosted/store";
 import { type FakeGitHub, githubReaching, openGithubUser } from "./support/github-app-fake";

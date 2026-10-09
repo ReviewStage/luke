@@ -8,7 +8,9 @@ what we collect, who we send it to, and how to turn it off.
 ## What we collect
 
 **On your Mac.** Luke reads no coding agent session on your Mac, and nothing
-on it reads message history, file contents, or command output. The planning
+on it reads message history, file contents, or command output from your
+Mac's own disk or from any other app; the one transcript it shows is a
+coding agent's that you started from Luke, read from our service. The planning
 model reads a plan's code in a sandbox on our service, never on your Mac,
 as described under "How the planning model reads your repository" below. The
 only coding agents the Mac app lists are the ones you start on a plan from
@@ -47,7 +49,10 @@ assumptions, written by the planning call's notetaker as you talk. It is
 stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
-it at once, and deleting your account removes every plan.
+it at once, with the record of each coding agent started on it and the copy
+of the plan that agent was handed, and marks the plan's conversation and each
+agent's transcript deleted, removed thirty days later; deleting your account
+removes every plan.
 
 **A plan's whiteboard.** Each plan has a whiteboard that Luke's planning model
 and you can both draw on. Our service stores it with the plan, under your
@@ -174,8 +179,8 @@ so the record holds the words you actually heard beside the turns he
 ran and the messages he read from.
 These rows are not sealed: they are stored as written, and our own operators
 can read them. They stand until you delete your account, which removes them at
-once; the conversation of a plan you delete is marked deleted and removed
-thirty days later.
+once; the conversation of a plan you delete, and the transcript of each
+coding agent started on it, are marked deleted and removed thirty days later.
 
 **Usage data.** We count how Luke's features are used on the Mac, and attach
 your name and email to that record. The counts are event names and values from
@@ -194,7 +199,8 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
 could carry another app's words, and so are the feedback form's message
-field, a plan's whiteboard, and a plan's transcript, as a second line. The whiteboard draws its
+field, a plan's whiteboard, a plan's transcript, and each coding agent's
+tab, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.
@@ -302,7 +308,13 @@ only when you press Send.
   policy. The agent's transcript, its words, reasoning summaries, and tool
   calls with their output, is written to your account's Conversation by our
   service, as described under "Your account" above. Nothing of the sandbox
-  reaches the screen recording.
+  reaches the screen recording. The sandbox has ordinary Internet access, and
+  the agent runs the repository's own checks in it; its `web_search` runs on
+  the model provider's own search, so a search goes to the provider the agent
+  is calling. The sandbox is stopped when the agent's turn ends or you stop
+  it, and its checkout, with the agent's changes, stays in a snapshot of it
+  that Vercel keeps on the same terms as the planning checkout's, described
+  under "How the planning model reads your repository" above.
 - GitHub, through the Luke GitHub App, for a coding agent's work. The agent
   checks the repository out, pushes its branch, and opens a pull request
   with an installation token the App mints for that one repository, set at
@@ -329,7 +341,9 @@ were but for a voice key, removed as described above. Nothing of your
 conversation with Luke, his working memory, or his workspace is kept on your
 Mac. When Luke runs a turn for you on our service, the conversation it
 writes is stored unsealed in our own database, as described above, beside
-what earlier versions left there.
+what earlier versions left there. A checkout of a plan's repository, and a
+coding agent's changes to it, are held in a Vercel Sandbox and in the
+snapshot Vercel keeps of it, as described above.
 Your account information is held by our own
 service, usage counts and recordings by PostHog, and crash reports by Sentry.
 

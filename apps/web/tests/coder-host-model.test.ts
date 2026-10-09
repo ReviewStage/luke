@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { Duration, Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
 import { TURN_STATUS } from "../server/core";

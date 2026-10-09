@@ -1,3 +1,4 @@
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -6,7 +7,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../db/auth-schema.js";
 import { accountPreference } from "../db/preferences-schema.js";
 import { db } from "../db/query.js";
-import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "./model-catalog.js";
+import { CODING_AGENT_DEFAULT_CHOICE } from "./model-catalog.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**

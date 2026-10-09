@@ -1,4 +1,5 @@
 import { carried, GATEWAY_METHOD, type GatewayMethodTable, invalid } from "@sidecar/gateway";
+import type { HostedCodingAgentClient } from "@sidecar/hosted";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -11,8 +12,7 @@ import {
   codingAgentMessagesParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
-  type HostedCodingAgentClient,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result, type Schema, type Scope } from "effect";

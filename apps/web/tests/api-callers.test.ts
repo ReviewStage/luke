@@ -24,10 +24,7 @@ const REPO_ROOT = join(WEB, "..", "..");
 /** A small table in the committed table's shape: one exact rewrite, one segment rewrite, one prefix rewrite. */
 const TABLE = [
   { src: "/api/auth/(.*)", dest: "/api/default.js?route=auth/[...all]&path=auth/$1" },
-  {
-    src: "/api/plans/([^/]+)/commands/claim",
-    dest: "/api/default.js?route=plans/commands/claim&id=$1",
-  },
+  { src: "/api/plans/([^/]+)/agents", dest: "/api/default.js?route=plans/agents&id=$1" },
   { src: "/api/plans/([^/]+)", dest: "/api/default.js?route=plans/plan&id=$1" },
   { src: "/api/events", dest: "/api/default.js?route=events" },
 ];
@@ -75,16 +72,16 @@ test("a template interpolating a whole segment is matched against the pattern th
   const report = await scratchReport({
     "client.ts": [
       `const read = \`/api/plans/\${encodeURIComponent(id)}\`;`,
-      `const claim = \`\${origin}/api/plans/\${id}/commands/claim\`;`,
+      `const agents = \`\${origin}/api/plans/\${id}/agents\`;`,
     ].join("\n"),
-    "probe.sh": 'curl "$ORIGIN/api/plans/$PLAN_ID/commands/claim"\n',
+    "probe.sh": 'curl "$ORIGIN/api/plans/$PLAN_ID/agents"\n',
   });
   assert.deepEqual(refusals(report), []);
   assert.deepEqual(
     report.resolved.map((entry) => [entry.caller.display, entry.caller.kind, entry.route]),
     [
       ["/api/plans/{…}", CALLER_KIND.BUILDER, "/api/plans/([^/]+)"],
-      ["/api/plans/{…}/commands/claim", CALLER_KIND.BUILDER, "/api/plans/([^/]+)/commands/claim"],
+      ["/api/plans/{…}/agents", CALLER_KIND.BUILDER, "/api/plans/([^/]+)/agents"],
     ],
   );
   assert.equal(report.resolved[1]?.caller.sites.length, 2);

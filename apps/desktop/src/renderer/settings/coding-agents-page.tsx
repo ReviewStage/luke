@@ -28,6 +28,8 @@ const MENU_ITEM = "[role=menuitem]";
 const PAGE_LINE = {
   READING: "Reading your default…",
   FAILED: "The default could not be read. Try again.",
+  MODELS_READING: "Reading the models…",
+  MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
@@ -35,6 +37,7 @@ const PAGE_LINE = {
 /** The model row's menu: the models under their marks, the chosen one checked. */
 function ModelMenu({
   models,
+  modelsFailed,
   chosen,
   onPick,
   onClose,
@@ -42,6 +45,8 @@ function ModelMenu({
   menuId,
 }: {
   models: readonly CatalogModel[] | undefined;
+  /** The models were asked for and not answered, so the menu says so rather than reading forever. */
+  modelsFailed: boolean;
   chosen: string;
   onPick: (model: CatalogModel) => void;
   onClose: () => void;
@@ -84,7 +89,9 @@ function ModelMenu({
       onBlur={(event) => onLeave(event.relatedTarget)}
     >
       {models === undefined ? (
-        <p className="plan-compose-menu-note">Reading the models…</p>
+        <p className="plan-compose-menu-note" role={modelsFailed ? "alert" : undefined}>
+          {modelsFailed ? PAGE_LINE.MODELS_FAILED : PAGE_LINE.MODELS_READING}
+        </p>
       ) : (
         models.map((model) => (
           <button
@@ -109,11 +116,13 @@ function ModelMenu({
 function DefaultRows({
   choice,
   models,
+  modelsFailed,
   busy,
   onChange,
 }: {
   choice: ModelChoice;
   models: readonly CatalogModel[] | undefined;
+  modelsFailed: boolean;
   busy: boolean;
   onChange: (choice: ModelChoice) => void;
 }): React.JSX.Element {
@@ -122,7 +131,10 @@ function DefaultRows({
   const row = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const listed = models?.find((model) => model.id === choice.model);
-  const efforts = models === undefined ? [choice.effort] : effortsOf(models, choice.model);
+  // The stored effort stands alone until the catalog is read, and where the catalog has
+  // stopped offering the stored model, so the row never draws nothing.
+  const offered = models === undefined ? [] : effortsOf(models, choice.model);
+  const efforts = offered.length === 0 ? [choice.effort] : offered;
   const close = () => {
     setOpen(false);
     trigger.current?.focus();
@@ -156,6 +168,7 @@ function DefaultRows({
             <ModelMenu
               menuId={menuId}
               models={models}
+              modelsFailed={modelsFailed}
               chosen={choice.model}
               onClose={close}
               onLeave={(left) => {
@@ -207,6 +220,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   const { act } = useAct();
   const [choice, setChoice] = useState<ModelChoice | undefined>(undefined);
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
+  const [modelsFailed, setModelsFailed] = useState(false);
   const [readFailed, setReadFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
@@ -219,6 +233,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
     // Nothing of an earlier read, or an earlier account, stands while this one is out.
     setChoice(undefined);
     setReadFailed(false);
+    setModelsFailed(false);
     act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).then(
       (answer) => {
         if (!live) return;
@@ -231,9 +246,13 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
     );
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
-        if (live && !("failure" in answer)) setModels(answer.models);
+        if (!live) return;
+        if ("failure" in answer) setModelsFailed(true);
+        else setModels(answer.models);
       },
-      () => undefined,
+      () => {
+        if (live) setModelsFailed(true);
+      },
     );
     return () => {
       live = false;
@@ -267,7 +286,13 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
         <p className="settings-note">{PAGE_LINE.SIGNED_OUT}</p>
       ) : choice !== undefined ? (
         <>
-          <DefaultRows choice={choice} models={models} busy={busy} onChange={write} />
+          <DefaultRows
+            choice={choice}
+            models={models}
+            modelsFailed={modelsFailed}
+            busy={busy}
+            onChange={write}
+          />
           {rejection !== undefined ? (
             <p className="error-message" role="alert">
               {rejection}

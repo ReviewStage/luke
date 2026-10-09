@@ -37,6 +37,8 @@ let stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
 let sent: Act[] = [];
 /** Whether a write is refused as a choice the catalog does not offer. */
 let refuseWrites = false;
+/** Whether the models read is answered with a failure rather than the catalog. */
+let refuseModels = false;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -51,7 +53,9 @@ function answer(request: Act): Promise<ActOutcome> {
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
       return Promise.resolve(done({ choice: stored }));
     case ACT_KIND.CODING_AGENTS_MODELS:
-      return Promise.resolve(done({ models: MODELS }));
+      return Promise.resolve(
+        done(refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: MODELS }),
+      );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
         return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE }));
@@ -69,6 +73,7 @@ beforeEach(() => {
   stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
   sent = [];
   refuseWrites = false;
+  refuseModels = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -154,6 +159,28 @@ test("choosing an effort and a model each write the default once and draw what t
     sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE).length,
     2,
   );
+});
+
+test("a models read that fails says so in the menu, and the stored effort still stands in its row", async () => {
+  refuseModels = true;
+  const page = await mount();
+
+  assert.equal(page.querySelector(".settings-model-chip")?.textContent, "Claude Opus 5.5");
+  assert.deepEqual(efforts(page), [["high", "true"]]);
+  act(() => page.querySelector<HTMLElement>(".settings-model-chip")?.click());
+  assert.equal(
+    page.querySelector('[role="menu"] [role="alert"]')?.textContent,
+    "The models could not be read. Open Settings again to try again.",
+  );
+  assert.deepEqual([...page.querySelectorAll('[role="menuitem"]')], []);
+});
+
+test("a stored model the catalog has stopped offering keeps its effort drawn rather than an empty row", async () => {
+  stored = { model: "anthropic/claude-opus-4.1", effort: "max" };
+  const page = await mount();
+
+  assert.equal(page.querySelector(".settings-model-chip")?.textContent, "Claude Opus 4.1");
+  assert.deepEqual(efforts(page), [["max", "true"]]);
 });
 
 test("a write the service refused leaves the default as it was and says so under the rows", async () => {

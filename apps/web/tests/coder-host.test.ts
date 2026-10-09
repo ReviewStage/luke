@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import {
@@ -44,7 +45,7 @@ import {
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
 import { createCodingAgent, latestTurnsOf } from "../server/hosted/coding-agent-store";
-import { type CatalogModel, MODEL_PROVIDER, modelCatalogOf } from "../server/hosted/model-catalog";
+import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { type ConversationTarget, type MessageCursor, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
@@ -67,7 +68,7 @@ const NOW = 1_800_000_000_000;
 
 const PLAN_TEXT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 
-const CATALOG: readonly CatalogModel[] = [
+const CATALOG: readonly OfferedModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
     name: "Claude Opus 5.5",

@@ -120,14 +120,10 @@ export function applyMessagesPage(
   page: readonly CodingAgentMessage[],
 ): readonly CodingAgentMessage[] {
   if (page.length === 0) return held;
-  const byId = new Map(held.map((message) => [message.id, message]));
-  const joined = held.map((message) => byId.get(message.id) ?? message);
-  const appended: CodingAgentMessage[] = [];
-  for (const message of page) {
-    const at = joined.findIndex((candidate) => candidate.id === message.id);
-    if (at === -1) appended.push(message);
-    else joined[at] = message;
-  }
+  const heard = new Map(page.map((message) => [message.id, message]));
+  const joined = held.map((message) => heard.get(message.id) ?? message);
+  const known = new Set(held.map((message) => message.id));
+  const appended = page.filter((message) => !known.has(message.id));
   return [...joined, ...appended];
 }
 

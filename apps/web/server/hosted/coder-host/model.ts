@@ -1,9 +1,10 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@sidecar/hosted/models-wire";
 import type { LanguageModel } from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
-import { MODEL_PROVIDER, type ModelChoice, providerModelOf } from "../model-catalog.js";
+import { providerModelOf } from "../model-catalog.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -32,10 +33,7 @@ export interface CoderModelSelection {
 }
 
 /** The provider's own option carrying the effort, by provider. */
-function effortOptions(
-  provider: (typeof MODEL_PROVIDER)[keyof typeof MODEL_PROVIDER],
-  effort: string,
-): AgentModelOptionsDefinition {
+function effortOptions(provider: ModelProvider, effort: string): AgentModelOptionsDefinition {
   switch (provider) {
     case MODEL_PROVIDER.ANTHROPIC:
       return { providerOptions: { anthropic: { effort } } };
