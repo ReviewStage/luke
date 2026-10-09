@@ -55,6 +55,17 @@ test("a file read and a search say the path and the pattern, and answer with the
   assert.equal(grep.glyph, TOOL_GLYPH.SEARCH);
   assert.deepEqual(grep.summary, { label: "Searched", code: "invit" });
   assert.deepEqual(grep.output, { kind: TOOL_BLOCK.TEXT, text: "a.ts:1: invite" });
+
+  // A search the tool cut short says so after its matches, so they are not read as all of them.
+  const cut = toolCallView({
+    tool: "grep",
+    input: { pattern: "invit" },
+    output: { content: "a.ts:1: invite\n", matchCount: 100, path: "/w", truncated: true },
+  });
+  assert.deepEqual(cut.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "a.ts:1: invite\n(output truncated)",
+  });
 });
 
 test("a patch names the first file it touches and how many more, carries the patch to draw as a diff, and answers with the files it changed", () => {
@@ -87,6 +98,20 @@ test("a patch names the first file it touches and how many more, carries the pat
     text: "update apps/web/a.ts\nadd apps/web/b.ts",
   });
   assert.deepEqual(patchPaths(patchText), ["apps/web/a.ts", "apps/web/b.ts"]);
+
+  // A problem the patch reported is told after the files, not dropped.
+  const flagged = toolCallView({
+    tool: "apply_patch",
+    input: { root: "/w", patchText },
+    output: {
+      diagnostics: ["Type error in apps/web/a.ts", { path: "apps/web/b.ts", message: "unused" }],
+      files: [{ operation: "update", path: "apps/web/a.ts" }],
+    },
+  });
+  assert.deepEqual(flagged.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: `update apps/web/a.ts\nType error in apps/web/a.ts\n${JSON.stringify({ path: "apps/web/b.ts", message: "unused" }, null, 2)}`,
+  });
 });
 
 test("a tool this build does not know is named as it is, with its input and answer as JSON", () => {

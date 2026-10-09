@@ -36,7 +36,8 @@ function useFold(): FoldState {
   return context;
 }
 
-export type FoldProps = ComponentProps<"details"> & {
+/** Note that the element's own `open` is not a prop: the state is this component's, and a fold meant to start open says `defaultOpen`. */
+export type FoldProps = Omit<ComponentProps<"details">, "open"> & {
   defaultOpen?: boolean;
 };
 

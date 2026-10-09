@@ -113,11 +113,14 @@ function commandOutput(output: WireValue): ToolBlock {
   const exitCode = isWireNumber(output.exitCode) ? output.exitCode : 0;
   const lines = [stdout.trimEnd(), stderr.trimEnd()].filter((text) => text.length > 0);
   if (exitCode !== 0) lines.push(`exit ${exitCode}`);
-  if (output.truncated === true) lines.push("(output truncated)");
+  if (output.truncated === true) lines.push(TRUNCATED_NOTE);
   return textBlock(stripAnsi(lines.join("\n")));
 }
 
-/** A patch's answer: the files it changed, one a line. */
+/** What an answer cut short by its tool says at its end. */
+const TRUNCATED_NOTE = "(output truncated)";
+
+/** A patch's answer: the files it changed, one a line, then every problem it reported. */
 function patchOutput(output: WireValue): ToolBlock {
   const files = isRecord(output) ? output.files : undefined;
   if (files === undefined || !isWireArray(files)) return jsonBlock(output);
@@ -126,13 +129,19 @@ function patchOutput(output: WireValue): ToolBlock {
     const path = stringAt(file, "path");
     return operation === undefined || path === undefined ? [] : [`${operation} ${path}`];
   });
+  const diagnostics = isRecord(output) ? output.diagnostics : undefined;
+  if (diagnostics !== undefined && isWireArray(diagnostics)) {
+    for (const diagnostic of diagnostics) lines.push(asJson(diagnostic));
+  }
   return textBlock(lines.join("\n"));
 }
 
-/** An answer that is words under one key, as they are; anything else as its JSON. */
+/** An answer that is words under one key, as they are, with a note where the tool cut them short; anything else as its JSON. */
 function wordsOutput(output: WireValue, key: string): ToolBlock {
   const words = stringAt(output, key);
-  return words === undefined ? jsonBlock(output) : textBlock(words);
+  if (words === undefined) return jsonBlock(output);
+  const truncated = isRecord(output) && output.truncated === true;
+  return textBlock(truncated ? `${words.trimEnd()}\n${TRUNCATED_NOTE}` : words);
 }
 
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
