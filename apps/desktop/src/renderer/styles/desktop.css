@@ -7,9 +7,16 @@
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
-  --desktop-bar-height: 52px;
-  /* A tab's pill, and the "+" beside a strip of them. */
-  --tab-height: 28px;
+  /* A top row and its hairline, its middle level with the traffic lights'. */
+  --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
+  /* One control's box, corner, and glyph, spent by every button and tab in
+     the top rows and the title bar, so a row of them reads as one. */
+  --control-height: 30px;
+  --control-radius: 8px;
+  --control-glyph: 15px;
+  /* A top row's inset from its column's edges, and the room between its items. */
+  --bar-inset: 12px;
+  --bar-gap: 8px;
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
   /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
@@ -21,17 +28,21 @@
      the first this far past the green light: about what the lights leave
      between themselves. The buttons stand edge to edge, so each glyph is as
      far from the next as the first is from the light, and the row reads as one. */
-  --title-bar-button: 30px;
   --title-bar-inset: 8px;
   --title-bar-left: calc(var(--traffic-lights-end) + var(--title-bar-inset));
-  /* Where the work column's toolbar starts its title while the sidebar is
-     folded: clear of the traffic lights and both buttons beside them, by the
-     toolbar's own gap between its items. */
-  --sidebar-toggle-clearance: calc(var(--title-bar-left) + 2 * var(--title-bar-button) + 16px);
+  /* Where the work column's toolbar starts its tab while the sidebar is
+     folded: clear of the traffic lights and both buttons beside them, by a
+     row's own gap between its items. */
+  --sidebar-toggle-clearance: calc(
+    var(--title-bar-left) +
+    2 *
+    var(--control-height) +
+    var(--bar-gap)
+  );
   /* What a top row at the window's right edge leaves past its last control
-     for the side panel's toggle: the toggle, its inset from the edge, and the
-     toolbar's own gap between its buttons. */
-  --panel-toggle-clearance: calc(var(--title-bar-inset) + var(--title-bar-button) + 8px);
+     for the side panel's toggle: the toggle, a row's inset from the edge,
+     and a row's gap between its items. */
+  --panel-toggle-clearance: calc(var(--bar-inset) + var(--control-height) + var(--bar-gap));
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
   /* A destructive act's own button, filled: deep enough to carry white words,
@@ -135,13 +146,13 @@ body,
 .title-bar-controls {
   position: absolute;
   z-index: 2;
-  top: calc(var(--traffic-lights-middle) - var(--title-bar-button) / 2);
+  top: calc(var(--traffic-lights-middle) - var(--control-height) / 2);
   left: var(--title-bar-left);
   display: flex;
 }
 
 .title-bar-controls[data-edge="end"] {
-  right: var(--title-bar-inset);
+  right: var(--bar-inset);
   left: auto;
 }
 
@@ -246,8 +257,8 @@ body,
 .sidebar-item svg,
 .toolbar-button svg,
 .primary-button svg {
-  width: 15px;
-  height: 15px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
   flex: 0 0 auto;
 }
 
@@ -453,7 +464,7 @@ body,
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 16px;
+  gap: var(--bar-gap);
   min-height: var(--desktop-bar-height);
   padding: 8px var(--panel-toggle-clearance) 8px 32px;
   border-bottom: 1px solid var(--hairline);
@@ -463,7 +474,7 @@ body,
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
    the window's, and the panel's own row leaves the toggle its room. */
 .desktop-plan[data-panel-open="true"] .desktop-toolbar {
-  padding-right: 20px;
+  padding-right: var(--bar-inset);
 }
 
 /* A pane sliding in finds the work column already narrowed for it, so the
@@ -503,16 +514,16 @@ body,
 }
 
 /* The plan's toolbar leads with its tab rather than a title, so it starts
-   the tab's pill where the title's words started, less the pill's own inset. */
+   the tab's pill a row's inset in, as the side panel's row starts its own. */
 .desktop-plan-main .desktop-toolbar {
-  padding-left: 22px;
+  padding-left: var(--bar-inset);
 }
 
 .desktop-toolbar-actions {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--bar-gap);
 }
 
 .desktop-toolbar-note {
@@ -537,9 +548,9 @@ body,
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
+  height: var(--control-height);
   padding: 0 12px;
-  border-radius: 8px;
+  border-radius: var(--control-radius);
   background: none;
   font-size: 12.5px;
   font-weight: 600;
@@ -555,9 +566,11 @@ body,
   background: none;
 }
 
+/* Square however tight its row, so only the tabs beside it give way. */
 .toolbar-icon-button {
+  flex: none;
   justify-content: center;
-  width: 30px;
+  width: var(--control-height);
   padding: 0;
   color: var(--text-secondary);
 }
@@ -1474,9 +1487,9 @@ body,
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--bar-gap);
   min-height: var(--desktop-bar-height);
-  padding: 8px var(--panel-toggle-clearance) 8px 10px;
+  padding: 8px var(--panel-toggle-clearance) 8px var(--bar-inset);
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
 }
@@ -1488,18 +1501,14 @@ body,
 }
 
 /* The tabs and their "+" take what the row leaves beside the full-screen
-   button, scrolling beneath it rather than pushing it out. */
+   button, whatever they hold, so the strip has that room to fit its tabs to
+   and gives way beneath the button rather than pushing it out. */
 .side-panel-tabs {
   display: flex;
   min-width: 0;
+  flex: 1 1 auto;
   align-items: center;
   gap: 2px;
-}
-
-.side-panel-tabs .toolbar-icon-button {
-  width: var(--tab-height);
-  height: var(--tab-height);
-  border-radius: 7px;
 }
 
 .side-panel-tabs .toolbar-icon-button[aria-disabled="true"] {
@@ -1567,9 +1576,14 @@ body,
 /* Tabs ------------------------------------------------------------------------ */
 
 /* One strip drawn alike in the plan's column and the side panel, the way an
-   editor draws its tabs: each a glyph and a label in a compact pill, raised
-   while chosen and plain and muted otherwise, with its × standing on the
-   chosen tab and shown on another while the pointer is on it. */
+   editor draws its tabs: each a glyph and a label in a pill a toolbar
+   button's size, raised while chosen and plain and muted otherwise, with its
+   × standing on the chosen tab and shown on another while the pointer is on
+   it. No tab gives way while the strip holds them whole; past that the strip
+   is compact (`data-compact`, tab-strip.tsx): the unchosen tabs stand as
+   their glyphs alone, never as a letter and an ellipsis, and the chosen tab
+   keeps its glyph, label, and ×, its label truncated to a few characters at
+   the least. */
 .tab-strip {
   display: flex;
   min-width: 0;
@@ -1580,13 +1594,21 @@ body,
 }
 
 .tab {
+  /* The pill's insets about its glyph and label, and the ×'s box with its
+     inset from the pill's end. */
+  --tab-start: 8px;
+  --tab-end: 10px;
+  --tab-gap: 6px;
+  --tab-close: 20px;
+  --tab-close-inset: 4px;
   position: relative;
   display: flex;
-  min-width: 56px;
-  flex: 0 1 auto;
+  flex: none;
   align-items: center;
-  border-radius: 7px;
+  border-radius: var(--control-radius);
   color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 560;
   transition:
     background-color var(--duration-hover) ease,
     color var(--duration-hover) ease;
@@ -1603,42 +1625,45 @@ body,
   color: var(--text-primary);
 }
 
+/* Only the chosen tab keeps room for its ×, so the strip holds more before
+   it gives way; another tab's × comes over the end of its label, which fades
+   beneath it. */
+.tab[data-closable="true"][data-selected="true"] {
+  --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
+}
+
 .tab-button {
   position: relative;
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
   align-items: center;
-  gap: 6px;
-  height: var(--tab-height);
-  padding: 0 9px 0 8px;
+  gap: var(--tab-gap);
+  height: var(--control-height);
+  padding: 0 var(--tab-end) 0 var(--tab-start);
   border-radius: inherit;
   background: none;
   color: inherit;
-  font-size: 13px;
-  font-weight: 560;
-}
-
-/* Only the chosen tab keeps room for its ×, so the strip holds more before
-   it scrolls; another tab's × comes over the end of its label, which fades
-   beneath it. */
-.tab[data-closable="true"][data-selected="true"] .tab-button {
-  padding-right: 25px;
 }
 
 .tab[data-closable="true"][data-selected="false"]:hover .tab-button {
-  mask-image: linear-gradient(to left, transparent 24px, #000 34px);
+  mask-image: linear-gradient(
+    to left,
+    transparent calc(var(--tab-close) + var(--tab-close-inset)),
+    #000 calc(var(--tab-close) + var(--tab-close-inset) + 10px)
+  );
 }
 
 .tab-icon {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   color: var(--text-secondary);
 }
 
 .tab-icon svg {
-  width: 14px;
-  height: 14px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
 }
 
 .tab-label {
@@ -1667,13 +1692,13 @@ body,
 .tab-close {
   position: absolute;
   top: 50%;
-  right: 5px;
+  right: var(--tab-close-inset);
   display: flex;
-  width: 18px;
-  height: 18px;
+  width: var(--tab-close);
+  height: var(--tab-close);
   align-items: center;
   justify-content: center;
-  border-radius: 5px;
+  border-radius: 6px;
   background: none;
   color: var(--text-secondary);
   opacity: 0;
@@ -1694,18 +1719,52 @@ body,
 }
 
 .tab-close svg {
-  width: 11px;
-  height: 11px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
 }
 
-/* Something arrived on a tab while another was chosen: a dot at its glyph's
-   corner until the tab is chosen, as the gear carries the update's. */
+/* Something arrived on a tab while another was chosen: a dot on its glyph's
+   corner until the tab is chosen, as the gear carries the update's. It rides
+   the glyph, so a compact tab wears it too, and an unchosen tab's × stands
+   at the pill's other end. */
 .tab .tab-note {
-  top: 5px;
-  left: 18px;
-  width: 5px;
-  height: 5px;
+  top: -2px;
+  right: -2px;
+  width: 6px;
+  height: 6px;
   margin: 0;
+}
+
+/* Compact, every tab but the chosen one is its glyph in a toolbar button's
+   square, its label left to its hint and its × to the keyboard's Delete, and
+   the chosen tab takes the room left, down to a few of its characters. */
+.tab-strip[data-compact="true"] .tab[data-selected="true"] {
+  min-width: calc(
+    var(--tab-start) +
+    var(--control-glyph) +
+    var(--tab-gap) +
+    3.5ch +
+    var(--tab-end)
+  );
+  flex: 0 1 auto;
+}
+
+.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-button {
+  width: var(--control-height);
+  justify-content: center;
+  padding: 0;
+  mask-image: none;
+}
+
+.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+}
+
+.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-close {
+  display: none;
 }
 
 /* Confirm dialog -------------------------------------------------------------- */

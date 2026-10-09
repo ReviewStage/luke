@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { plansControl } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
@@ -281,6 +282,29 @@ test("the panel's tabs hang no pill, their words being enough, while Copy plan s
   );
   assert.ok(copy, "the toolbar draws Copy plan");
   assert.equal(hover(copy), "Copy plan⇧⌘C");
+});
+
+test("a panel too narrow for its tabs whole names each unchosen tab in a pill, and widened, hangs none again", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const panelTabs = page.querySelector(".side-panel .tab-strip");
+  assert.ok(panelTabs, "the panel draws its tabs");
+  const stripRoom = (tabsNeed: number) => {
+    vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+      return this === panelTabs ? tabsNeed : 0;
+    });
+    vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+      return this === panelTabs ? 200 : 0;
+    });
+    act(() => relayout());
+  };
+
+  stripRoom(320);
+  assert.equal(hover(tabNamed(page, "Board")), undefined);
+  assert.equal(hover(tabNamed(page, "Code")), "Code");
+
+  stripRoom(180);
+  assert.equal(hover(tabNamed(page, "Code")), undefined);
 });
 
 test("the Code tab draws the code Luke has on screen", () => {

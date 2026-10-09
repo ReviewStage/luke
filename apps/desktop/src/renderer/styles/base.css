@@ -925,28 +925,6 @@ button:disabled {
   gap: 14px;
 }
 
-/* The radius is the thumb's, not a shape of its own: the tab draws no
-   background, so this changes nothing about how it looks and everything about
-   how it is ringed. A focus ring follows the border radius of the box it is
-   drawn around, so a control that is drawn round by something behind it — and
-   declares no radius itself — takes a ring with square corners around a shape
-   that has none. */
-.tab {
-  position: relative;
-  flex: 1;
-  padding: 6px 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 620;
-  transition: color var(--duration-hover) ease;
-}
-
-.tab[data-active="true"] {
-  color: var(--text-primary);
-}
-
 /* The dot the Settings tab wears while a newer release is waiting. News, not
    urgency, so it takes the working blue the Download button answers in rather
    than the attention orange. Absolutely positioned with auto insets: it holds

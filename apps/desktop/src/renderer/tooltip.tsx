@@ -172,20 +172,23 @@ function TooltipPill({
  * Wraps one control, which must take the handlers it is handed. `command`
  * adds its chord to the pill and to the control's `aria-keyshortcuts`. The
  * pill describes the control only where its label is not already the
- * control's own name, so a reader is not told the same word twice.
+ * control's own name, so a reader is not told the same word twice. With no
+ * label it raises no pill, so a control whose hint comes and goes keeps its
+ * place, and its focus, while it does.
  */
 export function Tooltip({
   label,
   command,
   children,
 }: {
-  label: string;
+  label: string | undefined;
   command?: AppCommand;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
   const [shown, setShown, latest] = useStateWithRef<Shown | undefined>(undefined);
   const show = (anchor: HTMLElement) => {
+    if (label === undefined) return;
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
     setShown({
@@ -222,7 +225,7 @@ export function Tooltip({
 
   const own = children.props;
   const anchor = cloneElement(children, {
-    ...(shown?.describes ? { "aria-describedby": id } : undefined),
+    ...(shown?.describes && label !== undefined ? { "aria-describedby": id } : undefined),
     ...(command === undefined
       ? undefined
       : { "aria-keyshortcuts": shortcutAria(APP_SHORTCUTS[command].chord) }),
@@ -253,7 +256,7 @@ export function Tooltip({
   return (
     <>
       {anchor}
-      {shown === undefined ? null : (
+      {shown === undefined || label === undefined ? null : (
         <TooltipPill id={id} shown={shown} label={label} command={command} />
       )}
     </>
