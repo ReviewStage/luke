@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -6,9 +6,10 @@ import { TURN_STATUS } from "../core.js";
 import { codingAgent } from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
-import { conversations, turns } from "../db/storage-schema.js";
+import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./store/database.js";
+import { type LatestTurn, latestTurnsOf } from "./store/message-reads.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.
@@ -56,15 +57,9 @@ export interface CodingAgentStarted {
   readonly created: boolean;
 }
 
-/** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. */
-export interface CodingAgentLatestTurn {
-  readonly conversationId: string;
-  readonly id: string;
-  readonly status: string;
-  /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
-  readonly eveTurnId: string | null;
-  readonly cancelRequestedAt: Date | null;
-}
+/** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`store/message-reads.ts`), re-exported here beside the agents it is read for. */
+export type CodingAgentLatestTurn = LatestTurn;
+export { latestTurnsOf };
 
 /** A Start: the plan, the request's own key, what to run on, and the plan text and repository as they stand now. */
 export interface NewCodingAgent {
@@ -218,32 +213,6 @@ const deleteConversationRow = SqlSchema.void({
       .where(and(eq(conversations.id, conversationId), eq(conversations.userId, userId))),
 });
 
-const LatestTurnRowSchema = Schema.Struct({
-  conversationId: Schema.String,
-  id: Schema.String,
-  status: Schema.String,
-  eveTurnId: Schema.NullOr(Schema.String),
-  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
-});
-
-/** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
-const findLatestTurns = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
-  Result: LatestTurnRowSchema,
-  execute: ({ userId, conversationIds }) =>
-    db
-      .selectDistinctOn([turns.conversationId], {
-        conversationId: turns.conversationId,
-        id: turns.id,
-        status: turns.status,
-        eveTurnId: turns.eveTurnId,
-        cancelRequestedAt: turns.cancelRequestedAt,
-      })
-      .from(turns)
-      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
-      .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
-});
-
 /**
  * Starts an agent on the account's plan: a `coding_agent` conversation and
  * the row that binds it to the plan, with the plan text and repository as
@@ -332,18 +301,6 @@ export function readCodingAgentOfConversation(
   conversationId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgentOfConversation({ userId, conversationId });
-}
-
-/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
-export function latestTurnsOf(
-  userId: string,
-  conversationIds: readonly string[],
-): CodingAgentStoreEffect<ReadonlyMap<string, CodingAgentLatestTurn>> {
-  if (conversationIds.length === 0) return Effect.succeed(new Map());
-  return Effect.map(
-    findLatestTurns({ userId, conversationIds }),
-    (rows) => new Map(rows.map((row) => [row.conversationId, row])),
-  );
 }
 
 /** The turn statuses under which an agent is still at work, which is when a Stop has something to stop. */

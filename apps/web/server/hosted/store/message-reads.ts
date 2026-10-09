@@ -409,6 +409,54 @@ export function readMessageByClientId(
   );
 }
 
+/** The newest turn of a conversation, as a coding agent's status is read from it. */
+export interface LatestTurn {
+  readonly conversationId: string;
+  readonly id: string;
+  readonly status: string;
+  /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
+  readonly eveTurnId: string | null;
+  readonly cancelRequestedAt: Date | null;
+}
+
+const LatestTurnRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  id: Schema.String,
+  status: Schema.String,
+  eveTurnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+/** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
+const findLatestTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Result: LatestTurnRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .selectDistinctOn([turns.conversationId], {
+        conversationId: turns.conversationId,
+        id: turns.id,
+        status: turns.status,
+        eveTurnId: turns.eveTurnId,
+        cancelRequestedAt: turns.cancelRequestedAt,
+      })
+      .from(turns)
+      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
+      .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
+});
+
+/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
+export function latestTurnsOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLatestTurns({ userId, conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row])),
+  );
+}
+
 /** A turn row is mutable, so its order is the latest instant any of its stamps was set. */
 const TURN_CHANGED_AT = sql`
   greatest(
