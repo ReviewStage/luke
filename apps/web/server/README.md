@@ -55,8 +55,18 @@ changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
-`GITHUB_CLIENT_SECRET`.
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and a GitHub client. That client
+is the Luke GitHub App's, `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`,
+wherever the deployment holds both; a deployment holding either alone or
+neither signs in through the OAuth App from before it, `GITHUB_CLIENT_ID` and
+`GITHUB_CLIENT_SECRET`, and never through one client's id with the other's
+secret (`authSecrets` in `server/auth-deployment.ts`; the admin dashboard's
+"GitHub sign-in" row reads the same choice). The round trip is the same
+OAuth under both, and GitHub names the developer by one user id under both,
+so an account that signed in through the OAuth App signs in to the user it
+already has through the App (`tests/auth-github-sign-in.test.ts`). What the
+developer sees is one "Authorize Luke" screen on their next sign-in; nothing
+is installed, and a plan still reads a folder on their Mac.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
 `/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
@@ -99,7 +109,17 @@ trusted first-party app.
 
 Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
-`user:email`, because Luke requires an email address for its account snapshot.
+`read:user` and `user:email` (`GITHUB_SIGN_IN_SCOPES` in `server/auth-policy.ts`),
+because Luke requires an email address for its account snapshot. GitHub
+ignores scopes on a GitHub App's authorization, where the App's "Email
+addresses: read" permission is what answers the `/user/emails` read instead.
+
+A Preview's GitHub sign-in goes through production's OAuth proxy (above), and
+production is the end that exchanges the code, under its own GitHub client:
+a Preview whose branch signs in through the App can complete a GitHub sign-in
+only while production holds the App's `GITHUB_APP_CLIENT_ID` and
+`GITHUB_APP_CLIENT_SECRET`, a Vercel project setting rather than anything in
+this repository.
 
 Every function Vercel deploys is plain ESM. The route sources live under
 `server/routes/`, and `scripts/bundle-functions.ts` bundles them into

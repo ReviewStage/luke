@@ -1,8 +1,16 @@
 import assert from "node:assert/strict";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { oAuthProxy } from "better-auth/plugins";
+import { Redacted } from "effect";
 import { test } from "vitest";
-import { authDeployment, LOCAL_AUTH_URL } from "../server/auth-deployment";
+import {
+  authDeployment,
+  authSecrets,
+  GITHUB_APP_ENVIRONMENT,
+  LOCAL_AUTH_URL,
+  type SocialClient,
+  socialClientConfigured,
+} from "../server/auth-deployment";
 import {
   authProxy,
   isTrustedProxyCallback,
@@ -11,6 +19,24 @@ import {
 } from "../server/auth-proxy";
 
 const PRODUCTION_URL = "https://tryluke.dev";
+
+const GITHUB_APP = {
+  [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: "Iv1.fixture-app-client",
+  [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "fixture-app-client-secret",
+};
+const GITHUB_OAUTH_APP = {
+  GITHUB_CLIENT_ID: "the-oauth-app-from-before",
+  GITHUB_CLIENT_SECRET: "its-secret",
+};
+
+/** A social client as the fixture reads it: the id beside the secret unsealed, or none. */
+function revealed(client: SocialClient) {
+  return {
+    clientId: client.clientId,
+    clientSecret:
+      client.clientSecret === undefined ? undefined : Redacted.value(client.clientSecret),
+  };
+}
 
 test("production names the registered address and trusts nothing beyond it", () => {
   const deployment = authDeployment({
@@ -225,4 +251,55 @@ test("only a preview carries the sign-in hook that names that return, ahead of t
   assert.notEqual(preview.hooks.before[0], plugin.hooks.before[0]);
   assert.equal(production.hooks.before.length, plugin.hooks.before.length + 1);
   assert.equal(production.hooks.before[0] === preview.hooks.before[0], false);
+});
+
+test("the GitHub sign-in's client is the Luke GitHub App's wherever the deployment holds its id and secret", () => {
+  const secrets = authSecrets({ ...GITHUB_OAUTH_APP, ...GITHUB_APP });
+
+  assert.deepEqual(revealed(secrets.github), {
+    clientId: "Iv1.fixture-app-client",
+    clientSecret: "fixture-app-client-secret",
+  });
+  assert.equal(socialClientConfigured(secrets.github), true);
+  // The Google client and the session secret are untouched by which GitHub client is chosen.
+  assert.deepEqual(revealed(secrets.google), { clientId: "", clientSecret: undefined });
+  assert.equal(secrets.sessionSecret, undefined);
+});
+
+test("a deployment holding only the OAuth App's client signs in through it, as before the App", () => {
+  const secrets = authSecrets(GITHUB_OAUTH_APP);
+
+  assert.deepEqual(revealed(secrets.github), {
+    clientId: "the-oauth-app-from-before",
+    clientSecret: "its-secret",
+  });
+  assert.equal(socialClientConfigured(secrets.github), true);
+});
+
+test("half an App client is no client: the sign-in falls back whole, never one id with the other's secret", () => {
+  const withoutAppSecret = authSecrets({
+    ...GITHUB_OAUTH_APP,
+    [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: GITHUB_APP[GITHUB_APP_ENVIRONMENT.CLIENT_ID],
+    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "  ",
+  });
+  const withoutAppId = authSecrets({
+    ...GITHUB_OAUTH_APP,
+    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: GITHUB_APP[GITHUB_APP_ENVIRONMENT.CLIENT_SECRET],
+  });
+
+  for (const secrets of [withoutAppSecret, withoutAppId]) {
+    assert.deepEqual(revealed(secrets.github), {
+      clientId: "the-oauth-app-from-before",
+      clientSecret: "its-secret",
+    });
+  }
+
+  // Nor does a half-set OAuth App borrow the App's other half.
+  const halves = authSecrets({
+    [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: GITHUB_APP[GITHUB_APP_ENVIRONMENT.CLIENT_ID],
+    GITHUB_CLIENT_SECRET: "its-secret",
+  });
+  assert.deepEqual(revealed(halves.github), { clientId: "", clientSecret: "its-secret" });
+  assert.equal(socialClientConfigured(halves.github), false);
+  assert.equal(socialClientConfigured(authSecrets({}).github), false);
 });
