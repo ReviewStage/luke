@@ -72,16 +72,14 @@ export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;
 }
 
-/** The agents' own routes, by the agent's id. */
-const AGENTS_PATH = "/api/agents";
-
 /** One agent's transcript past a cursor (GET), held open while the agent runs; `coding-agent-wire.ts` declares the answer. */
 export function agentMessagesPath(agentId: string, after: string): string {
-  const path = `${AGENTS_PATH}/${encodeURIComponent(agentId)}/messages`;
-  return `${path}?after=${encodeURIComponent(after)}`;
+  const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
+  const query = new URLSearchParams({ after });
+  return `${path}?${query}`;
 }
 
 /** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
 export function agentStopPath(agentId: string): string {
-  return `${AGENTS_PATH}/${encodeURIComponent(agentId)}/stop`;
+  return `/api/agents/${encodeURIComponent(agentId)}/stop`;
 }
