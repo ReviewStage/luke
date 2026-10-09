@@ -6,6 +6,7 @@ import { HttpServerResponse } from "effect/unstable/http";
 import { test } from "vitest";
 import { errorResponse, HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
+  GitHubSignInRequiredRefusal,
   HOSTED_REFUSAL,
   hostedRefusalResponse,
   InvalidRequestRefusal,
@@ -14,6 +15,7 @@ import {
   NotFoundRefusal,
   PromptTooLargeRefusal,
   QuotaExhaustedRefusal,
+  RepositoryNotReachableRefusal,
   RequestTooLargeRefusal,
   UnavailableRefusal,
   UnknownToolRefusal,
@@ -101,6 +103,16 @@ const REFUSALS = [
     refusal: HOSTED_REFUSAL.UNAVAILABLE,
     schema: UnavailableRefusal,
     status: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  },
+  {
+    refusal: HOSTED_REFUSAL.GITHUB_SIGN_IN_REQUIRED,
+    schema: GitHubSignInRequiredRefusal,
+    status: HOSTED_HTTP_STATUS.FORBIDDEN,
+  },
+  {
+    refusal: HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE,
+    schema: RepositoryNotReachableRefusal,
+    status: HOSTED_HTTP_STATUS.FORBIDDEN,
   },
 ] as const;
 

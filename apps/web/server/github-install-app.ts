@@ -26,6 +26,7 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http";
 import { GitHubApp, type GitHubReadFailure } from "./github/github-app.js";
+import { logGitHubReadFailure } from "./github/github-refusal.js";
 import { hostedNotFoundRoute } from "./hosted/http-effect.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -54,18 +55,13 @@ function landing(status: GitHubInstallStatus): HttpServerResponse.HttpServerResp
   });
 }
 
-/** The failure written down by its kind alone: nothing of the App's JWT or GitHub's body reaches a line. */
-function logReadFailure(failure: GitHubReadFailure): Effect.Effect<void> {
-  return Effect.logWarning(`GitHub App read failed: ${failure.message}`);
-}
-
 /** GET: to GitHub's install page for the App; a deployment without the App lands on the page saying so. */
 const installEndpoint = Effect.gen(function* () {
   const app = yield* GitHubApp;
   return yield* app.installUrl.pipe(
     Effect.map((url) => HttpServerResponse.redirect(url)),
     Effect.catch((failure) =>
-      Effect.as(logReadFailure(failure), landing(GITHUB_INSTALL_STATUS.UNAVAILABLE)),
+      Effect.as(logGitHubReadFailure(failure), landing(GITHUB_INSTALL_STATUS.UNAVAILABLE)),
     ),
   );
 });
@@ -96,7 +92,7 @@ const installedEndpoint = Effect.gen(function* () {
     query.get(SETUP_QUERY.SETUP_ACTION) ?? undefined,
   ).pipe(
     Effect.catch((failure) =>
-      Effect.as(logReadFailure(failure), GITHUB_INSTALL_STATUS.UNAVAILABLE),
+      Effect.as(logGitHubReadFailure(failure), GITHUB_INSTALL_STATUS.UNAVAILABLE),
     ),
   );
   return landing(status);

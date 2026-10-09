@@ -15,10 +15,17 @@ export const HOSTED_SERVICE_PATH = {
   ACCOUNT_PREFERENCES: "/api/account/preferences",
   /**
    * The account's named feature plans: list them, newest started first
-   * (GET), or start one (POST) with its name and the folder on the Mac it
-   * reads. `plan-wire.ts` declares both.
+   * (GET), or start one (POST) with its name and, where one is chosen, the
+   * GitHub repository it is about. `plan-wire.ts` declares both.
    */
   PLANS: "/api/plans",
+  /**
+   * The repositories the signed-in account reaches through the Luke GitHub
+   * App, most recently updated first (GET), with whether the App is
+   * installed anywhere for them and where to install it.
+   * `github-repositories-wire.ts` declares the answer.
+   */
+  GITHUB_REPOSITORIES: "/api/github/repositories",
   /**
    * Sends the browser to GitHub to install the Luke GitHub App, or to change
    * which repositories it reaches (GET). GitHub returns the browser to
@@ -45,7 +52,7 @@ export const VOICE_SERVICE_PATH = {
   SESSIONS: "/api/voice/sessions",
 } as const;
 
-/** One plan the caller owns: open it with its saved document (GET) or delete it (DELETE). */
+/** One plan the caller owns: open it with its saved document (GET), change its name or its repository (PATCH), or delete it (DELETE). */
 export function planPath(planId: string): string {
   return `${HOSTED_SERVICE_PATH.PLANS}/${encodeURIComponent(planId)}`;
 }

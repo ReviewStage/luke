@@ -93,6 +93,7 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1_000,
   updatedAt: 1_000,
+  repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 

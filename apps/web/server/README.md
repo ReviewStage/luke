@@ -156,6 +156,35 @@ the App's authorization, and is answered as `GitHubSignInRequired` too. A
 failure carries a status or a kind and never the request, since the request
 carried the bearer.
 
+What the user reaches through the App is read the same way.
+`userRepositories(userId)` pages through the user's installations and, for
+each, `GET /user/installations/{id}/repositories`, which is the repositories
+the installation covers that the user can also access, and answers them
+most recently updated first with whether there was any installation at all;
+a listing is paged the same way and stops at a thousand items (`PAGING`), and an
+installation uninstalled between the two reads reaches nothing rather than
+failing the whole. `userRepository(userId, "owner/name")` is the check a
+plan's repository passes before it is kept: only the installation on the
+owner can reach it, so only that one is paged, the name is matched the way
+GitHub folds case, and what is answered is the full name as GitHub spells it.
+A repository is reachable only through an installation. A public repository
+the token could read without one is deliberately not, because what the
+repository is for, a coding agent's checkout and pull request, needs the
+installation's permissions on it.
+
+`GET /api/github/repositories` (`server/github-repositories-app.ts`) is that
+listing under the account bearer, answered as
+`packages/hosted/src/github-repositories-wire.ts` declares it: `installed`,
+`repositories` (owner, name, full name, default branch, private, and when
+GitHub last saw it change), and `installationUrl`, which is where the desktop
+sends an account with nothing installed. Nothing is stored. An account whose
+token the service cannot use, having never signed in with GitHub, signed in
+before the App, or had the token refused or revoked, is `github-sign-in-required`
+(403); a GitHub or a store the service could not reach is `unavailable`.
+`tests/github-repositories-app.test.ts` holds the route and
+`tests/github-app.test.ts` the reads beneath it, over
+`tests/support/github-app-fake.ts`.
+
 Installing the App is two browser navigations in `server/github-install-app.ts`,
 neither carrying an account bearer. `GET /api/github/install` sends the
 browser to `https://github.com/apps/<slug>/installations/new`, where the
@@ -636,17 +665,32 @@ answers the route over a fixed catalog.
 ## The plans group
 
 `server/plans-app.ts` is the Mac's Plans tab's route group over the account's
-named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, most
-recently opened first, `POST /api/plans` starts one with its name and the
-untouched template as its document,
-`GET /api/plans/{id}` opens one with its saved document and moves it to the
-head of the list, and `DELETE /api/plans/{id}` deletes it, the id moved into
+named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, newest
+started first, `POST /api/plans` starts one with its name, the untouched
+template as its document, and the repository it is about where one is
+chosen, `GET /api/plans/{id}` opens one with its saved document,
+`PATCH /api/plans/{id}` changes its name, its repository, or both, and
+`DELETE /api/plans/{id}` deletes it, the id moved into
 the query by the rewrite `server/function-rewrites.ts` makes of every
 segment-captured id.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
+
+A plan's repository is `plan.repository` (migration 0063), the full name
+`owner/name` as GitHub spells it, or null for a plan with none, which is
+where every plan from before repositories stands and is no error. It is
+kept only once `userRepository` on the `GitHubApp` confirms the account
+reaches it, read from GitHub on the account's own token before the row is
+written, so a plan never names a repository its owner could not reach
+through the Luke GitHub App at the moment it was named; the stored spelling
+is GitHub's, whatever case the request used. A start or a change naming one
+the App reaches no installation of for the account is
+`repository-not-reachable` (403) with nothing written, the name beside it
+included; an account that must sign in with GitHub again is
+`github-sign-in-required` (403); and a GitHub the service could not read is
+`unavailable`, the plan standing as it was. A change naming null clears it.
 
 Nothing in the group writes a document. The one writer is a planning call's
 notetaker (`server/voice/plan-scribe.ts`), whose model answers with notes on

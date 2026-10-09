@@ -14,7 +14,9 @@
         "prompt-too-large",
         "unknown-tool",
         "method-not-allowed",
-        "not-found"
+        "not-found",
+        "github-sign-in-required",
+        "repository-not-reachable"
       ]
     }
   },

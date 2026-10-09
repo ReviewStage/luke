@@ -64,6 +64,10 @@
     "dest": "/api/default.js?route=github/installed"
   },
   {
+    "src": "/api/github/repositories",
+    "dest": "/api/default.js?route=github/repositories"
+  },
+  {
     "src": "/api/models",
     "dest": "/api/default.js?route=models"
   },

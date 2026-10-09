@@ -18,6 +18,14 @@ export {
   githubInstallStatusFromWire,
 } from "./github-install-wire.js";
 export {
+  GITHUB_REPOSITORY_BOUNDS,
+  type GitHubRepositoriesAnswer,
+  type GitHubRepository,
+  githubRepositoriesAnswerSchema,
+  githubRepositoryFullNameSchema,
+  githubRepositorySchema,
+} from "./github-repositories-wire.js";
+export {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,

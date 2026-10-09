@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, randomUUID, verify } from "node:crypto";
+import { randomUUID, verify } from "node:crypto";
 import { it } from "@effect/vitest";
-import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
+import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
+import { Clock, Effect, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
@@ -12,79 +11,42 @@ import { account, user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import {
   GITHUB_FAILURE,
-  GITHUB_PROVIDER_ID,
   GITHUB_REPOSITORY_SELECTION,
   GitHubApp,
-  type GitHubAppSettings,
   githubAppFromEnvironment,
   SIGN_IN_REQUIRED,
 } from "../server/github/github-app";
 import { InstantColumnSchema } from "../server/hosted/store/database";
+import {
+  fakeGitHub,
+  GITHUB_APP_PUBLIC_KEY,
+  GITHUB_APP_SETTINGS,
+  GITHUB_FIXTURE,
+  githubReaching,
+  openGithubUser,
+  type RepositoryFixture,
+  standingGithubRow,
+} from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
 
 /**
  * The Luke GitHub App's server client with GitHub a fake behind the
  * `HttpClient` and the account rows on a real Postgres dialect. What is held
  * here: the App speaks as itself with a JWT its own key signed; an
- * installation is confirmed as the App's own or not at all; and a signed-in
+ * installation is confirmed as the App's own or not at all; a signed-in
  * user's token comes off the account row unsealed, refreshed on GitHub's
  * terms before it expires, and re-sealed in place, with every failure
- * carrying a kind or a status and never a token.
+ * carrying a kind or a status and never a token; and what the user reaches
+ * through the App is every installation's repositories, paged, and a
+ * repository is reachable only through the installation on its owner.
  *
- * Synthetic keys, secrets, and tokens throughout.
+ * Synthetic keys, secrets, and tokens throughout (`support/github-app-fake.ts`).
  */
 
+const { HOUR_MS, APP_ID, SLUG, CLIENT_ID, CLIENT_SECRET, SESSION_SECRET } = GITHUB_FIXTURE;
 const NOW = Date.parse("2026-10-09T12:00:00.000Z");
-const HOUR_MS = 60 * 60 * 1000;
-const APP_ID = "4242";
-const SLUG = "luke";
-const CLIENT_ID = "Iv1.fixture-client-id";
-const CLIENT_SECRET = "fixture-client-secret";
-const SESSION_SECRET = "fixture-session-secret-of-enough-length";
 const INSTALLATION_ID = 777;
-
-const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
-const PRIVATE_KEY_PEM = privateKey.export({ type: "pkcs1", format: "pem" }).toString();
-
-const SETTINGS: GitHubAppSettings = {
-  appId: APP_ID,
-  slug: SLUG,
-  clientId: CLIENT_ID,
-  clientSecret: Redacted.make(CLIENT_SECRET),
-  privateKey: Redacted.make(PRIVATE_KEY_PEM),
-  sessionSecret: Redacted.make(SESSION_SECRET),
-};
-
-interface Sent {
-  readonly url: string;
-  readonly method: string;
-  readonly headers: Headers;
-  readonly body: string;
-}
-
-interface FakeGitHub {
-  readonly layer: Layer.Layer<GitHubApp | import("effect/unstable/http/HttpClient").HttpClient>;
-  readonly sent: Sent[];
-}
-
-/** GitHub's token endpoint and API, answering from the script given, every request written down. */
-function github(
-  answer: (sent: Sent) => Response | Promise<Response>,
-  settings: GitHubAppSettings | undefined = SETTINGS,
-): FakeGitHub {
-  const sent: Sent[] = [];
-  const http = fakeHttpClientLayer(async (url, init) => {
-    const request: Sent = {
-      url,
-      method: init.method ?? "GET",
-      headers: new Headers(init.headers),
-      body: init.body === undefined ? "" : await new Response(init.body).text(),
-    };
-    sent.push(request);
-    return answer(request);
-  });
-  return { layer: Layer.mergeAll(http, GitHubApp.layer(settings)), sent };
-}
+const PRIVATE_KEY_PEM = Redacted.value(GITHUB_APP_SETTINGS.privateKey);
 
 function installationJson(id: number): Response {
   return Response.json({
@@ -113,7 +75,7 @@ function readJwt(jwt: string) {
   const signed = verify(
     "RSA-SHA256",
     Buffer.from(`${header}.${payload}`),
-    publicKey,
+    GITHUB_APP_PUBLIC_KEY,
     Buffer.from(signature, "base64url"),
   );
   return {
@@ -137,7 +99,7 @@ it.effect(
       assert.equal(jwt.payload.iat, NOW / 1000 - 60);
       assert.ok(jwt.payload.exp > NOW / 1000);
       assert.ok(jwt.payload.exp <= NOW / 1000 + 10 * 60);
-    }).pipe(Effect.provide(github(() => new Response(null, { status: 500 })).layer)),
+    }).pipe(Effect.provide(fakeGitHub(() => new Response(null, { status: 500 })).layer)),
 );
 
 it.effect(
@@ -145,7 +107,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);
-      const fake = github((sent) =>
+      const fake = fakeGitHub((sent) =>
         sent.url.endsWith(`/app/installations/${INSTALLATION_ID}`)
           ? installationJson(INSTALLATION_ID)
           : Response.json({ message: "Not Found" }, { status: 404 }),
@@ -170,13 +132,13 @@ it.effect(
       const bearer = read.headers.get("authorization") ?? "";
       assert.match(bearer, /^Bearer /u);
       assert.equal(readJwt(bearer.slice("Bearer ".length)).payload.iss, APP_ID);
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
 );
 
 it.effect("a refusal or a dropped connection fails by status or kind alone", () =>
   Effect.gen(function* () {
-    const refused = github(() => Response.json({ message: "no" }, { status: 503 }));
-    const dropped = github(() => {
+    const refused = fakeGitHub(() => Response.json({ message: "no" }, { status: 503 }));
+    const dropped = fakeGitHub(() => {
       throw new Error("socket hang up");
     });
     const app = yield* GitHubApp;
@@ -193,7 +155,7 @@ it.effect("a refusal or a dropped connection fails by status or kind alone", () 
     assert.ok(transport._tag === "GitHubUnavailable");
     assert.deepEqual([transport.reason, transport.status], [GITHUB_FAILURE.TRANSPORT, undefined]);
     assert.equal(JSON.stringify([status, transport]).includes("Bearer"), false);
-  }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+  }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
 );
 
 it.effect("a deployment without the App answers what is missing, by name, from every read", () =>
@@ -213,7 +175,10 @@ it.effect("a private key that will not parse leaves the App unconfigured, naming
     assert.deepEqual(failure.missing, [GITHUB_APP_ENVIRONMENT.PRIVATE_KEY]);
   }).pipe(
     Effect.provide(
-      GitHubApp.layer({ ...SETTINGS, privateKey: Redacted.make("-----BEGIN NOTHING-----") }),
+      GitHubApp.layer({
+        ...GITHUB_APP_SETTINGS,
+        privateKey: Redacted.make("-----BEGIN NOTHING-----"),
+      }),
     ),
   ),
 );
@@ -268,48 +233,10 @@ it.effect(
     }),
 );
 
-/** A sealed token as Better Auth writes one on the account row. */
-const sealed = (token: string) =>
-  Effect.promise(() => symmetricEncrypt({ key: SESSION_SECRET, data: token }));
-
 const unsealed = (token: string | null) =>
   Effect.promise(async () =>
     token === null ? null : symmetricDecrypt({ key: SESSION_SECRET, data: token }),
   );
-
-interface GitHubRow {
-  readonly accessToken: string;
-  readonly refreshToken: string | null;
-  readonly accessTokenExpiresAt: Date | null;
-  readonly refreshTokenExpiresAt: Date | null;
-}
-
-/**
- * A user with one GitHub account row, its tokens sealed the way a sign-in
- * leaves them. The row's instants hang off the test clock as it stands
- * rather than off a clock the test moved: under a real Postgres pool a
- * `TestClock.setTime` jump left every later statement waiting, which PGlite
- * never showed.
- */
-const openGithubUser = (row: GitHubRow) =>
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const userId = `user-${randomUUID()}`;
-    yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-    yield* db.insert(account).values({
-      id: `account-${randomUUID()}`,
-      accountId: "4242",
-      providerId: GITHUB_PROVIDER_ID,
-      userId,
-      accessToken: yield* sealed(row.accessToken),
-      refreshToken: row.refreshToken === null ? null : yield* sealed(row.refreshToken),
-      accessTokenExpiresAt: row.accessTokenExpiresAt,
-      refreshTokenExpiresAt: row.refreshTokenExpiresAt,
-      scope: "",
-      updatedAt: new Date(now - HOUR_MS),
-    });
-    return userId;
-  });
 
 const readRow = (userId: string) =>
   Effect.gen(function* () {
@@ -341,27 +268,19 @@ function instantOf(value: Date | null): number | null {
   return decodeInstant(value)?.getTime() ?? null;
 }
 
-/** The row a sign-in through the App left, with hours on its token and months on its refresh token. */
-const appRow = (now: number): GitHubRow => ({
-  accessToken: "ghu_standing",
-  refreshToken: "ghr_standing",
-  accessTokenExpiresAt: new Date(now + 7 * HOUR_MS),
-  refreshTokenExpiresAt: new Date(now + 170 * 24 * HOUR_MS),
-});
-
 it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => {
   it.effect("a token with hours left is handed out as stored, with no word to GitHub", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const fake = github(() => new Response(null, { status: 500 }));
-      const userId = yield* openGithubUser(appRow(now));
+      const fake = fakeGitHub(() => new Response(null, { status: 500 }));
+      const userId = yield* openGithubUser(standingGithubRow(now));
       const app = yield* GitHubApp;
 
       const token = yield* app.userToken(userId).pipe(Effect.provide(fake.layer));
 
-      assert.equal(Redacted.value(token), appRow(0).accessToken);
+      assert.equal(Redacted.value(token), standingGithubRow(0).accessToken);
       assert.equal(fake.sent.length, 0);
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(
@@ -369,9 +288,9 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     () =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const fake = github(() => refreshedJson("1"));
+        const fake = fakeGitHub(() => refreshedJson("1"));
         const userId = yield* openGithubUser({
-          ...appRow(now),
+          ...standingGithubRow(now),
           accessTokenExpiresAt: new Date(now + 30_000),
         });
         const app = yield* GitHubApp;
@@ -391,7 +310,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           client_id: CLIENT_ID,
           client_secret: CLIENT_SECRET,
           grant_type: "refresh_token",
-          refresh_token: appRow(0).refreshToken,
+          refresh_token: standingGithubRow(0).refreshToken,
         });
         const row = yield* readRow(userId);
         assert.equal(row.accessToken, "ghu_fresh-1");
@@ -399,20 +318,20 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         assert.equal(row.accessTokenExpiresAt, now + 8 * HOUR_MS);
         assert.equal(row.refreshTokenExpiresAt, now + 180 * 24 * HOUR_MS);
         assert.equal(row.updatedAt, now);
-      }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("the row stays sealed: what the table holds is not the token", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const userId = yield* openGithubUser(appRow(now));
+      const userId = yield* openGithubUser(standingGithubRow(now));
       const [row] = yield* db
         .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
         .from(account)
         .where(eq(account.userId, userId));
       assert.ok(row);
-      assert.notEqual(row.accessToken, appRow(0).accessToken);
-      assert.notEqual(row.refreshToken, appRow(0).refreshToken);
+      assert.notEqual(row.accessToken, standingGithubRow(0).accessToken);
+      assert.notEqual(row.refreshToken, standingGithubRow(0).refreshToken);
     }),
   );
 
@@ -421,11 +340,11 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     () =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const fake = github(() =>
+        const fake = fakeGitHub(() =>
           Response.json({ error: "bad_refresh_token", error_description: "retired" }),
         );
         const userId = yield* openGithubUser({
-          ...appRow(now),
+          ...standingGithubRow(now),
           accessTokenExpiresAt: new Date(now),
         });
         const app = yield* GitHubApp;
@@ -437,17 +356,17 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           ["GitHubSignInRequired", SIGN_IN_REQUIRED.REFRESH_REFUSED],
         );
         const row = yield* readRow(userId);
-        assert.equal(row.accessToken, appRow(0).accessToken);
-        assert.equal(row.refreshToken, appRow(0).refreshToken);
-      }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+        assert.equal(row.accessToken, standingGithubRow(0).accessToken);
+        assert.equal(row.refreshToken, standingGithubRow(0).refreshToken);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("an expired refresh token is not even tried", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const fake = github(() => refreshedJson("never"));
+      const fake = fakeGitHub(() => refreshedJson("never"));
       const userId = yield* openGithubUser({
-        ...appRow(now),
+        ...standingGithubRow(now),
         accessTokenExpiresAt: new Date(now - HOUR_MS),
         refreshTokenExpiresAt: new Date(now - 1),
       });
@@ -457,12 +376,12 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
 
       assert.equal(failure._tag, "GitHubSignInRequired");
       assert.equal(fake.sent.length, 0);
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("a row from before the App, with no refresh token, calls for a new sign-in", () =>
     Effect.gen(function* () {
-      const fake = github(() => refreshedJson("never"));
+      const fake = fakeGitHub(() => refreshedJson("never"));
       const userId = yield* openGithubUser({
         accessToken: "gho_oauth-app-token",
         refreshToken: null,
@@ -478,12 +397,12 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         ["GitHubSignInRequired", SIGN_IN_REQUIRED.BEFORE_THE_APP],
       );
       assert.equal(fake.sent.length, 0);
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("an account with no GitHub row calls for a GitHub sign-in", () =>
     Effect.gen(function* () {
-      const fake = github(() => refreshedJson("never"));
+      const fake = fakeGitHub(() => refreshedJson("never"));
       const userId = `user-${randomUUID()}`;
       yield* db
         .insert(user)
@@ -496,13 +415,13 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         [failure._tag, "reason" in failure ? failure.reason : undefined],
         ["GitHubSignInRequired", SIGN_IN_REQUIRED.NO_GITHUB_ACCOUNT],
       );
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("the user's installations are read on the user's own token", () =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
-      const fake = github((sent) =>
+      const fake = fakeGitHub((sent) =>
         new URL(sent.url).pathname === "/user/installations"
           ? Response.json({
               total_count: 1,
@@ -516,7 +435,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
             })
           : new Response(null, { status: 500 }),
       );
-      const userId = yield* openGithubUser(appRow(now));
+      const userId = yield* openGithubUser(standingGithubRow(now));
       const app = yield* GitHubApp;
 
       const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
@@ -529,8 +448,11 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         },
       ]);
       const [read] = fake.sent;
-      assert.equal(read?.headers.get("authorization"), `Bearer ${appRow(0).accessToken}`);
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+      assert.equal(
+        read?.headers.get("authorization"),
+        `Bearer ${standingGithubRow(0).accessToken}`,
+      );
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect("a user with more installations than one page holds gets every page", () =>
@@ -542,11 +464,11 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           account: { login: `org-${page}-${index}`, type: "Organization" },
           repository_selection: GITHUB_REPOSITORY_SELECTION.ALL,
         }));
-      const fake = github((sent) => {
+      const fake = fakeGitHub((sent) => {
         const page = Number(new URL(sent.url).searchParams.get("page"));
         return Response.json({ installations: page === 1 ? pageOf(1, 100) : pageOf(2, 1) });
       });
-      const userId = yield* openGithubUser(appRow(now));
+      const userId = yield* openGithubUser(standingGithubRow(now));
       const app = yield* GitHubApp;
 
       const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
@@ -557,7 +479,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         fake.sent.map((sent) => new URL(sent.url).search),
         ["?per_page=100&page=1", "?per_page=100&page=2"],
       );
-    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(
@@ -565,8 +487,10 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     () =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const fake = github(() => Response.json({ message: "Bad credentials" }, { status: 401 }));
-        const userId = yield* openGithubUser(appRow(now));
+        const fake = fakeGitHub(() =>
+          Response.json({ message: "Bad credentials" }, { status: 401 }),
+        );
+        const userId = yield* openGithubUser(standingGithubRow(now));
         const app = yield* GitHubApp;
 
         const failure = yield* app
@@ -577,7 +501,195 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           [failure._tag, "reason" in failure ? failure.reason : undefined],
           ["GitHubSignInRequired", SIGN_IN_REQUIRED.TOKEN_REVOKED],
         );
-      }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "the user's repositories are every installation's, paged through, most recently updated first",
+    () =>
+      Effect.gen(function* () {
+        const many: RepositoryFixture[] = Array.from({ length: 130 }, (_, index) => ({
+          owner: "octo-org",
+          name: `service-${String(index).padStart(3, "0")}`,
+          updatedAt: new Date(Date.UTC(2026, 0, 1) + index * HOUR_MS).toISOString(),
+        }));
+        const fake = githubReaching([
+          {
+            id: 1,
+            login: "octocat",
+            repositories: [
+              { owner: "octocat", name: "dotfiles", updatedAt: "2026-10-08T00:00:00Z" },
+            ],
+          },
+          { id: 2, login: "octo-org", repositories: many },
+        ]);
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const reached = yield* app.userRepositories(userId).pipe(Effect.provide(fake.layer));
+
+        assert.equal(reached.installed, true);
+        assert.equal(reached.repositories.length, 131);
+        assert.deepEqual(reached.repositories[0], {
+          owner: "octocat",
+          name: "dotfiles",
+          fullName: "octocat/dotfiles",
+          defaultBranch: "main",
+          private: false,
+          updatedAt: Date.parse("2026-10-08T00:00:00Z"),
+        });
+        assert.deepEqual(
+          reached.repositories.slice(1, 3).map((repository) => repository.fullName),
+          ["octo-org/service-129", "octo-org/service-128"],
+        );
+        assert.deepEqual(
+          fake.sent.map((sent) => new URL(sent.url).pathname + new URL(sent.url).search),
+          [
+            "/user/installations?per_page=100&page=1",
+            "/user/installations/1/repositories?per_page=100&page=1",
+            "/user/installations/2/repositories?per_page=100&page=1",
+            "/user/installations/2/repositories?per_page=100&page=2",
+          ],
+        );
+        for (const sent of fake.sent) {
+          assert.equal(
+            sent.headers.get("authorization"),
+            `Bearer ${standingGithubRow(0).accessToken}`,
+          );
+        }
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect("a user with the App installed nowhere reaches no repository, and is told so", () =>
+    Effect.gen(function* () {
+      const fake = githubReaching([]);
+      const userId = yield* openGithubUser();
+      const app = yield* GitHubApp;
+
+      const reached = yield* app.userRepositories(userId).pipe(Effect.provide(fake.layer));
+      const one = yield* app
+        .userRepository(userId, "octocat/dotfiles")
+        .pipe(Effect.provide(fake.layer));
+
+      assert.deepEqual(reached, { installed: false, repositories: [] });
+      assert.equal(Option.isNone(one), true);
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a revoked token calls for a new sign-in from the repository reads too, and leaks no token",
+    () =>
+      Effect.gen(function* () {
+        const fake = fakeGitHub(() =>
+          Response.json({ message: "Bad credentials" }, { status: 401 }),
+        );
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const listing = yield* app
+          .userRepositories(userId)
+          .pipe(Effect.provide(fake.layer), Effect.flip);
+        const check = yield* app
+          .userRepository(userId, "octocat/dotfiles")
+          .pipe(Effect.provide(fake.layer), Effect.flip);
+
+        for (const failure of [listing, check]) {
+          assert.deepEqual(
+            [failure._tag, "reason" in failure ? failure.reason : undefined],
+            ["GitHubSignInRequired", SIGN_IN_REQUIRED.TOKEN_REVOKED],
+          );
+        }
+        assert.equal(JSON.stringify([listing, check]).includes("ghu_"), false);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a repository is reachable only through the installation on its owner, spelled as GitHub spells it",
+    () =>
+      Effect.gen(function* () {
+        const fake = githubReaching([
+          { id: 1, login: "octocat", repositories: [{ owner: "octocat", name: "dotfiles" }] },
+          {
+            id: 2,
+            login: "Octo-Org",
+            repositories: [
+              { owner: "Octo-Org", name: "Relay", private: true, defaultBranch: "trunk" },
+            ],
+          },
+        ]);
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+        const reach = (fullName: string) =>
+          app.userRepository(userId, fullName).pipe(Effect.provide(fake.layer));
+
+        const relay = yield* reach("octo-org/relay");
+        const elsewhere = yield* reach("octocat/relay");
+        const unknownOwner = yield* reach("acme/relay");
+
+        assert.deepEqual(Option.getOrUndefined(relay), {
+          owner: "Octo-Org",
+          name: "Relay",
+          fullName: "Octo-Org/Relay",
+          defaultBranch: "trunk",
+          private: true,
+          updatedAt: Date.parse("2026-10-01T00:00:00Z"),
+        });
+        assert.equal(Option.isNone(elsewhere), true);
+        assert.equal(Option.isNone(unknownOwner), true);
+        // Only the owner's installation is read for its repositories.
+        assert.deepEqual(
+          fake.sent.map((sent) => new URL(sent.url).pathname),
+          [
+            "/user/installations",
+            "/user/installations/2/repositories",
+            "/user/installations",
+            "/user/installations/1/repositories",
+            "/user/installations",
+          ],
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "an installation uninstalled between the two reads reaches nothing rather than failing the listing",
+    () =>
+      Effect.gen(function* () {
+        const uninstalled = fakeGitHub((sent) => {
+          const { pathname } = new URL(sent.url);
+          if (pathname === "/user/installations") {
+            return Response.json({
+              installations: [
+                { id: 1, account: { login: "octocat" }, repository_selection: "all" },
+                { id: 9, account: { login: "gone" }, repository_selection: "all" },
+              ],
+            });
+          }
+          return pathname === "/user/installations/1/repositories"
+            ? Response.json({
+                repositories: [
+                  {
+                    name: "dotfiles",
+                    full_name: "octocat/dotfiles",
+                    owner: { login: "octocat" },
+                    private: false,
+                    default_branch: "main",
+                    updated_at: null,
+                  },
+                ],
+              })
+            : Response.json({ message: "Not Found" }, { status: 404 });
+        });
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const reached = yield* app.userRepositories(userId).pipe(Effect.provide(uninstalled.layer));
+
+        assert.equal(reached.installed, true);
+        assert.deepEqual(
+          reached.repositories.map((repository) => [repository.fullName, repository.updatedAt]),
+          [["octocat/dotfiles", 0]],
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(
@@ -585,11 +697,14 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     () =>
       Effect.gen(function* () {
         const now = yield* Clock.currentTimeMillis;
-        const fake = github(() => new Response(null, { status: 500 }));
-        const userId = yield* openGithubUser(appRow(now));
+        const fake = fakeGitHub(() => new Response(null, { status: 500 }));
+        const userId = yield* openGithubUser(standingGithubRow(now));
         const app = yield* Effect.provide(
           GitHubApp,
-          GitHubApp.layer({ ...SETTINGS, sessionSecret: Redacted.make("another-secret-entirely") }),
+          GitHubApp.layer({
+            ...GITHUB_APP_SETTINGS,
+            sessionSecret: Redacted.make("another-secret-entirely"),
+          }),
         );
 
         const failure = yield* app.userToken(userId).pipe(Effect.provide(fake.layer), Effect.flip);
