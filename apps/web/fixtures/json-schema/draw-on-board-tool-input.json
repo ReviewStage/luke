@@ -125,6 +125,69 @@
               "type": {
                 "type": "string",
                 "enum": [
+                  "zone"
+                ]
+              },
+              "id": {
+                "type": "string",
+                "maxLength": 64,
+                "description": "A short kebab-case id, such as \"api\" or \"db\", which arrows name to connect it."
+              },
+              "x": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "description": "Left edge, in pixels."
+              },
+              "y": {
+                "type": "number",
+                "minimum": -100000,
+                "maximum": 100000,
+                "description": "Top edge, in pixels."
+              },
+              "width": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 4000,
+                "description": "Width in pixels, with room for the shapes inside it."
+              },
+              "height": {
+                "type": "number",
+                "minimum": 10,
+                "maximum": 4000,
+                "description": "Height in pixels, with room for the shapes inside it."
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 200,
+                "description": "Words drawn at its top-left corner, clear of the shapes inside it."
+              },
+              "strokeColor": {
+                "type": "string",
+                "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+              },
+              "backgroundColor": {
+                "type": "string",
+                "description": "A hex color such as \"#1971c2\", or \"transparent\"."
+              }
+            },
+            "required": [
+              "type",
+              "id",
+              "x",
+              "y",
+              "width",
+              "height"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
                   "arrow"
                 ]
               },
@@ -166,7 +229,7 @@
       },
       "minItems": 1,
       "maxItems": 100,
-      "description": "The whole diagram, every shape, text, and arrow in it."
+      "description": "The whole diagram, every shape, text, zone, and arrow in it."
     }
   },
   "required": [
