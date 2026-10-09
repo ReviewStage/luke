@@ -169,7 +169,12 @@ the two reads reaches nothing rather than failing the whole.
 passes before it is kept: only the installation on the owner can reach it,
 so only that one is paged, and only as far as the page the repository is on,
 the name is matched the way GitHub folds case, and what is answered is the
-full name as GitHub spells it.
+full name as GitHub spells it. `repositoryReadToken(userId, "owner/name")`
+is the same check followed by the one token the App mints: `POST
+/app/installations/{id}/access_tokens` under the App's JWT, naming that one
+repository and `contents: read`, answered sealed beside the repository as
+GitHub spells it, or none where the user does not reach it. It is what the
+planning sandbox's checkout reads through (`hosted/repository-shell.ts`).
 A repository is reachable only through an installation. A public repository
 the token could read without one is deliberately not, because what the
 repository is for, a coding agent's checkout and pull request, needs the
@@ -784,18 +789,38 @@ call when the window opens another plan, starts one, or closes, so only one
 plan is ever spoken. `tests/voice-service-exchange.test.ts` drives both
 plans and the re-attach over the real store.
 
-A start names the plan and nothing more: the folder it reads stays on the
-developer's Mac, and the service never learns its path. The planning model
-reads source through one tool, `run_in_repository({ command })`
-(`server/hosted/repository-shell.ts`), which runs nothing on the service: a
-call is a `plan_command` row the tool inserts and reads until the Mac has
-answered, and the Mac, while the plan is open in its Plans panel, claims the
-oldest unclaimed row through a held request
-(`POST /api/plans/{id}/commands/claim`), runs it in the plan's folder, and
-settles it (`POST /api/plans/{id}/commands/{command}`). Every claim and
-settle names the account beside the plan, so another account's plan answers
-as none, and a command no Mac answers by the deadline answers `not-run`.
-`tests/repository-shell.test.ts` holds it.
+The planning model reads source through one tool,
+`run_in_repository({ command })` (`server/hosted/repository-shell.ts`), which
+runs the command in the planning session's own Vercel Sandbox, the one eve
+opens per session from `eve/sandbox.ts` and hands a tool through
+`ctx.getSandbox()`, on a checkout of the plan's repository. The first call
+that finds no checkout of the plan's repository makes one, at the
+repository's current default branch and one commit deep, and later calls
+reuse it; a plan whose repository changed meanwhile is checked out again,
+and the worker subagent shares the session's sandbox
+(`eve/subagents/worker/sandbox.ts`), so its reads see the same checkout. The
+checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
+the owner still reaches the repository and mints a token for that one
+repository with contents read, which the shell sets as GitHub's `Basic`
+header at the sandbox's firewall, on `github.com` for the repository's own
+paths, for the clone alone, and sets back to open internet as the clone
+ends, in a finalizer, so the token never enters the sandbox's filesystem or
+environment and no command or output can carry it. The command runs from
+the checkout root under a 60-second bound, with its text handed to bash in
+a variable rather than spliced into shell text, and answers its exit code
+and up to 20,000 characters each of stdout and stderr. Every refusal is
+`not-run` with a reason the model can act on, and each is answered ahead of
+anything it would need: a plan with no repository yet opens no sandbox; a
+developer who must sign in with GitHub again, a repository the App no longer
+reaches for them, a GitHub that could not be read, a sandbox that could not
+be opened or carries no firewall, and a clone that failed, with git's words,
+each check nothing out. `tests/repository-shell.test.ts` holds it over a
+sandbox double at eve's boundary (`tests/support/repository-sandbox.ts`), a
+scripted GitHub, and PGlite, and `tests/hosted-planning.test.ts` drives the
+scripted model's read through the host and the relay, reading the record
+back for the listing and never the token. The old `plan_command` table, the
+Mac's claim and settle routes, and the Mac's command runner are gone
+(migration 0064).
 
 ## The admin group
 
@@ -1568,6 +1593,14 @@ nothing of eve's and the web build never traces into `eve/` (the function
 bundle guard refuses it). `tests/eve-layout.test.ts` runs the real build under
 Vercel's marker and asserts where the output landed, so a dependency bump that
 changed discovery fails the check rather than the deploy.
+
+`eve/sandbox.ts` is the session's sandbox, a `VercelSandbox.environment`
+whose `prepare` holds the one thing the checkout needs of eve's base image,
+git; `eve build` prewarms its snapshot on Vercel, so the eve service's build
+needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
+`VERCEL_TOKEN` with `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and a prewarm
+that fails stops the deployment. `tests/eve-layout.test.ts` builds with
+`--skip-sandbox-prewarm`, so it says nothing about the snapshot.
 
 `eve/evals/brain-host.eval.ts` is the one end-to-end eval, and nothing local
 runs it. `./scripts/check.sh` runs vitest over the workspaces

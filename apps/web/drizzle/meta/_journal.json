@@ -442,6 +442,13 @@
       "when": 1790700000000,
       "tag": "0063_plan_repository",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790725000000,
+      "tag": "0064_drop_plan_command",
+      "breakpoints": true
     }
   ]
 }

@@ -424,6 +424,28 @@ evaluations are outside this work.
   left able to try again. Nothing is kept here; what matters lands in the
   document.
 
+### How the planning model reads code
+
+The planning model reads the plan's repository, never a folder on the Mac.
+`run_in_repository` runs one bash command in a Vercel Sandbox the planning
+conversation's eve session owns (`apps/web/eve/sandbox.ts`), on a checkout of
+the plan's GitHub repository (`apps/web/server/hosted/repository-shell.ts`).
+The first call that finds no checkout of the plan's repository makes one, at
+the repository's current default branch and one commit deep, and later calls
+reuse it; a plan whose repository changed is checked out again. Before the
+checkout, the service confirms the developer still reaches the repository
+through the Luke GitHub App and mints an installation token for that one
+repository with contents read, which it sets as a header at the sandbox's
+firewall for the clone and withdraws after it; the token never enters the
+sandbox. The sandbox's network is otherwise eve's default, open internet.
+The worker subagent shares the session's sandbox, so its reads see the same
+checkout. A call that runs nothing answers `not-run` with a reason the model
+can act on and repeats to Luke: the plan has no repository yet (the developer
+picks one in the app), the developer must sign in with GitHub again, the
+repository is no longer reachable through the App, or the checkout failed;
+in every case nothing of the code has been read, and Luke never describes it
+as read.
+
 ## The journey
 
 The reference plan is "Teammate invitations" on a private repository,
@@ -454,9 +476,10 @@ concrete options grounded in the code, with the one it recommends, and if the
 developer still has no preference that recommendation becomes a working
 assumption Luke names aloud.
 
-The model browses `acme/relay` at `4f2c9e1` through GitHub's hosted
-`get_file_contents` tool. The thinking dots show while it reads, and Luke says
-only what it is doing: "Let me look at how workspaces and members work first."
+The model reads `acme/relay` through `run_in_repository`, on a checkout of
+`main` in the conversation's sandbox, made on its first call. The thinking dots
+show while it reads, and Luke says only what it is doing: "Let me look at how
+workspaces and members work first."
 
 ### 2. A useful, opinionated recommendation
 
@@ -744,8 +767,11 @@ changes when a check is run, not when one is planned.
 - **Real voice.** No spoken planning conversation has run against GPT Live:
   ordinary assent, interruption, a continuing answer, a correction, resuming,
   and switching plans by voice are untested outside the fakes.
-- **A live GitHub connection.** No repository has been connected or read
-  through GitHub's OAuth App and hosted MCP service outside the fakes.
+- **A live GitHub checkout.** No repository has been checked out in a real
+  Vercel Sandbox through the Luke GitHub App outside the fakes: the shell is
+  held against a sandbox double at eve's boundary and a scripted GitHub
+  (`apps/web/tests/repository-shell.test.ts`), and the eve build's sandbox
+  prewarm has not been run on Vercel.
 
 ### Known limitations
 

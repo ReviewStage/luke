@@ -135,36 +135,6 @@ export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
 
-/** The most characters of stdout or stderr one command's result carries. */
-export const PLAN_COMMAND_OUTPUT_MAX_CHARS = 20_000;
-
-/** One command the planning model asked to run in the plan's folder, as the Mac claims it; the Mac knows the folder. */
-export const planCommandSchema = EffectSchema.Struct({
-  id: wireUuidSchema,
-  command: EffectSchema.String,
-});
-
-export type PlanCommand = typeof planCommandSchema.Type;
-
-/** A claim (POST): the oldest command waiting for the plan, or null when none arrived in time. */
-export const planCommandClaimAnswerSchema = EffectSchema.Struct({
-  command: EffectSchema.NullOr(planCommandSchema),
-});
-
-/** What the Mac posts back once it ran a claimed command. */
-export const planCommandResultSchema = EffectSchema.Struct({
-  exitCode: EffectSchema.Int,
-  stdout: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
-  stderr: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
-});
-
-export type PlanCommandResult = typeof planCommandResultSchema.Type;
-
-/** A settled command (POST): whether the result landed on a command the account had claimed. */
-export const planCommandSettleAnswerSchema = EffectSchema.Struct({
-  settled: EffectSchema.Boolean,
-});
-
 /** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;
 

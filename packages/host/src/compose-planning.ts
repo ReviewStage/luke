@@ -31,7 +31,6 @@ import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
 import { type JsonStateFile, jsonStateFile } from "./json-state-file.js";
 import { planCode } from "./plan-code.js";
-import { servePlanningCommands } from "./planning-commands.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -51,10 +50,10 @@ import type { RunMode } from "./run-mode.js";
  * whenever a call about it ends, once at the end and once more when the
  * call's last words have had time to reach the record; while a call stands,
  * its words are the voice window's to report.
- * The loops here are the open plan's folder commands
- * (`planning-commands.ts`), which the planning model asks this Mac to run,
- * those board and transcript reads, and the code Luke puts on screen during
- * a call (`plan-code.ts`), read from the plan's folder.
+ * The loops here are those board and transcript reads, and the code Luke
+ * puts on screen during a call (`plan-code.ts`), read from the plan's folder.
+ * The planning model's own reads of the code run in a sandbox on the
+ * service, and nothing of them passes through this Mac.
  */
 
 /**
@@ -102,16 +101,7 @@ export function planFoldersFile(
 /** The service's side of the plans, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
-  | "list"
-  | "open"
-  | "create"
-  | "delete"
-  | "rename"
-  | "claimCommand"
-  | "settleCommand"
-  | "readBoard"
-  | "saveBoard"
-  | "readTranscript"
+  "list" | "open" | "create" | "delete" | "rename" | "readBoard" | "saveBoard" | "readTranscript"
 >;
 
 export interface PlanningDependencies {
@@ -562,19 +552,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The open plan's folder commands, the board reads a settled draw asks
-    // for, the transcript reads a call's end asks for, and its code on
-    // screen; every other read of the plans is an ask's.
+    // The board reads a settled draw asks for, the transcript reads a
+    // call's end asks for, and the open plan's code on screen; every other
+    // read of the plans is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(serveCode);
-      yield* servePlanningCommands({
-        client,
-        openPlan: () => {
-          const planId = view.activePlanId;
-          if (!gate() || planId === undefined) return undefined;
-          return { planId, folder: view.folders[planId] };
-        },
-      });
       yield* Effect.forkScoped(
         Effect.forever(
           Effect.flatMap(Queue.take(boardReads), (planId) =>

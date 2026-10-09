@@ -8,12 +8,12 @@ what we collect, who we send it to, and how to turn it off.
 ## What we collect
 
 **On your Mac.** Luke reads no coding agent session on your Mac, and nothing
-on it reads message history, file contents, or command output, beyond the
-read-only commands the planning model asks for in a plan's folder, described
-under "How the planning model reads your folder" below. The Mac app lists no
-coding agent sessions, and our service reads none either. No part of Luke's
-judgment runs on this Mac, so no transcript, working memory, or inbox of his
-is held here, in memory or on disk.
+on it reads message history, file contents, or command output. The planning
+model reads a plan's code in a sandbox on our service, never on your Mac,
+as described under "How the planning model reads your repository" below. The
+Mac app lists no coding agent sessions, and our service reads none either.
+No part of Luke's judgment runs on this Mac, so no transcript, working
+memory, or inbox of his is held here, in memory or on disk.
 
 **Your conversation with Luke.** No part of Luke's judgment runs on your
 Mac, so no record of what he did at your ask is kept on this machine, and
@@ -50,21 +50,26 @@ call it makes, with what it drew, is stored in the plan's planning
 conversation, under the terms described for that conversation. The board can
 hold no image or file. Deleting the plan deletes its whiteboard.
 
-**How the planning model reads your folder.** While a plan is open in Luke
-on your Mac, Luke's planning model, which runs on our service, can ask your
-Mac to run a shell command (such as `ls`, `grep`, or `cat`) in the plan's
-folder. Luke on your Mac runs each command with the folder as its working
-directory, inside a macOS sandbox that blocks all network access and all
-writes, and lets the command read only that folder and the system's own
-programs. A file named `.env` or starting with `.env` is not read, even in
-the folder. None of Luke's own environment reaches the command. Luke sends the
-command's exit
-code and up to 20,000 characters each of its output and error text back to
-our service, which hands them to the planning model. No copy of the folder is
-made, and the folder's path stays on your Mac: our service never stores it.
-Each command and its output are stored with the plan, and with the
-plan's planning conversation, under the terms described for each; deleting
-the plan deletes its commands.
+**How the planning model reads your repository.** A plan names the GitHub
+repository it is about, one the Luke GitHub App is installed on and you can
+reach. Luke's planning model, which runs on our service, reads that
+repository's code by running shell commands (such as `ls`, `grep`, or `cat`)
+in a Vercel Sandbox: an isolated machine our service opens for the plan's
+planning conversation, on Vercel's infrastructure, never on your Mac. The
+first command checks the repository out, at its default branch and only its
+latest commit, with a token the App mints for that one repository and for
+reading alone, good for an hour; our service confirms you still reach the
+repository before it does. The token is set at the sandbox's network
+firewall for the checkout and withdrawn as soon as it ends: it never enters
+the sandbox, a command, a command's output, or the conversation's record.
+Later commands reuse the checkout. The sandbox has ordinary Internet access
+while a command runs. Each command and up to 20,000 characters each of its
+output and error text are stored with the plan's planning conversation,
+under the terms described for it; deleting the plan deletes them with it.
+The checkout stays in the sandbox between commands and, once the sandbox is
+stopped for idleness, in a snapshot of it that Vercel keeps until it expires
+thirty days after its last use. Nothing written in the sandbox reaches your
+repository.
 
 **Code on screen during a planning call.** During a planning call, Luke shows
 code from the plan's folder in a small pane in the Plans tab. When the planning

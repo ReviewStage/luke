@@ -35,13 +35,14 @@ const text = (max?: number) =>
 /** An integer at or above its minimum, as a wire declaration reads one. */
 const wholeNumber = (minimum: number) => Schema.Int.check(Schema.isGreaterThanOrEqualTo(minimum));
 
-/** A struct or a null literal: a claim that found no command answers null. */
-const planCommandClaimAnswer = Schema.Struct({
-  command: Schema.NullOr(Schema.Struct({ id: text(36), command: Schema.String })),
+/** A bounded text beside an optional key that is a bounded string or a null literal: a plan started with or without a repository. */
+const planCreateRequest = Schema.Struct({
+  name: text(200),
+  repository: Schema.optionalKey(Schema.NullOr(Schema.String.check(Schema.isMaxLength(140)))),
 });
 
 const HOSTED_GOLDENS = [
-  ["plan-wire-planCommandClaimAnswerSchema", planCommandClaimAnswer],
+  ["plan-wire-planCreateRequestSchema", planCreateRequest],
 ] as const satisfies readonly (readonly [string, Schema.Top])[];
 
 test.for(HOSTED_GOLDENS)(

@@ -22,6 +22,7 @@ import {
   GITHUB_APP_PUBLIC_KEY,
   GITHUB_APP_SETTINGS,
   GITHUB_FIXTURE,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   openGithubUser,
   type RepositoryFixture,
@@ -38,7 +39,9 @@ import { testSqlClient } from "./support/sql-client";
  * terms before it expires, and re-sealed in place, with every failure
  * carrying a kind or a status and never a token; and what the user reaches
  * through the App is every installation's repositories, paged, and a
- * repository is reachable only through the installation on its owner.
+ * repository is reachable only through the installation on its owner, which
+ * is also what admits the one token the App mints, for that repository
+ * alone with contents read.
  *
  * Synthetic keys, secrets, and tokens throughout (`support/github-app-fake.ts`).
  */
@@ -648,6 +651,93 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           ],
         );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a read token is minted as the App for the one repository the user reaches, with contents read, and for no other",
+    () =>
+      Effect.gen(function* () {
+        const fake = githubReaching([
+          {
+            id: 2,
+            login: "octo-org",
+            repositories: [{ owner: "octo-org", name: "relay", defaultBranch: "trunk" }],
+          },
+        ]);
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const minted = yield* app
+          .repositoryReadToken(userId, "Octo-Org/Relay")
+          .pipe(Effect.provide(fake.layer));
+        const unreached = yield* app
+          .repositoryReadToken(userId, "octo-org/ledger")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.ok(Option.isSome(minted));
+        assert.equal(minted.value.repository.fullName, "octo-org/relay");
+        assert.equal(minted.value.repository.defaultBranch, "trunk");
+        assert.equal(Redacted.value(minted.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.equal(String(minted.value.token).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+        assert.ok(Option.isNone(unreached));
+        // The mint is the App's own request, under its JWT, naming the one repository and contents read.
+        const mints = fake.sent.filter((sent) => sent.url.endsWith("/access_tokens"));
+        assert.equal(mints.length, 1);
+        const [mint] = mints;
+        assert.ok(mint);
+        assert.equal(mint.method, "POST");
+        assert.equal(mint.url, "https://api.github.com/app/installations/2/access_tokens");
+        assert.deepEqual(JSON.parse(mint.body), {
+          repositories: ["relay"],
+          permissions: { contents: "read" },
+        });
+        assert.equal(
+          readJwt((mint.headers.get("authorization") ?? "").slice("Bearer ".length)).payload.iss,
+          APP_ID,
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect("a mint GitHub refuses is unavailable by status, never a token", () =>
+    Effect.gen(function* () {
+      const refusing = fakeGitHub((sent) => {
+        const { pathname } = new URL(sent.url);
+        if (pathname.endsWith("/access_tokens")) {
+          return Response.json(
+            { message: "Resource not accessible by integration" },
+            { status: 403 },
+          );
+        }
+        if (pathname === "/user/installations") {
+          return Response.json({
+            installations: [
+              { id: 2, account: { login: "octo-org" }, repository_selection: "selected" },
+            ],
+          });
+        }
+        return Response.json({
+          repositories: [
+            {
+              name: "relay",
+              full_name: "octo-org/relay",
+              owner: { login: "octo-org" },
+              private: true,
+              default_branch: "main",
+              updated_at: null,
+            },
+          ],
+        });
+      });
+      const userId = yield* openGithubUser();
+      const app = yield* GitHubApp;
+
+      const failure = yield* app
+        .repositoryReadToken(userId, "octo-org/relay")
+        .pipe(Effect.provide(refusing.layer), Effect.flip);
+
+      assert.ok(failure._tag === "GitHubUnavailable");
+      assert.equal(failure.status, 403);
+    }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 
   it.effect(

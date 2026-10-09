@@ -19,7 +19,7 @@ import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
-import { planBoard, planCommand } from "../server/db/plan-schema";
+import { planBoard } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
 import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
 import {
@@ -39,6 +39,7 @@ import {
   type FakeGitHub,
   fakeGitHub,
   githubReaching,
+  NO_GITHUB,
   openGithubUser,
 } from "./support/github-app-fake";
 import { INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
@@ -52,8 +53,7 @@ import { testSqlClient } from "./support/sql-client";
  * The path is the one the rewrite hands the group, the plan id moved from
  * the path into the `id` query. A plan's repository is kept only once the
  * Luke GitHub App, over a GitHub the test scripts, confirms the account
- * reaches it; the Mac claims and settles the planning model's commands
- * through the two command paths.
+ * reaches it.
  *
  * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
@@ -63,8 +63,6 @@ const PLANS = "/api/plans";
 const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
-const COMMAND_CLAIM = "/api/plans/commands/claim";
-const COMMAND = "/api/plans/commands/command";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -80,16 +78,14 @@ interface Answer {
 }
 
 /** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
-const NO_GITHUB: FakeGitHub = fakeGitHub(() => {
-  throw new Error("this test reaches no GitHub");
-});
+const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
 
 /**
  * Two accounts, each behind its own bearer. The owner signed in with GitHub
  * through the App; the other signed in with Google alone, and reaches
  * nothing on GitHub.
  */
-const openAccounts = (github: FakeGitHub = NO_GITHUB) =>
+const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
@@ -609,46 +605,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         yield* ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: {} })),
         refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
       );
-    }),
-  );
-
-  it.effect("the Mac claims the plan's waiting command and settles it with what it answered", () =>
-    Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
-      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const [queued] = yield* db
-        .insert(planCommand)
-        .values({ planId, command: "ls" })
-        .returning({ id: planCommand.id });
-      assert.ok(queued);
-      const result = { exitCode: 0, stdout: "README.md\n", stderr: "" };
-      const settle = (userId: string) =>
-        ask(
-          request(COMMAND, userId, {
-            method: "POST",
-            id: planId,
-            command: queued.id,
-            body: result,
-          }),
-        );
-
-      const strangerSettle = yield* settle(other);
-      const claimed = yield* ask(request(COMMAND_CLAIM, owner, { method: "POST", id: planId }));
-      const settled = yield* settle(owner);
-      const again = yield* settle(owner);
-
-      assert.deepEqual(strangerSettle, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });
-      assert.deepEqual(claimed, {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: { command: { id: queued.id, command: "ls" } },
-      });
-      assert.deepEqual(settled, { status: HOSTED_HTTP_STATUS.OK, body: { settled: true } });
-      assert.deepEqual(again, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });
-      const [stored] = yield* db
-        .select({ result: planCommand.result })
-        .from(planCommand)
-        .where(eq(planCommand.id, queued.id));
-      assert.deepEqual(stored?.result, result);
     }),
   );
 

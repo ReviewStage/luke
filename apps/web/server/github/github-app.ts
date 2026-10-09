@@ -12,7 +12,9 @@
  * which is both the list the desktop offers and the check a plan's
  * repository passes before it is kept: a repository is reachable only
  * through an installation, and a public repository the token could read
- * without one is deliberately not.
+ * without one is deliberately not. The one token the App mints is an
+ * installation token for one repository with contents read alone, for the
+ * planning sandbox's checkout, and it is minted only where that check passes.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
@@ -81,6 +83,15 @@ const APP_JWT = {
 const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
+
+/** What the App asks of an installation token: contents read alone, which is what a checkout needs. */
+const INSTALLATION_TOKEN_PERMISSIONS = { contents: "read" } as const;
+
+/** The mint as GitHub takes it: the repositories by name, and the permissions the token is cut to. */
+interface InstallationTokenRequest {
+  readonly repositories: readonly string[];
+  readonly permissions: typeof INSTALLATION_TOKEN_PERMISSIONS;
+}
 
 const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
 
@@ -192,6 +203,13 @@ interface GitHubUserRepositories {
   readonly repositories: readonly GitHubRepository[];
 }
 
+/** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
+interface GitHubRepositoryReadToken {
+  readonly repository: GitHubRepository;
+  /** An installation token limited to this one repository with contents read, good for an hour from its mint. */
+  readonly token: Redacted.Redacted;
+}
+
 export interface GitHubAppService {
   /** Where a user installs the App, or changes which repositories it sees; GitHub returns them to the App's Setup URL. */
   readonly installUrl: Effect.Effect<string, GitHubAppNotConfigured>;
@@ -229,6 +247,23 @@ export interface GitHubAppService {
     fullName: string,
   ) => Effect.Effect<
     Option.Option<GitHubRepository>,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * A token for one repository the user reaches through the App, minted by
+   * the App itself for that installation (`POST
+   * /app/installations/{id}/access_tokens`), limited to the one repository
+   * and to contents read; none where the user does not reach it, on the same
+   * terms as `userRepository`. The user's own reach is what admits the mint,
+   * and the token is the App's, so what the checkout reads is bounded by
+   * both.
+   */
+  readonly repositoryReadToken: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepositoryReadToken>,
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
@@ -295,6 +330,9 @@ const RefreshedTokensSchema = Schema.Struct({
 });
 const TokenRefusalSchema = Schema.Struct({ error: Schema.String });
 const RefreshAnswerSchema = Schema.Union([RefreshedTokensSchema, TokenRefusalSchema]);
+
+/** GitHub's answer to a token mint, read for the token alone. */
+const InstallationTokenSchema = Schema.Struct({ token: Schema.String });
 
 const AccountTokenRowSchema = Schema.Struct({
   id: Schema.String,
@@ -427,6 +465,19 @@ function githubRead(path: string, bearer: Redacted.Redacted): HttpClientRequest.
   return HttpClientRequest.get(`${GITHUB_API}${path}`).pipe(
     HttpClientRequest.bearerToken(bearer),
     HttpClientRequest.setHeaders(GITHUB_HEADERS),
+  );
+}
+
+/** The one write the App makes as itself: a token mint, its JSON body under the App's own JWT. */
+function githubMintAsApp(
+  path: string,
+  jwt: Redacted.Redacted,
+  body: InstallationTokenRequest,
+): HttpClientRequest.HttpClientRequest {
+  return HttpClientRequest.post(`${GITHUB_API}${path}`).pipe(
+    HttpClientRequest.bearerToken(jwt),
+    HttpClientRequest.setHeaders(GITHUB_HEADERS),
+    HttpClientRequest.bodyJsonUnsafe(body),
   );
 }
 
@@ -672,6 +723,32 @@ function githubAppService(
       );
     });
 
+  /**
+   * The repository and the installation it is reached through, where the
+   * user reaches it: only the installation on the owner can, so only that
+   * one is read, and only as far as the page the repository is on.
+   */
+  const reachableRepository = (userId: string, fullName: string) =>
+    Effect.gen(function* () {
+      const [owner] = fullName.split("/");
+      const token = yield* userToken(userId);
+      const installations = yield* installationsOnToken(token);
+      const onOwner = installations.find(
+        (installation) =>
+          installation.accountLogin !== undefined &&
+          sameName(installation.accountLogin, owner ?? ""),
+      );
+      if (onOwner === undefined) return Option.none();
+      const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
+      const repositories = yield* repositoriesOfInstallation(token, onOwner.id, (read) =>
+        read.some(isNamed),
+      );
+      return Option.map(Option.fromNullishOr(repositories.find(isNamed)), (repository) => ({
+        installation: onOwner,
+        repository,
+      }));
+    });
+
   return {
     installUrl: Effect.map(ready, (app) => `${GITHUB_APPS}/${app.slug}/installations/new`),
     appJwt,
@@ -698,22 +775,28 @@ function githubAppService(
         };
       }),
     userRepository: (userId, fullName) =>
+      Effect.map(
+        reachableRepository(userId, fullName),
+        Option.map((reached) => reached.repository),
+      ),
+    repositoryReadToken: (userId, fullName) =>
       Effect.gen(function* () {
-        const [owner] = fullName.split("/");
-        const token = yield* userToken(userId);
-        const installations = yield* installationsOnToken(token);
-        const onOwner = installations.find(
-          (installation) =>
-            installation.accountLogin !== undefined &&
-            sameName(installation.accountLogin, owner ?? ""),
+        const reached = yield* reachableRepository(userId, fullName);
+        if (Option.isNone(reached)) return Option.none();
+        const { installation, repository } = reached.value;
+        const jwt = yield* appJwt;
+        const minted = yield* Effect.scoped(
+          Effect.flatMap(
+            send(
+              githubMintAsApp(`/app/installations/${installation.id}/access_tokens`, jwt, {
+                repositories: [repository.name],
+                permissions: INSTALLATION_TOKEN_PERMISSIONS,
+              }),
+            ),
+            (response) => readBody(response, InstallationTokenSchema),
+          ),
         );
-        if (onOwner === undefined) return Option.none();
-        const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
-        // The owner's listing is read only as far as the repository, which may be any page of it.
-        const repositories = yield* repositoriesOfInstallation(token, onOwner.id, (read) =>
-          read.some(isNamed),
-        );
-        return Option.fromNullishOr(repositories.find(isNamed));
+        return Option.some({ repository, token: Redacted.make(minted.token) });
       }),
     userToken,
   };

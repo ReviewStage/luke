@@ -11,7 +11,7 @@
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
-- The repository: run_in_repository, which runs shell commands in the plan's folder on the developer's Mac.
+- The repository: run_in_repository, which runs shell commands in a checkout of the plan's GitHub repository.
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 

@@ -18,8 +18,8 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { noNetwork } from "./support/no-network";
 import { insertConversation } from "./support/store-rows";
 
 /**
@@ -123,7 +123,7 @@ async function callerOn(
     database.run(
       host
         .runTool(name, binding, input, toolContext(id, auth, name))
-        .pipe(Effect.provide(noNetwork)),
+        .pipe(Effect.provide(NO_GITHUB)),
     );
 }
 
