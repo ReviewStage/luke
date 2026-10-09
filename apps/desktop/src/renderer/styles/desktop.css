@@ -1689,6 +1689,8 @@ body,
   outline: none;
 }
 
+/* The × keeps none of a button's own padding, which would leave its glyph
+   8px of the box's 20 and squeeze it narrower than every glyph beside it. */
 .tab-close {
   position: absolute;
   top: 50%;
@@ -1698,14 +1700,15 @@ body,
   height: var(--tab-close);
   align-items: center;
   justify-content: center;
+  padding: 0;
   border-radius: 6px;
   background: none;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
   opacity: 0;
   transform: translateY(-50%);
   transition:
     opacity var(--duration-hover) ease,
-    background-color var(--duration-hover) ease;
+    color var(--duration-hover) ease;
 }
 
 .tab:hover .tab-close,
@@ -1713,14 +1716,16 @@ body,
   opacity: 1;
 }
 
+/* Note that the × draws no ground under the pointer, because it is a glyph
+   on a pill that is already raised: only the glyph itself brightens. */
 .tab-close:hover {
-  background: var(--raised-strong);
   color: var(--text-primary);
 }
 
 .tab-close svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
+  flex: 0 0 auto;
 }
 
 /* Something arrived on a tab while another was chosen: a dot on its glyph's

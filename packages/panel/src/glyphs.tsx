@@ -101,8 +101,8 @@ export function ResetIcon(): React.JSX.Element {
 export function CloseIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="M6.8 6.8 17.2 17.2" />
-      <path d="M17.2 6.8 6.8 17.2" />
+      <path d="M5.2 5.2 18.8 18.8" />
+      <path d="M18.8 5.2 5.2 18.8" />
     </Glyph>
   );
 }
