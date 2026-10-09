@@ -147,15 +147,20 @@ export function useAgentComposer(input: {
         if (latest.current.agentId !== agentId) return;
         if ("failure" in answer) {
           const note = messageFailureNote(answer.failure);
-          // The words come back into the box, and the line out of the transcript.
-          setHeld((was) => ({
-            ...was,
-            draft: was.draft === "" ? text : was.draft,
-            sending: false,
-            failed: { clientKey, known, note },
-            closed: closesComposer(answer.failure) ? note : was.closed,
-            sent: was.sent.filter((each) => each.id !== id),
-          }));
+          setHeld((was) => {
+            // A line a row has already read back reached the agent whatever the answer said: the
+            // row stands, so there is nothing to send again and nothing to put back in the box.
+            if (!was.sent.some((each) => each.id === id)) return { ...was, sending: false };
+            // The words come back into the box, and the line out of the transcript.
+            return {
+              ...was,
+              draft: was.draft === "" ? text : was.draft,
+              sending: false,
+              failed: { clientKey, known, note },
+              closed: closesComposer(answer.failure) ? note : was.closed,
+              sent: was.sent.filter((each) => each.id !== id),
+            };
+          });
           return;
         }
         setHeld((was) => ({ ...was, sending: false }));
