@@ -14,6 +14,7 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { CodingAgentsSection } from "./coding-agents-page";
 
 const MODELS: readonly CatalogModel[] = [
@@ -22,6 +23,12 @@ const MODELS: readonly CatalogModel[] = [
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["low", "high", "max"],
+  },
+  {
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
   },
   {
     id: "openai/gpt-6.1-sol",
@@ -78,6 +85,7 @@ function answer(request: Act): Promise<ActOutcome> {
 const roots: Root[] = [];
 
 beforeEach(() => {
+  installScrollIntoView();
   stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
   sent = [];
   refuseWrites = false;
@@ -110,63 +118,141 @@ async function mount(signedIn = true): Promise<HTMLElement> {
   return container;
 }
 
+const chip = (page: HTMLElement) =>
+  page.querySelector<HTMLButtonElement>(".settings-picker-chip") ?? assert.fail("no model chip");
+
+const open = (page: HTMLElement) => act(() => chip(page).click());
+
+const options = (page: HTMLElement) =>
+  [...page.querySelectorAll<HTMLElement>('[role="option"]')].map((row) => row.textContent);
+
 const efforts = (page: HTMLElement) =>
-  [...page.querySelectorAll<HTMLElement>(".start-agent-effort")].map((each) => [
+  [...page.querySelectorAll<HTMLElement>(".settings-segment")].map((each) => [
     each.textContent,
     each.getAttribute("aria-pressed"),
   ]);
 
-test("the page reads the default and the models as it opens, and draws the model under its mark with the efforts it lists", async () => {
+/** Types into a field the way a key press does, through the setter React watches. */
+function type(field: HTMLInputElement, words: string): void {
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function press(target: Element, key: string): void {
+  act(() => {
+    target.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+  });
+}
+
+const searchField = () =>
+  document.activeElement instanceof HTMLInputElement
+    ? document.activeElement
+    : assert.fail("the search field does not have focus");
+
+test("the page reads the default and the models as it opens, and draws the model under its mark with the efforts it lists in sentence case", async () => {
   const page = await mount();
 
   assert.deepEqual(
     sent.map((request) => request.kind),
     [ACT_KIND.CODING_AGENTS_DEFAULT_READ, ACT_KIND.CODING_AGENTS_MODELS],
   );
-  const chip = page.querySelector<HTMLElement>(".settings-model-chip");
-  assert.equal(chip?.textContent, "Claude Opus 5.5");
-  assert.ok(chip?.querySelector("svg.provider-mark"));
+  assert.equal(chip(page).textContent, "Claude Opus 5.5");
+  assert.ok(chip(page).querySelector("svg.provider-mark"));
+  assert.equal(page.querySelector("select"), null);
   assert.deepEqual(efforts(page), [
-    ["low", "false"],
-    ["high", "true"],
-    ["max", "false"],
+    ["Low", "false"],
+    ["High", "true"],
+    ["Max", "false"],
   ]);
 });
 
-test("choosing an effort and a model each write the default once and draw what the service kept", async () => {
+test("the model menu opens on its search, lists every model under its mark newest first, and a pick keeps the effort the model lists, else its first", async () => {
+  const page = await mount();
+
+  open(page);
+  const field = searchField();
+  assert.equal(field.placeholder, "Search models");
+  assert.deepEqual(options(page), ["Claude Opus 5.5", "Claude Sonnet 5.5", "GPT-6.1 Sol"]);
+  assert.ok(
+    [...page.querySelectorAll('[role="option"]')].every((row) =>
+      row.querySelector("svg.provider-mark"),
+    ),
+  );
+  assert.equal(
+    page.querySelector('[role="option"][aria-current="true"]')?.textContent,
+    "Claude Opus 5.5",
+  );
+
+  act(() => {
+    [...page.querySelectorAll<HTMLElement>('[role="option"]')]
+      .find((row) => row.textContent === "GPT-6.1 Sol")
+      ?.click();
+  });
+  await settle();
+  assert.deepEqual(stored, { model: "openai/gpt-6.1-sol", effort: "low" });
+  assert.equal(chip(page).textContent, "GPT-6.1 Sol");
+  assert.equal(page.querySelector('[role="listbox"]'), null);
+  assert.equal(document.activeElement, chip(page));
+  assert.deepEqual(efforts(page), [
+    ["Low", "true"],
+    ["Xhigh", "false"],
+  ]);
+});
+
+test("the search filters the models by name and by provider", async () => {
+  const page = await mount();
+  open(page);
+
+  type(searchField(), "sonnet");
+  assert.deepEqual(options(page), ["Claude Sonnet 5.5"]);
+  type(searchField(), "openai");
+  assert.deepEqual(options(page), ["GPT-6.1 Sol"]);
+  type(searchField(), "llama");
+  assert.deepEqual(options(page), []);
+  assert.match(page.querySelector('[role="listbox"]')?.textContent ?? "", /No models match/u);
+});
+
+test("arrows and Enter pick from the keyboard, and Escape closes the menu without reaching the window", async () => {
+  const page = await mount();
+  const reachedWindow: string[] = [];
+  const listen = (event: KeyboardEvent) => reachedWindow.push(event.key);
+  window.addEventListener("keydown", listen);
+
+  open(page);
+  press(searchField(), "ArrowDown");
+  press(searchField(), "Enter");
+  await settle();
+  assert.deepEqual(stored, { model: "anthropic/claude-sonnet-5.5", effort: "high" });
+  assert.equal(page.querySelector('[role="listbox"]'), null);
+
+  open(page);
+  press(searchField(), "Escape");
+  assert.equal(page.querySelector('[role="listbox"]'), null);
+  assert.equal(document.activeElement, chip(page));
+  assert.ok(!reachedWindow.includes("Escape"));
+  window.removeEventListener("keydown", listen);
+});
+
+test("choosing an effort writes the default once and draws what the service kept", async () => {
   const page = await mount();
 
   act(() => {
-    [...page.querySelectorAll<HTMLElement>(".start-agent-effort")]
-      .find((each) => each.textContent === "max")
+    [...page.querySelectorAll<HTMLElement>(".settings-segment")]
+      .find((each) => each.textContent === "Max")
       ?.click();
   });
   await settle();
   assert.deepEqual(stored, { model: "anthropic/claude-opus-5.5", effort: "max" });
   assert.deepEqual(
     efforts(page).find(([, pressed]) => pressed === "true"),
-    ["max", "true"],
+    ["Max", "true"],
   );
-
-  // The menu opens under the chip with every model under its mark; a model keeps the effort it lists, else its first.
-  act(() => page.querySelector<HTMLElement>(".settings-model-chip")?.click());
-  const rows = [...page.querySelectorAll<HTMLElement>('[role="menuitem"]')];
-  assert.deepEqual(
-    rows.map((row) => row.textContent),
-    ["Claude Opus 5.5", "GPT-6.1 Sol"],
-  );
-  assert.ok(rows.every((row) => row.querySelector("svg.provider-mark")));
-  act(() => rows[1]?.click());
-  await settle();
-  assert.deepEqual(stored, { model: "openai/gpt-6.1-sol", effort: "low" });
-  assert.equal(page.querySelector(".settings-model-chip")?.textContent, "GPT-6.1 Sol");
-  assert.deepEqual(efforts(page), [
-    ["low", "true"],
-    ["xhigh", "false"],
-  ]);
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE).length,
-    2,
+    1,
   );
 });
 
@@ -174,14 +260,14 @@ test("a models read that fails says so in the menu, and the stored effort still 
   refuseModels = true;
   const page = await mount();
 
-  assert.equal(page.querySelector(".settings-model-chip")?.textContent, "Claude Opus 5.5");
-  assert.deepEqual(efforts(page), [["high", "true"]]);
-  act(() => page.querySelector<HTMLElement>(".settings-model-chip")?.click());
+  assert.equal(chip(page).textContent, "Claude Opus 5.5");
+  assert.deepEqual(efforts(page), [["High", "true"]]);
+  open(page);
   assert.equal(
-    page.querySelector('[role="menu"] [role="alert"]')?.textContent,
+    page.querySelector('[role="listbox"] [role="alert"]')?.textContent,
     "The models could not be read. Open Settings again to try again.",
   );
-  assert.deepEqual([...page.querySelectorAll('[role="menuitem"]')], []);
+  assert.deepEqual(options(page), []);
 });
 
 test("a retry whose models read fails does not keep the earlier catalog on offer", async () => {
@@ -197,11 +283,11 @@ test("a retry whose models read fails does not keep the earlier catalog on offer
       ?.click();
   });
   await settle();
-  assert.deepEqual(efforts(page), [["high", "true"]]);
-  act(() => page.querySelector<HTMLElement>(".settings-model-chip")?.click());
-  assert.deepEqual([...page.querySelectorAll('[role="menuitem"]')], []);
+  assert.deepEqual(efforts(page), [["High", "true"]]);
+  open(page);
+  assert.deepEqual(options(page), []);
   assert.equal(
-    page.querySelector('[role="menu"] [role="alert"]')?.textContent,
+    page.querySelector('[role="listbox"] [role="alert"]')?.textContent,
     "The models could not be read. Open Settings again to try again.",
   );
 });
@@ -210,8 +296,8 @@ test("a stored model the catalog has stopped offering keeps its effort drawn rat
   stored = { model: "anthropic/claude-opus-4.1", effort: "max" };
   const page = await mount();
 
-  assert.equal(page.querySelector(".settings-model-chip")?.textContent, "Claude Opus 4.1");
-  assert.deepEqual(efforts(page), [["max", "true"]]);
+  assert.equal(chip(page).textContent, "Claude Opus 4.1");
+  assert.deepEqual(efforts(page), [["Max", "true"]]);
 });
 
 test("a write the service refused leaves the default as it was and says so under the rows", async () => {
@@ -219,8 +305,8 @@ test("a write the service refused leaves the default as it was and says so under
   refuseWrites = true;
 
   act(() => {
-    [...page.querySelectorAll<HTMLElement>(".start-agent-effort")]
-      .find((each) => each.textContent === "low")
+    [...page.querySelectorAll<HTMLElement>(".settings-segment")]
+      .find((each) => each.textContent === "Low")
       ?.click();
   });
   await settle();
@@ -228,7 +314,7 @@ test("a write the service refused leaves the default as it was and says so under
   assert.deepEqual(stored, { model: "anthropic/claude-opus-5.5", effort: "high" });
   assert.deepEqual(
     efforts(page).find(([, pressed]) => pressed === "true"),
-    ["high", "true"],
+    ["High", "true"],
   );
   assert.match(page.querySelector('[role="alert"]')?.textContent ?? "", /could not be saved/u);
 });

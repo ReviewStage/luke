@@ -4,8 +4,8 @@ import {
   ChevronIcon,
   DisplayIcon,
   KeyboardIcon,
-  PlayIcon,
   SpeakerIcon,
+  TerminalIcon,
 } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -34,7 +34,7 @@ export const SETTINGS_PAGE = {
   },
   [SETTINGS_VIEW.CODING_AGENTS]: {
     title: "Coding agents",
-    icon: <PlayIcon />,
+    icon: <TerminalIcon />,
   },
 };
 

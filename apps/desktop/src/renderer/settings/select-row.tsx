@@ -1,18 +1,15 @@
-import { PopUpIcon } from "@sidecar/panel";
 import type { ActionResult } from "@sidecar/wire";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
-import { searchAnchorProps } from "../settings-anchors";
 import { ChangedMark } from "./marks";
+import { PickerRow } from "./picker-row";
 import { useSettingWrite } from "./use-setting-write";
+
+/** What the menu says when a search over a short fixed set matches nothing, which it has no search to say. */
+const NO_MATCH = "Nothing matches.";
 
 /**
  * A settings pop-up: its name, optional why, and one value from a small fixed
- * set. The closed face is drawn here and the open menu is the system's, which
- * is also why the window is focused before the menu opens — a menu opened
- * while the panel is showing without being key would drop its first choice.
- * The up-and-down badge is the macOS mark for that kind of button; the select
- * alone answers the pointer.
+ * set, picked from the app's own menu with no search, since a set this short
+ * is read whole.
  */
 export function SelectRow<Value extends string | number>({
   label,
@@ -33,7 +30,7 @@ export function SelectRow<Value extends string | number>({
   parse: (raw: string) => Value | undefined;
   /** When the visible name is too short to stand as the control's own name. */
   ariaLabel?: string;
-  /** The id a pressed search result lands on: marked on the pop-up itself, which then takes the keyboard. */
+  /** The id a pressed search result lands on: marked on the chip itself, which then takes the keyboard. */
   anchor?: string;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed?: boolean;
@@ -45,47 +42,32 @@ export function SelectRow<Value extends string | number>({
   // biome-ignore lint/suspicious/noConfusingVoidType: the voice and pace cannot be refused, so those writes answer void
   onChange: (value: Value) => void | Promise<ActionResult>;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const { busy, rejection, run } = useSettingWrite(onChange);
+  const chosen = options.find((option) => option.value === value);
   return (
     <>
-      <div className="settings-row">
-        <span className="settings-copy">
-          <strong>
-            {label}
-            {changed ? <ChangedMark /> : null}
-          </strong>
-          {detail ? <small>{detail}</small> : null}
-        </span>
-        <span className="voice-select">
-          <select
-            {...(anchor ? searchAnchorProps(anchor) : undefined)}
-            aria-label={ariaLabel ?? label}
-            value={value}
-            disabled={busy || Boolean(restBusy)}
-            onChange={(event) => {
-              const next = parse(event.target.value);
-              if (next !== undefined) run(next);
-            }}
-            onFocus={() => {
-              // The panel can be showing without its window being key, and a
-              // menu opened then would drop its first choice.
-              tell(ACT_KIND.WINDOW_FOCUS_PANEL);
-            }}
-          >
-            {options.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          {/* Drawn over the select, the way macOS badges a pop-up button; the
-              select alone answers the pointer. */}
-          <span className="voice-select-badge" aria-hidden="true">
-            <PopUpIcon />
-          </span>
-        </span>
-      </div>
+      <PickerRow
+        label={ariaLabel ?? label}
+        copy={
+          <>
+            <strong>
+              {label}
+              {changed ? <ChangedMark /> : null}
+            </strong>
+            {detail ? <small>{detail}</small> : null}
+          </>
+        }
+        value={String(value)}
+        valueLabel={chosen?.label ?? String(value)}
+        rows={options.map((option) => ({ id: String(option.value), label: option.label }))}
+        noMatch={NO_MATCH}
+        anchor={anchor}
+        disabled={busy || Boolean(restBusy)}
+        onPick={(id) => {
+          const next = parse(id);
+          if (next !== undefined) run(next);
+        }}
+      />
       {rejection ? (
         <p className="error-message" role="alert">
           {rejection}

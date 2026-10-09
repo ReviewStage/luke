@@ -1,12 +1,12 @@
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { CheckIcon, PopUpIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
-import { effortsOf, modelLabel } from "../planning/coding-agent-model";
+import { effortsOf, modelLabel, orderedModels } from "../planning/coding-agent-model";
 import { ModelProviderMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { PickerRow } from "./picker-row";
 
 /**
  * coding-agents-page.tsx -- Settings › Coding agents: the model and effort a click on Start runs an agent on.
@@ -14,15 +14,14 @@ import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
  * The one value is the account's, kept on the service beside the settings
  * preferences and written by this page and by a Start that named a model
  * alike, so the page reads it afresh as it opens and shows what the last
- * Start wrote. The model row drops the same menu the Start button does,
- * each model under its provider's mark, because a pop-up of the system's
- * cannot draw a mark; the effort row offers the efforts the chosen model
- * lists. A write is one ask of the service, the row resting until it
- * answers and a refusal worded under it. With no account signed in there
+ * Start wrote. The model row is the same picker every settings row uses,
+ * searched because the catalog is long: each model under its provider's
+ * mark, the newest first within each provider, the chosen one checked. The
+ * effort row is a segmented control over the efforts the chosen model
+ * lists. A write is one ask of the service, the rows resting until it
+ * answers and a refusal worded under them. With no account signed in there
  * is no default to show, and the page says so.
  */
-
-const MENU_ITEM = "[role=menuitem]";
 
 /** What the page says while it reads, while it cannot, and with no account. */
 const PAGE_LINE = {
@@ -30,89 +29,22 @@ const PAGE_LINE = {
   FAILED: "The default could not be read. Try again.",
   MODELS_READING: "Reading the models…",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
+  MODELS_NONE_MATCH: "No models match.",
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
-/** The model row's menu: the models under their marks, the chosen one checked. */
-function ModelMenu({
-  models,
-  modelsFailed,
-  chosen,
-  onPick,
-  onClose,
-  onLeave,
-  menuId,
-}: {
-  models: readonly CatalogModel[] | undefined;
-  /** The models were asked for and not answered, so the menu says so rather than reading forever. */
-  modelsFailed: boolean;
-  chosen: string;
-  onPick: (model: CatalogModel) => void;
-  onClose: () => void;
-  /** Focus left the menu for somewhere outside its row. */
-  onLeave: (left: EventTarget | null) => void;
-  menuId: string;
-}): React.JSX.Element {
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    menu.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
-  }, []);
-  const onKey = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      onClose();
-      return;
-    }
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    const rows = [...event.currentTarget.querySelectorAll<HTMLElement>(MENU_ITEM)];
-    if (rows.length === 0) return;
-    event.preventDefault();
-    const focused = rows.find((row) => row === document.activeElement);
-    const at = focused === undefined ? -1 : rows.indexOf(focused);
-    const next =
-      at === -1
-        ? event.key === "ArrowDown"
-          ? 0
-          : rows.length - 1
-        : (at + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length;
-    rows[next]?.focus();
-  };
-  return (
-    <div
-      ref={menu}
-      id={menuId}
-      className="plan-compose-menu settings-model-menu"
-      role="menu"
-      aria-label="Default model"
-      onKeyDown={onKey}
-      onBlur={(event) => onLeave(event.relatedTarget)}
-    >
-      {models === undefined ? (
-        <p className="plan-compose-menu-note" role={modelsFailed ? "alert" : undefined}>
-          {modelsFailed ? PAGE_LINE.MODELS_FAILED : PAGE_LINE.MODELS_READING}
-        </p>
-      ) : (
-        models.map((model) => (
-          <button
-            key={model.id}
-            type="button"
-            role="menuitem"
-            className="plan-compose-menu-row"
-            aria-current={model.id === chosen ? "true" : undefined}
-            onClick={() => onPick(model)}
-          >
-            <ModelProviderMark provider={model.provider} />
-            <span className="plan-compose-menu-name">{model.name}</span>
-            {model.id === chosen ? <CheckIcon /> : null}
-          </button>
-        ))
-      )}
-    </div>
-  );
+/** The catalog's effort names are lowercase words; a segment reads them in sentence case. */
+function effortLabel(effort: string): string {
+  return `${effort.charAt(0).toUpperCase()}${effort.slice(1)}`;
 }
 
-/** The page's rows, over the default as read: the model's menu and the effort's choices. */
+/** The effort a model keeps on a change of model: the one chosen where the model lists it, else the model's first. */
+function effortFor(model: CatalogModel, chosen: string): string {
+  return model.efforts.includes(chosen) ? chosen : (model.efforts[0] ?? chosen);
+}
+
+/** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
   choice,
   models,
@@ -126,73 +58,59 @@ function DefaultRows({
   busy: boolean;
   onChange: (choice: ModelChoice) => void;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
-  const menuId = useId();
-  const row = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
   const listed = models?.find((model) => model.id === choice.model);
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
   const efforts = offered.length === 0 ? [choice.effort] : offered;
-  const close = () => {
-    setOpen(false);
-    trigger.current?.focus();
-  };
   return (
     <>
-      <div className="settings-row" ref={row}>
-        <span className="settings-copy">
-          <strong>Default model</strong>
-          <small>What a click on Start runs an agent on.</small>
-        </span>
-        <span className="settings-model">
-          <button
-            ref={trigger}
-            type="button"
-            className="plan-compose-chip settings-model-chip"
-            {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL)}
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-controls={open ? menuId : undefined}
-            disabled={busy}
-            onClick={() => setOpen(!open)}
-          >
-            {listed !== undefined ? <ModelProviderMark provider={listed.provider} /> : null}
-            <span className="plan-compose-chip-name">{modelLabel(choice.model, models)}</span>
-            <span className="voice-select-badge settings-model-badge" aria-hidden="true">
-              <PopUpIcon />
+      <PickerRow
+        label="Default model"
+        copy={
+          <>
+            <strong>Default model</strong>
+            <small>What a click on Start runs an agent on.</small>
+          </>
+        }
+        value={choice.model}
+        valueLabel={modelLabel(choice.model, models)}
+        valueIcon={listed !== undefined ? <ModelProviderMark provider={listed.provider} /> : null}
+        rows={
+          models === undefined
+            ? []
+            : orderedModels(models).map((model) => ({
+                id: model.id,
+                label: model.name,
+                icon: <ModelProviderMark provider={model.provider} />,
+                terms: [model.provider],
+              }))
+        }
+        placeholder="Search models"
+        noMatch={PAGE_LINE.MODELS_NONE_MATCH}
+        note={
+          models === undefined ? (
+            <span role={modelsFailed ? "alert" : undefined}>
+              {modelsFailed ? PAGE_LINE.MODELS_FAILED : PAGE_LINE.MODELS_READING}
             </span>
-          </button>
-          {open ? (
-            <ModelMenu
-              menuId={menuId}
-              models={models}
-              modelsFailed={modelsFailed}
-              chosen={choice.model}
-              onClose={close}
-              onLeave={(left) => {
-                if (!(left instanceof Node && row.current?.contains(left))) setOpen(false);
-              }}
-              onPick={(model) => {
-                close();
-                // A model keeps the effort it lists too; otherwise its first.
-                const effort = model.efforts.includes(choice.effort)
-                  ? choice.effort
-                  : (model.efforts[0] ?? choice.effort);
-                onChange({ model: model.id, effort });
-              }}
-            />
-          ) : null}
-        </span>
-      </div>
-      <div className="settings-row">
+          ) : undefined
+        }
+        anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
+        disabled={busy}
+        onPick={(id) => {
+          const model = models?.find((each) => each.id === id);
+          if (model === undefined) return;
+          onChange({ model: model.id, effort: effortFor(model, choice.effort) });
+        }}
+      />
+      {/* The segments wrap under the label where the row is narrow rather than clipping. */}
+      <div className="settings-row settings-row-wrapping">
         <span className="settings-copy">
           <strong>Default effort</strong>
           <small>How hard the model thinks.</small>
         </span>
         <fieldset
-          className="start-agent-efforts settings-efforts"
+          className="settings-segments"
           {...searchAnchorProps(SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT)}
         >
           <legend className="visually-hidden">Default effort</legend>
@@ -200,14 +118,14 @@ function DefaultRows({
             <button
               key={effort}
               type="button"
-              className="start-agent-effort"
+              className="settings-segment"
               aria-pressed={effort === choice.effort}
               disabled={busy}
               onClick={() => {
                 if (effort !== choice.effort) onChange({ model: choice.model, effort });
               }}
             >
-              {effort}
+              {effortLabel(effort)}
             </button>
           ))}
         </fieldset>
