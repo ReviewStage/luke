@@ -36,6 +36,12 @@ const MODELS: readonly CatalogModel[] = [
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "xhigh"],
   },
+  {
+    id: "anthropic/claude-opus-5.5-fast",
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high", "max"],
+  },
 ];
 
 /** The service's default as the test's bridge holds it, written by the page and read back by it. */
@@ -147,6 +153,10 @@ function press(target: Element, key: string): void {
   });
 }
 
+const fastSwitch = (page: HTMLElement) =>
+  page.querySelector<HTMLButtonElement>('[role="switch"][aria-label="Fast"]') ??
+  assert.fail("no Fast switch");
+
 const searchField = () =>
   document.activeElement instanceof HTMLInputElement
     ? document.activeElement
@@ -198,7 +208,7 @@ test("the model menu opens on its search, lists every model under its mark newes
   assert.equal(document.activeElement, chip(page));
   assert.deepEqual(efforts(page), [
     ["Low", "true"],
-    ["Xhigh", "false"],
+    ["Extra high", "false"],
   ]);
 });
 
@@ -323,4 +333,42 @@ test("with no account signed in the page asks nothing and says to sign in", asyn
   const page = await mount(false);
   assert.deepEqual(sent, []);
   assert.match(page.textContent ?? "", /Sign in to choose the model/u);
+});
+
+test("the model menu lists base models only, and the Fast switch under it stores the fast version's id and reads it back as its base with Fast on", async () => {
+  const page = await mount();
+  open(page);
+  assert.deepEqual(options(page), ["Claude Opus 5.5", "Claude Sonnet 5.5", "GPT-6.1 Sol"]);
+  type(searchField(), "fast");
+  assert.deepEqual(options(page), [], "a fast version is never listed on its own");
+  press(searchField(), "Escape");
+
+  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "false");
+  assert.equal(fastSwitch(page).disabled, false);
+  act(() => fastSwitch(page).click());
+  await settle();
+  assert.deepEqual(stored, { model: "anthropic/claude-opus-5.5-fast", effort: "high" });
+  assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
+  assert.equal(chip(page).textContent, "Claude Opus 5.5", "the chip names the base model");
+
+  // Read back from the service as stored: the base checked, Fast on.
+  const reopened = await mount();
+  assert.equal(chip(reopened).textContent, "Claude Opus 5.5");
+  assert.equal(fastSwitch(reopened).getAttribute("aria-checked"), "true");
+  open(reopened);
+  const checked = reopened.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.textContent, "Claude Opus 5.5");
+  press(searchField(), "Escape");
+
+  // Sonnet lists no fast version: the pick drops Fast, and the switch rests saying why.
+  open(reopened);
+  act(() => reopened.querySelectorAll<HTMLElement>('[role="option"]')[1]?.click());
+  await settle();
+  assert.deepEqual(stored, { model: "anthropic/claude-sonnet-5.5", effort: "high" });
+  assert.equal(fastSwitch(reopened).getAttribute("aria-checked"), "false");
+  assert.equal(fastSwitch(reopened).disabled, true);
+  assert.match(
+    fastSwitch(reopened).closest(".settings-row")?.textContent ?? "",
+    /No fast version of Claude Sonnet 5\.5/u,
+  );
 });

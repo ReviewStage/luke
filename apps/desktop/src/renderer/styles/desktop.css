@@ -958,12 +958,18 @@ body,
   flex: 0 0 auto;
 }
 
-/* The searchable menu: the search field is its first row, edge to edge
-   under the menu's own corner, the list scrolls under it past a bounded
-   height, and the foot is pinned under the list behind a hairline. */
+/* The searchable menu, in the shape of a command menu: the search as the
+   first row, flush and edge to edge over a hairline; under it the list,
+   its rows inset by the list's own padding so a highlight never meets the
+   border, scrolling inside itself past a bounded height; and under the
+   list, behind another hairline, the rows pinned where the scrolling
+   cannot take them. A row is one fixed height whatever the list holds:
+   the list is a plain block and a row flexes in no column it stands in,
+   because a bounded flex column would otherwise shrink its rows towards
+   their words as the matches grew past the bound, and let them back out
+   as a search cut them down. */
 .plan-compose-menu.searchable-menu {
   padding: 0;
-  overflow: hidden;
 }
 
 .plan-compose-menu-search {
@@ -971,7 +977,7 @@ body,
   flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  height: 36px;
+  height: 38px;
   padding: 0 12px;
   border-bottom: 1px solid var(--hairline);
   color: var(--text-tertiary);
@@ -985,43 +991,10 @@ body,
   flex: 0 0 auto;
 }
 
-.plan-compose-menu-list {
-  display: flex;
-  min-height: 0;
-  max-height: 288px;
-  flex-direction: column;
-  padding: 6px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
-}
-
-.plan-compose-menu-list:focus-visible {
-  outline: none;
-}
-
-.plan-compose-menu-foot {
-  display: flex;
-  flex: 0 0 auto;
-  flex-direction: column;
-  padding: 6px;
-  border-top: 1px solid var(--hairline);
-}
-
-/* One highlight, wherever it came from: the arrows and the pointer both
-   move the same one, so the pointer's own hover draws nothing of its own. */
-.searchable-menu .plan-compose-menu-row:hover {
-  background: none;
-}
-
-.searchable-menu .plan-compose-menu-row[aria-selected="true"],
-.searchable-menu .plan-compose-menu-row:focus-visible {
-  background: var(--raised-strong);
-}
-
 .plan-compose-menu-search input {
   flex: 1;
   min-width: 0;
+  height: 100%;
   border: 0;
   outline: none;
   background: none;
@@ -1034,10 +1007,106 @@ body,
   color: var(--text-tertiary);
 }
 
+.plan-compose-menu-list {
+  display: block;
+  max-height: 288px;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.plan-compose-menu-list:focus-visible {
+  outline: none;
+}
+
+.plan-compose-menu-foot {
+  display: block;
+  flex: 0 0 auto;
+  padding: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* One highlight, wherever it came from: the arrows and the pointer both
+   move the same one, so the pointer's own hover draws nothing of its own.
+   A pinned row carries it as a data attribute, standing outside the listbox. */
+.searchable-menu .plan-compose-menu-row:hover {
+  background: none;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-selected="true"],
+.searchable-menu .plan-compose-menu-row[data-highlighted="true"],
+.searchable-menu .plan-compose-menu-row:focus-visible {
+  background: var(--raised-strong);
+}
+
+/* What stands in the list's place: one quiet line, centred, at a row or
+   two's height, so a menu with nothing to list never falls to a sliver. */
 .plan-compose-menu-note {
-  margin: 4px 8px 6px;
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 4px 12px;
   color: var(--text-tertiary);
-  font-size: 12px;
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* A switch row: the panel's own switch at the row's end, keyed off the
+   row, which is the switch for the keyboard; a row that cannot be pressed
+   is muted and takes no highlight. */
+.plan-compose-menu-switch {
+  margin-left: auto;
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
+  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
+  transform: translateX(14px);
+}
+
+.plan-compose-menu-row[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-disabled="true"][data-highlighted="true"] {
+  background: none;
+}
+
+/* A submenu stands beside the pinned row that opened it, its top level
+   with that row's and its near edge at the menu's own; it turns to the
+   menu's other side where the window ends before it does, and stands up
+   from the row's foot where the window's bottom would cut it. */
+.plan-compose-menu-branch {
+  position: relative;
+}
+
+.plan-compose-submenu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: calc(100% + 9px);
+  width: 200px;
+  padding: 6px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-overlay);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.plan-compose-submenu[data-side="left"] {
+  right: calc(100% + 9px);
+  left: auto;
+}
+
+.plan-compose-submenu[data-stand="up"] {
+  top: auto;
+  bottom: 0;
 }
 
 .plan-compose-chip {
@@ -1104,10 +1173,34 @@ body,
   flex: 0 0 auto;
 }
 
-.plan-compose-menu-row .account-mark,
-.plan-compose-menu-row .provider-mark {
-  width: 15px;
-  height: 15px;
+/* The end slot is one glyph wide whether or not it holds one, so a name
+   ends where every other does; the check is the text's own colour here,
+   a choice rather than a state, and a mark or a chevron is quieter. */
+.plan-compose-menu-end {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+}
+
+.plan-compose-menu-end .credential-check {
+  width: 16px;
+  height: 16px;
+  color: var(--text-primary);
+}
+
+.plan-compose-menu-end .settings-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+.plan-compose-menu-end .link-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 
 .plan-compose-start svg {
@@ -1139,20 +1232,16 @@ body,
   }
 }
 
-.plan-compose-menu-heading {
-  margin: 4px 8px 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
+/* A row is one fixed height and flexes in no column it stands in. */
 .plan-compose-menu-row {
   display: flex;
+  flex: none;
+  width: 100%;
   align-items: center;
   gap: 8px;
   height: 32px;
   padding: 0 8px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -1167,8 +1256,25 @@ body,
 
 .plan-compose-menu-name {
   min-width: 0;
-  flex: 1;
-  font-weight: 560;
+  flex: 0 1 auto;
+  font-weight: 500;
+}
+
+/* The detail follows the name in the list, and stands at the row's end in
+   the foot, where the row names a setting and the detail is its value. */
+.plan-compose-menu-detail {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.plan-compose-menu-foot .plan-compose-menu-detail {
+  margin-left: auto;
+}
+
+.plan-compose-menu-foot .plan-compose-menu-detail + .plan-compose-menu-end {
+  margin-left: 0;
 }
 
 .plan-compose-note {
@@ -1993,49 +2099,6 @@ body,
   right: 0;
   left: auto;
   width: 300px;
-}
-
-.plan-compose-menu-row[aria-current="true"] {
-  color: var(--text-primary);
-}
-
-/* The efforts a chosen model lists, as one row of small choices. */
-.start-agent-efforts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0;
-  padding: 0 8px 6px;
-  border: 0;
-}
-
-.start-agent-effort {
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 560;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.start-agent-effort:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.start-agent-effort[aria-pressed="true"] {
-  border-color: transparent;
-  background: var(--text-primary);
-  color: var(--desktop-ground);
-}
-
-.start-agent-with {
-  color: var(--text-primary);
 }
 
 /* A word the toolbar says in passing, beside its buttons: what the last Copy came to. */
