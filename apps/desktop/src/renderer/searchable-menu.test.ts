@@ -119,9 +119,11 @@ test("the plan's toolbar and the side panel's bar take their height from one tok
   const bar = document.createElement("div");
   bar.className = "side-panel-bar";
   document.body.append(toolbar, bar);
-  const toolbarHeight = getComputedStyle(toolbar).height;
+  // The token is each bar's least height, which is its height while its
+  // one row of tabs and buttons stands no taller.
+  const toolbarHeight = getComputedStyle(toolbar).minHeight;
   assert.match(toolbarHeight, /^var\(--desktop-bar-height\)$/u);
-  assert.equal(getComputedStyle(bar).height, toolbarHeight);
+  assert.equal(getComputedStyle(bar).minHeight, toolbarHeight);
 });
 
 test("the highlight starts on the chosen row, the arrows move it with the field keeping focus, and Enter picks it", () => {

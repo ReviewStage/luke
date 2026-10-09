@@ -202,7 +202,11 @@ export function usePlansTab(input: {
   // away or the panel shows something else; a fixture's staged agents are
   // no one's to announce.
   const shownAgent =
-    shown && fixture === undefined && sidePanel.open && isAgentTab(sidePanel.tab)
+    shown &&
+    fixture === undefined &&
+    sidePanel.open &&
+    sidePanel.tab !== undefined &&
+    isAgentTab(sidePanel.tab)
       ? sidePanel.tab.agent
       : null;
   const reportedAgent = useRef<string | null | undefined>(undefined);

@@ -547,13 +547,10 @@
   animation-play-state: var(--loop-motion);
 }
 
-/* An agent's tab in the strip: its dot before its model's name. */
-.side-panel-agent-tab {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
+/* An agent's tab in the strip: its dot in its glyph's place, on a glyph's
+   footprint, so the note for an end no one saw sits at the same corner. */
+.tab-icon .agent-status-dot {
+  margin: 4px;
 }
 
 /* The agent's tab: its head, then the transcript filling the rest. */

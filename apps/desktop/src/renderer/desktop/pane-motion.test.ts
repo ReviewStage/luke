@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Plan } from "@sidecar/hosted/plan-wire";
+import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -10,6 +11,7 @@ import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { usePanelArrivals } from "../planning/use-panel-arrivals";
 import { useSidePanel } from "../planning/use-side-panel";
 import { DesktopShell } from "./desktop-shell";
 import { useSidebarCollapse } from "./sidebar-collapse";
@@ -21,6 +23,15 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+};
+
+/** The code Luke puts on screen during a call, its pointed lines part way down. */
+const CODE: PlanCode = {
+  ref: { path: "src/invite.ts", startLine: 3, endLine: 3 },
+  repository: "acme/relay",
+  firstLine: 1,
+  lineCount: 3,
+  lines: [[{ text: "import" }], [{ text: "" }], [{ text: "export function accept() {}" }]],
 };
 
 /** The motion tokens as base.css leaves them, which jsdom does not load: as shipped, and under reduced motion. */
@@ -118,10 +129,58 @@ function startOf(element: Element): Keyframe | undefined {
   return running.find((each) => each.element === element)?.keyframes[0];
 }
 
-/** The window as `App` stands it, with a plan open. */
-function Window(): React.JSX.Element {
+/**
+ * Lays the code pane out as the panel arriving on it draws it: its lines
+ * 200px tall from 100px down, the pointed line 400px down in them, and all of
+ * it past the window's right edge, where the panel starts its slide in.
+ */
+function layOutArrivingCode(): void {
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const past = window.innerWidth + 10;
+    if (this.classList.contains("code-lines")) {
+      return DOMRect.fromRect({ x: past, y: 100, width: 400, height: 200 });
+    }
+    if (this.dataset.pointed === "true") {
+      return DOMRect.fromRect({ x: past, y: 400, width: 400, height: 20 });
+    }
+    return DOMRect.fromRect();
+  });
+}
+
+/**
+ * Puts a browser's `scrollIntoView` in jsdom's place, as far as sideways goes:
+ * every box around the element scrolls until the element is back inside the
+ * window, the window's own layout included.
+ */
+function installScrollIntoView(): void {
+  Element.prototype.scrollIntoView = function (this: Element) {
+    const past = this.getBoundingClientRect().right - window.innerWidth;
+    if (past <= 0) return;
+    for (let box = this.parentElement; box !== null; box = box.parentElement) {
+      box.scrollLeft += past;
+    }
+  };
+}
+
+/** Every box in the window scrolled sideways, by its class, and how far. */
+function scrolledSideways(page: HTMLElement): string[] {
+  return [page, ...page.querySelectorAll<HTMLElement>("*")]
+    .filter((box) => box.scrollLeft !== 0)
+    .map((box) => `${box.className} ${box.scrollLeft}`);
+}
+
+/** The window as `App` stands it, with a plan open and, on a call, the code Luke has on screen. */
+function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
   const sidebar = useSidebarCollapse(false);
   const sidePanel = useSidePanel(undefined);
+  const unreadTabs = usePanelArrivals({
+    planId: PLAN.id,
+    board: undefined,
+    code,
+    panel: sidePanel,
+  });
   useAppKeymap(true);
   return createElement(DesktopShell, {
     gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
@@ -138,6 +197,8 @@ function Window(): React.JSX.Element {
       activePlanId: PLAN.id,
       region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
       sidePanel,
+      unreadTabs,
+      code,
     }),
     sidebar,
     settings: settingsPanelProps(),
@@ -150,8 +211,13 @@ let root: Root | undefined;
 function show(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(Window)));
+  act(() => root?.render(createElement(Window, {})));
   return container;
+}
+
+/** Redraws the window with the code Luke now has on screen. */
+function showCode(code: PlanCode): void {
+  act(() => root?.render(createElement(Window, { code })));
 }
 
 function find(page: HTMLElement, selector: string): HTMLElement {
@@ -176,6 +242,25 @@ function panel(page: HTMLElement): HTMLElement | null {
 function documentShown(page: HTMLElement): boolean {
   return find(page, ".desktop-plan-main").hidden === false;
 }
+
+/** The side panel's one toggle. */
+function panelToggle(page: HTMLElement): HTMLElement {
+  return find(page, ".side-panel-toggle");
+}
+
+/**
+ * Where the panel stands once every motion has played: beside the document at
+ * the default width, or nowhere.
+ */
+function settled(page: HTMLElement): string {
+  const drawn = panel(page);
+  if (drawn === null) return "hidden";
+  const leaving = drawn.dataset.leaving ?? "";
+  return `beside ${drawn.style.width} full-screen=${drawn.dataset.fullScreen} ${leaving}`.trim();
+}
+
+/** Option-Command-B from anywhere in the window; Option makes the key a symbol, so the chord reads the physical key. */
+const TOGGLE_CHORD = { key: "∫", code: "KeyB", altKey: true, metaKey: true } as const;
 
 /** A pointer event at `x` on `target`, or on the page once a snap has taken the edge away. */
 function pointer(page: HTMLElement, target: HTMLElement, type: string, x: number): void {
@@ -213,6 +298,7 @@ afterEach(() => {
   Reflect.deleteProperty(Element.prototype, "animate");
   Reflect.deleteProperty(Element.prototype, "getAnimations");
   Reflect.deleteProperty(HTMLElement.prototype, "setPointerCapture");
+  Reflect.deleteProperty(Element.prototype, "scrollIntoView");
   document.documentElement.removeAttribute("style");
   document.body.innerHTML = "";
   window.localStorage.clear();
@@ -230,7 +316,7 @@ test("the panel slides in, and hidden it stays drawn, out of reach, beside a doc
   const leaving = find(page, ".side-panel");
   assert.ok(animating(leaving), "it slides out");
   assert.ok(leaving.hasAttribute("inert"), "it takes no presses on its way out");
-  assert.ok(page.querySelector('[aria-label="Show panel"]'), "the toolbar has its toggle back");
+  assert.ok(page.querySelector('[aria-label="Show panel"]'), "the toggle offers it back at once");
   finishAll();
   assert.equal(panel(page), null);
 });
@@ -349,4 +435,104 @@ test("under reduced motion folding the sidebar moves the plan's title at once", 
 
   press(page, '[aria-label="Hide sidebar"]');
   assert.equal(animating(find(page, ".desktop-toolbar-heading")), false);
+});
+
+test("the panel opening on Luke's first code slides in with the pointed line in the middle of its lines, scrolling nothing else in the window", () => {
+  motion(MOTION.ON);
+  installScrollIntoView();
+  layOutArrivingCode();
+  const page = show();
+
+  showCode(CODE);
+  assert.ok(animating(find(page, ".side-panel")), "it slides in");
+  assert.equal(find(page, ".side-panel [role='tab'][aria-selected='true']").textContent, "Code");
+  assert.deepEqual(
+    scrolledSideways(page),
+    [],
+    "the shell, its sidebar, and the document stay where they are",
+  );
+  assert.equal(find(page, ".code-lines").scrollTop, 210, "the pointed line is centred");
+});
+
+test("lines Luke points at next are centred from their start, even where a long line was scrolled along", () => {
+  motion(MOTION.ON);
+  layOutArrivingCode();
+  const page = show();
+  showCode(CODE);
+  const lines = find(page, ".code-lines");
+  lines.scrollLeft = 120;
+
+  showCode({ ...CODE, ref: { ...CODE.ref, startLine: 2, endLine: 2 } });
+  assert.equal(lines.scrollLeft, 0);
+});
+
+test("the panel's toggle is one button standing in the title bar through showing, full screen, hiding, and each motion between", () => {
+  motion(MOTION.ON);
+  const page = show();
+  const toggle = panelToggle(page);
+  const standsWhereItWas = (moment: string) => {
+    assert.equal(panelToggle(page), toggle, `the same button ${moment}`);
+    assert.ok(toggle.parentElement?.matches(".title-bar-controls"), `in the title bar ${moment}`);
+    assert.equal(
+      toggle.closest(".side-panel, .desktop-toolbar"),
+      null,
+      `in neither pane ${moment}`,
+    );
+  };
+  standsWhereItWas("on a first launch");
+
+  act(() => toggle.click());
+  standsWhereItWas("as the panel slides in");
+  press(page, '[aria-label="Expand panel"]');
+  standsWhereItWas("as the panel grows");
+  finishAll();
+  standsWhereItWas("over a full-screen panel");
+  act(() => toggle.click());
+  standsWhereItWas("as the panel slides out");
+  finishAll();
+  standsWhereItWas("once the panel has gone");
+});
+
+test("rapid presses on the toggle each land, mid-motion too: a burst ends shown for an odd count and hidden for an even one, the panel where it belongs", () => {
+  motion(MOTION.ON);
+  layOutPanel();
+  const page = show();
+  const toggle = panelToggle(page);
+  let shown = false;
+  for (const presses of [1, 2, 3, 4, 5, 6, 7]) {
+    for (let each = 0; each < presses; each += 1) act(() => toggle.click());
+    shown = shown !== (presses % 2 === 1);
+    assert.equal(toggle.getAttribute("aria-expanded"), String(shown), `after ${presses} presses`);
+    finishAll();
+    assert.equal(settled(page), shown ? "beside 400px full-screen=false" : "hidden");
+    assert.ok(documentShown(page));
+    assert.equal(running.length, 0, "nothing is left playing");
+  }
+});
+
+test("Option-Command-B held down repeats as presses do, ending where the count says", () => {
+  motion(MOTION.ON);
+  layOutPanel();
+  const page = show();
+  for (const repeats of [5, 2]) {
+    for (let each = 0; each < repeats; each += 1) {
+      assert.equal(keydown(TOGGLE_CHORD), true, "the window takes every repeat");
+    }
+  }
+  // Five repeats leave it shown and two more leave it so.
+  assert.equal(panelToggle(page).getAttribute("aria-expanded"), "true");
+  finishAll();
+  assert.equal(settled(page), "beside 400px full-screen=false");
+
+  press(page, '[aria-label="Expand panel"]');
+  finishAll();
+  for (let each = 0; each < 3; each += 1) keydown(TOGGLE_CHORD);
+  finishAll();
+  assert.equal(settled(page), "hidden", "an odd count from full screen hides it");
+  keydown(TOGGLE_CHORD);
+  assert.equal(
+    settled(page),
+    "beside 400px full-screen=false",
+    "and it comes back beside the document",
+  );
 });

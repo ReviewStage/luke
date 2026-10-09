@@ -131,9 +131,9 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
   const menu =
     open === undefined || !plans.shown ? null : (
       <ActionMenu
+        label="Plan actions"
         menu={open}
         groups={planActionGroups(plans, planId, { rename, askDelete: deletion.ask })}
-        label="Plan actions"
         onClose={close}
       />
     );
