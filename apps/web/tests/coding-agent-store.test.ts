@@ -171,15 +171,22 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
     }),
   );
 
-  it.effect("an agent goes with its plan", () =>
+  it.effect("an agent goes with its plan, and its conversation is stamped for the purge", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
       const agent = started(yield* createCodingAgent(userId, start(planId)));
+      const kept = started(yield* createCodingAgent(userId, start(planId)));
+      yield* TestClock.adjust(Duration.minutes(1));
 
       assert.equal(yield* deletePlan(userId, planId), true);
 
       assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.none());
       assert.equal(yield* agentRows(userId), 0);
+      for (const { conversationId } of [agent, kept]) {
+        const conversation = yield* conversationKind(conversationId);
+        assert.equal(conversation?.kind, CONVERSATION_KIND.CODING_AGENT);
+        assert.ok(conversation?.deletedAt instanceof Date);
+      }
     }),
   );
 });

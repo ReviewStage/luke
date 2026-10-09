@@ -21,12 +21,17 @@ import { InstantColumnSchema } from "./store/database.js";
 
 type AccountSeamFailure = SqlError | Schema.SchemaError;
 
-/** One account's stored snapshot: the preferences every device shares, the coding agents' default, and the instant they were last written. */
+/** One account's stored snapshot: the preferences every device shares, the coding agents' default, and when the preferences were last written. */
 export interface AccountPreferencesRow {
   preferences: AccountPreferences;
   /** What a click on Start runs on; the catalog's default until the account chooses. */
   codingAgent: ModelChoice;
-  updatedAt: Date;
+  /**
+   * When the preferences part was last written; none on a row only a
+   * coding-agent choice opened. The desktop reads its presence as a snapshot
+   * to apply over its own settings, so it stands for the preferences alone.
+   */
+  updatedAt: Date | undefined;
 }
 
 /**
@@ -74,7 +79,7 @@ const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
   codingAgentModel: Schema.NullOr(Schema.String),
   codingAgentEffort: Schema.NullOr(Schema.String),
-  updatedAt: InstantColumnSchema,
+  updatedAt: Schema.NullOr(InstantColumnSchema),
 });
 
 type PreferenceRow = typeof PreferenceRowSchema.Type;
@@ -92,7 +97,7 @@ function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
   return {
     preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
     codingAgent,
-    updatedAt: row.updatedAt,
+    updatedAt: row.updatedAt ?? undefined,
   };
 }
 
@@ -126,11 +131,10 @@ const PreferenceWriteSchema = Schema.Struct({
 
 type PreferenceWrite = typeof PreferenceWriteSchema.Type;
 
-/** The columns a write replaces: each part the write carries, and the instant always. */
+/** The columns a write replaces: each part the write carries, the instant with the preferences part. */
 function writtenColumns(write: PreferenceWrite) {
   return {
-    updatedAt: write.updatedAt,
-    ...(write.voice === undefined ? undefined : { voice: write.voice }),
+    ...(write.voice === undefined ? undefined : { voice: write.voice, updatedAt: write.updatedAt }),
     ...(write.codingAgent === undefined
       ? undefined
       : {
@@ -162,7 +166,9 @@ const upsertPreference = SqlSchema.findOne({
 /**
  * Writes each part the write carries over what stood — the preferences
  * whole, the coding-agent default whole — and answers the snapshot as it
- * now stands, at the instant it was written.
+ * now stands. The instant moves with the preferences part alone, so a
+ * coding-agent choice never reads to a Mac as a settings snapshot it has
+ * to take.
  */
 export function writeAccountPreferences(
   userId: string,

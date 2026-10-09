@@ -522,7 +522,12 @@ resets the chosen model and the Start menu never touches the voice. A
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
 The store keeps the two columns beside `voice` on `account_preference`, and
-reads a half-written pair as the default.
+reads a half-written pair as the default. `updated_at` is the preferences
+part's own instant, nullable since migration 0062 and left null by a write
+that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
+as a snapshot to apply over its own settings, so a row a choice alone opened
+must answer none, or a Mac that never synced would take an empty snapshot
+over the voice it holds.
 
 ## The models group
 

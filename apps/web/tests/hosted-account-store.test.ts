@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { accountPreference } from "../server/db/preferences-schema";
 import { db } from "../server/db/query";
@@ -69,7 +70,7 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
 
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, { voice: "cedar" });
-      assert.equal(read?.updatedAt.getTime(), written.updatedAt.getTime());
+      assert.equal(read?.updatedAt?.getTime(), written.updatedAt?.getTime());
       assert.deepEqual(read, written);
     }),
   );
@@ -102,16 +103,23 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const chosen = yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
       assert.deepEqual(chosen.codingAgent, SONNET_AT_MAX);
       assert.deepEqual(chosen.preferences, {});
+      // No preferences were ever written, so there is no snapshot for a Mac to take.
+      assert.equal(chosen.updatedAt, undefined);
+      assert.equal((yield* readAccountPreferences(userId))?.updatedAt, undefined);
 
       yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
       const afterPreferences = yield* readAccountPreferences(userId);
       assert.deepEqual(afterPreferences?.codingAgent, SONNET_AT_MAX);
       assert.deepEqual(afterPreferences?.preferences, { voice: "cedar" });
+      assert.ok(afterPreferences?.updatedAt instanceof Date);
 
+      yield* TestClock.adjust(Duration.minutes(1));
       yield* writeAccountPreferences(userId, { codingAgent: CODING_AGENT_DEFAULT_CHOICE });
       const afterChoice = yield* readAccountPreferences(userId);
       assert.deepEqual(afterChoice?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
       assert.deepEqual(afterChoice?.preferences, { voice: "cedar" });
+      // The instant is the preferences part's own, so a choice leaves it where it stood.
+      assert.equal(afterChoice?.updatedAt?.getTime(), afterPreferences?.updatedAt?.getTime());
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
     }),
   );

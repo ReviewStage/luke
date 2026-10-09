@@ -108,6 +108,11 @@ function row(
   return { preferences, codingAgent, updatedAt: NOW };
 }
 
+/** A row a coding-agent choice alone opened: no preferences were ever written, so no instant stands. */
+function unsyncedRow(codingAgent: ModelChoice): AccountPreferencesRow {
+  return { preferences: {}, codingAgent, updatedAt: undefined };
+}
+
 const STORE_UNAVAILABLE = new SqlError({
   reason: new UnknownError({
     cause: new Error("the fixture's database is unreachable"),
@@ -148,14 +153,14 @@ function readPreferences(state: Backing) {
     state.stored.get(userId);
 }
 
-/** Each part the write carries replaces its own; the row stands otherwise as it was. */
+/** Each part the write carries replaces its own; the row stands otherwise as it was, and the instant moves with the preferences. */
 function writePreferences(state: Backing) {
   return async (userId: string, write: AccountPreferencesWrite): Promise<AccountPreferencesRow> => {
-    const standing = state.stored.get(userId) ?? row({});
+    const standing = state.stored.get(userId) ?? unsyncedRow(CODING_AGENT_DEFAULT_CHOICE);
     const written: AccountPreferencesRow = {
       preferences: write.preferences ?? standing.preferences,
       codingAgent: write.codingAgent ?? standing.codingAgent,
-      updatedAt: NOW,
+      updatedAt: write.preferences === undefined ? standing.updatedAt : NOW,
     };
     state.stored.set(userId, written);
     return written;
@@ -327,6 +332,13 @@ const EXCHANGES: readonly Exchange[] = [
     request: () => preferencesWriteRequest({ codingAgent: SOL_AT_HIGH }),
     finalState: () =>
       backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES, SOL_AT_HIGH)]]) }),
+  },
+  // A choice on an account that never synced its settings answers no instant, so a Mac still uploads its own.
+  {
+    name: "preferences-write-coding-agent-first",
+    state: () => backing(),
+    request: () => preferencesWriteRequest({ codingAgent: SOL_AT_HIGH }),
+    finalState: () => backing({ stored: new Map([[USER_ID, unsyncedRow(SOL_AT_HIGH)]]) }),
   },
   {
     name: "preferences-write-both",

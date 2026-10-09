@@ -83,12 +83,13 @@ const ModelChoiceSchema = Schema.Struct({
 
 const readModelChoice = readEither(ModelChoiceSchema);
 
-/** The snapshot as the group answers it, the stored instant beside it where one stands. */
+/** The snapshot as the group answers it, the preferences' instant beside it where the preferences were ever written. */
 function snapshotAnswer(row: AccountPreferencesRow | undefined) {
+  const updatedAt = row?.updatedAt;
   return {
     preferences: row?.preferences ?? {},
     codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
-    ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
+    ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
   };
 }
 

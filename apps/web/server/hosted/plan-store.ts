@@ -11,10 +11,11 @@ import {
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted/plan-wire";
-import { and, desc, eq, exists, isNull } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { codingAgent } from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
@@ -31,7 +32,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * deleted, and a save that fails leaves the document as it was. A plan's
  * conversation is a `plan` conversation of the same account, opened once and
  * named on the row, and it goes with the plan: deleting the plan stamps it
- * `deleted_at`, so the purge takes its words thirty days on. Every function is an effect over the ambient `SqlClient` and names
+ * `deleted_at`, and the conversations of the plan's coding agents with it,
+ * so the purge takes their words thirty days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 
@@ -250,25 +252,36 @@ const removePlan = SqlSchema.findOneOption({
       .returning({ conversationId: plan.conversationId }),
 });
 
-const stampConversation = SqlSchema.findAll({
+const stampConversations = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    conversationId: Schema.String,
+    conversationIds: Schema.Array(Schema.String),
     now: Schema.Date,
   }),
   Result: PlanIdRowSchema,
-  execute: ({ userId, conversationId, now }) =>
+  execute: ({ userId, conversationIds, now }) =>
     db
       .update(conversations)
       .set({ deletedAt: now })
       .where(
         and(
-          eq(conversations.id, conversationId),
+          inArray(conversations.id, conversationIds),
           eq(conversations.userId, userId),
           isNull(conversations.deletedAt),
         ),
       )
       .returning({ id: conversations.id }),
+});
+
+/** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
+const findAgentConversations = SqlSchema.findAll({
+  Request: PlanKeySchema,
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, planId }) =>
+    db
+      .select({ conversationId: codingAgent.conversationId })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.planId, planId), eq(codingAgent.userId, userId))),
 });
 
 /**
@@ -425,17 +438,27 @@ export function renamePlan(
   );
 }
 
-/** Deletes the plan and its document, and stamps its conversation cleared; false where the account owned no such plan. */
+/**
+ * Deletes the plan and its document, and stamps its conversation and its
+ * coding agents' conversations cleared; false where the account owned no
+ * such plan. The agents' conversations are read before the delete, because
+ * the delete cascades the agent rows that name them.
+ */
 export function deletePlan(userId: string, planId: string): PlanStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        const agents = yield* findAgentConversations({ userId, planId });
         const removed = yield* removePlan({ userId, planId });
         if (Option.isNone(removed)) return false;
         const { conversationId } = removed.value;
-        if (conversationId !== null) {
+        const conversationIds = [
+          ...(conversationId === null ? [] : [conversationId]),
+          ...agents.map((agent) => agent.conversationId),
+        ];
+        if (conversationIds.length > 0) {
           const now = yield* DateTime.nowAsDate;
-          yield* stampConversation({ userId, conversationId, now });
+          yield* stampConversations({ userId, conversationIds, now });
         }
         return true;
       }),
