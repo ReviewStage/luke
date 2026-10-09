@@ -54,14 +54,16 @@ jobs:
   # each test file clones it as a template into a database of its own and
   # drops the clone when it is done (`tests/support/store-test-postgres.ts`),
   # so a statement one file forgets to scope reaches no other file's rows here
-  # any more than it does on PGlite.
+  # any more than it does on PGlite. The image is Docker's official one pulled
+  # through AWS's public mirror, because a runner pulls Docker Hub anonymously
+  # and its shared address keeps meeting Hub's unauthenticated rate limit.
   postgres:
     name: Postgres migrations and store
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:18
+        image: public.ecr.aws/docker/library/postgres:18
         env:
           POSTGRES_USER: luke
           POSTGRES_PASSWORD: luke
