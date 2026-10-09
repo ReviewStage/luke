@@ -111,7 +111,7 @@ function linesLost(earlier: string, later: string): readonly string[] {
 
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
-    const { model, asked } = scriptedScribeModel(answers);
+    const { model, asked, pace } = scriptedScribeModel(answers);
     const reports: string[] = [];
     const drafts: PlanDraft[] = [];
     const writing: boolean[] = [];
@@ -124,7 +124,7 @@ const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswe
       createId: randomUUID,
       report: (message) => reports.push(message),
     });
-    return { scribe, asked, reports, drafts, writing };
+    return { scribe, asked, pace, reports, drafts, writing };
   });
 
 it.layer(testSqlClient)("the plan's notetaker", (it) => {
@@ -433,16 +433,21 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
             },
             added(PLAN_FIELD.OPEN_QUESTIONS, "How long does an invite link stay valid?"),
           ];
-          const { scribe, drafts, writing } = yield* scribeFor(userId, planId, [{ notes }]);
+          const { scribe, asked, pace, drafts } = yield* scribeFor(userId, planId, [
+            { paced: { notes } },
+          ]);
 
           scribe.observe(heard("Invites get lost, and owners add people, not admins.", 0, 1_000));
           yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
           yield* settledRead(
-            Effect.sync(() => writing.length),
+            Effect.sync(() => asked.length),
             (count) => count > 0,
           );
-          // The model streams its answer across drafts spaced a beat apart.
-          for (let beat = 0; beat < 60; beat += 1) {
+          // Note that each chunk lands a draft's beat after the last, so a draft
+          // is drawn for every one rather than for however many a machine's
+          // timers happened to let through between two moves of the clock.
+          while (pace()) {
+            yield* settle;
             yield* Effect.andThen(
               TestClock.adjust(Duration.millis(PLAN_SCRIBE.DRAFT_EVERY_MS)),
               settle,
