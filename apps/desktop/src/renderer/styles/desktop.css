@@ -8,6 +8,8 @@
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
   --desktop-bar-height: 52px;
+  /* A tab's pill, and the "+" beside a strip of them. */
+  --tab-height: 28px;
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
   /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
@@ -500,51 +502,10 @@ body,
   white-space: nowrap;
 }
 
-/* The title is the plan's name and renames it on a press, the way Linear's
-   and Codex's do: no chrome until the pointer is on it, and then the field
-   opens in the same place and type, ringed rather than bordered so nothing
-   moves. */
-.desktop-toolbar-title-button,
-.desktop-toolbar-title-field {
-  max-width: 100%;
-  margin: 0 0 0 -6px;
-  padding: 1px 6px;
-  border: 0;
-  border-radius: 6px;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  -webkit-app-region: no-drag;
-}
-
-.desktop-toolbar-title-button {
-  overflow: hidden;
-  background: none;
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.desktop-toolbar-title-button:hover {
-  background: var(--raised);
-}
-
-.desktop-toolbar-title-field {
-  width: calc(100% + 6px);
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--selected-edge);
-  outline: none;
-}
-
-.desktop-toolbar-subtitle {
-  margin: 2px 0 0;
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* The plan's toolbar leads with its tab rather than a title, so it starts
+   the tab's pill where the title's words started, less the pill's own inset. */
+.desktop-plan-main .desktop-toolbar {
+  padding-left: 22px;
 }
 
 .desktop-toolbar-actions {
@@ -675,6 +636,26 @@ body,
 .plan-menu-item[data-danger="true"]:hover,
 .plan-menu-item[data-danger="true"]:focus-visible {
   background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.plan-menu-label {
+  flex: 1;
+}
+
+/* An item's shortcut, or why it cannot be chosen now, at its end. */
+.plan-menu-end {
+  margin-left: 24px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+/* Dimmed, the way a system menu draws an item it cannot take now. */
+.plan-menu-item:disabled {
+  opacity: 0.45;
+}
+
+.plan-menu-item:disabled:hover {
+  background: none;
 }
 
 .plan-menu-rule {
@@ -1506,43 +1487,43 @@ body,
   padding-left: var(--sidebar-toggle-clearance);
 }
 
+/* The tabs and their "+" take what the row leaves beside the full-screen
+   button, scrolling beneath it rather than pushing it out. */
 .side-panel-tabs {
   display: flex;
   min-width: 0;
-  gap: 4px;
+  align-items: center;
+  gap: 2px;
 }
 
-.side-panel-tab {
-  position: relative;
-  padding: 5px 10px;
-  -webkit-app-region: no-drag;
+.side-panel-tabs .toolbar-icon-button {
+  width: var(--tab-height);
+  height: var(--tab-height);
   border-radius: 7px;
+}
+
+.side-panel-tabs .toolbar-icon-button[aria-disabled="true"] {
+  opacity: 0.45;
   background: none;
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
 }
 
-.side-panel-tab:hover {
-  color: var(--text-primary);
+/* With every tab closed, the panel offers what the "+" menu offers, as the
+   same rows, at the top of its well. */
+.side-panel-no-tabs {
+  display: flex;
+  width: 100%;
+  max-width: 300px;
+  flex-direction: column;
+  margin: 0 auto;
+  padding: 48px 16px;
 }
 
-.side-panel-tab[aria-selected="true"] {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-/* Something arrived on a tab while another was shown: a dot at its corner
-   until the tab is shown, as the gear carries the update's. */
-.side-panel-tab .tab-note {
-  top: 3px;
-  right: 3px;
-  width: 5px;
-  height: 5px;
-  margin: 0;
+.side-panel-no-tabs-line {
+  margin: 0 0 8px;
+  padding: 0 8px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
 }
 
 .side-panel-content {
@@ -1581,6 +1562,150 @@ body,
 
 .side-panel-toggle[data-open="true"] {
   color: var(--text-primary);
+}
+
+/* Tabs ------------------------------------------------------------------------ */
+
+/* One strip drawn alike in the plan's column and the side panel, the way an
+   editor draws its tabs: each a glyph and a label in a compact pill, raised
+   while chosen and plain and muted otherwise, with its × standing on the
+   chosen tab and shown on another while the pointer is on it. */
+.tab-strip {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  min-width: 56px;
+  flex: 0 1 auto;
+  align-items: center;
+  border-radius: 7px;
+  color: var(--text-secondary);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.tab:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.tab[data-selected="true"] {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.tab-button {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 6px;
+  height: var(--tab-height);
+  padding: 0 9px 0 8px;
+  border-radius: inherit;
+  background: none;
+  color: inherit;
+  font-size: 13px;
+  font-weight: 560;
+}
+
+/* Only the chosen tab keeps room for its ×, so the strip holds more before
+   it scrolls; another tab's × comes over the end of its label, which fades
+   beneath it. */
+.tab[data-closable="true"][data-selected="true"] .tab-button {
+  padding-right: 25px;
+}
+
+.tab[data-closable="true"][data-selected="false"]:hover .tab-button {
+  mask-image: linear-gradient(to left, transparent 24px, #000 34px);
+}
+
+.tab-icon {
+  display: flex;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.tab-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Renamed in place, the label gives way to a field in the same type,
+   ringed rather than bordered so nothing moves. */
+.tab-button[data-editing="true"] {
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+}
+
+.tab-field {
+  width: 24ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+.tab-close {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  background: none;
+  color: var(--text-secondary);
+  opacity: 0;
+  transform: translateY(-50%);
+  transition:
+    opacity var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+.tab:hover .tab-close,
+.tab[data-selected="true"] .tab-close {
+  opacity: 1;
+}
+
+.tab-close:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.tab-close svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Something arrived on a tab while another was chosen: a dot at its glyph's
+   corner until the tab is chosen, as the gear carries the update's. */
+.tab .tab-note {
+  top: 5px;
+  left: 18px;
+  width: 5px;
+  height: 5px;
+  margin: 0;
 }
 
 /* Confirm dialog -------------------------------------------------------------- */

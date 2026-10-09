@@ -1,6 +1,14 @@
 import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
+import {
+  BoardIcon,
+  CodeIcon,
+  CollapseIcon,
+  ExpandIcon,
+  PlusIcon,
+  SidePanelIcon,
+  TranscriptIcon,
+} from "@sidecar/panel";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -10,26 +18,38 @@ import { PlanTranscript } from "../planning/plan-transcript";
 import type { TranscriptRegion } from "../planning/transcript-model";
 import {
   SIDE_PANEL_TAB,
+  SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
+  tabAddable,
 } from "../planning/use-side-panel";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
+import {
+  ActionMenu,
+  MENU_ALIGN,
+  MENU_DROP,
+  type MenuAction,
+  MenuItem,
+  type OpenMenu,
+} from "./action-menu";
 import { paneTiming } from "./pane-motion";
+import { Tab, TabStrip } from "./tab-strip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
- * side-panel.tsx -- the open plan's side panel at the window's right: its toggle, its tab strip, its full-screen button, the tab shown, and the edge it is resized by.
+ * side-panel.tsx -- the open plan's side panel at the window's right: its toggle, its tabs and their "+", its full-screen button, the tab shown, and the edge it is resized by.
  *
  * Each part draws what `use-side-panel.ts` holds and hands every press back
  * to it, so the panel decides nothing about when it shows.
  *
  * The panel runs the window's full height. Its top row is the window's drag
- * handle above it, holding the tabs at its left and the full-screen button at
- * its right, which leaves room past itself for the toggle. The toggle is the
- * window's rather than the panel's (desktop-shell.tsx), so the panel's coming
- * and going never moves it. The plan's own actions stay in the plan's toolbar
+ * handle above it, holding the tabs and their "+" at its left and the
+ * full-screen button at its right, which leaves room past itself for the
+ * toggle; the tabs narrow, then scroll, rather than push either. The toggle
+ * is the window's rather than the panel's (desktop-shell.tsx), so the
+ * panel's coming and going never moves it. The plan's own actions stay in the plan's toolbar
  * and never come into the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
@@ -46,6 +66,13 @@ const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
  * `max-width` in desktop.css holds the same room while the window narrows.
  */
 const DOCUMENT_RESERVE = 360;
+
+/** Each kind's glyph, leading its tab and its row in the "+" menu. */
+const TAB_ICON = {
+  [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
+  [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
+  [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
+} as const satisfies Record<SidePanelTab, React.JSX.Element>;
 
 /** The shortcut that shows each tab. */
 const TAB_COMMAND = {
@@ -71,36 +98,121 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
+/** The menu entry, or the empty panel's row, that opens a tab of the kind. */
+function kindAction(
+  tab: SidePanelTab,
+  tabs: readonly SidePanelTab[],
+  onChoose: (tab: SidePanelTab) => void,
+): MenuAction {
+  const action: MenuAction = {
+    label: SIDE_PANEL_TAB_KIND[tab].label,
+    icon: TAB_ICON[tab],
+    command: TAB_COMMAND[tab],
+    onSelect: () => onChoose(tab),
+  };
+  return tabAddable(tab, tabs) ? action : { ...action, unavailable: "Open" };
+}
+
 /**
- * The strip of tabs across the panel's top. A tab's own word is all it needs
- * to say, so it hangs no pill; its chord is in the View menu and on the
- * Keyboard shortcuts page.
+ * The "+" after the last tab, and the menu it drops: every kind of tab, with
+ * its shortcut, and those that may not be opened again dimmed. With every
+ * kind open there is nothing to add, so it is dimmed and says so.
  */
-function TabStrip({
-  tab,
-  unread,
+function AddTabButton({
+  tabs,
   onChoose,
 }: {
-  tab: SidePanelTab;
-  unread: readonly SidePanelTab[];
+  tabs: readonly SidePanelTab[];
   onChoose: (tab: SidePanelTab) => void;
 }): React.JSX.Element {
+  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const close = useCallback((returnFocus: boolean) => {
+    setMenu(undefined);
+    if (returnFocus) opener.current?.focus();
+  }, []);
+  const full = SIDE_PANEL_TABS.every((kind) => !tabAddable(kind, tabs));
   return (
-    <div className="side-panel-tabs" role="tablist" aria-label="Panel">
-      {SIDE_PANEL_TABS.map((entry) => (
+    <>
+      <Tooltip label={full ? "Every tab is open" : "Open a tab"}>
         <button
-          key={entry.tab}
+          ref={opener}
           type="button"
-          role="tab"
-          className="side-panel-tab"
-          aria-selected={entry.tab === tab}
-          aria-keyshortcuts={commandKeyshortcuts(TAB_COMMAND[entry.tab])}
-          onClick={() => onChoose(entry.tab)}
+          className="toolbar-button toolbar-icon-button tab-add"
+          aria-label="Open a tab"
+          aria-haspopup="menu"
+          aria-expanded={menu !== undefined}
+          aria-disabled={full}
+          onClick={(event) => {
+            if (menu !== undefined) {
+              close(true);
+              return;
+            }
+            if (full) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            setMenu({
+              placement: { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START },
+              opener: event.currentTarget,
+            });
+          }}
         >
-          {entry.label}
-          {unread.includes(entry.tab) ? <span className="tab-note" aria-hidden="true" /> : null}
+          <PlusIcon />
         </button>
-      ))}
+      </Tooltip>
+      {menu === undefined ? null : (
+        <ActionMenu
+          label="Open a tab"
+          menu={menu}
+          groups={[SIDE_PANEL_TABS.map((kind) => kindAction(kind, tabs, onChoose))]}
+          onClose={close}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * The strip of tabs across the panel's top, then the "+". A tab's own word
+ * is all it needs to say, so it hangs no pill; its chord is in the View menu,
+ * the "+" menu, and on the Keyboard shortcuts page.
+ */
+function PanelTabs({
+  panel,
+  unread,
+}: {
+  panel: SidePanelControl;
+  unread: readonly SidePanelTab[];
+}): React.JSX.Element {
+  return (
+    <div className="side-panel-tabs">
+      <TabStrip label="Panel">
+        {panel.tabs.map((tab) => (
+          <Tab
+            key={tab}
+            icon={TAB_ICON[tab]}
+            label={SIDE_PANEL_TAB_KIND[tab].label}
+            selected={tab === panel.tab}
+            unread={unread.includes(tab)}
+            keyshortcuts={commandKeyshortcuts(TAB_COMMAND[tab])}
+            onSelect={() => panel.onChoose(tab)}
+            onClose={() => panel.onClose(tab)}
+          />
+        ))}
+      </TabStrip>
+      <AddTabButton tabs={panel.tabs} onChoose={panel.onChoose} />
+    </div>
+  );
+}
+
+/** The panel with every tab closed: what it holds, offered as the "+" menu offers it. */
+function NoTabs({ onChoose }: { onChoose: (tab: SidePanelTab) => void }): React.JSX.Element {
+  return (
+    <div className="side-panel-no-tabs">
+      <p className="side-panel-no-tabs-line">No tabs open</p>
+      {SIDE_PANEL_TABS.map((kind) => {
+        const action = kindAction(kind, [], onChoose);
+        return <MenuItem key={kind} action={action} inMenu={false} onChoose={action.onSelect} />;
+      })}
     </div>
   );
 }
@@ -240,7 +352,11 @@ interface HeldPanel {
 
 function sameDrawing(a: SidePanelControl, b: SidePanelControl): boolean {
   return (
-    a.open === b.open && a.fullScreen === b.fullScreen && a.width === b.width && a.tab === b.tab
+    a.open === b.open &&
+    a.fullScreen === b.fullScreen &&
+    a.width === b.width &&
+    a.tabs === b.tabs &&
+    a.tab === b.tab
   );
 }
 
@@ -365,7 +481,6 @@ export function SidePanel({
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
-  const label = SIDE_PANEL_TABS.find((entry) => entry.tab === panel.tab)?.label;
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
@@ -390,22 +505,32 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <TabStrip tab={panel.tab} unread={unread} onChoose={panel.onChoose} />
+          <PanelTabs panel={panel} unread={unread} />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}
             onToggle={panel.onToggleFullScreen}
           />
         </div>
-        <div className="side-panel-content" role="tabpanel" aria-label={label}>
-          <TabContent
-            tab={panel.tab}
-            planId={planId}
-            board={board}
-            code={code}
-            transcript={transcript}
-          />
-        </div>
+        {panel.tab === undefined ? (
+          <div className="side-panel-content">
+            <NoTabs onChoose={panel.onChoose} />
+          </div>
+        ) : (
+          <div
+            className="side-panel-content"
+            role="tabpanel"
+            aria-label={SIDE_PANEL_TAB_KIND[panel.tab].label}
+          >
+            <TabContent
+              tab={panel.tab}
+              planId={planId}
+              board={board}
+              code={code}
+              transcript={transcript}
+            />
+          </div>
+        )}
         {/* Last, so the drag region of the row above does not take the
             edge's top from it. Full screen has no edge to drag. */}
         {panel.fullScreen ? null : <ResizeEdge edge={edge} />}

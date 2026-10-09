@@ -1,5 +1,5 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CheckIcon, CopyIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon, DocumentIcon } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -18,6 +18,7 @@ import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
+import { Tab, TabStrip } from "./tab-strip";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -25,26 +26,24 @@ import { SidePanel, useSidePanelDrawing } from "./side-panel";
  * the window's full height, while that is open (or over them, while it fills
  * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
- * toolbar offers no way out of the open plan, only its actions. Its title is
- * the plan's name, and a press on it renames the plan in place.
+ * toolbar offers no way out of the open plan, only its actions. Its one tab
+ * is the plan's, named for it, and a press on it renames the plan in place.
  */
 
-/** The strip across the top of the work column, which is also the window's drag handle. */
+/**
+ * The strip across the top of the work column, which is also the window's
+ * drag handle: the plan's tab at its left and the plan's actions at its right.
+ */
 function Toolbar({
-  title,
-  subtitle,
+  heading,
   children,
 }: {
-  title: React.ReactNode;
-  subtitle?: string | undefined;
+  heading: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{title}</h1>
-        {subtitle !== undefined ? <p className="desktop-toolbar-subtitle">{subtitle}</p> : null}
-      </div>
+      {heading}
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
   );
@@ -77,45 +76,65 @@ function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element
 }
 
 /**
- * The open plan's name as the toolbar's title, which a press, or the ⋯
- * menu's Rename, opens as its field; a key that ends the edit hands focus
- * back to the title.
+ * The plan's one tab, standing while no plan is drawn yet as well, so the
+ * row does not move when one is. It is the column's only tab and never
+ * closes: the plan is always the column's content, and the sidebar is the
+ * way to another plan. Note that there is no "+" beside it, because the
+ * column has no second kind of tab to open.
  */
-function PlanTitle({
+function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
+  return (
+    <TabStrip label="Plan" className="desktop-toolbar-heading">
+      {tab}
+    </TabStrip>
+  );
+}
+
+/**
+ * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
+ * opens as its field, and its folder in the hint the pointer resting on it
+ * raises. A key that ends the edit hands focus back to the tab.
+ */
+function PlanTab({
   plan,
+  folderPath,
   rename,
 }: {
   plan: PlanSummary;
+  folderPath: string | undefined;
   rename: ReturnType<typeof usePlanRename>;
 }): React.JSX.Element {
-  const title = useRef<HTMLButtonElement | null>(null);
+  const tab = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
     if (rename.editing || !refocus.current) return;
     refocus.current = false;
-    title.current?.focus();
+    tab.current?.focus();
   }, [rename.editing]);
-  if (rename.editing) {
-    return (
-      <PlanNameField
-        name={plan.name}
-        className="desktop-toolbar-title-field"
-        onEnd={(edit) => {
-          refocus.current = edit.byKey;
-          rename.end(edit);
-        }}
-      />
-    );
-  }
+  const editor = rename.editing ? (
+    <PlanNameField
+      name={plan.name}
+      className="tab-field"
+      onEnd={(edit) => {
+        refocus.current = edit.byKey;
+        rename.end(edit);
+      }}
+    />
+  ) : undefined;
   return (
-    <button
-      ref={title}
-      type="button"
-      className="desktop-toolbar-title-button"
-      onClick={rename.begin}
-    >
-      {plan.name}
-    </button>
+    <PlanTabStrip
+      tab={
+        <Tab
+          icon={<DocumentIcon />}
+          label={plan.name}
+          selected
+          tooltip={folderPath === undefined ? undefined : folderLine(folderPath)}
+          editor={editor}
+          tabRef={tab}
+          onSelect={rename.begin}
+        />
+      }
+    />
   );
 }
 
@@ -136,7 +155,13 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             : "Choose a plan, or start a new one.";
     return (
       <>
-        <Toolbar title="Plan" />
+        <Toolbar
+          heading={
+            <PlanTabStrip
+              tab={<Tab icon={<DocumentIcon />} label="Plan" selected onSelect={() => undefined} />}
+            />
+          }
+        />
         <section className="desktop-empty" aria-busy={region.kind === DOCUMENT_REGION.READING}>
           <p role={region.kind === DOCUMENT_REGION.READING ? undefined : "alert"}>{line}</p>
           {region.kind === DOCUMENT_REGION.FAILED ? (
@@ -166,10 +191,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar
-          title={<PlanTitle plan={plan} rename={rename} />}
-          subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
-        >
+        <Toolbar heading={<PlanTab plan={plan} folderPath={folderPath} rename={rename} />}>
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
@@ -187,7 +209,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           <CopyButton copy={plans.copy} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
         </Toolbar>
-        <section className="desktop-document" aria-label={plan.name}>
+        <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
         </section>
         <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>

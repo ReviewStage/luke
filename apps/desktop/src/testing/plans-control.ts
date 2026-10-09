@@ -2,7 +2,11 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
-import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH } from "../renderer/planning/use-side-panel";
+import {
+  SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
+  SIDE_PANEL_WIDTH,
+} from "../renderer/planning/use-side-panel";
 
 const ignore = () => undefined;
 
@@ -25,11 +29,14 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     sidePanel: {
       open: false,
       fullScreen: false,
+      tabs: SIDE_PANEL_TABS,
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
       onToggleFullScreen: ignore,
       onChoose: ignore,
+      onAdd: ignore,
+      onClose: ignore,
       onResize: ignore,
     },
     unreadTabs: [],

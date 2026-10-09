@@ -442,7 +442,7 @@ test("the panel opening on Luke's first code slides in with the pointed line in 
 
   showCode(CODE);
   assert.ok(animating(find(page, ".side-panel")), "it slides in");
-  assert.equal(find(page, ".side-panel-tab[aria-selected='true']").textContent, "Code");
+  assert.equal(find(page, ".side-panel [role='tab'][aria-selected='true']").textContent, "Code");
   assert.deepEqual(
     scrolledSideways(page),
     [],
