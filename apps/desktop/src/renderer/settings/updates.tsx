@@ -1,5 +1,4 @@
 import { CheckIcon, DownloadIcon, ExternalIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -8,27 +7,27 @@ import type { UpdateControl } from "./controls";
 
 /**
  * The buttons with somewhere new to go — fetch the release, restart into it,
- * or reach its page in the browser — wear the same accent the tab's dot
- * announced the news with; checking stays the quiet button, because checking
- * is maintenance.
+ * or reach its page in the browser — are filled with the accent, as the one
+ * act the row exists for; checking stays a plain toolbar button, because
+ * checking is maintenance.
  */
 function updateButton(action: UpdateRowAction, control: UpdateControl): React.JSX.Element {
   switch (action) {
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return (
-        <button type="button" className="quiet-button" disabled>
+        <button type="button" className="toolbar-button" disabled>
           Downloading…
         </button>
       );
     case UPDATE_ROW_ACTION.RESTART:
       return (
-        <button type="button" className="action-button" onClick={control.onInstall}>
+        <button type="button" className="primary-button" onClick={control.onInstall}>
           Restart to update
         </button>
       );
     case UPDATE_ROW_ACTION.GET:
       return (
-        <button type="button" className="action-button" onClick={control.onOpenLatest}>
+        <button type="button" className="primary-button" onClick={control.onOpenLatest}>
           Download
         </button>
       );
@@ -36,7 +35,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
       return (
         <button
           type="button"
-          className="quiet-button"
+          className="toolbar-button"
           disabled={action === UPDATE_ROW_ACTION.CHECKING}
           onClick={() => void control.onCheck()}
         >
@@ -48,20 +47,13 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 
 /**
  * Where the build stands against the latest release. It stays below the pages
- * while the Settings tab's dot carries the news outside. The caller says where
- * it stands, because the arrival stagger is counted by the page.
+ * while the Settings tab's dot carries the news outside.
  */
-export function UpdatesSection({
-  control,
-  rowIndex,
-}: {
-  control: UpdateControl;
-  rowIndex: number;
-}): React.JSX.Element {
+export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();
   const row = updateRow(control.update);
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
+    <section className="settings-section">
       <h2>
         <DownloadIcon />
         Updates
@@ -86,7 +78,7 @@ export function UpdatesSection({
         </span>
         <button
           type="button"
-          className="quiet-button"
+          className="toolbar-button"
           onClick={() => tell(ACT_KIND.UPDATE_OPEN_CHANGELOG)}
         >
           Open

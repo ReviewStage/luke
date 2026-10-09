@@ -259,7 +259,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
           </p>
           <button
             type="button"
-            className="plan-button"
+            className="toolbar-button"
             onClick={() => setAttempt((count) => count + 1)}
           >
             Try again

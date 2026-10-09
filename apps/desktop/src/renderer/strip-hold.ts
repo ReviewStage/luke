@@ -1,7 +1,6 @@
 /**
- * The decisions behind a pointer resting on the spoken strip — the caption
- * block drawn under the housing while Luke speaks — kept pure so they can be
- * tested.
+ * The decisions behind a pointer resting on the caption bar Luke's words are
+ * drawn in while he speaks, kept pure so they can be tested.
  *
  * The words normally leave with the reply that earned them, and a voice
  * failure leaves on its own clock. But a pointer already over them is someone

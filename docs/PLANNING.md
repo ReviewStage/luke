@@ -940,14 +940,14 @@ changes when a check is run, not when one is planned.
   Plans tab in the panel, the fixed template's presentation (LUKE-352), the
   document scrolling inside the panel's ceiling,
   the microphone row, and the captions during a planning call
-  have never been seen running. `./scripts/evidence.sh` captures the panel
-  expanded on the Plans tab over a synthetic plan
-  (`app-smoke-planning.png`, from `--profile planning --expanded`), on the
+  have never been seen running. `./scripts/evidence.sh` captures the window
+  on the Plans tab over a synthetic plan
+  (`app-smoke-planning.png`, from `--profile planning`), on the
   plan's whiteboard (`app-smoke-planning-board.png`, from
-  `--profile planning-board --expanded`), on its transcript mid-call
+  `--profile planning-board`), on its transcript mid-call
   (`app-smoke-planning-transcript.png`, from
-  `--profile planning-transcript --expanded`), on its Work tab mid-call
-  (`app-smoke-planning-work.png`, from `--profile planning-work --expanded`),
+  `--profile planning-transcript`), on its Work tab mid-call
+  (`app-smoke-planning-work.png`, from `--profile planning-work`),
   and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the
   window opening on Plans), but neither

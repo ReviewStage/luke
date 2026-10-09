@@ -26,7 +26,7 @@ export type ConfirmStage = (typeof CONFIRM_STAGE)[keyof typeof CONFIRM_STAGE];
 export interface ConfirmSurroundings {
   /** True while the thing the question is about is still there. */
   subject: boolean;
-  /** True while the surface the question was asked on is the shape on screen. */
+  /** True while the surface the question was asked on is on screen. */
   surfaceOpen: boolean;
 }
 
@@ -37,12 +37,10 @@ export interface ConfirmSurroundings {
  * A question outlives neither its subject nor the surface it was asked on. The
  * subject going takes it: there is nothing left to confirm, and a confirm left
  * standing where a key used to be would be pointed at whatever is stored there
- * next. The surface closing takes it too — a confirm is a question put to
- * somebody standing in front of it, and one still waiting behind a closed panel
- * would be the first thing under the pointer the next time it opened, with
- * nobody having asked for it. Standing down to the slot closes the panel by
- * this measure, which is what keeps a trip to fetch a key from bringing an
- * armed delete back with it.
+ * next. The surface going off screen takes it too — a confirm is a question put
+ * to somebody standing in front of it, and one still waiting behind another
+ * tab would be the first thing under the pointer the next time it was shown,
+ * with nobody having asked for it.
  *
  * Both are the opposite of a key half-entered, which is the one thing here that
  * does survive a close: that is work someone is in the middle of, and this is a

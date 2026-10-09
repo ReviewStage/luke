@@ -223,7 +223,7 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
         <button
           ref={chevron}
           type="button"
-          className="toolbar-button toolbar-icon-button start-agent-chevron"
+          className="icon-button start-agent-chevron"
           aria-label="Choose a model to start with"
           aria-haspopup="listbox"
           aria-expanded={open}

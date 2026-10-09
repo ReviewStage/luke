@@ -9,7 +9,7 @@ const STYLE_ROOT = join(ROOT, "apps", "desktop", "src", "renderer", "styles");
 const failures = [];
 // The window's own sheets, which spend the spacing scale in desktop.css's
 // :root rather than a pixel of their own (docs/DESIGN.md).
-const SPACED_SHEETS = new Set(["desktop.css", "tooltip.css"]);
+const SPACED_SHEETS = new Set(["desktop.css", "sign-in.css", "tooltip.css"]);
 const SPACING_DECLARATION =
   /(?<![\w-])((?:padding|margin)(?:-[a-z-]+)?|(?:row-|column-)?gap)\s*:\s*([^;]+);([ \t]*\/\*\s*off-scale\b)?/gu;
 
@@ -87,8 +87,7 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
 
       if (
         property.startsWith("transition") &&
-        /\b(?:width|height|padding|font-size)\b/u.test(value) &&
-        !selector.includes(".panel-surface")
+        /\b(?:width|height|padding|font-size)\b/u.test(value)
       ) {
         failures.push(`${name}: ${selector.trim()} transitions a layout property`);
       }

@@ -72,15 +72,8 @@
   --duration-hover: 70ms;
   --duration-pane: 240ms;
   --motion-pane: cubic-bezier(0.2, 0, 0, 1);
-  --expand-delay: 200ms;
-  --peek-delay: 60ms;
   --row-stagger: 32ms;
   --hint-delay: 500ms;
-  --row-fan: 7px;
-  --row-fan-limit: 5;
-  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
   --caption-max: 210px;
   --voice-band-inset: 6px;
-  --panel-width: 620px;
-  --panel-height-max: 520px;
 }

@@ -284,12 +284,11 @@ const CALL_IN_PROGRESS: ReadonlySet<LiveStatus> = new Set([
 ]);
 
 /**
- * Whether a planning call is in progress, which holds the expanded panel
- * against the pointer leaving: the developer is talking a plan through and
- * reading the document it writes, often with their hands elsewhere. A call
- * closing or failed holds nothing.
+ * Whether a planning call is in progress: the developer is talking a plan
+ * through and reading the document it writes. A call closing or failed is
+ * not in progress.
  */
-export function planningCallHoldsPanel(
+export function planningCallInProgress(
   view: Pick<VoiceView, "voiceStatus" | "callPlanId">,
 ): boolean {
   return view.callPlanId !== undefined && CALL_IN_PROGRESS.has(view.voiceStatus);

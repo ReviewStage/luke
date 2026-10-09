@@ -21,16 +21,13 @@ import { useMeasuredHeight } from "./use-measured-height";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 
 /**
- * Sizes the caption block to the words it currently holds. The text wraps, so
- * only a measurement can say how tall it is; the size drives the surface's
- * growth and the clip that reveals the text. The block grows to the stack
- * until it meets the room the window reserved, and past that the stack rolls
- * up by the overflow instead, so the newest words stay inside the clip while
- * the oldest lines leave under the housing — `caption-layout.ts` says why the
- * bound is spent that way. Padding is the caption's own computed padding, not
- * a restated number, so a retune in the stylesheet grows the surface by
- * exactly what the text is inset — the one inset above the words, with
- * whatever stands below the block carrying the gap on that side.
+ * How far the caption's stack rolls up. The text wraps, so only a measurement
+ * can say how tall it is; the bar grows to the stack until it meets the room
+ * it may take, and past that the stack rolls up by the overflow instead, so
+ * the newest words stay inside the bar while the oldest lines leave through
+ * its top — `caption-layout.ts` says why the bound is spent that way. Padding
+ * is the caption's own computed padding, not a restated number, so a retune
+ * in the stylesheet moves the bound by exactly what the text is inset.
  */
 function captionSizeStyle(
   textHeight: number | undefined,
@@ -39,7 +36,6 @@ function captionSizeStyle(
 ): CSSProperties {
   if (!textHeight) return {};
   return cssCustomProperties({
-    [SURFACE_PROPERTY.CAPTION_SIZE]: `${captionBlockSize(textHeight, volumeHint, padding)}px`,
     [SURFACE_PROPERTY.CAPTION_OVERFLOW]: `${captionStackOverflow(textHeight, volumeHint, padding)}px`,
   });
 }
@@ -75,8 +71,8 @@ interface CaptionPresentation {
 }
 
 /**
- * Luke's words under the housing: which of them are drawn, in whose tone, how
- * tall the block they need is, and the pointer's hold that keeps a reply on
+ * Luke's words in the caption bar: which of them are drawn, in whose tone,
+ * how far the stack rolls up, and the pointer's hold that keeps a reply on
  * screen while someone is still reading it.
  */
 export function useCaptionPresentation(
@@ -164,9 +160,8 @@ export function useCaptionPresentation(
    */
   const hoverHeight = useRef(0);
   useEffect(() => {
-    // Forwarded moves arrive even while the window is click-through, which is
-    // what lets a pointer resting on words that take no pointer be seen here
-    // at all.
+    // Note that the window's moves are read rather than the caption's own,
+    // because the words take no pointer and would never hear one.
     const handleMove = (event: MouseEvent) => {
       const caption = element.current;
       setHovered(

@@ -1,8 +1,6 @@
 import { ChevronDownIcon } from "@sidecar/panel";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useId, useLayoutEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { searchAnchorProps } from "../settings-anchors";
 
@@ -104,7 +102,6 @@ export function PickerRow({
   disabled?: boolean | undefined;
   onPick: (id: string) => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<ReturnType<typeof pickerPlacement>>();
   const menuId = useId();
@@ -162,11 +159,6 @@ export function PickerRow({
           aria-controls={open ? menuId : undefined}
           disabled={disabled}
           onClick={() => setOpen(!open)}
-          onFocus={() => {
-            // The panel can be showing without its window being key, and the
-            // menu's search field could take no keystroke then.
-            tell(ACT_KIND.WINDOW_FOCUS_PANEL);
-          }}
         >
           {valueIcon}
           <span className="plan-compose-chip-name">{valueLabel}</span>

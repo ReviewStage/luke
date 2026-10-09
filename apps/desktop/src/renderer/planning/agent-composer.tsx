@@ -136,7 +136,7 @@ export function AgentComposer({
         <p className="agent-note agent-composer-note" role="alert">
           <span>{note}</span>
           {closed ? null : (
-            <button type="button" className="plan-button" onClick={composer.retry}>
+            <button type="button" className="toolbar-button" onClick={composer.retry}>
               Retry
             </button>
           )}

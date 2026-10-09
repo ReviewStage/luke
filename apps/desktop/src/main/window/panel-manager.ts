@@ -9,8 +9,6 @@ import {
   screen,
   type WebContents,
 } from "electron";
-import { channels } from "#shared/bridge";
-import type { DisplayDiagnostic, WindowMode } from "#shared/messages/session";
 import { hardenedWebPreferences, refuseForeignNavigation } from "./hardened-window";
 
 interface PanelDuck {
@@ -29,13 +27,6 @@ interface PanelManagerOptions {
    * say so once a hidden window of Luke's own stands beside them.
    */
   onAllClosed?: () => void;
-  /**
-   * A fact one window answers for has moved — its mode, or the geometry of
-   * the display under it. Neither is a slice of the app-state document, and
-   * both ride the snapshot a window is handed, so the document has to be
-   * announced again for the window to be handed one.
-   */
-  onWindowFactsChanged?: () => void;
 }
 
 /**
@@ -86,9 +77,6 @@ export class PanelManager {
   readonly #rendererHtmlPath: string;
   readonly #rendererUrl: string;
   readonly #onAllClosed: (() => void) | undefined;
-  readonly #onWindowFactsChanged: (() => void) | undefined;
-  /** Always expanded: the window has no compact shape to fall back to. */
-  readonly initialMode: WindowMode = "expanded";
   /** The window, keyed by the display it was opened against. */
   readonly #windows = new Map<number, BrowserWindow>();
   /** Set once a quit begins, so closing the window then destroys it rather than hiding it. */
@@ -101,7 +89,6 @@ export class PanelManager {
     this.#rendererHtmlPath = options.rendererHtmlPath;
     this.#rendererUrl = options.rendererUrl;
     this.#onAllClosed = options.onAllClosed;
-    this.#onWindowFactsChanged = options.onWindowFactsChanged;
     app.on("before-quit", () => {
       this.#quitting = true;
     });
@@ -118,20 +105,6 @@ export class PanelManager {
     const [held] = [...this.#windows.keys()];
     if (held === undefined) this.#create(wanted);
     else if (held !== wanted) this.#rebind(held, wanted);
-  }
-
-  /**
-   * The window has one mode. A request to stand down — Escape, a pointer
-   * leaving, a row press standing the panel down — is answered with the mode
-   * the window holds, so the renderer keeps drawing the panel; a request to
-   * expand with focus brings the window forward.
-   */
-  setMode(displayId: number, mode: WindowMode, requestFocus: boolean): WindowMode {
-    const window = this.#windows.get(displayId);
-    if (!window || window.isDestroyed()) return "expanded";
-    window.webContents.send(channels.onLifecycle, "mode:expanded");
-    if (mode === "expanded" && requestFocus) this.#focusWindow(window);
-    return "expanded";
   }
 
   /**
@@ -172,22 +145,8 @@ export class PanelManager {
     return undefined;
   }
 
-  modeFor(_displayId: number): WindowMode {
-    return "expanded";
-  }
-
   display(displayId: number): Display | undefined {
     return screen.getAllDisplays().find((candidate) => candidate.id === displayId);
-  }
-
-  diagnostic(display: Display): DisplayDiagnostic {
-    return {
-      id: display.id,
-      label: display.label || `Display ${display.id}`,
-      bounds: display.bounds,
-      workArea: display.workArea,
-      scaleFactor: display.scaleFactor,
-    };
   }
 
   /** Brings the window forward, shown again if it was closed. */
@@ -235,7 +194,6 @@ export class PanelManager {
     if (!window) return;
     this.#windows.delete(fromDisplayId);
     this.#windows.set(toDisplayId, window);
-    this.#onWindowFactsChanged?.();
   }
 
   /**

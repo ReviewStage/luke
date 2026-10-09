@@ -2,30 +2,25 @@ import { VOICE_CAPTION_MAX_HEIGHT } from "@sidecar/surface";
 import { VOLUME_HINT_BAND_HEIGHT } from "./volume-hint";
 
 /**
- * The geometry behind the caption block under the housing, kept pure so the
- * bound it keeps can be tested without a browser.
+ * The geometry behind the caption bar, kept pure so the bound it keeps can be
+ * tested without a browser.
  *
- * The block stacks every segment the voice reported — one per output item,
- * oldest first, the newest still arriving — and is bounded by the room the
- * window reserved under the housing, never by a count of segments. The
- * window cannot resize for speech, so that room is physical, and once the
- * stack outgrows it the block stops growing and the stack rolls up instead:
- * the oldest lines travel up under the housing and out of the block's clip
- * while the words still being spoken stay at its foot, where the eye already
- * is. Rolling, rather than dropping whole segments, keeps a reply's shape
- * continuous — a segment leaves a line at a time, the way it arrived — and
- * rather than a scrollbar, because the strip is captioning speech nobody can
+ * The bar stacks every segment the voice reported — one per output item,
+ * oldest first, the newest still arriving — and is bounded by `--caption-max`,
+ * never by a count of segments. Once the stack outgrows it the bar stops
+ * growing and the stack rolls up instead: the oldest lines leave through the
+ * bar's top while the words still being spoken stay at its foot, where the eye
+ * already is. Rolling, rather than dropping whole segments, keeps a reply's
+ * shape continuous — a segment leaves a line at a time, the way it arrived —
+ * and rather than a scrollbar, because the bar is captioning speech nobody can
  * scroll back through anyway.
  */
 
 /**
- * The caption block's visible height — the `--caption-size` the clip ends the
- * element at. The strip's hover test reads it too: the element's own box runs
- * to the reserved maximum, and only this much of it is words rather than
- * desktop. The volume hint stands in a band of its own below the block, so
- * while it is drawn the band comes off the block's maximum: the block and the
- * band partition the reserved room instead of sharing it, and the stack never
- * asks for more height than the window holds.
+ * The caption bar's visible height, which the hover test reads: only this
+ * much of the bar is words. The volume hint stands in a row of its own below
+ * the bar, so while it is drawn its band comes off the bar's maximum, and the
+ * stack never asks for more height than the two of them may take.
  */
 export function captionBlockSize(textHeight: number, volumeHint: boolean, padding: number): number {
   const hintBand = volumeHint ? VOLUME_HINT_BAND_HEIGHT : 0;

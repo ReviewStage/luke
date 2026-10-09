@@ -56,3 +56,32 @@ test("a key the window left unclaimed runs no item: a text field's ⌘⌫ and th
   choose("Exit Full Screen", window, true);
   assert.deepEqual(window.sent, []);
 });
+
+test("Go holds Back and Forward, each handed to the window it was chosen over", () => {
+  const go = appMenuTemplate("Luke").find((menu) => menu.label === "Go");
+  assert.ok(Array.isArray(go?.submenu));
+  assert.deepEqual(
+    go.submenu.map((each) => [each.label, each.accelerator]),
+    [
+      ["Back", "Command+["],
+      ["Forward", "Command+]"],
+    ],
+  );
+  const window = new FakeBrowserWindow();
+  choose("Back", window, false);
+  choose("Forward", window, false);
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.BACK],
+    [channels.onMenuCommand, APP_COMMAND.FORWARD],
+  ]);
+});
+
+test("Help offers the two notes to the people who make Luke, each handing the window its own command", () => {
+  const window = new FakeBrowserWindow();
+  choose("Send Feedback…", window, false);
+  choose("Suggest a Feature…", window, false);
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.SEND_FEEDBACK],
+    [channels.onMenuCommand, APP_COMMAND.SUGGEST_FEATURE],
+  ]);
+});

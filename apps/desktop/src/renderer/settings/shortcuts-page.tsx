@@ -10,19 +10,16 @@ import {
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
 import {
-  APP_COMMANDS,
   APP_SHORTCUT_GROUPS,
   APP_SHORTCUTS,
-  type AppCommand,
   commandForKey,
+  KEYED_COMMANDS,
+  type KeyedCommand,
   shortcutGlyphs,
 } from "#shared/shortcuts";
-import { useAct } from "../act";
 import { Keycaps } from "../keycaps";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -38,7 +35,7 @@ import type { SettingsWrites } from "./writes";
 const SHORTCUT_HINT = "Hold ⌃, ⌥ or ⌘ — ⇧ may join — and press a letter or Space.";
 
 /** Why a chord the window already answers cannot become a Luke key. */
-function windowChordRefusal(command: AppCommand): string {
+function windowChordRefusal(command: KeyedCommand): string {
   const { label, chord } = APP_SHORTCUTS[command];
   return `${shortcutGlyphs(chord).join("")} is Luke's own shortcut for ${label}. Choose another.`;
 }
@@ -97,7 +94,6 @@ function ShortcutRow({
   onChange: (accelerator: string | undefined) => Promise<ActionResult>;
   onCapture: (capturing: boolean) => void;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const [recording, setRecording] = useState(false);
   // The change is a round trip through the settings file and the system's
   // registrar, so the controls rest until the store has answered rather than
@@ -199,11 +195,6 @@ function ShortcutRow({
                 setRejection(undefined);
                 setRecording(true);
               }}
-              onFocus={() => {
-                // The panel can be showing without its window being key, and a
-                // recording no keystroke can reach would read as a dead control.
-                tell(ACT_KIND.WINDOW_FOCUS_PANEL);
-              }}
               // Focus leaving takes the recording with it: whatever was pressed
               // instead is its own action, not a half-formed chord left armed.
               onBlur={() => setRecording(false)}
@@ -222,7 +213,7 @@ function ShortcutRow({
                 // A system-wide key wins over the window's own chord, so a
                 // key that would take one of them is refused rather than
                 // left to silence it.
-                const taken = commandForKey(APP_COMMANDS, event.nativeEvent);
+                const taken = commandForKey(KEYED_COMMANDS, event.nativeEvent);
                 if (taken !== undefined) {
                   setRejection(windowChordRefusal(taken));
                   return;
@@ -284,10 +275,7 @@ export function ShortcutSection({
     ? undefined
     : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
+    <section className="settings-section settings-plain">
       <ShortcutRow
         title="Talk to Luke"
         anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
@@ -334,12 +322,8 @@ export function ShortcutSection({
 export function WindowShortcutSections(): React.JSX.Element {
   return (
     <>
-      {APP_SHORTCUT_GROUPS.map((group, index) => (
-        <section
-          key={group.title}
-          className="settings-section"
-          style={cssCustomProperties({ "--row-index": index + 2 })}
-        >
+      {APP_SHORTCUT_GROUPS.map((group) => (
+        <section key={group.title} className="settings-section">
           <h2>{group.title}</h2>
           {group.commands.map((command) => (
             <div key={command} className="settings-row" {...searchAnchorProps(command)}>

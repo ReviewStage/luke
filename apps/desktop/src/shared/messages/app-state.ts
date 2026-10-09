@@ -3,13 +3,7 @@ import type { PlanningView } from "@sidecar/hosted/planning-view";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { isRecord, isWireNumber, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import type { MicrophoneRoute, MicrophoneStatus, OutputAudioState } from "./audio";
-import {
-  type DisplayDiagnostic,
-  type SessionReplayBootstrap,
-  WINDOW_ROLE,
-  type WindowMode,
-  type WindowRole,
-} from "./session";
+import { type SessionReplayBootstrap, WINDOW_ROLE, type WindowRole } from "./session";
 import type { UpdateSnapshot } from "./update";
 import type { VoiceView } from "./voice-view";
 
@@ -146,15 +140,12 @@ export interface AppState {
 
 /**
  * What one window answers for and the document cannot: which surface it
- * draws, how big it currently stands, and the display it stands on. Decided
+ * draws. Decided
  * in the main process by which window asked, never by anything a renderer
  * could claim about itself.
  */
 export interface AppWindowFacts {
   role: WindowRole;
-  mode: WindowMode;
-  /** Absent for the hidden voice window, which stands on no display. */
-  display?: DisplayDiagnostic;
 }
 
 /**
@@ -180,12 +171,7 @@ export function isAppStateSnapshot(value: UnparsedWireValue): boolean {
     return false;
   }
   const window = value.window;
-  return (
-    isRecord(window) &&
-    isWireString(window.role) &&
-    WINDOW_ROLES.has(window.role) &&
-    isWireString(window.mode)
-  );
+  return isRecord(window) && isWireString(window.role) && WINDOW_ROLES.has(window.role);
 }
 
 /** What this run may record, as the renderer is handed it. */

@@ -36,7 +36,9 @@ export interface DialogQuestion {
   running: string;
 }
 
-const FOCUSABLE = "button:not([disabled])";
+/** What Tab may land on inside a modal card: its enabled controls, and never a hidden one. */
+const FOCUSABLE =
+  "button:not([disabled]), textarea:not([disabled]), input:not([disabled]):not([hidden])";
 
 /** One confirming act as a dialog holds it: the confirm, and whether its subject and surface still stand. */
 export interface DialogConfirm extends HeldConfirm {
@@ -61,12 +63,11 @@ export function useConfirmDialog(
   return { ...held, standing };
 }
 
-/** The move Tab makes from the focused element, kept to the card's own buttons. */
-function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
+/** The move Tab makes from the focused element, kept to the card's own controls. */
+export function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
   const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  const focused = buttons.find((button) => button === document.activeElement);
-  const at = focused === undefined ? -1 : buttons.indexOf(focused);
-  // Note that the ends wrap and a focus off the buttons (the card itself,
+  const at = buttons.findIndex((button) => button === document.activeElement);
+  // Note that the ends wrap and a focus off the controls (the card itself,
   // while the act runs) comes back onto them, because past either end the
   // browser's own move would leave the card for the window behind it.
   const wraps = event.shiftKey ? at <= 0 : at === -1 || at === buttons.length - 1;
@@ -187,19 +188,13 @@ export function ConfirmDialog({
           <button
             type="button"
             ref={cancel}
-            className="confirm-dialog-button"
+            className="toolbar-button"
             disabled={acting}
             onClick={dismiss}
           >
             Cancel
           </button>
-          <button
-            type="button"
-            className="confirm-dialog-button"
-            data-danger="true"
-            disabled={acting}
-            onClick={act}
-          >
+          <button type="button" className="danger-button" disabled={acting} onClick={act}>
             {acting ? question.running : question.verb}
           </button>
         </div>

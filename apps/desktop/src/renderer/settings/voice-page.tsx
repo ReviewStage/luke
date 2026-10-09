@@ -4,7 +4,6 @@ import {
   SETTING_SECTION,
   type SettingsRowsInput,
 } from "@sidecar/settings";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import {
   MICROPHONE_UNGRANTED_NOTE,
   microphoneAccessRow,
@@ -50,7 +49,7 @@ export function VoiceSection({
       {/* While voice cannot run, the one section says how to turn it on rather
           than drawing settings for a feature two steps from working. */}
       {settings.voiceAvailable ? null : (
-        <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
+        <section className="settings-section">
           <h2>
             <KeyIcon />
             Voice
@@ -63,7 +62,7 @@ export function VoiceSection({
           then, the permission guards a feature that cannot run, and the page
           holds the one thing to do next rather than a queue of them. */}
       {settings.voiceAvailable ? (
-        <section className="settings-section" style={cssCustomProperties({ "--row-index": 1 })}>
+        <section className="settings-section">
           <h2>
             <ShieldIcon />
             Permissions
@@ -104,7 +103,7 @@ export function VoiceSection({
                 </Tooltip>
               ) : null}
               {microphoneRow.offerAccess ? (
-                <button type="button" className="quiet-button" onClick={microphone.onRequest}>
+                <button type="button" className="toolbar-button" onClick={microphone.onRequest}>
                   Allow
                 </button>
               ) : null}
@@ -129,10 +128,7 @@ function VoiceControlsSection({
   writes: SettingsWrites;
 }): React.JSX.Element {
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 2 })}
-    >
+    <section className="settings-section settings-plain">
       <SchemaSettingRows
         page={SCHEMA_SETTINGS_PAGE.VOICE}
         section={SETTING_SECTION.CONTROLS}

@@ -1,61 +1,94 @@
-/* The panel's own padding already clears the housing by `--notch-top-inset`
-   plus a margin, so the gate adds almost nothing of its own on top. */
+/* The sign-in, alone in the window: one narrow column centred a little above
+   the window's middle, the way a devtool's welcome screen sits — Luke, who he
+   is, and the two ways in, at the window's own control height. */
 .sign-in-gate {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  min-height: 250px;
-  padding: 4px 24px 18px;
+  display: flex;
+  width: min(320px, 100% - 2 * var(--space-24));
+  margin: auto;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
 }
 
-.sign-in-gate h1,
-.sign-in-gate p {
-  margin: 0;
+/* Luke's mark, on the same quiet tile the sidebar draws him on. */
+.sign-in-face {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: var(--space-20);
+  border-radius: 16px;
+  background: var(--raised-strong);
+}
+
+.sign-in-face .luke-face {
+  width: 32px;
+  height: 32px;
 }
 
 .sign-in-gate h1 {
-  font-size: 20px;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.015em;
 }
 
-.sign-in-gate p,
-.sign-in-gate small {
+.sign-in-lede {
+  margin: var(--space-8) 0 0;
   color: var(--text-secondary);
-}
-
-/* The face's room on the gate. */
-.sign-in-face {
-  width: 56px;
-  height: 56px;
-  margin: 4px 0 2px;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .sign-in-actions {
-  display: grid;
+  display: flex;
   width: 100%;
-  gap: 8px;
-  margin-top: 8px;
+  margin-top: var(--space-32);
+  flex-direction: column;
+  gap: var(--control-gap);
 }
 
+/* The window's control height and corner. Google is the filled one, drawn in
+   the text colour the way the new-plan page's start press is; GitHub is the
+   quiet one beside it. */
 .sign-in-provider {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
-  min-height: 38px;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
+  gap: var(--glyph-gap);
+  height: var(--control-height);
+  padding: 0 var(--space-12);
+  border-radius: var(--control-radius);
   background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--hairline);
   color: var(--text-primary);
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
+  -webkit-app-region: no-drag;
+  transition:
+    background-color var(--duration-hover) ease,
+    opacity var(--duration-hover) ease;
 }
 
 .sign-in-provider:hover:not(:disabled) {
   background: var(--raised-strong);
 }
 
-.sign-in-provider:disabled {
-  opacity: 0.55;
+.sign-in-provider[data-provider="google"] {
+  background: var(--text-primary);
+  box-shadow: none;
+  color: var(--desktop-ground);
+}
+
+.sign-in-provider[data-provider="google"]:hover:not(:disabled) {
+  background: #fff;
+}
+
+/* Held while a sign-in is out: the button waited on stays as it was, saying
+   so; the other steps back. */
+.sign-in-provider:disabled[data-waiting="false"] {
+  opacity: 0.4;
 }
 
 /* The provider's own mark, at the size its guidelines draw beside a label. */
@@ -65,33 +98,32 @@
   flex: 0 0 auto;
 }
 
-.sign-in-gate .sign-in-error {
+/* The one line under the buttons: what the wait is for and the way to take
+   it back, or why the last attempt did not land. */
+.sign-in-note {
+  min-height: 1lh;
+  margin-top: var(--space-16);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.sign-in-note p {
+  margin: 0;
+}
+
+.sign-in-note .sign-in-error {
   color: var(--state-attention);
 }
 
-/* The waiting popup's one line: whose sign-in, what is being waited for, and
-   the way to take it back. */
-.sign-in-slot-copy {
-  display: flex;
-  min-width: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-
-.sign-in-slot-copy strong {
+.sign-in-cancel {
+  padding: 0;
+  background: none;
   color: var(--text-primary);
-  font-size: 11.5px;
-  font-weight: 650;
+  font-weight: 600;
+  -webkit-app-region: no-drag;
 }
 
-.sign-in-slot-copy small {
-  color: var(--text-secondary);
-  font-size: 10px;
-}
-
-.sign-in-slot-mark .account-mark {
-  width: 16px;
-  height: 16px;
+.sign-in-cancel:hover {
+  text-decoration: underline;
 }

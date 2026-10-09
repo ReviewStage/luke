@@ -1,41 +1,33 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { APP_SETTING_SCHEMA, VOICE_HOTKEY_NONE } from "@sidecar/settings";
 import { appSettingsView } from "@sidecar/settings/wire";
-import {
-  cssCustomProperties,
-  SURFACE_PROPERTY,
-  type SurfaceProperty,
-} from "@sidecar/surface/react-css";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
-import { useAppKeymap, useMenuCommands } from "./app-commands";
+import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
-import { FeedbackSlot } from "./feedback-slot";
+import { FeedbackDialog } from "./feedback-dialog";
 import { MarkdownMessage } from "./markdown-message";
-import { PANEL_PRESENTATION } from "./panel-state";
+import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
-import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
-import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
-import { useFeedbackComposer } from "./use-feedback-composer";
-import { useMeasuredHeight } from "./use-measured-height";
-import type { PanelEntrySurface } from "./use-panel-entry";
-import { usePanelPresentation } from "./use-panel-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
 import { useSignIn } from "./use-sign-in";
 import { useStateWithRef } from "./use-state-with-ref";
@@ -46,18 +38,6 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
-
-function surfaceHeightStyle(
-  slotHeight: number | undefined,
-  feedbackHeight: number | undefined,
-): CSSProperties {
-  const properties: Partial<Record<SurfaceProperty, string>> = {};
-  if (slotHeight !== undefined) properties[SURFACE_PROPERTY.SLOT_HEIGHT] = `${slotHeight}px`;
-  if (feedbackHeight !== undefined) {
-    properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
-  }
-  return cssCustomProperties(properties);
-}
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -77,8 +57,8 @@ export function App(): React.JSX.Element {
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
-  const [feedbackElement, feedbackHeight] = useMeasuredHeight();
+  /** The note being written to the people who make Luke, while its dialog stands. */
+  const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -87,9 +67,6 @@ export function App(): React.JSX.Element {
   const [silenceStretch, setSilenceStretch] = useState(0);
   const wasSilent = useRef(false);
   const [hintDismissal, setHintDismissal] = useState<VolumeHintDismissal>();
-  const feedbackHeld = useRef(false);
-  /** Whether a planning call is in progress, mirrored from the voice view below. */
-  const planningHeld = useRef(false);
 
   /**
    * Recording follows the account: a sign-out ends it rather than leaving it
@@ -109,9 +86,8 @@ export function App(): React.JSX.Element {
       setTab(next);
       // Arriving at the tab is arriving at its front page: a page left open
       // behind a tab switch would greet the next visit with a corner of the
-      // settings rather than the settings. The flows that need a deeper page —
-      // a credential entry returning from the key slot, the evidence run that
-      // starts in it — set their page right after this reset.
+      // settings rather than the settings. A flow that needs a deeper page
+      // sets it right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
       // `PanelTab` and the counted tab are the same union: both are the
       // guide's own set, which `PanelTab` aliases.
@@ -126,9 +102,6 @@ export function App(): React.JSX.Element {
   const accountGated =
     state?.run.accountRequired === true && account?.status !== ACCOUNT_STATUS.SIGNED_IN;
 
-  /** Whether this window has already opened its one sign-in greeting. */
-  const greeted = useRef(false);
-
   /**
    * The one signed-out Luke's introduction cycle — sway, pirouette, double
    * blink, curious tilt, nod — walked over the sign-in gate. Still while
@@ -136,58 +109,11 @@ export function App(): React.JSX.Element {
    */
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
-  const {
-    presentation,
-    current: presentationOf,
-    pointerInside: pointerIsInside,
-    applyPresentation,
-    applyAuthoritativeMode,
-    changeMode,
-    cancelHover,
-    onHitRegionLeave,
-    changeAskEngagement,
-    settle,
-    leave,
-    expand,
-  } = usePanelPresentation({
-    planningHeld: () => planningHeld.current,
-  });
+  const signIn = useSignIn();
 
-  /**
-   * Brings the panel back around the Feedback section a note was begun from —
-   * the settings front page, which changing to the tab lands on — and leaves
-   * it open the way every other way of opening it does.
-   */
-  const restorePanel = useCallback(() => {
-    changeTab(PANEL_TAB.SETTINGS);
-    expand();
-  }, [changeTab, expand]);
-
-  /**
-   * The panel every composer stands down from and comes back to, gathered
-   * once so each composer's hook is handed the same one.
-   */
-  const panelEntrySurface: PanelEntrySurface = {
-    pointerInside: pointerIsInside,
-    presentation: presentationOf,
-    onReleasedWhileAway: onHitRegionLeave,
-    cancelHover,
-    applyPresentation,
-    restorePanel,
-    leave,
-    settle,
-    heldRef: feedbackHeld,
-  };
-
-  const signIn = useSignIn({ surface: panelEntrySurface, expand });
-
-  const stillMotion = usePrefersReducedMotion();
-
-  const feedback = useFeedbackComposer({
-    surface: panelEntrySurface,
-    presentation,
-    stillMotion,
-  });
+  // The menu bar's Help items open the same dialog Settings' buttons do.
+  useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setFeedbackKind(FEEDBACK_KIND.FEEDBACK));
+  useAppCommand(APP_COMMAND.SUGGEST_FEATURE, () => setFeedbackKind(FEEDBACK_KIND.PROMPT));
 
   /**
    * Moves the talk key, or resets it when no chord is named. The key the row
@@ -237,16 +163,6 @@ export function App(): React.JSX.Element {
     requestMicrophoneAccess,
   } = useVoiceView();
   const { voiceError, voiceNotice, talkOpening } = voiceView;
-  const planningCallHeld = planningCallHoldsPanel(voiceView);
-  planningHeld.current = planningCallHeld;
-  // A call ending while the pointer is already away releases its hold the
-  // way letting go of the ask field does: the pointer cannot leave twice.
-  const wasPlanningCallHeld = useRef(false);
-  useEffect(() => {
-    const released = wasPlanningCallHeld.current && !planningCallHeld;
-    wasPlanningCallHeld.current = planningCallHeld;
-    if (released && !pointerIsInside()) onHitRegionLeave();
-  }, [planningCallHeld, pointerIsInside, onHitRegionLeave]);
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
@@ -272,7 +188,7 @@ export function App(): React.JSX.Element {
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
-    shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
+    shown: tab === PANEL_TAB.PLANS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
@@ -289,6 +205,16 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
+  // Where the window has stood, for back and forward, from the moment it
+  // knows where it stands.
+  const history = useWindowHistory({
+    known: state !== undefined && !accountGated,
+    tab,
+    onTabChange: changeTab,
+    settingsView,
+    onSettingsViewChange: setSettingsView,
+    plans,
+  });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
@@ -304,9 +230,8 @@ export function App(): React.JSX.Element {
   });
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
-  // wrong: the panel takes focus programmatically when it opens, which the
-  // engine can read as keyboard modality and ring the capsule after a plain
-  // press — most reliably the first time the window is ever focused. Modality
+  // wrong: the window takes focus programmatically, which the engine can
+  // read as keyboard modality and ring a control after a plain press — most reliably the first time the window is ever focused. Modality
   // is tracked outright instead, so a ring is drawn only once someone has
   // actually moved focus with the keyboard.
   useEffect(() => {
@@ -327,43 +252,15 @@ export function App(): React.JSX.Element {
   }, []);
 
   /**
-   * What the panel performs once with the state it opened on: the mode main
-   * decided and the report that it has painted. Once, on the first snapshot
-   * that carries settings. The mode needs no guard against a developer who
-   * moved it meanwhile: the snapshot carries the mode main holds as it
-   * publishes, so it is the same word the lifecycle relay would carry for
-   * whatever moved it.
+   * The report that the window has painted, made once, on the first snapshot
+   * that carries settings.
    */
   const opened = useRef(false);
   useEffect(() => {
     if (opened.current || !state?.settings) return;
     opened.current = true;
-    applyAuthoritativeMode(state.window.mode);
     window.sidecar.notifyReady();
-  }, [state, applyAuthoritativeMode]);
-
-  // The mode and the tab main decided for this window.
-  useEffect(() => {
-    const removeLifecycle = window.sidecar.onLifecycle((eventName) => {
-      if (eventName === "mode:expanded") applyAuthoritativeMode("expanded");
-      if (eventName === "tab:settings") changeTab(PANEL_TAB.SETTINGS);
-    });
-    return () => {
-      cancelHover();
-      removeLifecycle();
-    };
-  }, [applyAuthoritativeMode, cancelHover, changeTab]);
-
-  // The one greeting an unauthed launch gets: the panel opens on the sign-in
-  // gate exactly once, then behaves like any panel — Escape, the pointer, and
-  // the window's own close all close it. Signing out later opens no new
-  // greeting — the panel is already forward, showing the gate the sign-out
-  // left behind.
-  useEffect(() => {
-    if (!accountGated || greeted.current) return;
-    greeted.current = true;
-    void changeMode(true);
-  }, [accountGated, changeMode]);
+  }, [state]);
 
   // Silence is counted in stretches — one per unbroken run of muted-or-zero —
   // because that is the unit a "Got it" answers. The edge into silence is the
@@ -403,64 +300,39 @@ export function App(): React.JSX.Element {
         stopSpeaking();
         return;
       }
-      // Escape out of the slot withdraws the sign-in it waits on: the slot is
-      // the only thing on screen, so there is nothing else it could mean.
-      if (presentation === PANEL_PRESENTATION.SLOT) {
+      // Escape on a gate waiting for the browser withdraws the sign-in, as
+      // its Cancel does: the wait is the only thing on screen.
+      if (signIn.signInWait) {
         signIn.cancelSignIn();
         return;
       }
-      // Escape out of the composer leaves the shape and keeps the draft.
-      if (presentation === PANEL_PRESENTATION.FEEDBACK) {
-        feedback.control.dismiss();
-        return;
-      }
-      if (presentation !== PANEL_PRESENTATION.PANEL) return;
+      // A dialog that took the press for itself is the nearest layer of all.
+      if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: a settings page back to the front page, then the settings tab
-      // back to Plans, then a side panel filling the window back beside its
-      // plan, then an open plan back to the new-plan page, then the panel
-      // itself. The settings search answers its own Escapes while the
-      // caret is in it — clearing, then letting go of the caret — so it is no
-      // layer here.
-      if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
-        setSettingsView(SETTINGS_VIEW.ROOT);
-      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
+      // time: Settings back to wherever it was opened from, then a side panel
+      // filling the window back beside its plan, then an open plan back to
+      // the new-plan page. A menu and the settings search answer their own
+      // Escapes and keep them — the search clearing, then letting go of the
+      // caret — so neither is a layer here.
+      if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
-      // its call. That page is the home tab, so the press past it closes the
-      // panel.
-      else if (!plans.back()) void changeMode(false);
+      // its call. That page is home, so a press there does nothing.
+      plans.back();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [
-    changeMode,
-    changeTab,
-    feedback.control.dismiss,
-    presentation,
-    setSettingsView,
-    settingsView,
-    signIn.cancelSignIn,
-    listening,
-    plans.back,
-    speaking,
-    stopSpeaking,
-    tab,
-  ]);
+  }, [signIn.cancelSignIn, signIn.signInWait, listening, plans.back, speaking, stopSpeaking]);
 
-  // The window's shortcuts, from the keys and from the menu bar alike, are
-  // claimed only while its content has the keyboard: Luke is the frontmost
-  // app then, and no sheet stands over the controls that offer them.
-  useAppKeymap(presentation === PANEL_PRESENTATION.PANEL);
-  useMenuCommands(presentation === PANEL_PRESENTATION.PANEL);
+  // The window's shortcuts, from the keys and from the menu bar alike.
+  useAppKeymap(true);
+  useMenuCommands(true);
+  useHistoryMouseButtons(history, true);
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
   if (!state || !settings) return <div />;
 
   const shownStopHotkey = state.hotkeys.stop;
-  const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
-  const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
-  const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
 
   const microphone: MicrophoneControl = {
     status: state.audio.microphoneStatus,
@@ -496,37 +368,32 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Whether there are words to draw under the shape — a caption or a
-      // failure borrowing its strip — so the surface can grow the room they
-      // are drawn in.
+      // Whether there are words in the caption bar — Luke's, or a failure
+      // borrowing it — so the bar is drawn.
       data-caption={String(Boolean(caption.texts))}
-      // Whether those words need the volume hint under them, which stands in
-      // a band of its own below the caption block.
+      // Whether those words need the volume hint under them, in a row of its
+      // own below the bar.
       data-volume-hint={String(volumeHint)}
-      data-presentation={presentation}
       data-capture={String(state.run.captureMode)}
       // The panel is drawn as an ordinary app window's content; desktop.css
       // lays it out.
       data-surface="desktop"
       style={{
-        // The slot follows the height of the sign-in wait drawn in it.
-        ...surfaceHeightStyle(signInSlotHeight, feedbackHeight),
         ...caption.style,
         // The sidebar's width lays out the shell and Settings' page list, and
         // places the captions over the work column beside it.
         ...cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` }),
       }}
     >
-      <span className="panel-surface" aria-hidden="true" />
-
-      {/* The window's content. Inert while the panel stands down to a sign-in
-          wait or a note, which are drawn as a sheet over it. */}
-      <div className="desktop-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
+      {/* The window's content. */}
+      <div className="desktop-stage">
         <DesktopShell
           gates={{
             accountRequired: state.run.accountRequired,
+            signInWait: signIn.signInWait,
             signInFailure: signIn.signInFailure,
             onBeginSignIn: signIn.beginSignIn,
+            onCancelSignIn: signIn.cancelSignIn,
             signInFace,
           }}
           identity={{
@@ -539,9 +406,8 @@ export function App(): React.JSX.Element {
           tab={tab}
           onTabChange={changeTab}
           plans={plans}
+          history={history}
           sidebar={sidebar}
-          // One caret anywhere in the panel is hands being here.
-          onSettingsSearchEngaged={changeAskEngagement}
           settings={{
             account: state.account,
             onSignOut: async () => {
@@ -566,47 +432,31 @@ export function App(): React.JSX.Element {
             microphone,
             updates,
             settings,
-            feedback: feedback.control,
-            panelOpen,
+            onFeedback: setFeedbackKind,
             shortcuts,
           }}
         />
       </div>
-      <span className="desktop-scrim" aria-hidden="true" />
-
-      {/* The panel stood down to the account sign-in it is waiting on, drawn
-          as a sheet in the same window. */}
-      <SignInSlot
-        {...(signIn.signInWait ? { provider: signIn.signInWait } : undefined)}
-        drawn={slotOpen}
-        onCancel={signIn.cancelSignIn}
-        measure={signInSlotElement}
-      />
-      {/* The panel stood down to the composer, on the same terms. */}
-      <FeedbackSlot
-        control={feedback.control}
-        drawn={feedbackOpen}
-        measure={feedbackElement}
-        confirming={feedback.confirming}
-        still={stillMotion}
+      {/* A note to the people who make Luke, written in a dialog over the
+          window, and the thank-you after it lands. */}
+      <FeedbackDialog
+        kind={feedbackKind}
+        account={account}
+        onClose={() => setFeedbackKind(undefined)}
       />
 
       {/* Luke's words while he says them: one element in every state, always
-          mounted so both edges of its fade can run. The inner stack is what is
-          measured —
-          responses spoken back-to-back are one block each in it, oldest
-          first, the settled words above the ones still arriving — and its
-          wrapped height is the only honest answer to how much room the words
-          need; past the room the window reserved it rolls up rather than
-          growing, as `caption-layout.ts` says. The newest block is always
-          mounted like the stack itself; a settled one mounts only while it
-          has words, so a lone reply pays no gap for a block that is not
-          there, and the blocks keep their order as keys so a segment that
-          settles stays the element it streamed into. Hidden from readers
-          while it captions speech — it
-          duplicates what is already audible — and announced as a status line
-          when it carries a failure or a notice, which was never audible at
-          all. */}
+          mounted so both edges of its fade can run. The inner stack is what
+          is measured — responses spoken back-to-back are one block each in
+          it, oldest first, the settled words above the ones still arriving —
+          and past the room the bar may take it rolls up rather than growing,
+          as `caption-layout.ts` says. The newest block is always mounted like
+          the stack itself; a settled one mounts only while it has words, and
+          the blocks keep their order as keys so a segment that settles stays
+          the element it streamed into. Hidden from readers while it captions
+          speech — it duplicates what is already audible — and announced as a
+          status line when it carries a failure or a notice, which was never
+          audible at all. */}
       <span
         className="voice-caption"
         ref={caption.ref}
@@ -628,15 +478,11 @@ export function App(): React.JSX.Element {
       </span>
 
       {/* The one reason the words above might be the only part of Luke
-          arriving: the Mac's own output is off. It stands in a band of its
-          own directly below the caption block — the block's clip ends where
-          the band begins, so the words above can never be drawn over it —
-          and is drawn only while Luke speaks into a silence the helper
-          reported. Always
-          mounted, like the caption, so both edges of its fade can run, and
-          inert while hidden so its button cannot be tabbed to. It carries a
-          hit region of its own and sits above the hover strip, so Got it
-          answers the press instead of the panel opening under it. */}
+          arriving: the Mac's own output is off. It stands in a row of its own
+          directly below the caption bar and is drawn only while Luke speaks
+          into a silence the helper reported. Always mounted, like the
+          caption, so both edges of its fade can run, and inert while hidden
+          so its button cannot be tabbed to. */}
       <span className="volume-hint" role="status" inert={!volumeHint}>
         <span className="volume-hint-text">{volumeHintText(outputAudio)}</span>
         <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>

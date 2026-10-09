@@ -11,10 +11,11 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
-  APP_COMMANDS,
   APP_SHORTCUTS,
   type AppCommand,
   commandForKey,
+  KEYED_COMMANDS,
+  type KeyedCommand,
   shortcutEditsText,
   shortcutLayered,
 } from "#shared/shortcuts";
@@ -25,7 +26,7 @@ type CommandRun = { current: () => void };
 const offers = new Map<AppCommand, CommandRun[]>();
 
 /** The commands the keymap answers: every one but those whose key is the window's layered Escape. */
-const KEYED: readonly AppCommand[] = APP_COMMANDS.filter(
+const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter(
   (command) => !shortcutLayered(APP_SHORTCUTS[command].chord),
 );
 
@@ -35,8 +36,12 @@ function typingInto(target: EventTarget | null): boolean {
   return target.isContentEditable || target.matches("input, textarea, select");
 }
 
-/** Runs a command's standing offer, answering whether there was one. */
-function runCommand(command: AppCommand): boolean {
+/**
+ * Runs a command's standing offer, answering whether there was one: how the
+ * keymap and the menu bar run a command, and how the window's layered Escape
+ * runs one of the commands it leaves the keymap.
+ */
+export function runAppCommand(command: AppCommand): boolean {
   const offer = offers.get(command)?.at(-1);
   if (offer === undefined) return false;
   offer.current();
@@ -79,7 +84,7 @@ export function useAppKeymap(enabled: boolean): void {
       if (command === undefined || !offers.get(command)?.length) return;
       if (shortcutEditsText(APP_SHORTCUTS[command].chord) && typingInto(event.target)) return;
       event.preventDefault();
-      if (!event.repeat) runCommand(command);
+      if (!event.repeat) runAppCommand(command);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
@@ -91,7 +96,7 @@ export function useMenuCommands(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     return window.sidecar.onMenuCommand((command) => {
-      runCommand(command);
+      runAppCommand(command);
     });
   }, [enabled]);
 }

@@ -4,6 +4,7 @@ import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import type { NavigationHistory } from "../navigation-history";
 import { SETTINGS_PAGE } from "../settings/pages";
 import { pageResetControl } from "../settings/reset";
 import {
@@ -22,7 +23,7 @@ import {
 } from "../settings-search";
 import { SETTINGS_SUBVIEW_LIST, SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
-import { SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
+import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** The front page's name here, where it is one page among the others rather than their index. */
@@ -48,24 +49,26 @@ function pageOf(view: SettingsView): { title: string; icon: React.JSX.Element } 
  *
  * The list is as wide as the plans' sidebar and resizes it from its own edge,
  * but never folds: a drag past the least width holds there, because Settings
- * has no other way back to its pages.
+ * has no other way back to its pages. Back and forward stand at the right of
+ * its title-bar row, where the sidebar keeps them, and Back at the list's
+ * head is the one way out a newcomer sees: it and Escape both leave as the
+ * back button would.
  */
 export function DesktopSettings({
   sidebar,
+  history,
   settings,
-  onSearchEngaged,
-  onBack,
+  onExit,
 }: {
   sidebar: SidebarCollapse;
+  history: NavigationHistory;
   settings: SettingsPanelProps;
-  /** The caret entering or leaving the search field, which holds the panel open. */
-  onSearchEngaged: (engaged: boolean) => void;
-  /** Leaves Settings for the plans. */
-  onBack: () => void;
+  /** Leaves Settings for wherever it was opened from. */
+  onExit: () => void;
 }): React.JSX.Element {
   const [query, setQuery] = useState("");
   const [opened, setOpened] = useState<SettingsSearchEntry>();
-  useAppCommand(APP_COMMAND.BACK, onBack);
+  useAppCommand(APP_COMMAND.EXIT_SETTINGS, onExit);
   const pages: readonly SettingsView[] = [SETTINGS_VIEW.ROOT, ...SETTINGS_SUBVIEW_LIST];
   const shown = pageOf(settings.view);
   const writes = useSettingsWrites();
@@ -108,15 +111,16 @@ export function DesktopSettings({
     <div className="desktop-settings">
       <nav className="settings-pages" aria-label="Settings pages">
         <div className="desktop-drag-strip" />
+        <HistoryButtons history={history} />
         <button
           type="button"
           className="sidebar-item settings-pages-back"
-          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.BACK)}
-          onClick={onBack}
+          aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.EXIT_SETTINGS)}
+          onClick={onExit}
         >
           <BackIcon />
           Back
-          <ShortcutGlyphs command={APP_COMMAND.BACK} className="row-shortcut" />
+          <ShortcutGlyphs command={APP_COMMAND.EXIT_SETTINGS} className="row-shortcut" />
         </button>
         <h1 className="settings-pages-title">Settings</h1>
         <SettingsSearchField
@@ -125,7 +129,6 @@ export function DesktopSettings({
           onSubmit={() => {
             if (first) openResult(first);
           }}
-          onEngagedChange={onSearchEngaged}
         />
         <div className="sidebar-section">
           {search ? (

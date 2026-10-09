@@ -10,6 +10,7 @@ import {
   type ActKind,
   type ActOutcome,
 } from "#shared/messages/acts";
+import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { ONE_ACT_OF_EACH_KIND } from "../testing/acts";
 import {
   ActRefused,
@@ -150,10 +151,10 @@ it.effect(
       const ran: ActKind[] = [];
       const router = createActRouter(
         rowsRecording(ran, {
-          [ACT_KIND.WINDOW_SET_EXPANDED]: () =>
+          [ACT_KIND.MICROPHONE_REQUEST]: () =>
             Effect.sync(() => {
-              ran.push(ACT_KIND.WINDOW_SET_EXPANDED);
-              return "expanded";
+              ran.push(ACT_KIND.MICROPHONE_REQUEST);
+              return MICROPHONE_STATUS.GRANTED;
             }),
           [ACT_KIND.PLANNING_REFRESH]: () => Effect.die(new Error("planning.refresh was refused")),
           [ACT_KIND.WINDOW_FOCUS_PANEL]: () =>
@@ -162,15 +163,11 @@ it.effect(
             ),
         }),
       );
-      assert.deepEqual(
-        yield* perform(
-          router,
-          { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
-          PANEL,
-        ),
-        { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
-      );
-      assert.deepEqual(ran, [ACT_KIND.WINDOW_SET_EXPANDED]);
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.MICROPHONE_REQUEST }, PANEL), {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: MICROPHONE_STATUS.GRANTED,
+      });
+      assert.deepEqual(ran, [ACT_KIND.MICROPHONE_REQUEST]);
       assert.deepEqual(yield* perform(router, { kind: ACT_KIND.PLANNING_REFRESH }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.PLANNING_REFRESH].refusal,
@@ -202,15 +199,11 @@ it.effect("a row is handed the sender's standing, which no payload can claim", (
 it.effect("a row's answer rides the outcome as its own value", () =>
   Effect.gen(function* () {
     const router = createActRouter(
-      rowsRecording([], { [ACT_KIND.WINDOW_SET_EXPANDED]: () => "expanded" }),
+      rowsRecording([], { [ACT_KIND.MICROPHONE_REQUEST]: () => MICROPHONE_STATUS.DENIED }),
     );
-    assert.deepEqual(
-      yield* perform(
-        router,
-        { kind: ACT_KIND.WINDOW_SET_EXPANDED, payload: { expanded: true } },
-        PANEL,
-      ),
-      { status: ACT_OUTCOME_STATUS.DONE, value: "expanded" },
-    );
+    assert.deepEqual(yield* perform(router, { kind: ACT_KIND.MICROPHONE_REQUEST }, PANEL), {
+      status: ACT_OUTCOME_STATUS.DONE,
+      value: MICROPHONE_STATUS.DENIED,
+    });
   }),
 );

@@ -177,7 +177,7 @@ export function PlanTranscript({
               <p className="m-0" role="alert">
                 The transcript could not be read.
               </p>
-              <button type="button" className="plan-button" onClick={onRetry}>
+              <button type="button" className="toolbar-button" onClick={onRetry}>
                 Try again
               </button>
             </>

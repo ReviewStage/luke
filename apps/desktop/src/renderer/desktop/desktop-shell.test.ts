@@ -5,6 +5,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
@@ -26,7 +27,12 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
   useAppKeymap(true);
   const [page, setPage] = useState<PlansPage>(PLANS_PAGE.DOCUMENT);
   return createElement(DesktopShell, {
-    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
     identity: {
       speakers: { listening: false, lukeSpeaking: false },
       voiceActive: { developer: false, luke: false },
@@ -36,9 +42,9 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     tab,
     onTabChange: ignore,
     plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW) }),
+    history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps(),
-    onSettingsSearchEngaged: ignore,
   });
 }
 
@@ -402,7 +408,12 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
   useAppKeymap(true);
   useMenuCommands(true);
   return createElement(DesktopShell, {
-    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
     identity: {
       speakers: { listening: false, lukeSpeaking: false },
       voiceActive: { developer: false, luke: false },
@@ -419,9 +430,9 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
         newPlans += 1;
       },
     }),
+    history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps({ view, onViewChange: setView }),
-    onSettingsSearchEngaged: ignore,
   });
 }
 
@@ -486,16 +497,11 @@ test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page
   assert.ok(rows.includes("Exit full screen"));
 });
 
-test("Command-N leaves Settings for a new plan, and Command-[ backs out of Settings", () => {
+test("Command-N leaves Settings for a new plan", () => {
   stubBridge();
   newPlans = 0;
   route(PANEL_TAB.SETTINGS);
 
-  assert.equal(command("["), true);
-  assert.equal(settingsPage(), undefined, "the plans are back");
-  assert.equal(command("["), false, "nothing to back out of on the plans");
-
-  command(",");
   assert.equal(command("n"), true);
   assert.equal(settingsPage(), undefined);
   assert.equal(newPlans, 1);
@@ -512,7 +518,7 @@ test("a command chosen from the menu bar runs as its chord does, and only where 
   assert.equal(settingsPage(), "General");
   // Settings draws no sidebar toggle, so the menu's item there does nothing.
   act(() => menuListener?.(APP_COMMAND.TOGGLE_SIDEBAR));
-  act(() => menuListener?.(APP_COMMAND.BACK));
+  act(() => menuListener?.(APP_COMMAND.EXIT_SETTINGS));
   assert.equal(sidebar().hasAttribute("inert"), true, "the fold is as the menu left it");
 });
 
@@ -583,4 +589,20 @@ test("the panel's toggle stands in the title bar on a plan's page alone, disable
 
   show(PANEL_TAB.SETTINGS);
   assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
+});
+
+test("a toolbar leaves the panel's toggle room only where the toggle stands", () => {
+  // Whether the window's toolbar sits beneath the panel's toggle, and so stops short of it.
+  const clears = (): boolean => {
+    const toolbar = document.body.querySelector(".desktop-toolbar");
+    assert.ok(toolbar, "the page draws its toolbar");
+    return toolbar.closest("[data-panel-toggle='true']") !== null;
+  };
+  show(PANEL_TAB.PLANS);
+  assert.ok(document.body.querySelector(".side-panel-toggle"), "a plan's page draws the toggle");
+  assert.equal(clears(), true);
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
+  assert.equal(clears(), false, "so its toolbar ends as far in as it starts");
 });

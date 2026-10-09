@@ -1,21 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
- * Reports an element's own content height, for the pieces of the shape whose
- * size only a measurement can say: the surface ends where the panel's content
- * does, a caption is as tall as its words wrapped, the options sheet as tall
- * as the filter rows the sessions earned. The number drives layout through a
- * custom property rather than being read at draw time, so the surface can
- * spring toward it.
+ * Reports an element's own height, for what only a measurement can say: the
+ * caption's stack is as tall as its words wrapped.
  */
 export function useMeasuredHeight(): [(element: HTMLElement | null) => void, number | undefined] {
   const observer = useRef<ResizeObserver | undefined>(undefined);
   const [height, setHeight] = useState<number>();
 
-  // A callback ref rather than an effect: the measured elements mount late —
-  // the panel only once bootstrap has resolved, the slot only once a key is
-  // being entered, the options sheet only once it is opened — all after the
-  // first render.
+  // A callback ref rather than an effect: the measured element can mount
+  // after the first render.
   const measured = useCallback((element: HTMLElement | null) => {
     observer.current?.disconnect();
     observer.current = undefined;

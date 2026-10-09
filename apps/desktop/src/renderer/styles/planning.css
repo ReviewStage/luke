@@ -1,22 +1,3 @@
-.plan-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 7px;
-  background: var(--raised-strong);
-}
-
-.plan-button:hover:not(:disabled) {
-  background: var(--selected);
-}
-
-.plan-button:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
 /* The whiteboard fills the page between the header and the microphone row;
    Excalidraw draws to the size of the box it is given, so the canvas's box
    is the page's own. */
@@ -495,11 +476,6 @@
   padding-left: 4px;
 }
 
-.agent-composer-note .plan-button {
-  padding: 2px 8px;
-  font-size: 12px;
-}
-
 /* A link in the transcript: the pull request opens in the browser, drawn
    as a link; any other address is drawn as words that go nowhere. */
 .agent-link {
@@ -515,7 +491,9 @@
 
 /* What the agent published, in its head: the pull request's pill, coloured
    by where it stands and dotted by its checks, or the chip naming the
-   branch pushed with no pull request yet; the ⋯ beside either. */
+   branch pushed with no pull request yet; the ⋯ beside either. The pill is
+   a status that opens its pull request rather than one of the window's two
+   buttons: it wears the state's colour and GitHub's own round shape. */
 .agent-pr-pill {
   display: inline-flex;
   flex: 0 0 auto;
@@ -605,12 +583,6 @@
   white-space: nowrap;
 }
 
-.agent-published-more {
-  width: 26px;
-  height: 26px;
-  padding: 0;
-}
-
 /* The row summing a finished turn up, at the transcript's end. */
 .agent-published-row {
   color: var(--text-secondary);
@@ -618,10 +590,6 @@
 
 .agent-published-row[data-state="merged"] .account-mark {
   color: #c3a0ff;
-}
-
-.agent-published-open {
-  height: 24px;
 }
 
 /* The open plan's Work tab: each planning turn under the time it began, its
@@ -696,6 +664,13 @@
 
 .ai-trigger:hover {
   color: var(--text-primary);
+}
+
+/* Lucide's glyphs, which the AI Elements components draw with, at the
+   stroke every glyph of our own is drawn at in its 24 box (glyphs.tsx), so
+   the Work and Transcript tabs read at the weight of the rest of the window. */
+svg.lucide {
+  stroke-width: 1.9;
 }
 
 /* A subagent's call: a boxed line that opens its session. Note that its edge

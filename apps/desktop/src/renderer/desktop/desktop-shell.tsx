@@ -1,9 +1,10 @@
 import { ACCOUNT_STATUS, type AccountProvider } from "@sidecar/credentials/snapshot";
-import { ComposeIcon, SidebarIcon, WingFace } from "@sidecar/panel";
+import { ComposeIcon, SidebarIcon } from "@sidecar/panel";
 import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -23,34 +24,13 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 /** What stands between the developer and the window's own content: the account sign-in. */
 export interface DesktopGates {
   accountRequired: boolean;
+  /** Whose sign-in the gate is waiting on in the browser. */
+  signInWait?: AccountProvider | undefined;
   signInFailure?: string | undefined;
   onBeginSignIn: (provider: AccountProvider) => void;
-  /** The signed-out Luke's introduction cycle, walked over the sign-in card. */
+  onCancelSignIn: () => void;
+  /** The signed-out Luke's introduction cycle, walked over the sign-in. */
   signInFace: { play: number; motion?: FaceMotion };
-}
-
-/**
- * The sign-in, alone in the window: Luke over a card holding it. Nothing
- * else is drawn, because nothing else can run until it is answered.
- */
-function Onboarding({
-  face,
-  children,
-}: {
-  face: { play: number; motion?: FaceMotion };
-  children: React.ReactNode;
-}): React.JSX.Element {
-  return (
-    <div className="desktop-onboarding">
-      <div className="desktop-drag-strip" />
-      <div className="desktop-onboarding-card">
-        <span className="desktop-onboarding-face" aria-hidden="true">
-          <WingFace key={face.play} {...(face.motion ? { motion: face.motion } : undefined)} />
-        </span>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -64,12 +44,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
-      <button
-        type="button"
-        className="toolbar-button toolbar-icon-button"
-        aria-label={label}
-        onClick={sidebar.onToggle}
-      >
+      <button type="button" className="icon-button" aria-label={label} onClick={sidebar.onToggle}>
         <SidebarIcon />
       </button>
     </Tooltip>
@@ -78,7 +53,8 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
 
 /**
  * The shortcuts that reach a place from anywhere past the sign-in: a new
- * plan, Settings, and the Keyboard shortcuts page that lists them all.
+ * plan, Settings, the Keyboard shortcuts page that lists them all, and back
+ * and forward, which answer whether or not their buttons are drawn.
  */
 function usePlaceCommands(
   pastGate: boolean,
@@ -86,7 +62,13 @@ function usePlaceCommands(
   onTabChange: (tab: PanelTab) => void,
   plans: PlansControl,
   settings: SettingsPanelProps,
+  history: NavigationHistory,
 ): void {
+  useAppCommand(APP_COMMAND.BACK, pastGate && history.canGoBack ? history.onBack : undefined);
+  useAppCommand(
+    APP_COMMAND.FORWARD,
+    pastGate && history.canGoForward ? history.onForward : undefined,
+  );
   useAppCommand(
     APP_COMMAND.NEW_PLAN,
     pastGate && plans.signedIn
@@ -121,7 +103,7 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
     <Tooltip label="New plan" command={APP_COMMAND.NEW_PLAN}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button"
+        className="icon-button"
         aria-label="New plan"
         disabled={!plans.signedIn}
         onClick={plans.onNewPlan}
@@ -141,7 +123,10 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
  * mirror of the sidebar's, at the window's top right on a plan's page, so
  * neither pane carries the button that moves it. Folding the sidebar, or
  * opening, shutting, or growing the side panel, glides the work beside them
- * (pane-motion.tsx).
+ * (pane-motion.tsx). Back and forward ride the left column's title-bar row,
+ * the plans' sidebar or Settings' page list alike, and leaving Settings is
+ * going back to wherever it was opened from, or to the plans when nothing
+ * stands behind it.
  */
 export function DesktopShell({
   gates,
@@ -149,33 +134,36 @@ export function DesktopShell({
   tab,
   onTabChange,
   plans,
+  history,
   sidebar,
   settings,
-  onSettingsSearchEngaged,
 }: {
   gates: DesktopGates;
   identity: LukeIdentityProps;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
+  history: NavigationHistory;
   sidebar: SidebarCollapse;
   settings: SettingsPanelProps;
-  /** The caret entering or leaving the settings search, which holds the panel open. */
-  onSettingsSearchEngaged: (engaged: boolean) => void;
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
-  usePlaceCommands(!gated, tab, onTabChange, plans, settings);
+  usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
   if (gated) {
     return (
-      <Onboarding face={gates.signInFace}>
+      <div className="desktop-onboarding">
+        <div className="desktop-drag-strip" />
         <SignInGate
           account={account}
+          face={gates.signInFace}
+          {...(gates.signInWait ? { waiting: gates.signInWait } : undefined)}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           onBegin={gates.onBeginSignIn}
+          onCancel={gates.onCancelSignIn}
         />
-      </Onboarding>
+      </div>
     );
   }
   // Settings wears the update row's own words, so the dot's hover and the
@@ -189,18 +177,27 @@ export function DesktopShell({
       <div className="desktop-shell">
         <DesktopSettings
           sidebar={sidebar}
+          history={history}
           settings={settings}
-          onSearchEngaged={onSettingsSearchEngaged}
-          onBack={() => onTabChange(PANEL_TAB.PLANS)}
+          onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
         />
       </div>
     );
   }
+  // Note that the shell says whether the panel's toggle stands, because the
+  // toolbar beneath it leaves the toggle room then and only then.
+  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT;
   return (
-    <div ref={shell} className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
+    <div
+      ref={shell}
+      className="desktop-shell"
+      data-sidebar-collapsed={String(sidebar.collapsed)}
+      data-panel-toggle={String(panelToggle)}
+    >
       <DesktopSidebar
         sidebar={sidebar}
         identity={identity}
+        history={history}
         plans={plans}
         tab={tab}
         onTabChange={onTabChange}
@@ -217,7 +214,7 @@ export function DesktopShell({
           <TitleBarNewPlan plans={plans} />
         ) : null}
       </div>
-      {plans.page === PLANS_PAGE.DOCUMENT ? (
+      {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">
           <SidePanelToggle
             panel={plans.sidePanel}

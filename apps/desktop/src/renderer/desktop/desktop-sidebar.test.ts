@@ -9,6 +9,7 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -69,6 +70,7 @@ function mount(
           fixtureSpeaking: false,
           voiceOpening: false,
         },
+        history: navigationHistory(),
         plans: plansControl(options.plans),
         tab: options.tab ?? PANEL_TAB.PLANS,
         onTabChange: options.onTabChange ?? (() => undefined),

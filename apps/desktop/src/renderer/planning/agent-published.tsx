@@ -152,7 +152,7 @@ function PublishedMenuButton({
         <button
           ref={opener}
           type="button"
-          className="toolbar-button toolbar-icon-button agent-published-more"
+          className="icon-button agent-published-more"
           aria-label={MENU_LABEL}
           aria-haspopup="menu"
           aria-expanded={open !== undefined}
@@ -225,7 +225,7 @@ export function PublishedRow({
       <CheckDot checks={pullRequest.checks} />
       <button
         type="button"
-        className="plan-button agent-published-open"
+        className="toolbar-button agent-published-open"
         onClick={() => openGitHub(pullRequest.url)}
       >
         Open

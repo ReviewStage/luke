@@ -74,11 +74,24 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
 
 /**
- * What the panel leaves the document beside it, in CSS pixels: the panel is
- * dragged no wider than the plan's area less this. `.side-panel`'s
- * `max-width` in desktop.css holds the same room while the window narrows.
+ * What the panel leaves the document beside it, as desktop.css declares it
+ * on the plan's area: the panel is dragged no wider than the area less this,
+ * and has no greatest width of its own. `.side-panel`'s `max-width` holds the
+ * same room while the window narrows.
  */
-const DOCUMENT_RESERVE = 360;
+const DOCUMENT_RESERVE_PROPERTY = "--document-reserve";
+
+/**
+ * The room the document keeps in the plan's area, in CSS pixels. Where the
+ * stylesheet declares none it keeps the panel's own least width, the floor
+ * the stylesheet gives it beside the open sidebar.
+ */
+function documentReserve(area: HTMLElement): number {
+  const declared = Number.parseFloat(
+    getComputedStyle(area).getPropertyValue(DOCUMENT_RESERVE_PROPERTY),
+  );
+  return Number.isFinite(declared) ? declared : SIDE_PANEL_WIDTH.MIN;
+}
 
 /** Each kind's glyph, leading its tab and its row in the "+" menu. */
 const TAB_ICON = {
@@ -153,7 +166,7 @@ function AddTabButton({
         <button
           ref={opener}
           type="button"
-          className="toolbar-button toolbar-icon-button tab-add"
+          className="icon-button tab-add"
           aria-label="Open a tab"
           aria-haspopup="menu"
           aria-expanded={menu !== undefined}
@@ -363,7 +376,7 @@ export function SidePanelToggle({
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button side-panel-toggle"
+        className="icon-button side-panel-toggle"
         aria-label={label}
         aria-expanded={panel.open}
         data-open={String(panel.open)}
@@ -399,7 +412,7 @@ function FullScreenToggle({
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button side-panel-full-screen"
+        className="icon-button side-panel-full-screen"
         aria-label={label}
         aria-pressed={fullScreen}
         onClick={onToggle}
@@ -482,7 +495,7 @@ export function useSidePanelDrawing(panel: SidePanelControl): SidePanelDrawing {
     side: EDGE_SIDE.LEFT,
     width: drawn.width,
     bounds: SIDE_PANEL_WIDTH,
-    reserve: DOCUMENT_RESERVE,
+    reserve: documentReserve,
     label: "Resize panel",
     onResize: panel.onResize,
     onToggleCollapsed: panel.onToggle,

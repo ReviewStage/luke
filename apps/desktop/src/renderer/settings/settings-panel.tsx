@@ -1,11 +1,10 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import type { FeedbackKind } from "@sidecar/feedback";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useRef } from "react";
-import type { FeedbackEntryControl } from "../feedback-entry";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
 import {
   SETTINGS_SUBVIEW_LIST,
@@ -47,14 +46,8 @@ export interface SettingsPanelProps {
   microphone: MicrophoneControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
-  /** The one note to the founders being written, and everything that can be done to it. */
-  feedback: FeedbackEntryControl;
-  /**
-   * True while the panel is the shape on screen. A field can only hold the
-   * caret then: everything here sits in an inert stage the rest of the time,
-   * and an entry can outlast the panel it was started in.
-   */
-  panelOpen: boolean;
+  /** Opens the dialog that writes a note of this kind to the people who make Luke. */
+  onFeedback: (kind: FeedbackKind) => void;
   shortcuts: ShortcutControl;
 }
 
@@ -93,8 +86,7 @@ export function SettingsPanel({
   microphone,
   updates,
   settings,
-  feedback,
-  panelOpen,
+  onFeedback,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
@@ -111,15 +103,13 @@ export function SettingsPanel({
   // Moving between pages moves the keyboard with it: into a page, onto its
   // back button; back out, onto the row that opened the page just left. Keyed
   // to the page, because the control being reached for only exists once the
-  // new page is mounted. Only while the panel is the shape on screen — a
-  // view reset behind a closed panel is housekeeping, and reaching into an
-  // inert stage would find nothing focusable anyway.
+  // new page is mounted.
   const backControl = useRef<HTMLButtonElement | null>(null);
   const heldView = useRef(view);
   useEffect(() => {
     const previous = heldView.current;
     heldView.current = view;
-    if (previous === view || !panelOpen) return;
+    if (previous === view) return;
     if (view === SETTINGS_VIEW.ROOT) {
       if (previous !== SETTINGS_VIEW.ROOT) {
         document.getElementById(settingsNavRowId(previous))?.focus();
@@ -127,7 +117,7 @@ export function SettingsPanel({
       return;
     }
     backControl.current?.focus();
-  }, [view, panelOpen]);
+  }, [view]);
   return (
     <div className="settings">
       {view !== SETTINGS_VIEW.ROOT ? (
@@ -143,10 +133,7 @@ export function SettingsPanel({
            section of its own here: a section that changed places as its own
            check found news would rearrange the page under the hand that
            pressed it. */
-        <section
-          className="settings-section settings-index"
-          style={cssCustomProperties({ "--row-index": 1 })}
-        >
+        <section className="settings-section settings-index">
           {SETTINGS_SUBVIEW_LIST.map((subview) => (
             <SettingsNavRow
               key={subview}
@@ -186,16 +173,15 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
-          <UpdatesSection control={updates} rowIndex={2} />
+          <UpdatesSection control={updates} />
 
-          <FeedbackSection control={feedback} />
+          <FeedbackSection onOpen={onFeedback} />
 
           {account.status === ACCOUNT_STATUS.SIGNED_IN ? (
             <AccountSection
               account={account}
               onSignOut={onSignOut}
               onDeleteAccount={onDeleteAccount}
-              panelOpen={panelOpen}
             />
           ) : null}
         </>

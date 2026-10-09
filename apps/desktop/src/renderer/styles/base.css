@@ -44,6 +44,11 @@
      entirely. */
   --selected: rgba(255, 255, 255, 0.2);
   --selected-edge: rgba(255, 255, 255, 0.32);
+  /* A button held down: a step past its hover, so the press is seen. */
+  --pressed: rgba(255, 255, 255, 0.26);
+  /* The keyboard's ring around whatever control it is on, in the system's
+     own default accent. */
+  --focus-ring: var(--message-sent);
   --hairline: rgba(255, 255, 255, 0.08);
 
   /* A key drawn on screen is a physical thing quoted, so it gets what the
@@ -63,38 +68,17 @@
 
   /* Springs, durations, delays, and the row fan arrive from motion-tokens.css,
      imported by index.css, so the marketing mock cannot ship a different
-     vocabulary. The comments that say *why* those tokens exist stay here,
-     next to the rules that spend them.
+     vocabulary. One sampled damped spring drives every travel, at one
+     duration: a real spring's motion is a property of the spring, not of how
+     far it is asked to go, which is what makes every move read as the same
+     hand. */
 
-     The black surface is the only thing that changes size; everything layered
-     on it moves with `transform` and `opacity` alone, so a frame costs a
-     composite rather than a relayout and a text re-shape.
-
-     `--expand-delay` is measured, not chosen: the surface only reaches far
-     enough left to enclose the tab bar partway through the spring, and content
-     revealed before that is drawn on the desktop.
-
-     Whichever direction it runs, the shape and its content must never cross:
-     content sits outside the shape it belongs to, so any overlap leaves it
-     drawn on the desktop. Growing, the surface leads and the content follows.
-     Shrinking, the content leaves first over `--duration-exit` and the surface
-     only starts closing once it has gone.      COLLAPSE_ANIMATION_MS in main.ts is
-     the sum of those two steps, taken from MOTION_DURATION_MS so the window
-     cannot shrink before the capsule is all that is left.
-
-     One sampled damped spring drives every resize, at one duration. A real
-     spring's motion is a property of the spring, not of how far it is asked to
-     travel, which is why using the same one for a 176px peek and a 482px panel
-     is what makes the two read as the same object rather than two effects. The
-     window carries SURFACE_MARGIN on every side so neither the overshoot nor
-     the shadow can clip. */
-
-  /* Luke's face is the one thing in the wing that is always drawn, and the only
-     thing here that moves without being asked to. Stopping it is a token rather
-     than a selector, for the same reason the durations are: a capture run and
-     reduced motion both need it still, and both already reach the tokens. Paused,
-     every motion holds its first frame, which is the resting pose every one of
-     them starts from — head upright, eyes open. */
+  /* Luke's face is the one thing here that moves without being asked to.
+     Stopping it is a token rather than a selector, for the same reason the
+     durations are: a capture run and reduced motion both need it still, and
+     both already reach the tokens. Paused, every motion holds its first frame,
+     which is the resting pose every one of them starts from — head upright,
+     eyes open. */
   --face-motion: running;
   /* The other loop with no end to wait for: the spinner on a working row. Its
      own token rather than the face's, because the face's is about Luke and this
@@ -103,22 +87,8 @@
      for stillness. */
   --loop-motion: running;
 
-  /* Opaque in every state: the shape has to pass for part of a physical camera
-     housing, and nothing behind the window should ever show through it. Depth
-     comes from the shadow and the hairline edge instead. */
+  /* The darkest fill, opaque, for what nothing behind may show through. */
   --surface-fill: #000;
-  /* Shadow only. A hairline edge drew a visible line along the top, where the
-     surface meets the menu bar and is meant to be indistinguishable from the
-     housing beside it. */
-  --surface-shadow: 0 10px 26px rgba(0, 0, 0, 0.46), 0 2px 7px rgba(0, 0, 0, 0.3);
-
-  --panel-radius: 30px;
-  /* Rounder than the panel at half its size, and the same family: the slot is
-     the panel stood down to one field, not a different object. */
-  --slot-radius: 28px;
-  /* The panel's own content edge: where the tab bar, the rows, and the composer
-     all start. */
-  --panel-inset: 20px;
   --scroll-fade: 26px;
 }
 
@@ -140,101 +110,11 @@
 }
 
 .app-stage {
-  /* Mirrors CAPSULE_SIDE_WIDTH, PEEK_SIDE_GROWTH, and PEEK_MIN_WIDTH in
-     packages/surface/src/geometry.ts, so the drawn shapes match the window
-     the main process gives them. The peek's floor is its width beside the
-     14-inch housing every proportion was measured against: Luke's words wrap
-     at the peek's width, and the caption block's reservation was sized
-     against lines that wide — a bubble growing from no housing would wrap
-     them at barely half of it and run a reply past the room the window
-     reserved. */
-  --capsule-width: calc(var(--notch-housing-width) + 72px);
-  --capsule-height: max(var(--notch-top-inset), 32px);
-  /* The strip the wings are drawn in, and so the room every shape opened below
-     it reserves above its first row: the whole capsule beside a housing, and on
-     a display without one the capsule less the lift on both edges, restated
-     where the lift is. The pill at rest is exactly it, the wings and the press
-     target are as tall as it, and every popup and the panel pad by it. */
-  --strip-height: var(--capsule-height);
-  --peek-width: max(calc(var(--notch-housing-width) + 248px), 458px);
-  /* Luke's words under the housing, wrapping as they stream in and shown
-     whole. `--caption-max` arrives from the shared surface tokens, the
-     same number the compact window already holds below the capsule, so growing
-     into it costs no IPC. `--caption-size` is the block's height right now —
-     the words as measured by the renderer plus the one inset above them,
-     never past the max less the volume hint's band while one stands. How
-     much of that room the shape is currently using: the caption states below
-     raise it, and every other state leaves the capsule's own height.
-
-     Every band grown below the strip is sized this way — its own inset plus
-     its content — so a stack of them is evenly spaced by construction and
-     the shape closes the column with one more inset below the last. That
-     final inset is what `--caption-growth` adds on top of the bands it
-     sums; `--voice-band-inset` itself arrives from the shared surface
-     tokens, because the compact window has to reserve it too. */
-  --caption-growth: 0px;
-  /* The volume hint's band below the caption block, 0 until the hint stands.
-     The hint's own rule raises it, and every place that spends
-     `--caption-size` adds this beside it — the block and the band are two
-     stacked elements partitioning the reserved room, never one shared
-     height. */
+  /* The volume hint's row below the caption bar, 0 until the hint stands. */
   --volume-hint-size: 0px;
-  /* The one width the caption block and the volume hint both lay out at: the
-     peek less one convex corner a side, so their last row ends inside the
-     shape's bottom curve. The open panel overrides it with its own usable
-     width, where both stand at its foot; the compact value keeps a name of
-     its own because the panel measures its widen step against it. */
-  --voice-band-width-compact: calc(var(--peek-width) - var(--notch-convex-radius) * 2);
-  --voice-band-width: var(--voice-band-width-compact);
-  /* Where the two of them measure their travel from. Each is positioned at
-     the strip's full height and then moved by this, because a bubble's shape
-     is the strip inset by `--shape-top` on both edges: the strip a band hangs
-     off ends that much higher than the element's own top, and the shape's
-     bottom edge that much lower than its growth. Beside a housing the shape
-     starts at the display's edge, the lift is zero, and this is nothing. */
-  --voice-band-origin: calc(0px - var(--shape-top, 0px));
-  /* Wide enough for a key, a way out, and a way on, and no wider — the page the
-     key was copied from is behind this and has to stay readable. The floor is
-     what those three need on a display with no housing to grow from. */
-  --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
-  /* Wider than the key slot — a note wraps where a key scrolls, and the credit
-     fields share a line — and narrower than the panel, so the composer reads as
-     the panel stood down to one thing rather than as the panel refilled. */
-  --feedback-width: max(520px, calc(var(--notch-housing-width) + 340px));
-  /* A popup's one vertical inset, above its first row and below its last. The
-     same number on both edges, because the two edges are the same edge: beside
-     a housing the first row sits one inset under the strip, and where the
-     strip is nothing the row sits one inset from each curved edge of the pill,
-     so the row is centred by construction rather than by a second number. */
-  --slot-inset: 12px;
-  /* The mark sits outside the field's column, so everything else in the slot is
-     indented past it by the same amount. */
-  --slot-mark-size: 22px;
-  --slot-gutter-gap: 9px;
-  /* Measured off photographs of the hardware rather than guessed: the housing's
-     own corners are a convex 0.348 of its height. */
-  --notch-convex-radius: calc(var(--capsule-height) * 0.348);
   position: relative;
   width: 100%;
   height: 100%;
-}
-
-.app-stage[data-presentation="panel"] {
-  /* The open panel is the one shape drawn downward from the lift rather than
-     inward from both edges of the strip: its height is its own measured
-     height, and the bands ride at its foot. So the same edge they hang off is
-     that much below the element's top here, not above it — without the sign
-     change a bubble's panel closed on a gap twice the lift too wide. */
-  --voice-band-origin: var(--shape-top, 0px);
-  /* The panel hands the caption block and the volume hint its usable width —
-     the content column between the panel's insets, which also clears the
-     bottom corners' curve beside the band's last row. The
-     width itself snaps, because animating a width re-wraps text on every
-     frame; `--voice-band-widen`, the half-side step up from the compact
-     width, is what the widen keyframe spends as a clip so the change rides
-     the shape's spring instead. */
-  --voice-band-width: calc(var(--panel-width) - var(--panel-inset) * 2);
-  --voice-band-widen: calc((var(--voice-band-width) - var(--voice-band-width-compact)) / 2);
 }
 
 /* The element resets, in a `base` layer under the Tailwind layers
@@ -250,7 +130,10 @@
     box-sizing: border-box;
   }
 
+  /* No user-agent padding either: a button keeps none it did not ask for, so a
+     glyph centred in a fixed box is never squeezed narrower than its own. */
   button {
+    padding: 0;
     border: 0;
     color: inherit;
     cursor: pointer;
@@ -280,9 +163,8 @@ body,
   width: 100%;
   height: 100%;
   margin: 0;
-  /* `clip` rather than `hidden`: expanded content keeps its full panel layout
-     box while the compact window is only ~38px, so `hidden` leaves a scroll
-     container that focus or scrollIntoView can drag the capsule out of. */
+  /* `clip` rather than `hidden`: `hidden` leaves a scroll container that focus
+     or scrollIntoView can drag the whole window's content out of. */
   overflow: clip;
   background: transparent;
   -webkit-user-select: none;
@@ -295,83 +177,12 @@ body,
   user-select: text;
 }
 
-/* The black surface is the whole animation: one leaf element with no children
-   and no text, so growing it costs a rounded-rect fill rather than a relayout
-   of the panel. It also ends where the content does, so a session arriving or
-   finishing stretches the panel instead of leaving a box the wrong size. */
-.panel-surface {
-  position: absolute;
-  z-index: 0;
-  top: 0;
-  left: 50%;
-  width: var(--capsule-width);
-  height: calc(var(--strip-height) + var(--caption-growth));
-  /* The spring undershoots on the way back, and the capsule is the floor: a
-     shape that dips inside the housing's footprint opens a gap where there is
-     a physical camera, not a screen. Clamping the used size lets the spring
-     keep its overshoot in the direction where there is room for it. */
-  min-width: var(--capsule-width);
-  min-height: var(--strip-height);
-  border-radius: 0 0 var(--notch-convex-radius) var(--notch-convex-radius);
-  background: var(--surface-fill);
-  /* The lift off the top edge is carried here rather than by `top`, so that on a
-     display where it changes between states it travels on the spring with the
-     rest of the shape instead of jumping to its new place. It is 0 wherever the
-     shape meets the edge, which is every state beside a real housing. */
-  transform: translate(-50%, var(--shape-top, 0px));
-  /* Held back by `--duration-exit` so the shape never shrinks out from under
-     content that is still on screen. Five properties here, and the per-state
-     rules below override duration, timing, and delay by position — a sixth
-     entry has to be added to those lists too, not left to wrap around. */
-  transition:
-    width var(--duration-shape) var(--spring) var(--duration-exit),
-    height var(--duration-shape) var(--spring) var(--duration-exit),
-    border-radius var(--duration-shape) var(--spring) var(--duration-exit),
-    background-color var(--duration-shape) var(--motion-exit),
-    box-shadow var(--duration-quick) var(--motion-exit),
-    transform var(--duration-shape) var(--spring) var(--duration-exit);
-}
-
-/* The capsule joins the list only once the caption has grown it past the
-   housing: a shape that has left the housing's footprint needs the depth, and
-   one still inside it must stay indistinguishable from the hardware. */
-.app-stage[data-presentation="slot"] .panel-surface,
-.app-stage[data-presentation="feedback"] .panel-surface,
-.app-stage[data-presentation="panel"] .panel-surface {
-  box-shadow: var(--surface-shadow);
-}
-
-/* The panel narrowed to the width of one field. It is only ever arrived at from
-   the panel, which is a shrink, so the base rule's timing is already right:
-   content leaves over `--duration-exit` and the shape follows it in. */
-.app-stage[data-presentation="slot"] .panel-surface {
-  width: var(--slot-width);
-  height: var(--slot-height, 96px);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-/* The panel narrowed to the composer, in the slot's own family: reached from
-   the panel it is a shrink, and reached from the tray it retargets the growth
-   already under way, so the base rule's timing serves both. */
-.app-stage[data-presentation="feedback"] .panel-surface {
-  width: var(--feedback-width);
-  height: var(--feedback-height, 220px);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-/* Luke's meter follows the room being made for it, the way the marks spread
-   into the peek. The capsule grows 26px, and a meter drawn 60ms in is drawn
-   past an edge that is still 300ms away from it. So it crosses over the last
-   of the shape's travel and finishes as the shape settles, which is the same
-   thing the marks are doing — arriving inside the black rather than ahead of
-   it. A mount animation rather than a transition, because the live reply is
-   the meter's first style and a transition has nothing to start from. Stated
-   once, in every state alike: the peek and the panel have the room already,
-   and the same delayed pair there keeps one reply arriving one way.
-
-   The developer's meter takes the resting mark's room beside the housing,
-   where the black never moves, so there is nothing for it to wait behind and
-   it appears at once — the key answers on the frame it lands. */
+/* Luke's meter arrives beside his name in the sidebar when he starts to
+   speak: a short fade and an 8px travel, late enough on the shape's beat that
+   a reply arriving reads as one gesture. A mount animation rather than a
+   transition, because the live reply is the meter's first style and a
+   transition has nothing to start from. The developer's meter has nothing to
+   wait behind, so it appears at once — the key answers on the frame it lands. */
 .wing-meter[data-turn="luke"] {
   animation:
     wing-mount-fade var(--duration-quick) var(--motion-exit)
@@ -386,33 +197,19 @@ body,
   }
 }
 
-/* A mark arriving into a resting strip lands in its own resting seat rather
-   than at the meter's unfold pose; the meter, which has no seat of its own,
-   reads the fallback. */
 @keyframes wing-mount-travel {
   from {
-    transform: translateX(var(--mark-rest, 8px));
+    transform: translateX(8px);
   }
 }
 
-.app-stage[data-presentation="panel"] .panel-surface {
-  width: var(--panel-width);
-  height: var(--panel-height, var(--panel-height-max));
-  border-radius: 0 0 var(--panel-radius) var(--panel-radius);
-  transition-duration: var(--duration-shape);
-  transition-timing-function:
-    var(--spring), var(--spring), var(--spring), var(--motion-exit), var(--motion-exit),
-    var(--spring);
-  transition-delay: 0s, 0s, 0s, 0s, var(--duration-shape), 0s;
-}
+/* Voice meters ----------------------------------------------------------- */
 
-/* Notch wings ------------------------------------------------------------ */
-
-/* A meter's slot, rather than the meter itself: arriving is the wing's
-   gesture and belongs to the slot, while the opacity and scale inside it are
-   the meter's own answer to speech. One element cannot carry both. A meter is
-   drawn only while its speaker is heard, so the slot's arrival is its mount,
-   choreographed per speaker below. */
+/* A meter's seat, rather than the meter itself: arriving is the seat's
+   gesture, while the opacity and scale inside it are the meter's own answer
+   to speech. One element cannot carry both. A meter is drawn only while its
+   speaker is heard, so the seat's arrival is its mount, choreographed per
+   speaker above. */
 .wing-meter {
   display: flex;
   align-items: center;
@@ -420,16 +217,10 @@ body,
 
 /* Luke's face ------------------------------------------------------------ */
 
-/* The place nearest the housing is the one the capsule keeps, and Luke holds it
-   in every state: the marks, the meter, and the captions all unfold around a
-   fixed point, and the strip at rest is him rather than whichever provider
-   happens to be first. Drawn larger than a provider mark because the artwork is
-   mostly the space between its parts, and in the primary ink because it is the
-   app rather than one of the things the app is watching.
-
-   The loud motions leave the square the artwork is drawn in — a pirouette and a
-   duck both need more room than a face at rest — so nothing is clipped here. The
-   wing clips them instead, at the housing, which is the edge that matters. */
+/* Drawn in the primary ink because it is the app rather than one of the
+   things the app is watching. The loud motions leave the square the artwork
+   is drawn in — a pirouette and a duck both need more room than a face at
+   rest — so nothing is clipped here. */
 
 .luke-face {
   width: 18px;
@@ -440,12 +231,9 @@ body,
   transition: color var(--duration-quick) var(--motion-exit);
 }
 
-/* The two motions the microphone owns. The capsule has no room for the meter
-   beside the face, so Luke takes the meter's own colour while it is open: the
-   state reads at every size, and the bars stay with the peek. Which colour is
-   which is the same answer in both places — the face is green while it attends
-   to you and blue while it is the one talking, so the capsule alone says whose
-   turn it is even with the peek closed. */
+/* The two motions the microphone owns, in the meters' own colours: the face
+   is green while it attends to you and blue while it is the one talking, so
+   the face alone says whose turn it is. */
 .luke-face[data-motion="listening"] {
   color: var(--voice-developer);
 }
@@ -593,97 +381,43 @@ body,
 
 /* Voice caption ----------------------------------------------------------- */
 
-/* Luke's words, wrapping as they stream so the whole reply can be read — the
-   text is not timed to the speech (the protocol carries no word timing, and
-   generation runs ahead of the voice), so showing everything is what lets
-   reading catch up.
-
-   One element for every state, and one wrap width for every state: the
-   peek's, inset by the capsule's corner. A caption that re-wrapped at each
-   shape's own width would re-set its lines at the instant of every morph,
-   which reads as a jump; at one width the words never re-flow, and every
-   change of shape moves them on `transform` alone — under the housing in the
-   compact states, riding down to the panel's foot when the shape opens.
-
-   The box is always the full block the window reserves; what tracks the text
-   is the clip. It springs on the same `--caption-size` the surface's height
-   does — meeting the surface's edge, or the volume hint's band when one
-   stands between them — so a line that wraps into existence is revealed by
-   the black arriving under it rather than being drawn on the desktop. The
-   lift off the top edge rides in the transform rather than in `top` for the
-   same reason the surface carries it there: it changes between states, and
-   only a transform travels on the spring. It takes no pointer — the surface
-   under it is what answers, so hovering the words holds the peek like
-   hovering the shape does. */
+/* Luke's words while he says them: a floating bar over the work column, above
+   the call bar, one element in every state so both edges of its fade can run.
+   The bar grows with the words to `--caption-max`; past that the stack inside
+   rolls up (below) rather than the bar growing on. It takes no pointer, so the
+   document under it keeps answering. */
 .voice-caption {
-  /* Named so the widen keyframe can hold them while animating the sides: an
-     animation owns the whole clip-path while it runs. The top clip is the
-     block's own inset, so a stack rolled up past the words' edge is cut where
-     the inset begins rather than drawn in it. */
-  --voice-band-clip-top: var(--voice-band-inset);
-  --voice-band-clip-bottom: calc(var(--caption-max) - var(--caption-size, 20px));
   position: absolute;
-  z-index: 3;
-  top: var(--capsule-height);
-  left: 50%;
+  z-index: 6;
+  bottom: calc(96px + var(--volume-hint-size));
+  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   overflow: hidden;
-  width: var(--voice-band-width);
-  height: var(--caption-max);
-  /* The block's own inset, above the words and nowhere else: whatever stands
-     below it — the volume hint's band, or the shape's bottom edge — carries
-     the gap on that side, so the words are the same distance from the thing
-     above them as from the thing below however the stack is composed. */
-  padding: var(--voice-band-inset) 0 0;
-  clip-path: inset(var(--voice-band-clip-top) 0 var(--voice-band-clip-bottom));
+  width: var(--caption-width);
+  max-height: var(--caption-max);
+  padding: 12px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 16px;
+  /* Opaque, because the document scrolls on beneath it. */
+  background: #16161b;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  font-size: 13.5px;
+  line-height: 1.5;
   opacity: 0;
   pointer-events: none;
-  transform: translate(-50%, calc(var(--caption-rest, 0px) + var(--voice-band-origin)));
-  /* The transform and the clip wait out `--duration-exit` like the surface
-     does: leaving a state, the words travel with the shape rather than ahead
-     of it. */
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring) var(--duration-exit),
-    clip-path var(--duration-shape) var(--spring) var(--duration-exit);
+  transform: translateX(-50%);
+  transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* The open panel keeps the same words at its foot: `--caption-rest` is the
-   travel from under the housing to the bottom edge the panel's measured
-   height puts there. Expanding, the words lead with the surface — no delay,
-   the panel's own timing — and collapsing, the compact rule above holds them
-   back by `--duration-exit` so they leave with the shape. */
-.app-stage[data-presentation="panel"][data-caption="true"] {
-  --caption-rest: calc(
-    var(--panel-height, var(--panel-height-max)) -
-    var(--capsule-height) -
-    var(--caption-size, 20px) -
-    var(--volume-hint-size) -
-    var(--voice-band-inset)
-  );
-}
-
-.app-stage[data-presentation="panel"][data-caption="true"] .voice-caption {
+.app-stage[data-caption="true"] .voice-caption {
   opacity: 1;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)),
-    transform var(--duration-shape) var(--spring),
-    clip-path var(--duration-shape) var(--spring);
 }
 
 /* The stack holds one block per response, oldest first, so responses spoken
-   back-to-back sit apart instead of running together. While the stack fits
-   the room the window reserved, nothing here moves: the block grows to the
-   words and the clip on the caption above is the only reveal. Past that room
-   the block stops growing and the stack rolls up by `--caption-overflow`,
-   the renderer's measure of what will not fit, so the newest words stay at
-   the block's foot and the oldest lines travel up under the housing and out
-   through the clip's top edge — a transform on the spring, like every
-   travel on the surface, never a scroll. The roll waits out
-   `--duration-exit` in the compact states like the caption's own transform,
-   so a stack leaving a state rolls with the shape rather than ahead of it;
-   the captioned rules below drop the delay while the words are up, the way
-   they do for the clip. */
+   back-to-back sit apart instead of running together. Past the room the bar
+   can grow to, the stack rolls up by `--caption-overflow`, the renderer's
+   measure of what will not fit, so the newest words stay at the bar's foot
+   and the oldest leave through its top edge — a transform on the spring,
+   never a scroll. */
 .voice-caption-stack {
   display: flex;
   flex-direction: column;
@@ -700,23 +434,21 @@ body,
 .voice-caption-text {
   display: block;
   width: 100%;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
   letter-spacing: 0.1px;
-  line-height: 14px;
-  text-align: center;
+  line-height: 1.5;
 }
 
-/* A voice failure borrows the caption's strip — same box, same travel — in
-   the `.error-message` red, because it is a fault being reported rather than
-   words being spoken. */
+/* A voice failure borrows the caption's bar in the `.error-message` red,
+   because it is a fault being reported rather than words being spoken. */
 .voice-caption[data-tone="error"] .voice-caption-text {
   color: var(--error-text);
 }
 
-/* A state notice borrows the strip more quietly, in the attention orange the
-   session rows warn in: temporary unavailability must not wear a fault's red. */
+/* A state notice borrows it more quietly, in the attention orange: temporary
+   unavailability must not wear a fault's red. */
 .voice-caption[data-tone="notice"] .voice-caption-text {
   color: var(--state-attention);
 }
@@ -724,67 +456,42 @@ body,
 /* Volume hint ------------------------------------------------------------- */
 
 /* Why the words above are the only part of Luke arriving: the Mac's output is
-   muted or at zero. It stands in a band of its own directly below the caption
-   block: `--volume-hint-size` mirrors VOLUME_HINT_BAND_HEIGHT in
-   volume-hint.ts — the inset every band carries above itself plus the 20px
-   row this element draws — and the renderer takes the band off the block's
-   maximum. The block and the band partition the reserved room rather than
-   layering in it: the caption's clip ends where the band begins, so no line
-   can be revealed over the hint. The travel is the caption's own transform
-   plus the block's current size and that inset, so the row springs down the
-   shape's edge exactly as the shape grows for new lines. Above the hover
-   strip (z-index 4) because it holds the one button on the compact shape
-   that is not the strip: Got it has to answer the press. */
+   muted or at zero. It stands in a row of its own directly below the caption
+   bar, which rises by `--volume-hint-size` to make the room: the inset above
+   the row plus the 20px row itself, mirroring VOLUME_HINT_BAND_HEIGHT in
+   volume-hint.ts. */
 .app-stage[data-volume-hint="true"] {
   --volume-hint-size: calc(var(--voice-band-inset) + 20px);
 }
 
 /* The row's height mirrors VOLUME_HINT_HEIGHT in volume-hint.ts — the two
-   must agree — and is exactly what it draws: a small pill with the sentence
-   beside it. */
+   must agree — and is exactly what it draws: the sentence and a small pill
+   beside it. It takes the pointer only while it is drawn. */
 .volume-hint {
   position: absolute;
-  z-index: 5;
-  top: var(--capsule-height);
-  left: 50%;
+  z-index: 6;
+  bottom: 88px;
+  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 9px;
-  width: var(--voice-band-width);
+  width: var(--caption-width);
   height: 20px;
   opacity: 0;
   pointer-events: none;
-  transform: translate(
-    -50%,
-    calc(
-      var(--caption-rest, 0px) +
-      var(--voice-band-origin) +
-      var(--caption-size, 20px) +
-      var(--voice-band-inset)
-    )
-  );
-  /* The transform waits out `--duration-exit` like the caption's does, so
-     leaving a state the row travels with the shape rather than ahead of it. */
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring) var(--duration-exit);
+  transform: translateX(-50%);
+  transition: opacity var(--duration-exit) var(--motion-exit);
 }
 
-/* Arrives the way the caption's first words do — crossing the last of the
-   shape's travel — and takes the pointer only while it is drawn: a hidden
-   button must stay click-through, because everything it covers is desktop. */
-.app-stage[data-volume-hint="true"][data-caption="true"][data-presentation="panel"] .volume-hint {
+.app-stage[data-volume-hint="true"][data-caption="true"] .volume-hint {
   opacity: 1;
   pointer-events: auto;
-  transition:
-    opacity var(--duration-quick) var(--motion-exit)
-    calc(var(--duration-shape) - var(--duration-quick)),
-    transform var(--duration-shape) var(--spring);
+  transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
-/* Attention's own orange, because this is the one line on the shape that asks
-   the user to do something; the caption above it keeps the secondary grey. */
+/* Attention's own orange, because this is the one line that asks the user to
+   do something; the caption above it keeps its own colour. */
 .volume-hint-text {
   overflow: hidden;
   color: var(--state-attention);
@@ -795,7 +502,6 @@ body,
   white-space: nowrap;
 }
 
-/* A small raised pill, the one pressable thing that appears under the housing. */
 .volume-hint-dismiss {
   display: flex;
   flex: 0 0 auto;
@@ -815,50 +521,13 @@ body,
   background: var(--raised-strong);
 }
 
-/* Opening the panel is the one move that changes `--voice-band-width`, and
-   the new width lands at once — a width that animated would re-wrap the words
-   on every frame. What must not land at once is the reveal: on the flip the
-   surface is still the peek's width, so the extra width waits behind a side
-   clip released on the surface's own duration and spring — the shape's edge
-   is what uncovers the wider rows, exactly as it uncovers arriving content.
-   Keyed to the presentation alone: both elements are always mounted, so the
-   animation fires only at the flip and never mid-panel, where the surface is
-   already wide and the caption's arriving content needs its clip transition
-   live rather than owned by a finished animation. One keyframe serves both
-   because each element's `--voice-band-clip-top` and `--voice-band-clip-bottom`
-   — 0 for the hint's bare row — ride through both frames unchanged, so the
-   animation ends exactly on the clip the element's own rule draws. Leaving
-   the panel needs no twin: the compact width snaps back on the flip, already
-   inside every edge the collapse will pass. */
-@keyframes voice-band-widen {
-  from {
-    clip-path: inset(
-      var(--voice-band-clip-top, 0px) var(--voice-band-widen) var(--voice-band-clip-bottom, 0px)
-    );
-  }
-
-  to {
-    clip-path: inset(var(--voice-band-clip-top, 0px) 0 var(--voice-band-clip-bottom, 0px));
-  }
-}
-
-.app-stage[data-presentation="panel"] .voice-caption,
-.app-stage[data-presentation="panel"] .volume-hint {
-  animation: voice-band-widen var(--duration-shape) var(--spring);
-}
-
 /* Waveform --------------------------------------------------------------- */
 
 /* The meter takes the face's own place while the microphone is live and stays
    drawn for the whole of that — silence is a thing it reports, not a reason to
-   disappear. It unfolds with the peek the way the marks spread, because the
-   capsule has no room for it beside the face; there, a live microphone is what
-   the face's colour and tempo say. Speech only raises the meter from idle to
-   full. */
-/* Exactly the face's 18px, because it stands where the face stands and the
-   capsule has room for one of them: five bars at 2px with 2px between them. A
-   wider meter is drawn past the black and onto the desktop, since the wings are
-   bounded by the peek the capsule can grow into rather than by the capsule. */
+   disappear. Speech only raises it from idle to full. Exactly the face's
+   18px, because it stands where the face stands: five bars at 2px with 2px
+   between them. */
 .waveform {
   display: flex;
   width: 18px;
@@ -944,568 +613,17 @@ body,
   white-space: nowrap;
 }
 
-/* Content arrives behind the surface, never in front of it, and it arrives on
-   the same spring the surface is riding. Each row starts further up than the
-   one above it, so the stack is compressed and the gaps spring open — the
-   space between sessions is the thing that moves.
- *
- * The stagger is written into the shorthand beside the property it delays,
- * rather than as a `transition-delay` list beside the rule that sets the state.
- * Some of this stack also answers the pointer, and a single `transition-delay`
- * applies to every property in the list: the row's turn to appear would become
- * the wait before its hover, for as long as the panel stayed open. A list
- * positioned against the property list can express that, but only by matching
- * two rules by index — so inserting a property silently delays the wrong one.
- * Here each delay travels with the property it belongs to, and an element that
- * declares its own transition carries the arrival pair unchanged.
- *
- * `--row-delay` is what makes it directional: zero here, so leaving is
- * immediate, and the stagger below, so arriving fans out. A transition reads
- * its timing from the state being entered, which is what keeps the two apart. */
-.settings-section,
-.settings-header {
-  --row-delay: 0s;
-
-  opacity: 0;
-  transform: translateY(
-    calc((min(var(--row-index, 0), var(--row-fan-limit)) + 1) * var(--row-fan) * -1)
-  );
-  transition:
-    opacity var(--duration-exit) var(--motion-exit) var(--row-delay),
-    transform var(--duration-shape) var(--spring) var(--row-delay);
-}
-
-.app-stage[data-presentation="panel"] .settings-section,
-.app-stage[data-presentation="panel"] .settings-header {
-  --row-delay: calc(
-    var(--expand-delay) +
-    min(var(--row-index, 0), var(--row-fan-limit)) *
-    var(--row-stagger)
-  );
-
-  opacity: 1;
-  transform: none;
-}
-
-/* A departing session's fade is drawn by session-motion rather than here: the
-   row's opacity transition above carries the panel-arrival stagger, and a
-   session that returned mid-fade would wait out `--expand-delay` before
-   resuming. An animation leaves the property underneath untouched, so a
-   return only has to cancel it. */
-
 /* Feedback --------------------------------------------------------------- */
 
-/* Layered and hidden exactly as the key slot's stage is, but its own class:
-   the two stages coexist in the DOM — each holds its last entry through an
-   exit — and a shared class would let the rule that shows one show the other
-   over it. */
-.feedback-stage {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  left: 50%;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(-6px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    visibility 0s linear var(--duration-exit);
-  will-change: opacity, transform;
-}
-
-/* The composer arrives exactly as the key slot does, on the shape's own beat:
-   held back by the slot's delay so the panel's content has left first. */
-.app-stage[data-presentation="feedback"] .feedback-stage {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-  transition:
-    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
-    transform var(--duration-shape) var(--spring) var(--slot-delay),
-    visibility 0s linear var(--slot-delay);
-}
-
-/* Rounded like the shape it sits on, for the same reason the key slot is:
-   past the corner is desktop, and a press there belongs to whatever is behind
-   Luke. Capped at the panel's own ceiling — the window is only as tall as the
-   panel plus the margin the spring overshoots into — and everything inside
-   holds its size except the preview, which yields whatever the cap takes. */
-.feedback-slot {
-  display: flex;
-  overflow: hidden;
-  width: var(--feedback-width);
-  max-height: var(--panel-height-max);
-  flex-direction: column;
-  gap: 8px;
-  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-.feedback-slot > * {
-  flex: 0 0 auto;
-}
-
-.app-stage[data-presentation="feedback"] .feedback-slot {
-  pointer-events: auto;
-}
-
-/* Everything below the preview, moved as one thing. The layout puts it at its
-   destination the instant a preview takes or gives back its room — that is
-   what keeps the surface to one clean spring — and these animations replay
-   the journey on that same spring, from where the row used to be to where it
-   now is. `--preview-room` is the distance, told to the stylesheet by the
-   component; unset it is zero, so the composer opening plays neither. */
-.feedback-follow {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* Going down, the row waits out the slot's content delay rather than the
-   surface's shorter one: the shape must lead, and a row that trails a beat
-   behind the edge is always over black — the same reason the panel's rows fan
-   open behind the surface. Coming back up it takes the shorter delay instead,
-   because against a rising edge it is the leader that stays covered. */
-.feedback-follow[data-follow="true"] {
-  animation: feedback-follow-down var(--duration-shape) var(--spring) var(--slot-delay) backwards;
-}
-
-.feedback-follow[data-follow="false"] {
-  animation: feedback-follow-up var(--duration-shape) var(--spring) var(--duration-exit) backwards;
-}
-
-@keyframes feedback-follow-down {
-  from {
-    transform: translateY(calc(-1 * var(--preview-room, 0px)));
-  }
-}
-
-@keyframes feedback-follow-up {
-  from {
-    transform: translateY(var(--preview-room, 0px));
-  }
-}
-
-/* Held to the width of its longest word, so saying "Sending…" does not slide
-   the Cancel beside it — the same floor the slot's confirm keeps. */
-.feedback-send {
-  min-width: 76px;
-}
-
-/* The note grows with its words — the box follows the text and the surface
-   follows the box on its spring — up to the point where scrolling the note is
-   kinder than a panel the height of the screen. No resize handle: the box is
-   already sized by what it holds. */
-.feedback-message {
-  min-height: 64px;
-  max-height: 150px;
-  overflow-y: auto;
-  resize: none;
-  field-sizing: content;
-  letter-spacing: 0;
-  line-height: 1.45;
-}
-
-/* The signature is one choice, so its two halves share one line. */
-.feedback-credit {
-  display: flex;
-  gap: 7px;
-}
-
-.feedback-credit .settings-input {
-  min-width: 0;
-  flex: 1;
-  letter-spacing: 0;
-}
-
-.feedback-images {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-}
-
-/* A screenshot coming along, at the size of a control: enough to recognise,
-   not enough to read — pressing it opens the preview below, where it can be. */
-.feedback-image {
-  position: relative;
-  display: flex;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 auto;
-}
-
-/* The chip itself is the way to look closer, and says so with the hand every
-   zoomable thing takes. */
-.feedback-image-open {
-  display: flex;
-  overflow: hidden;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.4);
-  cursor: zoom-in;
-  transition: border-color var(--duration-hover) ease;
-}
-
-.feedback-image-open:hover {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-}
-
-.feedback-image-open[aria-expanded="true"] {
-  border-color: color-mix(in srgb, var(--state-working) 60%, transparent);
-}
-
-.feedback-image-open img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* On the thumbnail's own corner, large enough to acquire without precision. */
-.feedback-image-remove {
-  position: absolute;
-  top: -9px;
-  right: -9px;
-  display: flex;
-  width: 24px;
-  height: 24px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  border: 1px solid var(--hairline);
-  background: color-mix(in srgb, var(--surface-overlay) 92%, transparent);
-  color: var(--text-primary);
-  transition: background-color var(--duration-hover) ease;
-}
-
-.feedback-image-remove:hover {
-  background: color-mix(in srgb, var(--danger) 55%, var(--surface-overlay));
-}
-
-.feedback-image-remove:disabled {
-  opacity: 0.4;
-}
-
-.feedback-image-remove svg {
-  width: 8px;
-  height: 8px;
-}
-
-/* The screenshot at a readable size: as wide as the note above it, no taller
-   than keeps the shape on screen, and the whole thing is the way back out.
-   `contain` rather than `cover`, because a preview that crops is not a
-   preview.
-
-   Its room lands in the layout at once, so the surface takes one clean spring
-   to the new height instead of chasing a growing box frame by frame. The
-   image itself does not move at all: it is uncovered, by a clip that rides
-   the surface's own delay, duration, and spring — the same trick the caption
-   uses — so the picture appears exactly as fast as the notch's edge sweeps
-   down over it, never ahead of the shape and never drawn past it. */
-.feedback-slot > .feedback-preview {
-  display: flex;
-  overflow: hidden;
-  min-height: 0;
-  flex: 0 1 auto;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.4);
-  clip-path: inset(0 0 0 0 round 12px);
-  cursor: zoom-out;
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-/* The arrival is an animation rather than a transition from `@starting-style`:
-   the engine starts an animation on a freshly mounted element without fail,
-   where a clip transition from a starting style is quietly skipped. `backwards`
-   holds the covered pose through the surface's own head start. */
-.feedback-slot > .feedback-preview[data-open="true"] {
-  animation:
-    feedback-preview-uncover var(--duration-shape) var(--spring) var(--duration-exit) backwards,
-    feedback-preview-arrive var(--duration-quick) var(--motion-exit) backwards;
-}
-
-/* From covered to the element's own resting clip; the pose every open starts at. */
-@keyframes feedback-preview-uncover {
-  from {
-    clip-path: inset(0 0 100% 0 round 12px);
-  }
-}
-
-@keyframes feedback-preview-arrive {
-  from {
-    opacity: 0;
-  }
-}
-
-/* Leaving is immediate and brief, the way content always leaves ahead of the
-   shape: the image is gone over `--duration-exit`, and only the end of that
-   fade takes its room — so the surface never shrinks out from under a picture
-   still on screen. */
-.feedback-slot > .feedback-preview[data-open="false"] {
-  opacity: 0;
-  transition: opacity var(--duration-exit) var(--motion-exit);
-}
-
-.feedback-preview img {
-  display: block;
-  width: 100%;
-  max-height: 260px;
-  object-fit: contain;
-}
-
-/* Offers like the quiet buttons around it, with the picture glyph saying what
-   it takes. */
-.feedback-attach {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 11px;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 640;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.feedback-attach:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.feedback-attach:disabled {
-  opacity: 0.4;
-}
-
-.feedback-attach:disabled:hover {
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.feedback-attach .icon-button-glyph {
-  width: 12px;
-  height: 12px;
-}
-
-/* The settings section's two offers share one row, half the width each. */
+/* The settings section's two offers share one row, side by side. */
 .feedback-offers {
   display: flex;
   gap: 7px;
 }
 
-.feedback-offer {
-  flex: 1 1 0;
-}
-
-/* A send that landed, said in the palette every settled answer uses. */
-.feedback-sent {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--state-complete);
-  font-size: 10.5px;
-  font-weight: 640;
-}
-
-/* The landing: a delivered send answered in the shape the note left from.
-   Luke swoops down from above the slot's top edge — the slot's own overflow
-   clips him until he is inside, so he arrives through the shape — and the
-   thank-you rises under him on the arriving pair every element rides. The
-   room lands at once (the landing replaces the fields in the same measured
-   shell), so the surface takes one clean spring to the smaller shape. */
-.feedback-confirm {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  padding: 14px 0 10px;
-}
-
-.feedback-confirm-luke {
-  display: block;
-  width: 54px;
-  height: 54px;
-  color: var(--text-primary);
-  animation: feedback-confirm-swoop var(--duration-shape) var(--spring) var(--slot-delay) backwards;
-}
-
-.feedback-confirm-luke .luke-face {
-  width: 54px;
-  height: 54px;
-}
-
-@keyframes feedback-confirm-swoop {
-  from {
-    opacity: 0;
-    transform: translateY(-140px) scale(0.5) rotate(-16deg);
-  }
-
-  45% {
-    opacity: 1;
-  }
-
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.feedback-confirm-msg {
-  margin: 0;
-  font-size: 13px;
-  font-weight: 640;
-  color: var(--text-primary);
-  animation:
-    feedback-confirm-fade var(--duration-quick) var(--motion-exit)
-    calc(var(--slot-delay) + var(--row-stagger)) backwards,
-    feedback-confirm-rise var(--duration-shape) var(--spring)
-    calc(var(--slot-delay) + var(--row-stagger)) backwards;
-}
-
-@keyframes feedback-confirm-fade {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes feedback-confirm-rise {
-  from {
-    transform: translateY(8px);
-  }
-}
-
-/* The shockwave landing: the success motion lands its squash at 65% of its
-   2s cycle, and the headline ducks on that landing. The delays and durations
-   inside this block are
-   literal because they are the artwork's own timing — a face motion carries
-   literal seconds for the same reason — and they answer `--face-motion`
-   exactly as the gesture they follow does, so a capture run and reduced
-   motion hold them at their first frame, the resting pose. (Under reduced
-   motion the gesture is never asked for at all, so these never match.) */
-.feedback-confirm[data-scene="shockwave"][data-gesturing="true"] .feedback-confirm-msg {
-  animation: feedback-confirm-duck 520ms var(--spring-fast) 1280ms backwards;
-  animation-play-state: var(--face-motion);
-}
-
-@keyframes feedback-confirm-duck {
-  30% {
-    transform: translateY(4px) scaleY(0.9);
-  }
-
-  65% {
-    transform: translateY(-2px);
-  }
-}
-
-/* The boop landing's punchline: the puff peaks just past 63% of its 3.2s
-   cycle, and the exclamation mark it is aimed at tips right over and springs
-   back upright. Literal timing under `--face-motion`, as above. */
-.feedback-confirm-bang {
-  display: inline-block;
-  transform-origin: 50% 100%;
-}
-
-.feedback-confirm[data-scene="boop"][data-gesturing="true"] .feedback-confirm-bang {
-  animation: feedback-confirm-bang 700ms var(--spring-fast) 2000ms backwards;
-  animation-play-state: var(--face-motion);
-}
-
-@keyframes feedback-confirm-bang {
-  25% {
-    transform: rotate(24deg);
-  }
-
-  55% {
-    transform: rotate(-9deg);
-  }
-
-  78% {
-    transform: rotate(4deg);
-  }
-}
-
-/* Key slot --------------------------------------------------------------- */
-
-/* Layered like the panel and animated like it, because it is the panel: the
-   stage carries the arrival and the shape underneath carries the size. */
-.slot-stage {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  left: 50%;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(-6px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    visibility 0s linear var(--duration-exit);
-  will-change: opacity, transform;
-}
-
-/* Only the stage whose entry holds the slot comes forward: the others keep
-   whatever pill they last held — that is what lets an exit finish saying what
-   it was saying — so without the drawn gate a stale pill would resurface
-   under another occupant's wait. */
-.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-  transition:
-    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
-    transform var(--duration-shape) var(--spring) var(--slot-delay),
-    visibility 0s linear var(--slot-delay);
-}
-
-/* Rounded like the shape it sits on, for the same reason the panel body is:
-   past the corner is desktop, and a press there belongs to whatever is behind
-   Luke — which, here, is the page the key was copied from. */
-.key-slot {
-  display: flex;
-  width: var(--slot-width);
-  flex-direction: column;
-  gap: 7px;
-  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] .key-slot {
-  pointer-events: auto;
-}
-
-.key-slot-row {
-  display: flex;
-  align-items: center;
-  gap: var(--slot-gutter-gap);
-}
-
-/* Larger than the mark on a settings line: here it is the only thing naming the
-   provider, rather than a glyph beside its name. The badge grows with it. */
-.key-slot-mark {
-  position: relative;
-  display: grid;
-  width: var(--slot-mark-size);
-  height: var(--slot-mark-size);
-  flex: 0 0 auto;
-  place-items: center;
-}
-
-/* Evidence capture screenshots a fixed moment after the renderer reports ready.
-   The panel's height is only known once it has been measured, so without this a
-   capture could land mid-transition and the PNGs would stop being reproducible.
+/* Evidence capture screenshots a fixed moment after the renderer reports ready,
+   so without this a capture could land mid-transition and the PNGs would stop
+   being reproducible.
    Zeroing the tokens every transition is written in terms of is enough — no
    rule has to be overridden. */
 .app-stage[data-capture="true"] {
@@ -1515,8 +633,6 @@ body,
   --duration-fast: 0s;
   --duration-hover: 0s;
   --duration-pane: 0s;
-  --expand-delay: 0s;
-  --peek-delay: 0s;
   --row-stagger: 0s;
   /* Luke blinks and sways on a loop with no end to wait for, so a capture would
      otherwise land wherever in it the shutter happened to fall. Held on its
@@ -1526,14 +642,9 @@ body,
   --loop-motion: paused;
 }
 
-/* COLLAPSE_ANIMATION_MS in main.ts drops to zero too — collapseDelay() checks
-   capture mode and the OS's reduced-motion setting itself — so the window
-   still waits for the capsule rather than shrinking under the panel. */
-/* Reduced motion is answered at the tokens rather than element by element. A
-   list of selectors misses whatever is added later, and it loses outright to the
-   staggered rules, which carry a `.app-stage[data-presentation]` prefix a media
-   query does not add specificity to. Zeroing the vocabulary reaches every rule
-   derived from it, including those. Hover feedback keeps its 70ms: a colour
+/* Reduced motion is answered at the tokens rather than element by element: a
+   list of selectors misses whatever is added later, and zeroing the vocabulary
+   reaches every rule derived from it. Hover feedback keeps its 70ms: a colour
    settling is not motion. */
 @media (prefers-reduced-motion: reduce) {
   :root {
@@ -1542,22 +653,11 @@ body,
     --duration-quick: 1ms;
     --duration-fast: 1ms;
     --duration-pane: 1ms;
-    --expand-delay: 0ms;
-    --peek-delay: 0ms;
     --row-stagger: 0ms;
-    /* Nothing travels, so the stack has no distance to spring across. */
-    --row-fan: 0px;
     /* Idle motion is the one thing here that no one asked for, so it is the
        first thing to stop: Luke sits still, upright, with his eyes open. The
        spinner holds too — a working row still says Working in words. */
     --face-motion: paused;
     --loop-motion: paused;
-  }
-
-  .panel-surface,
-  .slot-stage,
-  .feedback-stage {
-    transition-duration: 1ms;
-    transition-delay: 0ms;
   }
 }

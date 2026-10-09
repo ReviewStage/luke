@@ -33,7 +33,7 @@ import {
   type PendingRenames,
   PLANS_PAGE,
   type PlansPage,
-  planningCallHoldsPanel,
+  planningCallInProgress,
   plansPage,
   recentRepositories,
   renamedView,
@@ -86,6 +86,12 @@ export interface PlansControl {
   signedIn: boolean;
   plans: PlanningView["plans"];
   activePlanId: string | undefined;
+  /**
+   * The plan the tab is on its way to: the one a press asked the host for,
+   * until the host's open plan next moves, else the open one. Nothing is the
+   * new-plan page, asked for or standing.
+   */
+  boundFor: string | undefined;
   listFailed: boolean;
   region: DocumentRegion;
   copy: { shown: CopyShown; onPress: () => void };
@@ -152,6 +158,16 @@ export interface PlansControl {
   back: () => boolean;
 }
 
+/**
+ * A plan asked of the host, or the new-plan page as nothing, and the open
+ * plan it was asked over: the ask stands only while that plan is still the
+ * open one, so the host's next move, whatever it is, answers it.
+ */
+interface PlanAsk {
+  planId: string | undefined;
+  over: string | undefined;
+}
+
 /** What a delete the service did not carry answers, so the plan stays and says why. */
 const DELETE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
@@ -181,6 +197,7 @@ export function usePlansTab(input: {
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
   const [newPlanPresses, setNewPlanPresses] = useState(0);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
+  const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
@@ -237,15 +254,29 @@ export function usePlansTab(input: {
     if (reading) tell(ACT_KIND.PLANNING_REFRESH);
   }, [reading, tell]);
 
+  // The host answers a press a round trip later, so where the tab is bound
+  // is said at once, and a select that did not open the plan takes its ask
+  // back. A fixture's plans are opened nowhere, so nothing is asked of them.
+  const openPlanId = planning.activePlanId;
+  const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
   const select = useCallback(
     (planId: string) => {
-      act(ACT_KIND.PLANNING_SELECT, { planId }).catch(() => undefined);
+      const ask = { planId, over: openPlanId };
+      const withdraw = () => setAsked((held) => (held === ask ? undefined : held));
+      if (fixture === undefined) setAsked(ask);
+      act(ACT_KIND.PLANNING_SELECT, { planId }).then((opened) => {
+        if (!opened) withdraw();
+      }, withdraw);
     },
-    [act],
+    [act, fixture, openPlanId],
   );
+  // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
-    if (fixture === undefined) tell(ACT_KIND.PLANNING_CLOSE);
-  }, [fixture, tell]);
+    if (fixture !== undefined) return;
+    const ask = { planId: undefined, over: openPlanId };
+    setAsked(ask);
+    act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
+  }, [act, fixture, openPlanId]);
 
   // A fixture's plans are deleted nowhere, as they are read from nowhere.
   const deletePlan = async (planId: string): Promise<ActionResult> => {
@@ -289,7 +320,7 @@ export function usePlansTab(input: {
     voiceStatus: voice.view.voiceStatus,
   });
   const live =
-    planningCallHoldsPanel(voice.view) && voice.view.callPlanId === planning.activePlanId;
+    planningCallInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
@@ -391,6 +422,7 @@ export function usePlansTab(input: {
     signedIn,
     plans: planning.plans,
     activePlanId: planning.activePlanId,
+    boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
     copy: {

@@ -3,8 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { unparsedWire } from "@sidecar/wire";
-import { type Duration, Effect, Fiber } from "effect";
-import { TestClock } from "effect/testing";
+import { Effect } from "effect";
 import { test } from "vitest";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
@@ -18,6 +17,7 @@ import {
 } from "../server/hosted/board-look";
 import { writeDrawing, writeScene } from "../server/hosted/board-store";
 import { createPlan } from "../server/hosted/plan-store";
+import { driven, forkClockDriven } from "./support/clock-driven";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -45,24 +45,13 @@ const openPlan = Effect.gen(function* () {
   return { userId, planId: started.id, binding: { userId, planId: started.id } };
 });
 
-/** A forked effect driven to its end, the clock moved a step at a time so each wait it holds elapses. */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
-  Effect.gen(function* () {
-    for (let attempt = 0; attempt < 1_000; attempt += 1) {
-      if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
-      yield* TestClock.adjust(step);
-      yield* Effect.yieldNow;
-    }
-    return yield* Fiber.join(fiber);
-  });
-
 it.layer(testSqlClient)("look_at_board", (it) => {
   it.effect("a look answers the image the Mac's save of the latest drawing carried", () =>
     Effect.gen(function* () {
       const { userId, planId, binding } = yield* openPlan;
       yield* writeDrawing(userId, planId, BOX);
 
-      const look = yield* Effect.forkChild(runLookAtBoard(binding, unparsedWire({})));
+      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
       yield* writeScene(userId, planId, SCENE, 1, IMAGE);
       const answered = yield* driven(look, BOARD_LOOK_WAIT.POLL);
 
@@ -77,7 +66,7 @@ it.layer(testSqlClient)("look_at_board", (it) => {
       yield* writeScene(userId, planId, SCENE, 1, OLDER_IMAGE);
       yield* writeDrawing(userId, planId, BOX);
 
-      const look = yield* Effect.forkChild(runLookAtBoard(binding, unparsedWire({})));
+      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
       const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
 
       assert.deepEqual(answered, {
@@ -108,7 +97,7 @@ it.layer(testSqlClient)("look_at_board", (it) => {
       yield* writeDrawing(userId, planId, BOX);
       yield* writeScene(userId, planId, SCENE, 2);
 
-      const look = yield* Effect.forkChild(runLookAtBoard(binding, unparsedWire({})));
+      const look = yield* forkClockDriven(runLookAtBoard(binding, unparsedWire({})));
       const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
 
       assert.equal(answered.status, LOOK_AT_BOARD_STATUS.NOT_LOOKED);
@@ -135,7 +124,7 @@ it.layer(testSqlClient)("look_at_board", (it) => {
       yield* writeDrawing(userId, planId, BOX);
       yield* writeScene(userId, planId, SCENE, 1, IMAGE);
 
-      const look = yield* Effect.forkChild(
+      const look = yield* forkClockDriven(
         runLookAtBoard({ userId: stranger, planId }, unparsedWire({})),
       );
       const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
