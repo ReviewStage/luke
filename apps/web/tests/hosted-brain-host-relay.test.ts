@@ -34,7 +34,7 @@ import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { stampedEveEvent } from "./support/eve-events";
-import { spokenTurn } from "./support/eve-turns";
+import { parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,
@@ -279,146 +279,6 @@ it.effect(
     }),
 );
 
-/** The worker's receipt, as eve answers a subagent call the moment its task starts. */
-const WORKER_RECEIPT =
-  "Started task worker-ha1bbn. Its result will arrive in a <task_result> message.";
-
-const DELEGATION_CALL = "call-delegate";
-const WORKER_TASK = "worker-ha1bbn";
-
-/**
- * A turn in which the planning model hands work to the worker, as eve streams
- * it up to the park: the call eve announces as its own kind of action, the
- * receipt as the call's result, the words before the wait, and the park on
- * the task. Every event is stamped with the deliveries the turn's start named.
- */
-function parkedTurn(
-  turnId: string,
-  sequence: number,
-  deliveryIds?: readonly string[],
-): MessageStreamEvent[] {
-  const stampedWith = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-    stampedEveEvent(event, NOW, deliveryIds);
-  return [
-    stampedWith({ type: "turn.started", data: { turnId, sequence } }),
-    stampedWith({
-      type: "message.received",
-      data: { turnId, sequence, message: "compare the two queue libraries" },
-    }),
-    stampedWith({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
-    stampedWith({
-      type: "actions.requested",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        actions: [
-          {
-            kind: "subagent-call",
-            callId: DELEGATION_CALL,
-            name: EVE_DELEGATION_TOOL.WORKER,
-            subagentName: EVE_DELEGATION_TOOL.WORKER,
-            description: "Do one job in the background.",
-            nodeId: "subagents/worker",
-            input: { message: "Compare the two queue libraries." },
-          },
-        ],
-      },
-    }),
-    stampedWith({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
-    }),
-    stampedWith({
-      type: "task.started",
-      data: {
-        turnId,
-        callId: DELEGATION_CALL,
-        kind: "agent",
-        name: EVE_DELEGATION_TOOL.WORKER,
-        taskId: WORKER_TASK,
-      },
-    }),
-    stampedWith({
-      type: "action.result",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 0,
-        status: "completed",
-        result: {
-          kind: "tool-result",
-          callId: DELEGATION_CALL,
-          toolName: EVE_DELEGATION_TOOL.WORKER,
-          output: WORKER_RECEIPT,
-        },
-      },
-    }),
-    stampedWith({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
-    stampedWith({
-      type: "message.completed",
-      data: {
-        turnId,
-        sequence,
-        stepIndex: 1,
-        finishReason: "stop",
-        message: "The worker is on it.",
-      },
-    }),
-    stampedWith({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
-    }),
-    stampedWith({ type: "turn.waiting", data: { turnId, sequence, on: "tasks" } }),
-    stampedWith({
-      type: "agent.started",
-      data: {
-        turnId,
-        callId: DELEGATION_CALL,
-        taskId: WORKER_TASK,
-        name: EVE_DELEGATION_TOOL.WORKER,
-        sessionId: "wrun_child",
-        streamPath: "/eve/v1/session/wrun_child/stream",
-      },
-    }),
-  ];
-}
-
-/** The rest of a parked turn: the task's result, the words after it, and the end, stamped with the turn's deliveries. */
-function resumedTurn(
-  turnId: string,
-  sequence: number,
-  stepIndex: number,
-  deliveryIds?: readonly string[],
-): MessageStreamEvent[] {
-  const stampedWith = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
-    stampedEveEvent(event, NOW, deliveryIds);
-  return [
-    stampedWith({
-      type: "task.settled",
-      data: {
-        turnId,
-        callId: DELEGATION_CALL,
-        kind: "agent",
-        name: EVE_DELEGATION_TOOL.WORKER,
-        taskId: WORKER_TASK,
-        status: "completed",
-        output: "Three sources agree.",
-      },
-    }),
-    stampedWith({ type: "step.started", data: { turnId, sequence, stepIndex, modelId: "m" } }),
-    stampedWith({
-      type: "message.completed",
-      data: { turnId, sequence, stepIndex, finishReason: "stop", message: "Found it." },
-    }),
-    stampedWith({
-      type: "step.completed",
-      data: { turnId, sequence, stepIndex, finishReason: "stop" },
-    }),
-    stampedWith({ type: "turn.completed", data: { turnId, sequence } }),
-  ];
-}
-
 /**
  * A message that steers a parked turn, as eve streams it: the line, stamped
  * with its own delivery beside the start's, the step that answers it, and
@@ -449,7 +309,7 @@ function steering(
 
 /** The whole of a turn eve holds open for the worker, nothing steering it. */
 function delegatingTurn(turnId: string, sequence: number): MessageStreamEvent[] {
-  return [...parkedTurn(turnId, sequence), ...resumedTurn(turnId, sequence, 2)];
+  return [...parkedTurn(turnId, sequence, NOW), ...resumedTurn(turnId, sequence, 2, NOW)];
 }
 
 it.effect(
@@ -533,7 +393,7 @@ it.effect(
       refusals.length = 0;
       const turnId = hostTurnId(standing.sessionId, "turn_0");
       const first = await askOf("delivery-1", "Compare the two queue libraries.");
-      await playOn(parkedTurn("turn_0", 0, ["delivery-1"]));
+      await playOn(parkedTurn("turn_0", 0, NOW, ["delivery-1"]));
       assert.equal((await database.run(record.named(spoken.userId, first.id)))?.turnId, turnId);
 
       // The follow-up is asked while the turn is parked, and Stop is pressed on it before eve reads it.
@@ -547,7 +407,7 @@ it.effect(
       assert.equal((await database.run(record.named(spoken.userId, second.id)))?.turnId, turnId);
       assert.deepEqual(stops, ["turn_0"]);
 
-      await playOn(resumedTurn("turn_0", 0, 3, ["delivery-1", "delivery-2"]));
+      await playOn(resumedTurn("turn_0", 0, 3, NOW, ["delivery-1", "delivery-2"]));
       // The delivery already bound binds nothing again, so the Stop is carried once.
       assert.deepEqual(stops, ["turn_0"]);
       const { turnRows, messageRows } = await rows(spoken);
@@ -574,13 +434,13 @@ it.effect(
       const target = await conversation();
       const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
       refusals.length = 0;
-      await play(parkedTurn("turn_0", 0), standing);
+      await play(parkedTurn("turn_0", 0, NOW), standing);
       const joining = steering("turn_0", 0, [], "And how do invites expire?");
       await play(joining, standing);
       const [line] = joining;
       assert.ok(line);
       await play([line], standing);
-      await play(resumedTurn("turn_0", 0, 3), standing);
+      await play(resumedTurn("turn_0", 0, 3, NOW), standing);
 
       const { turnRows, messageRows } = await rows(target);
       assert.deepEqual(
