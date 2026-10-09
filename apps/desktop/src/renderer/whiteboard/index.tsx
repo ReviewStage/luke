@@ -336,7 +336,14 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
       }}
     />,
   );
-  return { show, unmount: () => root.unmount() };
+  return {
+    show,
+    scene: () =>
+      api === undefined || !loaded
+        ? undefined
+        : { elements: api.getSceneElements(), appliedDrawing: applied },
+    unmount: () => root.unmount(),
+  };
 }
 
 /** How far the drawn scene stands in from the image's edges, in pixels. */

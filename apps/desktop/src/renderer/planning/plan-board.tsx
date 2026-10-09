@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -7,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
+import { useAppState } from "../use-app-state";
 import {
   WHITEBOARD_ASSET,
   type WhiteboardHandle,
@@ -29,7 +31,9 @@ import { admittedElements } from "./board-scene";
  * (`look_at_board`). Note that "first" is read off the board main last
  * handed over: until a save holding the drawing lands, main's board still
  * names the drawing before it, so a save that interrupts the first one still
- * carries the image.
+ * carries the image. While the planning model's pending call is a look, the
+ * canvas saves the scene it holds with its image as well, so a look at a
+ * board Luke did not just draw on still finds one.
  *
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
@@ -119,6 +123,7 @@ function BoardCanvas({
   const latestBoard = useRef(board);
   latestBoard.current = board;
   const save = useAtomSet(boardSaveAtom);
+  const looking = useAppState()?.planning.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME;
 
   useEffect(() => {
     const element = host.current;
@@ -144,6 +149,11 @@ function BoardCanvas({
   useEffect(() => {
     if (board !== firstBoard.current) handle.current?.show(board);
   }, [board]);
+
+  useEffect(() => {
+    const scene = looking ? handle.current?.scene() : undefined;
+    if (scene !== undefined) save({ planId, ...scene, module, withImage: true });
+  }, [looking, module, planId, save]);
 
   return <div ref={host} className="plan-board-canvas" />;
 }

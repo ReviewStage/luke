@@ -7,7 +7,7 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
-import { DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -327,15 +327,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * Shows the call's activity, and asks for the board again where it says a
    * draw just settled: the planning model's pending call was a draw and is
    * not any more, or the planning model stopped working, which also covers a
-   * draw that settled between two words about it.
+   * draw that settled between two words about it. A look that just became
+   * the pending call asks too, because a draw made in the same step never
+   * shows as pending, and the look waits on the board holding it.
    */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
     if (view.activePlanId !== planId) return;
     const was = view.activity?.planner;
     const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
+    const looking =
+      activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
+      was?.action !== LOOK_AT_BOARD_TOOL_NAME;
     write({ activity });
-    if (drew || stopped) Queue.offerUnsafe(boardReads, planId);
+    if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
   }
 
   // Note that only the newest ask is kept, because code named while an older

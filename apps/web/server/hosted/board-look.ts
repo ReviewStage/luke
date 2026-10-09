@@ -1,3 +1,4 @@
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { isRecord, type UnparsedWireValue, unparsedWire } from "@sidecar/wire";
 import { Duration, Effect, Option, Schedule, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -16,8 +17,11 @@ import type { PlanDocumentBinding } from "./plan-notes.js";
  * places Luke's drawing beside the developer's. The Mac already puts each new
  * drawing on the board the moment the draw settles, while the board is open,
  * and its first save of the scene that holds it carries the scene drawn as a
- * PNG (`board-store.ts`). So a look asks the Mac nothing: it waits a short
- * while for that image to land, and says the board is not open when none did.
+ * PNG (`board-store.ts`); and while a look is the call pending, which the Mac
+ * reads off the planning call's activity, the open board saves itself with
+ * its image again. So a look asks the Mac nothing directly: it waits a short
+ * while for an image of the scene as it holds the latest drawing, and says
+ * the board is not open when none landed.
  *
  * The image reaches the model as an image (`lookModelOutput`), never as its
  * base64 spelled out as text, and stays out of the conversation's stored
@@ -52,10 +56,10 @@ export type LookAtBoardResult =
 
 /** The tool as a planning model is offered it: its name, its words, and its input schema. */
 export const LOOK_AT_BOARD_TOOL = {
-  name: "look_at_board",
+  name: LOOK_AT_BOARD_TOOL_NAME,
   description:
-    "See your latest drawing as the developer sees it on the plan's whiteboard, beside what " +
-    "they drew: an image of the whole board. Call it after draw_on_board, and check that every " +
+    "See the plan's whiteboard as the developer sees it: an image of the whole board, your " +
+    "latest drawing and what they drew. Call it after draw_on_board, and check that every " +
     "label is whole, nothing overlaps, and no arrow crosses a shape it does not join; then fix " +
     "what you see by drawing again. Answers the image, or `not-looked` and why.",
   inputSchema: Schema.Struct({}),
@@ -74,8 +78,9 @@ function takesNothing(input: UnparsedWireValue): boolean {
 }
 
 /**
- * One call of `look_at_board`: the image of the latest drawing once the Mac's
- * save of it lands, or `not-looked` when none did by the deadline.
+ * One call of `look_at_board`: the board's image once a save of the scene
+ * holding the latest drawing has carried one, or `not-looked` when none did
+ * by the deadline.
  */
 export function runLookAtBoard(
   binding: PlanDocumentBinding,
@@ -125,7 +130,7 @@ export function lookModelOutput(output: UnparsedWireValue): ToolModelOutput {
     value: [
       {
         type: "text",
-        text: "Your latest drawing on the plan's whiteboard, as the developer sees it:",
+        text: "The plan's whiteboard, as the developer sees it:",
       },
       { type: "file", data: { type: "data", data: output.image }, mediaType: LOOK_MEDIA_TYPE },
     ],

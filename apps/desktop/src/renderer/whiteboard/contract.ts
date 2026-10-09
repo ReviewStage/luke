@@ -30,9 +30,13 @@ export interface WhiteboardProps {
   readonly onScene: (elements: readonly object[], appliedDrawing: number) => void;
 }
 
-/** The board as mounted: show a later board, and take the board down. */
+/** The board as mounted: show a later board, read the scene it holds, and take the board down. */
 export interface WhiteboardHandle {
   readonly show: (board: Board) => void;
+  /** The scene as the canvas holds it now, and the number of Luke's drawing in it; nothing before it has loaded. */
+  readonly scene: () =>
+    | { readonly elements: readonly object[]; readonly appliedDrawing: number }
+    | undefined;
   readonly unmount: () => void;
 }
 

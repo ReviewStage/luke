@@ -9,7 +9,11 @@ import {
   type GatewayMethod,
 } from "@sidecar/gateway";
 import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
-import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import {
+  BOARD_ELEMENT_TYPE,
+  DRAW_ON_BOARD_TOOL_NAME,
+  LOOK_AT_BOARD_TOOL_NAME,
+} from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import type { Plan, PlanCommand, PlanCommandResult, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
@@ -893,6 +897,29 @@ it.effect(
           activityFrame(INVITES, { planner: { action: DRAW_ON_BOARD_TOOL_NAME }, notes: false }),
         );
         planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.board, drawn);
+      }),
+    ),
+);
+
+it.effect(
+  "a look becoming the pending call reads the board again, so a draw made in the same step is on it",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        service.boards[INVITES] = { elements: [box("note")], appliedDrawing: 0 };
+        const { call, last, planning } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+        const drawn = { elements: [box("note")], appliedDrawing: 0, drawing: drawing(1) };
+        service.boards[INVITES] = drawn;
+        planning.showActivity(
+          activityFrame(INVITES, { planner: { action: LOOK_AT_BOARD_TOOL_NAME }, notes: false }),
+        );
         for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
 
         assert.deepEqual(last()?.board, drawn);

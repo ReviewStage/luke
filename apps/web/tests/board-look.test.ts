@@ -115,6 +115,19 @@ it.layer(testSqlClient)("look_at_board", (it) => {
     }),
   );
 
+  it.effect(
+    "a look at a board Luke has not drawn on answers the image of the developer's scene",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId, binding } = yield* openPlan;
+        yield* writeScene(userId, planId, SCENE, 0, IMAGE);
+
+        const answered = yield* runLookAtBoard(binding, unparsedWire({}));
+
+        assert.deepEqual(answered, { status: LOOK_AT_BOARD_STATUS.LOOKED, image: IMAGE });
+      }),
+  );
+
   it.effect("another account's plan shows nothing", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

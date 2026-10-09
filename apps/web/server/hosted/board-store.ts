@@ -182,12 +182,7 @@ export function readBoardImage(
 ): PlanStoreEffect<Option.Option<string>> {
   return Effect.map(findBoardImage({ userId, planId }), (row) =>
     Option.flatMap(row, ({ image, appliedDrawing, drawingNumber }) =>
-      image !== null &&
-      drawingNumber !== null &&
-      drawingNumber > 0 &&
-      appliedDrawing === drawingNumber
-        ? Option.some(image)
-        : Option.none(),
+      image !== null && appliedDrawing === drawingNumber ? Option.some(image) : Option.none(),
     ),
   );
 }
