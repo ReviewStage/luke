@@ -250,11 +250,13 @@ export const CODE_UNREADABLE = {
 
 export type CodeUnreadable = (typeof CODE_UNREADABLE)[keyof typeof CODE_UNREADABLE];
 
-/** One run of a line in one colour, as the host's highlighter split it. */
+/** One run of a line in one colour per appearance, as the host's highlighter split it. */
 const codeTokenSchema = EffectSchema.Struct({
   text: EffectSchema.String,
-  /** A `#rrggbb` colour; absent for the theme's own foreground. */
+  /** A `#rrggbb` colour in the dark theme; absent for that theme's own foreground. */
   color: EffectSchema.optionalKey(EffectSchema.String),
+  /** A `#rrggbb` colour in the light theme; absent for that theme's own foreground. */
+  lightColor: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type CodeToken = typeof codeTokenSchema.Type;

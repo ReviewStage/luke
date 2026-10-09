@@ -6,13 +6,19 @@ import {
   exportToBlob,
   ROUNDNESS,
   restoreElements,
+  THEME,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import type {
   ExcalidrawElement,
   OrderedExcalidrawElement,
+  Theme,
 } from "@excalidraw/excalidraw/element/types";
-import type { AppState, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type {
+  AppState,
+  ExcalidrawImperativeAPI,
+  ExcalidrawInitialDataState,
+} from "@excalidraw/excalidraw/types";
 import {
   BOARD_ELEMENT_TYPE,
   BOARD_IMAGE_MAX_SIDE,
@@ -20,6 +26,7 @@ import {
   LUKE_MARK,
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
+import { useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
 import {
   sceneSignature,
@@ -49,12 +56,32 @@ import {
  *
  * The bundle also draws a scene the canvas reported as a PNG
  * (`renderScene`), for the planning model to look at what it drew: in the
- * canvas's own dark theme, so the model sees what the developer sees.
+ * canvas's own theme, so the model sees what the developer sees.
  *
  * What the board leaves out is everything that could carry a file or a page:
  * the image tool, a pasted file, an embedded page, and every save, export,
- * or load to disk. The canvas is dark, as the panel is.
+ * or load to disk. The canvas takes the window's appearance, and takes it
+ * again whenever it changes, as a new theme for the canvas already mounted,
+ * so the scene, the selection, the view, and the tool in hand all stay. A
+ * theme is how the canvas is drawn and never what it holds: Excalidraw's dark
+ * theme is a filter over the scene, so a drawing saved under either is the
+ * same drawing.
  */
+
+/** The appearance the window's stylesheet answers to, which the canvas follows too. */
+const DARK_APPEARANCE = "(prefers-color-scheme: dark)";
+
+/** Excalidraw's theme for the window's appearance as it stands. */
+function appearanceTheme(): Theme {
+  return window.matchMedia(DARK_APPEARANCE).matches ? THEME.DARK : THEME.LIGHT;
+}
+
+/** Calls `changed` whenever the window's appearance changes, until the returned call. */
+function onAppearance(changed: () => void): () => void {
+  const query = window.matchMedia(DARK_APPEARANCE);
+  query.addEventListener("change", changed);
+  return () => query.removeEventListener("change", changed);
+}
 
 /** Excalidraw's buttons the board does not offer, since a board lives on the service and holds no file. */
 const UI_OPTIONS = {
@@ -273,6 +300,29 @@ function newerDrawing(board: Board, applied: number) {
 /** The hand-drawn font Excalidraw measures and draws text in, as the document loads it. */
 const DRAWING_FONT = `${DRAWING_DEFAULT.FONT_SIZE}px Excalifont`;
 
+interface CanvasProps {
+  readonly onApi: (api: ExcalidrawImperativeAPI) => void;
+  readonly onChange: (elements: readonly OrderedExcalidrawElement[], appState: AppState) => void;
+  readonly initialData: ExcalidrawInitialDataState;
+}
+
+/** The canvas, in the window's appearance as it stands and as it changes. */
+function Canvas({ onApi, onChange, initialData }: CanvasProps): React.JSX.Element {
+  const theme = useSyncExternalStore(onAppearance, appearanceTheme);
+  return (
+    <Excalidraw
+      excalidrawAPI={onApi}
+      onChange={onChange}
+      onPaste={(data) => data.files === undefined || Object.keys(data.files).length === 0}
+      validateEmbeddable={false}
+      aiEnabled={false}
+      theme={theme}
+      UIOptions={UI_OPTIONS}
+      initialData={initialData}
+    />
+  );
+}
+
 /**
  * One mounted board. Note that it opens on the board's scene through
  * Excalidraw's `initialData`, because the canvas loads that data after it
@@ -320,16 +370,11 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
   }
 
   root.render(
-    <Excalidraw
-      excalidrawAPI={(ready) => {
+    <Canvas
+      onApi={(ready) => {
         api = ready;
       }}
       onChange={changed}
-      onPaste={(data) => data.files === undefined || Object.keys(data.files).length === 0}
-      validateEmbeddable={false}
-      aiEnabled={false}
-      theme="dark"
-      UIOptions={UI_OPTIONS}
       initialData={{
         elements: restoredScene(props.board),
         appState: { viewBackgroundColor: "transparent" },
@@ -360,9 +405,9 @@ function base64Of(bytes: Uint8Array): string {
 }
 
 /**
- * A scene the canvas reported, drawn whole as a PNG. Note that Excalidraw's
- * dark theme is a filter over a white background and everything on it, which
- * is exactly how the canvas itself is drawn.
+ * A scene the canvas reported, drawn whole as a PNG in the canvas's theme.
+ * Note that Excalidraw's dark theme is a filter over a white background and
+ * everything on it, which is exactly how the canvas itself is drawn.
  */
 async function renderScene(reported: readonly object[]): Promise<string | undefined> {
   // SAFETY: what the canvas reported is Excalidraw's own records, handed back unchanged.
@@ -375,7 +420,7 @@ async function renderScene(reported: readonly object[]): Promise<string | undefi
       appState: {
         exportBackground: true,
         viewBackgroundColor: "#ffffff",
-        exportWithDarkMode: true,
+        exportWithDarkMode: appearanceTheme() === THEME.DARK,
       },
       files: null,
       mimeType: "image/png",

@@ -82,7 +82,7 @@
 }
 
 .sign-in-provider[data-provider="google"]:hover:not(:disabled) {
-  background: #fff;
+  background: var(--ink);
 }
 
 /* Held while a sign-in is out: the button waited on stays as it was, saying

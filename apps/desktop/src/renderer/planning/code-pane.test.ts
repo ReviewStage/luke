@@ -11,7 +11,7 @@ const CODE: PlanCode = {
   firstLine: 10,
   lineCount: 40,
   lines: [
-    [{ text: "export", color: "#ff7b72" }, { text: " function accept() {" }],
+    [{ text: "export", color: "#ff7b72", lightColor: "#cf222e" }, { text: " function accept() {" }],
     [{ text: "  return true;" }],
     [{ text: "}" }],
   ],
@@ -30,7 +30,13 @@ test("the pane numbers the window's lines from where it starts in the file and l
     ...markup.matchAll(/data-pointed="true"><span class="code-line-number">(\d+)</gu),
   ].map((match) => match[1]);
   assert.deepEqual(lit, ["11", "12"]);
-  assert.match(markup, /<span style="color:#ff7b72">export<\/span>/u);
+});
+
+test("a run carries its colour in both appearances, so the stylesheet picks one as the appearance changes", () => {
+  const markup = paneMarkup(CODE);
+
+  assert.match(markup, /<span style="--run-dark:#ff7b72;--run-light:#cf222e">export<\/span>/u);
+  assert.match(markup, /<span> function accept\(\) \{<\/span>/u);
 });
 
 test("a file that drew nothing says why", () => {

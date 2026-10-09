@@ -132,15 +132,19 @@ const FIXTURE_PLAN_LIST: PlanningView = {
   },
 };
 
-const KEYWORD = "#ff7b72";
-const FUNCTION = "#d2a8ff";
-const STRING = "#a5d6ff";
-const COMMENT = "#8b949e";
-const TYPE = "#ffa657";
+/** The fixture's colours as the host's highlighter gives them, in GitHub's dark and light themes. */
+const KEYWORD = { color: "#ff7b72", lightColor: "#cf222e" } as const;
+const FUNCTION = { color: "#d2a8ff", lightColor: "#8250df" } as const;
+const STRING = { color: "#a5d6ff", lightColor: "#0a3069" } as const;
+const COMMENT = { color: "#8b949e", lightColor: "#6e7781" } as const;
+const TYPE = { color: "#ffa657", lightColor: "#953800" } as const;
 
-/** One run of a fixture line in the colour it is drawn in. */
-function run(text: string, color: string): CodeToken {
-  return { text, color };
+/** One run of a fixture line in the colours it is drawn in. */
+function run(
+  text: string,
+  colours: { readonly color: string; readonly lightColor: string },
+): CodeToken {
+  return { text, ...colours };
 }
 
 /** One fixture line from its runs, a bare word drawn in the theme's own foreground. */

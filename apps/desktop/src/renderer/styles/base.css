@@ -50,6 +50,51 @@
      own default accent. */
   --focus-ring: var(--message-sent);
   --hairline: rgba(255, 255, 255, 0.08);
+  /* The edge of what floats over the window, a menu or a dialog, and the one
+     an edge brightens to while it is taking a chord. */
+  --hairline-strong: rgba(255, 255, 255, 0.12);
+  --edge-strong: rgba(255, 255, 255, 0.35);
+  /* A document's running text, a step under the primary ink so a page of it
+     does not glare. */
+  --text-body: rgba(255, 255, 255, 0.86);
+  /* The primary ink at full strength, for the one control drawn in it. */
+  --ink: #fff;
+  /* Words and glyphs on a filled accent or destructive button. */
+  --on-accent: #fff;
+  --on-accent-muted: rgba(255, 255, 255, 0.65);
+  --scrollbar: rgba(255, 255, 255, 0.18);
+  /* A settings group's ground, a query's matched words, and a field. */
+  --section-fill: rgba(255, 255, 255, 0.022);
+  --match-wash: rgba(255, 255, 255, 0.16);
+  --input-fill: rgba(0, 0, 0, 0.4);
+  --input-fill-focus: rgba(0, 0, 0, 0.55);
+  --switch-track: var(--raised-strong);
+  --switch-on: color-mix(in srgb, var(--state-complete) 62%, transparent);
+  --switch-thumb: var(--text-primary);
+  --switch-thumb-shadow: none;
+  /* What dims the window behind a dialog, and the three depths of shadow
+     under what floats: a small control, a menu or a card, a dialog. */
+  --scrim: rgba(0, 0, 0, 0.55);
+  --shadow-soft: rgba(0, 0, 0, 0.4);
+  --shadow: rgba(0, 0, 0, 0.5);
+  --shadow-deep: rgba(0, 0, 0, 0.6);
+  /* The caption bar's ground, opaque because the document scrolls on beneath it. */
+  --surface-caption: #16161b;
+  /* A hint is a dark pill in either appearance, as the system's own and every
+     chat app's are, so it is the one surface these values hold for both. */
+  --tooltip-fill: #0b0b0c;
+  --tooltip-edge: rgba(255, 255, 255, 0.1);
+  --tooltip-text: rgba(255, 255, 255, 0.95);
+  --tooltip-chord: rgba(255, 255, 255, 0.5);
+  --avatar-fill: linear-gradient(135deg, #3a3f55, #262833);
+  /* The code on screen, in the ground and inks of the theme the host colours
+     it with (`plan-code.ts`), and its lines pointed at in that theme's blue. */
+  --code-ground: #0d1117;
+  --code-text: #e6edf3;
+  --code-line-number: rgba(230, 237, 243, 0.32);
+  --code-line-number-pointed: rgba(230, 237, 243, 0.8);
+  --code-pointed: rgba(56, 139, 253, 0.16);
+  --code-pointed-edge: #388bfd;
 
   /* A key drawn on screen is a physical thing quoted, so it gets what the
      hairline deliberately withholds: an edge bright enough to close the shape
@@ -90,6 +135,72 @@
   /* The darkest fill, opaque, for what nothing behind may show through. */
   --surface-fill: #000;
   --scroll-fade: 26px;
+}
+
+/* The light appearance. Every colour above is restated here and nowhere else,
+   so a sheet that spends the tokens flips with the system's appearance (which
+   Luke's own Theme setting drives through `nativeTheme.themeSource`) on the
+   frame it changes, without a re-render: neutral off-white grounds, black
+   inks at the alphas that hold WCAG AA on every ground and fill they meet,
+   and accents darkened until they read as text on white. The contrast each
+   pair reaches is in the pull request that set them. */
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+
+    --state-working: #0a72a8;
+    --voice-developer: #17784a;
+    --state-attention: #a65400;
+    --state-complete: #18794e;
+    --danger: #e0383e;
+    --danger-text: #b8232a;
+    --error-text: #b8232a;
+    --surface-overlay: #fff;
+
+    --text-primary: rgba(0, 0, 0, 0.88);
+    --text-secondary: rgba(0, 0, 0, 0.6);
+    --text-tertiary: rgba(0, 0, 0, 0.56);
+    --raised: rgba(0, 0, 0, 0.035);
+    --raised-strong: rgba(0, 0, 0, 0.06);
+    --selected: rgba(0, 0, 0, 0.07);
+    --selected-edge: rgba(0, 0, 0, 0.3);
+    --pressed: rgba(0, 0, 0, 0.11);
+    --hairline: rgba(0, 0, 0, 0.08);
+    --hairline-strong: rgba(0, 0, 0, 0.1);
+    --edge-strong: rgba(0, 0, 0, 0.4);
+    --text-body: rgba(0, 0, 0, 0.8);
+    --ink: #000;
+    --scrollbar: rgba(0, 0, 0, 0.2);
+    --section-fill: #fff;
+    --match-wash: rgba(0, 0, 0, 0.09);
+    --input-fill: #fff;
+    --input-fill-focus: #fff;
+    /* The system's own switch: a white thumb lifted off a grey track. */
+    --switch-track: rgba(0, 0, 0, 0.14);
+    --switch-on: var(--state-complete);
+    --switch-thumb: #fff;
+    --switch-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 0.5px rgba(0, 0, 0, 0.08);
+    --scrim: rgba(0, 0, 0, 0.25);
+    --shadow-soft: rgba(0, 0, 0, 0.08);
+    --shadow: rgba(0, 0, 0, 0.12);
+    --shadow-deep: rgba(0, 0, 0, 0.2);
+    --surface-caption: #fff;
+    --avatar-fill: linear-gradient(135deg, #e3e5ee, #cdd1dc);
+    --code-ground: #fff;
+    --code-text: #1f2328;
+    --code-line-number: rgba(31, 35, 40, 0.5);
+    --code-line-number-pointed: rgba(31, 35, 40, 0.85);
+    --code-pointed: rgba(9, 105, 218, 0.08);
+    --code-pointed-edge: #0969da;
+
+    /* A light key is a white cap with a grey edge and a shadow under it, as
+       a keyboard drawn on white is. */
+    --keycap-face: #fff;
+    --keycap-edge: rgba(0, 0, 0, 0.16);
+    --keycap-relief: 0 1px 0 rgba(0, 0, 0, 0.08);
+
+    --surface-fill: #fff;
+  }
 }
 
 /* How every scroll container in the panel meets its bottom edge: content
@@ -376,8 +487,8 @@ button:disabled {
   border: 1px solid var(--hairline);
   border-radius: 16px;
   /* Opaque, because the document scrolls on beneath it. */
-  background: #16161b;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  background: var(--surface-caption);
+  box-shadow: 0 16px 40px var(--shadow);
   font-size: 13.5px;
   line-height: 1.5;
   opacity: 0;
