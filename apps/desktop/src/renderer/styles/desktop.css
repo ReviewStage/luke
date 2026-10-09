@@ -139,7 +139,8 @@ body,
 }
 
 /* Beside the traffic lights, centred on them, the sidebar toggle in the same
-   place whichever way the sidebar is and New plan after it while folded; and
+   place whichever way the sidebar is and New plan after it while folded
+   anywhere but the new-plan page itself; and
    level with them at the window's other edge, as far in from it as these are
    from the lights, the side panel's toggle in the same place whichever way
    the panel is. */
