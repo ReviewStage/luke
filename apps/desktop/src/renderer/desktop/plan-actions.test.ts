@@ -5,8 +5,9 @@ import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -53,6 +54,8 @@ function unmountAll(): void {
   });
   document.body.innerHTML = "";
 }
+
+beforeEach(installScrollIntoView);
 
 afterEach(unmountAll);
 
@@ -192,10 +195,16 @@ test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last
   assert.doesNotMatch(toolbar?.textContent ?? "", /Copy plan/u);
   assert.match(toolbar?.textContent ?? "", /Start/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
-  // The plan's chip stands under its title, waiting on a pick.
-  assert.equal(
-    document.querySelector(".desktop-toolbar-heading .plan-compose-chip")?.textContent,
-    "Choose repository",
+  // The toolbar is one row: the title alone in its heading, and the plan's
+  // chip in the actions row ahead of Start, waiting on a pick.
+  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  assert.equal(document.querySelector(".desktop-toolbar-subtitle"), null);
+  const chip = document.querySelector(".desktop-toolbar-actions .plan-compose-chip");
+  assert.equal(chip?.textContent, "Choose repository");
+  assert.ok(
+    chip?.compareDocumentPosition(document.querySelector(".start-agent") ?? chip) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    "the chip stands left of Start",
   );
 
   unmountAll();
@@ -214,10 +223,9 @@ test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last
   const deleteItem = menuItems().at(-1);
   assert.equal(deleteItem?.dataset.danger, "true");
   assert.ok(deleteItem?.previousElementSibling instanceof HTMLHRElement);
-  assert.equal(
-    document.querySelector(".desktop-toolbar-heading .plan-compose-chip")?.textContent,
-    "acme/relay",
-  );
+  // A plan with a repository shows it in the sidebar's row, not in the toolbar.
+  assert.equal(document.querySelector(".desktop-toolbar .plan-compose-chip"), null);
+  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
 
   choose("Open on GitHub");
   assert.deepEqual(kept.asked.openedOnGitHub, [PLAN.id]);
@@ -738,7 +746,40 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
     );
   });
 
-  const chipMenu = container.querySelector('.desktop-toolbar-heading [role="menu"]');
-  assert.ok(chipMenu, "the chip's menu stands under the title");
-  assert.equal(chipMenu.getAttribute("aria-label"), "Repository");
+  const picker = container.querySelector(".desktop-toolbar-actions .plan-compose-menu");
+  assert.ok(picker, "the picker hangs from the toolbar");
+  assert.equal(picker.querySelector('[role="listbox"]')?.getAttribute("aria-label"), "Repository");
+  const search = picker.querySelector('input[aria-label="Search repositories"]');
+  assert.ok(document.activeElement === search, "the search field holds focus");
+
+  // Escape closes it and hands focus back to the ⋯ that asked, the plan having no chip of its own.
+  act(() => {
+    search?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(container.querySelector(".plan-compose-menu"), null);
+  assert.ok(document.activeElement === more, "focus is back on the plan actions button");
+});
+
+test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
+  const { plans } = openTab();
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
+
+  openMenu(more);
+  choose("Change repository…");
+  act(() => {
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
+  });
+  const search = container.querySelector('input[aria-label="Search repositories"]');
+  assert.ok(search, "the picker opened");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.ok(document.activeElement === more, "focus is back on the plan actions button");
 });

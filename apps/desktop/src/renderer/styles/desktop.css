@@ -429,13 +429,15 @@ body,
   flex-direction: column;
 }
 
+/* One row at the one bar height the side panel's bar shares, so the two
+   bars' bottom borders are one line across the window. */
 .desktop-toolbar {
   position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   gap: 16px;
-  min-height: var(--desktop-bar-height);
+  height: var(--desktop-bar-height);
   padding: 8px 20px 8px 32px;
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
@@ -514,14 +516,8 @@ body,
   outline: none;
 }
 
-/* The subtitle is the repository chip, whose menu hangs below it, so nothing here clips. */
-.desktop-toolbar-subtitle {
-  display: flex;
-  min-width: 0;
-  margin: 2px 0 0 -7px;
-}
-
 .desktop-toolbar-actions {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -915,14 +911,21 @@ body,
   min-width: 0;
 }
 
-/* The chip in the toolbar stands where a subtitle would, so it is drawn
-   smaller and flush with the title's left edge. */
+/* The chip in the toolbar stands in the actions row beside Start, so it is
+   drawn as a toolbar control is: the toolbar buttons' height and corner, no
+   fill until the pointer is on it. The wrapper draws nothing of its own, so
+   a plan whose chip is not drawn leaves no gap in the row; its menu hangs
+   from the actions row's right edge, with or without the chip. */
+.repository-chip[data-place="toolbar"] {
+  display: contents;
+}
+
 .repository-chip[data-place="toolbar"] .plan-compose-chip {
-  height: 22px;
-  padding: 0 9px 0 7px;
-  border-color: transparent;
+  height: 28px;
+  padding: 0 10px 0 9px;
+  border-radius: 8px;
   background: none;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .repository-chip[data-place="toolbar"] .plan-compose-chip:hover,
@@ -930,23 +933,76 @@ body,
   background: var(--raised-strong);
 }
 
-.plan-compose-chip .account-mark,
-.plan-compose-menu-row .account-mark {
+.repository-chip[data-place="toolbar"] .plan-compose-menu {
+  right: 0;
+  left: auto;
+}
+
+.plan-compose-chip .account-mark {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
 }
 
-/* The search over every repository: a field at the menu's head, the matches under it. */
+/* The searchable menu: the search field is its first row, edge to edge
+   under the menu's own corner, the list scrolls under it past a bounded
+   height, and the foot is pinned under the list behind a hairline. */
+.plan-compose-menu.searchable-menu {
+  padding: 0;
+  overflow: hidden;
+}
+
 .plan-compose-menu-search {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  margin-bottom: 4px;
-  padding: 0 8px;
+  height: 36px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--hairline);
   color: var(--text-tertiary);
+}
+
+/* The glyph is sized here, as every glyph is by what it sits in: an SVG
+   with no size of its own fills the row it is in. */
+.plan-compose-menu-search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.plan-compose-menu-list {
+  display: flex;
+  min-height: 0;
+  max-height: 288px;
+  flex-direction: column;
+  padding: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.plan-compose-menu-list:focus-visible {
+  outline: none;
+}
+
+.plan-compose-menu-foot {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  padding: 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+/* One highlight, wherever it came from: the arrows and the pointer both
+   move the same one, so the pointer's own hover draws nothing of its own. */
+.searchable-menu .plan-compose-menu-row:hover {
+  background: none;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-selected="true"],
+.searchable-menu .plan-compose-menu-row:focus-visible {
+  background: var(--raised-strong);
 }
 
 .plan-compose-menu-search input {
@@ -1022,11 +1078,22 @@ body,
   color: var(--text-tertiary);
 }
 
-.plan-compose-chip svg,
-.plan-compose-menu-row svg {
+.plan-compose-chip svg {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
+}
+
+.plan-compose-menu-row svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.plan-compose-menu-row .account-mark,
+.plan-compose-menu-row .provider-mark {
+  width: 15px;
+  height: 15px;
 }
 
 .plan-compose-start svg {
@@ -1034,8 +1101,7 @@ body,
   height: 17px;
 }
 
-/* The repositories open under the chip and enter as the settings search
-   does, on the tokens reduced motion zeroes. */
+/* The menu opens under its trigger and enters on the tokens reduced motion zeroes. */
 .plan-compose-menu {
   position: absolute;
   z-index: 2;
@@ -1049,7 +1115,14 @@ body,
   border-radius: 12px;
   background: var(--surface-overlay);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  animation: search-enter var(--duration-quick) var(--motion-exit) both;
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
 .plan-compose-menu-heading {
@@ -1082,13 +1155,6 @@ body,
   min-width: 0;
   flex: 1;
   font-weight: 560;
-}
-
-.plan-compose-menu hr {
-  width: 100%;
-  margin: 6px 0;
-  border: 0;
-  border-top: 1px solid var(--hairline);
 }
 
 .plan-compose-note {
@@ -1514,7 +1580,7 @@ body,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: var(--desktop-bar-height);
+  height: var(--desktop-bar-height);
   padding: 8px 20px 8px 10px;
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
@@ -1775,12 +1841,6 @@ body,
   right: 0;
   left: auto;
   width: 300px;
-}
-
-.start-agent-menu .provider-mark {
-  width: 15px;
-  height: 15px;
-  flex: 0 0 auto;
 }
 
 .plan-compose-menu-row[aria-current="true"] {

@@ -199,6 +199,16 @@ export function DownloadIcon(): React.JSX.Element {
   );
 }
 
+/** A padlock: a repository only its own people can see. */
+export function LockIcon(): React.JSX.Element {
+  return (
+    <Glyph className="lock-icon">
+      <rect x="4.8" y="10.4" width="14.4" height="10" rx="2" />
+      <path d="M8.2 10.4V7.4a3.8 3.8 0 0 1 7.6 0v3" />
+    </Glyph>
+  );
+}
+
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (
