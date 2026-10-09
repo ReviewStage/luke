@@ -26,9 +26,10 @@ import { modelLabel } from "#shared/model-label";
  * as a notification, unless the window is focused and that agent's tab is
  * the one shown; and as the agent's unseen dot, until its tab is shown or
  * the window comes forward on it. A Stop is the developer's own and
- * announces nothing. The ledger is this launch's, so an agent that ended
- * before Luke watched it, or while Luke was not running, is not announced,
- * and a reload of the window announces nothing twice.
+ * announces nothing. The ledger is this launch's and this account's, so an
+ * agent that ended before Luke watched it, or while Luke was not running,
+ * is not announced, a reload of the window announces nothing twice, and an
+ * account that signs out takes its agents with it.
  *
  * The notification says the plan's name, the model's name, and how the turn
  * ended, and nothing of the transcript.
@@ -82,6 +83,8 @@ export interface AgentNoticesDependencies {
   onUnseenChanged: (unseen: readonly string[]) => void;
   /** The panel window coming forward or going behind, for as long as the subscription stands. */
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
+  /** The account signing in, out, or away, for as long as the subscription stands: the ledger is no one else's. */
+  onAccountChanged: (listener: () => void) => () => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -173,11 +176,28 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
+      // An agent that ended stays ended: the reads overlap, and a list that
+      // read the agent running before it ended can land after the page that
+      // read it ended, which must not make its end a second turn's. A turn
+      // the developer starts after the end will need the wire to name the
+      // turn before the ledger can take it.
+      if (was !== undefined && !stillWriting(was.status) && stillWriting(next.status)) return;
       ledger.set(agentId, next);
       // Only a move from still writing to ended is a turn's end: an agent
       // first seen ended ended before Luke watched it.
       if (was === undefined || !stillWriting(was.status) || stillWriting(next.status)) return;
       ended(agentId, next);
+    }
+
+    /** Lets go of every agent `keep` refuses, their dots with them, as a plan deleted or an account left has no tab to clear one. */
+    function forget(keep: (agent: HeldAgent) => boolean): void {
+      let dotted = false;
+      for (const [agentId, agent] of ledger) {
+        if (keep(agent)) continue;
+        ledger.delete(agentId);
+        if (unseen.delete(agentId)) dotted = true;
+      }
+      if (dotted) publishUnseen();
     }
 
     function seen(agentId: string | null): void {
@@ -205,9 +225,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeModels: (next) => {
         models = next;
       },
-      observePlanGone: (planId) => {
-        for (const [agentId, agent] of ledger) if (agent.planId === planId) ledger.delete(agentId);
-      },
+      observePlanGone: (planId) => forget((agent) => agent.planId !== planId),
       shown: (agentId) => {
         shownAgent = agentId;
         seen(agentId);
@@ -252,6 +270,13 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
           if (focused) seen(shownAgent);
         }),
       ),
+      (unsubscribe) => Effect.sync(unsubscribe),
+    );
+    // The account moving leaves the ledger no one's: nothing of the account
+    // that left is announced to whoever signs in next, and an answer still on
+    // its way lands as a first sighting, which announces nothing.
+    yield* Effect.acquireRelease(
+      Effect.sync(() => dependencies.onAccountChanged(() => forget(() => false))),
       (unsubscribe) => Effect.sync(unsubscribe),
     );
     return notices;

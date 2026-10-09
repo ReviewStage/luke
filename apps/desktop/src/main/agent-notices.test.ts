@@ -48,6 +48,7 @@ function fixture() {
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
   let focus: ((focused: boolean) => void) | undefined;
+  let accountChanged: (() => void) | undefined;
   const notices = createAgentNotices({
     listAgents: (planId) =>
       Effect.sync(() => {
@@ -66,6 +67,12 @@ function fixture() {
         focus = undefined;
       };
     },
+    onAccountChanged: (listener) => {
+      accountChanged = listener;
+      return () => {
+        accountChanged = undefined;
+      };
+    },
     watchInterval: WATCH,
     report: () => undefined,
   });
@@ -80,6 +87,10 @@ function fixture() {
     focus: (focused: boolean) => {
       assert.ok(focus, "the notices subscribe to the window's focus");
       focus(focused);
+    },
+    changeAccount: () => {
+      assert.ok(accountChanged, "the notices subscribe to the account");
+      accountChanged();
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
@@ -184,11 +195,13 @@ it.effect(
       notices.shown(AGENT_ID);
       assert.deepEqual(f.unseen.at(-1), []);
 
-      // Ended again, with its tab shown but the window behind: seen when it
+      // Another ends with its tab shown but the window behind: seen when it
       // comes forward.
-      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
-      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
-      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+      const second = "a1b2c3d4-0000-4000-8000-000000000001";
+      notices.shown(second);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id: second })]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id: second })]);
+      assert.deepEqual(f.unseen.at(-1), [second]);
       f.focus(true);
       assert.deepEqual(f.unseen.at(-1), []);
       assert.equal(f.posted.length, 2);
@@ -260,4 +273,60 @@ it.effect("a pull request, once a reader hands one in, is the end the notice say
       undefined,
     );
   }),
+);
+
+it.effect(
+  "a list that read the agent running before it ended, landing after the end, makes no second end",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+
+      yield* TestClock.adjust(WATCH);
+      assert.equal(f.posted.length, 1);
+      assert.deepEqual(f.listed, []);
+    }),
+);
+
+it.effect("a plan the host no longer holds takes its agents' dots with it", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const notices = yield* f.notices;
+    f.focus(false);
+    notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+    notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+    assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+    notices.observePlanGone(PLAN_ID);
+    assert.deepEqual(f.unseen.at(-1), []);
+  }),
+);
+
+it.effect(
+  "the account leaving takes its agents with it, so nothing of theirs is announced to the next",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      const other = agent(CODING_AGENT_STATUS.RUNNING, {
+        id: "a1b2c3d4-0000-4000-8000-000000000002",
+      });
+      notices.observeAgents([other]);
+
+      f.changeAccount();
+      assert.deepEqual(f.unseen.at(-1), []);
+      // The answer that was on its way lands as a first sighting.
+      notices.observeAgents([{ ...other, status: CODING_AGENT_STATUS.COMPLETED }]);
+      yield* TestClock.adjust(WATCH);
+      assert.equal(f.posted.length, 1);
+      assert.deepEqual(f.listed, []);
+    }),
 );

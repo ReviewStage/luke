@@ -199,6 +199,7 @@ export function composeDesktop(
         },
         onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
         onPanelFocusChanged: windows.onPanelFocusChanged,
+        onAccountChanged: (listener) => operator.host.onAccountChanged(() => listener()),
         report: config.report,
       });
       const updates = yield* createUpdateServiceHost({
