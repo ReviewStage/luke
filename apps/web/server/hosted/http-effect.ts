@@ -30,6 +30,8 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.UNKNOWN_TOOL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -49,6 +51,10 @@ export const QuotaExhaustedRefusal = refusalSchema(HOSTED_API_ERROR.QUOTA_EXHAUS
 export const UnknownToolRefusal = refusalSchema(HOSTED_API_ERROR.UNKNOWN_TOOL);
 export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO_LARGE);
 export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
+export const GitHubSignInRequiredRefusal = refusalSchema(HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED);
+export const RepositoryNotReachableRefusal = refusalSchema(
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -77,6 +83,10 @@ export const HOSTED_REFUSAL = {
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
+  /** The account must sign in with GitHub again before the Luke GitHub App can read for it. */
+  GITHUB_SIGN_IN_REQUIRED: { error: HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED },
+  /** The App reaches no such repository for the account; nothing was written. */
+  REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
@@ -93,6 +103,13 @@ export function hostedStoreOrUnavailable<A, R>(
     Effect.tapError(logStoreFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );
+}
+
+/** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */
+export function hostedRefusing<R>(
+  endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> {
+  return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
 /** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */

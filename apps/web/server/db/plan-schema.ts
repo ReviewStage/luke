@@ -42,6 +42,13 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The template's fields the body was formatted from; null until the first save, an untouched template. */
     fields: jsonb("fields").$type<PlanFields>(),
+    /**
+     * The GitHub repository the plan is about, `owner/name` as GitHub spells
+     * it, confirmed reachable through the Luke GitHub App by the account
+     * before it was written; null until one is chosen, which is where every
+     * plan from before repositories stands and is no error.
+     */
+    repository: text("repository"),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),

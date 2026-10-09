@@ -31,8 +31,8 @@ import {
   listPlans,
   type NewPlan,
   readPlan,
-  renamePlan,
   savePlanDocument,
+  updatePlan,
 } from "../server/hosted/plan-store";
 import { noDatabase } from "./support/no-database";
 import {
@@ -545,8 +545,8 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         yield* saveNotes(bound(userId, relay.id), notesFor(INVITATIONS_DRAFT));
         const saved = yield* resumedDocument(userId, relay.id);
 
-        const renamed = yield* renamePlan(userId, relay.id, "Team invites");
-        const untouched = yield* renamePlan(userId, ledger.id, "Billing exports");
+        const renamed = yield* updatePlan(userId, relay.id, { name: "Team invites" });
+        const untouched = yield* updatePlan(userId, ledger.id, { name: "Billing exports" });
 
         const plan = Option.getOrThrow(renamed);
         assert.equal(plan.name, "Team invites");
@@ -574,7 +574,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
         yield* saveNotes(bound(userId, planId), notesFor(INVITATIONS_DRAFT));
 
-        yield* renamePlan(userId, planId, "Team invites");
+        yield* updatePlan(userId, planId, { name: "Team invites" });
         const saved = savedDocument(
           yield* saveNotes(bound(userId, planId), notesFor(SMALL_FEATURE)),
         );
@@ -599,7 +599,9 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const body = planBody(RELAY_PLAN, fields);
         yield* savePlanDocument(userId, planId, { body, assumptions: [] }, fields);
 
-        const renamed = yield* renamePlan(userId, planId, "y".repeat(PLAN_BOUNDS.MAX_NAME_CHARS));
+        const renamed = yield* updatePlan(userId, planId, {
+          name: "y".repeat(PLAN_BOUNDS.MAX_NAME_CHARS),
+        });
 
         assert.equal(Option.getOrThrow(renamed).document.body, body);
         assert.equal((yield* resumedDocument(userId, planId)).body, body);
@@ -613,8 +615,11 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
       const before = yield* readPlan(owner, planId);
 
-      assert.equal(Option.isNone(yield* renamePlan(intruder, planId, "Mine now")), true);
-      assert.equal(Option.isNone(yield* renamePlan(owner, randomUUID(), "Nothing")), true);
+      assert.equal(Option.isNone(yield* updatePlan(intruder, planId, { name: "Mine now" })), true);
+      assert.equal(
+        Option.isNone(yield* updatePlan(owner, randomUUID(), { name: "Nothing" })),
+        true,
+      );
       assert.deepEqual(yield* readPlan(owner, planId), before);
     }),
   );

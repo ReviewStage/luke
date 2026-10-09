@@ -22,6 +22,17 @@
           "type": "number",
           "minimum": 0
         },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 140
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "openedAt": {
           "type": "number",
           "minimum": 0
@@ -64,6 +75,7 @@
         "name",
         "createdAt",
         "updatedAt",
+        "repository",
         "document"
       ],
       "additionalProperties": false

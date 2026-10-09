@@ -46,6 +46,18 @@ export const HOSTED_API_ERROR = {
   METHOD_NOT_ALLOWED: "method-not-allowed",
   /** The row the path names is not one this account holds; another account's and none at all read alike. */
   NOT_FOUND: "not-found",
+  /**
+   * The account holds no GitHub App token the service can use: it never
+   * signed in with GitHub, signed in before the Luke GitHub App, or GitHub
+   * retired or revoked what it had. Signing in with GitHub again mends it.
+   */
+  GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
+  /**
+   * The Luke GitHub App reaches no such repository for this account: the App
+   * is not installed there, or the account has no access to it. Nothing was
+   * written.
+   */
+  REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

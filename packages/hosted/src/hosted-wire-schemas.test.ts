@@ -8,6 +8,7 @@ import {
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
 import * as boardWire from "./board-wire.js";
+import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as planWire from "./plan-wire.js";
 import * as serviceWire from "./service-wire.js";
@@ -34,6 +35,11 @@ const EFFECT_MODULE_SCHEMAS = {
     boardSaveRequestSchema: boardWire.boardSaveRequestSchema,
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
+  "github-repositories-wire": {
+    githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
+    githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
+    githubRepositoriesAnswerSchema: githubRepositoriesWire.githubRepositoriesAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof githubRepositoriesWire>,
   "live-contract": {
     sessionCreateFrameSchema: liveContract.sessionCreateFrameSchema,
     sessionAttachFrameSchema: liveContract.sessionAttachFrameSchema,
@@ -53,6 +59,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planRenameRequestSchema: planWire.planRenameRequestSchema,
+    planUpdateRequestSchema: planWire.planUpdateRequestSchema,
     planSummarySchema: planWire.planSummarySchema,
     planSchema: planWire.planSchema,
     planListAnswerSchema: planWire.planListAnswerSchema,

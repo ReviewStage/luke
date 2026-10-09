@@ -435,6 +435,13 @@
       "when": 1790675000000,
       "tag": "0062_coding_agent_default_model",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790700000000,
+      "tag": "0063_plan_repository",
+      "breakpoints": true
     }
   ]
 }

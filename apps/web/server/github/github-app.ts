@@ -7,7 +7,12 @@
  * access, and it expires in hours, with a refresh token that lasts months.
  * This is the one place either token is read back. The App itself speaks
  * with a JWT signed by its private key, which is how an installation GitHub
- * hands the Setup URL is confirmed as this App's own.
+ * hands the Setup URL is confirmed as this App's own. What the user token
+ * reads is the user's installations and the repositories each reaches,
+ * which is both the list the desktop offers and the check a plan's
+ * repository passes before it is kept: a repository is reachable only
+ * through an installation, and a public repository the token could read
+ * without one is deliberately not.
  *
  * Nothing here holds a client: the GitHub reads run on the ambient
  * `HttpClient` and the account row is read on the ambient `SqlClient`, so a
@@ -38,7 +43,7 @@ import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
-import { text } from "../core.js";
+import { type GitHubRepository, text } from "../core.js";
 import { account } from "../db/auth-schema.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "../hosted/store/database.js";
@@ -79,8 +84,15 @@ const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 
 const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
 
-/** GitHub's largest page; `/user/installations` is read page by page until one comes back short. */
-const INSTALLATIONS_PAGE = 100;
+/**
+ * GitHub pages a listing at most a hundred to a page. A listing is read page
+ * by page until one comes back short, or until the caller has what it came
+ * for, and never past this many pages: a GitHub still answering full pages
+ * at the bound is a listing that did not end, and is answered as unreadable
+ * rather than as the part of it that was read, so a repository past the
+ * bound is never refused as one the user cannot reach.
+ */
+const PAGING = { PER_PAGE: 100, MAX_PAGES: 50 } as const;
 
 export interface GitHubAppSettings {
   /** The App's numeric id, which is the JWT's issuer. */
@@ -128,6 +140,8 @@ export const GITHUB_FAILURE = {
   STATUS: "status",
   /** GitHub answered, but not in the shape the read declares. */
   UNREADABLE: "unreadable",
+  /** GitHub was still answering full pages of a listing at the bound, so the listing did not end. */
+  UNBOUNDED: "unbounded",
 } as const;
 type GitHubFailure = (typeof GITHUB_FAILURE)[keyof typeof GITHUB_FAILURE];
 
@@ -168,7 +182,15 @@ class GitHubSignInRequired extends Data.TaggedError("GitHubSignInRequired")<{
 /** What a read of GitHub can fail with, apart from the account row. */
 export type GitHubReadFailure = GitHubAppNotConfigured | GitHubUnavailable;
 /** What a read on the user's own token can fail with. */
-type GitHubUserReadFailure = GitHubReadFailure | GitHubSignInRequired | StoreFailure;
+export type GitHubUserReadFailure = GitHubReadFailure | GitHubSignInRequired | StoreFailure;
+
+/** What the App reaches for a user, read on the user's own token. */
+interface GitHubUserRepositories {
+  /** Whether the user reaches any installation of the App at all; false is "Install Luke on GitHub". */
+  readonly installed: boolean;
+  /** Every repository those installations reach for the user, most recently updated first. */
+  readonly repositories: readonly GitHubRepository[];
+}
 
 export interface GitHubAppService {
   /** Where a user installs the App, or changes which repositories it sees; GitHub returns them to the App's Setup URL. */
@@ -179,11 +201,34 @@ export interface GitHubAppService {
   readonly installation: (
     installationId: number,
   ) => Effect.Effect<Option.Option<GitHubInstallation>, GitHubReadFailure, HttpClient.HttpClient>;
-  /** Every installation the signed-in user can reach, read page by page on the user's own token. */
+  /** The installations the signed-in user can reach, read on the user's own token. */
   readonly userInstallations: (
     userId: string,
   ) => Effect.Effect<
     readonly GitHubInstallation[],
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /** The repositories the signed-in user reaches through the App, read on the user's own token: every installation they reach, each paged through. */
+  readonly userRepositories: (
+    userId: string,
+  ) => Effect.Effect<
+    GitHubUserRepositories,
+    GitHubUserReadFailure,
+    HttpClient.HttpClient | SqlClient.SqlClient
+  >;
+  /**
+   * One repository by `owner/name`, where the user reaches it through the
+   * App, spelled as GitHub spells it; none where they do not, which is also
+   * what an App installed nowhere answers. Only the installation on the
+   * owner can reach it, so only that one is read, and only as far as the
+   * repository.
+   */
+  readonly userRepository: (
+    userId: string,
+    fullName: string,
+  ) => Effect.Effect<
+    Option.Option<GitHubRepository>,
     GitHubUserReadFailure,
     HttpClient.HttpClient | SqlClient.SqlClient
   >;
@@ -226,6 +271,20 @@ const InstallationSchema = Schema.Struct({
 type InstallationRecord = typeof InstallationSchema.Type;
 
 const UserInstallationsSchema = Schema.Struct({ installations: Schema.Array(InstallationSchema) });
+
+const RepositorySchema = Schema.Struct({
+  name: Schema.String,
+  full_name: Schema.String,
+  owner: Schema.Struct({ login: Schema.String }),
+  private: Schema.Boolean,
+  default_branch: Schema.String,
+  updated_at: Schema.NullOr(Schema.DateFromString),
+});
+type RepositoryRecord = typeof RepositorySchema.Type;
+
+const InstallationRepositoriesSchema = Schema.Struct({
+  repositories: Schema.Array(RepositorySchema),
+});
 
 /** GitHub's refresh answer, which arrives with status 200 whether it is tokens or a refusal. */
 const RefreshedTokensSchema = Schema.Struct({
@@ -329,6 +388,28 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
   };
 }
 
+/** A repository GitHub never dated reads as older than any it did. */
+function repositoryOf(record: RepositoryRecord): GitHubRepository {
+  return {
+    owner: record.owner.login,
+    name: record.name,
+    fullName: record.full_name,
+    defaultBranch: record.default_branch,
+    private: record.private,
+    updatedAt: record.updated_at?.getTime() ?? 0,
+  };
+}
+
+/** Most recently updated first, and by name among those updated at once, so two reads of one GitHub answer in one order. */
+function byMostRecentlyUpdated(left: GitHubRepository, right: GitHubRepository): number {
+  return right.updatedAt - left.updatedAt || left.fullName.localeCompare(right.fullName);
+}
+
+/** GitHub folds case in logins and repository names, so a name is the same name however it is spelled. */
+function sameName(left: string, right: string): boolean {
+  return left.toLowerCase() === right.toLowerCase();
+}
+
 /** A transport failure as the kind alone: the request it carries holds the bearer, and is left behind. */
 function unavailable(error: HttpClientError.HttpClientError): GitHubUnavailable {
   const status = error.response?.status;
@@ -355,6 +436,102 @@ function send(
 ): Effect.Effect<HttpClientResponse.HttpClientResponse, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.flatMap(HttpClient.HttpClient, (client) =>
     Effect.mapError(client.execute(request), unavailable),
+  );
+}
+
+/**
+ * A read on the user's token sent, its answer still open for the caller to
+ * read and close. A 401 here is not an outage: the token has not reached its
+ * stored expiry, so GitHub refusing it means the user revoked the App's
+ * authorization, which a new sign-in mends.
+ */
+function sendAsUser(
+  request: HttpClientRequest.HttpClientRequest,
+): Effect.Effect<
+  HttpClientResponse.HttpClientResponse,
+  GitHubUnavailable | GitHubSignInRequired,
+  HttpClient.HttpClient
+> {
+  return Effect.flatMap(send(request), (response) =>
+    response.status === HTTP_STATUS.UNAUTHORIZED
+      ? Effect.fail(new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.TOKEN_REVOKED }))
+      : Effect.succeed(response),
+  );
+}
+
+/** Whether a listing read so far holds what the caller came for, so no further page is asked. */
+type Enough<A> = (items: readonly A[]) => boolean;
+
+const WHOLE_LISTING: Enough<unknown> = () => false;
+
+/**
+ * A paged listing on the user's token, read a hundred at a time until a
+ * page comes back short or the items read are enough, and never past
+ * `PAGING.MAX_PAGES`, where a listing still going is unbounded. Each page's
+ * answer is read and closed before the next is asked for.
+ */
+function readPages<A>(
+  path: string,
+  token: Redacted.Redacted,
+  readPage: (
+    response: HttpClientResponse.HttpClientResponse,
+  ) => Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired>,
+  enough: Enough<A> = WHOLE_LISTING,
+): Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired, HttpClient.HttpClient> {
+  return Effect.gen(function* () {
+    const items: A[] = [];
+    for (let page = 1; page <= PAGING.MAX_PAGES; page += 1) {
+      const request = githubRead(path, token).pipe(
+        HttpClientRequest.setUrlParams({ per_page: String(PAGING.PER_PAGE), page: String(page) }),
+      );
+      const read = yield* Effect.scoped(Effect.flatMap(sendAsUser(request), readPage));
+      items.push(...read);
+      if (read.length < PAGING.PER_PAGE || enough(items)) return items;
+    }
+    return yield* new GitHubUnavailable({ reason: GITHUB_FAILURE.UNBOUNDED, status: undefined });
+  });
+}
+
+/** The installations the token reaches, every page of them. */
+function installationsOnToken(
+  token: Redacted.Redacted,
+): Effect.Effect<
+  readonly GitHubInstallation[],
+  GitHubUnavailable | GitHubSignInRequired,
+  HttpClient.HttpClient
+> {
+  return readPages("/user/installations", token, (response) =>
+    Effect.map(readBody(response, UserInstallationsSchema), (answer) =>
+      answer.installations.map(installationOf),
+    ),
+  );
+}
+
+/**
+ * The repositories one installation reaches for the token's user, every page
+ * of them or as many as are enough. An installation GitHub no longer knows,
+ * uninstalled between the listing that named it and this read, reaches
+ * nothing rather than failing the whole.
+ */
+function repositoriesOfInstallation(
+  token: Redacted.Redacted,
+  installationId: number,
+  enough: Enough<GitHubRepository> = WHOLE_LISTING,
+): Effect.Effect<
+  readonly GitHubRepository[],
+  GitHubUnavailable | GitHubSignInRequired,
+  HttpClient.HttpClient
+> {
+  return readPages(
+    `/user/installations/${installationId}/repositories`,
+    token,
+    (response) =>
+      response.status === HTTP_STATUS.NOT_FOUND
+        ? Effect.succeed([])
+        : Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
+            answer.repositories.map(repositoryOf),
+          ),
+    enough,
   );
 }
 
@@ -457,30 +634,6 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
   return Redacted.make(fresh.access_token);
 });
 
-/**
- * One page of the user's installations. A 401 here is not an outage: the
- * token has not reached its stored expiry, so GitHub refusing it means the
- * user revoked the App's authorization, which a new sign-in mends.
- */
-const userInstallationsPage = /* @__PURE__ */ Effect.fn("web/userInstallationsPage")(function* (
-  token: Redacted.Redacted,
-  page: number,
-): Effect.fn.Return<
-  readonly InstallationRecord[],
-  GitHubUnavailable | GitHubSignInRequired,
-  HttpClient.HttpClient
-> {
-  const request = githubRead("/user/installations", token).pipe(
-    HttpClientRequest.setUrlParams({ per_page: String(INSTALLATIONS_PAGE), page: String(page) }),
-  );
-  const response = yield* send(request);
-  if (response.status === HTTP_STATUS.UNAUTHORIZED) {
-    return yield* new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.TOKEN_REVOKED });
-  }
-  const answer = yield* readBody(response, UserInstallationsSchema);
-  return answer.installations;
-}, Effect.scoped);
-
 function githubAppService(
   settings: GitHubAppSettings | undefined,
   missing: readonly string[],
@@ -530,15 +683,37 @@ function githubAppService(
         const record = yield* readBody(response, InstallationSchema);
         return Option.some(installationOf(record));
       }).pipe(Effect.scoped),
-    userInstallations: (userId) =>
+    userInstallations: (userId) => Effect.flatMap(userToken(userId), installationsOnToken),
+    userRepositories: (userId) =>
       Effect.gen(function* () {
         const token = yield* userToken(userId);
-        const installations: GitHubInstallation[] = [];
-        for (let page = 1; ; page += 1) {
-          const read = yield* userInstallationsPage(token, page);
-          installations.push(...read.map(installationOf));
-          if (read.length < INSTALLATIONS_PAGE) return installations;
+        const installations = yield* installationsOnToken(token);
+        const repositories: GitHubRepository[] = [];
+        for (const installation of installations) {
+          repositories.push(...(yield* repositoriesOfInstallation(token, installation.id)));
         }
+        return {
+          installed: installations.length > 0,
+          repositories: repositories.sort(byMostRecentlyUpdated),
+        };
+      }),
+    userRepository: (userId, fullName) =>
+      Effect.gen(function* () {
+        const [owner] = fullName.split("/");
+        const token = yield* userToken(userId);
+        const installations = yield* installationsOnToken(token);
+        const onOwner = installations.find(
+          (installation) =>
+            installation.accountLogin !== undefined &&
+            sameName(installation.accountLogin, owner ?? ""),
+        );
+        if (onOwner === undefined) return Option.none();
+        const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
+        // The owner's listing is read only as far as the repository, which may be any page of it.
+        const repositories = yield* repositoriesOfInstallation(token, onOwner.id, (read) =>
+          read.some(isNamed),
+        );
+        return Option.fromNullishOr(repositories.find(isNamed));
       }),
     userToken,
   };

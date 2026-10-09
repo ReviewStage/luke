@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -10,6 +11,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the service takes into the plan's fields and formats into the body as the
  * one fixed template (`plan-template.ts`), and it is replaced whole on every
  * save: there is no version, no revision argument, and no per-assumption id.
+ * A plan may name the GitHub repository it is about, `owner/name` as
+ * `github-repositories-wire.ts` spells it, which the service confirms the
+ * account reaches through the Luke GitHub App before it keeps it; null is a
+ * plan with no repository yet, and every plan from before repositories.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -51,12 +56,16 @@ export const planDocumentSchema = EffectSchema.Struct({
 
 export type PlanDocument = typeof planDocumentSchema.Type;
 
+/** A plan's repository as a request names it: a full name, or null for none. */
+const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
+
 /**
- * Starting a plan (POST): its name; the document starts as the untouched
- * template. The folder it reads stays on the developer's Mac.
+ * Starting a plan (POST): its name, and the repository it is about where one
+ * is chosen; the document starts as the untouched template.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  repository: EffectSchema.optionalKey(repositoryChoiceSchema),
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
@@ -68,6 +77,21 @@ export const planRenameRequestSchema = EffectSchema.Struct({
 
 export type PlanRenameRequest = typeof planRenameRequestSchema.Type;
 
+/** Whether an update names anything to change: one that names nothing is refused rather than answered unchanged. */
+function updateNamesAChange(update: { name?: string; repository?: string | null }): boolean {
+  return "name" in update || "repository" in update;
+}
+
+/**
+ * Changing a plan (PATCH): its name, its repository, or both. A rename is
+ * one of these; a repository is confirmed reachable by the account before it
+ * is kept, and null clears it.
+ */
+export const planUpdateRequestSchema = EffectSchema.Struct({
+  name: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  repository: EffectSchema.optionalKey(repositoryChoiceSchema),
+}).check(EffectSchema.makeFilter(updateNamesAChange));
+
 const planSummaryFields = {
   id: wireUuidSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
@@ -75,6 +99,8 @@ const planSummaryFields = {
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
   updatedAt: countedNumber,
+  /** The GitHub repository the plan is about, `owner/name`; null before one is chosen. */
+  repository: repositoryChoiceSchema,
   /**
    * The start again, answered only for a desktop through v0.7.1, which
    * refuses a summary without it; the list once ordered by the last open.
@@ -103,7 +129,7 @@ export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });
 
-/** A started, opened, or renamed plan (POST, GET, PATCH), with its document as saved. */
+/** A started, opened, or changed plan (POST, GET, PATCH), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */

@@ -38,6 +38,7 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
     name,
     createdAt: 1_000,
     updatedAt,
+    repository: null,
     document: {
       body,
       assumptions: [{ text: "An invite expires after 7 days." }],

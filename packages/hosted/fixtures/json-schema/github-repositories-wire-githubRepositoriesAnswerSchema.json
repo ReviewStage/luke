@@ -1,0 +1,54 @@
+{
+  "type": "object",
+  "properties": {
+    "installed": {
+      "type": "boolean"
+    },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string",
+            "maxLength": 140
+          },
+          "defaultBranch": {
+            "type": "string"
+          },
+          "private": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "owner",
+          "name",
+          "fullName",
+          "defaultBranch",
+          "private",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "installationUrl": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "installed",
+    "repositories",
+    "installationUrl"
+  ],
+  "additionalProperties": false
+}

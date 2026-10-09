@@ -12,6 +12,7 @@ const SUMMARY = {
   name: "Teammate invitations",
   createdAt: 1_800_000_000_000,
   updatedAt: 1_800_000_100_000,
+  repository: null,
   openedAt: 1_800_000_200_000,
 };
 
