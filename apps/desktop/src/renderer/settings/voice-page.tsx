@@ -27,10 +27,9 @@ import type { SettingsWrites } from "./writes";
  * Whichever stage is missing wears the same exclamation mark the front
  * page's Voice row wears, so the mark that brought someone here is the mark
  * they land on. The voice Luke speaks with leads the controls — it is what
- * Luke *is* to the ear — offered the way macOS offers one value from a small
- * fixed set: a pop-up button whose closed face is drawn here and whose open
- * menu is the system's, which also lets it escape a window sized to the
- * panel rather than being clipped by it.
+ * Luke *is* to the ear — offered as one value from a small fixed set: a
+ * chip naming it, and under it the app's own menu, which stands above the
+ * chip where a window sized to the panel leaves no room below.
  */
 export function VoiceSection({
   view,
