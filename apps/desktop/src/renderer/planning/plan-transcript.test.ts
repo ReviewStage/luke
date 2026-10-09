@@ -316,3 +316,42 @@ test("a turn's copy hands the clipboard its lines, a paragraph each, and shows t
     "Copied",
   );
 });
+
+test("the check does not outlive the reader on the bar: a copy landing after the pointer left shows nothing, and focus leaving clears it", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(PlanTranscript, {
+        region: TWO_CALLS,
+        onRetry: () => undefined,
+        copyText: copyNothing,
+      }),
+    ),
+  );
+  const copy = container.querySelector<HTMLButtonElement>('[data-speaker="user"] button');
+  assert.ok(copy);
+  const bar = copy.parentElement;
+  assert.ok(bar);
+  // The pointer leaves before the clipboard has answered, which it does a tick later.
+  act(() => {
+    copy.click();
+    bar.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
+  });
+  await act(async () => {
+    await Promise.resolve();
+  });
+  assert.equal(copy.getAttribute("aria-label"), "Copy");
+
+  // On the bar by keyboard, a copy shows the check; tabbing away clears it.
+  act(() => copy.focus());
+  await act(async () => {
+    copy.click();
+    await Promise.resolve();
+  });
+  assert.equal(copy.getAttribute("aria-label"), "Copied");
+  act(() => copy.blur());
+  assert.equal(copy.getAttribute("aria-label"), "Copy");
+});
