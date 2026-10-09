@@ -77,7 +77,10 @@ const USER_TOKEN_REFRESH_MARGIN_MS = 60_000;
 
 const GRANT_TYPE = { REFRESH_TOKEN: "refresh_token" } as const;
 
-const HTTP_STATUS = { NOT_FOUND: 404 } as const;
+const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
+
+/** GitHub's largest page; `/user/installations` is read page by page until one comes back short. */
+const INSTALLATIONS_PAGE = 100;
 
 export interface GitHubAppSettings {
   /** The App's numeric id, which is the JWT's issuer. */
@@ -149,6 +152,8 @@ export const SIGN_IN_REQUIRED = {
   REFRESH_REFUSED: "refresh-refused",
   /** The sealed token would not open under this deployment's secret. */
   UNREADABLE_TOKEN: "unreadable-token",
+  /** GitHub refused a token that had not reached its expiry: the user revoked the App's authorization. */
+  TOKEN_REVOKED: "token-revoked",
 } as const;
 type SignInRequiredReason = (typeof SIGN_IN_REQUIRED)[keyof typeof SIGN_IN_REQUIRED];
 
@@ -174,7 +179,7 @@ export interface GitHubAppService {
   readonly installation: (
     installationId: number,
   ) => Effect.Effect<Option.Option<GitHubInstallation>, GitHubReadFailure, HttpClient.HttpClient>;
-  /** The installations the signed-in user can reach, read on the user's own token. */
+  /** Every installation the signed-in user can reach, read page by page on the user's own token. */
   readonly userInstallations: (
     userId: string,
   ) => Effect.Effect<
@@ -452,6 +457,30 @@ const tokenOfRow = /* @__PURE__ */ Effect.fn("web/githubTokenOfRow")(function* (
   return Redacted.make(fresh.access_token);
 });
 
+/**
+ * One page of the user's installations. A 401 here is not an outage: the
+ * token has not reached its stored expiry, so GitHub refusing it means the
+ * user revoked the App's authorization, which a new sign-in mends.
+ */
+const userInstallationsPage = /* @__PURE__ */ Effect.fn("web/userInstallationsPage")(function* (
+  token: Redacted.Redacted,
+  page: number,
+): Effect.fn.Return<
+  readonly InstallationRecord[],
+  GitHubUnavailable | GitHubSignInRequired,
+  HttpClient.HttpClient
+> {
+  const request = githubRead("/user/installations", token).pipe(
+    HttpClientRequest.setUrlParams({ per_page: String(INSTALLATIONS_PAGE), page: String(page) }),
+  );
+  const response = yield* send(request);
+  if (response.status === HTTP_STATUS.UNAUTHORIZED) {
+    return yield* new GitHubSignInRequired({ reason: SIGN_IN_REQUIRED.TOKEN_REVOKED });
+  }
+  const answer = yield* readBody(response, UserInstallationsSchema);
+  return answer.installations;
+}, Effect.scoped);
+
 function githubAppService(
   settings: GitHubAppSettings | undefined,
   missing: readonly string[],
@@ -504,10 +533,13 @@ function githubAppService(
     userInstallations: (userId) =>
       Effect.gen(function* () {
         const token = yield* userToken(userId);
-        const response = yield* send(githubRead("/user/installations", token));
-        const answer = yield* readBody(response, UserInstallationsSchema);
-        return answer.installations.map(installationOf);
-      }).pipe(Effect.scoped),
+        const installations: GitHubInstallation[] = [];
+        for (let page = 1; ; page += 1) {
+          const read = yield* userInstallationsPage(token, page);
+          installations.push(...read.map(installationOf));
+          if (read.length < INSTALLATIONS_PAGE) return installations;
+        }
+      }),
     userToken,
   };
 }

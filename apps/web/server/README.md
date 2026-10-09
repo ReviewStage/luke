@@ -149,7 +149,10 @@ body, which is read as `GitHubSignInRequired`, the same failure a row with no
 GitHub account, a row from before the App (no refresh token), an expired
 refresh token, or a token that will not open under this deployment's secret
 answers: in every case the user mends it by signing in with GitHub again.
-`userInstallations(userId)` is `GET /user/installations` on that token. A
+`userInstallations(userId)` is `GET /user/installations` on that token, read
+a hundred at a time until a page comes back short; a 401 there is a token
+GitHub refused before its stored expiry, which is the user having revoked
+the App's authorization, and is answered as `GitHubSignInRequired` too. A
 failure carries a status or a kind and never the request, since the request
 carried the bearer.
 

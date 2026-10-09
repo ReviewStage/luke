@@ -481,7 +481,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);
       const fake = github((sent) =>
-        sent.url === "https://api.github.com/user/installations"
+        new URL(sent.url).pathname === "/user/installations"
           ? Response.json({
               total_count: 1,
               installations: [
@@ -509,6 +509,53 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
       const [read] = fake.sent;
       assert.equal(read?.headers.get("authorization"), `Bearer ${APP_ROW.accessToken}`);
     }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+  );
+
+  it.effect("a user with more installations than one page holds gets every page", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(NOW);
+      const pageOf = (page: number, size: number) =>
+        Array.from({ length: size }, (_, index) => ({
+          id: page * 1000 + index,
+          account: { login: `org-${page}-${index}`, type: "Organization" },
+          repository_selection: GITHUB_REPOSITORY_SELECTION.ALL,
+        }));
+      const fake = github((sent) => {
+        const page = Number(new URL(sent.url).searchParams.get("page"));
+        return Response.json({ installations: page === 1 ? pageOf(1, 100) : pageOf(2, 1) });
+      });
+      const userId = yield* openGithubUser(APP_ROW);
+      const app = yield* GitHubApp;
+
+      const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
+
+      assert.equal(installations.length, 101);
+      assert.equal(installations.at(-1)?.id, 2000);
+      assert.deepEqual(
+        fake.sent.map((sent) => new URL(sent.url).search),
+        ["?per_page=100&page=1", "?per_page=100&page=2"],
+      );
+    }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
+  );
+
+  it.effect(
+    "GitHub refusing a token that has not expired means the authorization was revoked: sign in again",
+    () =>
+      Effect.gen(function* () {
+        yield* TestClock.setTime(NOW);
+        const fake = github(() => Response.json({ message: "Bad credentials" }, { status: 401 }));
+        const userId = yield* openGithubUser(APP_ROW);
+        const app = yield* GitHubApp;
+
+        const failure = yield* app
+          .userInstallations(userId)
+          .pipe(Effect.provide(fake.layer), Effect.flip);
+
+        assert.deepEqual(
+          [failure._tag, "reason" in failure ? failure.reason : undefined],
+          ["GitHubSignInRequired", SIGN_IN_REQUIRED.TOKEN_REVOKED],
+        );
+      }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
   );
 
   it.effect(
