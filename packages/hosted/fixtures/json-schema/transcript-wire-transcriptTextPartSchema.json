@@ -1,11 +1,10 @@
 {
   "type": "object",
   "properties": {
-    "speaker": {
+    "type": {
       "type": "string",
       "enum": [
-        "user",
-        "assistant"
+        "text"
       ]
     },
     "text": {
@@ -13,7 +12,7 @@
     }
   },
   "required": [
-    "speaker",
+    "type",
     "text"
   ],
   "additionalProperties": false

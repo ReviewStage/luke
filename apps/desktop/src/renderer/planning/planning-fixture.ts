@@ -8,7 +8,11 @@ import {
   type PlanCode,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import {
+  type PlanTranscript,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptMessage,
+} from "@sidecar/hosted/transcript-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
@@ -226,24 +230,29 @@ const FIXTURE_CODE: PlanCode = {
 
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
-/** What was said on the fixture plan's one earlier call, as the record answers it. */
+/** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place. */
 const FIXTURE_TRANSCRIPT: PlanTranscript = {
   calls: [
     {
       id: "3c5e7a9b-1d2f-4a6c-8e0b-2d4f6a8c0e1a",
       startedAt: Date.parse("2026-10-07T16:20:00Z"),
-      lines: [
-        { speaker: USER, text: "I want members to be able to invite a teammate by email." },
-        { speaker: ASSISTANT, text: "Who can invite today — only admins?" },
-        {
-          speaker: USER,
-          text: "Right, an admin creates the account by hand. Any member should be able to.",
-        },
-        {
-          speaker: ASSISTANT,
-          text: "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
-        },
-      ],
+      messages: (
+        [
+          [USER, "I want members to be able to invite a teammate by email."],
+          [ASSISTANT, "Who can invite today — only admins?"],
+          [USER, "Right, an admin creates the account by hand. Any member should be able to."],
+          [
+            ASSISTANT,
+            "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
+          ],
+        ] as const
+      ).map(
+        ([role, text], index): TranscriptMessage => ({
+          id: String(index),
+          role,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+        }),
+      ),
     },
   ],
   earlierOmitted: false,

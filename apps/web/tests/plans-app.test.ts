@@ -4,7 +4,12 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
-import { planTranscriptAnswerSchema, TRANSCRIPT_BOUNDS } from "@sidecar/hosted/transcript-wire";
+import {
+  planTranscriptAnswerSchema,
+  TRANSCRIPT_BOUNDS,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptMessage,
+} from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -185,6 +190,11 @@ const callAbout = (
     }
     return row.id;
   });
+
+/** One line as the transcript answers it: its place on the call, the speaker as the role, the words as one text part. */
+function spoken(index: number, role: TranscriptMessage["role"], text: string): TranscriptMessage {
+  return { id: String(index), role, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+}
 
 /** Luke's drawing of one labelled box. */
 const DRAW_API = {
@@ -591,16 +601,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             {
               id: first,
               startedAt: 1_000_000,
-              lines: [
-                { speaker: TRANSCRIPT_SPEAKER.USER, text: "Invites should expire." },
-                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "Mm." },
-                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "After how many days?" },
+              messages: [
+                spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
+                spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm."),
+                spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"),
               ],
             },
             {
               id: second,
               startedAt: 2_000_000,
-              lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text: "Seven days." }],
+              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.")],
             },
           ],
           earlierOmitted: false,
@@ -632,7 +642,10 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         yield* ask(request(TRANSCRIPT, owner, { id: planId })),
       ).transcript;
       assert.equal(transcript.earlierOmitted, true);
-      const text = transcript.calls.flatMap((call) => call.lines.map((line) => line.text)).join("");
+      const text = transcript.calls
+        .flatMap((call) => call.messages.flatMap((message) => message.parts))
+        .map((part) => part.text)
+        .join("");
       assert.equal(text.startsWith("1 2 "), true);
       assert.equal(text.endsWith(`${TRANSCRIPT_BOUNDS.MAX_SEGMENTS} `), true);
     }),

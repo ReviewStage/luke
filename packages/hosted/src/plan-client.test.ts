@@ -176,9 +176,9 @@ it.effect("reads what was said on a plan's calls, and nothing from a service tha
         {
           id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
           startedAt: 1_800_000_300_000,
-          lines: [
-            { speaker: "user", text: "Invites should expire." },
-            { speaker: "assistant", text: "After how many days?" },
+          messages: [
+            { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
+            { id: "1", role: "assistant", parts: [{ type: "text", text: "After how many days?" }] },
           ],
         },
       ],

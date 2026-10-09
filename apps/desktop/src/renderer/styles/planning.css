@@ -489,31 +489,6 @@
   flex-direction: column;
 }
 
-.plan-transcript-state {
-  display: flex;
-  max-width: 280px;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  margin: auto;
-  padding: 24px;
-  color: var(--text-secondary);
-  font-size: 12.5px;
-  line-height: 1.5;
-  text-align: center;
-}
-
-.plan-transcript-state > p {
-  margin: 0;
-}
-
-.plan-transcript-scroll {
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 16px 20px;
-}
-
 .plan-transcript-note {
   margin: 12px 0 0;
   color: var(--text-tertiary);
@@ -521,8 +496,7 @@
   text-align: center;
 }
 
-.plan-transcript-calls,
-.plan-transcript-lines {
+.plan-transcript-calls {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -564,11 +538,13 @@
   content: "";
 }
 
-.plan-transcript-line {
+/* Each line is an AI Elements Message (../ai-elements/message.tsx), which
+   draws the words; the speaker above it is this tab's own. */
+.plan-transcript-messages {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-top: 12px;
+  gap: 12px;
+  padding-top: 4px;
 }
 
 .plan-transcript-speaker {
@@ -577,26 +553,6 @@
   font-weight: 600;
 }
 
-.plan-transcript-text {
-  margin: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-  line-height: 1.5;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-
-.plan-transcript-line[data-speaker="user"] {
-  align-items: flex-end;
-}
-
-.plan-transcript-line[data-speaker="user"] .plan-transcript-speaker {
+.plan-transcript-speaker[data-speaker="user"] {
   color: var(--voice-developer);
-}
-
-.plan-transcript-line[data-speaker="user"] .plan-transcript-text {
-  max-width: 85%;
-  padding: 7px 11px;
-  border-radius: 12px;
-  background: var(--raised-strong);
 }

@@ -16,6 +16,9 @@
 @import "./sign-in.css";
 @import "./voice.css";
 @import "./planning.css";
+/* The AI Elements components' utilities, over the tokens above; compiled by
+   scripts/tailwind.mjs as the stylesheet is built. */
+@import "./tailwind.css";
 /* Generated from design/generate-brand-assets.mjs; base.css holds the wiring it
    assumes. Last, so a hand-written rule can still win. */
 @import "./generated/face-motion.css";

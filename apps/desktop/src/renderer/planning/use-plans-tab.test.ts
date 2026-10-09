@@ -20,7 +20,7 @@ import { RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
@@ -296,7 +296,7 @@ test("the planning profile's fixture shows the planning model's command and the 
 /** The words of every call the transcript draws, in order, with whether each call stands now. */
 function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
   if (region.kind !== TRANSCRIPT_REGION.READY) return [];
-  return region.calls.map((call) => [call.live, call.lines.map((line) => line.text)] as const);
+  return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
 }
 
 test("the open plan's call grows the transcript as it is said, and hanging up keeps its words until the record holds them", () => {
@@ -332,7 +332,13 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
       {
         id: CALL,
         startedAt: 1_000,
-        lines: [{ speaker: "user" as const, text: "Invites should expire after a week." }],
+        messages: [
+          {
+            id: "0",
+            role: "user" as const,
+            parts: [{ type: "text" as const, text: "Invites should expire after a week." }],
+          },
+        ],
       },
     ],
     earlierOmitted: false,

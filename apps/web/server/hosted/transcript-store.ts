@@ -1,4 +1,8 @@
-import { type PlanTranscript, TRANSCRIPT_BOUNDS } from "@sidecar/hosted/transcript-wire";
+import {
+  type PlanTranscript,
+  TRANSCRIPT_BOUNDS,
+  TRANSCRIPT_PART_TYPE,
+} from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER, TranscriptLedger } from "@sidecar/live";
 import { and, desc, eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
@@ -16,7 +20,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * The voice writer keeps each call's words as timed fragments
  * (`store/voice-writer.ts`); this reads the newest of them for one plan and
  * groups each call's through the ledger the live captions keep, so a call
- * reads back in the lines its captions drew. Every statement names the
+ * reads back in the lines its captions drew, each line one `UIMessage`
+ * whose id is its place on the call. Every statement names the
  * account beside the plan, so a plan another account owns reads as no plan,
  * exactly as in `plan-store.ts`, and a call another account made about a
  * plan of the same id is never gathered. Nothing is written here.
@@ -88,8 +93,8 @@ interface CallRead {
 /**
  * Fragments read newest first, as the calls they were said on, oldest
  * first, each call's fragments appended to its ledger in the order they
- * were written. Note that the ledger's row ids are never read, because only
- * its lines are asked for.
+ * were written. Note that the ledger's row ids are never read, because a
+ * line's place on its call is what names it here.
  */
 function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
   const earlierOmitted = newestFirst.length > TRANSCRIPT_BOUNDS.MAX_SEGMENTS;
@@ -111,7 +116,11 @@ function transcriptOf(newestFirst: readonly SegmentRow[]): PlanTranscript {
     calls: calls.map(({ first, ledger }) => ({
       id: first.voiceSessionId,
       startedAt: first.startedAt.getTime(),
-      lines: ledger.captionLines().map((line) => ({ speaker: line.speaker, text: line.text })),
+      messages: ledger.captionLines().map((line, index) => ({
+        id: String(index),
+        role: line.speaker,
+        parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.text }],
+      })),
     })),
     earlierOmitted,
   };
