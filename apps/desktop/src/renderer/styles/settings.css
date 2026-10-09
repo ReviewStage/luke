@@ -419,20 +419,6 @@
   height: 10px;
 }
 
-/* One provider per line: mark, name, whether it is connected, and what you can
-   do about that. Providers are separated by a rule rather than by nested cards,
-   so the section stays one object however many keys it holds. */
-.credential {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.credential + .credential {
-  padding-top: 10px;
-  border-top: 1px solid var(--hairline);
-}
-
 /* The one green thing on the line, in the same palette a finished session
    uses, so connected reads the same way complete does. */
 .credential-check {

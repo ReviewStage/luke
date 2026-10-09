@@ -386,24 +386,6 @@ button:disabled {
 
 /* Notch wings ------------------------------------------------------------ */
 
-/* Bounded vertically by the shape rather than by the window, for the same reason
-   it is bounded horizontally by it below. The two agree beside a housing, where
-   the shape meets the top edge — but on a display with none the shape lifts off
-   that edge and closes into a pill shorter than the strip, and a wing the height
-   of the strip would let anything that leaves the face be drawn on the desktop.
-   The lift is symmetric, so this takes the same centre either way and only
-   tightens the clip: what a motion throws past the black is cut off at it. */
-.wing {
-  position: absolute;
-  z-index: 5;
-  top: var(--shape-top, 0px);
-  display: flex;
-  height: var(--strip-height);
-  align-items: center;
-  overflow: hidden;
-  pointer-events: none;
-}
-
 /* A meter's slot, rather than the meter itself: arriving is the wing's
    gesture and belongs to the slot, while the opacity and scale inside it are
    the meter's own answer to speech. One element cannot carry both. A meter is
@@ -413,13 +395,6 @@ button:disabled {
   display: flex;
   align-items: center;
 }
-
-/* Superset's bracket mark is two and a half times as wide as it is tall, and
-   it takes no scale at all: a credential row pulls its mark box left until a
-   mark fitted to the box's width sits flush with the identity's clip
-   boundary, so any overhang past the box is cut, not empty margin. Fitted to
-   the width, the glyph carries less ink than the square marks — that is the
-   published proportion, shown whole rather than enlarged and clipped. */
 
 /* Luke's face ------------------------------------------------------------ */
 
@@ -917,14 +892,6 @@ button:disabled {
   --bar-height: 23px;
 }
 
-.body {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 14px;
-}
-
 /* The dot the Settings tab wears while a newer release is waiting. News, not
    urgency, so it takes the working blue the Download button answers in rather
    than the attention orange. Absolutely positioned with auto insets: it holds
@@ -955,28 +922,6 @@ button:disabled {
   white-space: nowrap;
 }
 
-.empty-state {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  padding: 34px 0;
-  text-align: center;
-}
-
-.empty-state strong {
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 620;
-}
-
-.empty-state small {
-  color: var(--text-tertiary);
-  font-size: 10px;
-}
-
 /* Content arrives behind the surface, never in front of it, and it arrives on
    the same spring the surface is riding. Each row starts further up than the
    one above it, so the stack is compressed and the gaps spring open — the
@@ -997,8 +942,7 @@ button:disabled {
  * its timing from the state being entered, which is what keeps the two apart. */
 .settings-section,
 .settings-header,
-.quit-button,
-.empty-state {
+.quit-button {
   --row-delay: 0s;
 
   opacity: 0;
@@ -1012,8 +956,7 @@ button:disabled {
 
 .app-stage[data-presentation="panel"] .settings-section,
 .app-stage[data-presentation="panel"] .settings-header,
-.app-stage[data-presentation="panel"] .quit-button,
-.app-stage[data-presentation="panel"] .empty-state {
+.app-stage[data-presentation="panel"] .quit-button {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *
@@ -1086,13 +1029,6 @@ button:disabled {
 
 .app-stage[data-presentation="feedback"] .feedback-slot {
   pointer-events: auto;
-}
-
-/* The line under the composer yields to the buttons opposite it the same way
-   the key slot's does. */
-.feedback-foot .settings-note {
-  flex: 1;
-  min-width: 0;
 }
 
 /* Everything below the preview, moved as one thing. The layout puts it at its
@@ -1545,16 +1481,6 @@ button:disabled {
   height: var(--slot-mark-size);
   flex: 0 0 auto;
   place-items: center;
-}
-
-.key-slot-mark .settings-icon {
-  width: 16px;
-  height: 16px;
-}
-
-/* Under the whole line, where the panel's editor puts it too. */
-.key-slot .error-message {
-  padding-left: calc(var(--slot-mark-size) + var(--slot-gutter-gap));
 }
 
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.
