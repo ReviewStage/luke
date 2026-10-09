@@ -50,7 +50,12 @@ import {
 } from "./transcript-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { usePanelArrivals } from "./use-panel-arrivals";
-import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-side-panel";
+import {
+  isAgentTab,
+  type SidePanelControl,
+  type SidePanelTab,
+  useSidePanel,
+} from "./use-side-panel";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -66,7 +71,10 @@ import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-si
  * leaves it. With none open, the tab is the new-plan page. The open plan's
  * coding agents are the tab's too (`use-coding-agents.ts`): read when the
  * plan opens, started from the toolbar, and each drawn on a tab of the side
- * panel.
+ * panel. Main is told which agent's tab is shown, so the notification it
+ * posts when an agent ends is held back while the developer is looking at
+ * that agent, and the agents main says ended unseen wear a dot until their
+ * tab is shown (`main/agent-notices.ts`).
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -90,7 +98,7 @@ export interface PlansControl {
   live: boolean;
   /** The side panel beside the open plan's document: shown or not, its tab, and its width. */
   sidePanel: SidePanelControl;
-  /** The side panel's tabs holding something that arrived while the panel showed another, each until it is shown. */
+  /** The side panel's tabs holding something that arrived while the panel showed another, and the agents that ended unseen, each until it is shown. */
   unreadTabs: readonly SidePanelTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
@@ -101,6 +109,8 @@ export interface PlansControl {
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
   onSelect: (planId: string) => void;
+  /** Opens a plan on one agent's tab: what a notification's click asks. */
+  onShowAgent: (planId: string, agentId: string) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
@@ -156,6 +166,8 @@ export function usePlansTab(input: {
   microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
+  /** The agents main says ended while no one was looking, each until its tab is shown. */
+  unseenAgents: readonly string[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -186,6 +198,19 @@ export function usePlansTab(input: {
   });
   const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds);
   panelRef.current = sidePanel;
+  // Main hears which agent's tab is on screen, and none while the tab is
+  // away or the panel shows something else; a fixture's staged agents are
+  // no one's to announce.
+  const shownAgent =
+    shown && fixture === undefined && sidePanel.open && isAgentTab(sidePanel.tab)
+      ? sidePanel.tab.agent
+      : null;
+  const reportedAgent = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (reportedAgent.current === shownAgent) return;
+    reportedAgent.current = shownAgent;
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
+  }, [shownAgent, tell]);
   // A name given here stands until main's view carries it, so a rename that
   // landed never flickers back while main's copy of the view catches up.
   const [renames, setRenames] = useState<PendingRenames>(new Map());
@@ -272,12 +297,18 @@ export function usePlansTab(input: {
   const codeShown = live || fixture !== undefined;
   const code = codeShown ? planning.code : undefined;
   // A fixture's staged plan has nothing arriving on it.
-  const unreadTabs = usePanelArrivals({
+  const arrivedTabs = usePanelArrivals({
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
     code,
     panel: sidePanel,
   });
+  // An agent that ended unseen dots its tab the way an arrival does; main
+  // clears it once the tab is shown.
+  const unreadTabs: readonly SidePanelTab[] = [
+    ...arrivedTabs,
+    ...input.unseenAgents.map((agent): SidePanelTab => ({ agent })),
+  ];
 
   // A fixture's repositories are read from nowhere, as its plans are.
   const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
@@ -386,6 +417,10 @@ export function usePlansTab(input: {
     },
     agents,
     onSelect: select,
+    onShowAgent: (planId, agentId) => {
+      if (planId !== planning.activePlanId) select(planId);
+      sidePanel.onChoose({ agent: agentId });
+    },
     repositories: {
       recent: recentRepositories(planning.plans),
       read: readRepositories,

@@ -85,7 +85,9 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
  * coding agent of the plan. A tab's own word is all it needs to say, so it
  * hangs no pill; a fixed tab's chord is in the View menu and on the
  * Keyboard shortcuts page, and an agent's tab wears the dot for where the
- * agent stands.
+ * agent stands. A tab something arrived on while another was shown, and an
+ * agent's whose end no one was looking at, wear the note at their corner
+ * until shown.
  */
 function TabStrip({
   tab,
@@ -128,6 +130,9 @@ function TabStrip({
         >
           <AgentStatusDot status={agent.status} />
           {agentTabLabel(agent, agents.models)}
+          {unread.some((each) => sameTab(each, { agent: agent.id })) ? (
+            <span className="tab-note" aria-hidden="true" />
+          ) : null}
         </button>
       ))}
       {/* The first read of the plan's agents did not land: nothing is known

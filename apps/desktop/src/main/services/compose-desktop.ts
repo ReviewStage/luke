@@ -6,9 +6,11 @@ import {
   layersInOrder,
 } from "@sidecar/host/effect";
 import { Context, Effect, Layer, Stream } from "effect";
+import { type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
+import { electronNoticePoster } from "../window/notice-poster";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
@@ -39,6 +41,8 @@ export interface DesktopServices {
   readonly updates: UpdateServiceHost;
   readonly operator: OperatorClient;
   readonly windows: WindowService;
+  /** Where every coding-agent answer is noted, and the notification an agent's end is announced in. */
+  readonly notices: AgentNotices;
   /**
    * Every act's Effect, run here rather than under a context of its own: the
    * desktop's own `ManagedRuntime` is what `main.ts` disposes, and these are
@@ -175,6 +179,28 @@ export function composeDesktop(
         run,
         launchStanding: quit.launchStanding,
       });
+      // The notices read the plans' names from the document and write the
+      // unseen agents back into it; a click brings the window forward and
+      // asks the panel to open the plan on the agent's tab.
+      const notices = yield* createAgentNotices({
+        listAgents: (planId) => operator.host.codingAgentList({ planId }),
+        planName: (planId) => {
+          const { planning } = state.snapshot();
+          const open = planning.document.plan;
+          return (
+            planning.plans.find((plan) => plan.id === planId)?.name ??
+            (open?.id === planId ? open.name : undefined)
+          );
+        },
+        poster: electronNoticePoster(),
+        open: (place) => {
+          windows.panels.focusExpanded();
+          windows.showAgent(place);
+        },
+        onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
+        onPanelFocusChanged: windows.onPanelFocusChanged,
+        report: config.report,
+      });
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,
@@ -193,7 +219,7 @@ export function composeDesktop(
         reapplyTalkHotkey: () => windows.reapplyTalkHotkey(),
       });
 
-      return { config, state, telemetry, native, updates, operator, windows, run };
+      return { config, state, telemetry, native, updates, operator, windows, notices, run };
     }),
   );
 
