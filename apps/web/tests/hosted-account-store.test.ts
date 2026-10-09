@@ -13,6 +13,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "../server/hosted/account-store";
+import { CODING_AGENT_DEFAULT_CHOICE } from "../server/hosted/model-catalog";
 
 import { testSqlClient } from "./support/sql-client";
 
@@ -22,9 +23,14 @@ import { testSqlClient } from "./support/sql-client";
  * what is pinned here is the unit as well as the answer: the dependent rows
  * of exactly the named account go with it, another account's stand, and a
  * rewritten snapshot replaces what stood whole rather than merging into it.
+ * The coding agents' default is the snapshot's other part: written on its
+ * own or beside the preferences, each part replacing only itself, and the
+ * catalog's default where none was ever chosen.
  *
  * Synthetic accounts throughout.
  */
+
+const SONNET_AT_MAX = { model: "anthropic/claude-sonnet-5.5", effort: "max" } as const;
 
 const openUser = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
@@ -59,23 +65,63 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
   it.effect("a written snapshot reads back whole, at the instant it was written", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      const written = yield* writeAccountPreferences(userId, { voice: "cedar" });
+      const written = yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
 
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, { voice: "cedar" });
-      assert.equal(read?.updatedAt.getTime(), written.getTime());
+      assert.equal(read?.updatedAt.getTime(), written.updatedAt.getTime());
+      assert.deepEqual(read, written);
     }),
   );
 
   it.effect("a rewrite replaces the snapshot rather than merging into it", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;
-      yield* writeAccountPreferences(userId, { voice: "cedar" });
-      yield* writeAccountPreferences(userId, {});
+      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      yield* writeAccountPreferences(userId, { preferences: {} });
 
       const read = yield* readAccountPreferences(userId);
       assert.deepEqual(read?.preferences, {});
       assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
+    }),
+  );
+
+  it.effect("an account that never chose a coding-agent default reads the catalog's", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+
+      const read = yield* readAccountPreferences(userId);
+      assert.deepEqual(read?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
+    }),
+  );
+
+  it.effect("each part of the snapshot is written on its own and leaves the other standing", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      const chosen = yield* writeAccountPreferences(userId, { codingAgent: SONNET_AT_MAX });
+      assert.deepEqual(chosen.codingAgent, SONNET_AT_MAX);
+      assert.deepEqual(chosen.preferences, {});
+
+      yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
+      const afterPreferences = yield* readAccountPreferences(userId);
+      assert.deepEqual(afterPreferences?.codingAgent, SONNET_AT_MAX);
+      assert.deepEqual(afterPreferences?.preferences, { voice: "cedar" });
+
+      yield* writeAccountPreferences(userId, { codingAgent: CODING_AGENT_DEFAULT_CHOICE });
+      const afterChoice = yield* readAccountPreferences(userId);
+      assert.deepEqual(afterChoice?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
+      assert.deepEqual(afterChoice?.preferences, { voice: "cedar" });
+      assert.deepEqual(yield* countRows(userId), { preferences: 1, usage: 0 });
+    }),
+  );
+
+  it.effect("a half-written coding-agent default reads as the catalog's", () =>
+    Effect.gen(function* () {
+      const userId = yield* openUser;
+      yield* db.insert(accountPreference).values({ userId, codingAgentModel: SONNET_AT_MAX.model });
+      const read = yield* readAccountPreferences(userId);
+      assert.deepEqual(read?.codingAgent, CODING_AGENT_DEFAULT_CHOICE);
     }),
   );
 
@@ -93,7 +139,7 @@ it.layer(testSqlClient)("the account group's seams over effect/unstable/sql", (i
       const erased = yield* openUser;
       const kept = yield* openUser;
       for (const userId of [erased, kept]) {
-        yield* writeAccountPreferences(userId, { voice: "cedar" });
+        yield* writeAccountPreferences(userId, { preferences: { voice: "cedar" } });
         yield* db.insert(hostedUsage).values({ userId, day: "2099-01-01", calls: 3 });
       }
 

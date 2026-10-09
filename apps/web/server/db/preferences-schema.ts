@@ -14,6 +14,13 @@ export const accountPreference = pgTable("account_preference", {
     .references(() => user.id, { onDelete: "cascade" }),
   voice: text("voice"),
   defaultWorkspaceProvider: text("default_workspace_provider"),
+  /**
+   * The model and effort a coding agent starts on when Start is clicked, as
+   * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
+   * means the account has never chosen and starts on the catalog's default.
+   */
+  codingAgentModel: text("coding_agent_model"),
+  codingAgentEffort: text("coding_agent_effort"),
   createdAt: instant("created_at").notNull().defaultNow(),
   updatedAt: instant("updated_at").notNull().defaultNow(),
 });

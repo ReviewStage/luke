@@ -6,22 +6,37 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import { user } from "../db/auth-schema.js";
 import { accountPreference } from "../db/preferences-schema.js";
 import { db } from "../db/query.js";
+import { CODING_AGENT_DEFAULT_CHOICE, type ModelChoice } from "./model-catalog.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, and
- * the cross-device preferences snapshot behind `/api/account/preferences`.
- * Every function here is an effect over the ambient `SqlClient` and names no
- * database of its own; `account-seams.ts` beside it runs them at the web
- * edge and is the only file of the two that reaches the auth session.
+ * the cross-device snapshot behind `/api/account/preferences`, which is the
+ * settings preferences and the coding agents' default model and effort
+ * beside them. Every function here is an effect over the ambient `SqlClient`
+ * and names no database of its own; `account-seams.ts` beside it runs them
+ * at the web edge and is the only file of the two that reaches the auth
+ * session.
  */
 
 type AccountSeamFailure = SqlError | Schema.SchemaError;
 
-/** One account's stored snapshot: the preferences every device shares, and the instant they were written. */
+/** One account's stored snapshot: the preferences every device shares, the coding agents' default, and the instant they were last written. */
 export interface AccountPreferencesRow {
   preferences: AccountPreferences;
+  /** What a click on Start runs on; the catalog's default until the account chooses. */
+  codingAgent: ModelChoice;
   updatedAt: Date;
+}
+
+/**
+ * What a write carries: each part present replaces what stood, and a part
+ * left out stands as it was, so the desktop's settings sync and the Start
+ * menu's choice each write their own part without reading the other first.
+ */
+export interface AccountPreferencesWrite {
+  preferences?: AccountPreferences;
+  codingAgent?: ModelChoice;
 }
 
 /** What an account seam answers: an effect over the ambient client, composed into the request that made it. */
@@ -47,20 +62,46 @@ export function deleteAccount(
   return deleteUserRow(userId);
 }
 
+/** The columns every read and the write's `returning` project, so a row decodes one way whatever wrote it. */
+const PREFERENCE_COLUMNS = {
+  voice: accountPreference.voice,
+  codingAgentModel: accountPreference.codingAgentModel,
+  codingAgentEffort: accountPreference.codingAgentEffort,
+  updatedAt: accountPreference.updatedAt,
+};
+
 const PreferenceRowSchema = Schema.Struct({
   voice: Schema.NullOr(Schema.String),
+  codingAgentModel: Schema.NullOr(Schema.String),
+  codingAgentEffort: Schema.NullOr(Schema.String),
   updatedAt: InstantColumnSchema,
 });
+
+type PreferenceRow = typeof PreferenceRowSchema.Type;
+
+/**
+ * The row as the group answers it. A coding-agent default stands only with
+ * both halves written; one half alone is no choice the catalog could have
+ * accepted, so it reads as the default beside a whole one.
+ */
+function snapshotOf(row: PreferenceRow): AccountPreferencesRow {
+  const codingAgent: ModelChoice =
+    row.codingAgentModel !== null && row.codingAgentEffort !== null
+      ? { model: row.codingAgentModel, effort: row.codingAgentEffort }
+      : CODING_AGENT_DEFAULT_CHOICE;
+  return {
+    preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
+    codingAgent,
+    updatedAt: row.updatedAt,
+  };
+}
 
 const findPreference = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: PreferenceRowSchema,
   execute: (userId) =>
     db
-      .select({
-        voice: accountPreference.voice,
-        updatedAt: accountPreference.updatedAt,
-      })
+      .select(PREFERENCE_COLUMNS)
       .from(accountPreference)
       .where(eq(accountPreference.userId, userId))
       .limit(1),
@@ -72,51 +113,73 @@ export function readAccountPreferences(
 ): Effect.Effect<AccountPreferencesRow | undefined, AccountSeamFailure, SqlClient.SqlClient> {
   return Effect.map(
     findPreference(userId),
-    Option.match({
-      onNone: () => undefined,
-      onSome: (row) => ({
-        preferences: accountPreferencesFromStored(row.voice ? { voice: row.voice } : {}) ?? {},
-        updatedAt: row.updatedAt,
-      }),
-    }),
+    Option.match({ onNone: () => undefined, onSome: snapshotOf }),
   );
 }
 
 const PreferenceWriteSchema = Schema.Struct({
   userId: Schema.String,
-  voice: Schema.NullOr(Schema.String),
+  voice: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  codingAgent: Schema.optionalKey(Schema.Struct({ model: Schema.String, effort: Schema.String })),
   updatedAt: Schema.Date,
 });
+
+type PreferenceWrite = typeof PreferenceWriteSchema.Type;
+
+/** The columns a write replaces: each part the write carries, and the instant always. */
+function writtenColumns(write: PreferenceWrite) {
+  return {
+    updatedAt: write.updatedAt,
+    ...(write.voice === undefined ? undefined : { voice: write.voice }),
+    ...(write.codingAgent === undefined
+      ? undefined
+      : {
+          codingAgentModel: write.codingAgent.model,
+          codingAgentEffort: write.codingAgent.effort,
+        }),
+  };
+}
 
 /**
  * Note that the conflicting update sets the values the insert carried rather
  * than reading them back out of `excluded`, because a single-row insert's
- * `excluded` row is exactly those values.
+ * `excluded` row is exactly those values; a part the write leaves out is
+ * not among them, so the column it stands in keeps what it held.
  */
-const upsertPreference = SqlSchema.void({
+const upsertPreference = SqlSchema.findOne({
   Request: PreferenceWriteSchema,
-  execute: (write) =>
-    db
+  Result: PreferenceRowSchema,
+  execute: (write) => {
+    const columns = writtenColumns(write);
+    return db
       .insert(accountPreference)
-      .values({
-        userId: write.userId,
-        voice: write.voice,
-        updatedAt: write.updatedAt,
-      })
-      .onConflictDoUpdate({
-        target: accountPreference.userId,
-        set: { voice: write.voice, updatedAt: write.updatedAt },
-      }),
+      .values({ userId: write.userId, ...columns })
+      .onConflictDoUpdate({ target: accountPreference.userId, set: columns })
+      .returning(PREFERENCE_COLUMNS);
+  },
 });
 
-/** Replaces the account's stored snapshot whole, and answers the instant it was written. */
+/**
+ * Writes each part the write carries over what stood — the preferences
+ * whole, the coding-agent default whole — and answers the snapshot as it
+ * now stands, at the instant it was written.
+ */
 export function writeAccountPreferences(
   userId: string,
-  preferences: AccountPreferences,
-): Effect.Effect<Date, AccountSeamFailure, SqlClient.SqlClient> {
+  write: AccountPreferencesWrite,
+): Effect.Effect<AccountPreferencesRow, AccountSeamFailure, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const updatedAt = yield* DateTime.nowAsDate;
-    yield* upsertPreference({ userId, voice: preferences.voice ?? null, updatedAt });
-    return updatedAt;
+    const stored: PreferenceWrite = {
+      userId,
+      updatedAt,
+      ...(write.preferences === undefined ? undefined : { voice: write.preferences.voice ?? null }),
+      ...(write.codingAgent === undefined ? undefined : { codingAgent: write.codingAgent }),
+    };
+    const row = yield* upsertPreference(stored).pipe(
+      // An upsert that returned no row is the database breaking its own contract, not an outcome.
+      Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
+    );
+    return snapshotOf(row);
   });
 }

@@ -66,6 +66,7 @@ const DECLARED_TABLES = [
   "account_workspace_preference",
   "admin_favorite",
   "asks",
+  "coding_agent",
   "conversations",
   "devices",
   "events",

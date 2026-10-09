@@ -9,9 +9,21 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
 import { test } from "vitest";
 import { type AccountAppSeams, accountApp } from "../server/account-app.js";
-import type { AccountPreferencesRow } from "../server/hosted/account-store.js";
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+} from "../server/hosted/account-store.js";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
+import {
+  type CatalogModel,
+  CODING_AGENT_DEFAULT_CHOICE,
+  MODEL_PROVIDER,
+  ModelCatalog,
+  ModelCatalogUnavailable,
+  type ModelChoice,
+  modelCatalogOf,
+} from "../server/hosted/model-catalog.js";
 import { noDatabase } from "./support/no-database.js";
 import {
   type RecordedResponse,
@@ -26,7 +38,8 @@ import {
  * rather than read — against a fresh backing store, and asserts both the bytes the
  * answer carries and what the backing store ends up holding; the goldens
  * beside the bytes are the answer itself, so a later change to the group
- * cannot move them silently.
+ * cannot move them silently. The model catalog is a fixed list handed in,
+ * so a coding-agent choice is checked against models no network answered.
  */
 
 const GOLDEN_ROOT = path.join(import.meta.dirname, "../fixtures/account-route");
@@ -46,6 +59,24 @@ const ENVIRONMENT: HostedEnvironmentValues = {
   cronSecret: undefined,
 };
 
+/** The catalog every exchange checks a choice against: two models, each with its own efforts. */
+const CATALOG: readonly CatalogModel[] = [
+  {
+    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "xhigh", "max"],
+  },
+  {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "medium", "high"],
+  },
+];
+
+const SOL_AT_HIGH = { model: "openai/gpt-6.1-sol", effort: "high" } as const satisfies ModelChoice;
+
 interface Backing {
   deleted: string[];
   forgotten: string[];
@@ -53,6 +84,8 @@ interface Backing {
   forgetAnalyticsFails: boolean;
   /** The store refuses every statement, the way an unreachable database does. */
   storeUnavailable: boolean;
+  /** The catalog cannot be read, the way an outage at AI Gateway reads. */
+  catalogUnavailable: boolean;
 }
 
 function backing(overrides: Partial<Backing> = {}): Backing {
@@ -62,8 +95,17 @@ function backing(overrides: Partial<Backing> = {}): Backing {
     stored: new Map(),
     forgetAnalyticsFails: false,
     storeUnavailable: false,
+    catalogUnavailable: false,
     ...overrides,
   };
+}
+
+/** A stored row: the preferences, and the coding-agent default where one was chosen. */
+function row(
+  preferences: AccountPreferences,
+  codingAgent: ModelChoice = CODING_AGENT_DEFAULT_CHOICE,
+): AccountPreferencesRow {
+  return { preferences, codingAgent, updatedAt: NOW };
 }
 
 const STORE_UNAVAILABLE = new SqlError({
@@ -106,11 +148,27 @@ function readPreferences(state: Backing) {
     state.stored.get(userId);
 }
 
+/** Each part the write carries replaces its own; the row stands otherwise as it was. */
 function writePreferences(state: Backing) {
-  return async (userId: string, preferences: AccountPreferences): Promise<Date> => {
-    state.stored.set(userId, { preferences, updatedAt: NOW });
-    return NOW;
+  return async (userId: string, write: AccountPreferencesWrite): Promise<AccountPreferencesRow> => {
+    const standing = state.stored.get(userId) ?? row({});
+    const written: AccountPreferencesRow = {
+      preferences: write.preferences ?? standing.preferences,
+      codingAgent: write.codingAgent ?? standing.codingAgent,
+      updatedAt: NOW,
+    };
+    state.stored.set(userId, written);
+    return written;
   };
+}
+
+/** The catalog as the group reads it: the fixed list, or the outage. */
+function catalogLayer(state: Backing) {
+  return state.catalogUnavailable
+    ? Layer.succeed(ModelCatalog, {
+        read: Effect.fail(new ModelCatalogUnavailable({ cause: new Error("gateway unreachable") })),
+      })
+    : modelCatalogOf(CATALOG);
 }
 
 function groupSeams(state: Backing): AccountAppSeams {
@@ -118,8 +176,8 @@ function groupSeams(state: Backing): AccountAppSeams {
     resolveUserId,
     deleteUser: (userId) => overStore(state, () => deleteUser(state)(userId)),
     readPreferences: (userId) => overStore(state, () => readPreferences(state)(userId)),
-    writePreferences: (userId, preferences) =>
-      overStore(state, () => writePreferences(state)(userId, preferences)),
+    writePreferences: (userId, write) =>
+      overStore(state, () => writePreferences(state)(userId, write)),
   };
 }
 
@@ -129,6 +187,7 @@ function groupAnswer(state: Backing, request: Request): Promise<Response> {
     accountApp(groupSeams(state)).pipe(
       HttpRouter.provideRequest(Layer.succeed(HostedEnvironment, ENVIRONMENT)),
       HttpRouter.provideRequest(fakeHttpClientLayer(forgetAnalyticsResponder(state))),
+      HttpRouter.provideRequest(catalogLayer(state)),
       HttpRouter.provideRequest(noDatabase),
     ),
     { disableLogger: true },
@@ -219,15 +278,16 @@ const EXCHANGES: readonly Exchange[] = [
   },
   {
     name: "preferences-read",
-    state: () =>
-      backing({
-        stored: new Map([[USER_ID, { preferences: STORED_PREFERENCES, updatedAt: NOW }]]),
-      }),
+    state: () => backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES)]]) }),
+    request: preferencesReadRequest,
+    finalState: () => backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES)]]) }),
+  },
+  {
+    name: "preferences-read-chosen-model",
+    state: () => backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES, SOL_AT_HIGH)]]) }),
     request: preferencesReadRequest,
     finalState: () =>
-      backing({
-        stored: new Map([[USER_ID, { preferences: STORED_PREFERENCES, updatedAt: NOW }]]),
-      }),
+      backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES, SOL_AT_HIGH)]]) }),
   },
   {
     name: "preferences-read-empty",
@@ -251,15 +311,69 @@ const EXCHANGES: readonly Exchange[] = [
     name: "preferences-write",
     state: () => backing(),
     request: () => preferencesWriteRequest(WRITE_BODY),
+    finalState: () => backing({ stored: new Map([[USER_ID, row(WRITTEN_PREFERENCES)]]) }),
+  },
+  // The preferences alone are written: the chosen default stands as it was.
+  {
+    name: "preferences-write-keeps-chosen-model",
+    state: () => backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES, SOL_AT_HIGH)]]) }),
+    request: () => preferencesWriteRequest(WRITE_BODY),
     finalState: () =>
-      backing({
-        stored: new Map([[USER_ID, { preferences: WRITTEN_PREFERENCES, updatedAt: NOW }]]),
+      backing({ stored: new Map([[USER_ID, row(WRITTEN_PREFERENCES, SOL_AT_HIGH)]]) }),
+  },
+  {
+    name: "preferences-write-coding-agent",
+    state: () => backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES)]]) }),
+    request: () => preferencesWriteRequest({ codingAgent: SOL_AT_HIGH }),
+    finalState: () =>
+      backing({ stored: new Map([[USER_ID, row(STORED_PREFERENCES, SOL_AT_HIGH)]]) }),
+  },
+  {
+    name: "preferences-write-both",
+    state: () => backing(),
+    request: () => preferencesWriteRequest({ ...WRITE_BODY, codingAgent: SOL_AT_HIGH }),
+    finalState: () =>
+      backing({ stored: new Map([[USER_ID, row(WRITTEN_PREFERENCES, SOL_AT_HIGH)]]) }),
+  },
+  {
+    name: "preferences-write-unknown-model",
+    state: () => backing(),
+    request: () =>
+      preferencesWriteRequest({
+        codingAgent: { model: "anthropic/claude-opus-3", effort: "high" },
       }),
+    finalState: () => backing(),
+  },
+  {
+    name: "preferences-write-unknown-effort",
+    state: () => backing(),
+    request: () =>
+      preferencesWriteRequest({ codingAgent: { model: SOL_AT_HIGH.model, effort: "max" } }),
+    finalState: () => backing(),
+  },
+  {
+    name: "preferences-write-malformed-choice",
+    state: () => backing(),
+    request: () => preferencesWriteRequest({ codingAgent: { model: SOL_AT_HIGH.model } }),
+    finalState: () => backing(),
+  },
+  {
+    name: "preferences-write-catalog-unavailable",
+    state: () => backing({ catalogUnavailable: true }),
+    request: () => preferencesWriteRequest({ codingAgent: SOL_AT_HIGH }),
+    finalState: () => backing({ catalogUnavailable: true }),
   },
   {
     name: "preferences-write-invalid-body",
     state: () => backing(),
     request: () => preferencesWriteRequest(undefined),
+    finalState: () => backing(),
+  },
+  // A body carrying neither part asks for nothing.
+  {
+    name: "preferences-write-empty-body",
+    state: () => backing(),
+    request: () => preferencesWriteRequest({}),
     finalState: () => backing(),
   },
   {
