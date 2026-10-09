@@ -13,6 +13,7 @@ import {
   APP_SETTING_SCHEMA,
   type AppSettingField,
   type AppSettingValue,
+  THEME,
   VOICE_HOTKEY_NONE,
 } from "@sidecar/settings";
 import {
@@ -287,6 +288,9 @@ test("a failed first load is retried before a later write", async (t) => {
  * than going quietly untested.
  */
 const SAMPLE_VALUE = {
+  // System is stored as itself rather than as what the Mac resolves to now,
+  // so it is the choice that has to survive a reopen.
+  theme: THEME.SYSTEM,
   openAtLogin: false,
   showInDock: true,
   voice: LIVE_VOICE.MARIN,
@@ -829,6 +833,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
+  await store.set(APP_SETTING_SCHEMA.theme.field, THEME.LIGHT);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
@@ -836,6 +841,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(reason, undefined);
   assert.equal(appSettingsView(settings).showInDock, false);
   assert.equal(appSettingsView(settings).openAtLogin, true);
+  assert.equal(appSettingsView(settings).theme, THEME.DARK);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
   // One scope's reset is that scope's alone.
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);

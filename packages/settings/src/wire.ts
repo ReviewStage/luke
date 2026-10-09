@@ -18,7 +18,7 @@ export interface AppSettings {
 }
 
 /** A renderer-local view over the two disjoint halves of the settings wire. */
-type ResolvedSettingField = "voice";
+type ResolvedSettingField = "voice" | "theme";
 export type AppSettingsView = Omit<StoredAppSettings, ResolvedSettingField> & {
   [Field in ResolvedSettingField]-?: NonNullable<StoredAppSettings[Field]>;
 } & RuntimeStatus;
@@ -28,6 +28,7 @@ export function appSettingsView(settings: AppSettings): AppSettingsView {
     ...settings.stored,
     ...settings.status,
     voice: settings.stored.voice ?? APP_SETTING_DEFAULTS.voice,
+    theme: settings.stored.theme ?? APP_SETTING_DEFAULTS.theme,
   };
 }
 

@@ -34,6 +34,7 @@ export {
   settingRowsForPage,
   settingsScopeChanged,
 } from "./schema-access.js";
+export { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 export {
   capturedVoiceHotkey,
   DEFAULT_STOP_HOTKEYS,
