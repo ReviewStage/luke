@@ -1,7 +1,6 @@
 import { PRODUCT_SURFACE_EVENT } from "@sidecar/analytics";
 import { BackIcon, ChevronIcon, DisplayIcon, KeyboardIcon, SpeakerIcon } from "@sidecar/panel";
 import { SETTINGS_VIEW_COUNTED_AS } from "@sidecar/settings";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { SETTINGS_VIEW, type SettingsSubview, settingsNavRowId } from "../settings-views";
 import { AttentionMark } from "./marks";
 
@@ -87,7 +86,7 @@ export function SettingsPageHeader({
   backControl: React.RefObject<HTMLButtonElement | null>;
 }): React.JSX.Element {
   return (
-    <div className="settings-header" style={cssCustomProperties({ "--row-index": 0 })}>
+    <div className="settings-header">
       <button
         type="button"
         ref={backControl}

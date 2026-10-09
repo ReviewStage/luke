@@ -17,17 +17,14 @@ export const MOTION_DURATION_MS = {
 } as const;
 
 export const MOTION_DELAY_MS = {
-  EXPAND: 200,
-  PEEK: 60,
   ROW_STAGGER: 32,
   HINT: 500,
 } as const;
 
-/** Tallest caption block the window holds — sized past a whole spoken reply,
- * because the block grows to the words and nothing scrolls; a taller stack
- * rolls up inside it. CSS: `--caption-max`. */
+/** Tallest the caption bar grows to the words; a taller stack rolls up inside
+ * it. CSS: `--caption-max`. */
 export const VOICE_CAPTION_MAX_HEIGHT = 210;
 
-/** The one gap between the strip, each band grown below it, and the shape's
- * bottom edge. CSS: `--voice-band-inset`. */
+/** The gap between the caption bar and the volume hint's row below it. CSS:
+ * `--voice-band-inset`. */
 export const VOICE_BAND_INSET = 6;

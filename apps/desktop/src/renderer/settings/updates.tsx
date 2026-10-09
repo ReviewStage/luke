@@ -1,5 +1,4 @@
 import { CheckIcon, DownloadIcon, ExternalIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -48,20 +47,13 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 
 /**
  * Where the build stands against the latest release. It stays below the pages
- * while the Settings tab's dot carries the news outside. The caller says where
- * it stands, because the arrival stagger is counted by the page.
+ * while the Settings tab's dot carries the news outside.
  */
-export function UpdatesSection({
-  control,
-  rowIndex,
-}: {
-  control: UpdateControl;
-  rowIndex: number;
-}): React.JSX.Element {
+export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();
   const row = updateRow(control.update);
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": rowIndex })}>
+    <section className="settings-section">
       <h2>
         <DownloadIcon />
         Updates

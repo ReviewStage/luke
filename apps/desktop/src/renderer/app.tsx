@@ -19,7 +19,6 @@ import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
 import { MarkdownMessage } from "./markdown-message";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
-import { PANEL_PRESENTATION, type PanelPresentation } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
@@ -84,9 +83,8 @@ export function App(): React.JSX.Element {
       setTab(next);
       // Arriving at the tab is arriving at its front page: a page left open
       // behind a tab switch would greet the next visit with a corner of the
-      // settings rather than the settings. The flows that need a deeper page —
-      // a credential entry returning from the key slot, the evidence run that
-      // starts in it — set their page right after this reset.
+      // settings rather than the settings. A flow that needs a deeper page
+      // sets it right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
       // `PanelTab` and the counted tab are the same union: both are the
       // guide's own set, which `PanelTab` aliases.
@@ -107,9 +105,6 @@ export function App(): React.JSX.Element {
    * signed in, so the timer is not left running under the plans.
    */
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
-
-  /** What the window is drawn as, which is only ever its own content now. */
-  const presentation: PanelPresentation = PANEL_PRESENTATION.PANEL;
 
   const signIn = useSignIn();
 
@@ -190,7 +185,7 @@ export function App(): React.JSX.Element {
     signedIn: account?.status === ACCOUNT_STATUS.SIGNED_IN,
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
-    shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
+    shown: tab === PANEL_TAB.PLANS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
   // Where the window has stood, for back and forward, from the moment it
@@ -218,9 +213,8 @@ export function App(): React.JSX.Element {
   });
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
-  // wrong: the panel takes focus programmatically when it opens, which the
-  // engine can read as keyboard modality and ring the capsule after a plain
-  // press — most reliably the first time the window is ever focused. Modality
+  // wrong: the window takes focus programmatically, which the engine can
+  // read as keyboard modality and ring a control after a plain press — most reliably the first time the window is ever focused. Modality
   // is tracked outright instead, so a ring is drawn only once someone has
   // actually moved focus with the keyboard.
   useEffect(() => {
@@ -295,7 +289,6 @@ export function App(): React.JSX.Element {
         signIn.cancelSignIn();
         return;
       }
-      if (presentation !== PANEL_PRESENTATION.PANEL) return;
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
@@ -311,29 +304,18 @@ export function App(): React.JSX.Element {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [
-    presentation,
-    signIn.cancelSignIn,
-    signIn.signInWait,
-    listening,
-    plans.back,
-    speaking,
-    stopSpeaking,
-  ]);
+  }, [signIn.cancelSignIn, signIn.signInWait, listening, plans.back, speaking, stopSpeaking]);
 
-  // The window's shortcuts, from the keys and from the menu bar alike, are
-  // claimed only while its content has the keyboard: Luke is the frontmost
-  // app then, and no sheet stands over the controls that offer them.
-  useAppKeymap(presentation === PANEL_PRESENTATION.PANEL);
-  useMenuCommands(presentation === PANEL_PRESENTATION.PANEL);
-  useHistoryMouseButtons(history, presentation === PANEL_PRESENTATION.PANEL);
+  // The window's shortcuts, from the keys and from the menu bar alike.
+  useAppKeymap(true);
+  useMenuCommands(true);
+  useHistoryMouseButtons(history, true);
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
   if (!state || !settings) return <div />;
 
   const shownStopHotkey = state.hotkeys.stop;
-  const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
 
   const microphone: MicrophoneControl = {
     status: state.audio.microphoneStatus,
@@ -369,14 +351,12 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Whether there are words to draw under the shape — a caption or a
-      // failure borrowing its strip — so the surface can grow the room they
-      // are drawn in.
+      // Whether there are words in the caption bar — Luke's, or a failure
+      // borrowing it — so the bar is drawn.
       data-caption={String(Boolean(caption.texts))}
-      // Whether those words need the volume hint under them, which stands in
-      // a band of its own below the caption block.
+      // Whether those words need the volume hint under them, in a row of its
+      // own below the bar.
       data-volume-hint={String(volumeHint)}
-      data-presentation={presentation}
       data-capture={String(state.run.captureMode)}
       // The panel is drawn as an ordinary app window's content; desktop.css
       // lays it out.
@@ -388,11 +368,8 @@ export function App(): React.JSX.Element {
         ...cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` }),
       }}
     >
-      <span className="panel-surface" aria-hidden="true" />
-
-      {/* The window's content. Inert while the panel stands down to a sign-in
-          wait or a note, which are drawn as a sheet over it. */}
-      <div className="desktop-stage" aria-hidden={!panelOpen} inert={!panelOpen}>
+      {/* The window's content. */}
+      <div className="desktop-stage">
         <DesktopShell
           gates={{
             accountRequired: state.run.accountRequired,
@@ -439,7 +416,6 @@ export function App(): React.JSX.Element {
             updates,
             settings,
             onFeedback: setFeedbackKind,
-            panelOpen,
             shortcuts,
           }}
         />
@@ -453,21 +429,17 @@ export function App(): React.JSX.Element {
       />
 
       {/* Luke's words while he says them: one element in every state, always
-          mounted so both edges of its fade can run. The inner stack is what is
-          measured —
-          responses spoken back-to-back are one block each in it, oldest
-          first, the settled words above the ones still arriving — and its
-          wrapped height is the only honest answer to how much room the words
-          need; past the room the window reserved it rolls up rather than
-          growing, as `caption-layout.ts` says. The newest block is always
-          mounted like the stack itself; a settled one mounts only while it
-          has words, so a lone reply pays no gap for a block that is not
-          there, and the blocks keep their order as keys so a segment that
-          settles stays the element it streamed into. Hidden from readers
-          while it captions speech — it
-          duplicates what is already audible — and announced as a status line
-          when it carries a failure or a notice, which was never audible at
-          all. */}
+          mounted so both edges of its fade can run. The inner stack is what
+          is measured — responses spoken back-to-back are one block each in
+          it, oldest first, the settled words above the ones still arriving —
+          and past the room the bar may take it rolls up rather than growing,
+          as `caption-layout.ts` says. The newest block is always mounted like
+          the stack itself; a settled one mounts only while it has words, and
+          the blocks keep their order as keys so a segment that settles stays
+          the element it streamed into. Hidden from readers while it captions
+          speech — it duplicates what is already audible — and announced as a
+          status line when it carries a failure or a notice, which was never
+          audible at all. */}
       <span
         className="voice-caption"
         ref={caption.ref}
@@ -489,15 +461,11 @@ export function App(): React.JSX.Element {
       </span>
 
       {/* The one reason the words above might be the only part of Luke
-          arriving: the Mac's own output is off. It stands in a band of its
-          own directly below the caption block — the block's clip ends where
-          the band begins, so the words above can never be drawn over it —
-          and is drawn only while Luke speaks into a silence the helper
-          reported. Always
-          mounted, like the caption, so both edges of its fade can run, and
-          inert while hidden so its button cannot be tabbed to. It carries a
-          hit region of its own and sits above the hover strip, so Got it
-          answers the press instead of the panel opening under it. */}
+          arriving: the Mac's own output is off. It stands in a row of its own
+          directly below the caption bar and is drawn only while Luke speaks
+          into a silence the helper reported. Always mounted, like the
+          caption, so both edges of its fade can run, and inert while hidden
+          so its button cannot be tabbed to. */}
       <span className="volume-hint" role="status" inert={!volumeHint}>
         <span className="volume-hint-text">{volumeHintText(outputAudio)}</span>
         <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>

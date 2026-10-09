@@ -87,8 +87,7 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
 
       if (
         property.startsWith("transition") &&
-        /\b(?:width|height|padding|font-size)\b/u.test(value) &&
-        !selector.includes(".panel-surface")
+        /\b(?:width|height|padding|font-size)\b/u.test(value)
       ) {
         failures.push(`${name}: ${selector.trim()} transitions a layout property`);
       }

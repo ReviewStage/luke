@@ -27,7 +27,7 @@ const SURFACE = join(HERE, "..", "packages", "surface", "src", "generated");
 // ---------- Motion tokens ----------
 // Sampled damped springs, one duration. A real spring's motion is a property
 // of the spring, not of how far it is asked to travel, which is why the same
-// samples serve a 176px peek and a 482px panel.
+// samples serve a short travel and a long one.
 const SPRING = [
   0, 0.0285, 0.0993, 0.1943, 0.3005, 0.4083, 0.5115, 0.6061, 0.69, 0.7623, 0.8229, 0.8727, 0.9125,
   0.9437, 0.9674, 0.9848, 0.9972, 1.0056, 1.0109, 1.0138, 1.015, 1.015, 1.0142, 1.0129, 1.0114,
@@ -50,8 +50,6 @@ const MOTION_DURATION_MS = {
   PANE: 240,
 };
 const MOTION_DELAY_MS = {
-  EXPAND: 200,
-  PEEK: 60,
   ROW_STAGGER: 32,
   // How long a pointer rests on a control before its hover hint shows.
   HINT: 500,
@@ -61,27 +59,15 @@ const MOTION_EXIT = "cubic-bezier(0.4, 0, 0.6, 1)";
 // a plain ease-out rather than the spring: a pane stands on the window's own
 // edge, and a spring's overshoot would part the two for a frame.
 const MOTION_PANE = "cubic-bezier(0.2, 0, 0, 1)";
-const ROW_FAN_PX = 7;
-const ROW_FAN_LIMIT = 5;
 
 // Window layout sizes the main process and both stylesheets spend.
 const SURFACE_GEOMETRY_PX = {
-  // The caption block grows to the words and nothing scrolls, so the
-  // reservation sits past what a reply wraps to at the peek's width: fourteen
-  // 14px lines plus the block's own padding, room enough for two long
-  // responses stacked. The window cannot resize for speech, so this bound is
-  // physical: a stack taller still rolls up inside the block, its oldest
-  // lines leaving under the housing, rather than growing the window.
+  // The tallest the caption bar grows to the words: past it, the stack rolls
+  // up inside the bar, its oldest lines leaving through the top, rather than
+  // the bar growing over the document.
   VOICE_CAPTION_MAX_HEIGHT: 210,
-  // The one gap between anything the surface grows below the strip. The
-  // words and the volume hint stack under the housing in the compact states
-  // and at the panel's foot when it opens, and each of them is this far from
-  // the strip above it, from the band before it, and from the shape's bottom
-  // edge below it — so a reply that draws both reads as one evenly spaced
-  // column rather than two bands that each chose their own breathing room.
+  // The gap between the caption bar and the volume hint's row below it.
   VOICE_BAND_INSET: 6,
-  PANEL_WIDTH: 620,
-  PANEL_MAX_HEIGHT: 520,
 };
 
 // ---------- Provider mark paths ----------
@@ -162,17 +148,10 @@ function motionTokensCss() {
   --duration-hover: ${ms(MOTION_DURATION_MS.HOVER)};
   --duration-pane: ${ms(MOTION_DURATION_MS.PANE)};
   --motion-pane: ${MOTION_PANE};
-  --expand-delay: ${ms(MOTION_DELAY_MS.EXPAND)};
-  --peek-delay: ${ms(MOTION_DELAY_MS.PEEK)};
   --row-stagger: ${ms(MOTION_DELAY_MS.ROW_STAGGER)};
   --hint-delay: ${ms(MOTION_DELAY_MS.HINT)};
-  --row-fan: ${ROW_FAN_PX}px;
-  --row-fan-limit: ${ROW_FAN_LIMIT};
-  --slot-delay: calc(var(--duration-exit) + var(--peek-delay));
   --caption-max: ${px(SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT)};
   --voice-band-inset: ${px(SURFACE_GEOMETRY_PX.VOICE_BAND_INSET)};
-  --panel-width: ${px(SURFACE_GEOMETRY_PX.PANEL_WIDTH)};
-  --panel-height-max: ${px(SURFACE_GEOMETRY_PX.PANEL_MAX_HEIGHT)};
 }
 `;
 }
@@ -199,13 +178,12 @@ export const MOTION_DELAY_MS = {
 ${tsRecord(Object.entries(MOTION_DELAY_MS).map(([key, value]) => [key, value]))}
 } as const;
 
-/** Tallest caption block the window holds — sized past a whole spoken reply,
- * because the block grows to the words and nothing scrolls; a taller stack
- * rolls up inside it. CSS: \`--caption-max\`. */
+/** Tallest the caption bar grows to the words; a taller stack rolls up inside
+ * it. CSS: \`--caption-max\`. */
 export const VOICE_CAPTION_MAX_HEIGHT = ${SURFACE_GEOMETRY_PX.VOICE_CAPTION_MAX_HEIGHT};
 
-/** The one gap between the strip, each band grown below it, and the shape's
- * bottom edge. CSS: \`--voice-band-inset\`. */
+/** The gap between the caption bar and the volume hint's row below it. CSS:
+ * \`--voice-band-inset\`. */
 export const VOICE_BAND_INSET = ${SURFACE_GEOMETRY_PX.VOICE_BAND_INSET};
 `;
 }

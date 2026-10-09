@@ -88,18 +88,10 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  /* No housing to blend into: the slot and the composer draw as the
-     free-standing cards a display without a notch gets. */
-  --notch-top-inset: 0px;
-  --notch-housing-width: 0px;
-  /* The entry sheets hang this far below the window's top edge. The bubble
-     rules spend `--shape-top` for that drop, and the strip they reserve above
-     their first row is nothing here. */
-  --shape-top: 96px;
-  --strip-height: 0px;
-  /* Where the work column begins, which the captions centre on. */
+  /* Where the work column begins, which the captions centre on, and the
+     width they are drawn at over it. */
   --work-left: var(--sidebar-width);
-  --voice-band-width: min(640px, calc(100vw - var(--work-left) - 96px));
+  --caption-width: min(640px, calc(100vw - var(--work-left) - 96px));
   position: absolute;
   inset: 0;
   color: var(--text-primary);
@@ -1380,70 +1372,6 @@ body,
   flex-direction: column;
   overflow-y: auto;
   padding-bottom: 8vh;
-}
-
-/* Entry sheets --------------------------------------------------------------- */
-
-.app-stage[data-surface="desktop"] .panel-surface {
-  z-index: 8;
-  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
-  background: var(--desktop-sidebar);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-}
-
-.app-stage[data-surface="desktop"][data-presentation="panel"] .panel-surface {
-  visibility: hidden;
-}
-
-/* Luke's words --------------------------------------------------------------- */
-
-/* A floating bar over the work column, above the call bar, rather than a band
-   riding the notch shape's edge. */
-.app-stage[data-surface="desktop"][data-presentation] .voice-caption {
-  z-index: 6;
-  top: auto;
-  bottom: calc(96px + var(--volume-hint-size));
-  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  height: auto;
-  max-height: var(--caption-max);
-  padding: var(--space-12) var(--space-16);
-  border: 1px solid var(--hairline);
-  border-radius: 16px;
-  /* Opaque, because the document scrolls on beneath it. */
-  background: #16161b;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
-  clip-path: none;
-  animation: none;
-  font-size: 13.5px;
-  line-height: 1.5;
-  transform: translateX(-50%);
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-.app-stage[data-surface="desktop"][data-caption="true"] .voice-caption {
-  opacity: 1;
-}
-
-.app-stage[data-surface="desktop"][data-presentation] .volume-hint {
-  z-index: 6;
-  top: auto;
-  bottom: 88px;
-  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  animation: none;
-  transform: translateX(-50%);
-}
-
-.app-stage[data-surface="desktop"][data-volume-hint="true"][data-caption="true"] .volume-hint {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.app-stage[data-surface="desktop"] .voice-caption-text {
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.5;
-  text-align: left;
 }
 
 /* The side panel ----------------------------------------------------------- */
