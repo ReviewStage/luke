@@ -14,7 +14,5 @@ export function cssCustomProperties(properties: Record<string, string | number>)
  * quietly the wrong size.
  */
 export const SURFACE_PROPERTY = {
-  PANEL_HEIGHT: "--panel-height",
-  CAPTION_SIZE: "--caption-size",
   CAPTION_OVERFLOW: "--caption-overflow",
 } as const;

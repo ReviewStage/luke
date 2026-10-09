@@ -18,7 +18,7 @@ import {
  */
 export interface ActSender {
   sender: WebContents;
-  /** A panel: the surface beside the housing, which types asks and presses rows. */
+  /** A panel: Luke's window, which types asks and presses rows. */
   panel: boolean;
   /** The hidden window the conversation lives in, and the one receiver of replies. */
   voice: boolean;

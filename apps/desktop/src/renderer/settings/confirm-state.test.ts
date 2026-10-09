@@ -17,8 +17,7 @@ const SURROUNDINGS: readonly ConfirmSurroundings[] = [
   // A confirm left where a key used to be would be pointed at whatever is
   // stored there next.
   { subject: false, surfaceOpen: true },
-  // The panel closes outright, and it also stands down to the slot to let
-  // someone fetch a key — which is exactly when a question left standing would
+  // The surface goes off screen — exactly when a question left standing would
   // be forgotten about, and be the first thing under the pointer next time.
   { subject: true, surfaceOpen: false },
   { subject: false, surfaceOpen: false },

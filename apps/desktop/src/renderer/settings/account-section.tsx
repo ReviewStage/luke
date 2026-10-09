@@ -1,7 +1,6 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
 import { UserIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
@@ -17,12 +16,10 @@ export function AccountSection({
   account,
   onSignOut,
   onDeleteAccount,
-  panelOpen,
 }: {
   account: Extract<AccountSnapshot, { status: typeof ACCOUNT_STATUS.SIGNED_IN }>;
   onSignOut: () => Promise<void>;
   onDeleteAccount: () => Promise<ActionResult>;
-  panelOpen: boolean;
 }): React.JSX.Element {
   // Signing out asks first, the way deleting a key does: getting back in costs
   // a whole trip through the browser, so the button asks and only the answer
@@ -31,7 +28,9 @@ export function AccountSection({
   // place, so at most one of them may be standing: the group is what withdraws
   // the other's question when one is raised.
   const ways = useConfirmGroup();
-  const surroundings = { subject: true, surfaceOpen: panelOpen };
+  // Note that the section is only drawn while its page is, so the page
+  // leaving takes the question with it.
+  const surroundings = { subject: true, surfaceOpen: true };
   // The sign-out cannot be refused, so its answer is the accepted one every
   // confirming action reports through.
   const signOut = useConfirm(
@@ -45,7 +44,7 @@ export function AccountSection({
   const deletion = useConfirm(surroundings, onDeleteAccount, ways);
 
   return (
-    <section className="settings-section" style={cssCustomProperties({ "--row-index": 4 })}>
+    <section className="settings-section">
       <h2>
         <UserIcon />
         Account

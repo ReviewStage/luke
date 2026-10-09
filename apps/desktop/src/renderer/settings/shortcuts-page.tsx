@@ -10,7 +10,6 @@ import {
   voiceHotkeyKeycaps,
   voiceHotkeyLabel,
 } from "@sidecar/settings";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useState } from "react";
 import {
@@ -276,10 +275,7 @@ export function ShortcutSection({
     ? undefined
     : (shortcuts.stopHotkey ?? (voiceAvailable ? undefined : promisedStop));
   return (
-    <section
-      className="settings-section settings-plain"
-      style={cssCustomProperties({ "--row-index": 1 })}
-    >
+    <section className="settings-section settings-plain">
       <ShortcutRow
         title="Talk to Luke"
         anchor={SETTINGS_SEARCH_ROW.TALK_KEY}
@@ -326,12 +322,8 @@ export function ShortcutSection({
 export function WindowShortcutSections(): React.JSX.Element {
   return (
     <>
-      {APP_SHORTCUT_GROUPS.map((group, index) => (
-        <section
-          key={group.title}
-          className="settings-section"
-          style={cssCustomProperties({ "--row-index": index + 2 })}
-        >
+      {APP_SHORTCUT_GROUPS.map((group) => (
+        <section key={group.title} className="settings-section">
           <h2>{group.title}</h2>
           {group.commands.map((command) => (
             <div key={command} className="settings-row" {...searchAnchorProps(command)}>

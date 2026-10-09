@@ -1,5 +1,5 @@
 /* A message's Markdown, drawn wherever Luke's or the developer's words are: the
-   Conversation bubbles and the caption under the housing. Every measure is in `em`
+   Conversation bubbles and the caption bar. Every measure is in `em`
    so the same rules read at the caption's ten pixels and the thread's twelve
    and a half, and every tint is mixed from `currentColor`, so the same rule
    reads on the raised bubble's grey and on the sent bubble's accent without a

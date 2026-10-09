@@ -1,6 +1,5 @@
 import { FEEDBACK_KIND, type FeedbackKind } from "@sidecar/feedback";
 import { MegaphoneIcon } from "@sidecar/panel";
-import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { FEEDBACK_COPY } from "../feedback-dialog";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 
@@ -16,11 +15,7 @@ export function FeedbackSection({
   onOpen: (kind: FeedbackKind) => void;
 }): React.JSX.Element {
   return (
-    <section
-      className="settings-section"
-      style={cssCustomProperties({ "--row-index": 3 })}
-      {...searchAnchorProps(SETTINGS_SEARCH_ROW.FEEDBACK)}
-    >
+    <section className="settings-section" {...searchAnchorProps(SETTINGS_SEARCH_ROW.FEEDBACK)}>
       <h2>
         <MegaphoneIcon />
         Feedback
