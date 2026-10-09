@@ -32,7 +32,7 @@ export function useSidebarEdge(
     side: EDGE_SIDE.RIGHT,
     width: sidebar.width,
     bounds: SIDEBAR_WIDTH,
-    reserve: WORK_RESERVE,
+    reserve: () => WORK_RESERVE,
     label: "Resize sidebar",
     onResize: sidebar.onResize,
     onToggleCollapsed,

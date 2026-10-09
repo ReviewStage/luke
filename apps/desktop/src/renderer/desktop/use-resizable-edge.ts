@@ -13,7 +13,8 @@
  * on far enough to mean more than the bound: then the pane snaps there and
  * then, shut past its least width or to the whole window past its greatest,
  * and a drag that comes back undoes the snap as it crosses again, as VS
- * Code's and ChatGPT's panes do. A release leaves the pane however the drag
+ * Code's and ChatGPT's panes do. The whole window asks the longer pull of
+ * the two. A release leaves the pane however the drag
  * left it. Note that the hook is called by whoever outlives the pane, because
  * a drag that shuts the pane takes its edge away and must still hear the
  * pointer coming back.
@@ -43,12 +44,20 @@ const EDGE_SNAP = {
 type EdgeSnap = (typeof EDGE_SNAP)[keyof typeof EDGE_SNAP];
 
 /**
- * How far past a bound, in CSS pixels, the pointer goes before the pane snaps
- * rather than holds at the bound. Far enough that a drag to the bound that
+ * How far past the least width, in CSS pixels, the pointer goes before the
+ * pane shuts rather than holds there. Far enough that a drag to the bound that
  * overshoots by a hand's tremor still lands on it, near enough that a
  * deliberate fling does not run out of window.
  */
-const SNAP_OVERSHOOT = 80;
+const COLLAPSE_OVERSHOOT = 80;
+
+/**
+ * How far past the greatest width, in CSS pixels, the pointer goes before the
+ * pane grows over the window. Twice the way to shut it, because filling the
+ * window covers the work beside the pane rather than giving it room, so a
+ * drag that only meant to leave that work at its least must not reach it.
+ */
+const EXPAND_OVERSHOOT = 160;
 
 /**
  * How far back past the snap's own threshold, in CSS pixels, the pointer
@@ -63,10 +72,14 @@ const EDGE_DRAG_ATTRIBUTE = "data-edge-drag";
 /** How far one arrow press moves the edge, in CSS pixels. */
 const KEY_STEP = 16;
 
-/** A pane's widths, in CSS pixels: the least and greatest it is dragged to, and the one a reset gives it. */
+/**
+ * A pane's widths, in CSS pixels: the least and greatest it is dragged to, and
+ * the one a reset gives it. A pane with no greatest width of its own is held
+ * only by the reserve its neighbour keeps.
+ */
 interface EdgeBounds {
   readonly MIN: number;
-  readonly MAX: number;
+  readonly MAX?: number;
   readonly DEFAULT: number;
 }
 
@@ -76,11 +89,12 @@ export interface ResizableEdgeOptions {
   width: number;
   bounds: EdgeBounds;
   /**
-   * What the pane leaves its neighbour in the container they share: the pane
-   * is dragged no wider than the container less this, whatever its own bound
-   * says, so the column beside it stays readable.
+   * What the pane leaves its neighbour in the container they share, read from
+   * that container as a drag or a key press begins: the pane is dragged no
+   * wider than the container less this, whatever its own bound says, so the
+   * column beside it stays readable.
    */
-  reserve: number;
+  reserve: (container: HTMLElement) => number;
   label: string;
   onResize: (width: number) => void;
   /** Shuts the pane, or opens it again. Without it a drag past the least width holds there. */
@@ -95,7 +109,7 @@ export interface ResizableEdgeProps {
   "aria-orientation": "vertical";
   "aria-label": string;
   "aria-valuemin": number;
-  "aria-valuemax": number;
+  "aria-valuemax": number | undefined;
   "aria-valuenow": number;
   tabIndex: 0;
   onPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
@@ -119,22 +133,25 @@ interface Drag {
 }
 
 /**
- * The greatest width the pane can take in the container it stands in now.
- * A container that measures nothing is not laid out, so its pane's own bound
- * stands.
+ * The greatest width the pane can take in the container it stands in now: its
+ * own bound, where it has one, and no wider than the container less the
+ * reserve. A container that measures nothing is not laid out, so only the
+ * pane's own bound stands.
  */
-function roomFor(edge: HTMLElement, bounds: EdgeBounds, reserve: number): number {
+function roomFor(edge: HTMLElement, options: ResizableEdgeOptions): number {
+  const { bounds } = options;
+  const own = bounds.MAX ?? Number.POSITIVE_INFINITY;
   const container = edge.parentElement?.parentElement;
   const room = container?.getBoundingClientRect().width ?? 0;
-  if (room <= 0) return bounds.MAX;
-  return Math.max(bounds.MIN, Math.min(bounds.MAX, Math.round(room - reserve)));
+  if (container == null || room <= 0) return own;
+  return Math.max(bounds.MIN, Math.min(own, Math.round(room - options.reserve(container))));
 }
 
 /** The snap a width the pointer asks for earns, given the one the drag holds. */
 function snapFor(asked: number, drag: Drag, options: ResizableEdgeOptions): EdgeSnap {
   const give = (snap: EdgeSnap) => (drag.snap === snap ? SNAP_HYSTERESIS : 0);
-  const shutBelow = options.bounds.MIN - SNAP_OVERSHOOT + give(EDGE_SNAP.COLLAPSE);
-  const growAbove = drag.max + SNAP_OVERSHOOT - give(EDGE_SNAP.EXPAND);
+  const shutBelow = options.bounds.MIN - COLLAPSE_OVERSHOOT + give(EDGE_SNAP.COLLAPSE);
+  const growAbove = drag.max + EXPAND_OVERSHOOT - give(EDGE_SNAP.EXPAND);
   if (options.onToggleCollapsed !== undefined && asked < shutBelow) return EDGE_SNAP.COLLAPSE;
   if (options.onToggleExpanded !== undefined && asked > growAbove) return EDGE_SNAP.EXPAND;
   return EDGE_SNAP.NONE;
@@ -258,12 +275,12 @@ export function useResizableEdge(options: ResizableEdgeOptions): ResizableEdgePr
       event.currentTarget.setPointerCapture(event.pointerId);
       // The drag starts from the width the pane is drawn at, which the window
       // may hold narrower than the one kept.
-      begin(event, roomFor(event.currentTarget, bounds, options.reserve));
+      begin(event, roomFor(event.currentTarget, options));
     },
     onDoubleClick: () => onResize(bounds.DEFAULT),
     onKeyDown: (event) => {
       // The keys move the pane the window draws, held to the same room a drag is.
-      const max = roomFor(event.currentTarget, bounds, options.reserve);
+      const max = roomFor(event.currentTarget, options);
       const asked = keyedWidth(event.key, Math.min(width, max), max, options);
       if (asked === undefined) return;
       event.preventDefault();

@@ -1437,6 +1437,17 @@ body,
 
 /* The side panel ----------------------------------------------------------- */
 
+/* What the open plan's document keeps beside the side panel: the panel is
+   dragged no wider than the plan's area less this (side-panel.tsx reads it,
+   which is why it is registered as a length), and drawn no wider either.
+   Beside the open sidebar it is the panel's own least width, so neither pane
+   is dragged narrower than the other. */
+@property --document-reserve {
+  syntax: "<length>";
+  inherits: true;
+  initial-value: 280px;
+}
+
 /* The open plan: its toolbar, document, and call bar in a column, and the side
    panel to their right, the window's full height, while it is open. */
 .desktop-plan {
@@ -1444,6 +1455,13 @@ body,
   display: flex;
   min-height: 0;
   flex: 1;
+}
+
+/* With the sidebar folded the document's toolbar starts clear of the title
+   bar's buttons, so the document keeps that much more, and the plan's tab the
+   same room beside Copy plan and the plan's menu. */
+.desktop-shell[data-sidebar-collapsed="true"] .desktop-plan {
+  --document-reserve: calc(280px + var(--sidebar-toggle-clearance) - var(--column-inset));
 }
 
 .desktop-plan-main {
@@ -1463,13 +1481,12 @@ body,
 
 /* Its width is the developer's, set inline. The document keeps room to be
    read beside it while the window allows, but never at the cost of the
-   panel's own least width. The 360px is `DOCUMENT_RESERVE` in side-panel.tsx,
-   which a drag is held to. The room full screen keeps beside the document is
+   panel's own least width. The room full screen keeps beside the document is
    held the same. */
 .side-panel,
 .side-panel-room {
   min-width: 0;
-  max-width: max(280px, calc(100% - 360px));
+  max-width: max(280px, calc(100% - var(--document-reserve)));
   flex: 0 0 auto;
 }
 
