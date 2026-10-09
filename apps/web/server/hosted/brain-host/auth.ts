@@ -43,7 +43,14 @@ import {
  * account owns, and the deployment's secret can open only the turns the
  * table admits: a spoken ask for the voice function, never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
- * table's, decided before any principal exists.
+ * table's, decided before any principal exists. The one other thing the
+ * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as
+ * the deployment's cancel, from the voice function or from the hook that
+ * carries a waiting ask's Stop at its turn's start, and neither holds a
+ * bearer of the account's. A cancel opens no turn, so the table says nothing
+ * about it and it names no kind; what bounds it is the door's ownership
+ * check, which admits it only on a session the named account's conversation
+ * recorded.
  */
 
 const BEARER_CHALLENGE = [{ scheme: "Bearer" }] as const;
@@ -90,8 +97,9 @@ export interface DeploymentActor {
   readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
 }
 
-/** The routes a deployment actor may reach: a message opening a session or following one up; no other. */
+/** The routes a deployment actor may reach: a message opening a session or following one up, and a cancel of a turn in a session; no other. */
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
+const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
 
 /**
  * The route authenticator for the deployment acting for an account, minted
@@ -100,7 +108,7 @@ const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
  * opened the session reads the deployment, in the role the turn kind names.
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
- * message, or is a message naming a kind of turn the table does
+ * message or a cancel, or is a message naming a kind of turn the table does
  * not admit is refused here, before any later authenticator could admit it
  * as something else.
  */
@@ -114,13 +122,15 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
     const attributes = requestAttributes(request.headers);
     const turn = attributes[BRAIN_HOST_ATTRIBUTE.TURN];
     const pathname = new URL(request.url).pathname;
+    const posted = request.method === "POST";
     const message =
-      request.method === "POST" &&
+      posted &&
       MESSAGE_ROUTE.test(pathname) &&
       isWireString(turn) &&
       isBrainHostTurn(turn) &&
       actor.admits[turn];
-    if (!message) {
+    const cancel = posted && CANCEL_ROUTE.test(pathname);
+    if (!message && !cancel) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
     }
     return {

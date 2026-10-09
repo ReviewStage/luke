@@ -164,7 +164,8 @@ export const BRAIN_HOST_REFUSAL = {
   NOT_INITIATOR: "Not run: this session was opened by another account.",
   NO_TURN_KIND: "Not run: the request names no kind of turn.",
   NO_ACCOUNT: "Not run: the deployment's request names no account.",
-  NOT_DEPLOYMENT_ACT: "Not run: the deployment may only open the turns it is admitted for.",
+  NOT_DEPLOYMENT_ACT:
+    "Not run: the deployment may only open the turns it is admitted for, or stop one.",
   NO_MODEL: "Not run: this deployment holds no model key, so the hosted brain is off.",
   NOT_CURRENT_SESSION: "Not run: this conversation runs in another session now.",
 } as const;
