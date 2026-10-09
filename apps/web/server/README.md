@@ -1072,19 +1072,21 @@ under the deployment's `CRON_SECRET` as its bearer with the account in
 a principal of the deployment's own type — the deployment's one id, the
 account as its attribute — for a message naming a kind of turn its table,
 `DEPLOYMENT_TURNS` in `server/hosted/brain-host/channel.ts`, admits (a spoken
-turn) and nothing else: any other route or kind of turn carrying the secret
-is refused outright rather than passed to the account authenticator behind
-it. Which account a request acts for is one accessor over both principal
-types, and the door's ownership checks and the host's admission read that
-answer, so the deployment can open a turn only on a conversation the named
-account owns. Where eve answers is an origin of this deployment's own, whose
-rewrites carry `/eve/v1/*` into the eve service (`deploymentEveOrigin` in
-`server/hosted/brain-host/eve-origin.ts`): `LUKE_EVE_ORIGIN` where it is set,
-otherwise the project's production domain in production and the
-deployment's own host on any other deployment. Production names the custom
-domain rather than the generated `*.vercel.app` host because that host
-carries the project's Vercel Authentication, which answers a
-server-to-server POST at the edge and never reaches eve (LUKE-250).
+turn) and for a cancel of a turn in a session, which is how the stop key's
+`stopAsk` and the hook's carried Stop reach eve, and nothing else: any other
+route or kind of turn carrying the secret is refused outright rather than
+passed to the account authenticator behind it. Which account a request acts
+for is one accessor over both principal types, and the door's ownership
+checks and the host's admission read that answer, so the deployment can open
+a turn only on a conversation the named account owns and cancel one only in
+a session that account's conversation recorded. Where eve answers is an
+origin of this deployment's own, whose rewrites carry `/eve/v1/*` into the
+eve service (`deploymentEveOrigin` in `server/hosted/brain-host/eve-origin.ts`):
+`LUKE_EVE_ORIGIN` where it is set, otherwise the project's production domain
+in production and the deployment's own host on any other deployment.
+Production names the custom domain rather than the generated `*.vercel.app`
+host because that host carries the project's Vercel Authentication, which
+answers a server-to-server POST at the edge and never reaches eve (LUKE-250).
 
 ### One connection is one invocation
 

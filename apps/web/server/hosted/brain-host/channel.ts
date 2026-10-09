@@ -37,10 +37,11 @@ const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
  * where eve is a development server, and the turn policy above for a message
  * that arrives while a turn is under way. The
  * deployment goes first because it refuses rather than skips a request under
- * its secret that asks for anything but the turns its table admits, and a
- * later entry must not get the chance to read that request as something
- * else; for the same reason there is one of it, over one table, and a
- * deployment-side caller that needs another kind of turn adds a row.
+ * its secret that asks for anything but the turns its table admits or a
+ * cancel of a turn, and a later entry must not get the chance to read that
+ * request as something else; for the same reason there is one of it, over
+ * one table, and a deployment-side caller that needs another kind of turn
+ * adds a row.
  * Ownership stands at the door: whoever the inner walk admits is refused for
  * a session or a conversation that is not theirs before any route runs.
  * Every message carries the request's conversation and turn kind into the
