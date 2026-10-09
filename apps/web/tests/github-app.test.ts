@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Redacted } from "effect";
+import { Clock, Effect, Layer, Option, Redacted, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, beforeEach, vi } from "vitest";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-deployment";
@@ -19,6 +19,7 @@ import {
   githubAppFromEnvironment,
   SIGN_IN_REQUIRED,
 } from "../server/github/github-app";
+import { InstantColumnSchema } from "../server/hosted/store/database";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -283,9 +284,16 @@ interface GitHubRow {
   readonly refreshTokenExpiresAt: Date | null;
 }
 
-/** A user with one GitHub account row, its tokens sealed the way a sign-in leaves them. */
+/**
+ * A user with one GitHub account row, its tokens sealed the way a sign-in
+ * leaves them. The row's instants hang off the test clock as it stands
+ * rather than off a clock the test moved: under a real Postgres pool a
+ * `TestClock.setTime` jump left every later statement waiting, which PGlite
+ * never showed.
+ */
 const openGithubUser = (row: GitHubRow) =>
   Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
     yield* db.insert(account).values({
@@ -298,7 +306,7 @@ const openGithubUser = (row: GitHubRow) =>
       accessTokenExpiresAt: row.accessTokenExpiresAt,
       refreshTokenExpiresAt: row.refreshTokenExpiresAt,
       scope: "",
-      updatedAt: new Date(NOW - HOUR_MS),
+      updatedAt: new Date(now - HOUR_MS),
     });
     return userId;
   });
@@ -317,30 +325,41 @@ const readRow = (userId: string) =>
       .where(eq(account.userId, userId));
     assert.ok(row);
     return {
-      ...row,
       accessToken: yield* unsealed(row.accessToken),
       refreshToken: yield* unsealed(row.refreshToken),
+      // Read through the column schema: `@effect/sql-pg` hands a timestamptz back as epoch millis, PGlite as a Date.
+      accessTokenExpiresAt: instantOf(row.accessTokenExpiresAt),
+      refreshTokenExpiresAt: instantOf(row.refreshTokenExpiresAt),
+      updatedAt: instantOf(row.updatedAt),
     };
   });
 
-const APP_ROW: GitHubRow = {
+const decodeInstant = Schema.decodeUnknownSync(Schema.NullOr(InstantColumnSchema));
+
+/** A timestamptz as the two drivers hand it back, as epoch millis; null stays null. */
+function instantOf(value: Date | null): number | null {
+  return decodeInstant(value)?.getTime() ?? null;
+}
+
+/** The row a sign-in through the App left, with hours on its token and months on its refresh token. */
+const appRow = (now: number): GitHubRow => ({
   accessToken: "ghu_standing",
   refreshToken: "ghr_standing",
-  accessTokenExpiresAt: new Date(NOW + 7 * HOUR_MS),
-  refreshTokenExpiresAt: new Date(NOW + 170 * 24 * HOUR_MS),
-};
+  accessTokenExpiresAt: new Date(now + 7 * HOUR_MS),
+  refreshTokenExpiresAt: new Date(now + 170 * 24 * HOUR_MS),
+});
 
 it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => {
   it.effect("a token with hours left is handed out as stored, with no word to GitHub", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
+      const now = yield* Clock.currentTimeMillis;
       const fake = github(() => new Response(null, { status: 500 }));
-      const userId = yield* openGithubUser(APP_ROW);
+      const userId = yield* openGithubUser(appRow(now));
       const app = yield* GitHubApp;
 
       const token = yield* app.userToken(userId).pipe(Effect.provide(fake.layer));
 
-      assert.equal(Redacted.value(token), APP_ROW.accessToken);
+      assert.equal(Redacted.value(token), appRow(0).accessToken);
       assert.equal(fake.sent.length, 0);
     }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
   );
@@ -349,11 +368,11 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     "a token about to expire is refreshed on the App's client, re-sealed in place, and reused",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
+        const now = yield* Clock.currentTimeMillis;
         const fake = github(() => refreshedJson("1"));
         const userId = yield* openGithubUser({
-          ...APP_ROW,
-          accessTokenExpiresAt: new Date(NOW + 30_000),
+          ...appRow(now),
+          accessTokenExpiresAt: new Date(now + 30_000),
         });
         const app = yield* GitHubApp;
 
@@ -372,27 +391,28 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           client_id: CLIENT_ID,
           client_secret: CLIENT_SECRET,
           grant_type: "refresh_token",
-          refresh_token: APP_ROW.refreshToken,
+          refresh_token: appRow(0).refreshToken,
         });
         const row = yield* readRow(userId);
         assert.equal(row.accessToken, "ghu_fresh-1");
         assert.equal(row.refreshToken, "ghr_fresh-1");
-        assert.equal(row.accessTokenExpiresAt?.getTime(), NOW + 8 * HOUR_MS);
-        assert.equal(row.refreshTokenExpiresAt?.getTime(), NOW + 180 * 24 * HOUR_MS);
-        assert.equal(row.updatedAt.getTime(), NOW);
+        assert.equal(row.accessTokenExpiresAt, now + 8 * HOUR_MS);
+        assert.equal(row.refreshTokenExpiresAt, now + 180 * 24 * HOUR_MS);
+        assert.equal(row.updatedAt, now);
       }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
   );
 
   it.effect("the row stays sealed: what the table holds is not the token", () =>
     Effect.gen(function* () {
-      const userId = yield* openGithubUser(APP_ROW);
+      const now = yield* Clock.currentTimeMillis;
+      const userId = yield* openGithubUser(appRow(now));
       const [row] = yield* db
         .select({ accessToken: account.accessToken, refreshToken: account.refreshToken })
         .from(account)
         .where(eq(account.userId, userId));
       assert.ok(row);
-      assert.notEqual(row.accessToken, APP_ROW.accessToken);
-      assert.notEqual(row.refreshToken, APP_ROW.refreshToken);
+      assert.notEqual(row.accessToken, appRow(0).accessToken);
+      assert.notEqual(row.refreshToken, appRow(0).refreshToken);
     }),
   );
 
@@ -400,11 +420,14 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     "GitHub refusing the refresh means signing in again, and the row is left as it was",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
+        const now = yield* Clock.currentTimeMillis;
         const fake = github(() =>
           Response.json({ error: "bad_refresh_token", error_description: "retired" }),
         );
-        const userId = yield* openGithubUser({ ...APP_ROW, accessTokenExpiresAt: new Date(NOW) });
+        const userId = yield* openGithubUser({
+          ...appRow(now),
+          accessTokenExpiresAt: new Date(now),
+        });
         const app = yield* GitHubApp;
 
         const failure = yield* app.userToken(userId).pipe(Effect.provide(fake.layer), Effect.flip);
@@ -414,19 +437,19 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           ["GitHubSignInRequired", SIGN_IN_REQUIRED.REFRESH_REFUSED],
         );
         const row = yield* readRow(userId);
-        assert.equal(row.accessToken, APP_ROW.accessToken);
-        assert.equal(row.refreshToken, APP_ROW.refreshToken);
+        assert.equal(row.accessToken, appRow(0).accessToken);
+        assert.equal(row.refreshToken, appRow(0).refreshToken);
       }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
   );
 
   it.effect("an expired refresh token is not even tried", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
+      const now = yield* Clock.currentTimeMillis;
       const fake = github(() => refreshedJson("never"));
       const userId = yield* openGithubUser({
-        ...APP_ROW,
-        accessTokenExpiresAt: new Date(NOW - HOUR_MS),
-        refreshTokenExpiresAt: new Date(NOW - 1),
+        ...appRow(now),
+        accessTokenExpiresAt: new Date(now - HOUR_MS),
+        refreshTokenExpiresAt: new Date(now - 1),
       });
       const app = yield* GitHubApp;
 
@@ -439,7 +462,6 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
 
   it.effect("a row from before the App, with no refresh token, calls for a new sign-in", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
       const fake = github(() => refreshedJson("never"));
       const userId = yield* openGithubUser({
         accessToken: "gho_oauth-app-token",
@@ -479,7 +501,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
 
   it.effect("the user's installations are read on the user's own token", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
+      const now = yield* Clock.currentTimeMillis;
       const fake = github((sent) =>
         new URL(sent.url).pathname === "/user/installations"
           ? Response.json({
@@ -494,7 +516,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
             })
           : new Response(null, { status: 500 }),
       );
-      const userId = yield* openGithubUser(APP_ROW);
+      const userId = yield* openGithubUser(appRow(now));
       const app = yield* GitHubApp;
 
       const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
@@ -507,13 +529,13 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         },
       ]);
       const [read] = fake.sent;
-      assert.equal(read?.headers.get("authorization"), `Bearer ${APP_ROW.accessToken}`);
+      assert.equal(read?.headers.get("authorization"), `Bearer ${appRow(0).accessToken}`);
     }).pipe(Effect.provide(GitHubApp.layer(SETTINGS))),
   );
 
   it.effect("a user with more installations than one page holds gets every page", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(NOW);
+      const now = yield* Clock.currentTimeMillis;
       const pageOf = (page: number, size: number) =>
         Array.from({ length: size }, (_, index) => ({
           id: page * 1000 + index,
@@ -524,7 +546,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         const page = Number(new URL(sent.url).searchParams.get("page"));
         return Response.json({ installations: page === 1 ? pageOf(1, 100) : pageOf(2, 1) });
       });
-      const userId = yield* openGithubUser(APP_ROW);
+      const userId = yield* openGithubUser(appRow(now));
       const app = yield* GitHubApp;
 
       const installations = yield* app.userInstallations(userId).pipe(Effect.provide(fake.layer));
@@ -542,9 +564,9 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     "GitHub refusing a token that has not expired means the authorization was revoked: sign in again",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
+        const now = yield* Clock.currentTimeMillis;
         const fake = github(() => Response.json({ message: "Bad credentials" }, { status: 401 }));
-        const userId = yield* openGithubUser(APP_ROW);
+        const userId = yield* openGithubUser(appRow(now));
         const app = yield* GitHubApp;
 
         const failure = yield* app
@@ -562,9 +584,9 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
     "a token that will not open under this deployment's secret calls for a new sign-in",
     () =>
       Effect.gen(function* () {
-        yield* TestClock.setTime(NOW);
+        const now = yield* Clock.currentTimeMillis;
         const fake = github(() => new Response(null, { status: 500 }));
-        const userId = yield* openGithubUser(APP_ROW);
+        const userId = yield* openGithubUser(appRow(now));
         const app = yield* Effect.provide(
           GitHubApp,
           GitHubApp.layer({ ...SETTINGS, sessionSecret: Redacted.make("another-secret-entirely") }),
