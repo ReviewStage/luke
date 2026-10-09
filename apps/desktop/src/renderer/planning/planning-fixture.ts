@@ -16,7 +16,12 @@ import {
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
-import { SIDE_PANEL_TAB, SIDE_PANEL_WIDTH, type SidePanelState } from "./use-side-panel";
+import {
+  SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
+  SIDE_PANEL_WIDTH,
+  type SidePanelState,
+} from "./use-side-panel";
 
 /**
  * planning-fixture.ts -- the synthetic plans a fixture run's Plans tab draws in place of the service's.
@@ -349,6 +354,7 @@ const FIXTURE_OPEN_BOARD: PlanningView = { ...FIXTURE_OPEN_PLAN, board: FIXTURE_
 /** The side panels the fixture profiles open their plan with. */
 const FIXTURE_CODE_PANEL: SidePanelState = {
   open: true,
+  tabs: SIDE_PANEL_TABS,
   tab: SIDE_PANEL_TAB.CODE,
   width: SIDE_PANEL_WIDTH.DEFAULT,
 };

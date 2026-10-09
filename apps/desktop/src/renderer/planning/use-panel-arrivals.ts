@@ -18,7 +18,8 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  *
  * A closed panel opens on the arrival's tab. An open one is left as it is,
  * its tab and full screen included, and the arrival's tab carries a dot
- * until it is shown. Nothing here moves focus.
+ * until it is shown. Either way a tab the developer had closed is opened
+ * again for the arrival. Nothing here moves focus.
  *
  * Which plans' arrivals have happened is this window's to remember, so it
  * is kept in the renderer's own storage beside the panel's preference, read
@@ -142,10 +143,16 @@ export function usePanelArrivals(input: {
         continue;
       }
       if (!held || !waiting.delete(tab) || !recordArrival(planId, tab)) continue;
-      if (!panel.open) panel.onChoose(tab);
-      else if (panel.tab !== tab) setUnread((was) => withUnread(was, planId, tab));
+      if (!panel.open) {
+        panel.onChoose(tab);
+        continue;
+      }
+      panel.onAdd(tab);
+      if (panel.tab !== undefined && panel.tab !== tab) {
+        setUnread((was) => withUnread(was, planId, tab));
+      }
     }
-  }, [planId, board, code, panel.open, panel.tab, panel.onChoose]);
+  }, [planId, board, code, panel.open, panel.tab, panel.onChoose, panel.onAdd]);
 
   // A tab shown is a tab seen.
   const shownTab = panel.open ? panel.tab : undefined;
