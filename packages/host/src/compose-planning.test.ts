@@ -68,6 +68,8 @@ interface FakeService extends PlanningClient {
   readonly firstSettle: Deferred.Deferred<void>;
   /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
   boards: Record<string, Board>;
+  /** The image each plan's last save carried, by plan id, as the service keeps it beside the board. */
+  readonly images: Record<string, string | undefined>;
   /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
   transcripts: Record<string, PlanTranscript>;
 }
@@ -84,12 +86,14 @@ function fakeService(plans: Plan[]): FakeService {
     settled: [],
     firstSettle: Deferred.makeUnsafe<void>(),
     boards: {},
+    images: {},
     transcripts: {},
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     // The service keeps the last scene written, beside whatever drawing it holds.
-    saveBoard: (planId, elements, appliedDrawing) =>
+    saveBoard: (planId, elements, appliedDrawing, image) =>
       Effect.sync(() => {
+        service.images[planId] = image;
         const board = { ...service.boards[planId], elements, appliedDrawing };
         service.boards[planId] = board;
         return board;
@@ -918,7 +922,7 @@ it.effect(
 );
 
 it.effect(
-  "the panel's scene is saved for the open plan, and the board drawn is what the service kept",
+  "the panel's scene is saved for the open plan with any image it carries, and the board drawn is what the service kept",
   () =>
     Effect.gen(function* () {
       const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
@@ -938,7 +942,16 @@ it.effect(
         appliedDrawing: 0,
       });
 
+      const imaged = yield* call(GATEWAY_METHOD.PLANNING_BOARD_SAVE, {
+        planId: INVITES,
+        elements: scene,
+        appliedDrawing: 1,
+        image: "iVBORw0KGgo=",
+      });
+
       assert.deepEqual(saved, { saved: true });
+      assert.deepEqual(imaged, { saved: true });
+      assert.equal(service.images[INVITES], "iVBORw0KGgo=");
       assert.deepEqual(elsewhere, { saved: false });
       assert.equal(service.boards[BILLING], undefined);
       assert.deepEqual(last()?.board, { elements: scene, appliedDrawing: 1, drawing: drawing(1) });

@@ -77,7 +77,9 @@ export const planCommand = pgTable("plan_command", {
  * A plan's whiteboard: the Excalidraw scene the Plans tab shows, with the
  * number of Luke's drawing it holds, and Luke's latest drawing with its own
  * number. A plan has no row until its board is first drawn on, and reads as
- * an empty board until then. The Mac writes the scene and Luke writes the
+ * an empty board until then. Beside them stands the scene as the Mac drew it,
+ * a PNG, from the first save that held each new drawing of Luke's, which is
+ * what the planning model looks at (`look_at_board`). The Mac writes the scene and Luke writes the
  * drawing, each whole and each the last write winning (`board-store.ts`).
  * The row goes with its plan.
  */
@@ -92,5 +94,9 @@ export const planBoard = pgTable("plan_board", {
   drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
   /** The latest drawing's number, one more for each drawing; 0 before he drew. */
   drawingNumber: integer("drawing_number").notNull().default(0),
+  /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `image_drawing`; null before one. */
+  image: text("image"),
+  /** The number of Luke's drawing the image holds; 0 before there is one. */
+  imageDrawing: integer("image_drawing").notNull().default(0),
   updatedAt: instant("updated_at").notNull().defaultNow(),
 });

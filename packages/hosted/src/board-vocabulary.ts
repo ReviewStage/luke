@@ -27,6 +27,12 @@ export const LUKE_MARK = { drawnBy: "luke" } as const;
  */
 export const DRAWING_ZONE = "zone";
 
+/**
+ * The longest side, in pixels, of the image the Mac draws of a board for the
+ * planning model to look at: legible, and cheap to send again on later turns.
+ */
+export const BOARD_IMAGE_MAX_SIDE = 1_200;
+
 /** The Excalidraw element types a scene admits. */
 export const BOARD_ELEMENT_TYPE = {
   RECTANGLE: "rectangle",

@@ -24,9 +24,16 @@ import { admittedElements } from "./board-scene";
  * scene, the developer's or a drawing put in, is saved once the canvas
  * pauses, whole, the last write winning.
  *
+ * A save that is the first to hold a new drawing of Luke's carries the scene
+ * drawn as a PNG beside it, which is what the planning model looks at
+ * (`look_at_board`). Note that "first" is read off the board main last
+ * handed over: until a save holding the drawing lands, main's board still
+ * names the drawing before it, so a save that interrupts the first one still
+ * carries the image.
+ *
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
- * reach.
+ * reach. The image is drawn off the document, so the recording never sees it.
  */
 
 /** How long the developer's drawing rests before it is saved. */
@@ -63,11 +70,13 @@ const whiteboardModuleAtom = Atom.keepAlive(
   ),
 );
 
-/** One save the canvas asked for: the plan, its scene, and the number of Luke's drawing the scene holds. */
+/** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
   readonly planId: string;
   readonly elements: readonly object[];
   readonly appliedDrawing: number;
+  readonly module: WhiteboardModule;
+  readonly withImage: boolean;
 }
 
 /**
@@ -78,11 +87,15 @@ interface BoardSave {
 const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   Effect.gen(function* () {
     yield* Effect.sleep(SAVE_PAUSE);
-    const payload: ActPayload<typeof ACT_KIND.PLANNING_BOARD_SAVE> = {
+    const scene: ActPayload<typeof ACT_KIND.PLANNING_BOARD_SAVE> = {
       planId: save.planId,
       elements: admittedElements(save.elements),
       appliedDrawing: save.appliedDrawing,
     };
+    const image = save.withImage
+      ? yield* Effect.promise(() => save.module.render(save.elements))
+      : undefined;
+    const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
       try: () => window.sidecar.act(actRequest(ACT_KIND.PLANNING_BOARD_SAVE, payload)),
       catch: (error) => error,
@@ -103,6 +116,8 @@ function BoardCanvas({
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<WhiteboardHandle | undefined>(undefined);
   const firstBoard = useRef(board);
+  const latestBoard = useRef(board);
+  latestBoard.current = board;
   const save = useAtomSet(boardSaveAtom);
 
   useEffect(() => {
@@ -110,7 +125,14 @@ function BoardCanvas({
     if (element === null) return undefined;
     const mounted = module.mount(element, {
       board: firstBoard.current,
-      onScene: (elements, appliedDrawing) => save({ planId, elements, appliedDrawing }),
+      onScene: (elements, appliedDrawing) =>
+        save({
+          planId,
+          elements,
+          appliedDrawing,
+          module,
+          withImage: appliedDrawing > latestBoard.current.appliedDrawing,
+        }),
     });
     handle.current = mounted;
     return () => {

@@ -529,12 +529,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         const read = readEither(planningBoardSaveParamsSchema)(unparsedWire(params));
         if (Result.isFailure(read))
           return yield* invalid("saving a board names a plan and its scene");
-        const { planId, elements, appliedDrawing } = read.success;
+        const { planId, elements, appliedDrawing, image } = read.success;
         if (!gate() || view.activePlanId !== planId) return { saved: false };
         return yield* serial(
           Effect.gen(function* () {
             const board = yield* Effect.provide(
-              client.saveBoard(planId, elements, appliedDrawing),
+              client.saveBoard(planId, elements, appliedDrawing, image),
               FetchHttpClient.layer,
             );
             if (board === undefined) return { saved: false };

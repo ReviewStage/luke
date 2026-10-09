@@ -33,6 +33,8 @@ export const BOARD_BOUNDS = {
   MAX_ID_CHARS: 64,
   /** The most elements one drawing of Luke's holds. */
   MAX_DRAWING_ELEMENTS: 100,
+  /** The most characters of base64 the board's image may spell: a PNG of `BOARD_IMAGE_MAX_SIDE` with room to spare. */
+  MAX_IMAGE_CHARS: 3_000_000,
 } as const;
 
 const elementIdSchema = EffectSchema.String.check(
@@ -236,10 +238,21 @@ export type Board = typeof boardSchema.Type;
 /** A board read (GET), and what a scene's write answers (PUT). */
 export const boardAnswerSchema = EffectSchema.Struct({ board: boardSchema });
 
-/** The Mac's write (PUT): the whole scene, and the number of Luke's drawing it holds. */
+/**
+ * The Mac's write (PUT): the whole scene, and the number of Luke's drawing it
+ * holds; with the scene drawn as a PNG, base64, when this write is the first
+ * to hold that drawing, so the planning model can look at what it drew.
+ */
 export const boardSaveRequestSchema = EffectSchema.Struct({
   elements: boardElementsSchema,
   appliedDrawing: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(0)),
+  image: EffectSchema.optionalKey(
+    EffectSchema.String.check(
+      EffectSchema.isNonEmpty(),
+      EffectSchema.isMaxLength(BOARD_BOUNDS.MAX_IMAGE_CHARS),
+      EffectSchema.isPattern(/^[A-Za-z0-9+/]+={0,2}$/),
+    ),
+  ),
 });
 
 /** The board before anything was drawn on it. */

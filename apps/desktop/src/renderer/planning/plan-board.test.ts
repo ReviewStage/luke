@@ -7,7 +7,10 @@ import { PlanBoard } from "./plan-board";
 
 test("the whiteboard is drawn under a root the screen recording leaves out", () => {
   // The bundle already loaded, as it is once a board has been shown in this window.
-  window.lukeWhiteboard = { mount: () => ({ show: () => undefined, unmount: () => undefined }) };
+  window.lukeWhiteboard = {
+    mount: () => ({ show: () => undefined, unmount: () => undefined }),
+    render: () => Promise.resolve(undefined),
+  };
 
   const markup = renderToStaticMarkup(
     createElement(PlanBoard, {
