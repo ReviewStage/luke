@@ -184,6 +184,7 @@ export function composeDesktop(
       // asks the panel to open the plan on the agent's tab.
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
+        readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
         planName: (planId) => {
           const { planning } = state.snapshot();
           const open = planning.document.plan;

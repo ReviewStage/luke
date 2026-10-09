@@ -24,12 +24,14 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
 } from "./coding-agent-view.js";
 import {
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
 import {
@@ -40,6 +42,7 @@ import {
 } from "./models-wire.js";
 import {
   agentMessagesPath,
+  agentPullRequestPath,
   agentStopPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,
@@ -128,7 +131,8 @@ function readAnswer<Answer, Encoded>(
 /**
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
- * one started, one's transcript past a cursor, and one stopped.
+ * one started, one's transcript past a cursor, one stopped, and what one
+ * published.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -233,6 +237,16 @@ export class HostedCodingAgentClient {
     return Effect.flatMap(
       this.#call.send({ method: HTTP_METHOD.POST, path: agentStopPath(agentId) }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
+    );
+  }
+
+  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
+  pullRequest(
+    agentId: string,
+  ): Effect.Effect<CodingAgentPullRequestAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: agentPullRequestPath(agentId) }),
+      (answer) => readAnswer(answer, codingAgentPullRequestAnswerSchema, ROW_REFUSALS),
     );
   }
 }

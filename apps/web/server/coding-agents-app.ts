@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_STATUS,
   type CodingAgentSummary,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
@@ -9,7 +10,7 @@ import {
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
+import { Cache, Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -37,6 +38,11 @@ import {
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
+import {
+  type PublishedCache,
+  PublishedKey,
+  withPublishedCache,
+} from "./hosted/coder-host/published.js";
 import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { cursorOfWire, cursorToWire, transcriptPast } from "./hosted/coder-host/transcript.js";
@@ -109,6 +115,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
  * anything the agent pushed stays.
+ * What the agent published (`GET /api/agents/{id}/pull-request`) is the
+ * branch and pull request its own transcript names, as GitHub holds them
+ * now (`hosted/coder-host/published.ts`), kept per agent for a short while
+ * so a tab asking beside every held page does not ask GitHub as often.
  */
 
 const AGENTS_PATH = {
@@ -118,6 +128,8 @@ const AGENTS_PATH = {
   MESSAGES: "/api/agents/messages",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
+  /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
+  PULL_REQUEST: "/api/agents/pull-request",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
@@ -537,17 +549,62 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: summary });
 });
 
-/** The group: the three paths, and the hosted vocabulary's own refusal for any other. */
+/** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
+const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  published: PublishedCache,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* ownedAgent(seams, request);
+  // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
+  const { status } = yield* summaryOf(userId, agent);
+  const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
+  const answer = yield* Cache.get(
+    published,
+    new PublishedKey({ userId, agentId: agent.id, ended }),
+  ).pipe(
+    Effect.catch((failure) => {
+      switch (failure._tag) {
+        // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
+        case "NoSuchAgent":
+          return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+        case "SqlError":
+        case "SchemaError":
+          return hostedStoreOrUnavailable(Effect.fail(failure));
+        default:
+          return githubUserReadOrRefusal(Effect.fail(failure));
+      }
+    }),
+  );
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
+});
+
+/** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
-  return Layer.mergeAll(
-    HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_PLAN, hostedRefusing(planAgentsEndpoint(seams))),
-    HttpRouter.add(
-      ANY_METHOD,
-      AGENTS_PATH.MESSAGES,
-      hostedRefusing(messagesEndpoint(seams, writer)),
+  return Layer.unwrap(
+    withPublishedCache((published) =>
+      Layer.mergeAll(
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_PLAN, hostedRefusing(planAgentsEndpoint(seams))),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.MESSAGES,
+          hostedRefusing(messagesEndpoint(seams, writer)),
+        ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.PULL_REQUEST,
+          hostedRefusing(pullRequestEndpoint(seams, published)),
+        ),
+        hostedNotFoundRoute,
+      ),
     ),
-    HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
-    hostedNotFoundRoute,
   );
 }

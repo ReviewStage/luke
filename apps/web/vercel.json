@@ -37,6 +37,10 @@
           "dest": "/api/default.js?route=agents/stop&id=$1"
         },
         {
+          "src": "/api/agents/([^/]+)/pull-request",
+          "dest": "/api/default.js?route=agents/pull-request&id=$1"
+        },
+        {
           "src": "/api/account/delete",
           "dest": "/api/default.js?route=account/delete"
         },

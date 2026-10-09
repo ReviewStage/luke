@@ -74,6 +74,7 @@ export {
 } from "./plan-client.js";
 export {
   agentMessagesPath,
+  agentPullRequestPath,
   agentStopPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,

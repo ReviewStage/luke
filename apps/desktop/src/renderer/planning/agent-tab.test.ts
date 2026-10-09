@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentPullRequest,
+  type CodingAgentPullRequestAnswer,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { PublishedRow } from "./agent-published";
 import { AgentHeader, AgentTranscriptView } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
@@ -78,6 +86,73 @@ afterEach(() => {
 
 const ignore = () => undefined;
 const copyNothing = () => Promise.resolve();
+
+/** Doors that lead nowhere. */
+const SHUT = { openGitHub: ignore, copy: ignore };
+
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 123,
+  title: "Teammate invitations",
+  url: "https://github.com/acme/relay/pull/123",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 210,
+  deletions: 14,
+  changedFiles: 6,
+};
+
+const PUBLISHED: CodingAgentPullRequestAnswer = {
+  repository: "acme/relay",
+  branch: "luke/teammate-invitations",
+  pullRequest: PULL_REQUEST,
+};
+
+const AGENT = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  createdAt: 1,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: null,
+} as const;
+
+/** The head mounted live, so its ⋯ can be opened and its items pressed. */
+function mountedHead(
+  published: CodingAgentPullRequestAnswer | undefined,
+  doors: { openGitHub: (url: string) => void; copy: (words: string) => void },
+): HTMLElement {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => {
+    root.render(
+      createElement(AgentHeader, {
+        agent: AGENT,
+        models: undefined,
+        published,
+        doors,
+        onStop: () => Promise.resolve(),
+      }),
+    );
+  });
+  return container;
+}
+
+function menuItems(): HTMLButtonElement[] {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
+}
+
+/** Opens the head's ⋯ and presses the item named. */
+function choose(container: HTMLElement, label: string): void {
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
+  assert.ok(more, "the ⋯ stands");
+  act(() => more.click());
+  const item = menuItems().find((candidate) => candidate.textContent === label);
+  assert.ok(item, `the menu offers ${label}`);
+  act(() => item.click());
+}
 
 function drawn(messages: readonly CodingAgentMessage[], working = false): string {
   return renderToStaticMarkup(
@@ -252,17 +327,15 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
 });
 
 test("the head says model · effort · status with the dot, and offers Stop only while a turn runs", () => {
-  const agent = {
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    createdAt: 1,
-    status: CODING_AGENT_STATUS.RUNNING,
-    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  } as const;
+  const agent = AGENT;
   const running = renderToStaticMarkup(
-    createElement(AgentHeader, { agent, models: undefined, onStop: () => Promise.resolve() }),
+    createElement(AgentHeader, {
+      agent,
+      models: undefined,
+      published: undefined,
+      doors: SHUT,
+      onStop: () => Promise.resolve(),
+    }),
   );
   assert.match(running, /class="agent-status-dot" data-status="running" data-live="true"/u);
   assert.match(
@@ -275,6 +348,8 @@ test("the head says model · effort · status with the dot, and offers Stop only
     createElement(AgentHeader, {
       agent: { ...agent, status: CODING_AGENT_STATUS.COMPLETED },
       models: undefined,
+      published: undefined,
+      doors: SHUT,
       onStop: () => Promise.resolve(),
     }),
   );
@@ -286,6 +361,8 @@ test("the head says model · effort · status with the dot, and offers Stop only
     createElement(AgentHeader, {
       agent: { ...agent, status: CODING_AGENT_STATUS.STARTING },
       models: undefined,
+      published: undefined,
+      doors: SHUT,
       onStop: () => Promise.resolve(),
     }),
   );
@@ -410,4 +487,136 @@ test("copying a turn hands the clipboard the agent's words alone, never its tool
     },
   ]);
   assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
+});
+
+test("the head wears the pull request's pill in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said", () => {
+  const head = (published: CodingAgentPullRequestAnswer | undefined) =>
+    renderToStaticMarkup(
+      createElement(AgentHeader, {
+        agent: AGENT,
+        models: undefined,
+        published,
+        doors: SHUT,
+        onStop: () => Promise.resolve(),
+      }),
+    );
+  for (const state of Object.values(PULL_REQUEST_STATE)) {
+    const pill = head({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, state } });
+    assert.match(pill, new RegExp(`class="agent-pr-pill" data-state="${state}"`, "u"));
+    assert.match(pill, /class="agent-pr-number">#123</u);
+  }
+  for (const checks of Object.values(CHECK_SUMMARY)) {
+    const pill = head({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, checks } });
+    assert.match(pill, new RegExp(`class="agent-check-dot" data-checks="${checks}"`, "u"));
+  }
+  assert.match(head(PUBLISHED), /aria-label="Pull request #123, open, checks passing"/u);
+  assert.match(head(PUBLISHED), /aria-label="Pull request actions"/u);
+  assert.doesNotMatch(head(PUBLISHED), /agent-branch-chip/u);
+
+  const chip = head({ ...PUBLISHED, pullRequest: null });
+  assert.match(chip, /class="agent-branch-chip"[^>]*>[\s\S]*luke\/teammate-invitations</u);
+  assert.doesNotMatch(chip, /agent-pr-pill/u);
+  assert.match(chip, /aria-label="Pull request actions"/u);
+
+  for (const bare of [undefined, { ...PUBLISHED, branch: null, pullRequest: null }]) {
+    const nothing = head(bare);
+    assert.doesNotMatch(nothing, /agent-pr-pill|agent-branch-chip|Pull request actions/u);
+  }
+});
+
+test("the pill opens the pull request, and the ⋯ offers opening it, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
+  const opened: string[] = [];
+  const copied: string[] = [];
+  const doors = {
+    openGitHub: (url: string) => opened.push(url),
+    copy: (words: string) => copied.push(words),
+  };
+  const container = mountedHead(PUBLISHED, doors);
+
+  const pill = container.querySelector<HTMLButtonElement>(".agent-pr-pill");
+  assert.ok(pill);
+  act(() => pill.click());
+  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
+
+  choose(container, "Open pull request");
+  choose(container, "Copy branch name");
+  choose(container, "Copy checkout command");
+  choose(container, "View changes on GitHub");
+  assert.deepEqual(opened, [
+    "https://github.com/acme/relay/pull/123",
+    "https://github.com/acme/relay/pull/123",
+    "https://github.com/acme/relay/pull/123/files",
+  ]);
+  assert.deepEqual(copied, [
+    "luke/teammate-invitations",
+    "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
+  ]);
+  // The menu closes on a choice, and nothing in it is Stop, which stays the head's own button.
+  assert.deepEqual(menuItems(), []);
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
+  assert.ok(more);
+  act(() => more.click());
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    ["Open pull request", "Copy branch name", "Copy checkout command", "View changes on GitHub"],
+  );
+});
+
+test("with a branch and no pull request the ⋯ offers the copies and the compare page alone", () => {
+  const opened: string[] = [];
+  const container = mountedHead(
+    { ...PUBLISHED, pullRequest: null },
+    { openGitHub: (url) => opened.push(url), copy: ignore },
+  );
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
+  assert.ok(more);
+  act(() => more.click());
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    ["Copy branch name", "Copy checkout command", "View changes on GitHub"],
+  );
+  const changes = menuItems().find((item) => item.textContent === "View changes on GitHub");
+  assert.ok(changes);
+  act(() => changes.click());
+  assert.deepEqual(opened, [
+    "https://github.com/acme/relay/compare/luke/teammate-invitations?expand=1",
+  ]);
+});
+
+test("a finished transcript ends on the row summing the pull request up, whose Open opens it", () => {
+  const opened: string[] = [];
+  const markup = renderToStaticMarkup(
+    createElement(AgentTranscriptView, {
+      messages: [PLAN, TURN],
+      reading: false,
+      failed: false,
+      working: false,
+      onRetry: ignore,
+      openGitHub: ignore,
+      copyText: copyNothing,
+      footer: createElement(PublishedRow, { pullRequest: PULL_REQUEST, openGitHub: ignore }),
+    }),
+  );
+  assert.match(
+    markup,
+    /<\/div><div[^>]*data-published-row=""[^>]*data-state="open"[^>]*>[\s\S]*Opened #123 · \+210 −14 in 6 files<\/span><span class="agent-check-dot" data-checks="passing"/u,
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => {
+    root.render(
+      createElement(PublishedRow, {
+        pullRequest: PULL_REQUEST,
+        openGitHub: (url) => opened.push(url),
+      }),
+    );
+  });
+  const open = container.querySelector<HTMLButtonElement>(".agent-published-open");
+  assert.ok(open);
+  assert.equal(open.textContent, "Open");
+  act(() => open.click());
+  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
 });
