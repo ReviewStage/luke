@@ -73,6 +73,33 @@ export function speakerLabel(role: UIMessage["role"]): string {
   return role === TRANSCRIPT_SPEAKER.USER ? "You" : "Luke";
 }
 
+/** A run of consecutive lines from one speaker, drawn as one turn under the speaker's name. */
+export interface SpeakerTurn {
+  /** The first line's id, which is the turn's place on the call. */
+  readonly key: string;
+  readonly role: UIMessage["role"];
+  readonly messages: readonly UIMessage[];
+}
+
+/** A call's lines grouped into turns: each run of lines from one speaker is one turn, in the call's order. */
+export function speakerTurns(messages: readonly UIMessage[]): readonly SpeakerTurn[] {
+  const turns: SpeakerTurn[] = [];
+  for (const message of messages) {
+    const last = turns.at(-1);
+    if (last !== undefined && last.role === message.role) {
+      turns[turns.length - 1] = { ...last, messages: [...last.messages, message] };
+      continue;
+    }
+    turns.push({ key: message.id, role: message.role, messages: [message] });
+  }
+  return turns;
+}
+
+/** What a copy of a turn carries: its lines' words, one paragraph each. */
+export function turnText(messages: readonly UIMessage[]): string {
+  return messages.map(messageText).join("\n\n");
+}
+
 /** A message's words: its text parts, run together. */
 export function messageText(message: UIMessage): string {
   return message.parts

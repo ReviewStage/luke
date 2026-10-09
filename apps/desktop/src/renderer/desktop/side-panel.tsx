@@ -2,7 +2,9 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
@@ -85,7 +87,9 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
  * coding agent of the plan. A tab's own word is all it needs to say, so it
  * hangs no pill; a fixed tab's chord is in the View menu and on the
  * Keyboard shortcuts page, and an agent's tab wears the dot for where the
- * agent stands.
+ * agent stands. A tab something arrived on while another was shown, and an
+ * agent's whose end no one was looking at, wear the note at their corner
+ * until shown.
  */
 function TabStrip({
   tab,
@@ -128,6 +132,9 @@ function TabStrip({
         >
           <AgentStatusDot status={agent.status} />
           {agentTabLabel(agent, agents.models)}
+          {unread.some((each) => sameTab(each, { agent: agent.id })) ? (
+            <span className="tab-note" aria-hidden="true" />
+          ) : null}
         </button>
       ))}
       {/* The first read of the plan's agents did not land: nothing is known
@@ -166,6 +173,7 @@ function TabContent({
   /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
 }): React.JSX.Element {
+  const { act } = useAct();
   if (isAgentTab(tab)) {
     const agent = agents.agents?.find((each) => each.id === tab.agent);
     // The tab stands for an agent the list no longer holds only until the
@@ -186,7 +194,13 @@ function TabContent({
         <CodePane code={code} />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
-      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
+      return (
+        <PlanTranscript
+          region={transcript.region}
+          onRetry={transcript.onRetry}
+          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+        />
+      );
   }
 }
 

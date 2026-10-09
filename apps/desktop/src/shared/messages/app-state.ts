@@ -102,6 +102,16 @@ interface AppSessionReplaySlice {
 }
 
 /**
+ * The coding agents whose turn ended while the developer was not looking at
+ * the agent's tab, each until that tab is shown: what the tab's unseen dot
+ * is drawn from. Main's, because main is what watches the agents while no
+ * tab does, and so a reload of the window does not lose the dots.
+ */
+interface AppCodingAgentsSlice {
+  unseen: readonly string[];
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -128,6 +138,7 @@ export interface AppState {
    * session and the talk key bind to.
    */
   planning: PlanningView;
+  codingAgents: AppCodingAgentsSlice;
   sessionReplay: AppSessionReplaySlice;
 }
 

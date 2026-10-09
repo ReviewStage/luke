@@ -60,6 +60,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     agents: codingAgentsControl(),
     onSelect: ignore,
+    onShowAgent: ignore,
     repositories: {
       recent: [],
       read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),

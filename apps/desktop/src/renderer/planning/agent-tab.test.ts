@@ -77,15 +77,18 @@ afterEach(() => {
 });
 
 const ignore = () => undefined;
+const copyNothing = () => Promise.resolve();
 
-function drawn(messages: readonly CodingAgentMessage[]): string {
+function drawn(messages: readonly CodingAgentMessage[], working = false): string {
   return renderToStaticMarkup(
     createElement(AgentTranscriptView, {
       messages,
       reading: false,
       failed: false,
+      working,
       onRetry: ignore,
       openGitHub: ignore,
+      copyText: copyNothing,
     }),
   );
 }
@@ -94,6 +97,7 @@ function drawn(messages: readonly CodingAgentMessage[]): string {
 function mounted(
   messages: readonly CodingAgentMessage[],
   openGitHub: (url: string) => void = ignore,
+  copyText: (words: string) => Promise<void> = copyNothing,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -105,8 +109,10 @@ function mounted(
         messages,
         reading: false,
         failed: false,
+        working: false,
         onRetry: ignore,
         openGitHub,
+        copyText,
       }),
     );
   });
@@ -294,11 +300,114 @@ test("with nothing held the tab says the agent is starting, a read out says it i
         messages: [],
         reading,
         failed,
+        working: false,
         onRetry: ignore,
         openGitHub: ignore,
+        copyText: copyNothing,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
   assert.match(empty(true, false), /Reading the transcript…/u);
   assert.match(empty(false, true), /could not be read[\s\S]*Try again/u);
+});
+
+/** A message the developer sent the agent after the plan, as O1's messaging stores one. */
+const FOLLOW_UP: CodingAgentMessage = {
+  id: "m-follow-up",
+  role: "user",
+  parts: [{ type: "text", text: "Also expire them after a week." }],
+};
+
+test("each kind of part is drawn by its AI Elements component: the plan a card, a tool a row, the thinking folded, the words a response, an error in red", () => {
+  const container = mounted([PLAN, TURN]);
+  const log = container.querySelector('[role="log"]');
+  assert.ok(log);
+  // The plan card is the registry's Plan: a details first in the log, holding its content once opened.
+  assert.ok(log.firstElementChild?.matches("details[data-plan-card]"));
+  // Each tool call is one Tool row with its input and output under it.
+  const rows = [...log.querySelectorAll("details[data-call-id]")];
+  assert.equal(rows.length, 4);
+  for (const row of rows) assert.ok(row.querySelector("summary [data-tool-state]"));
+  // The reasoning is one Reasoning fold under its line.
+  const thoughts = [...log.querySelectorAll("details")].filter(
+    (fold) => fold.querySelector("summary")?.textContent === "Thought",
+  );
+  assert.equal(thoughts.length, 1);
+  // The words are a Response: markdown inside the assistant's message.
+  const turn = log.querySelector(".is-assistant");
+  assert.ok(turn);
+  assert.ok(turn.querySelector("p")?.textContent?.startsWith("Opened "));
+  // A call that failed carries the error in red, as an alert, once opened.
+  const failed = open(container, '[data-call-id="call_4"]');
+  const error = failed.querySelector('[role="alert"]');
+  assert.ok(error);
+  assert.ok(error.classList.contains("text-danger"));
+  assert.equal(
+    failed
+      .querySelector('[data-tool-state="output-error"]')
+      ?.querySelector("svg")
+      ?.classList.contains("text-danger"),
+    true,
+  );
+});
+
+test("a working line shimmers at the end only while the agent may still write, so a finished turn ends on its own last line", () => {
+  const running = drawn([PLAN, TURN], true);
+  assert.match(
+    running,
+    /<p[^>]*data-working=""[^>]*><span[^>]*animate-shimmer[^>]*>Working…<\/span><\/p><\/div>/u,
+  );
+  const ended = drawn([PLAN, TURN], false);
+  assert.doesNotMatch(ended, /Working…/u);
+  assert.doesNotMatch(ended, /data-working/u);
+  // Nothing trails the last message: the log's own padding is the end.
+  assert.match(ended, /<\/div><\/div><\/div>$/u);
+});
+
+test("a message the developer sent after the plan is the developer's bubble, and only the first is the plan card", () => {
+  const markup = drawn([PLAN, TURN, FOLLOW_UP]);
+  const cards = markup.match(/data-plan-card=""/gu) ?? [];
+  assert.equal(cards.length, 1);
+  assert.match(
+    markup,
+    /<div class="[^"]*\bis-user\b[^"]*"[^>]*>.*?Also expire them after a week\./u,
+  );
+  assert.doesNotMatch(markup, /Plan · <\/span><span[^>]*>Also expire them/u);
+});
+
+test("copying a turn hands the clipboard the agent's words alone, never its tool calls, and a turn of calls alone offers no copy", async () => {
+  const copied: string[] = [];
+  const container = mounted([PLAN, TURN], ignore, (words) => {
+    copied.push(words);
+    return Promise.resolve();
+  });
+  const copy = container.querySelector<HTMLButtonElement>(
+    '.is-assistant button[aria-label="Copy"]',
+  );
+  assert.ok(copy);
+  await act(async () => {
+    copy.click();
+    await Promise.resolve();
+  });
+  assert.deepEqual(copied, [
+    "Opened [the pull request](https://github.com/acme/relay/pull/7). See [the docs](https://example.com/docs).",
+  ]);
+  assert.equal(copy.getAttribute("aria-label"), "Copied");
+
+  const callsOnly = mounted([
+    {
+      id: "m-calls",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-bash",
+          toolCallId: "call_only",
+          state: "output-available",
+          input: { command: "ls" },
+          output: { status: "completed", exitCode: 0, stdout: "a\n", stderr: "", truncated: false },
+        },
+      ],
+    },
+  ]);
+  assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
 });

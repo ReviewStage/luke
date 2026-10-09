@@ -134,6 +134,11 @@ export const ACT_KIND = {
   CODING_AGENTS_START: "codingAgents.start",
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   CODING_AGENTS_STOP: "codingAgents.stop",
+  /**
+   * Which agent's tab the panel shows, or none: what main's notification of
+   * an agent's end is held back by, and what clears the tab's unseen dot.
+   */
+  CODING_AGENTS_SHOWN: "codingAgents.shown",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -465,6 +470,11 @@ export const ACT = {
     payload: actSchema(codingAgentStopParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not stop the agent on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_SHOWN]: {
+    payload: record({ agentId: EffectSchema.NullOr(exactId) }),
+    result: answersNothing,
+    refusal: "Could not note which agent is shown on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
