@@ -6,7 +6,16 @@ import {
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { StopIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import { useState } from "react";
+import {
+  FilePenIcon,
+  FileTextIcon,
+  GlobeIcon,
+  type LucideIcon,
+  SearchIcon,
+  TerminalIcon,
+  WrenchIcon,
+} from "lucide-react";
+import { type ReactNode, useState } from "react";
 import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -16,7 +25,13 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "../ai-elements/message";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  PANEL_MARKDOWN_COMPONENTS,
+} from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "../ai-elements/tool";
 import {
@@ -28,6 +43,7 @@ import {
   agentTabLabel,
   opensOnGitHub,
 } from "./coding-agent-model";
+import { planCardTitle, TOOL_GLYPH, type ToolGlyph, toolCallView } from "./tool-call-model";
 import { useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
@@ -35,25 +51,28 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, the Stop, and its transcript live.
  *
  * The transcript is drawn with the AI Elements components, as the
- * Transcript tab's is, from the agent's stored `UIMessage`s as they are:
- * the plan it was handed as the one user turn, folded; and each of its own
- * turns with its text as markdown, its reasoning folded, each tool call
- * folded under its name with the input and the output inside, and a call
- * that ended in an error said in red. The list keeps to its newest line
- * while it is scrolled there. A link in the transcript opens in the
- * browser where it is a page on GitHub, which is where the pull request
- * the agent opened lives; every other address is drawn and goes nowhere.
- * Every word here is the agent's or the plan's, so the root is left out
- * of the screen recording (`ph-no-capture`) as a second line behind the
- * recording's text masking.
+ * Transcript tab's is, from the agent's stored `UIMessage`s as they are,
+ * and reads as a devtool's agent pane: the plan it was handed is a card
+ * at the top, folded under its title; each of its own turns runs the
+ * column's width with its text as markdown, its reasoning folded under
+ * one quiet line, and each tool call one compact row saying what it did
+ * (`tool-call-model.ts`), with the input and the answer under the row
+ * once opened and a call that ended in an error marked in red. The list
+ * keeps to its newest line while it is scrolled there. A link in the
+ * transcript opens in the browser where it is a page on GitHub, which is
+ * where the pull request the agent opened lives; every other address is
+ * drawn and goes nowhere. Every word here is the agent's or the plan's,
+ * so the root is left out of the screen recording (`ph-no-capture`) as a
+ * second line behind the recording's text masking.
  */
 
 /** What the tab says before the agent's first message lands. */
 const NOTHING_YET_LINE = "The agent is starting. Its transcript appears here.";
 
-/** How the agent's markdown is drawn: never as an image, which would be a request the moment the tab opens, and a link only to GitHub. */
+/** How the agent's markdown is drawn: at the panel's scale, never as an image, which would be a request the moment the tab opens, and a link only to GitHub. */
 function transcriptComponents(openGitHub: (url: string) => void): Components {
   return {
+    ...PANEL_MARKDOWN_COMPONENTS,
     img: () => null,
     a: ({ href, children }) =>
       href !== undefined && opensOnGitHub(href) ? (
@@ -75,16 +94,51 @@ function transcriptComponents(openGitHub: (url: string) => void): Components {
   };
 }
 
+/** Each row's icon, by what its glyph stands for. */
+const TOOL_ICON = {
+  [TOOL_GLYPH.TERMINAL]: TerminalIcon,
+  [TOOL_GLYPH.FILE]: FileTextIcon,
+  [TOOL_GLYPH.EDIT]: FilePenIcon,
+  [TOOL_GLYPH.SEARCH]: SearchIcon,
+  [TOOL_GLYPH.WEB]: GlobeIcon,
+  [TOOL_GLYPH.GENERIC]: WrenchIcon,
+} as const satisfies Record<ToolGlyph, LucideIcon>;
+
+/** The word before a plan card's title. */
+const PLAN_CARD_LABEL = "Plan";
+
+/** One tool call: its row, and its input and answer under it once opened. */
+function ToolCallView({
+  part,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+}): ReactNode {
+  const view = toolCallView(part);
+  const Icon = TOOL_ICON[view.glyph];
+  return (
+    <Tool data-call-id={part.callId}>
+      <ToolHeader
+        state={part.state}
+        icon={<Icon aria-hidden="true" />}
+        label={view.summary.label}
+        code={view.summary.code}
+      />
+      <ToolContent>
+        <ToolInput block={view.input} />
+        <ToolOutput block={view.output} errorText={part.errorText} />
+      </ToolContent>
+    </Tool>
+  );
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
-  index,
   components,
 }: {
   part: AgentPart;
-  index: number;
   components: Components;
-}): React.JSX.Element | null {
+}): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
       return (
@@ -104,55 +158,59 @@ function AgentPartView({
         </Reasoning>
       );
     case AGENT_PART.TOOL:
-      return (
-        <Tool data-call-id={part.callId}>
-          <ToolHeader name={part.tool} state={part.state} />
-          <ToolContent>
-            <ToolInput input={part.input} />
-            <ToolOutput output={part.output} errorText={part.errorText} />
-          </ToolContent>
-        </Tool>
-      );
+      return <ToolCallView part={part} />;
+    // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
-      return index === 0 ? null : <hr className="agent-step" />;
     case AGENT_PART.OTHER:
       return null;
   }
 }
 
-/** One message: the plan the agent was handed, folded, or one of the agent's own turns. */
+/** The plan the agent was handed: a card across the column, folded under its title. */
+function PlanCard({ text, components }: { text: string; components: Components }): ReactNode {
+  return (
+    <Fold
+      className="rounded-lg border border-border bg-muted text-[12.5px]"
+      data-plan-card=""
+      aria-label={PLAN_CARD_LABEL}
+    >
+      <FoldSummary className="flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary">
+        <FoldChevron />
+        <FileTextIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 flex-1 truncate">
+          <span className="text-muted-foreground">{PLAN_CARD_LABEL} · </span>
+          <span className="font-medium">{planCardTitle(text)}</span>
+        </span>
+      </FoldSummary>
+      <FoldBody className="border-t border-border px-3 py-2 text-[13px] leading-normal">
+        <MessageResponse mode="static" components={components}>
+          {text}
+        </MessageResponse>
+      </FoldBody>
+    </Fold>
+  );
+}
+
+/** One message: the plan the agent was handed, as a card, or one of the agent's own turns. */
 function AgentMessage({
   message,
   components,
 }: {
   message: CodingAgentMessage;
   components: Components;
-}): React.JSX.Element {
+}): ReactNode {
   const parts = agentParts(message);
   if (message.role === MESSAGE_ROLE.USER) {
     const text = parts
       .flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : []))
       .join("\n\n");
-    return (
-      <Message from={message.role}>
-        <MessageContent>
-          <Reasoning>
-            <ReasoningTrigger>Plan</ReasoningTrigger>
-            <ReasoningContent>
-              <MessageResponse mode="static" components={components}>
-                {text}
-              </MessageResponse>
-            </ReasoningContent>
-          </Reasoning>
-        </MessageContent>
-      </Message>
-    );
+    return <PlanCard text={text} components={components} />;
   }
   return (
     <Message from={message.role}>
       <MessageContent>
         {parts.map((part, index) => (
-          <AgentPartView key={index} part={part} index={index} components={components} />
+          <AgentPartView key={index} part={part} components={components} />
         ))}
       </MessageContent>
     </Message>
