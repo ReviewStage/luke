@@ -45,9 +45,11 @@ Vercel's cron calls `/api/maintenance/sweep` once a minute (`apps/web/vercel.jso
 `CRON_SECRET`, compared in constant time; a deployment missing that secret
 answers unavailable and sweeps nothing. Each call purges the conversations
 stamped deleted thirty days ago, settles as abandoned every turn still running
-an hour after it started, and ends on Luke's key every voice session whose
-device detached and did not come back within the grace. It reads no account's
-words and runs no model.
+past its bound (`apps/web/server/hosted/store/abandoned-turns.ts`'s
+`TURN_ABANDON`: an hour after it started, or twenty-five hours for a coding
+agent's turn, whose one turn is its whole run), and ends on Luke's key every
+voice session whose device detached and did not come back within the grace. It
+reads no account's words and runs no model.
 
 ## Testing
 

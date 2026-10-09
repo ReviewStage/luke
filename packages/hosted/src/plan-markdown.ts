@@ -16,6 +16,8 @@ const ASSUMPTIONS_HEADING = `## ${PLAN_HEADING.ASSUMPTIONS}`;
 
 const BULLET = "- ";
 
+const WHITESPACE = /\s/u;
+
 /** The characters the heading and the blank lines around it add to the body. */
 const HEADING_OVERHEAD = ASSUMPTIONS_HEADING.length + 4;
 
@@ -32,11 +34,28 @@ export const PLAN_MARKDOWN_MAX_CHARS =
 
 /**
  * One assumption as a list item. Note that we fold a line break inside the
- * text into a space, because a blank line would end the item and leave the
- * rest of the sentence outside the list.
+ * text into a space, with the whitespace run around it, because a blank line
+ * would end the item and leave the rest of the sentence outside the list. A
+ * run holding no break is kept as written. The fold is one pass over the
+ * text rather than a `\s*\n\s*` replace, because that expression backtracks
+ * across every long run of spaces it finds no break in, and the service
+ * runs this on a saved document as a coding agent starts.
  */
 function listItem(text: string): string {
-  return `${BULLET}${text.replace(/\s*\n\s*/gu, " ")}`;
+  let item = BULLET;
+  let run = "";
+  let broken = false;
+  for (const char of text) {
+    if (WHITESPACE.test(char)) {
+      run += char;
+      broken ||= char === "\n";
+      continue;
+    }
+    item += `${broken ? " " : run}${char}`;
+    run = "";
+    broken = false;
+  }
+  return item + (broken ? " " : run);
 }
 
 /**
