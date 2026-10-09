@@ -49,7 +49,6 @@ export function settingsPanelProps(
       commit: ignore,
     },
     panelOpen: true,
-    onQuit: ignore,
     shortcuts: {
       voiceHotkeyHeld: false,
       voiceChosen: false,

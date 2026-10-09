@@ -1,6 +1,5 @@
 import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
-import { PowerIcon } from "@sidecar/panel";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
@@ -8,7 +7,6 @@ import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useRef } from "react";
 import type { FeedbackEntryControl } from "../feedback-entry";
 import { microphoneAccessRow, voiceAttentionNote } from "../microphone-access";
-import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import {
   SETTINGS_SUBVIEW_LIST,
   SETTINGS_VIEW,
@@ -56,7 +54,6 @@ export interface SettingsPanelProps {
    * and an entry can outlast the panel it was started in.
    */
   panelOpen: boolean;
-  onQuit: () => void;
   shortcuts: ShortcutControl;
 }
 
@@ -97,7 +94,6 @@ export function SettingsPanel({
   settings,
   feedback,
   panelOpen,
-  onQuit,
   shortcuts,
 }: SettingsPanelProps): React.JSX.Element {
   const writes = useSettingsWrites();
@@ -197,17 +193,6 @@ export function SettingsPanel({
               panelOpen={panelOpen}
             />
           ) : null}
-
-          <button
-            type="button"
-            className="quit-button"
-            style={cssCustomProperties({ "--row-index": 5 })}
-            {...searchAnchorProps(SETTINGS_SEARCH_ROW.QUIT)}
-            onClick={onQuit}
-          >
-            <PowerIcon />
-            Quit Luke
-          </button>
         </>
       )}
     </div>

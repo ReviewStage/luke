@@ -941,8 +941,7 @@ button:disabled {
  * immediate, and the stagger below, so arriving fans out. A transition reads
  * its timing from the state being entered, which is what keeps the two apart. */
 .settings-section,
-.settings-header,
-.quit-button {
+.settings-header {
   --row-delay: 0s;
 
   opacity: 0;
@@ -955,8 +954,7 @@ button:disabled {
 }
 
 .app-stage[data-presentation="panel"] .settings-section,
-.app-stage[data-presentation="panel"] .settings-header,
-.app-stage[data-presentation="panel"] .quit-button {
+.app-stage[data-presentation="panel"] .settings-header {
   --row-delay: calc(
     var(--expand-delay) +
     min(var(--row-index, 0), var(--row-fan-limit)) *

@@ -551,7 +551,6 @@ export function App(): React.JSX.Element {
             settings,
             feedback: feedback.control,
             panelOpen,
-            onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
             shortcuts,
           }}
         />

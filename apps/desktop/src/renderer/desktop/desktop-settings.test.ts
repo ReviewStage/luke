@@ -308,3 +308,9 @@ test("a page at its defaults offers no reset", () => {
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
   assert.equal(toolbarButton(container, "Reset to defaults"), undefined);
 });
+
+test("the front page draws no Quit button, which the app menu's Quit already does", () => {
+  const container = mount(settingsView({ voiceAvailable: true }));
+  const words = [...container.querySelectorAll("button")].map((button) => button.textContent);
+  assert.ok(!words.some((text) => text?.includes("Quit")));
+});

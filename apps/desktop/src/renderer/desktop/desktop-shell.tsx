@@ -174,7 +174,6 @@ export function DesktopShell({
           account={account}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           onBegin={gates.onBeginSignIn}
-          onQuit={settings.onQuit}
         />
       </Onboarding>
     );
