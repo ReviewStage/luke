@@ -526,14 +526,21 @@ body,
   align-items: center;
   gap: var(--control-gap);
   min-height: var(--desktop-bar-height);
-  padding: var(--space-8) var(--panel-toggle-clearance) var(--space-8) var(--content-inset);
+  padding: var(--space-8) var(--content-inset);
   border-bottom: 1px solid var(--hairline);
   -webkit-app-region: drag;
 }
 
+/* Beneath the side panel's toggle, at the window's top right, the toolbar
+   stops short of it. Only a plan's page draws the toggle, so Settings' rows
+   end as far in as they start. */
+.desktop-shell[data-panel-toggle="true"] .desktop-toolbar {
+  padding-right: var(--panel-toggle-clearance);
+}
+
 /* With the panel beside it, the toolbar ends at the panel's edge rather than
    the window's, and the panel's own row leaves the toggle its room. */
-.desktop-plan[data-panel-open="true"] .desktop-toolbar {
+.desktop-shell .desktop-plan[data-panel-open="true"] .desktop-toolbar {
   padding-right: var(--column-inset);
 }
 

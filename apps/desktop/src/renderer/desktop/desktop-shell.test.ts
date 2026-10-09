@@ -584,3 +584,19 @@ test("the panel's toggle stands in the title bar on a plan's page alone, disable
   show(PANEL_TAB.SETTINGS);
   assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
 });
+
+test("a toolbar leaves the panel's toggle room only where the toggle stands", () => {
+  // Whether the window's toolbar sits beneath the panel's toggle, and so stops short of it.
+  const clears = (): boolean => {
+    const toolbar = document.body.querySelector(".desktop-toolbar");
+    assert.ok(toolbar, "the page draws its toolbar");
+    return toolbar.closest("[data-panel-toggle='true']") !== null;
+  };
+  show(PANEL_TAB.PLANS);
+  assert.ok(document.body.querySelector(".side-panel-toggle"), "a plan's page draws the toggle");
+  assert.equal(clears(), true);
+
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
+  assert.equal(clears(), false, "so its toolbar ends as far in as it starts");
+});
