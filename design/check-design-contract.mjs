@@ -12,6 +12,12 @@ const failures = [];
 const SPACED_SHEETS = new Set(["desktop.css", "sign-in.css", "tooltip.css"]);
 const SPACING_DECLARATION =
   /(?<![\w-])((?:padding|margin)(?:-[a-z-]+)?|(?:row-|column-)?gap)\s*:\s*([^;]+);([ \t]*\/\*\s*off-scale\b)?/gu;
+// A colour is a token: named in a `:root` block, the dark one or the light
+// one under `prefers-color-scheme`, so every sheet flips with the appearance.
+// A mask's black is an alpha rather than a colour, so a mask may spell it.
+const COLOUR_LITERAL =
+  /#[\da-f]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(|(?<![\w-])(?:white|black)(?![\w-])/iu;
+const MASK_PROPERTY = /^(?:-webkit-)?mask(?:-image)?$/u;
 
 // A value less every calc that spends a token, which may adjust it by a pixel
 // as a border asks.
@@ -106,6 +112,18 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
 
   const rules = source.matchAll(/([^{}]+)\{([^{}]*)\}/gsu);
   for (const [, selector, body] of rules) {
+    const bare = selector.replace(/\/\*[\s\S]*?\*\//gu, "").trim();
+    if (bare !== ":root") {
+      for (const declaration of body.replace(/\/\*[\s\S]*?\*\//gu, "").split(";")) {
+        const colon = declaration.indexOf(":");
+        const property = declaration.slice(0, colon).trim();
+        if (colon < 0 || MASK_PROPERTY.test(property)) continue;
+        if (COLOUR_LITERAL.test(declaration.slice(colon + 1))) {
+          failures.push(`${name}: ${bare} spends a literal colour in ${property}; use a token`);
+        }
+      }
+    }
+
     if (SPACED_SHEETS.has(name)) {
       for (const [, property, value, offScale] of body.matchAll(SPACING_DECLARATION)) {
         if (offScale || !/(?<![\w.])0*[1-9]\d*(?:\.\d+)?px\b/u.test(withoutTokenCalcs(value))) {

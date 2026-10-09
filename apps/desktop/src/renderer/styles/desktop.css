@@ -7,6 +7,10 @@
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
+  /* What floats over the window, a menu, a dialog, or the composer's card:
+     the sidebar's step above the ground in the dark, where lighter is nearer,
+     and white in the light, where a shadow says it instead. */
+  --surface-popover: var(--desktop-sidebar);
   /* A top row and its hairline, its middle level with the traffic lights'. */
   --desktop-bar-height: calc(2 * var(--traffic-lights-middle) + 1px);
   /* One control's box, corner, and glyph, spent by every button and tab in
@@ -79,6 +83,20 @@
   /* A destructive act's own button, filled: deep enough to carry white words,
      where the panel's lighter red is drawn as text. */
   --danger-fill: #d4373a;
+}
+
+/* The light appearance, which the window answers whenever macOS (or Luke's
+   own setting, through it) asks: an off-white ground, the sidebar a step
+   darker, the side panel between them, and white for what floats. The window
+   main paints before the page loads is this ground too
+   (`DESKTOP_WINDOW.BACKGROUND`). */
+@media (prefers-color-scheme: light) {
+  :root {
+    --desktop-ground: #fcfcfc;
+    --desktop-sidebar: #f3f3f4;
+    --desktop-well: #f8f8f9;
+    --surface-popover: #fff;
+  }
 }
 
 html,
@@ -466,7 +484,7 @@ body,
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3a3f55, #262833);
+  background: var(--avatar-fill);
   font-size: 12px;
   font-weight: 700;
   object-fit: cover;
@@ -687,12 +705,12 @@ body,
 
 .primary-button {
   background: var(--message-sent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .danger-button {
   background: var(--danger-fill);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 :is(.primary-button, .danger-button):hover:where(:not(:disabled)) {
@@ -728,10 +746,10 @@ body,
   min-width: 196px;
   flex-direction: column;
   padding: var(--menu-inset);
-  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--hairline-strong);
   border-radius: 10px;
-  background: var(--desktop-sidebar);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  background: var(--surface-popover);
+  box-shadow: 0 12px 32px var(--shadow);
   -webkit-app-region: no-drag;
 }
 
@@ -870,7 +888,7 @@ body,
 }
 
 .desktop-document .plan-body {
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--text-body);
   font-size: 15px;
   line-height: 1.65;
 }
@@ -950,7 +968,7 @@ body,
   width: 42px;
   height: 42px;
   background: var(--message-sent);
-  color: #fff;
+  color: var(--on-accent);
   box-shadow: 0 6px 18px color-mix(in srgb, var(--message-sent) 35%, transparent);
 }
 
@@ -1189,7 +1207,7 @@ body,
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 40px var(--shadow);
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
@@ -1289,7 +1307,7 @@ body,
   border: 1px solid var(--hairline);
   border-radius: 12px;
   background: var(--surface-overlay);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 16px 40px var(--shadow);
   animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
@@ -1756,7 +1774,7 @@ body,
   background: var(--button-ground);
   box-shadow:
     inset 0 0 0 1px var(--hairline),
-    0 6px 16px rgba(0, 0, 0, 0.4);
+    0 6px 16px var(--shadow-soft);
   translate: -50% 0;
 }
 
@@ -1829,7 +1847,7 @@ body,
 .tab[data-dragging="true"] {
   z-index: 1;
   background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-well);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px var(--shadow);
   color: var(--text-primary);
   transition:
     background-color var(--duration-hover) ease,
@@ -1996,7 +2014,7 @@ body,
   display: grid;
   place-items: center;
   padding: var(--space-24);
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--scrim);
   animation: confirm-dialog-dim var(--duration-quick) ease-out;
   -webkit-app-region: no-drag;
 }
@@ -2007,10 +2025,10 @@ body,
   flex-direction: column;
   gap: var(--space-8);
   padding: var(--space-20);
-  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--hairline-strong);
   border-radius: 14px;
-  background: var(--desktop-sidebar);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+  background: var(--surface-popover);
+  box-shadow: 0 24px 64px var(--shadow-deep);
   color: var(--text-primary);
   font-size: 13px;
   animation: confirm-dialog-rise var(--duration-fast) var(--spring-fast);
@@ -2127,7 +2145,7 @@ body,
 .feedback-dialog[data-dropping="true"] {
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--message-sent) 70%, transparent),
-    0 24px 64px rgba(0, 0, 0, 0.6);
+    0 24px 64px var(--shadow-deep);
 }
 
 /* The note grows with its words, up to where scrolling it is kinder than a
@@ -2193,9 +2211,9 @@ body,
   height: 18px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--hairline-strong);
   border-radius: 50%;
-  background: var(--desktop-sidebar);
+  background: var(--surface-popover);
   color: var(--text-secondary);
   transition: color var(--duration-hover) ease;
 }
@@ -2254,7 +2272,7 @@ body,
 
 /* Send's chord, muted against its own fill rather than the card's. */
 .feedback-dialog .primary-button .shortcut-glyphs {
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--on-accent-muted);
 }
 
 /* Said quietly at the window's foot once a note has gone, and gone itself a
@@ -2269,10 +2287,10 @@ body,
   gap: var(--glyph-gap);
   margin: 0;
   padding: var(--space-8) var(--space-16);
-  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border: 1px solid var(--hairline-strong);
   border-radius: 999px;
-  background: var(--desktop-sidebar);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: var(--surface-popover);
+  box-shadow: 0 8px 24px var(--shadow);
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 560;

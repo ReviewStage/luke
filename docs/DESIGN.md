@@ -93,8 +93,15 @@ exception belongs in this contract and its check in the same change.
 
 ## Readability and access
 
-Semantic colors are named once in `base.css`; component sheets consume the
-token rather than inventing another error red, overlay black, or text gray.
+Semantic colors are named once in `base.css`, and the window's grounds in
+`desktop.css`; component sheets consume the token rather than inventing another
+error red, overlay black, or text gray. Every colour token is restated for the
+light appearance in its file's `@media (prefers-color-scheme: light)` `:root`
+block, which Luke's theme drives through Electron's `nativeTheme.themeSource`,
+so a change of appearance is the stylesheet's alone: nothing re-renders, and
+the whiteboard takes it as a new theme for the canvas already mounted.
+`check-design-contract.mjs` refuses a colour literal anywhere but a `:root`
+block; a mask's black is an alpha rather than a colour, so a mask may spell it.
 Text that communicates a label, status, count, or instruction must meet WCAG
 AA contrast at its rendered size. Decorative marks and disabled controls may
 sit below that threshold only when their meaning is available elsewhere.

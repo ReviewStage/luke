@@ -37,7 +37,7 @@
   padding: 10px 2px 12px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--scrollbar) transparent;
   scrollbar-width: thin;
   -webkit-user-select: text;
   user-select: text;
@@ -205,7 +205,7 @@
   margin-left: auto;
   border-radius: 50%;
   background: var(--danger);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .plan-stop .control-icon {
@@ -260,8 +260,8 @@
   overflow: hidden;
   border: 1px solid var(--hairline);
   border-radius: 10px;
-  background: #0d1117;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  background: var(--code-ground);
+  box-shadow: 0 12px 32px var(--shadow);
 }
 
 .code-pane-header {
@@ -297,11 +297,11 @@
   padding: var(--space-6) 0;
   overflow: auto;
   overscroll-behavior: contain;
-  color: #e6edf3;
+  color: var(--code-text);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;
   line-height: 1.6;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--scrollbar) transparent;
   scrollbar-width: thin;
 }
 
@@ -312,27 +312,39 @@
 
 /* The lines pointed at, lit across the whole width with a bar in the gutter. */
 .code-line[data-pointed="true"] {
-  background: rgba(56, 139, 253, 0.16);
-  box-shadow: inset 2px 0 0 #388bfd;
+  background: var(--code-pointed);
+  box-shadow: inset 2px 0 0 var(--code-pointed-edge);
 }
 
 .code-line-number {
   flex: 0 0 auto;
   width: 48px;
   padding: 0 var(--space-12) 0 0;
-  color: rgba(230, 237, 243, 0.32);
+  color: var(--code-line-number);
   text-align: right;
   user-select: none;
 }
 
 .code-line[data-pointed="true"] .code-line-number {
-  color: rgba(230, 237, 243, 0.8);
+  color: var(--code-line-number-pointed);
 }
 
 .code-line-text {
   padding-right: var(--content-inset);
   font: inherit;
   white-space: pre;
+}
+
+/* Each run carries its colour in both appearances (`code-pane.tsx`); a run
+   in the theme's own foreground carries neither and takes the pane's. */
+.code-line-text > span {
+  color: var(--run-dark, var(--code-text));
+}
+
+@media (prefers-color-scheme: light) {
+  .code-line-text > span {
+    color: var(--run-light, var(--code-text));
+  }
 }
 
 /* The open plan's transcript: the AI Elements components draw the calls
@@ -524,7 +536,7 @@
 }
 
 .agent-pr-pill[data-state="merged"] {
-  --accent: #c3a0ff;
+  --accent: var(--state-merged);
 }
 
 .agent-pr-pill[data-state="closed"] {
@@ -589,7 +601,7 @@
 }
 
 .agent-published-row[data-state="merged"] .account-mark {
-  color: #c3a0ff;
+  color: var(--state-merged);
 }
 
 /* The open plan's Work tab: each planning turn under the time it began, its

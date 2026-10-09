@@ -18,11 +18,11 @@
   align-items: center;
   gap: var(--glyph-gap);
   padding: var(--space-4) var(--row-inset);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--tooltip-edge);
   border-radius: 7px;
-  background: #0b0b0c;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
-  color: rgba(255, 255, 255, 0.95);
+  background: var(--tooltip-fill);
+  box-shadow: 0 4px 14px var(--shadow);
+  color: var(--tooltip-text);
   font-size: 12px;
   font-weight: 500;
   line-height: 16px;
@@ -77,7 +77,7 @@ body:has(.app-stage[data-capture="true"]) .tooltip {
 }
 
 .tooltip .shortcut-glyphs {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--tooltip-chord);
 }
 
 /* A row's own shortcut at its right end, shown while the row is hovered or

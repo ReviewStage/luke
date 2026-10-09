@@ -1,5 +1,6 @@
-import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { useEffect, useRef } from "react";
+import type { CodeToken, PlanCode } from "@sidecar/hosted/planning-view";
+import { cssCustomProperties } from "@sidecar/surface/react-css";
+import { type CSSProperties, useEffect, useRef } from "react";
 import { isPointed, rangeLabel } from "./code-pane-model";
 
 /**
@@ -25,6 +26,19 @@ function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   const line = target.getBoundingClientRect();
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
   lines.scrollLeft = 0;
+}
+
+/**
+ * A run's colour in each appearance, as the properties `planning.css` picks
+ * between, so the code follows the appearance without being drawn again;
+ * nothing for a run in the theme's own foreground.
+ */
+function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
+  if (color === undefined && lightColor === undefined) return undefined;
+  const colours: Record<string, string> = {};
+  if (color !== undefined) colours["--run-dark"] = color;
+  if (lightColor !== undefined) colours["--run-light"] = lightColor;
+  return cssCustomProperties(colours);
 }
 
 /** The file's window of lines, the lines pointed at lit and scrolled into view whenever they change. */
@@ -53,10 +67,7 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
             <span className="code-line-number">{line}</span>
             <code className="code-line-text">
               {tokens.map((token, at) => (
-                <span
-                  key={at}
-                  style={token.color === undefined ? undefined : { color: token.color }}
-                >
+                <span key={at} style={runColours(token)}>
                   {token.text}
                 </span>
               ))}
