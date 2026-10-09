@@ -182,10 +182,12 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
 
       assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.none());
       assert.equal(yield* agentRows(userId), 0);
+      // The raw select reads the instant as each driver hands it back, a Date on
+      // PGlite and epoch milliseconds on `pg`, so what is held is that one stands.
       for (const { conversationId } of [agent, kept]) {
         const conversation = yield* conversationKind(conversationId);
         assert.equal(conversation?.kind, CONVERSATION_KIND.CODING_AGENT);
-        assert.ok(conversation?.deletedAt instanceof Date);
+        assert.notEqual(conversation?.deletedAt, null);
       }
     }),
   );
