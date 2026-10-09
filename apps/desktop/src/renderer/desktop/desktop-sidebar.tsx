@@ -1,5 +1,5 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { BackIcon, ComposeIcon, ForwardIcon, GearIcon, UserIcon } from "@sidecar/panel";
+import { ArrowLeftIcon, ArrowRightIcon, ComposeIcon, GearIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -69,7 +69,7 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
           disabled={!history.canGoBack}
           onClick={history.onBack}
         >
-          <BackIcon />
+          <ArrowLeftIcon />
         </button>
       </Tooltip>
       <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
@@ -80,7 +80,7 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
           disabled={!history.canGoForward}
           onClick={history.onForward}
         >
-          <ForwardIcon />
+          <ArrowRightIcon />
         </button>
       </Tooltip>
     </div>

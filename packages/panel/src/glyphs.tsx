@@ -146,11 +146,22 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
-/** Points on, the way back came: the control that goes forward again. */
-export function ForwardIcon(): React.JSX.Element {
+/** An arrow pointing left: back to the place the window stood on before. */
+export function ArrowLeftIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+      <path d="M19 12H5" />
+      <path d="m11.6 5.4-6.6 6.6 6.6 6.6" />
+    </Glyph>
+  );
+}
+
+/** An arrow pointing right: forward again to where back came from. */
+export function ArrowRightIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M5 12h14" />
+      <path d="m12.4 5.4 6.6 6.6-6.6 6.6" />
     </Glyph>
   );
 }
