@@ -376,3 +376,44 @@ test("a refused send keeps the dialog, the words, and says why", async () => {
   assert.equal(field().value, "It broke");
   assert.equal(document.querySelector('[role="status"]'), null, "nothing claims it went");
 });
+
+test("each kind keeps its own draft, so a note is sent as the kind it was written as", async () => {
+  mount();
+  openFromSettings("Send feedback");
+  type("The plan deleted my question");
+  press("Escape");
+
+  openFromSettings("Suggest a feature");
+  assert.equal(field().value, "", "the other kind starts empty");
+  type("Export a plan as a PDF");
+  act(() => button("Send").click());
+  await settle();
+
+  openFromSettings("Send feedback");
+  assert.equal(field().value, "The plan deleted my question");
+  act(() => button("Send").click());
+  await settle();
+
+  assert.deepEqual(
+    submissions().map((each) => [each.kind, each.message]),
+    [
+      [FEEDBACK_KIND.PROMPT, "Export a plan as a PDF"],
+      [FEEDBACK_KIND.FEEDBACK, "The plan deleted my question"],
+    ],
+  );
+});
+
+test("a screenshot still being read when its draft is cancelled lands in no draft", async () => {
+  mount();
+  openFromSettings("Send feedback");
+  const input = dialog()?.querySelector<HTMLInputElement>('input[type="file"]');
+  assert.ok(input);
+  Object.defineProperty(input, "files", { configurable: true, value: [screenshot("old.png")] });
+  act(() => {
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  act(() => button("Cancel").click());
+
+  openFromSettings("Send feedback");
+  await pick([screenshot("new.png")], ["new.png"]);
+});

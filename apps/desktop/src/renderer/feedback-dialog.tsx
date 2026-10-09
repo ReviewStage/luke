@@ -7,10 +7,12 @@
  * focus goes back to whatever opened it. Command-Enter sends from anywhere in
  * the card.
  *
- * One rule keeps the draft: Cancel and a delivered send discard it; Escape
- * and a press on the dimmed window only close the card, keeping the words
- * and screenshots for the next opening — unless there are no words yet, in
- * which case there is nothing worth keeping and they discard it too.
+ * Each kind keeps its own draft, so a note is always sent as the kind it was
+ * written as. One rule keeps it: Cancel and a delivered send discard it;
+ * Escape and a press on the dimmed window only close the card, keeping the
+ * words and screenshots for the next opening of that kind — unless there are
+ * no words yet, in which case there is nothing worth keeping and they discard
+ * it too.
  *
  * What a send carries is exactly what the card shows: the words, the
  * screenshots drawn in it, and — only while "Include my name and email" is
@@ -90,6 +92,13 @@ interface FeedbackDraft {
 }
 
 const FRESH_DRAFT: FeedbackDraft = { message: "", images: [], signed: true };
+
+type FeedbackDrafts = Readonly<Record<FeedbackKind, FeedbackDraft>>;
+
+const FRESH_DRAFTS = {
+  [FEEDBACK_KIND.FEEDBACK]: FRESH_DRAFT,
+  [FEEDBACK_KIND.PROMPT]: FRESH_DRAFT,
+} satisfies FeedbackDrafts;
 
 /** The credit a signed note carries: the signed-in account's own name and address. */
 interface FeedbackSignature {
@@ -191,8 +200,8 @@ function ImageThumbnail({
 
 /**
  * The dialog for the kind asked for, while one is, and the thank-you after a
- * send lands. Always mounted by the app, because the draft it keeps between
- * openings lives here.
+ * send lands. Always mounted by the app, because the drafts it keeps between
+ * openings live here.
  */
 export function FeedbackDialog({
   kind,
@@ -205,7 +214,18 @@ export function FeedbackDialog({
   onClose: () => void;
 }): React.JSX.Element {
   const { act } = useAct();
-  const [draft, setDraft, latestDraft] = useStateWithRef<FeedbackDraft>(FRESH_DRAFT);
+  const [drafts, setDrafts, latestDrafts] = useStateWithRef<FeedbackDrafts>(FRESH_DRAFTS);
+  /**
+   * Counts each kind's discards, so a screenshot still being read when its
+   * draft was cancelled or sent lands in no draft at all.
+   */
+  const discards = useRef<Record<FeedbackKind, number>>({
+    [FEEDBACK_KIND.FEEDBACK]: 0,
+    [FEEDBACK_KIND.PROMPT]: 0,
+  });
+  /** The kind on screen now, for work that finishes renders after it began. */
+  const shownKind = useRef(kind);
+  shownKind.current = kind;
   const [busy, setBusy, latestBusy] = useStateWithRef(false);
   const [rejection, setRejection] = useState<string>();
   const [dropping, setDropping] = useState(false);
@@ -241,36 +261,55 @@ export function FeedbackDialog({
     if (!open) setDropping(false);
   }, [open]);
 
+  const draft = drafts[kind ?? FEEDBACK_KIND.FEEDBACK];
+
+  const writeDraft = (of: FeedbackKind, next: FeedbackDraft) => {
+    setDrafts({ ...latestDrafts(), [of]: next });
+  };
+
+  const discardDraft = (of: FeedbackKind) => {
+    discards.current[of] += 1;
+    writeDraft(of, FRESH_DRAFT);
+  };
+
   const changeDraft = (next: Partial<FeedbackDraft>) => {
-    setDraft({ ...latestDraft(), ...next });
+    if (kind === undefined) return;
+    writeDraft(kind, { ...latestDrafts()[kind], ...next });
     setRejection(undefined);
   };
 
   const close = (discard: boolean) => {
-    if (latestBusy()) return;
-    if (discard || !hasWords(latestDraft())) setDraft(FRESH_DRAFT);
+    if (kind === undefined || latestBusy()) return;
+    if (discard || !hasWords(latestDrafts()[kind])) discardDraft(kind);
     setRejection(undefined);
     onClose();
   };
 
   const attach = async (files: readonly File[]) => {
-    if (files.length === 0 || latestBusy()) return;
+    if (kind === undefined || files.length === 0 || latestBusy()) return;
+    const of = kind;
+    const discarded = discards.current[of];
     const taken = await takenImages(
       files,
-      FEEDBACK_LIMITS.MAX_IMAGES - latestDraft().images.length,
+      FEEDBACK_LIMITS.MAX_IMAGES - latestDrafts()[of].images.length,
     );
+    // Note that a draft cancelled or sent while its screenshots were read
+    // takes none of them, and neither does one now being sent, because
+    // either would carry a picture into a note nobody attached it to.
+    if (discards.current[of] !== discarded || latestBusy()) return;
     // Read again after the encoding: typing meanwhile replaced the draft.
-    const current = latestDraft();
-    setDraft({
+    const current = latestDrafts()[of];
+    writeDraft(of, {
       ...current,
       images: [...current.images, ...taken.images].slice(0, FEEDBACK_LIMITS.MAX_IMAGES),
     });
-    setRejection(taken.refusal);
+    if (shownKind.current === of) setRejection(taken.refusal);
   };
 
   const send = async () => {
-    const current = latestDraft();
-    if (kind === undefined || latestBusy() || !hasWords(current)) return;
+    if (kind === undefined) return;
+    const current = latestDrafts()[kind];
+    if (latestBusy() || !hasWords(current)) return;
     setBusy(true);
     setRejection(undefined);
     const refusal = await act(ACT_KIND.FEEDBACK_SEND, {
@@ -284,7 +323,7 @@ export function FeedbackDialog({
       setRejection(refusal);
       return;
     }
-    setDraft(FRESH_DRAFT);
+    discardDraft(kind);
     onClose();
     showSent();
   };
@@ -387,7 +426,7 @@ export function FeedbackDialog({
                         busy={busy}
                         onRemove={() =>
                           changeDraft({
-                            images: latestDraft().images.filter((_, held) => held !== index),
+                            images: latestDrafts()[kind].images.filter((_, held) => held !== index),
                           })
                         }
                       />
@@ -426,7 +465,7 @@ export function FeedbackDialog({
                   <Tooltip label="Attach screenshot">
                     <button
                       type="button"
-                      className="toolbar-button toolbar-icon-button feedback-dialog-attach"
+                      className="icon-button feedback-dialog-attach"
                       aria-label="Attach screenshot"
                       disabled={busy || full}
                       onClick={() => picker.current?.click()}
@@ -449,7 +488,7 @@ export function FeedbackDialog({
                   />
                   <button
                     type="button"
-                    className="confirm-dialog-button"
+                    className="toolbar-button"
                     disabled={busy}
                     onClick={() => close(true)}
                   >
@@ -457,8 +496,7 @@ export function FeedbackDialog({
                   </button>
                   <button
                     type="button"
-                    className="confirm-dialog-button"
-                    data-primary="true"
+                    className="primary-button"
                     aria-keyshortcuts="Meta+Enter"
                     disabled={!ready}
                     onClick={() => void send()}

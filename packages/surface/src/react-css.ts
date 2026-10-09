@@ -18,5 +18,3 @@ export const SURFACE_PROPERTY = {
   CAPTION_SIZE: "--caption-size",
   CAPTION_OVERFLOW: "--caption-overflow",
 } as const;
-
-export type SurfaceProperty = (typeof SURFACE_PROPERTY)[keyof typeof SURFACE_PROPERTY];

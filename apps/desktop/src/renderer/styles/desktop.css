@@ -2092,24 +2092,13 @@ body,
   margin-right: auto;
 }
 
-.feedback-dialog-attach:disabled {
-  opacity: 0.4;
+/* Send waits for words, and says so by dimming. */
+.feedback-dialog .primary-button:disabled {
+  opacity: 0.5;
 }
 
-.confirm-dialog-button[data-primary="true"] {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--glyph-gap);
-  background: var(--message-sent);
-  color: #fff;
-}
-
-.confirm-dialog-button[data-primary="true"]:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.confirm-dialog-button[data-primary="true"] .shortcut-glyphs {
+/* Send's chord, muted against its own fill rather than the card's. */
+.feedback-dialog .primary-button .shortcut-glyphs {
   color: rgba(255, 255, 255, 0.65);
 }
 

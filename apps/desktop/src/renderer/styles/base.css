@@ -955,10 +955,6 @@ button:disabled {
   gap: 7px;
 }
 
-.feedback-offer {
-  flex: 1 1 0;
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.
    The panel's height is only known once it has been measured, so without this a
    capture could land mid-transition and the PNGs would stop being reproducible.

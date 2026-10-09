@@ -30,7 +30,7 @@ export function FeedbackSection({
           <button
             key={kind}
             type="button"
-            className="quiet-button feedback-offer"
+            className="toolbar-button"
             aria-haspopup="dialog"
             onClick={() => onOpen(kind)}
           >
