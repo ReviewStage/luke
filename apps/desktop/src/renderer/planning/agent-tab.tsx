@@ -1,4 +1,8 @@
-import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { StopIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
@@ -178,7 +182,9 @@ export function AgentHeader({
   onStop: (agentId: string) => Promise<void>;
 }): React.JSX.Element {
   const [stopping, setStopping] = useState(false);
-  const stoppable = agentStillWriting(agent.status);
+  // Note that Stop stands only once a turn runs, because the service cancels
+  // the turn under way and a starting agent has none yet to cancel.
+  const stoppable = agent.status === CODING_AGENT_STATUS.RUNNING;
   return (
     <header className="agent-tab-header">
       <AgentStatusDot status={agent.status} />

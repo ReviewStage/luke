@@ -114,7 +114,7 @@ test("the pull request's link opens on GitHub in the browser rather than in the 
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
 });
 
-test("the head says model · effort · status with the dot, and offers Stop only while the agent may still write", () => {
+test("the head says model · effort · status with the dot, and offers Stop only while a turn runs", () => {
   const agent = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -142,6 +142,17 @@ test("the head says model · effort · status with the dot, and offers Stop only
   );
   assert.match(ended, /data-status="completed" data-live="false"/u);
   assert.doesNotMatch(ended, /Stop<\/button>/u);
+
+  // A starting agent has no turn the service could cancel yet, so Stop waits for one.
+  const starting = renderToStaticMarkup(
+    createElement(AgentHeader, {
+      agent: { ...agent, status: CODING_AGENT_STATUS.STARTING },
+      models: undefined,
+      onStop: () => Promise.resolve(),
+    }),
+  );
+  assert.match(starting, /data-status="starting" data-live="true"/u);
+  assert.doesNotMatch(starting, /Stop<\/button>/u);
 });
 
 test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {

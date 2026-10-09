@@ -176,10 +176,10 @@ test("a press mints one key, a press asked again after no answer carries the sam
   ]);
 });
 
-test("a Stop reads the list again, a page's status moves the agent's dot, and leaving the plan drops its agents", async () => {
+test("a Stop reads the list again, a read that fails keeps the agents drawn, a page's status moves the agent's dot, and leaving the plan drops its agents", async () => {
   const running = { ...STARTED, status: CODING_AGENT_STATUS.RUNNING };
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
-  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [running] }, { agents: [running] });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [running] });
   tab.answer(ACT_KIND.CODING_AGENTS_STOP, {
     agent: { ...running, status: CODING_AGENT_STATUS.CANCELLED },
   });
@@ -196,9 +196,27 @@ test("a Stop reads the list again, a page's status moves the agent's dot, and le
     tab.asked.map((each) => each.kind),
     [ACT_KIND.CODING_AGENTS_LIST, ACT_KIND.CODING_AGENTS_STOP, ACT_KIND.CODING_AGENTS_LIST],
   );
+  // The read after the Stop was not answered: the agents already drawn stand, as cancelled.
+  assert.equal(tab.control().listFailed, true);
+  assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.CANCELLED);
 
   await tab.stand({ planId: undefined });
   assert.equal(tab.control().agents, undefined);
   assert.equal(tab.control().start.available, false);
   assert.equal(tab.control().start.reason, undefined);
+});
+
+test("a Start that lands after the developer left the plan opens no tab on the plan now open", async () => {
+  const other = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] });
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: STARTED });
+  await tab.mount();
+
+  // The plan changes before the Start's answer, already on its way, is heard.
+  act(() => tab.control().start.onPress());
+  await tab.stand({ planId: other });
+
+  assert.deepEqual(tab.started, []);
+  assert.deepEqual(tab.control().agents, []);
 });

@@ -130,6 +130,13 @@ function TabStrip({
           {agentTabLabel(agent, agents.models)}
         </button>
       ))}
+      {/* The first read of the plan's agents did not land: nothing is known
+          to draw, so the strip offers the read again where the tabs would be. */}
+      {agents.listFailed && agents.agents === undefined ? (
+        <button type="button" className="side-panel-tab" onClick={agents.onRetryList}>
+          Agents · Try again
+        </button>
+      ) : null}
     </div>
   );
 }

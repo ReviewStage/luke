@@ -112,14 +112,20 @@ export function useCodingAgents(input: {
     latest.current.acts.act(ACT_KIND.CODING_AGENTS_LIST, { planId }).then(
       (answer) => {
         if (!live) return;
-        setList(
+        setList((was) =>
           "failure" in answer
-            ? { planId, agents: undefined, failed: true }
+            ? { planId, agents: was.planId === planId ? was.agents : undefined, failed: true }
             : { planId, agents: answer.agents, failed: false },
         );
       },
       () => {
-        if (live) setList({ planId, agents: undefined, failed: true });
+        // A read that failed keeps the agents already drawn: their tabs stand until a read lands.
+        if (live)
+          setList((was) => ({
+            planId,
+            agents: was.planId === planId ? was.agents : undefined,
+            failed: true,
+          }));
       },
     );
     return () => {
@@ -174,6 +180,8 @@ export function useCodingAgents(input: {
           return;
         }
         pending.current = undefined;
+        // A Start that lands after the developer left the plan opens no tab on the plan now open.
+        if (latest.current.planId !== planId) return;
         setList((was) =>
           was.planId === planId && was.agents !== undefined
             ? {

@@ -91,6 +91,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   useEffect(() => {
     if (!open) return;
     let live = true;
+    // The menu lands on the default as read now, never on an earlier opening's choice.
+    setChoice(undefined);
     latest.current.readModels();
     latest.current.readDefault().then((answer) => {
       if (live && !("failure" in answer)) setChoice(answer.choice);
