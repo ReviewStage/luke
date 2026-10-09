@@ -10,7 +10,7 @@ import {
 } from "ai";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { DateTime, Effect, Option, Result, Schema } from "effect";
+import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -50,7 +50,9 @@ import {
 } from "../../core.js";
 import { db } from "../../db/query.js";
 import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { voiceSessions } from "../../db/voice-schema.js";
+import { sentLineId } from "../brain-host/ids.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
 
 /**
@@ -289,6 +291,39 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
+/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, and the client's key for the send. */
+interface AwaitingLineWrite {
+  readonly text: string;
+  readonly clientKey: string;
+}
+
+/** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
+type AwaitingLineWritten = Result.Result<
+  Option.Option<{ readonly id: string; readonly effect: StoreWriteEffect }>,
+  typeof NO_CONVERSATION | MessageRefused
+>;
+
+/** The line a turn received, as the relay reads it off eve's stream: its words, and the turn that received it. */
+interface AwaitingLineTake {
+  readonly text: string;
+  readonly turnId: string;
+}
+
+/**
+ * The longest the hand-over to eve inside an awaiting line's write may take
+ * before it is given up: eve answers a follow-up in well under a second and
+ * its own not-ready loop ends at twenty, so one not answered in thirty is
+ * not going to; the planning ask's `ASK_DISPATCH_DEADLINE` is the same
+ * figure for the same reason.
+ */
+const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
+
+/** The row the turn took, by id; none where no line with those words awaited; or the turn does not stand. */
+type AwaitingLineTaken = Result.Result<
+  Option.Option<string>,
+  typeof NO_CONVERSATION | typeof NO_TURN
+>;
+
 /**
  * The one path by which a conversation's rows are written, each method an
  * effect over the ambient client: a caller composes one into the request it
@@ -337,6 +372,37 @@ export interface StoreWriter {
   upsertSpokenRow(target: ConversationTarget, write: SpokenRowWrite): Write<UserMessageWriteResult>;
   /** The latest developer line one voice session left starting at or before an instant, and the delegation that owns it where one does. */
   latestSpokenLine(target: ConversationTarget, query: SpokenLineQuery): Write<SpokenLineResult>;
+  /**
+   * Writes the developer's line to a coding agent as a row awaiting its
+   * turn, under the conversation's lock and only once the dispatch handed in
+   * has answered that eve took it: the dispatch is the hand-over to eve,
+   * run inside the lock so the turn eve opens on the line finds the row
+   * standing when its own first write takes the lock, and a dispatch that
+   * answers nothing writes nothing. The row stands under the client's key
+   * for the send (`sentLineId`), and a line already standing under that key
+   * is answered as repeated without the dispatch being run, so two sends
+   * carrying one key, however they race, hand eve the words once. The whole
+   * write cannot be interrupted, because eve takes the message before the
+   * row records it: a caller that went in between would roll the row back
+   * with eve's turn already on its way, so the dispatch is bounded by a
+   * deadline of its own instead, past which it is read as having answered
+   * nothing.
+   */
+  writeAwaitingLine(
+    target: ConversationTarget,
+    line: AwaitingLineWrite,
+    dispatch: Effect.Effect<boolean>,
+  ): Write<AwaitingLineWritten>;
+  /**
+   * Takes into the turn the line awaiting one the receipt is of: the oldest
+   * of the conversation's user rows no turn owns whose words are the ones
+   * received, eve having received the lines in the order they were sent.
+   * The row takes the turn in place at a bumped revision, so a device
+   * reading from its revision sees the line again where it stands, now the
+   * turn's. Answers the row taken, or none where no such line awaits, which
+   * is every line of a conversation that is no coding agent's.
+   */
+  takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
 }
 
 /**
@@ -1740,6 +1806,124 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
 });
 
 /**
+ * The developer's lines of the conversation awaiting a turn, oldest first:
+ * the user rows no turn owns, of a coding agent's conversation, which is
+ * the one kind whose developer lines are written ahead of their turn; a
+ * planning conversation's turnless user rows are its spoken asks, attached
+ * by their own writer, and never match here.
+ */
+const findAwaitingLines = SqlSchema.findAll({
+  Request: Schema.Struct({ conversationId: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, parts: StoredPartsColumnSchema }),
+  execute: (key) =>
+    db
+      .select({ id: messages.id, parts: messages.parts })
+      .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(
+        and(
+          eq(messages.conversationId, key.conversationId),
+          eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          isNull(messages.turnId),
+        ),
+      )
+      .orderBy(asc(messages.seq)),
+});
+
+/** A line taken by the turn that received it: the turn on the row in place, its revision moved. */
+const giveLineToTurn = SqlSchema.void({
+  Request: Schema.Struct({
+    id: Schema.String,
+    conversationId: Schema.String,
+    turnId: Schema.String,
+  }),
+  execute: (row) => {
+    const bumped = bumpedRevision(row.conversationId);
+    return db
+      .with(bumped)
+      .update(messages)
+      .set({ turnId: row.turnId, revision: landedRevision(bumped) })
+      .where(eq(messages.id, row.id));
+  },
+});
+
+/** The words of a line as its one text part holds them; nothing for a row with none. */
+function lineText(parts: Parts): string | undefined {
+  const text = parts.find((part) => part.type === UI_PART_TYPE.TEXT);
+  return text !== undefined && "text" in text ? text.text : undefined;
+}
+
+/**
+ * The dispatch run to its answer or its deadline, from inside the
+ * uninterruptible write: the dispatch is forked as a root fiber of its own,
+ * which is interruptible as the write is not, and a second fiber interrupts
+ * it at the deadline; one interrupted that way answered nothing. The
+ * planning ask's `dispatchedWithinDeadline` is the same shape for the same
+ * reason.
+ */
+function dispatchedWithinDeadline(dispatch: Effect.Effect<boolean>): Effect.Effect<boolean> {
+  return Effect.gen(function* () {
+    const running = yield* Effect.forkDetach(dispatch);
+    const deadline = yield* Effect.forkDetach(
+      Effect.andThen(Effect.sleep(AWAITING_LINE_DISPATCH_DEADLINE), Fiber.interrupt(running)),
+    );
+    const exit = yield* Fiber.await(running);
+    yield* Fiber.interrupt(deadline);
+    if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return false;
+    return yield* exit;
+  });
+}
+
+const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  line: AwaitingLineWrite,
+  dispatch: Effect.Effect<boolean>,
+): Effect.fn.Return<AwaitingLineWritten, WriteFailure, SqlClient.SqlClient> {
+  const clientId = sentLineId(line.clientKey);
+  // A line already under the key is the send a lost answer was for: eve has it, and hears nothing again.
+  const standing = yield* messageByClientId(context, clientId);
+  if (Option.isSome(standing)) {
+    return Result.succeed(
+      Option.some({ id: standing.value.id, effect: STORE_WRITE_EFFECT.REPEATED }),
+    );
+  }
+  const read = yield* admitted(context, {
+    id: clientId,
+    role: MESSAGE_ROLE.USER,
+    metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
+    parts: [{ type: UI_PART_TYPE.TEXT, text: line.text, state: UI_PART_STATE.DONE }],
+  });
+  if (Result.isFailure(read)) return Result.fail(read.failure);
+  if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());
+  const { id } = yield* insertMessage(context, {
+    clientId: read.success.id,
+    turnId: undefined,
+    message: read.success,
+    finishedAt: context.now,
+  });
+  return Result.succeed(Option.some({ id, effect: STORE_WRITE_EFFECT.WRITTEN }));
+});
+
+const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
+  context: WriterContext,
+  take: AwaitingLineTake,
+): Effect.fn.Return<AwaitingLineTaken, WriteFailure, SqlClient.SqlClient> {
+  if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
+  const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
+  // The oldest line with the words received: every send is a steer, which eve receives in the
+  // order sent, so two lines sharing their words are taken in that order.
+  const line = awaiting.find((row) => lineText(row.parts) === take.text);
+  if (line === undefined) return Result.succeed(Option.none());
+  yield* giveLineToTurn({
+    id: line.id,
+    conversationId: context.target.conversationId,
+    turnId: take.turnId,
+  });
+  return Result.succeed(Option.some(line.id));
+});
+
+/**
  * The developer's rows a delegation is about, in the order they stand: those
  * under the client ids named that no delegation owns yet, and those already
  * this delegation's, so a delegation told twice finds its own rows and none
@@ -1917,6 +2101,12 @@ export function storeWriter({ tools }: StoreWriterOptions): Effect.Effect<StoreW
       underConversation(target, (context) => upsertSpokenRow(context, write)),
     latestSpokenLine: (target, query) =>
       underConversation(target, (context) => latestSpokenLine(context, query)),
+    writeAwaitingLine: (target, line, dispatch) =>
+      Effect.uninterruptible(
+        underConversation(target, (context) => writeAwaitingLine(context, line, dispatch)),
+      ),
+    takeAwaitingLine: (target, take) =>
+      underConversation(target, (context) => takeAwaitingLine(context, take)),
   };
 
   return Effect.flatMap(toolsRefusingUnknownOutcome(tools), (refusing) =>

@@ -428,6 +428,34 @@
       "when": 1790711400000,
       "tag": "0061_plan_board_image",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790725000000,
+      "tag": "0062_coding_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790750000000,
+      "tag": "0063_coding_agent_default_model",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1790775000000,
+      "tag": "0064_plan_repository",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790800000000,
+      "tag": "0065_drop_plan_command",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import {
   type GatewayShutdownSteps,
 } from "@sidecar/gateway";
 import {
+  HostedCodingAgentClient,
   HostedPlanClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
@@ -16,8 +17,9 @@ import { Effect, Layer } from "effect";
 import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
+import { composeCodingAgents } from "./compose-coding-agents.js";
 import { composeLive } from "./compose-live.js";
-import { composePlanning, planFoldersFile } from "./compose-planning.js";
+import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -33,12 +35,13 @@ import {
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
 import { createGatewayService } from "./service.js";
 
-/** The four concerns, by the name each is built under. */
+/** The five concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
   PLANNING: "planning",
+  CODING_AGENTS: "codingAgents",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -52,6 +55,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.ACCOUNT,
   HOST_CONCERN.LIVE,
   HOST_CONCERN.PLANNING,
+  HOST_CONCERN.CODING_AGENTS,
 ];
 
 /**
@@ -106,9 +110,16 @@ export const hostAssemblyLayer: Layer.Layer<
     const planning = yield* composePlanning({
       kernel,
       account,
-      folders: planFoldersFile(() => kernel.stateRoot, report),
       endPlanCall: (keep) => live.service.endPlanCall(keep),
       client: new HostedPlanClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+    });
+    const codingAgents = yield* composeCodingAgents({
+      kernel,
+      account,
+      client: new HostedCodingAgentClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,
       }),
@@ -117,7 +128,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
-    showPlanCode = (code) => planning.showCode(code.planId, code.ref);
+    showPlanCode = (frame) => planning.showCode(frame.planId, frame.code);
     showPlanWork = (work) => planning.showWork(work.planId, work.turn);
 
     /**
@@ -159,6 +170,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.ACCOUNT]: account,
       [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.PLANNING]: planning,
+      [HOST_CONCERN.CODING_AGENTS]: codingAgents,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

@@ -42,7 +42,6 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@excalidraw/excalidraw": "0.18.1",
-    "@radix-ui/react-collapsible": "1.1.21",
     "@sentry/esbuild-plugin": "5.4.0",
     "@sidecar/analytics": "workspace:*",
     "@sidecar/credentials": "workspace:*",

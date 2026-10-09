@@ -12,25 +12,58 @@
       "minLength": 1,
       "maxLength": 36
     },
-    "ref": {
+    "code": {
       "type": "object",
       "properties": {
-        "path": {
+        "ref": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            },
+            "startLine": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "endLine": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "required": [
+            "path"
+          ],
+          "additionalProperties": false
+        },
+        "repository": {
           "type": "string",
-          "minLength": 1,
-          "maxLength": 1024
+          "maxLength": 140
         },
-        "startLine": {
+        "firstLine": {
           "type": "integer",
           "minimum": 1
         },
-        "endLine": {
+        "lineCount": {
           "type": "integer",
           "minimum": 1
+        },
+        "lines": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "maxItems": 200
         }
       },
       "required": [
-        "path"
+        "ref",
+        "repository",
+        "firstLine",
+        "lineCount",
+        "lines"
       ],
       "additionalProperties": false
     }
@@ -38,7 +71,7 @@
   "required": [
     "type",
     "planId",
-    "ref"
+    "code"
   ],
   "additionalProperties": false
 }

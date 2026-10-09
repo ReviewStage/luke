@@ -32,19 +32,13 @@ interface SegmentRewrite {
 
 const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/auth/(.*)", route: "auth/[...all]", query: `${DISPATCH_QUERY.PATH}=auth/$1` },
-  {
-    src: "/api/plans/([^/]+)/commands/claim",
-    route: "plans/commands/claim",
-    query: "id=$1",
-  },
-  {
-    src: "/api/plans/([^/]+)/commands/([^/]+)",
-    route: "plans/commands/command",
-    query: "id=$1&command=$2",
-  },
   { src: "/api/plans/([^/]+)/board", route: "plans/board", query: "id=$1" },
   { src: "/api/plans/([^/]+)/transcript", route: "plans/transcript", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
   { src: "/api/plans/([^/]+)", route: "plans/plan", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
+  { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */
@@ -133,6 +127,19 @@ const EveService = Schema.Struct({
   ignoreCommand: Schema.String,
 });
 
+/** A route of eve's second service, which rewrites its mounted path back to eve's own rather than naming a destination. */
+const TransformRouteSchema = Schema.Struct({
+  src: Schema.String,
+  transforms: Schema.Array(
+    Schema.Struct({ type: Schema.String, op: Schema.String, args: Schema.String }),
+  ),
+});
+
+const CoderService = Schema.Struct({
+  ...EveService.fields,
+  routes: Schema.Array(TransformRouteSchema),
+});
+
 const ServiceRewriteSchema = Schema.Struct({
   source: Schema.String,
   destination: Schema.Struct({ service: Schema.String }),
@@ -140,7 +147,7 @@ const ServiceRewriteSchema = Schema.Struct({
 
 const VercelConfig = Schema.Struct({
   $schema: Schema.String,
-  services: Schema.Struct({ web: WebService, eve: EveService }),
+  services: Schema.Struct({ web: WebService, eve: EveService, coder: CoderService }),
   crons: Schema.Array(Schema.Struct({ path: Schema.String, schedule: Schema.String })),
   rewrites: Schema.Array(ServiceRewriteSchema),
 });

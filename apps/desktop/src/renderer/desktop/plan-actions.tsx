@@ -1,16 +1,10 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import {
-  CopyIcon,
-  EllipsisIcon,
-  FolderIcon,
-  FolderOpenIcon,
-  PencilIcon,
-  TrashIcon,
-} from "@sidecar/panel";
+import { CopyIcon, EllipsisIcon, ExternalIcon, PencilIcon, TrashIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
-import { DOCUMENT_REGION, folderLine } from "../planning/planning-model";
+import { DOCUMENT_REGION } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
@@ -30,8 +24,8 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  *
  * Both doors open the same menu over the same plan, so a plan in the list can
  * be acted on without being opened first, and nothing in the menu moves the
- * window to another plan. The menu is the window's own (action-menu.tsx), so
- * both doors draw it the same way and Delete is drawn red.
+ * window to another plan. The menu is the window's own (`action-menu.tsx`),
+ * so both doors draw it the same way and Delete can be drawn red.
  *
  * Rename edits the name where the door draws it: the sidebar's row turns
  * into a field, and the toolbar's ⋯ opens its title as one. Delete cannot be
@@ -39,10 +33,21 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * the plan, whichever door it was chosen from.
  */
 
+/** The repository a plan is about, read off the list or the open document; null for one with none. */
+function repositoryOf(plans: PlansControl, planId: string): string | null {
+  const listed = plans.plans.find((plan) => plan.id === planId);
+  if (listed !== undefined) return listed.repository;
+  const { region } = plans;
+  return region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
+    ? region.plan.repository
+    : null;
+}
+
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename; Delete is last and alone.
+ * offers it, ahead of Rename; the repository is changed from any plan and
+ * opened on GitHub where there is one; Delete is last and alone.
  */
 function planActionGroups(
   plans: PlansControl,
@@ -51,21 +56,25 @@ function planActionGroups(
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
-  const chooseFolder = () => plans.onChooseFolder(planId);
   const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
+  const change: MenuAction = {
+    label: "Change repository…",
+    icon: <GitHubMark />,
+    onSelect: () => plans.onChangeRepository(planId),
+  };
   const groups: MenuAction[][] = [
     drawn
       ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename]
       : [rename],
-    plans.folders[planId] === undefined
-      ? [{ label: "Choose folder", icon: <FolderIcon />, onSelect: chooseFolder }]
+    repositoryOf(plans, planId) === null
+      ? [change]
       : [
+          change,
           {
-            label: "Reveal in Finder",
-            icon: <FolderOpenIcon />,
-            onSelect: () => plans.onRevealFolder(planId),
+            label: "Open on GitHub",
+            icon: <ExternalIcon />,
+            onSelect: () => plans.onOpenOnGitHub(planId),
           },
-          { label: "Change folder", icon: <FolderIcon />, onSelect: chooseFolder },
         ],
     [{ label: "Delete plan", icon: <TrashIcon />, onSelect: doors.askDelete, danger: true }],
   ];
@@ -134,8 +143,8 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
 
 /**
  * The open plan's ⋯ button in the toolbar, and the menu it drops. It is also
- * what offers the open plan's Delete and Reveal shortcuts, so each asks or
- * acts exactly as its menu item would: Delete still asks first.
+ * what offers the open plan's Delete shortcut, so it asks exactly as its
+ * menu item would: Delete still asks first.
  */
 export function PlanActionsButton({
   plans,
@@ -151,10 +160,6 @@ export function PlanActionsButton({
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
-  useAppCommand(
-    APP_COMMAND.REVEAL_FOLDER,
-    plans.folders[plan.id] === undefined ? undefined : () => plans.onRevealFolder(plan.id),
-  );
   return (
     <>
       <Tooltip label="Plan actions">
@@ -205,7 +210,6 @@ export function SidebarPlan({
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
   const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
-  const folderPath = plans.folders[plan.id];
   const row = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
@@ -214,8 +218,8 @@ export function SidebarPlan({
     row.current?.focus();
   }, [rename.editing]);
   const repository =
-    folderPath !== undefined ? (
-      <span className="sidebar-plan-repository">{folderLine(folderPath)}</span>
+    plan.repository !== null ? (
+      <span className="sidebar-plan-repository">{plan.repository}</span>
     ) : null;
   return (
     <li>

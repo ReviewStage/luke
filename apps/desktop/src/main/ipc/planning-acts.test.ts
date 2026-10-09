@@ -14,16 +14,11 @@ const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-const REQUEST = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
+const REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
 
 /** The plan the host has open, as the fixture's main process reads it. */
 interface OpenPlan {
   activePlanId: string | undefined;
-}
-
-/** What the folder picker answers: the folder chosen, or null for a cancel. */
-interface FolderPicker {
-  chosen: string | null;
 }
 
 /** What the host answers a start with, and whether voice could open a call now. */
@@ -35,9 +30,8 @@ interface StartScript {
 function fixture() {
   const asked: string[] = [];
   const talked: string[] = [];
-  const revealed: string[] = [];
+  const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
-  const picker: FolderPicker = { chosen: "/Users/dev/relay" };
   const start: StartScript = {
     answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
@@ -63,22 +57,25 @@ function fixture() {
         }),
       planningStart: (request) =>
         Effect.sync(() => {
-          asked.push(`start:${request.folderPath}`);
+          asked.push(`start:${request.repository}`);
           return start.answer;
         }),
-      planningSetFolder: (params) =>
-        Effect.sync(() => void asked.push(`folder:${params.planId}:${params.folderPath}`)),
+      planningRepositories: () =>
+        Effect.sync(() => {
+          asked.push("repositories");
+          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+        }),
+      planningSetRepository: (params) =>
+        Effect.sync(() => {
+          asked.push(`repository:${params.planId}:${params.repository}`);
+          return { repository: params.repository };
+        }),
       planningBoardSave: (params) =>
         Effect.sync(() => void asked.push(`board:${params.planId}:${params.appliedDrawing}`)),
     },
-    chooseFolder: () =>
-      Effect.sync(() => {
-        asked.push("choose-folder");
-        return picker.chosen;
-      }),
-    folders: () => ({ [PLAN_ID]: "/Users/dev/relay" }),
-    revealFolder: (folderPath) => {
-      revealed.push(folderPath);
+    openExternal: (url) => {
+      opened.push(url);
+      return Promise.resolve();
     },
     activePlanId: () => view.activePlanId,
     talkAboutPlan: (planId) => {
@@ -89,7 +86,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, revealed, view, start, picker };
+  return { router, asked, talked, opened, view, start };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -125,7 +122,7 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
     assert.deepEqual(f.asked, [
       "refresh",
       `open:${PLAN_ID}`,
-      "start:/Users/dev/relay",
+      "start:acme/relay",
       "close",
       `rename:${PLAN_ID}:Team invites`,
       `delete:${PLAN_ID}`,
@@ -133,47 +130,47 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
   }),
 );
 
-it.effect("Choose folder answers the folder picked, or null when the picker was cancelled", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-
-    const chosen = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CHOOSE_FOLDER }, PANEL);
-    f.picker.chosen = null;
-    const cancelled = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_CHOOSE_FOLDER }, PANEL);
-
-    assert.deepEqual(chosen, { status: ACT_OUTCOME_STATUS.DONE, value: "/Users/dev/relay" });
-    assert.deepEqual(cancelled, { status: ACT_OUTCOME_STATUS.DONE, value: null });
-  }),
-);
-
 it.effect(
-  "Reveal in Finder shows the folder the host holds for the plan named, and is refused for a plan with none",
+  "the repository chip's read and a plan's repository reach the host, and answer what it answered",
   () =>
     Effect.gen(function* () {
       const f = fixture();
-      const OTHER_PLAN_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
 
-      const revealed = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: PLAN_ID } },
+      const listed = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REPOSITORIES }, PANEL);
+      const changed = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_SET_REPOSITORY, payload: { planId: PLAN_ID, repository: null } },
         PANEL,
       );
-      const folderless = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: OTHER_PLAN_ID } },
-        PANEL,
-      );
-      const fromVoice = yield* f.router.performAct(
-        { kind: ACT_KIND.PLANNING_REVEAL_FOLDER, payload: { planId: PLAN_ID } },
-        VOICE,
-      );
+      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REPOSITORIES }, VOICE);
 
-      assert.equal(revealed.status, ACT_OUTCOME_STATUS.DONE);
-      assert.deepEqual(folderless, {
-        status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: ACT[ACT_KIND.PLANNING_REVEAL_FOLDER].refusal,
+      assert.deepEqual(listed, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: PLAN_CALL_FAILURE.UNANSWERED },
       });
+      assert.deepEqual(changed, { status: ACT_OUTCOME_STATUS.DONE, value: { repository: null } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.revealed, ["/Users/dev/relay"]);
+      assert.deepEqual(f.asked, ["repositories", `repository:${PLAN_ID}:null`]);
     }),
+);
+
+it.effect("Open on GitHub opens a GitHub address in the browser, and no other address at all", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+
+    const opened = yield* f.router.performAct(
+      { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://github.com/acme/relay" } },
+      PANEL,
+    );
+    const elsewhere = yield* f.router.performAct(
+      // SAFETY: an address off GitHub is what the schema refuses, so it is sent as the shape it would arrive in.
+      { kind: ACT_KIND.GITHUB_OPEN, payload: { url: "https://example.com/acme/relay" } } as never,
+      PANEL,
+    );
+
+    assert.equal(opened.status, ACT_OUTCOME_STATUS.DONE);
+    assert.notEqual(elsewhere.status, ACT_OUTCOME_STATUS.DONE);
+    assert.deepEqual(f.opened, ["https://github.com/acme/relay"]);
+  }),
 );
 
 it.effect("the voice window does not reach the plans", () =>

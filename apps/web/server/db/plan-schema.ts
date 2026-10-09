@@ -1,6 +1,6 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanFields } from "@sidecar/hosted/plan-template";
-import type { PlanAssumption, PlanCommandResult } from "@sidecar/hosted/plan-wire";
+import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
@@ -42,6 +42,13 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The template's fields the body was formatted from; null until the first save, an untouched template. */
     fields: jsonb("fields").$type<PlanFields>(),
+    /**
+     * The GitHub repository the plan is about, `owner/name` as GitHub spells
+     * it, confirmed reachable through the Luke GitHub App by the account
+     * before it was written; null until one is chosen, which is where every
+     * plan from before repositories stands and is no error.
+     */
+    repository: text("repository"),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
@@ -54,24 +61,6 @@ export const plan = pgTable(
     index("plan_user_created").on(table.userId, table.createdAt),
   ],
 );
-
-/**
- * One command the planning model asked to run in a plan's folder, which only
- * the developer's Mac knows. The tool inserts it, the Mac claims it
- * (`claimed_at`) and runs it, and posts the `result` the tool is waiting on.
- * Rows go with their plan.
- */
-export const planCommand = pgTable("plan_command", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  planId: uuid("plan_id")
-    .notNull()
-    .references(() => plan.id, { onDelete: "cascade" }),
-  command: text("command").notNull(),
-  createdAt: instant("created_at").notNull().defaultNow(),
-  claimedAt: instant("claimed_at"),
-  /** What the Mac answered: the exit code, stdout, and stderr; null until it does. */
-  result: jsonb("result").$type<PlanCommandResult>(),
-});
 
 /**
  * A plan's whiteboard: the Excalidraw scene the Plans tab shows, with the

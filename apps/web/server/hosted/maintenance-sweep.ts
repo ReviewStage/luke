@@ -25,7 +25,7 @@ type SweepRead<A> = Effect.Effect<A, unknown, SqlClient.SqlClient>;
 interface MaintenanceSweeps {
   /** Removes every conversation stamped deleted past its retention window, answering how many went. */
   purgeCleared: (now: number) => SweepRead<number>;
-  /** Settles every turn still running an hour after it started as failed for abandonment, answering how many. */
+  /** Settles every turn still running past its kind's bound, an hour for a planning turn and a day and an hour for a coding agent's, as failed for abandonment, answering how many. */
   sweepAbandonedTurns: (now: number) => SweepRead<number>;
   /** Ends every voice session whose device socket went without a hang-up longer ago than the grace. */
   sweepVoice: (now: number) => SweepRead<VoiceOrphanSweepOutcome>;
@@ -40,7 +40,7 @@ export interface MaintenanceSweepOptions extends MaintenanceSweeps {
 interface MaintenanceSweepAnswer {
   /** Deleted conversations purged past their retention window. */
   purged: number;
-  /** Turns still running an hour after their start, settled as failed for abandonment. */
+  /** Turns still running past their kind's bound, settled as failed for abandonment. */
   abandoned: number;
   /** What the sweep over the detached voice sessions did. */
   voice: VoiceOrphanSweepOutcome;

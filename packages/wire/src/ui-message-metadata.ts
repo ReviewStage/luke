@@ -99,7 +99,7 @@ const TYPED_ASK_METADATA = EffectSchema.Struct({
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
 });
 
-type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
+export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
 
 /**
  * A spoken ask is the developer's own words, or the voice model's delegation

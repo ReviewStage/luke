@@ -151,8 +151,7 @@ const asks = {
 };
 const relay = new StreamRelay({
   writer,
-  asks: askEffects,
-  stopTurn: () => Effect.void,
+  asks: { binding: askEffects, stopTurn: () => Effect.void },
   now: () => NOW,
   report: () => undefined,
 });

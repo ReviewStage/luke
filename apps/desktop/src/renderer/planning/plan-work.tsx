@@ -1,4 +1,3 @@
-import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   PLAN_WORK_STATE,
   PLAN_WORK_TOOL,
@@ -30,16 +29,19 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import {
+  TOOL_BLOCK,
   TOOL_STATE,
   Tool,
   ToolContent,
   ToolHeader,
+  ToolInput,
+  ToolOutput,
   type ToolState,
-  ToolText,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
 import { callHeading } from "./transcript-model";
@@ -57,14 +59,14 @@ import {
  * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
  *
  * Each turn opens under the time it began, and its rows are
- * `work-model.ts`'s, drawn with the AI Elements components Stage draws
- * Stagent's turns with: the model's words as a reply, its reasoning folded
- * behind one line, each call a Tool line wearing its tool's icon that opens
- * onto its input and output, and the worker a Task box whose commands hang
- * beneath it. Everything here is the planning model's or the developer's
- * repository's, a command's output included, so the root is left out of the
- * screen recording (`ph-no-capture`) as a second line behind its text
- * masking.
+ * `work-model.ts`'s, drawn with the AI Elements components the agent tabs
+ * draw a coding agent's turns with: the model's words as a reply, its
+ * reasoning folded behind one line, each call a Tool row wearing its tool's
+ * icon that opens onto its input and output, and the worker a boxed line
+ * that opens its session. Everything here is the planning model's or the
+ * developer's repository's, a command's output included, so the root is
+ * left out of the screen recording (`ph-no-capture`) as a second line
+ * behind its text masking.
  */
 
 /** How the model's words are drawn: as markdown, but never as an image, which would be a request to wherever it points. */
@@ -92,29 +94,36 @@ const TOOL_ICON = {
   [PLAN_WORK_TOOL.OTHER]: <WrenchIcon />,
 } as const satisfies Record<PlanWorkTool, ReactNode>;
 
-/** A call's state as the Tool line marks it: running only while it still moves. */
+/** A call's state as the Tool row marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
-  if (call.running) return TOOL_STATE.RUNNING;
-  return call.state === PLAN_WORK_STATE.FAILED ? TOOL_STATE.FAILED : TOOL_STATE.DONE;
+  if (call.running) return TOOL_STATE.INPUT_AVAILABLE;
+  return call.state === PLAN_WORK_STATE.FAILED
+    ? TOOL_STATE.OUTPUT_ERROR
+    : TOOL_STATE.OUTPUT_AVAILABLE;
 }
 
-/** A call's line, opening onto its input and what it answered. */
+/** A call's row, opening onto its input and what it answered, each as the words the frame carried. */
 function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   const failed = call.state === PLAN_WORK_STATE.FAILED;
   return (
     <Tool>
       <ToolHeader
         icon={TOOL_ICON[call.tool]}
-        title={call.verb}
+        label={call.verb}
         subject={call.subject}
         subjectIsCode={call.subjectIsCode}
         state={toolStateOf(call)}
       />
       <ToolContent>
-        <ToolText label="Input" text={call.input} />
-        {call.output === undefined ? null : (
-          <ToolText label={failed ? "Error" : "Output"} text={call.output} failed={failed} />
-        )}
+        <ToolInput block={{ kind: TOOL_BLOCK.TEXT, text: call.input }} />
+        <ToolOutput
+          block={
+            call.output === undefined || failed
+              ? undefined
+              : { kind: TOOL_BLOCK.TEXT, text: call.output }
+          }
+          errorText={failed ? call.output : undefined}
+        />
       </ToolContent>
     </Tool>
   );
@@ -123,10 +132,10 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
 /**
  * A line that folds what is beneath it: a group of calls, or a finished
  * turn's lead. Note that the group is keyed by whether it opens, by its
- * caller, because Radix reads `defaultOpen` once, and a group that stops
+ * caller, because the fold reads `defaultOpen` once, and a group that stops
  * being the turn's latest work has to fold.
  */
-function Fold({
+function WorkFold({
   icon,
   summary,
   running,
@@ -140,18 +149,19 @@ function Fold({
   children: ReactNode;
 }): React.JSX.Element {
   return (
-    <Collapsible.Root className="group/fold not-prose w-full" defaultOpen={open}>
-      <Collapsible.Trigger className="ai-trigger flex w-full items-center gap-1.5 rounded-md py-0.5">
-        <ChevronRightIcon className="size-3 shrink-0 transition-transform group-data-[state=open]/fold:rotate-90" />
-        <span className="flex size-3.5 shrink-0 items-center justify-center [&>svg]:size-3.5">
+    <Fold className="text-[12.5px]" defaultOpen={open}>
+      <FoldSummary className="flex h-7 items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground">
+        <FoldChevron />
+        <span
+          className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
+          aria-hidden="true"
+        >
           {icon}
         </span>
         {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
-      </Collapsible.Trigger>
-      <Collapsible.Content className="space-y-1 pt-1 pl-[18px] outline-none">
-        {children}
-      </Collapsible.Content>
-    </Collapsible.Root>
+      </FoldSummary>
+      <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
+    </Fold>
   );
 }
 
@@ -244,7 +254,9 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
       return (
         <Reasoning>
           <ReasoningTrigger />
-          <ReasoningContent>{block.text}</ReasoningContent>
+          <ReasoningContent>
+            <p className="m-0 whitespace-pre-wrap">{block.text}</p>
+          </ReasoningContent>
         </Reasoning>
       );
     case WORK_BLOCK.CALL:
@@ -253,7 +265,7 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
       return <WorkerLine call={block.call} />;
     case WORK_BLOCK.GROUP:
       return (
-        <Fold
+        <WorkFold
           key={String(block.open)}
           icon={<WrenchIcon />}
           summary={
@@ -265,15 +277,15 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
           {block.calls.map((call) => (
             <WorkCall key={call.id} call={call} />
           ))}
-        </Fold>
+        </WorkFold>
       );
     case WORK_BLOCK.FOLDED:
       return (
-        <Fold icon={<ListIcon />} summary={block.summary} running={false}>
+        <WorkFold icon={<ListIcon />} summary={block.summary} running={false}>
           {block.blocks.map((inner) => (
             <WorkBlockView key={inner.key} block={inner} />
           ))}
-        </Fold>
+        </WorkFold>
       );
   }
 }

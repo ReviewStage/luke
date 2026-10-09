@@ -1,6 +1,6 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CheckIcon, CopyIcon, DocumentIcon, FolderIcon } from "@sidecar/panel";
-import { useEffect, useRef } from "react";
+import { DocumentIcon } from "@sidecar/panel";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
@@ -9,15 +9,15 @@ import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   DOCUMENT_REGION,
-  folderLine,
   PLANS_PAGE,
 } from "../planning/planning-model";
 import { MicrophoneRow } from "../planning/planning-parts";
+import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
+import { StartAgentButton } from "./start-agent-button";
 import { Tab, TabStrip } from "./tab-strip";
 
 /**
@@ -26,8 +26,13 @@ import { Tab, TabStrip } from "./tab-strip";
  * the window's full height, while that is open (or over them, while it fills
  * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
- * toolbar offers no way out of the open plan, only its actions. Its one tab
- * is the plan's, named for it, and a press on it renames the plan in place.
+ * toolbar offers no way out of the open plan, only its actions: Start, which
+ * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
+ * rest stand. Its one tab is the plan's, named for it, and a press on it
+ * renames the plan in place. The toolbar is one row, the side panel's bar's
+ * height exactly; the plan's repository is the sidebar's row's to name, so
+ * the toolbar draws the repository chip only while the plan has none, and
+ * otherwise only the chip's menu, which Change repository… opens.
  */
 
 /**
@@ -49,30 +54,28 @@ function Toolbar({
   );
 }
 
-/** Copy, the plan's own action and so never folded into its menu, with its refusal said beside it. */
-function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element {
-  const copied = copy.shown === COPY_SHOWN.COPIED;
+/**
+ * Copy's chord and what the last Copy came to, said in the toolbar: the
+ * press itself stands in the ⋯ menu, so a copy's check mark and a copy that
+ * failed are said here, where the menu was.
+ */
+function CopyNote({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element | null {
   useAppCommand(APP_COMMAND.COPY_PLAN, copy.onPress);
-  return (
-    <>
-      {copy.shown === COPY_SHOWN.FAILED ? (
-        <p className="desktop-toolbar-note" role="alert">
-          {COPY_FAILED_NOTE}
-        </p>
-      ) : null}
-      <Tooltip label="Copy plan" command={APP_COMMAND.COPY_PLAN}>
-        <button
-          type="button"
-          className="toolbar-button"
-          data-copied={copied ? "true" : undefined}
-          onClick={copy.onPress}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-          {copied ? "Copied" : "Copy plan"}
-        </button>
-      </Tooltip>
-    </>
-  );
+  if (copy.shown === COPY_SHOWN.FAILED) {
+    return (
+      <p className="desktop-toolbar-note" role="alert">
+        {COPY_FAILED_NOTE}
+      </p>
+    );
+  }
+  if (copy.shown === COPY_SHOWN.COPIED) {
+    return (
+      <p className="desktop-toolbar-word" role="status">
+        Copied
+      </p>
+    );
+  }
+  return null;
 }
 
 /**
@@ -92,16 +95,14 @@ function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
 
 /**
  * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
- * opens as its field, and its folder in the hint the pointer resting on it
- * raises. A key that ends the edit hands focus back to the tab.
+ * opens as its field, and its repository in the hint the pointer resting on
+ * it raises. A key that ends the edit hands focus back to the tab.
  */
 function PlanTab({
   plan,
-  folderPath,
   rename,
 }: {
   plan: PlanSummary;
-  folderPath: string | undefined;
   rename: ReturnType<typeof usePlanRename>;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
@@ -128,7 +129,7 @@ function PlanTab({
           icon={<DocumentIcon />}
           label={plan.name}
           selected
-          tooltip={folderPath === undefined ? undefined : folderLine(folderPath)}
+          tooltip={plan.repository ?? undefined}
           editor={editor}
           tabRef={tab}
           onSelect={rename.begin}
@@ -144,6 +145,12 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const rename = usePlanRename(planId, plans.onRenamePlan);
+  // A refusal is said beside the chip, under the plan it was about and no
+  // other. Note that it is held above the states with no document, because
+  // a plan opened from the list is drawn reading before its read lands, and
+  // a hook that only the ready page reached would be one more hook than
+  // the reading page had, which React refuses by unmounting the window.
+  const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.READING
@@ -181,8 +188,18 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { plan } = region;
-  const folderPath = plans.folders[plan.id];
   const { sidePanel } = plans;
+  const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
+  const chooseRepository = (repository: string) => {
+    const { id: planId } = plan;
+    setRefusal(undefined);
+    plans.onSetRepository(planId, repository).then(
+      (note) => setRefusal(note === undefined ? undefined : { planId, note }),
+      () => undefined,
+    );
+  };
+  const menuRequest =
+    plans.repositoryMenu?.planId === plan.id ? plans.repositoryMenu.request : undefined;
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
@@ -191,24 +208,31 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar heading={<PlanTab plan={plan} folderPath={folderPath} rename={rename} />}>
+        <Toolbar heading={<PlanTab plan={plan} rename={rename} />}>
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
             </p>
           ) : null}
-          {folderPath === undefined ? (
-            <button
-              type="button"
-              className="toolbar-button"
-              onClick={() => plans.onChooseFolder(plan.id)}
-            >
-              <FolderIcon />
-              Choose folder
-            </button>
+          {repositoryNote !== undefined ? (
+            <p className="desktop-toolbar-note" role="alert">
+              {repositoryNote}
+            </p>
           ) : null}
-          <CopyButton copy={plans.copy} />
-          <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
+          <CopyNote copy={plans.copy} />
+          {/* Keyed once for the chip and the menu alike, so another plan
+              starts both afresh and the same plan keeps them. */}
+          <Fragment key={plan.id}>
+            <RepositoryChip
+              place={CHIP_PLACE.TOOLBAR}
+              value={plan.repository}
+              chooser={plans.repositories}
+              onChoose={chooseRepository}
+              openRequest={menuRequest}
+            />
+            <StartAgentButton control={plans.agents} />
+            <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
+          </Fragment>
         </Toolbar>
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
@@ -227,6 +251,8 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           code={plans.code}
           transcript={plans.transcript}
           work={plans.work}
+          agents={plans.agents}
+          shown={plans.shown}
         />
       ) : null}
     </div>
@@ -243,7 +269,7 @@ export function DesktopPlans({ plans }: { plans: PlansControl }): React.JSX.Elem
         <>
           <div className="desktop-drag-strip" />
           <div className="desktop-compose">
-            <NewPlanForm newPlan={plans.newPlan} />
+            <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
           </div>
         </>
       );

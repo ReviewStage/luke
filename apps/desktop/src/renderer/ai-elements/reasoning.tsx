@@ -1,61 +1,78 @@
-import * as Collapsible from "@radix-ui/react-collapsible";
-import { BrainIcon, ChevronRightIcon } from "lucide-react";
-import type { ComponentProps, ReactNode } from "react";
+import type { ReactNode } from "react";
+import {
+  Fold,
+  FoldBody,
+  type FoldBodyProps,
+  FoldChevron,
+  type FoldProps,
+  FoldSummary,
+  type FoldSummaryProps,
+} from "./fold";
 import { cn } from "./utils";
 
 /**
- * reasoning.tsx -- AI Elements' Reasoning: what a model thought on its way to an answer, folded behind one line.
+ * reasoning.tsx -- AI Elements' Reasoning: a model's thinking, folded under one quiet line until the reader opens it.
  *
- * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to Luke's tokens. The registry's timer, which measures how long
- * the model thought and folds the block a moment after, is not here: a
- * reasoning part reaches the Mac whole once its step is done, so there is
- * nothing streaming to time and the block starts folded.
+ * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
+ * to Luke's tokens and folded on `fold.tsx` rather than the registry's
+ * collapsible. Closed by default, as docs/PLANNING.md's rule for an
+ * agent's transcript asks: the reasoning is there to be read, never in
+ * the way. The line says "Thought" and no more, because the stored part
+ * carries the words alone and no measure of how long they took.
  */
 
-export type ReasoningProps = ComponentProps<typeof Collapsible.Root>;
+/** What the folded line says. */
+const REASONING_LINE = "Thought";
 
-export function Reasoning({ className, ...props }: ReasoningProps): ReactNode {
-  return <Collapsible.Root className={cn("group/reasoning not-prose", className)} {...props} />;
-}
+export type ReasoningProps = FoldProps;
 
-export type ReasoningTriggerProps = ComponentProps<typeof Collapsible.Trigger>;
-
-export function ReasoningTrigger({
-  className,
-  children,
-  ...props
-}: ReasoningTriggerProps): ReactNode {
+export function Reasoning({ className, children, ...props }: ReasoningProps): ReactNode {
   return (
-    <Collapsible.Trigger
-      className={cn("ai-trigger flex w-full items-center gap-1.5", className)}
-      {...props}
-    >
-      <ChevronRightIcon className="size-3 shrink-0 transition-transform group-data-[state=open]/reasoning:rotate-90" />
-      <BrainIcon className="size-3.5 shrink-0" />
-      <span>{children ?? "Thought"}</span>
-    </Collapsible.Trigger>
+    <Fold className={cn("text-[12.5px]", className)} {...props}>
+      {children}
+    </Fold>
   );
 }
 
-export type ReasoningContentProps = ComponentProps<typeof Collapsible.Content> & {
-  children: string;
-};
+export type ReasoningTriggerProps = FoldSummaryProps;
 
+/** The one line a folded reasoning shows. */
+export function ReasoningTrigger({
+  className,
+  children = REASONING_LINE,
+  ...props
+}: ReasoningTriggerProps): ReactNode {
+  return (
+    <FoldSummary
+      className={cn(
+        "flex h-7 items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground",
+        className,
+      )}
+      {...props}
+    >
+      <FoldChevron />
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+    </FoldSummary>
+  );
+}
+
+export type ReasoningContentProps = FoldBodyProps;
+
+/** The thinking itself, drawn quieter than the reply it led to, and only once opened. */
 export function ReasoningContent({
   className,
   children,
   ...props
 }: ReasoningContentProps): ReactNode {
   return (
-    <Collapsible.Content
+    <FoldBody
       className={cn(
-        "mt-1 whitespace-pre-wrap pl-[18px] text-muted-foreground text-xs leading-relaxed outline-none",
+        "mt-1 mb-1 ml-6 border-l-2 border-border pl-3 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className,
       )}
       {...props}
     >
       {children}
-    </Collapsible.Content>
+    </FoldBody>
   );
 }

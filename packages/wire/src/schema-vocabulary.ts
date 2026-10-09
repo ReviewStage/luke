@@ -55,6 +55,8 @@ export type JsonSchemaNode =
       readonly required: readonly string[];
       readonly additionalProperties: false;
     }
+  /** An object whose fields another vocabulary spells, shown as such: no emitter writes one, only a declaration that carries it verbatim. */
+  | { readonly type: "object"; readonly description?: string; readonly additionalProperties: true }
   | { readonly anyOf: readonly JsonSchemaNode[]; readonly description?: string };
 
 /**

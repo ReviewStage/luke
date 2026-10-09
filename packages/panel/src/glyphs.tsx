@@ -118,16 +118,6 @@ export function EllipsisIcon(): React.JSX.Element {
   );
 }
 
-/** The up-and-down pair macOS badges a pop-up button with. */
-export function PopUpIcon(): React.JSX.Element {
-  return (
-    <Glyph className="voice-select-glyph">
-      <path d="M7.2 9.6 12 4.8l4.8 4.8" />
-      <path d="M7.2 14.4 12 19.2l4.8-4.8" />
-    </Glyph>
-  );
-}
-
 /** Points into a page: the row it sits on opens one. */
 export function ChevronIcon(): React.JSX.Element {
   return (
@@ -335,34 +325,6 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
-/** A folder on this Mac: the one a plan reads. */
-export function FolderIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M3.8 7.2a1.7 1.7 0 0 1 1.7-1.7h3.9l2 2.2h7.1a1.7 1.7 0 0 1 1.7 1.7v8.1a1.7 1.7 0 0 1-1.7 1.7H5.5a1.7 1.7 0 0 1-1.7-1.7Z" />
-    </Glyph>
-  );
-}
-
-/** The same folder opened: shows where it is on this Mac, in Finder. */
-export function FolderOpenIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M6 14.6 7.4 11.9a1.7 1.7 0 0 1 1.5-.9h10.6a1.4 1.4 0 0 1 1.3 1.8l-1.5 5.1a1.7 1.7 0 0 1-1.6 1.2H5.5a1.7 1.7 0 0 1-1.7-1.7V7.2a1.7 1.7 0 0 1 1.7-1.7h3.9l2 2.2h5.4a1.7 1.7 0 0 1 1.7 1.7V11" />
-    </Glyph>
-  );
-}
-
-/** Sends what was composed, drawn the way every composer draws it: an arrow up. */
-export function ArrowUpIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M12 18.6V5.4" />
-      <path d="m6.4 11 5.6-5.6 5.6 5.6" />
-    </Glyph>
-  );
-}
-
 /** A window with a pane down its right side: the side panel beside the document, shown or hidden. */
 export function SidePanelIcon(): React.JSX.Element {
   return (
@@ -436,6 +398,17 @@ export function GearIcon(): React.JSX.Element {
   );
 }
 
+/** A terminal's prompt: the page about the coding agents that run in one. Outline, like the other pages' glyphs. */
+export function TerminalIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <rect x="2.6" y="4.6" width="18.8" height="14.8" rx="2.4" />
+      <path d="m7 9.2 3.2 2.8L7 14.8" />
+      <path d="M12.6 14.8h4.2" />
+    </Glyph>
+  );
+}
+
 /** A page with its corner turned down and lines of text on it: the plan's own document. */
 export function DocumentIcon(): React.JSX.Element {
   return (
@@ -448,6 +421,15 @@ export function DocumentIcon(): React.JSX.Element {
   );
 }
 
+/** Starts a run: the triangle every transport draws for play. */
+export function PlayIcon(): React.JSX.Element {
+  return (
+    <Glyph className="control-icon">
+      <path d="M8 5.6v12.8l10-6.4z" fill="currentColor" stroke="none" />
+    </Glyph>
+  );
+}
+
 /** A board on its stand with a line drawn across it: the plan's whiteboard. */
 export function BoardIcon(): React.JSX.Element {
   return (
@@ -456,6 +438,15 @@ export function BoardIcon(): React.JSX.Element {
       <path d="M12 16v4.2" />
       <path d="M8.6 20.2h6.8" />
       <path d="m7.4 12 2.8-3 2.6 2.2 3.8-3.6" />
+    </Glyph>
+  );
+}
+
+/** Points down into a menu: the half of a split button that opens its choices. */
+export function ChevronDownIcon(): React.JSX.Element {
+  return (
+    <Glyph className="settings-chevron">
+      <path d="m5.8 9.4 6.2 6.2 6.2-6.2" />
     </Glyph>
   );
 }
@@ -488,6 +479,15 @@ export function TranscriptIcon(): React.JSX.Element {
       <path d="M20.4 14.6a2 2 0 0 1-2 2H8.6l-4.8 3.8V5.6a2 2 0 0 1 2-2h12.6a2 2 0 0 1 2 2Z" />
       <path d="M7.8 8.4h8.4" />
       <path d="M7.8 12h5.4" />
+    </Glyph>
+  );
+}
+
+/** Points into a submenu beside a menu row, in the chevron's own stroke. */
+export function ChevronRightIcon(): React.JSX.Element {
+  return (
+    <Glyph className="settings-chevron">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
     </Glyph>
   );
 }

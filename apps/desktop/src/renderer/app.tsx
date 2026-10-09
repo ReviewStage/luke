@@ -39,6 +39,9 @@ import {
   volumeHintText,
 } from "./volume-hint";
 
+/** No agent ended unseen, as the document reads before main has answered. */
+const NO_UNSEEN_AGENTS: readonly string[] = [];
+
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
   // Everything main holds, on the one channel it holds it on, and this
@@ -186,8 +189,22 @@ export function App(): React.JSX.Element {
     voiceAvailable: state?.settings?.status.voiceAvailable === true,
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     shown: tab === PANEL_TAB.PLANS,
+    unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
+  // A coding agent's notification clicked: the Plans tab, on that agent.
+  // Read through a ref, because the tab hands a new closure each render and
+  // the subscription is owed to the window, not to a render.
+  const showAgent = useRef(plans.onShowAgent);
+  showAgent.current = plans.onShowAgent;
+  useEffect(
+    () =>
+      window.sidecar.onShowAgent(({ planId, agentId }) => {
+        changeTab(PANEL_TAB.PLANS);
+        showAgent.current(planId, agentId);
+      }),
+    [changeTab],
+  );
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

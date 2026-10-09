@@ -23,18 +23,21 @@ const INVITATIONS: PlanSummary = {
   name: "Invitations",
   createdAt: 1,
   updatedAt: 1,
+  repository: null,
 };
 const BILLING: PlanSummary = {
   id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
   name: "Billing",
   createdAt: 2,
   updatedAt: 2,
+  repository: null,
 };
 const EXPORTS: PlanSummary = {
   id: "5d2e8b4a-9f1c-4a3e-b7d6-1e0f2a3b4c5d",
   name: "Exports",
   createdAt: 3,
   updatedAt: 3,
+  repository: null,
 };
 const EVERY_PLAN = [INVITATIONS, BILLING, EXPORTS];
 

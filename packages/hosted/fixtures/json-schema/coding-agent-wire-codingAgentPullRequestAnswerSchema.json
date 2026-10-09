@@ -1,0 +1,87 @@
+{
+  "type": "object",
+  "properties": {
+    "repository": {
+      "type": "string"
+    },
+    "branch": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pullRequest": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "number": {
+              "type": "number",
+              "minimum": 0
+            },
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "open",
+                "draft",
+                "merged",
+                "closed"
+              ]
+            },
+            "checks": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "passing",
+                "failing",
+                "none"
+              ]
+            },
+            "additions": {
+              "type": "number",
+              "minimum": 0
+            },
+            "deletions": {
+              "type": "number",
+              "minimum": 0
+            },
+            "changedFiles": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "number",
+            "title",
+            "url",
+            "state",
+            "checks",
+            "additions",
+            "deletions",
+            "changedFiles"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "repository",
+    "branch",
+    "pullRequest"
+  ],
+  "additionalProperties": false
+}

@@ -1,6 +1,9 @@
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
+import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
@@ -9,6 +12,29 @@ import {
 } from "../renderer/planning/use-side-panel";
 
 const ignore = () => undefined;
+
+/** A plan with no agents and no repository, every press ignored. */
+export function codingAgentsControl(
+  overrides: Partial<CodingAgentsControl> = {},
+): CodingAgentsControl {
+  return {
+    agents: [],
+    agentIds: [],
+    listFailed: false,
+    onRetryList: ignore,
+    models: undefined,
+    readModels: ignore,
+    readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
+    onStop: () => Promise.resolve(),
+    onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onStatus: ignore,
+    readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    readPullRequest: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    ...overrides,
+  };
+}
 
 /**
  * A signed-in Plans tab on screen on its new-plan page with no plans, every
@@ -20,7 +46,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     shown: true,
     signedIn: true,
     plans: [],
-    folders: {},
     activePlanId: undefined,
     boundFor: overrides.activePlanId,
     listFailed: false,
@@ -49,16 +74,23 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: { turns: undefined, callLive: false },
+    agents: codingAgentsControl(),
     onSelect: ignore,
-    onChooseFolder: ignore,
-    onRevealFolder: ignore,
+    onShowAgent: ignore,
+    repositories: {
+      recent: [],
+      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+      openGitHub: ignore,
+    },
+    repositoryMenu: undefined,
+    onChangeRepository: ignore,
+    onSetRepository: () => Promise.resolve(undefined),
+    onOpenOnGitHub: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewPlan: ignore,
     newPlan: {
       presses: 0,
-      recentFolders: [],
-      pickFolder: () => Promise.resolve(null),
       start: () => Promise.resolve(undefined),
     },
     onLeavePlan: ignore,

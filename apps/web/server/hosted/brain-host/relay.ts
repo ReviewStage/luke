@@ -42,10 +42,16 @@ import {
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
 
 /**
- * The relay from eve's stream into the brain's own: every event eve records
- * for a session is read here, after eve has written it, and told again as
- * the `BrainRunEvent` the store writer consumes, so the writer stays the sole
- * consumer and the only thing that writes a message row. eve numbers a turn
+ * The relay from eve's stream into the brain's own, which both eve services
+ * share: every event eve records for a session is read here, after eve has
+ * written it, and told again as the `BrainRunEvent` the store writer
+ * consumes, so the writer stays the sole consumer and the only thing that
+ * writes a message row. The planning host composes it with the ask record,
+ * whose deliveries a turn's start binds and whose Stop it carries; the
+ * coding-agent host composes it without, since a message to a coding agent
+ * is written ahead of its turn as a line awaiting one and taken into the
+ * turn that receives it, and everything below from a turn's start to its
+ * answer is the same for both. eve numbers a turn
  * inside its session and names a call by id; the relay mints the store's
  * uuid for the turn and its messages as the same function of those
  * coordinates every time, so a step eve retries lands on the rows the first
@@ -169,6 +175,8 @@ export interface RelayStanding {
   readonly turn: RelayTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
   readonly model?: string;
+  /** The reasoning effort the turns run at, as the turn row records it; nothing where the model decides it. */
+  readonly reasoningEffort?: string;
   /** The content address of the prompt the session runs under, as the turn row records it; nothing before the session composed one. */
   readonly promptHash?: string;
   /** The content address of the tool set this turn is offered, as the turn row records it. */
@@ -184,11 +192,10 @@ export interface RelayStanding {
  */
 type RelayEffect<Value> = Effect.Effect<Value, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 
-interface StreamRelaySeams {
-  /** The three writes the relay makes. */
-  readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">;
+/** The ask record a planning turn binds its deliveries to, and the Stop a waiting ask took, carried the moment the turn starts. */
+interface RelayAskSeams {
   /** Names the turn each ask delivered into it ran in, once eve's start names the deliveries. */
-  readonly asks: AskDeliveryBinding;
+  readonly binding: AskDeliveryBinding;
   /** Carries the Stop an ask took while it waited, the moment eve's start names the turn it ran in: eve's cancel scoped to that turn, and the row's stamp. */
   readonly stopTurn: (
     target: ConversationTarget,
@@ -196,6 +203,16 @@ interface StreamRelaySeams {
     eveTurnId: string,
     turnId: string,
   ) => RelayEffect<void>;
+}
+
+interface StreamRelaySeams {
+  /** The four writes the relay makes. */
+  readonly writer: Pick<
+    StoreWriter,
+    "consume" | "enqueueTurn" | "attachAskLines" | "takeAwaitingLine"
+  >;
+  /** The ask record, where the conversation takes asks; nothing for a coding agent, whose turns are opened by a Start alone. */
+  readonly asks?: RelayAskSeams;
   readonly now: () => number;
   /** Where a write the writer refused is said; the relay never throws into eve's turn. */
   readonly report: (message: string) => void;
@@ -577,6 +594,9 @@ export class StreamRelay {
         eveTurnId,
         origin: TURN_ORIGIN_OF_HOST_TURN[kind],
         ...(standing.model !== undefined ? { model: standing.model } : undefined),
+        ...(standing.reasoningEffort !== undefined
+          ? { reasoningEffort: standing.reasoningEffort }
+          : undefined),
         ...(standing.promptHash !== undefined ? { promptHash: standing.promptHash } : undefined),
         ...(standing.toolSetHash !== undefined ? { toolSetHash: standing.toolSetHash } : undefined),
       });
@@ -595,11 +615,7 @@ export class StreamRelay {
       // A failed stop drops the turn from relay state with the rest of this block, so the start
       // eve emits again reaches the stamp and carries it; a start that finds its turn under way
       // never comes this far and carries nothing twice.
-      yield* this.#seams.asks.bindDeliveries(standing.target, deliveryIds, turnId);
-      const stopped = yield* this.#seams.asks.stoppedOn(standing.target, turnId);
-      if (stopped.length > 0) {
-        yield* this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
-      }
+      yield* this.#bound(standing, deliveryIds, eveTurnId, turnId);
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_STARTED,
         origin,
@@ -616,6 +632,24 @@ export class StreamRelay {
         Effect.sync(() => standing.state.update((state) => this.#without(state, eveTurnId))),
       ),
     );
+  }
+
+  /** Binds the deliveries to the turn and carries any Stop they took, where the conversation takes asks at all. */
+  #bound(
+    standing: RelayStanding,
+    deliveryIds: readonly string[],
+    eveTurnId: string,
+    turnId: string,
+  ): RelayEffect<void> {
+    const asks = this.#seams.asks;
+    if (asks === undefined) return Effect.void;
+    return Effect.gen(function* () {
+      yield* asks.binding.bindDeliveries(standing.target, deliveryIds, turnId);
+      const stopped = yield* asks.binding.stoppedOn(standing.target, turnId);
+      if (stopped.length > 0) {
+        yield* asks.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
+      }
+    });
   }
 
   #without(state: RelayState, eveTurnId: string): RelayState {
@@ -642,12 +676,7 @@ export class StreamRelay {
       const bound = new Set(turn.deliveries ?? []);
       const joining = deliveryIds.filter((id) => !bound.has(id));
       if (joining.length === 0) return;
-      const turnId = hostTurnId(standing.sessionId, eveTurnId);
-      yield* this.#seams.asks.bindDeliveries(standing.target, joining, turnId);
-      const stopped = yield* this.#seams.asks.stoppedOn(standing.target, turnId);
-      if (stopped.length > 0) {
-        yield* this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
-      }
+      yield* this.#bound(standing, joining, eveTurnId, hostTurnId(standing.sessionId, eveTurnId));
       standing.state.update((state) =>
         withTurn(state, eveTurnId, (held) => ({
           ...held,
@@ -692,6 +721,14 @@ export class StreamRelay {
         }
         return;
       }
+      // A line the developer sent to a running coding agent already stands in the conversation,
+      // awaiting this turn: the receipt takes it into the turn rather than writing it again, and
+      // the turn's own received-line count still moves, so a later line's row keeps its id.
+      const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
+        text,
+        turnId: hostTurnId(standing.sessionId, eveTurnId),
+      });
+      if (Result.isSuccess(taken) && Option.isSome(taken.success)) return;
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         message: userMessage(

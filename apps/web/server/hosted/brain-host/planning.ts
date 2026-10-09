@@ -9,6 +9,7 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
@@ -21,7 +22,11 @@ import {
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
 import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
-import { RUN_IN_REPOSITORY_TOOL, runInRepository } from "../repository-shell.js";
+import {
+  type RepositoryCall,
+  RUN_IN_REPOSITORY_TOOL,
+  runInRepository,
+} from "../repository-shell.js";
 import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 
 /**
@@ -134,7 +139,7 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 ### Working in parallel
 
-You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find.
+You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's repository. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find.
 
 Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its taskId and the new message; to stop one whose job no longer matters, use task_cancel.
 
@@ -143,8 +148,8 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
-- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
-- run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
+- show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
+- run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - worker does a job in the background, as above.
 - task_cancel stops a worker you no longer need.
@@ -233,9 +238,10 @@ export interface HostedToolDeclaration {
   readonly inputSchema: ToolDefinition["inputSchema"];
 }
 
-/** What one planning call runs under: the plan the conversation belongs to and the turn's research bounds. */
+/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, and the turn's research bounds. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
+  readonly repository: RepositoryCall;
   readonly research: ResearchCall;
 }
 
@@ -250,16 +256,17 @@ interface PlanningTool {
   ) => Effect.Effect<WireRecord, never, PlanningToolServices>;
 }
 
-/** What a planning call may reach: the store, which also carries the folder read to the Mac, and the network for public research. */
-type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
+/** What a planning call may reach: the store, the network for public research, and GitHub through the App for the checkout. */
+type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
  * None writes the plan, which is the notetaker's; `queue_question` hands the
- * voice a question mid-turn (`queue-question.ts`); `show_code` puts lines of
- * the plan's folder on the developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
- * command in the plan's folder on the developer's Mac, under the same
- * binding; the public search and page read (`public-research.ts`)
+ * voice a question mid-turn (`queue-question.ts`); `show_code` reads lines of
+ * the plan's repository from the session's checkout and puts them on the
+ * developer's screen as Luke speaks (`show-code.ts`); `run_in_repository` runs a
+ * command in the same sandbox on the same checkout
+ * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
  * hands back the board as the Mac draws it (`board-look.ts`). Every read's
@@ -272,12 +279,12 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   },
   {
     ...SHOW_CODE_TOOL,
-    run: (_call, input) => Effect.succeed(runShowCode(input)),
+    run: (call, input) => runShowCode(call.repository, input),
   },
   {
     ...RUN_IN_REPOSITORY_TOOL,
     run: (call, input) =>
-      Effect.map(runInRepository(call.plan, input), (result) => ({
+      Effect.map(runInRepository(call.repository, input), (result) => ({
         ...result,
       })),
   },
@@ -357,13 +364,13 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
  * is nobody's voice, because the planning model reads its findings and
  * decides what reaches Luke; that its return is a summary with sources,
  * because the parent reads it whole into a turn of its own; and that the
- * folder's text never goes into a search, because the folder is private and
- * a search query leaves for the public web.
+ * repository's text never goes into a search, because the repository is
+ * private and a search query leaves for the public web.
  */
 export const WORKER_INSTRUCTIONS = `
 You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the plan's code folder with run_in_repository: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the folder's code, names, or paths into a search: the folder is private and a search is public. Stop when you can answer, or when more reading stops turning up anything new.
+Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;

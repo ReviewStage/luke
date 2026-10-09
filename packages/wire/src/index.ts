@@ -70,6 +70,7 @@ export {
   type ObservationSource,
   type SpokenAskMetadata,
   type StoredMessageMetadata,
+  type TypedAskMetadata,
   USER_MESSAGE_METADATA,
   type UserMessageMetadata,
 } from "./ui-message-metadata.js";

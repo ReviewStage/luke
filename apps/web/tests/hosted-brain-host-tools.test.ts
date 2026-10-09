@@ -23,8 +23,8 @@ import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { listJournals } from "../server/hosted/store/message-reads";
 import { stampedEveEvent } from "./support/eve-events";
+import { NO_GITHUB } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { noNetwork } from "./support/no-network";
 import { insertConversation } from "./support/store-rows";
 
 /**
@@ -128,7 +128,7 @@ async function callerOn(
     database.run(
       host
         .runTool(name, binding, input, toolContext(id, auth, name))
-        .pipe(Effect.provide(noNetwork)),
+        .pipe(Effect.provide(NO_GITHUB)),
     );
 }
 
@@ -217,7 +217,7 @@ test("a worker's session is recorded in its child conversation as a child turn, 
     }),
     stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
   ]) {
-    await database.run(host.relayChild(event, child, state).pipe(Effect.provide(noNetwork)));
+    await database.run(host.relayChild(event, child, state).pipe(Effect.provide(NO_GITHUB)));
   }
 
   const journals = await database.run(

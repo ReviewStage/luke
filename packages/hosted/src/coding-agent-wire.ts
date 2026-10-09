@@ -1,0 +1,222 @@
+import { MESSAGE_ROLE, WireValueSchema } from "@sidecar/wire";
+import { verbatimJsonSchema } from "@sidecar/wire/effect";
+import { Schema as EffectSchema } from "effect";
+import { countedNumber, wireUuidSchema } from "./service-wire.js";
+
+/**
+ * coding-agent-wire.ts -- a plan's coding agents, as the desktop starts, lists, reads, messages, and stops them.
+ *
+ * A coding agent is one cloud session the service runs over a plan: it
+ * checks the plan's repository out, implements the plan, and decides on a
+ * pull request. The desktop starts one with a key of its own, so a retry of
+ * the same Start is the same agent, and names the model and effort it runs
+ * on or leaves both to the account's default. What comes back is the
+ * agent's summary: its id, what it runs on, when it started, and where it
+ * stands, which is the status of its newest turn. Its transcript is the
+ * conversation's own `messages` rows, each an AI SDK `UIMessage`, read after
+ * a cursor the service hands back with every page beside the agent's status
+ * as the page was read, so a tab held open hears each message once as it
+ * lands and again when it changes in place, and hears the agent end from
+ * the page that ends the hold. A message to the agent steers the turn
+ * under way, so the model sees it at its next step, or opens a turn when
+ * the agent is idle; it shows in the transcript at once as the developer's
+ * own row. Every send carries a key the client made, so a send repeated
+ * after a lost answer finds the message it already sent and sends nothing
+ * again.
+ *
+ * Every request refuses a key it does not name; an answer ignores one a
+ * newer service added. Declared directly with Effect's `Schema.Struct` and
+ * exported under its own name.
+ */
+
+export const CODING_AGENT_BOUNDS = {
+  /** The most characters a Start's or a message's key may spell; a UUID is the usual. */
+  MAX_KEY_CHARS: 128,
+  /** The most characters a model id or an effort may spell on the way in; the catalog decides whether they name anything. */
+  MAX_CHOICE_CHARS: 200,
+  /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
+  MAX_MESSAGE_CHARS: 16_000,
+} as const;
+
+/** Where an agent stands, read from its newest turn: not yet started, at work, or how it ended. */
+export const CODING_AGENT_STATUS = {
+  /** The agent exists and its session has not run a turn yet. */
+  STARTING: "starting",
+  /** A turn is under way, or a message of the developer's awaits the turn it will open. */
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  /** The developer stopped it, or a Stop is on its way to it; anything it pushed stays. */
+  CANCELLED: "cancelled",
+} as const;
+
+export type CodingAgentStatus = (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS];
+
+/** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
+function trimmedText(maximumChars: number) {
+  return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
+}
+
+/**
+ * Starting an agent (POST): the request's own key, which a retry carries
+ * again, and the model and effort to run on where the developer chose
+ * them; both or neither, since a choice is one thing.
+ */
+export const codingAgentStartRequestSchema = EffectSchema.Struct({
+  idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+  model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+  effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+});
+
+export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
+
+/**
+ * Messaging an agent (POST): the developer's words, trimmed and bounded,
+ * and the client's own key for this one send, which a retry carries again
+ * so the service answers what the first send did rather than sending the
+ * words a second time. The message steers the turn under way, so the model
+ * sees it at its next step and a call still generating is cut short and
+ * run again with it, or opens a turn where none runs. The answer is the
+ * agent's summary with its status read after the message was taken, which
+ * is running.
+ */
+export const codingAgentMessageRequestSchema = EffectSchema.Struct({
+  text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+  clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+});
+
+export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
+
+/** One agent as the tabs draw it: what it runs on, when it started, where it stands, and which turn that is. */
+export const codingAgentSummarySchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  planId: wireUuidSchema,
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: EffectSchema.String,
+  effort: EffectSchema.String,
+  /** Epoch milliseconds the agent was started. */
+  createdAt: countedNumber,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /**
+   * The newest turn the status is read from, by the service's own id for
+   * it; nothing before the first turn. A message that opens a new turn moves
+   * it once eve starts that turn, so a reader keying an agent's run by
+   * (agent, turn) sees the run after a message as its own; while the
+   * message still awaits its turn the id is the ended turn's and the status
+   * is running on the message's account.
+   */
+  turnId: EffectSchema.NullOr(wireUuidSchema),
+});
+
+export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
+
+/** A started or stopped agent (POST). */
+export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
+
+/** The plan's agents (GET), in the order they were started. */
+export const codingAgentListAnswerSchema = EffectSchema.Struct({
+  agents: EffectSchema.Array(codingAgentSummarySchema),
+});
+
+/** Where a pull request stands on GitHub, as its pill is coloured. */
+export const PULL_REQUEST_STATE = {
+  OPEN: "open",
+  DRAFT: "draft",
+  MERGED: "merged",
+  CLOSED: "closed",
+} as const;
+
+export type PullRequestState = (typeof PULL_REQUEST_STATE)[keyof typeof PULL_REQUEST_STATE];
+
+/** The checks on a pull request's head, read as one word: still running, every one passed, one failed, or none run at all. */
+export const CHECK_SUMMARY = {
+  PENDING: "pending",
+  PASSING: "passing",
+  FAILING: "failing",
+  NONE: "none",
+} as const;
+
+export type CheckSummary = (typeof CHECK_SUMMARY)[keyof typeof CHECK_SUMMARY];
+
+/** The pull request an agent opened, as GitHub holds it now: what its pill and its summary row say. */
+export const codingAgentPullRequestSchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  /** The pull request's own page on GitHub. */
+  url: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  additions: countedNumber,
+  deletions: countedNumber,
+  changedFiles: countedNumber,
+});
+
+export type CodingAgentPullRequest = typeof codingAgentPullRequestSchema.Type;
+
+/**
+ * What an agent published (GET): the repository it works in as `owner/name`,
+ * the branch it pushed, where GitHub holds one, and the pull request from
+ * it, where one is open or was; null for each it has not. A pull request's
+ * branch is its head.
+ */
+export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
+  repository: EffectSchema.String,
+  branch: EffectSchema.NullOr(EffectSchema.String),
+  pullRequest: EffectSchema.NullOr(codingAgentPullRequestSchema),
+});
+
+export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/**
+ * One JSON object as the row holds it, read whole: a message part or the
+ * metadata beside the parts, whose fields are the AI SDK's own vocabulary
+ * and not this wire's to spell. The node shown for it says only that much.
+ */
+const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
+  type: "object",
+  additionalProperties: true,
+});
+
+/**
+ * One message of an agent's transcript, as the conversation's row holds it:
+ * an AI SDK `UIMessage`, its parts as the SDK shapes them (text, reasoning,
+ * tool calls with their input and output, step boundaries) and the stored
+ * metadata beside them. The parts are carried as the JSON they are rather
+ * than declared part by part, because the SDK's vocabulary is the contract
+ * and the components that draw them read it directly.
+ */
+export const codingAgentMessageSchema = EffectSchema.Struct({
+  id: EffectSchema.String,
+  role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
+  parts: EffectSchema.Array(storedObjectSchema),
+  metadata: EffectSchema.optionalKey(storedObjectSchema),
+});
+
+export type CodingAgentMessage = typeof codingAgentMessageSchema.Type;
+
+/**
+ * Where a reader stands in the transcript: the highest message sequence it
+ * has, and the conversation's journal revision it read at, joined by a
+ * colon. A message is new past a cursor when its sequence is higher or it
+ * was amended in place at a later revision.
+ */
+const CURSOR_PATTERN = /^\d+:\d+$/u;
+
+export const codingAgentCursorSchema = EffectSchema.String.check(
+  EffectSchema.isPattern(CURSOR_PATTERN),
+);
+
+/** The cursor a reader starts from: before every message. */
+export const CODING_AGENT_CURSOR_START = "0:0";
+
+/**
+ * The messages past a cursor (GET), the cursor to read on from, and where
+ * the agent stood as the page was read, so a reader held on a running agent
+ * learns from the page that ends the hold that there is nothing more to
+ * wait for.
+ */
+export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
+  messages: EffectSchema.Array(codingAgentMessageSchema),
+  cursor: codingAgentCursorSchema,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+});

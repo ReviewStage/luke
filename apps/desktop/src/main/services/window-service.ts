@@ -6,6 +6,7 @@ import type { UnparsedWireValue } from "@sidecar/wire";
 import { Effect, Exit, Scope } from "effect";
 import {
   app,
+  type BrowserWindow,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   nativeTheme,
@@ -17,6 +18,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
+import type { AgentPlace } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { DockPresence } from "../window/dock-presence";
@@ -73,6 +75,14 @@ export interface WindowService extends DesktopService {
   windowFactsFor: (sender: WebContents) => AppWindowFacts;
   /** Hands a payload to the voice window alone, the one peer of the host's live session. */
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
+  /** Asks the panels to open a plan on one agent's tab: a notification's click. */
+  showAgent: (place: AgentPlace) => void;
+  /**
+   * The panel window coming forward or going behind, for as long as the
+   * subscription stands. The hidden voice window is never the key window, so
+   * only the panels are reported.
+   */
+  onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
   /**
    * The opaque name one window's writes travel to the host under. It names
    * nothing about the window to anyone else, and the host records it beside
@@ -190,6 +200,25 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     if (voice) sendTo(voice.webContents, channel, payload);
   }
 
+  function showAgent(place: AgentPlace): void {
+    panels.broadcast(channels.onShowAgent, place);
+  }
+
+  function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
+    const focused = (_event: Electron.Event, window: BrowserWindow) => {
+      if (panels.owns(window.webContents)) listener(true);
+    };
+    const blurred = (_event: Electron.Event, window: BrowserWindow) => {
+      if (panels.owns(window.webContents)) listener(false);
+    };
+    app.on("browser-window-focus", focused);
+    app.on("browser-window-blur", blurred);
+    return () => {
+      app.removeListener("browser-window-focus", focused);
+      app.removeListener("browser-window-blur", blurred);
+    };
+  }
+
   /**
    * Every wait this service schedules — the settling a display change waits
    * out — held so the quit can take them back. Each opens a window when it
@@ -299,6 +328,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     applyTheme,
     windowFactsFor,
     sendToVoice,
+    showAgent,
+    onPanelFocusChanged,
     reporterOf,
     trustedSender: (event) => {
       const url = event.senderFrame?.url ?? event.sender.getURL();

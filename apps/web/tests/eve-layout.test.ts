@@ -16,7 +16,9 @@ import { test } from "vitest";
  */
 
 const WEB = join(import.meta.dirname, "..");
-const EVE = join(WEB, "eve");
+
+/** The two eve app roots the deployment builds as services of their own. */
+const EVE_ROOTS = { PLANNING: join(WEB, "eve"), CODER: join(WEB, "coder") } as const;
 const VERCEL_OUTPUT = join(".vercel", "output", "config.json");
 const BUILD_OUTPUT_VERSION = 3;
 
@@ -26,27 +28,29 @@ function mtimeOrAbsent(path: string): number | undefined {
   return existsSync(path) ? statSync(path).mtimeMs : undefined;
 }
 
-test("eve resolves eve/ as a flat app root and writes its Vercel output there", {
-  timeout: 180_000,
-}, () => {
-  const parentConfig = join(WEB, VERCEL_OUTPUT);
-  const eveConfig = join(EVE, VERCEL_OUTPUT);
-  const parentBefore = mtimeOrAbsent(parentConfig);
-  const startedAt = Date.now();
+test.for(Object.entries(EVE_ROOTS))(
+  "eve resolves the %s root as a flat app root and writes its Vercel output there",
+  { timeout: 180_000 },
+  ([, root]) => {
+    const parentConfig = join(WEB, VERCEL_OUTPUT);
+    const eveConfig = join(root, VERCEL_OUTPUT);
+    const parentBefore = mtimeOrAbsent(parentConfig);
+    const startedAt = Date.now();
 
-  const build = spawnSync("pnpm", ["exec", "eve", "build", "--skip-sandbox-prewarm"], {
-    cwd: EVE,
-    encoding: "utf8",
-    env: { ...process.env, VERCEL: "1", EVE_TELEMETRY_DISABLED: "1" },
-  });
-  assert.equal(build.status, 0, build.stderr);
+    const build = spawnSync("pnpm", ["exec", "eve", "build", "--skip-sandbox-prewarm"], {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, VERCEL: "1", EVE_TELEMETRY_DISABLED: "1" },
+    });
+    assert.equal(build.status, 0, build.stderr);
 
-  const eveAfter = mtimeOrAbsent(eveConfig);
-  assert.ok(eveAfter !== undefined && eveAfter >= startedAt);
-  assert.equal(mtimeOrAbsent(parentConfig), parentBefore);
+    const eveAfter = mtimeOrAbsent(eveConfig);
+    assert.ok(eveAfter !== undefined && eveAfter >= startedAt);
+    assert.equal(mtimeOrAbsent(parentConfig), parentBefore);
 
-  const config = Schema.decodeUnknownSync(BuildOutputConfig)(
-    JSON.parse(readFileSync(eveConfig, "utf8")),
-  );
-  assert.equal(config.version, BUILD_OUTPUT_VERSION);
-});
+    const config = Schema.decodeUnknownSync(BuildOutputConfig)(
+      JSON.parse(readFileSync(eveConfig, "utf8")),
+    );
+    assert.equal(config.version, BUILD_OUTPUT_VERSION);
+  },
+);

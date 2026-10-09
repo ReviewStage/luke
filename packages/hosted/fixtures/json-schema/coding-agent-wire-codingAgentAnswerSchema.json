@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "properties": {
+    "agent": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "planId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 36
+        },
+        "model": {
+          "type": "string"
+        },
+        "effort": {
+          "type": "string"
+        },
+        "createdAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "starting",
+            "running",
+            "completed",
+            "failed",
+            "cancelled"
+          ]
+        },
+        "turnId": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "planId",
+        "model",
+        "effort",
+        "createdAt",
+        "status",
+        "turnId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "agent"
+  ],
+  "additionalProperties": false
+}

@@ -5,8 +5,9 @@ import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -18,6 +19,7 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
+  repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
@@ -26,6 +28,7 @@ const OTHER: PlanSummary = {
   name: "Billing export",
   createdAt: 4,
   updatedAt: 5,
+  repository: null,
 };
 
 const DIALOG = '[role="alertdialog"]';
@@ -33,8 +36,10 @@ const DIALOG = '[role="alertdialog"]';
 /** What the plan actions asked of the tab, by the plan each named. */
 interface Asked {
   opened: string[];
-  revealed: string[];
-  chosen: string[];
+  /** Each plan whose page Open on GitHub asked for. */
+  openedOnGitHub: string[];
+  /** Each plan whose chip Change repository… asked open. */
+  changed: string[];
   deleted: string[];
   /** Each rename asked, as the plan and the name it was given. */
   renamed: string[][];
@@ -50,24 +55,30 @@ function unmountAll(): void {
   document.body.innerHTML = "";
 }
 
+beforeEach(installScrollIntoView);
+
 afterEach(unmountAll);
 
 /** The open plan's tab, every per-plan press recorded; `PLAN` is open and `OTHER` beside it in the list. */
 function openTab(
-  folders: Readonly<Record<string, string>> = {},
+  repositories: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   renames: () => Promise<boolean> = () => Promise.resolve(true),
 ) {
-  const asked: Asked = { opened: [], revealed: [], chosen: [], deleted: [], renamed: [] };
+  const asked: Asked = { opened: [], openedOnGitHub: [], changed: [], deleted: [], renamed: [] };
+  const onRepository = (plan: Plan | PlanSummary) => ({
+    ...plan,
+    repository: repositories[plan.id] ?? null,
+  });
+  const open = onRepository(PLAN);
   const plans: PlansControl = plansControl({
     page: PLANS_PAGE.DOCUMENT,
-    plans: [PLAN, OTHER],
-    folders,
+    plans: [onRepository(PLAN), onRepository(OTHER)],
     activePlanId: PLAN.id,
-    region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-    onRevealFolder: (planId) => asked.revealed.push(planId),
-    onChooseFolder: (planId) => asked.chosen.push(planId),
+    region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, ...open } },
+    onOpenOnGitHub: (planId) => asked.openedOnGitHub.push(planId),
+    onChangeRepository: (planId) => asked.changed.push(planId),
     onDeletePlan: (planId) => {
       asked.deleted.push(planId);
       return deletes();
@@ -174,23 +185,36 @@ async function confirmDelete(): Promise<void> {
   await act(async () => remove.click());
 }
 
-test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
-  const folderless = openTab();
-  openMenu(mountToolbar(folderless.plans));
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
+test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
+  const unset = openTab();
+  openMenu(mountToolbar(unset.plans));
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
+  // Copy plan is the menu's alone: the toolbar keeps Start and the ⋯.
   const toolbar = document.querySelector(".desktop-toolbar-actions");
-  assert.match(toolbar?.textContent ?? "", /Choose folder.*Copy plan/u);
+  assert.doesNotMatch(toolbar?.textContent ?? "", /Copy plan/u);
+  assert.match(toolbar?.textContent ?? "", /Start/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
+  // The toolbar is one row: the title alone in its heading, and the plan's
+  // chip in the actions row ahead of Start, waiting on a pick.
+  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  assert.equal(document.querySelector(".desktop-toolbar-subtitle"), null);
+  const chip = document.querySelector(".desktop-toolbar-actions .plan-compose-chip");
+  assert.equal(chip?.textContent, "Choose repository");
+  assert.ok(
+    chip?.compareDocumentPosition(document.querySelector(".start-agent") ?? chip) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    "the chip stands left of Start",
+  );
 
   unmountAll();
-  const kept = openTab({ [PLAN.id]: "/Users/dev/relay" });
+  const kept = openTab({ [PLAN.id]: "acme/relay" });
   openMenu(mountToolbar(kept.plans));
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
-    "Reveal in Finder",
-    "Change folder",
+    "Change repository…",
+    "Open on GitHub",
     "Delete plan",
   ]);
   for (const item of menuItems()) {
@@ -199,35 +223,35 @@ test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, an
   const deleteItem = menuItems().at(-1);
   assert.equal(deleteItem?.dataset.danger, "true");
   assert.ok(deleteItem?.previousElementSibling instanceof HTMLHRElement);
-  assert.doesNotMatch(
-    document.querySelector(".desktop-toolbar-actions")?.textContent ?? "",
-    /Choose folder/u,
-  );
+  // A plan with a repository shows it in the sidebar's row, not in the toolbar.
+  assert.equal(document.querySelector(".desktop-toolbar .plan-compose-chip"), null);
+  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
 
-  choose("Reveal in Finder");
-  assert.deepEqual(kept.asked.revealed, [PLAN.id]);
+  choose("Open on GitHub");
+  assert.deepEqual(kept.asked.openedOnGitHub, [PLAN.id]);
   assert.deepEqual(menuItems(), []);
 });
 
 test("a right-click on a sidebar plan offers that plan's actions at the pointer, and acting on it opens nothing", () => {
-  const { plans, asked } = openTab({ [OTHER.id]: "/Users/dev/billing" });
-  const other = mountSidebarPlan(plans, OTHER, asked);
+  const { plans, asked } = openTab({ [OTHER.id]: "acme/billing" });
+  const other = mountSidebarPlan(plans, { ...OTHER, repository: "acme/billing" }, asked);
   const open = mountSidebarPlan(plans, PLAN, asked);
 
   rightClick(other, 40, 60);
   // Copy formats the document drawn, which is the open plan's alone.
-  assert.deepEqual(labels(), ["Rename", "Reveal in Finder", "Change folder", "Delete plan"]);
+  assert.deepEqual(labels(), ["Rename", "Change repository…", "Open on GitHub", "Delete plan"]);
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   assert.equal(menu?.style.left, "40px");
   assert.equal(menu?.style.top, "60px");
-  choose("Change folder");
+  choose("Change repository…");
 
   rightClick(open, 40, 120);
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
-  choose("Choose folder");
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
+  choose("Change repository…");
 
-  assert.deepEqual(asked.chosen, [OTHER.id, PLAN.id]);
+  assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
+  assert.equal(other.textContent, "Billing exportacme/billing");
 });
 
 /** The plan's name field standing now, if one does. */
@@ -705,14 +729,57 @@ test("Command-Delete asks before the open plan is deleted, and leaves a text fie
   assert.deepEqual(asked.deleted, [PLAN.id]);
 });
 
-test("Option-Command-R reveals the open plan's folder, and only once it has one", () => {
-  const folderless = openTab();
-  mountToolbarWithKeys(folderless.plans);
-  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), false);
-  unmountAll();
+test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
+  const { plans } = openTab({ [PLAN.id]: "acme/relay" });
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
 
-  const { plans, asked } = openTab({ [PLAN.id]: "/Users/dean/code/luke" });
-  mountToolbarWithKeys(plans);
-  assert.equal(chord(window, { key: "®", code: "KeyR", altKey: true }), true);
-  assert.deepEqual(asked.revealed, [PLAN.id]);
+  openMenu(more);
+  choose("Change repository…");
+  // The tab counts the ask; the toolbar's chip opens on it.
+  act(() => {
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
+  });
+
+  const picker = container.querySelector(".desktop-toolbar-actions .plan-compose-menu");
+  assert.ok(picker, "the picker hangs from the toolbar");
+  assert.equal(picker.querySelector('[role="listbox"]')?.getAttribute("aria-label"), "Repository");
+  const search = picker.querySelector('input[aria-label="Search repositories"]');
+  assert.ok(document.activeElement === search, "the search field holds focus");
+
+  // Escape closes it and hands focus back to the ⋯ that asked, the plan having no chip of its own.
+  act(() => {
+    search?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(container.querySelector(".plan-compose-menu"), null);
+  assert.ok(document.activeElement === more, "focus is back on the plan actions button");
+});
+
+test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
+  const { plans } = openTab();
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const more = container.querySelector('[aria-label="Plan actions"]');
+  assert.ok(more instanceof HTMLButtonElement);
+  assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
+
+  openMenu(more);
+  choose("Change repository…");
+  act(() => {
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
+  });
+  const search = container.querySelector('input[aria-label="Search repositories"]');
+  assert.ok(search, "the picker opened");
+  act(() => {
+    search.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.ok(document.activeElement === more, "focus is back on the plan actions button");
 });

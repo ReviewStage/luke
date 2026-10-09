@@ -18,7 +18,6 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 export const APP_COMMAND = {
   NEW_PLAN: "new-plan",
   COPY_PLAN: "copy-plan",
-  REVEAL_FOLDER: "reveal-folder",
   DELETE_PLAN: "delete-plan",
   PREVIOUS_PLAN: "previous-plan",
   NEXT_PLAN: "next-plan",
@@ -129,19 +128,15 @@ export interface AppShortcut {
 
 /**
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
- * ⌥⌘B for the secondary sidebar and ⌥⌘R for Reveal in Finder as VS Code and
- * Cursor have them, ⌘/ for the shortcuts as ChatGPT has it, ⌘[ and ⌘] for
- * back and forward as Finder and Safari have them, ⇧⌘↩ to fill the window
- * with a pane as iTerm and Warp have it, and ⇧⌘← and ⇧⌘→ to move the focused
- * tab along its strip, the keys VS Code's Move Editor Left and Right end in.
+ * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
+ * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
+ * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
+ * have it, and ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
+ * keys VS Code's Move Editor Left and Right end in.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
-  [APP_COMMAND.REVEAL_FOLDER]: {
-    label: "Reveal in Finder",
-    chord: { key: SHORTCUT_KEY.R, option: true },
-  },
   [APP_COMMAND.DELETE_PLAN]: { label: "Delete plan", chord: { key: SHORTCUT_KEY.BACKSPACE } },
   [APP_COMMAND.PREVIOUS_PLAN]: {
     label: "Previous plan",
@@ -199,7 +194,6 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_PLAN,
       APP_COMMAND.NEXT_PLAN,
       APP_COMMAND.COPY_PLAN,
-      APP_COMMAND.REVEAL_FOLDER,
       APP_COMMAND.DELETE_PLAN,
     ],
   },

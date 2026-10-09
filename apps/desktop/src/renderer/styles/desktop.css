@@ -412,7 +412,7 @@ body,
 }
 
 /* A sidebar plan renamed in place keeps its row: the field takes the name's
-   own line and type, ringed, and the folder stays beneath it. */
+   own line and type, ringed, and the repository stays beneath it. */
 .sidebar-plan-field {
   width: calc(100% + 10px);
   margin: -2px -5px; /* off-scale */
@@ -539,6 +539,8 @@ body,
   flex-direction: column;
 }
 
+/* One row at the one bar height the side panel's bar shares, so the two
+   bars' bottom borders are one line across the window. */
 .desktop-toolbar {
   position: relative;
   display: flex;
@@ -607,6 +609,7 @@ body,
 }
 
 .desktop-toolbar-actions {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
@@ -1009,6 +1012,8 @@ body,
   padding: var(--space-24) var(--page-inset) 12vh;
 }
 
+/* The page's card is the shared composer (../ai-elements/prompt-input.tsx)
+   at its hero type; what stands here is the page around it. */
 .plan-compose {
   display: flex;
   width: 100%;
@@ -1027,48 +1032,193 @@ body,
   text-align: center;
 }
 
-.plan-compose-card {
+.repository-chip {
+  position: relative;
+  min-width: 0;
+}
+
+/* The chip in the toolbar stands in the actions row beside Start, so it is
+   drawn as a toolbar control is: the toolbar buttons' height and corner, no
+   fill until the pointer is on it. The wrapper draws nothing of its own, so
+   a plan whose chip is not drawn leaves no gap in the row; its menu hangs
+   from the actions row's right edge, with or without the chip. */
+.repository-chip[data-place="toolbar"] {
+  display: contents;
+}
+
+.repository-chip[data-place="toolbar"] .plan-compose-chip {
+  height: 28px;
+  padding: 0 10px 0 9px; /* off-scale */
+  border-radius: 8px;
+  background: none;
+  font-size: 12px;
+}
+
+.repository-chip[data-place="toolbar"] .plan-compose-chip:hover,
+.repository-chip[data-place="toolbar"] .plan-compose-chip[aria-expanded="true"] {
+  background: var(--raised-strong);
+}
+
+.repository-chip[data-place="toolbar"] .plan-compose-menu {
+  right: 0;
+  left: auto;
+}
+
+.plan-compose-chip .account-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* The searchable menu, in the shape of a command menu: the search as the
+   first row, flush and edge to edge over a hairline; under it the list,
+   its rows inset by the list's own padding so a highlight never meets the
+   border, scrolling inside itself past a bounded height; and under the
+   list, behind another hairline, the rows pinned where the scrolling
+   cannot take them. A row is one fixed height whatever the list holds:
+   the list is a plain block and a row flexes in no column it stands in,
+   because a bounded flex column would otherwise shrink its rows towards
+   their words as the matches grew past the bound, and let them back out
+   as a search cut them down. */
+.plan-compose-menu.searchable-menu {
+  padding: 0;
+}
+
+.plan-compose-menu-search {
   display: flex;
-  flex-direction: column;
-  border: 1px solid var(--hairline);
-  border-radius: 22px;
-  background: var(--surface-popover);
-  box-shadow: 0 18px 48px var(--shadow-soft);
-  transition: border-color var(--duration-hover) ease;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--glyph-gap);
+  height: 38px;
+  padding: 0 var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-tertiary);
 }
 
-.plan-compose-card:focus-within {
-  border-color: var(--selected-edge);
+/* The glyph is sized here, as every glyph is by what it sits in: an SVG
+   with no size of its own fills the row it is in. */
+.plan-compose-menu-search svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
-.plan-compose-name {
-  width: 100%;
-  padding: var(--space-20) var(--space-20) var(--space-12);
+.plan-compose-menu-search input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   border: 0;
   outline: none;
   background: none;
   color: var(--text-primary);
   font: inherit;
-  font-size: 17px;
-  -webkit-user-select: text;
-  user-select: text;
+  font-size: 13px;
 }
 
-.plan-compose-name::placeholder {
+.plan-compose-menu-search input::placeholder {
   color: var(--text-tertiary);
 }
 
-.plan-compose-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-12);
-  padding: 0 var(--space-12) var(--space-12);
+.plan-compose-menu-list {
+  display: block;
+  max-height: 288px;
+  padding: var(--space-6);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 
-.plan-compose-folder {
+.plan-compose-menu-list:focus-visible {
+  outline: none;
+}
+
+.plan-compose-menu-foot {
+  display: block;
+  flex: 0 0 auto;
+  padding: var(--space-6);
+  border-top: 1px solid var(--hairline);
+}
+
+/* One highlight, wherever it came from: the arrows and the pointer both
+   move the same one, so the pointer's own hover draws nothing of its own.
+   A pinned row carries it as a data attribute, standing outside the listbox. */
+.searchable-menu .plan-compose-menu-row:hover {
+  background: none;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-selected="true"],
+.searchable-menu .plan-compose-menu-row[data-highlighted="true"],
+.searchable-menu .plan-compose-menu-row:focus-visible {
+  background: var(--raised-strong);
+}
+
+/* What stands in the list's place: one quiet line, centred, at a row or
+   two's height, so a menu with nothing to list never falls to a sliver. */
+.plan-compose-menu-note {
+  display: flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--space-4) var(--space-12);
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* A switch row: the panel's own switch at the row's end, keyed off the
+   row, which is the switch for the keyboard; a row that cannot be pressed
+   is muted and takes no highlight. */
+.plan-compose-menu-switch {
+  margin-left: auto;
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch {
+  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+}
+
+.plan-compose-menu-row[role="switch"][aria-checked="true"] .switch-thumb {
+  transform: translateX(14px);
+}
+
+.plan-compose-menu-row[aria-disabled="true"] {
+  opacity: 0.4;
+}
+
+.searchable-menu .plan-compose-menu-row[aria-disabled="true"][data-highlighted="true"] {
+  background: none;
+}
+
+/* A submenu stands beside the pinned row that opened it, its top level
+   with that row's and its near edge at the menu's own; it turns to the
+   menu's other side where the window ends before it does, and stands up
+   from the row's foot where the window's bottom would cut it. */
+.plan-compose-menu-branch {
   position: relative;
-  min-width: 0;
+}
+
+.plan-compose-submenu {
+  position: absolute;
+  z-index: 1;
+  top: 0;
+  left: calc(100% + 9px);
+  width: 200px;
+  padding: var(--space-6);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-overlay);
+  box-shadow: 0 16px 40px var(--shadow);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.plan-compose-submenu[data-side="left"] {
+  right: calc(100% + 9px);
+  left: auto;
+}
+
+.plan-compose-submenu[data-stand="up"] {
+  top: auto;
+  bottom: 0;
 }
 
 .plan-compose-chip {
@@ -1096,48 +1246,55 @@ body,
 }
 
 .plan-compose-chip-name,
-.plan-compose-menu-name,
-.plan-compose-menu-path {
+.plan-compose-menu-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* The start press is the card's one filled thing, drawn in the text colour
-   the way a composer's send is, and only filled once it can be pressed. */
-.plan-compose-start {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  color: var(--desktop-ground);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.plan-compose-start:disabled {
-  background: var(--raised-strong);
-  color: var(--text-tertiary);
-}
-
-.plan-compose-chip svg,
-.plan-compose-menu-row svg {
+.plan-compose-chip svg {
   width: 15px;
   height: 15px;
   flex: 0 0 auto;
 }
 
-.plan-compose-start svg {
-  width: 17px;
-  height: 17px;
+.plan-compose-menu-row svg {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
-/* The recent folders open under the chip and enter as the settings search
-   does, on the tokens reduced motion zeroes. */
+/* The end slot is one glyph wide whether or not it holds one, so a name
+   ends where every other does; the check is the text's own colour here,
+   a choice rather than a state, and a mark or a chevron is quieter. */
+.plan-compose-menu-end {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+}
+
+.plan-compose-menu-end .credential-check {
+  width: 16px;
+  height: 16px;
+  color: var(--text-primary);
+}
+
+.plan-compose-menu-end .settings-chevron {
+  width: 14px;
+  height: 14px;
+}
+
+.plan-compose-menu-end .link-icon {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+/* The menu opens under its trigger and enters on the tokens reduced motion zeroes. */
 .plan-compose-menu {
   position: absolute;
   z-index: 2;
@@ -1151,23 +1308,26 @@ body,
   border-radius: 12px;
   background: var(--surface-overlay);
   box-shadow: 0 16px 40px var(--shadow);
-  animation: search-enter var(--duration-quick) var(--motion-exit) both;
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
-.plan-compose-menu-heading {
-  margin: var(--space-4) var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
 }
 
+/* A row is one fixed height and flexes in no column it stands in. */
 .plan-compose-menu-row {
   display: flex;
+  flex: none;
+  width: 100%;
   align-items: center;
   gap: var(--glyph-gap);
   height: 32px;
   padding: 0 var(--row-inset);
-  border-radius: 8px;
+  border-radius: 6px;
   background: none;
   color: var(--text-primary);
   font-size: 13px;
@@ -1181,23 +1341,26 @@ body,
 }
 
 .plan-compose-menu-name {
-  flex: 0 1 auto;
-  font-weight: 560;
-}
-
-.plan-compose-menu-path {
   min-width: 0;
-  flex: 1;
-  color: var(--text-tertiary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
+  flex: 0 1 auto;
+  font-weight: 500;
 }
 
-.plan-compose-menu hr {
-  align-self: stretch;
-  margin: var(--menu-inset) var(--row-inset);
-  border: 0;
-  border-top: 1px solid var(--hairline);
+/* The detail follows the name in the list, and stands at the row's end in
+   the foot, where the row names a setting and the detail is its value. */
+.plan-compose-menu-detail {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.plan-compose-menu-foot .plan-compose-menu-detail {
+  margin-left: auto;
+}
+
+.plan-compose-menu-foot .plan-compose-menu-detail + .plan-compose-menu-end {
+  margin-left: 0;
 }
 
 .plan-compose-note {
@@ -1918,6 +2081,53 @@ body,
     opacity: 0;
     transform: scale(0.96);
   }
+}
+
+/* Start ------------------------------------------------------------------ */
+
+/* The toolbar's Start: a split button whose main part starts an agent on
+   the account's default and whose chevron drops the model menu. The
+   labelled button and the icon button above, joined into one pill by a
+   hairline around both and between them, the way a split button is drawn
+   in every toolbar; each half keeps its own hover. Unavailable, both halves
+   say so (`aria-disabled`) and fade as a disabled button does while they
+   keep answering the pointer, so the hover can say why. */
+.start-agent {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.start-agent-split {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  -webkit-app-region: no-drag;
+}
+
+.start-agent-main {
+  border-radius: calc(var(--control-radius) - 1px) 0 0 calc(var(--control-radius) - 1px);
+}
+
+.start-agent-chevron {
+  border-left: 1px solid var(--hairline);
+  border-radius: 0 calc(var(--control-radius) - 1px) calc(var(--control-radius) - 1px) 0;
+}
+
+/* The model menu hangs under the chevron, to the toolbar's right edge. */
+.start-agent-menu {
+  right: 0;
+  left: auto;
+  width: 300px;
+}
+
+/* A word the toolbar says in passing, beside its buttons: what the last Copy came to. */
+.desktop-toolbar-word {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* Feedback dialog ------------------------------------------------------------ */

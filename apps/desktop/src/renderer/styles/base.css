@@ -17,6 +17,8 @@
   --voice-luke: var(--state-working);
   --state-attention: #ffa049;
   --state-complete: #6fdca4;
+  /* A pull request merged, in GitHub's own purple for it, on the agent's pill and its row. */
+  --state-merged: #c3a0ff;
 
   /* The one destructive colour, in the two weights a control that destroys
      something needs: a ground it can sit on and a text colour that reads on
@@ -152,6 +154,7 @@
     --voice-developer: #17784a;
     --state-attention: #a65400;
     --state-complete: #18794e;
+    --state-merged: #8250df;
     --danger: #e0383e;
     --danger-text: #b8232a;
     --error-text: #b8232a;
@@ -228,8 +231,44 @@
   height: 100%;
 }
 
-* {
-  box-sizing: border-box;
+/* The element resets, in a `base` layer under the Tailwind layers
+   (styles/tailwind.css) as Tailwind's own preflight would sit: a rule outside
+   every layer outranks a layered one whatever its specificity, so a reset
+   left out here would beat the utility a component spells on the same
+   element, and the submit's `text-primary-foreground` would lose to the
+   button's `color: inherit` and draw its arrow in its disc's own colour.
+   Every other rule in this sheet stays outside the layers and so still wins
+   over a utility of the same element. */
+@layer base {
+  * {
+    box-sizing: border-box;
+  }
+
+  /* No user-agent padding either: a button keeps none it did not ask for, so a
+     glyph centred in a fixed box is never squeezed narrower than its own. */
+  button {
+    padding: 0;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    font: inherit;
+  }
+
+  button:disabled {
+    cursor: default;
+  }
+
+  /* A field is typed into in the panel's own font, on no border and no
+     surface of the browser's: Tailwind's preflight, which would reset these,
+     is left out (styles/tailwind.css), so the reset is this sheet's, and the
+     box around the words is its owner's to draw. Without it a textarea is the
+     browser's monospace well behind a hard rectangle. */
+  textarea {
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+  }
 }
 
 html,
@@ -250,20 +289,6 @@ body,
 .settings-input {
   -webkit-user-select: text;
   user-select: text;
-}
-
-/* No user-agent padding either: a button keeps none it did not ask for, so a
-   glyph centred in a fixed box is never squeezed narrower than its own. */
-button {
-  padding: 0;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
-}
-
-button:disabled {
-  cursor: default;
 }
 
 /* Luke's meter arrives beside his name in the sidebar when he starts to

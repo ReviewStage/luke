@@ -4,14 +4,6 @@
     "dest": "/api/default.js?route=auth/[...all]&path=auth/$1"
   },
   {
-    "src": "/api/plans/([^/]+)/commands/claim",
-    "dest": "/api/default.js?route=plans/commands/claim&id=$1"
-  },
-  {
-    "src": "/api/plans/([^/]+)/commands/([^/]+)",
-    "dest": "/api/default.js?route=plans/commands/command&id=$1&command=$2"
-  },
-  {
     "src": "/api/plans/([^/]+)/board",
     "dest": "/api/default.js?route=plans/board&id=$1"
   },
@@ -20,8 +12,24 @@
     "dest": "/api/default.js?route=plans/transcript&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/agents",
+    "dest": "/api/default.js?route=plans/agents&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)",
     "dest": "/api/default.js?route=plans/plan&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/messages",
+    "dest": "/api/default.js?route=agents/messages&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/stop",
+    "dest": "/api/default.js?route=agents/stop&id=$1"
+  },
+  {
+    "src": "/api/agents/([^/]+)/pull-request",
+    "dest": "/api/default.js?route=agents/pull-request&id=$1"
   },
   {
     "src": "/api/account/delete",
@@ -54,6 +62,22 @@
   {
     "src": "/api/events",
     "dest": "/api/default.js?route=events"
+  },
+  {
+    "src": "/api/github/install",
+    "dest": "/api/default.js?route=github/install"
+  },
+  {
+    "src": "/api/github/installed",
+    "dest": "/api/default.js?route=github/installed"
+  },
+  {
+    "src": "/api/github/repositories",
+    "dest": "/api/default.js?route=github/repositories"
+  },
+  {
+    "src": "/api/models",
+    "dest": "/api/default.js?route=models"
   },
   {
     "src": "/api/plans",

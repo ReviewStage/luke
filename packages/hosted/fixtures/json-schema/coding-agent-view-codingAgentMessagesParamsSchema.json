@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "after": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "agentId",
+    "after"
+  ],
+  "additionalProperties": false
+}

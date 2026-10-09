@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   OBSERVATION_SOURCE,
   type ObservationSource,
@@ -146,6 +147,28 @@ test("a brain-authored user row reads back under each source the vocabulary name
   const read = await runTest(readStoredUIMessages([unnamed], TOOLS));
   assert.equal(refusalOf(read), SCHEMA_REFUSAL.MALFORMED);
   assert.deepEqual(pathOf(read), [0, "metadata"]);
+});
+
+test("a stored developer's line written by an earlier build with how it was to be delivered on it reads as the ordinary typed line, the legacy key dropped; the write door still refuses the key, and any other key the vocabulary does not name is refused on either", async () => {
+  const typed = { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED };
+  const legacy = withMetadata(await fixture(FIXTURE.SPOKEN_ASK), { ...typed, delivery: "queue" });
+  const read = await runTest(readStoredUIMessages([legacy], TOOLS, UNREGISTERED_TOOL_PART.DROP));
+  assert.ok(read.ok, refusalOf(read));
+  const [stored] = read.value;
+  assert.ok(stored !== undefined && "metadata" in stored);
+  assert.deepEqual(stored.metadata, typed);
+  // The write door reads under the vocabulary as it stands: a new row naming the key is refused.
+  const written = await runTest(readStoredUIMessages([legacy], TOOLS));
+  assert.equal(refusalOf(written), SCHEMA_REFUSAL.MALFORMED);
+  assert.deepEqual(pathOf(written), [0, "metadata"]);
+  const refused = await runTest(
+    readStoredUIMessages(
+      [withMetadata(legacy, { ...typed, mood: "cheerful" })],
+      TOOLS,
+      UNREGISTERED_TOOL_PART.DROP,
+    ),
+  );
+  assert.equal(refusalOf(refused), SCHEMA_REFUSAL.MALFORMED);
 });
 
 test("a message with metadata the vocabulary does not name is refused at the metadata", async () => {

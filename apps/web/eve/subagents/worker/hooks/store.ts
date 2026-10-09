@@ -1,8 +1,8 @@
 import { defineState } from "eve/context";
 import { defineHook } from "eve/hooks";
+import { pinnedState } from "../../../../server/hosted/brain-host/pinned-state.js";
 import { EMPTY_RELAY_STATE, type RelayState } from "../../../../server/hosted/brain-host/relay.js";
 import { relayChildEvent } from "../../../host.js";
-import { pinnedState } from "../../../pinned-state.js";
 
 /**
  * The relay from the worker's own stream into the store: every event eve
@@ -19,7 +19,7 @@ const relayState = defineState<RelayState>("luke.relay.child", () => EMPTY_RELAY
 export default defineHook({
   events: {
     "*"(event, ctx) {
-      // Pinned before anything awaits, for the reason the root's relay pins it (`../../../pinned-state.ts`).
+      // Pinned before anything awaits, for the reason the root's relay pins it (`server/hosted/brain-host/pinned-state.ts`).
       const state = pinnedState(relayState);
       return relayChildEvent(event, ctx.session, state);
     },

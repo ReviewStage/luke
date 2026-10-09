@@ -11,6 +11,10 @@ import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool.js";
 import { BRAIN_HOST_MODEL_FIXTURE } from "../server/hosted/brain-host/bounds.js";
 import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning.js";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
+import {
+  REPOSITORY_SHELL_STATUS,
+  RUN_IN_REPOSITORY_TOOL,
+} from "../server/hosted/repository-shell.js";
 
 /**
  * The fixture model the end-to-end eval runs the whole host under: a
@@ -22,7 +26,9 @@ import { SEARCH_WEB_TOOL } from "../server/hosted/public-research.js";
  * found, or says it found none; told to draw something, it draws it on the
  * plan's board as one labelled box and says so; told to research something,
  * it hands it to the worker subagent and says so, and the worker,
- * running on the same model, looks it up. It is selected only by the
+ * running on the same model, looks it up; told to read something, it runs
+ * that command in the plan's repository and says what it read, or why it
+ * read nothing, in the tool's own words. It is selected only by the
  * fixture's own environment variable and a deployment never names it.
  */
 
@@ -39,6 +45,37 @@ export const SCRIPTED_DRAW = "Draw: ";
 /** The id the scripted planner gives the box it draws. */
 export const SCRIPTED_DRAWN_ID = "sketch";
 export const SCRIPTED_DRAWN_REPLY = "It's on the board.";
+/** What a developer's words start with when they ask the scripted planner to run the rest in the repository. */
+export const SCRIPTED_READ = "Read: ";
+/** The reply to a command that ran: its stdout follows. */
+export const SCRIPTED_READ_REPLY = "The repository says:";
+/** The reply to a command that did not run: the tool's own reason follows, so nothing unread is described as read. */
+export const SCRIPTED_NOT_READ_REPLY = "I could not read the repository.";
+
+const readCommandResult = Schema.decodeUnknownOption(
+  Schema.Union([
+    Schema.Struct({
+      status: Schema.Literal(REPOSITORY_SHELL_STATUS.RAN),
+      exitCode: Schema.Number,
+      stdout: Schema.String,
+    }),
+    Schema.Struct({
+      status: Schema.Literal(REPOSITORY_SHELL_STATUS.NOT_RUN),
+      reason: Schema.String,
+    }),
+  ]),
+);
+
+/** The reply to a repository read: what it answered, or that nothing was read and why. */
+function readReply(read: MockModelToolResult): MockModelResponse {
+  return Option.match(readCommandResult(read.output), {
+    onNone: () => ({ text: SCRIPTED_NOT_READ_REPLY }),
+    onSome: (result) =>
+      result.status === REPOSITORY_SHELL_STATUS.RAN
+        ? { text: `${SCRIPTED_READ_REPLY} ${result.stdout.trim()}` }
+        : { text: `${SCRIPTED_NOT_READ_REPLY} ${result.reason}` },
+  });
+}
 
 const readFoundSearch = Schema.decodeUnknownOption(
   Schema.Struct({ findings: Schema.NonEmptyArray(Schema.Struct({ url: Schema.String })) }),
@@ -56,6 +93,8 @@ function researchReply(searched: MockModelToolResult): MockModelResponse {
 function scriptedResponse(request: MockModelRequest): MockModelResponse {
   const searched = request.toolResults.find((result) => result.name === SEARCH_WEB_TOOL.name);
   if (searched) return researchReply(searched);
+  const read = request.toolResults.find((result) => result.name === RUN_IN_REPOSITORY_TOOL.name);
+  if (read) return readReply(read);
   if (request.toolResults.some((result) => result.name === DRAW_ON_BOARD_TOOL.name)) {
     return { text: SCRIPTED_DRAWN_REPLY };
   }
@@ -83,6 +122,10 @@ function scriptedResponse(request: MockModelRequest): MockModelResponse {
   if (request.lastUserMessage?.startsWith(SCRIPTED_LOOK_UP)) {
     const query = request.lastUserMessage.slice(SCRIPTED_LOOK_UP.length);
     return { toolCalls: [{ name: SEARCH_WEB_TOOL.name, input: { query } }] };
+  }
+  if (request.lastUserMessage?.startsWith(SCRIPTED_READ)) {
+    const command = request.lastUserMessage.slice(SCRIPTED_READ.length);
+    return { toolCalls: [{ name: RUN_IN_REPOSITORY_TOOL.name, input: { command } }] };
   }
   return { text: SCRIPTED_PLANNING_REPLY };
 }

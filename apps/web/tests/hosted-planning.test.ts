@@ -6,6 +6,9 @@ import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {
   generateText,
+  getToolName,
+  isTextUIPart,
+  isToolUIPart,
   type JSONValue,
   jsonSchema,
   type ModelMessage,
@@ -13,7 +16,7 @@ import {
   type ToolSet,
   tool,
 } from "ai";
-import { Effect, type Layer, Option, Redacted, Result, Schema } from "effect";
+import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -24,12 +27,17 @@ import {
   SCRIPTED_DRAWN_REPLY,
   SCRIPTED_LOOK_UP,
   SCRIPTED_NO_SOURCE_REPLY,
+  SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
+  SCRIPTED_READ,
+  SCRIPTED_READ_REPLY,
   SCRIPTED_RESEARCH_REPLY,
   scriptedModel,
 } from "../eve/scripted-model";
+import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
+import { GitHubApp } from "../server/github/github-app";
 import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { readBoard, writeScene } from "../server/hosted/board-store";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
@@ -53,13 +61,29 @@ import {
   readPlan,
   savePlanDocument,
 } from "../server/hosted/plan-store";
-import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
+import {
+  READ_WEB_PAGE_TOOL,
+  SEARCH_WEB_STATUS,
+  SEARCH_WEB_TOOL,
+} from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
-import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import {
+  REPOSITORY_SHELL_REFUSAL,
+  type RepositorySandboxDoor,
+  RUN_IN_REPOSITORY_TOOL,
+} from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
+import {
+  GITHUB_APP_SETTINGS,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
+  githubReaching,
+  NO_GITHUB,
+  openGithubUser,
+} from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -95,6 +119,32 @@ const EXPIRY_QUERY = "Stripe idempotency key expiry";
 const EXPIRY_SOURCE = "https://docs.stripe.com/api/idempotent_requests";
 const EXPIRY_ANSWER = "Stripe keeps idempotency keys for at least 24 hours. (docs.stripe.com)";
 
+const readFoundSearch = Schema.decodeUnknownOption(
+  Schema.Struct({
+    status: Schema.Literal(SEARCH_WEB_STATUS.FOUND),
+    findings: Schema.Array(Schema.Struct({ url: Schema.String })),
+  }),
+);
+
+/** The sources every settled search in these rows cites, whole, in the rows' order. */
+function citedSources(rows: readonly StoredUIMessage[]): readonly string[] {
+  return rows.flatMap((row) =>
+    row.parts.flatMap((part) => {
+      if (!isToolUIPart(part) || getToolName(part) !== SEARCH_WEB_TOOL.name) return [];
+      if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return [];
+      return Option.match(readFoundSearch(part.output), {
+        onNone: () => [],
+        onSome: (found) => found.findings.map((finding) => finding.url),
+      });
+    }),
+  );
+}
+
+/** Every word spoken in these rows, one string per text part, in the rows' order. */
+function spokenWords(rows: readonly StoredUIMessage[]): readonly string[] {
+  return rows.flatMap((row) => row.parts.filter(isTextUIPart).map((part) => part.text));
+}
+
 /** OpenAI's search as a scripted table: one cited answer, or a server error. */
 function searchService(answered: boolean) {
   return recordingHttpClient(() =>
@@ -126,6 +176,18 @@ function searchService(answered: boolean) {
 }
 
 const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
+
+/** The repository the reading scenarios' plan is about, and the installation the developer reaches it through. */
+const RELAY = { owner: "acme", name: "relay", defaultBranch: "main" } as const;
+const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
+const RELAY_INSTALLATION = { id: 11, login: RELAY.owner, repositories: [RELAY] } as const;
+
+/** What the checkout answers `ls`, on one line so the record is read for it as written. */
+const RELAY_LISTING = "README.md src";
+
+/** A network service beside the App over the fixture settings, for a turn that reads GitHub nowhere. */
+const withApp = (http: Layer.Layer<HttpClient.HttpClient>) =>
+  Layer.merge(http, GitHubApp.layer(GITHUB_APP_SETTINGS));
 
 /** The usage meter as a fixed answer: every use counted, or none writable. */
 function meter(writable: boolean): BrainHostSeams["spend"] {
@@ -213,6 +275,8 @@ interface Session {
   readonly id: string;
   readonly auth: SessionAuth;
   readonly state: RelayStateStore;
+  /** The session's sandbox door, as eve hands a tool `getSandbox`. */
+  readonly sandbox: RepositorySandboxDoor;
 }
 
 /** A session claiming the conversation as the store hook does at its start. */
@@ -221,6 +285,7 @@ const startSession = (
   userId: string,
   conversationId: string,
   kind: BrainHostTurn = BRAIN_HOST_TURN.TYPED,
+  sandbox: Session["sandbox"] = unreached("getSandbox"),
 ) =>
   Effect.gen(function* () {
     const id = sessionId();
@@ -228,7 +293,7 @@ const startSession = (
     const starting = yield* host.admitStarting(auth, id);
     if (Result.isFailure(starting)) return assert.fail(starting.failure);
     assert.equal(yield* host.sessionStarted(starting.success, id), true);
-    return { id, auth, state: memoryRelayState() } satisfies Session;
+    return { id, auth, state: memoryRelayState(), sandbox } satisfies Session;
   });
 
 const admitted = (host: BrainHost, session: Session) =>
@@ -245,7 +310,8 @@ function toolContext(session: Session, name: string): EveToolContext {
     messages: [],
     getToken: unreached("getToken"),
     requireAuth: unreached("requireAuth"),
-    getSandbox: unreached("getSandbox"),
+    // SAFETY: the session's sandbox as eve hands a tool it; the double stands for the live one, and a test that opens none hands the unreached door.
+    getSandbox: session.sandbox as EveToolContext["getSandbox"],
   };
 }
 
@@ -260,7 +326,7 @@ const planningTurn = (
   session: Session,
   eveTurnId: string,
   words: string,
-  http: Layer.Layer<HttpClient.HttpClient> = noNetwork,
+  services: Layer.Layer<HttpClient.HttpClient | GitHubApp> = NO_GITHUB,
   kind: BrainHostTurn = BRAIN_HOST_TURN.TYPED,
 ) =>
   Effect.gen(function* () {
@@ -356,7 +422,7 @@ const planningTurn = (
             unparsedWire(call.input as WireBoundaryInput),
             toolContext(session, call.toolName),
           )
-          .pipe(Effect.provide(http));
+          .pipe(Effect.provide(services));
         yield* relay({
           type: "action.result",
           data: {
@@ -515,7 +581,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           session,
           "turn_0",
           SPOKEN_ASK,
-          noNetwork,
+          NO_GITHUB,
           BRAIN_HOST_TURN.SPOKEN,
         );
 
@@ -626,9 +692,9 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           askingSession,
           "turn_0",
           `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-          search.layer,
+          withApp(search.layer),
         );
-        yield* planningTurn(host, otherSession, "turn_0", CORRECTION, search.layer);
+        yield* planningTurn(host, otherSession, "turn_0", CORRECTION, withApp(search.layer));
 
         assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
         assert.equal(search.requests.length, 1);
@@ -645,8 +711,9 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           HOSTED_TOOL_SET,
           10,
         );
-        assert.ok(JSON.stringify(askingRows).includes(EXPIRY_SOURCE));
-        assert.ok(!JSON.stringify(otherRows).includes(EXPIRY_SOURCE));
+        assert.deepEqual(citedSources(askingRows), [EXPIRY_SOURCE]);
+        assert.deepEqual(citedSources(otherRows), []);
+        assert.deepEqual(spokenWords(otherRows), [CORRECTION, SCRIPTED_PLANNING_REPLY]);
       }),
   );
 
@@ -663,7 +730,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         session,
         "turn_0",
         `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-        searchService(false).layer,
+        withApp(searchService(false).layer),
       );
 
       assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
@@ -686,11 +753,79 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           session,
           "turn_0",
           `${SCRIPTED_LOOK_UP}${EXPIRY_QUERY}`,
-          search.layer,
+          withApp(search.layer),
         );
 
         assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
         assert.equal(search.requests.length, 1);
+      }),
+  );
+
+  it.effect(
+    "asked to read, the planning model reads a checkout of the plan's repository in the session's sandbox, and the token reaches no row of the record",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openGithubUser();
+        const host = yield* planningHost();
+        const started = yield* createPlan(userId, { ...RELAY_PLAN, repository: RELAY_FULL_NAME });
+        const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
+        const sandbox = sandboxDouble((command) =>
+          command === "ls" ? { exitCode: 0, stdout: RELAY_LISTING, stderr: "" } : undefined,
+        );
+        const session = yield* startSession(
+          host,
+          userId,
+          conversationId,
+          BRAIN_HOST_TURN.TYPED,
+          sandbox.door,
+        );
+        const github = githubReaching([RELAY_INSTALLATION]);
+
+        const first = yield* planningTurn(
+          host,
+          session,
+          "turn_0",
+          `${SCRIPTED_READ}ls`,
+          github.layer,
+        );
+        const again = yield* planningTurn(
+          host,
+          session,
+          "turn_1",
+          `${SCRIPTED_READ}ls`,
+          github.layer,
+        );
+
+        assert.equal(first, `${SCRIPTED_READ_REPLY} ${RELAY_LISTING}`);
+        assert.equal(again, first);
+        assert.equal(sandbox.clones.length, 1);
+        const rows = yield* readRecentMessages(
+          (yield* admitted(host, session)).target,
+          HOSTED_TOOL_SET,
+          10,
+        );
+        const record = JSON.stringify(rows);
+        assert.ok(record.includes(RELAY_LISTING));
+        const header = Buffer.from(`x-access-token:${GITHUB_FIXTURE_INSTALLATION_TOKEN}`).toString(
+          "base64",
+        );
+        for (const text of [record, JSON.stringify(sandbox.runs)]) {
+          assert.equal(text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+          assert.equal(text.includes(header), false);
+        }
+      }),
+  );
+
+  it.effect(
+    "asked to read a plan with no repository yet, the planning model says nothing was read and why",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+
+        const reply = yield* planningTurn(host, session, "turn_0", `${SCRIPTED_READ}ls`);
+
+        assert.equal(reply, `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`);
       }),
   );
 });

@@ -162,9 +162,28 @@ function refusedPart(
   return undefined;
 }
 
-/** A validated row typed by its role, its metadata read under that role's schema. */
+/**
+ * The one key an earlier build wrote on a developer's line to a coding
+ * agent while it awaited its turn, naming how it was to be delivered. No
+ * row carries it any more and the vocabulary no longer admits it, but a
+ * row written before that build retired still may, so a stored-row read
+ * drops it and the row reads as the ordinary line it is, rather than
+ * refusing the page it stands on. The write door drops nothing: a message
+ * written today naming the key is outside the vocabulary and is refused.
+ */
+const LEGACY_USER_METADATA_KEY = "delivery";
+
+/** The user metadata with the legacy key gone; anything else exactly as it came, for the schema to judge. */
+function withoutLegacyUserKey(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata) || !(LEGACY_USER_METADATA_KEY in metadata)) return metadata;
+  const { [LEGACY_USER_METADATA_KEY]: _legacy, ...rest } = metadata;
+  return rest;
+}
+
+/** A validated row typed by its role, its metadata read under that role's schema; a stored-row read forgives the legacy key, the write door does not. */
 function readStoredMessage(
   message: ValidatedMessage,
+  storedRow: boolean,
 ): Result.Result<StoredUIMessage, SchemaRefusalError> {
   const part = refusedPart(message.parts);
   if (part) return refuse(SCHEMA_REFUSAL.MALFORMED, part);
@@ -173,12 +192,10 @@ function readStoredMessage(
   switch (message.role) {
     case MESSAGE_ROLE.USER: {
       const role = message.role;
-      return Result.map(underMetadata(readUserMetadata(metadata)), (value) => ({
-        id,
-        role,
-        parts,
-        metadata: value,
-      }));
+      return Result.map(
+        underMetadata(readUserMetadata(storedRow ? withoutLegacyUserKey(metadata) : metadata)),
+        (value) => ({ id, role, parts, metadata: value }),
+      );
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
@@ -198,10 +215,11 @@ function readStoredMessage(
 /** Every validated message read under this build's metadata and tool-state set, or the first refusal with the row's index ahead of its path. */
 function readStoredMessages(
   messages: readonly ValidatedMessage[],
+  storedRow: boolean,
 ): Result.Result<StoredUIMessage[], SchemaRefusalError> {
   const stored: StoredUIMessage[] = [];
   for (const [messageIndex, message] of messages.entries()) {
-    const read = readStoredMessage(message);
+    const read = readStoredMessage(message, storedRow);
     if (Result.isFailure(read)) {
       return Result.fail(
         new SchemaRefusalError({
@@ -221,7 +239,9 @@ function readStoredMessages(
  * role and its tool-state set. The registry is the catalog's `tool()`
  * declarations keyed by the name a part spells. A tool part naming a tool the
  * registry does not hold is refused or dropped as `unregistered` says, the
- * write door refusing and a stored-row read dropping; a refusal is the same
+ * write door refusing and a stored-row read dropping, and a stored-row read
+ * forgives the legacy metadata key named above on the same terms, since
+ * `unregistered` is where the two doors tell themselves apart; a refusal is the same
  * word and path a wire schema answers with, so a store can tell a malformed
  * row from one naming a tool this build does not register. A conversation
  * with no rows yet reads as no messages: the SDK refuses an empty array, and
@@ -234,8 +254,8 @@ export function readStoredUIMessagesEither(
 ): Effect.Effect<Result.Result<StoredUIMessage[], SchemaRefusalError>> {
   if (!Array.isArray(rows)) return Effect.succeed(refuse(SCHEMA_REFUSAL.MALFORMED, []));
   if (rows.length === 0) return Effect.succeed(Result.succeed([]));
-  const messages =
-    unregistered === UNREGISTERED_TOOL_PART.DROP ? withoutRetiredToolParts(rows, tools) : rows;
+  const storedRow = unregistered === UNREGISTERED_TOOL_PART.DROP;
+  const messages = storedRow ? withoutRetiredToolParts(rows, tools) : rows;
   const unregisteredPart = unregisteredToolPart(messages, tools);
   if (unregisteredPart) {
     return Effect.succeed(refuse(SCHEMA_REFUSAL.NOT_REGISTERED, unregisteredPart));
@@ -251,7 +271,9 @@ export function readStoredUIMessagesEither(
     }),
   );
   return Effect.map(validated, (result) =>
-    result.success ? readStoredMessages(result.data) : refuse(SCHEMA_REFUSAL.MALFORMED, []),
+    result.success
+      ? readStoredMessages(result.data, storedRow)
+      : refuse(SCHEMA_REFUSAL.MALFORMED, []),
   );
 }
 

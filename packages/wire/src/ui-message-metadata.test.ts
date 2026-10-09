@@ -57,6 +57,15 @@ test("a user row is a typed ask, a spoken ask, or an observation, each admitted 
     }),
     { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
   );
+  // A typed ask carries nothing of how it was delivered: a row naming one is malformed.
+  assert.equal(
+    refusalOf(USER_MESSAGE_METADATA, {
+      author: MESSAGE_AUTHOR.DEVELOPER,
+      channel: MESSAGE_CHANNEL.TYPED,
+      delivery: "steer",
+    }),
+    SCHEMA_REFUSAL.MALFORMED,
+  );
   assert.deepEqual(parse(USER_MESSAGE_METADATA, spokenAsk), {
     author: MESSAGE_AUTHOR.DEVELOPER,
     channel: MESSAGE_CHANNEL.VOICE,
@@ -232,7 +241,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
   assert.equal("anyOf" in user, true);
   if (!("anyOf" in user)) return;
   const shapes = user.anyOf.map((member) =>
-    "type" in member && member.type === "object"
+    "properties" in member
       ? { keys: Object.keys(member.properties).sort(), required: [...member.required].sort() }
       : undefined,
   );
@@ -246,7 +255,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
   ]);
   const assistant = emitJsonSchema(ASSISTANT_MESSAGE_METADATA);
   assert.equal("type" in assistant && assistant.type, "object");
-  if (!("type" in assistant) || assistant.type !== "object") return;
+  if (!("properties" in assistant)) return;
   assert.deepEqual(Object.keys(assistant.properties).sort(), [
     "author",
     "channel",

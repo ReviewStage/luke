@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -10,6 +11,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the service takes into the plan's fields and formats into the body as the
  * one fixed template (`plan-template.ts`), and it is replaced whole on every
  * save: there is no version, no revision argument, and no per-assumption id.
+ * A plan may name the GitHub repository it is about, `owner/name` as
+ * `github-repositories-wire.ts` spells it, which the service confirms the
+ * account reaches through the Luke GitHub App before it keeps it; null is a
+ * plan with no repository yet, and every plan from before repositories.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -51,12 +56,16 @@ export const planDocumentSchema = EffectSchema.Struct({
 
 export type PlanDocument = typeof planDocumentSchema.Type;
 
+/** A plan's repository as a request names it: a full name, or null for none. */
+const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
+
 /**
- * Starting a plan (POST): its name; the document starts as the untouched
- * template. The folder it reads stays on the developer's Mac.
+ * Starting a plan (POST): its name, and the repository it is about where one
+ * is chosen; the document starts as the untouched template.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  repository: EffectSchema.optionalKey(repositoryChoiceSchema),
 });
 
 export type PlanCreateRequest = typeof planCreateRequestSchema.Type;
@@ -68,6 +77,21 @@ export const planRenameRequestSchema = EffectSchema.Struct({
 
 export type PlanRenameRequest = typeof planRenameRequestSchema.Type;
 
+/** Whether an update names anything to change: one that names nothing is refused rather than answered unchanged. */
+function updateNamesAChange(update: { name?: string; repository?: string | null }): boolean {
+  return "name" in update || "repository" in update;
+}
+
+/**
+ * Changing a plan (PATCH): its name, its repository, or both. A rename is
+ * one of these; a repository is confirmed reachable by the account before it
+ * is kept, and null clears it.
+ */
+export const planUpdateRequestSchema = EffectSchema.Struct({
+  name: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  repository: EffectSchema.optionalKey(repositoryChoiceSchema),
+}).check(EffectSchema.makeFilter(updateNamesAChange));
+
 const planSummaryFields = {
   id: wireUuidSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
@@ -75,6 +99,8 @@ const planSummaryFields = {
   createdAt: countedNumber,
   /** Epoch milliseconds the document was last saved; the start, before any save. */
   updatedAt: countedNumber,
+  /** The GitHub repository the plan is about, `owner/name`; null before one is chosen. */
+  repository: repositoryChoiceSchema,
   /**
    * The start again, answered only for a desktop through v0.7.1, which
    * refuses a summary without it; the list once ordered by the last open.
@@ -103,41 +129,11 @@ export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });
 
-/** A started, opened, or renamed plan (POST, GET, PATCH), with its document as saved. */
+/** A started, opened, or changed plan (POST, GET, PATCH), with its document as saved. */
 export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
-
-/** The most characters of stdout or stderr one command's result carries. */
-export const PLAN_COMMAND_OUTPUT_MAX_CHARS = 20_000;
-
-/** One command the planning model asked to run in the plan's folder, as the Mac claims it; the Mac knows the folder. */
-export const planCommandSchema = EffectSchema.Struct({
-  id: wireUuidSchema,
-  command: EffectSchema.String,
-});
-
-export type PlanCommand = typeof planCommandSchema.Type;
-
-/** A claim (POST): the oldest command waiting for the plan, or null when none arrived in time. */
-export const planCommandClaimAnswerSchema = EffectSchema.Struct({
-  command: EffectSchema.NullOr(planCommandSchema),
-});
-
-/** What the Mac posts back once it ran a claimed command. */
-export const planCommandResultSchema = EffectSchema.Struct({
-  exitCode: EffectSchema.Int,
-  stdout: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
-  stderr: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_COMMAND_OUTPUT_MAX_CHARS)),
-});
-
-export type PlanCommandResult = typeof planCommandResultSchema.Type;
-
-/** A settled command (POST): whether the result landed on a command the account had claimed. */
-export const planCommandSettleAnswerSchema = EffectSchema.Struct({
-  settled: EffectSchema.Boolean,
-});
 
 /** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;
@@ -156,10 +152,9 @@ function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boo
 }
 
 /**
- * Code on screen during a planning call, by place and never by content: a
- * file of the plan's folder, named relative to it, and the lines pointed at,
- * or the file whole with none. Luke names one through the planning model's
- * `show_code`, and the Mac reads the lines from its own folder.
+ * A place in the plan's repository: a file, named relative to the checkout
+ * root, and the lines pointed at, or the file whole with none. Luke names one
+ * through the planning model's `show_code`.
  */
 export const codeRefSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
@@ -171,3 +166,56 @@ export const codeRefSchema = EffectSchema.Struct({
 }).check(EffectSchema.makeFilter(codeRangeIsReadable));
 
 export type CodeRef = typeof codeRefSchema.Type;
+
+export const SHOWN_CODE_BOUNDS = {
+  /** The most lines one showing carries: the lines pointed at, with the file around them. */
+  WINDOW_LINES: 200,
+  /** The most characters of one line that travel; a longer line is cut there. */
+  MAX_LINE_CHARS: 400,
+} as const;
+
+/**
+ * Code on screen during a planning call, with its lines: the place named,
+ * the repository the service read it from, and the window of the file it
+ * holds around the lines pointed at. The service reads the lines from the
+ * planning session's checkout of the repository as `show_code` runs, and
+ * they travel in the call's own journal and on the `plan.code` frame; the Mac
+ * reads nothing of its own.
+ */
+export const shownCodeSchema = EffectSchema.Struct({
+  ref: codeRefSchema,
+  /** The repository the lines were read from, `owner/name`. */
+  repository: githubRepositoryFullNameSchema,
+  /** The file's line the first carried line is. */
+  firstLine: codeLineSchema,
+  /** How many lines the whole file has. */
+  lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  lines: EffectSchema.Array(
+    EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
+  ).check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.WINDOW_LINES)),
+});
+
+export type ShownCode = typeof shownCodeSchema.Type;
+
+/** One window of a file: its first and last line, both counted from one. */
+export interface CodeWindow {
+  readonly first: number;
+  readonly last: number;
+}
+
+/**
+ * The window of a file of `lineCount` lines the screen holds for `ref`: the
+ * lines pointed at centred where the file allows, and the file's head for a
+ * reference with none.
+ */
+export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
+  const { WINDOW_LINES } = SHOWN_CODE_BOUNDS;
+  const latest = Math.max(1, lineCount - WINDOW_LINES + 1);
+  if (ref.startLine === undefined || ref.endLine === undefined) {
+    return { first: 1, last: Math.min(lineCount, WINDOW_LINES) };
+  }
+  const pointed = ref.endLine - ref.startLine + 1;
+  const margin = Math.max(0, Math.floor((WINDOW_LINES - pointed) / 2));
+  const first = Math.min(Math.max(1, ref.startLine - margin), latest);
+  return { first, last: Math.min(lineCount, first + WINDOW_LINES - 1) };
+}

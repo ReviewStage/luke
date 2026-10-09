@@ -25,6 +25,13 @@ import { cn } from "./utils";
  * line leaves it where it is until the reader scrolls back down, or presses
  * the button that takes them there. The context the children read is the
  * registry's: whether the log is at its bottom, and a way to go there.
+ *
+ * The log itself is a block that scrolls, not a flex column. A flex item
+ * of a container with a definite height has a definite height of its own
+ * once flexed, so a percentage height anywhere inside a message would
+ * resolve against the message rather than fall back to its content; a
+ * block child of a scroll box keeps the height it draws, whatever is
+ * inside it. `planning/transcript-layout.test.ts` holds the rule.
  */
 
 /** How far from the bottom, in pixels, the list still counts as following the newest line. */
@@ -104,7 +111,7 @@ export function ConversationContent({
     <div
       ref={list}
       role="log"
-      className={cn("flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-4 pt-1 pb-5", className)}
+      className={cn("min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pt-1 pb-5", className)}
       onScroll={onScroll}
       {...props}
     >

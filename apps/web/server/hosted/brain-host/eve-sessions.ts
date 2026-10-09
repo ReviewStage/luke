@@ -29,12 +29,17 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * command inbox is still starting with a 409 naming `session_not_ready`, and
  * one to a session it no longer runs with a 409 naming `session_not_active`;
  * the SDK's own client tries the first again for up to twenty seconds and
- * reads the second as terminal at once, and the same stands here. The retry
- * is what makes a wrong "retired" rare; it is not what makes one safe. That
+ * reads the second as terminal at once, and the same stands here. A session
+ * still not ready past the last wait is answered as such, which the
+ * planning ask reads as a retirement and a coding agent's message answers as
+ * a conflict the desktop tries again. The retry is what makes a wrong
+ * "retired" rare; it is not what makes one safe. That
  * is the conversation row's forward-only claim: an inbox slower than the
  * last wait costs a session opened for nothing, which the claim lets the
  * older one lose, and never two sessions writing one conversation. Reopening
- * is never eve's: the host decides it, under that claim.
+ * is never eve's: the host decides it, under that claim. How a follow-up
+ * reaches a turn under way is the channel's policy, which both of Luke's
+ * channels set to steer; no call here names one of its own.
  *
  * Every call is an effect on the `HttpClient` the web runtime builds once
  * per instance, read here once at composition rather than on each call, so
@@ -47,11 +52,29 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * decides against its own refusal rather than dying mid-transaction.
  */
 
-/** eve's session routes, as `door.ts` also spells them; a path is composed from these and nothing else. */
-const EVE_SESSION_PATH = "/eve/v1/session";
+/**
+ * Where an eve service's routes stand under its origin: the planning brain's
+ * at eve's own `/eve`, and the coding-agent service's at the named mount
+ * `/eve/coder`, which the deployment's rewrite carries into that service and
+ * whose own route transform turns back into `/eve/v1/*` before the door
+ * reads it (`door.ts` spells the paths the door sees).
+ */
+export const EVE_MOUNT = {
+  PLANNING: "/eve",
+  CODER: "/eve/coder",
+} as const;
 
-function sessionPath(sessionId: string): string {
-  return `${EVE_SESSION_PATH}/${encodeURIComponent(sessionId)}`;
+export type EveMount = (typeof EVE_MOUNT)[keyof typeof EVE_MOUNT];
+
+/** eve's session routes under a mount; a path is composed from these and nothing else. */
+const SESSION_ROUTE = "/v1/session";
+
+function sessionsPath(mount: EveMount): string {
+  return `${mount}${SESSION_ROUTE}`;
+}
+
+function sessionPath(mount: EveMount, sessionId: string): string {
+  return `${sessionsPath(mount)}/${encodeURIComponent(sessionId)}`;
 }
 
 /** eve's id for a session's first turn, the one the opening message runs: `turn_<sequence>` from zero. */
@@ -69,7 +92,7 @@ const EVE_SESSION_REFUSAL = {
  * bump is the moment to check it still matches. The first wait is 250
  * milliseconds, each wait after it is double the last up to two seconds, and
  * the tries end twenty seconds after the first. A session still not ready
- * past the last wait is retired.
+ * past the last wait is answered `not_ready`.
  */
 const NOT_READY_WAIT = { FIRST: Duration.millis(250), LONGEST: Duration.seconds(2) } as const;
 const NOT_READY_TRIES = Duration.seconds(20);
@@ -139,11 +162,13 @@ export function describeUnreachable(failure: EveUnreachable): string {
 /** A follow-up eve answered `session_not_ready`; the retry schedule's own input, and never a caller's. */
 class EveSessionNotReady extends Data.TaggedError("EveSessionNotReady") {}
 
-/** How eve answered a call: what it accepted, a session it no longer runs, or an answer this build cannot read as either. */
+/** How eve answered a call: what it accepted, a session it no longer runs, one still coming up, or an answer this build cannot read as any. */
 export const EVE_SEND_OUTCOME = {
   ACCEPTED: "accepted",
-  /** eve does not run the session, or did not come to within the retry schedule; the conversation needs a new one. */
+  /** eve does not run the session: unknown to it, or ended; the conversation needs a new one. */
   RETIRED: "retired",
+  /** eve runs the session but its inbox was not up within the retry schedule; the same message later may be taken. */
+  NOT_READY: "not_ready",
   /** eve refused or answered outside its documented shape; the status travels for the operator. */
   FAILED: "failed",
 } as const;
@@ -159,6 +184,7 @@ type EveSent =
       readonly deliveryId: string;
     }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.RETIRED }
+  | { readonly outcome: typeof EVE_SEND_OUTCOME.NOT_READY }
   | { readonly outcome: typeof EVE_SEND_OUTCOME.FAILED; readonly status: number };
 
 /** How eve answered a cancel: its own two words, or an answer this build cannot read as either. */
@@ -202,18 +228,32 @@ interface EvePostBody {
   readonly turnId?: string;
 }
 
-/** The deployment acting for an account it names. */
-export interface EveCaller {
-  /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
-  readonly secret: Redacted.Redacted;
-  /** The account acted for: one the caller already established, never one a request named. */
-  readonly account: string;
-}
+/**
+ * Who reaches eve: the deployment acting for an account it names, under its
+ * own secret, or the account itself, under the bearer its request carried,
+ * which the door resolves the way every hosted route does. The planning
+ * brain's asks come from the voice function as the deployment; a coding
+ * agent's Start and Stop come from a route still holding the developer's
+ * own bearer and reach eve as that developer.
+ */
+export type EveCaller =
+  | {
+      /** The deployment's own secret, the one the door's deployment actor was composed with; revealed onto the bearer alone. */
+      readonly secret: Redacted.Redacted;
+      /** The account acted for: one the caller already established, never one a request named. */
+      readonly account: string;
+    }
+  | {
+      /** The account's own `Authorization` value, as its request carried it; revealed onto the bearer alone. */
+      readonly authorization: Redacted.Redacted;
+    };
 
 export interface EveSessionsOptions {
-  /** The origin eve answers on; the deployment's own, where its rewrites carry `/eve/v1/*` into the eve service. */
+  /** The origin eve answers on; the deployment's own, where its rewrites carry the mount's `/v1/*` into the eve service. */
   readonly origin: string;
   readonly caller: EveCaller;
+  /** Which eve service's routes are reached; the planning brain's when unsaid. */
+  readonly mount?: EveMount;
 }
 
 /** The constructor over one fiber's client: every seam handed eve's client composes it for a caller through this. */
@@ -221,8 +261,9 @@ export type EveSessionsComposer = <Turn extends BrainHostTurn = BrainHostTurn>(
   options: EveSessionsOptions,
 ) => EveSessions<Turn>;
 
-/** The headers the caller's identity travels as: the bearer, and the account beside it. */
+/** The headers the caller's identity travels as: the deployment's bearer with the account beside it, or the account's own authorization as it came. */
 function callerHeaders(caller: EveCaller) {
+  if ("authorization" in caller) return { authorization: Redacted.value(caller.authorization) };
   return {
     authorization: `Bearer ${Redacted.value(caller.secret)}`,
     [BRAIN_HOST_HEADER.ACCOUNT]: caller.account,
@@ -310,6 +351,7 @@ function sessionsOver<Turn extends BrainHostTurn>(
   options: EveSessionsOptions,
 ): EveSessions<Turn> {
   const identity = callerHeaders(options.caller);
+  const mount = options.mount ?? EVE_MOUNT.PLANNING;
   const post = (path: string, headers: Readonly<Record<string, string>>, body: EvePostBody) =>
     postToEve(client, new URL(path, options.origin), { ...identity, ...headers }, body);
   const turnHeaders = (message: EveMessage<Turn>) => ({
@@ -319,25 +361,25 @@ function sessionsOver<Turn extends BrainHostTurn>(
   return {
     open: (message) =>
       Effect.map(
-        post(EVE_SESSION_PATH, turnHeaders(message), { message: message.message }),
+        post(sessionsPath(mount), turnHeaders(message), { message: message.message }),
         readOpened,
       ),
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
-    // its last wait is the retirement the caller reads; an unreachable eve is retried nowhere.
+    // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
     send: (sessionId, message) =>
-      post(sessionPath(sessionId), turnHeaders(message), { message: message.message }).pipe(
+      post(sessionPath(mount, sessionId), turnHeaders(message), { message: message.message }).pipe(
         Effect.flatMap(readSent),
         Effect.retry({
           schedule: SESSION_NOT_READY_RETRY,
           while: (failure) => failure._tag === "EveSessionNotReady",
         }),
         Effect.catchTag("EveSessionNotReady", () =>
-          Effect.succeed({ outcome: EVE_SEND_OUTCOME.RETIRED }),
+          Effect.succeed({ outcome: EVE_SEND_OUTCOME.NOT_READY }),
         ),
       ),
     cancel: (sessionId, eveTurnId) =>
       Effect.map(
-        post(`${sessionPath(sessionId)}/cancel`, {}, { turnId: eveTurnId }),
+        post(`${sessionPath(mount, sessionId)}/cancel`, {}, { turnId: eveTurnId }),
         readCancelled,
       ),
   };

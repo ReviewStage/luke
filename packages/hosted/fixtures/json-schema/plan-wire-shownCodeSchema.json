@@ -1,0 +1,55 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "repository": {
+      "type": "string",
+      "maxLength": 140
+    },
+    "firstLine": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "lineCount": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "lines": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "maxLength": 400
+      },
+      "maxItems": 200
+    }
+  },
+  "required": [
+    "ref",
+    "repository",
+    "firstLine",
+    "lineCount",
+    "lines"
+  ],
+  "additionalProperties": false
+}

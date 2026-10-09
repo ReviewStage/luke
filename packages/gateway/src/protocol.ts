@@ -19,16 +19,36 @@ export const GATEWAY_METHOD = {
   PLANNING_OPEN: "planning.open",
   /** The developer left the open plan: its call ends and no plan is active. */
   PLANNING_CLOSE: "planning.close",
-  /** A named plan started on a folder of this Mac, and made the active one. */
+  /** A named plan started on the service, on the repository it names where it names one, and made the active one. */
   PLANNING_START: "planning.start",
-  /** One plan deleted on the service, with this Mac's folder record of it; deleting the open plan ends its call and leaves no plan active. */
+  /** One plan deleted on the service; deleting the open plan ends its call and leaves no plan active. */
   PLANNING_DELETE: "planning.delete",
   /** One plan renamed on the service; the list and the open document take the name it answered without reading either again. */
   PLANNING_RENAME: "planning.rename",
-  /** The folder of this Mac a plan reads, chosen again for a plan this Mac holds none for. */
-  PLANNING_SET_FOLDER: "planning.setFolder",
+  /** The repositories the account reaches through the Luke GitHub App, read from the service now. */
+  PLANNING_REPOSITORIES: "planning.repositories",
+  /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
+  PLANNING_SET_REPOSITORY: "planning.setRepository",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /** The models a coding agent may run on, read from the service's catalog now. */
+  CODING_AGENTS_MODELS: "codingAgents.models",
+  /** The account's default model and effort for a coding agent, read from the service now. */
+  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
+  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  /** One plan's coding agents with their status, read from the service now. */
+  CODING_AGENTS_LIST: "codingAgents.list",
+  /** A coding agent started on one plan under the panel's own key; the agent, or why none started. */
+  CODING_AGENTS_START: "codingAgents.start",
+  /** One agent's transcript past a cursor, held open by the service while the agent runs. */
+  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
+  CODING_AGENTS_MESSAGE: "codingAgents.message",
+  /** One agent stopped; the agent as it then stands, or why it was not. */
+  CODING_AGENTS_STOP: "codingAgents.stop",
+  /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
+  CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

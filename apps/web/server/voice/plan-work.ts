@@ -1,5 +1,4 @@
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import { planCommandResultSchema } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_BOUNDS,
   PLAN_WORK_PART,
@@ -38,9 +37,9 @@ import type { StoredTurnRecord } from "../hosted/store/message-reads.js";
  * the wire's bound so a turn that read a large file still travels small.
  *
  * Note that the output does travel. A repository command's output is text
- * the developer's own Mac read for the service a moment before, and a page
- * or search is the public web's; the frame returns it to that same Mac and
- * nowhere else.
+ * the service read in the plan's repository sandbox for the developer who
+ * owns the plan, and a page or search is the public web's; the frame hands
+ * it to that developer's own Mac and nowhere else.
  */
 
 const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
@@ -63,12 +62,14 @@ const isCodeInput = Schema.is(SHOW_CODE_TOOL.inputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
 
-/** What `run_in_repository` answers, as its call's output is journaled. */
+/** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
   Schema.Union([
     Schema.Struct({
       status: Schema.Literal(REPOSITORY_SHELL_STATUS.RAN),
-      ...planCommandResultSchema.fields,
+      exitCode: Schema.Number,
+      stdout: Schema.String,
+      stderr: Schema.String,
     }),
     Schema.Struct({
       status: Schema.Literal(REPOSITORY_SHELL_STATUS.NOT_RUN),

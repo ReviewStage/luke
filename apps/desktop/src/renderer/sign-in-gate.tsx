@@ -84,7 +84,14 @@ function ProviderButton({
       disabled={disabled}
       onClick={() => onBegin(provider)}
     >
-      {waiting ? <LoaderCircleIcon className="ai-spin account-mark" aria-hidden="true" /> : mark}
+      {waiting ? (
+        <LoaderCircleIcon
+          className="account-mark animate-spin [animation-play-state:var(--loop-motion)]"
+          aria-hidden="true"
+        />
+      ) : (
+        mark
+      )}
       {waiting ? "Waiting for browser…" : `Continue with ${name}`}
     </button>
   );

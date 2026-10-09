@@ -14,6 +14,7 @@ import {
 } from "../settings-views";
 import { AccountSection } from "./account-section";
 import { AppearanceSection } from "./appearance-page";
+import { CodingAgentsSection } from "./coding-agents-page";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./controls";
 import { FeedbackSection } from "./feedback-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
@@ -152,6 +153,10 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.APPEARANCE && panelView ? (
         <AppearanceSection view={panelView} writes={writes} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.CODING_AGENTS ? (
+        <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS ? (

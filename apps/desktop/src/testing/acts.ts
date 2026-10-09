@@ -31,7 +31,7 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.PLANNING_START]: {
     kind: ACT_KIND.PLANNING_START,
-    payload: { name: "Teammate invitations", folderPath: "/Users/dev/relay" },
+    payload: { name: "Teammate invitations", repository: "acme/relay" },
   },
   [ACT_KIND.PLANNING_DELETE]: {
     kind: ACT_KIND.PLANNING_DELETE,
@@ -41,14 +41,14 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_RENAME,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", name: "Team invites" },
   },
-  [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },
-  [ACT_KIND.PLANNING_SET_FOLDER]: {
-    kind: ACT_KIND.PLANNING_SET_FOLDER,
-    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", folderPath: "/Users/dev/relay" },
+  [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
+  [ACT_KIND.PLANNING_SET_REPOSITORY]: {
+    kind: ACT_KIND.PLANNING_SET_REPOSITORY,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", repository: "acme/relay" },
   },
-  [ACT_KIND.PLANNING_REVEAL_FOLDER]: {
-    kind: ACT_KIND.PLANNING_REVEAL_FOLDER,
-    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  [ACT_KIND.GITHUB_OPEN]: {
+    kind: ACT_KIND.GITHUB_OPEN,
+    payload: { url: "https://github.com/acme/relay" },
   },
   [ACT_KIND.PLANNING_TALK]: { kind: ACT_KIND.PLANNING_TALK },
   [ACT_KIND.PLANNING_BOARD_SAVE]: {
@@ -58,6 +58,44 @@ export const ONE_ACT_OF_EACH_KIND = {
       elements: [{ id: "api", type: "rectangle", x: 0, y: 0, width: 200, height: 80 }],
       appliedDrawing: 1,
     },
+  },
+  [ACT_KIND.CODING_AGENTS_MODELS]: { kind: ACT_KIND.CODING_AGENTS_MODELS },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: { kind: ACT_KIND.CODING_AGENTS_DEFAULT_READ },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: {
+    kind: ACT_KIND.CODING_AGENTS_DEFAULT_WRITE,
+    payload: { model: "anthropic/claude-opus-5.5", effort: "high" },
+  },
+  [ACT_KIND.CODING_AGENTS_LIST]: {
+    kind: ACT_KIND.CODING_AGENTS_LIST,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
+  [ACT_KIND.CODING_AGENTS_START]: {
+    kind: ACT_KIND.CODING_AGENTS_START,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", idempotencyKey: "press-1" },
+  },
+  [ACT_KIND.CODING_AGENTS_MESSAGES]: {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGES,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21", after: "0:0" },
+  },
+  [ACT_KIND.CODING_AGENTS_MESSAGE]: {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+    payload: {
+      agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+      text: "Also expire them after a week.",
+      clientKey: "7f9e2c1d-4b3a-4c5d-9e8f-0a1b2c3d4e5f",
+    },
+  },
+  [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
+    kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+  },
+  [ACT_KIND.CODING_AGENTS_STOP]: {
+    kind: ACT_KIND.CODING_AGENTS_STOP,
+    payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
+  },
+  [ACT_KIND.CODING_AGENTS_SHOWN]: {
+    kind: ACT_KIND.CODING_AGENTS_SHOWN,
+    payload: { agentId: null },
   },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,

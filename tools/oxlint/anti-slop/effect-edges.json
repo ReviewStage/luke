@@ -6,6 +6,12 @@
     "apps/desktop/src/renderer/renderer-runtime.ts",
     "apps/desktop/src/renderer/voice/live-call.ts",
     "apps/desktop/src/renderer/voice/use-voice-session.ts",
+    "apps/web/coder/agent.ts",
+    "apps/web/coder/channels/eve.ts",
+    "apps/web/coder/hooks/store.ts",
+    "apps/web/coder/host.ts",
+    "apps/web/coder/instructions/prompt.ts",
+    "apps/web/coder/sandbox.ts",
     "apps/web/eve/agent.ts",
     "apps/web/eve/channels/eve.ts",
     "apps/web/eve/hooks/store.ts",
@@ -22,6 +28,7 @@
     "tools/trace-export/src/cli.ts"
   ],
   "runShims": [
+    "apps/web/coder/evals/coder.eval.ts",
     "apps/web/eve/evals/brain-host.eval.ts",
     "apps/web/server/db/drizzle.ts",
     "apps/web/tests/support/hosted-store-database.ts",

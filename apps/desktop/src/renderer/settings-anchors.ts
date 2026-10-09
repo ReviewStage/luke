@@ -28,4 +28,7 @@ export const SETTINGS_SEARCH_ROW = {
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
   STOP_KEY: "stop-key",
+  CODING_AGENT_MODEL: "coding-agent-model",
+  CODING_AGENT_EFFORT: "coding-agent-effort",
+  CODING_AGENT_FAST: "coding-agent-fast",
 } as const;

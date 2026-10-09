@@ -16,13 +16,39 @@ import {
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
+  type CodingAgentDefaultAnswer,
+  type CodingAgentListAnswer,
+  type CodingAgentListParams,
+  type CodingAgentMessageParams,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentMessagesParams,
+  type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestParams,
+  type CodingAgentStartParams,
+  type CodingAgentStopParams,
+  codingAgentAgentAnswerSchema,
+  codingAgentDefaultAnswerViewSchema,
+  codingAgentListAnswerViewSchema,
+  codingAgentMessagesAnswerViewSchema,
+  codingAgentModelsAnswerSchema,
+  codingAgentPullRequestAnswerViewSchema,
+} from "@sidecar/hosted/coding-agent-view";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
   type PlanningRenameParams,
-  type PlanningSetFolderParams,
+  type PlanningRepositoriesAnswer,
+  type PlanningSetRepositoryAnswer,
+  type PlanningSetRepositoryParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
+  planningRepositoriesAnswerSchema,
+  planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
@@ -38,7 +64,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -114,16 +140,42 @@ export interface HostOperator {
   planningOpen(planId: string): Effect.Effect<boolean>;
   /** The developer left the open plan: its call ends and no plan is active. */
   planningClose(): Effect.Effect<void>;
-  /** A named plan started on a folder of this Mac and made the active one, or why none started. */
+  /** A named plan started on the repository it names, where it names one, and made the active one; or why none started. */
   planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
   /** One plan deleted; answers whether the service deleted it. */
   planningDelete(planId: string): Effect.Effect<boolean>;
   /** One plan renamed; answers whether the service renamed it. */
   planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
-  /** The folder of this Mac a plan reads, chosen again. */
-  planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
+  /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
+  planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+  /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
+  planningSetRepository(
+    params: PlanningSetRepositoryParams,
+  ): Effect.Effect<PlanningSetRepositoryAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
+  /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
+  codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
+  /** The account's default model and effort for a coding agent; or why there is none. */
+  codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
+  /** The default written; the choice as kept, or why it is unchanged. */
+  codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+  /** One plan's coding agents with their status; or why there is no list. */
+  codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
+  /** An agent started on a plan under the press's own key; the agent, or why none started. */
+  codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
+  codingAgentMessages(
+    params: CodingAgentMessagesParams,
+  ): Effect.Effect<CodingAgentMessagesAnswerView>;
+  /** One agent sent a message naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
+  codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent stopped; the agent as it then stands, or why it was not. */
+  codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
+  codingAgentPullRequest(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentPullRequestAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -165,6 +217,9 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
   return value === undefined ? undefined : (value as unknown as Value);
 }
 
+/** What a coding-agent call the host could not answer is drawn as. */
+const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -201,6 +256,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
    */
   const wireValue = <Value>(value: Value | undefined) =>
     value !== undefined ? { value: carried(value) } : undefined;
+
+  /**
+   * A coding-agent answer as the host's method documents it, or unanswered
+   * where the host refused the call or answered a shape the view cannot
+   * read: the window draws why and offers to try again either way.
+   */
+  const codingAgentAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof CODING_AGENT_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? CODING_AGENT_UNANSWERED;
 
   return {
     bootstrap: () =>
@@ -298,18 +365,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RENAME, { planId: params.planId, name: params.name }),
         (answer) => record(answer)?.renamed === true,
       ),
-    planningSetFolder: (params) =>
-      fire(
-        client.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {
+    planningRepositories: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REPOSITORIES),
+        (answer): PlanningRepositoriesAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningSetRepository: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
           planId: params.planId,
-          folderPath: params.folderPath,
+          repository: params.repository,
         }),
+        (answer): PlanningSetRepositoryAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
     planningStart: (request) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
-          folderPath: request.folderPath,
+          ...("repository" in request ? { repository: request.repository } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok
@@ -326,6 +413,66 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           appliedDrawing: params.appliedDrawing,
           ...(params.image === undefined ? undefined : { image: params.image }),
         }),
+      ),
+    codingAgentModels: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MODELS),
+        codingAgentAnswer(codingAgentModelsAnswerSchema),
+      ),
+    codingAgentDefaultRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ),
+        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+      ),
+    codingAgentDefaultWrite: (choice) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
+          model: choice.model,
+          effort: choice.effort,
+        }),
+        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+      ),
+    codingAgentList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: params.planId }),
+        codingAgentAnswer(codingAgentListAnswerViewSchema),
+      ),
+    codingAgentStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
+          planId: params.planId,
+          idempotencyKey: params.idempotencyKey,
+          ...("model" in params ? { model: params.model } : undefined),
+          ...("effort" in params ? { effort: params.effort } : undefined),
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentMessages: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: params.agentId,
+          after: params.after,
+        }),
+        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
+      ),
+    codingAgentMessage: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
+          agentId: params.agentId,
+          text: params.text,
+          clientKey: params.clientKey,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentStop: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentPullRequest: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

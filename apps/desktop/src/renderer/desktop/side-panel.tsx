@@ -11,20 +11,28 @@ import {
   WorkIcon,
 } from "@sidecar/panel";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
+import { agentTabLabel } from "../planning/coding-agent-model";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork } from "../planning/plan-work";
 import type { TranscriptRegion } from "../planning/transcript-model";
+import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
+  type FixedSidePanelTab,
+  isAgentTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
+  sameTab,
   tabAddable,
 } from "../planning/use-side-panel";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
@@ -51,8 +59,11 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * full-screen button at its right, which leaves room past itself for the
  * toggle; the tabs narrow, then scroll, rather than push either. The toggle
  * is the window's rather than the panel's (desktop-shell.tsx), so the
- * panel's coming and going never moves it. The plan's own actions stay in the plan's toolbar
- * and never come into the panel.
+ * panel's coming and going never moves it. The fixed tabs come first and
+ * the plan's coding agents follow, one tab each, named by model with a dot
+ * for where the agent stands; a fixed tab closes, an agent's never does.
+ * The plan's own actions stay in the plan's toolbar and never come into
+ * the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -88,15 +99,15 @@ const TAB_ICON = {
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
   [SIDE_PANEL_TAB.WORK]: <WorkIcon />,
-} as const satisfies Record<SidePanelTab, React.JSX.Element>;
+} as const satisfies Record<FixedSidePanelTab, React.JSX.Element>;
 
-/** The shortcut that shows each tab. */
+/** The shortcut that shows each fixed tab; an agent's tab has none. */
 const TAB_COMMAND = {
   [SIDE_PANEL_TAB.BOARD]: APP_COMMAND.SHOW_BOARD,
   [SIDE_PANEL_TAB.CODE]: APP_COMMAND.SHOW_CODE,
   [SIDE_PANEL_TAB.TRANSCRIPT]: APP_COMMAND.SHOW_TRANSCRIPT,
   [SIDE_PANEL_TAB.WORK]: APP_COMMAND.SHOW_WORK,
-} as const satisfies Record<SidePanelTab, AppCommand>;
+} as const satisfies Record<FixedSidePanelTab, AppCommand>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
   NONE: "none",
@@ -117,9 +128,9 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
 
 /** The menu entry, or the empty panel's row, that opens a tab of the kind. */
 function kindAction(
-  tab: SidePanelTab,
-  tabs: readonly SidePanelTab[],
-  onChoose: (tab: SidePanelTab) => void,
+  tab: FixedSidePanelTab,
+  tabs: readonly FixedSidePanelTab[],
+  onChoose: (tab: FixedSidePanelTab) => void,
 ): MenuAction {
   const action: MenuAction = {
     label: SIDE_PANEL_TAB_KIND[tab].label,
@@ -139,8 +150,8 @@ function AddTabButton({
   tabs,
   onChoose,
 }: {
-  tabs: readonly SidePanelTab[];
-  onChoose: (tab: SidePanelTab) => void;
+  tabs: readonly FixedSidePanelTab[];
+  onChoose: (tab: FixedSidePanelTab) => void;
 }): React.JSX.Element {
   const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
   const opener = useRef<HTMLButtonElement | null>(null);
@@ -189,26 +200,37 @@ function AddTabButton({
 }
 
 /**
- * The strip of tabs across the panel's top, then the "+". A tab's own word
- * is all it needs to say, so it hangs no pill; its chord is in the View menu,
- * the "+" menu, and on the Keyboard shortcuts page. The tabs are dragged or
- * stepped into the order the panel keeps; the "+" stands after them, apart
- * from the strip, so it is never dragged nor dropped before.
+ * The strip of tabs across the panel's top: the open fixed tabs, then one
+ * per coding agent of the plan, then the "+". A tab's own word is all it
+ * needs to say, so it hangs no pill; a fixed tab's chord is in the View
+ * menu, the "+" menu, and on the Keyboard shortcuts page, and an agent's
+ * tab wears the dot for where the agent stands in its glyph's place. A tab
+ * something arrived on while another was shown, and an agent's whose end no
+ * one was looking at, wear the note at their corner until shown. The fixed
+ * tabs are dragged or stepped into the order the panel keeps; the agent
+ * tabs stand after them in the order the agents started, so a drop among
+ * them, or of one of them, changes nothing, and the "+" stands after all of
+ * them, apart from the strip, so it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
   unread,
+  agents,
 }: {
   panel: SidePanelControl;
   unread: readonly SidePanelTab[];
+  agents: CodingAgentsControl;
 }): React.JSX.Element {
+  const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
+  const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
   return (
     <div className="side-panel-tabs">
       <TabStrip
         label="Panel"
         onMove={(from, to) => {
+          // Only the fixed tabs move, and only among themselves.
           const tab = panel.tabs[from];
-          if (tab !== undefined) panel.onMove(tab, to);
+          if (tab !== undefined && to < panel.tabs.length) panel.onMove(tab, to);
         }}
       >
         {panel.tabs.map((tab) => (
@@ -216,13 +238,30 @@ function PanelTabs({
             key={tab}
             icon={TAB_ICON[tab]}
             label={SIDE_PANEL_TAB_KIND[tab].label}
-            selected={tab === panel.tab}
-            unread={unread.includes(tab)}
+            selected={chosen(tab)}
+            unread={noted(tab)}
             keyshortcuts={commandKeyshortcuts(TAB_COMMAND[tab])}
             onSelect={() => panel.onChoose(tab)}
             onClose={() => panel.onClose(tab)}
           />
         ))}
+        {(agents.agents ?? []).map((agent) => (
+          <Tab
+            key={agent.id}
+            icon={<AgentStatusDot status={agent.status} />}
+            label={agentTabLabel(agent, agents.models)}
+            selected={chosen({ agent: agent.id })}
+            unread={noted({ agent: agent.id })}
+            onSelect={() => panel.onChoose({ agent: agent.id })}
+          />
+        ))}
+        {/* The first read of the plan's agents did not land: nothing is known
+            to draw, so the strip offers the read again where the tabs would be. */}
+        {agents.listFailed && agents.agents === undefined ? (
+          <button type="button" className="toolbar-button" onClick={agents.onRetryList}>
+            Agents · Try again
+          </button>
+        ) : null}
       </TabStrip>
       <AddTabButton tabs={panel.tabs} onChoose={panel.onChoose} />
     </div>
@@ -230,7 +269,7 @@ function PanelTabs({
 }
 
 /** The panel with every tab closed: what it holds, offered as the "+" menu offers it. */
-function NoTabs({ onChoose }: { onChoose: (tab: SidePanelTab) => void }): React.JSX.Element {
+function NoTabs({ onChoose }: { onChoose: (tab: FixedSidePanelTab) => void }): React.JSX.Element {
   return (
     <div className="side-panel-no-tabs">
       <p className="side-panel-no-tabs-line">No tabs open</p>
@@ -262,6 +301,8 @@ function TabContent({
   code,
   transcript,
   work,
+  agents,
+  shown,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -269,7 +310,21 @@ function TabContent({
   code: PlanCode | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
+  agents: CodingAgentsControl;
+  /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
+  shown: boolean;
 }): React.JSX.Element {
+  const { act } = useAct();
+  if (isAgentTab(tab)) {
+    const agent = agents.agents?.find((each) => each.id === tab.agent);
+    // The tab stands for an agent the list no longer holds only until the
+    // panel moves back to the board, a render away.
+    return agent === undefined ? (
+      <p className="side-panel-empty">Reading the agent…</p>
+    ) : (
+      <AgentTab key={agent.id} agent={agent} control={agents} shown={shown} />
+    );
+  }
   switch (tab) {
     case SIDE_PANEL_TAB.BOARD:
       return <PlanBoard planId={planId} board={board} />;
@@ -280,7 +335,13 @@ function TabContent({
         <CodePane code={code} />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
-      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
+      return (
+        <PlanTranscript
+          region={transcript.region}
+          onRetry={transcript.onRetry}
+          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+        />
+      );
     case SIDE_PANEL_TAB.WORK:
       return <PlanWork turns={work.turns} callLive={work.callLive} />;
   }
@@ -510,6 +571,8 @@ export function SidePanel({
   code,
   transcript,
   work,
+  agents,
+  shown,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each dotted until it is shown. */
@@ -519,9 +582,25 @@ export function SidePanel({
   code: PlanCode | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
+  agents: CodingAgentsControl;
+  /** Whether the plan's page is on screen, which an agent's tab follows its transcript under. */
+  shown: boolean;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
+  const { tab } = panel;
+  const shownAgent =
+    tab !== undefined && isAgentTab(tab)
+      ? agents.agents?.find((agent) => agent.id === tab.agent)
+      : undefined;
+  const label =
+    tab === undefined
+      ? undefined
+      : isAgentTab(tab)
+        ? shownAgent === undefined
+          ? undefined
+          : agentTabLabel(shownAgent, agents.models)
+        : SIDE_PANEL_TAB_KIND[tab].label;
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
@@ -546,30 +625,28 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <PanelTabs panel={panel} unread={unread} />
+          <PanelTabs panel={panel} unread={unread} agents={agents} />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}
             onToggle={panel.onToggleFullScreen}
           />
         </div>
-        {panel.tab === undefined ? (
+        {tab === undefined ? (
           <div className="side-panel-content">
             <NoTabs onChoose={panel.onChoose} />
           </div>
         ) : (
-          <div
-            className="side-panel-content"
-            role="tabpanel"
-            aria-label={SIDE_PANEL_TAB_KIND[panel.tab].label}
-          >
+          <div className="side-panel-content" role="tabpanel" aria-label={label}>
             <TabContent
-              tab={panel.tab}
+              tab={tab}
               planId={planId}
               board={board}
               code={code}
               transcript={transcript}
               work={work}
+              agents={agents}
+              shown={shown && leaving === PANEL_LEAVING.NONE}
             />
           </div>
         )}

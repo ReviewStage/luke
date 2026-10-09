@@ -5,15 +5,18 @@ import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import {
+  ACTION_RESULT_STATUS,
   BRAIN_RUN_EVENT,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   SLOW_STEP_KIND,
   type StoredUIMessage,
+  TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
   UI_PART_STATE,
   UI_PART_TYPE,
+  type WireRecord,
 } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
@@ -52,8 +55,7 @@ afterAll(() => database.close());
 const writer = await database.run(storeWriter({ tools: HOSTED_TOOL_SET }));
 const relay = new StreamRelay({
   writer,
-  asks: askRecord(),
-  stopTurn: () => Effect.void,
+  asks: { binding: askRecord(), stopTurn: () => Effect.void },
   now: () => NOW,
   report: () => undefined,
 });
@@ -355,13 +357,15 @@ function toolPart(
   callId: string,
   input: Readonly<Record<string, string | number>> = {},
   state = "input-available",
+  output?: WireRecord,
 ): StoredUIMessage["parts"][number] {
-  // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
+  // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run and settles it after.
   return {
     type: `tool-${name}`,
     toolCallId: callId,
     state,
     input,
+    ...(output === undefined ? undefined : { output }),
   } as unknown as StoredUIMessage["parts"][number];
 }
 
@@ -417,22 +421,40 @@ test("the projection: every question a planning call queued is told before the t
   );
 });
 
-test("the projection: code a planning call shows is told by place, in order with its questions, once its call is whole and reads", () => {
-  const shown = { path: "src/invite.ts", startLine: 40, endLine: 58 };
+test("the projection: code a planning call shows is told with its lines, in order with its questions, once its call has answered them", () => {
+  const ref = { path: "src/invite.ts", startLine: 40, endLine: 58 };
+  const shown = {
+    ref,
+    repository: "acme/relay",
+    firstLine: 1,
+    lineCount: 60,
+    lines: ["export function acceptInvite() {", "}"],
+  };
+  const accepted = { status: ACTION_RESULT_STATUS.ACCEPTED, code: shown };
   const queued = { question: "Move the check here?", recommendation: "Yes." };
   assert.deepEqual(
     projectTurnEvents(
       TURN,
       journal([
-        toolPart(SHOW_CODE_TOOL.name, "c1", shown),
+        toolPart(SHOW_CODE_TOOL.name, "c1", ref, TOOL_PART_STATE.OUTPUT_AVAILABLE, accepted),
         toolPart(QUEUE_QUESTION_TOOL.name, "c2", queued),
-        toolPart(SHOW_CODE_TOOL.name, "c3", { path: "src/a.ts", startLine: 9, endLine: 2 }),
-        toolPart(SHOW_CODE_TOOL.name, "c4", { path: "src/b.ts", startLine: 1 }),
-        toolPart(SHOW_CODE_TOOL.name, "c5", { path: "src/c.ts" }, "input-streaming"),
+        // A call still reading, one the read refused, and one that errored show nothing.
+        toolPart(SHOW_CODE_TOOL.name, "c3", { path: "src/a.ts" }),
+        toolPart(
+          SHOW_CODE_TOOL.name,
+          "c4",
+          { path: "src/b.ts" },
+          TOOL_PART_STATE.OUTPUT_AVAILABLE,
+          {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: "Not shown: no such file in the repository.",
+          },
+        ),
+        toolPart(SHOW_CODE_TOOL.name, "c5", { path: "src/c.ts" }, TOOL_PART_STATE.OUTPUT_ERROR),
       ]),
     ),
     [
-      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown },
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, code: shown },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
     ],
   );

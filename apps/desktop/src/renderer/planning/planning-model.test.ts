@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import { PLANNING_READ, type PlanningView, VOICE_PHASE } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_CALL_FAILURE,
+  PLANNING_READ,
+  type PlanningView,
+  VOICE_PHASE,
+} from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS, type LiveStatus } from "@sidecar/live";
 import { test } from "vitest";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -13,14 +18,15 @@ import {
   copyShown,
   DOCUMENT_REGION,
   documentRegion,
-  folderLine,
-  folderName,
   MICROPHONE_PRESS,
   microphoneButton,
   PLANS_PAGE,
   planningCallInProgress,
   plansPage,
-  recentFolders,
+  recentRepositories,
+  repositoryFailureNote,
+  repositoryPageUrl,
+  START_FAILED_NOTE,
 } from "./planning-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -31,6 +37,7 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
+  repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
@@ -39,7 +46,6 @@ function view(patch: Partial<PlanningView>): PlanningView {
     plans: [],
     listStatus: PLANNING_READ.READY,
     document: { status: PLANNING_READ.IDLE },
-    folders: {},
     ...patch,
   };
 }
@@ -73,45 +79,47 @@ test("the document region draws only a document read for the active plan", () =>
   );
 });
 
-test("the header names the plan's folder, with the home folder as ~", () => {
-  assert.equal(folderLine("/Users/dev/relay"), "~/relay");
-  assert.equal(folderLine("/Users/dev"), "~");
-  assert.equal(folderLine("/Volumes/work/relay"), "/Volumes/work/relay");
-});
-
 test("an open plan is the document page, and with none open the tab is the new-plan page", () => {
   assert.equal(plansPage(view({})), PLANS_PAGE.NEW);
   // A plan another panel opened, or one just started from the new-plan page, is the document page here too.
   assert.equal(plansPage(view({ activePlanId: INVITES })), PLANS_PAGE.DOCUMENT);
 });
 
-test("a folder chip names the folder by its last segment", () => {
-  assert.equal(folderName("/Users/dev/relay"), "relay");
-  assert.equal(folderName("/Users/dev/relay/"), "relay");
-  assert.equal(folderName("/"), "/");
+test("the recent repositories follow the plans' order, each once, skipping a plan with none, five at most", () => {
+  const repositories = [
+    "acme/relay",
+    null,
+    "acme/api",
+    "acme/relay",
+    "acme/web",
+    "acme/docs",
+    "acme/cli",
+    "acme/infra",
+  ];
+  const plans = repositories.map((repository, index) => ({
+    ...PLAN,
+    id: String(index),
+    repository,
+  }));
+
+  assert.deepEqual(recentRepositories(plans), [
+    "acme/relay",
+    "acme/api",
+    "acme/web",
+    "acme/docs",
+    "acme/cli",
+  ]);
+  assert.deepEqual(recentRepositories([PLAN]), []);
 });
 
-test("the recent folders follow the plans' order, each once, skipping a plan with no folder here, five at most", () => {
-  const ids = ["a", "b", "c", "d", "e", "f", "g", "h"];
-  const plans = ids.map((id) => ({ ...PLAN, id }));
-  const folders = {
-    a: "/Users/dev/relay",
-    c: "/Users/dev/api",
-    d: "/Users/dev/relay",
-    e: "/Users/dev/web",
-    f: "/Users/dev/docs",
-    g: "/Users/dev/cli",
-    h: "/Users/dev/infra",
-  };
-
-  assert.deepEqual(recentFolders(plans, folders), [
-    "/Users/dev/relay",
-    "/Users/dev/api",
-    "/Users/dev/web",
-    "/Users/dev/docs",
-    "/Users/dev/cli",
-  ]);
-  assert.deepEqual(recentFolders(plans, {}), []);
+test("a refusal about a repository is said by its reason, and a repository's page is its GitHub address", () => {
+  assert.match(repositoryFailureNote(PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE), /can't see/u);
+  assert.match(
+    repositoryFailureNote(PLAN_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED),
+    /Sign in with GitHub/u,
+  );
+  assert.equal(repositoryFailureNote(PLAN_CALL_FAILURE.UNANSWERED), START_FAILED_NOTE);
+  assert.equal(repositoryPageUrl("acme/relay"), "https://github.com/acme/relay");
 });
 
 test("the microphone's word is the open plan's call status with no backend line, and nothing for a desk call or another plan's", () => {

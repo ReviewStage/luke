@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
@@ -9,16 +10,18 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
-import { plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
+  type SidePanelTab,
   useSidePanel,
 } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
@@ -29,11 +32,13 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
+  repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
 const CODE: PlanCode = {
   ref: { path: "src/invite.ts", startLine: 1, endLine: 1 },
+  repository: "acme/relay",
   firstLine: 1,
   lineCount: 1,
   lines: [[{ text: "export function accept() {}" }]],
@@ -271,18 +276,23 @@ test("the tabs switch the panel between the board and the code, which is quiet w
   assert.ok(page.querySelector(".side-panel .plan-board"));
 });
 
-test("the panel's tabs hang no pill, their words being enough, while Copy plan still names its chord", () => {
+test("the panel's tabs hang no pill, their words being enough, while Copy plan's chord still copies from the ⋯ menu's toolbar", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   assert.equal(hover(tabNamed(page, "Code")), undefined);
   assert.equal(tabNamed(page, "Code").getAttribute("aria-keyshortcuts"), "Meta+Alt+2");
 
+  // Copy plan stands in the ⋯ menu now, so the toolbar draws no button for
+  // it; its chord is still the toolbar's, and Start stands where Copy was.
   const copy = [...page.querySelectorAll<HTMLElement>("button")].find(
     (each) => each.textContent === "Copy plan",
   );
-  assert.ok(copy, "the toolbar draws Copy plan");
-  assert.equal(hover(copy), "Copy plan⇧⌘C");
+  assert.equal(copy, undefined, "the toolbar draws no Copy plan of its own");
+  assert.ok(page.querySelector('.desktop-toolbar [aria-label="Start a coding agent"]'));
+  const before = copies;
+  assert.equal(keydown({ key: "c", code: "KeyC", metaKey: true, shiftKey: true }), true);
+  assert.equal(copies, before + 1);
 });
 
 test("a panel too narrow for its tabs whole names each unchosen tab in a pill, and widened, hangs none again", () => {
@@ -321,7 +331,10 @@ test("the Code tab draws the code Luke has on screen", () => {
     }),
   );
 
-  assert.match(markup, /<aside class="side-panel"[\s\S]*class="code-pane"[\s\S]*src\/invite\.ts/u);
+  assert.match(
+    markup,
+    /<aside class="side-panel"[\s\S]*class="code-pane ph-no-capture"[\s\S]*src\/invite\.ts/u,
+  );
 });
 
 test("a tab with something new on it carries a dot, and the tab shown carries none", () => {
@@ -387,8 +400,9 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   const work = container.querySelector('section[aria-label="Work"]');
   assert.ok(work);
   assert.ok(work.classList.contains("ph-no-capture"));
-  const line = [...work.querySelectorAll("button")].find((button) =>
-    button.textContent?.includes("ls src"),
+  // The call's row is its fold's summary (../ai-elements/fold.tsx), as an agent tab's rows are.
+  const line = [...work.querySelectorAll("summary")].find((summary) =>
+    summary.textContent?.includes("ls src"),
   );
   assert.ok(line, "no line for the call");
   assert.match(line.textContent ?? "", /^Ran\s*ls src/u);
@@ -515,10 +529,13 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
   );
 
   assert.match(markup, /<section class="plan-transcript ph-no-capture" aria-label="Transcript">/u);
-  assert.match(markup, /data-speaker="user">You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su);
   assert.match(
     markup,
-    /data-speaker="assistant">Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
+    /data-speaker="user"[^>]*>.*?>You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su,
+  );
+  assert.match(
+    markup,
+    /data-speaker="assistant"[^>]*>.*?>Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
   );
   assert.match(markup, />Live</u);
 });
@@ -616,7 +633,7 @@ test("the open panel's row ends at its full-screen button, holding neither the t
   press(page, '[aria-label="Show panel"]');
 
   assert.ok(page.querySelector('.desktop-toolbar [aria-label="Plan actions"]'));
-  assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Copy plan/u);
+  assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Start/u);
 
   for (const fullScreen of [false, true]) {
     if (fullScreen) press(page, '[aria-label="Expand panel"]');
@@ -970,6 +987,47 @@ test("the menu bar's Exit Full Screen steps out of full screen, and does nothing
   assert.ok(page.querySelector('.side-panel [aria-label="Expand panel"]'));
 });
 
+/**
+ * The page over a region that moves as the host's does: opening a plan from
+ * the list draws it reading first and ready once the read lands, and
+ * opening another draws the first plan's page reading again.
+ */
+function Opening({ region }: { region: PlansControl["region"] }) {
+  const sidePanel = useSidePanel(undefined);
+  return createElement(DesktopPlans, {
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region,
+      sidePanel,
+    }),
+  });
+}
+
+test("a plan opened from the list, read after the page first drew it reading, draws its document on the repository chip", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  // The host publishes the plan reading before its read lands, and ready after.
+  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
+  assert.match(container.textContent ?? "", /Reading the plan…/u);
+
+  act(() =>
+    root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READY, plan: PLAN } })),
+  );
+  assert.ok(documentShown(container));
+  assert.equal(
+    container.querySelector(".repository-chip .plan-compose-chip-name")?.textContent,
+    "Choose repository",
+  );
+
+  // Another plan opening draws the page reading again, with nothing of the first left on it.
+  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
+  assert.equal(documentShown(container), false);
+  assert.match(container.textContent ?? "", /Reading the plan…/u);
+});
+
 /** The panel's tabs, in the strip's order. */
 function panelTabs(page: HTMLElement): string[] {
   return [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')].map(
@@ -1000,26 +1058,25 @@ function menuItem(label: string): HTMLButtonElement {
   return item;
 }
 
-test("the plan's tab names the plan, has no × to close it, and its hint says the plan's folder", () => {
+test("the plan's tab names the plan, has no × to close it, and its hint says the plan's repository", () => {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (folders: Record<string, string>) =>
+  const render = (repository: string | null) =>
     act(() =>
       root.render(
         createElement(DesktopPlans, {
           plans: plansControl({
             page: PLANS_PAGE.DOCUMENT,
             activePlanId: PLAN.id,
-            region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-            folders,
+            region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, repository } },
           }),
         }),
       ),
     );
 
-  render({});
+  render(null);
   const tab = container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]');
   assert.ok(tab, "the plan's tab stands");
   assert.equal(tab.textContent, PLAN.name);
@@ -1027,16 +1084,82 @@ test("the plan's tab names the plan, has no × to close it, and its hint says th
   assert.equal(container.querySelector(".desktop-toolbar .tab-close"), null);
   key(tab, "Delete");
   assert.equal(container.querySelector('.desktop-toolbar [role="tab"]')?.textContent, PLAN.name);
-  assert.match(container.querySelector(".desktop-toolbar")?.textContent ?? "", /Choose folder/u);
+  assert.match(
+    container.querySelector(".desktop-toolbar")?.textContent ?? "",
+    /Choose repository/u,
+  );
 
-  render({ [PLAN.id]: "/Users/dean/code/invites" });
+  render("dean/invites");
   const filed = container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]');
   assert.ok(filed);
-  assert.equal(hover(filed), "~/code/invites");
+  assert.equal(hover(filed), "dean/invites");
   assert.doesNotMatch(
     container.querySelector(".desktop-toolbar")?.textContent ?? "",
-    /Choose folder/u,
+    /Choose repository/u,
   );
+});
+
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by model, dotted for where each stands and for an end unseen, with no × and no shortcut", () => {
+  const running: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const ended: CodingAgentSummary = {
+    ...running,
+    id: "1f6d2c3b-5a4e-4f7d-9c8b-2e3f4a5b6c7d",
+    model: "openai/gpt-5.6-sol",
+    status: CODING_AGENT_STATUS.COMPLETED,
+  };
+  const chosen: SidePanelTab[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DesktopPlans, {
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+          sidePanel: {
+            ...plansControl().sidePanel,
+            open: true,
+            tabs: [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.TRANSCRIPT],
+            tab: { agent: ended.id },
+            onChoose: (tab) => chosen.push(tab),
+          },
+          unreadTabs: [{ agent: running.id }],
+          agents: codingAgentsControl({
+            agents: [running, ended],
+            agentIds: [running.id, ended.id],
+          }),
+        }),
+      }),
+    ),
+  );
+
+  assert.deepEqual(panelTabs(container), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+  assert.equal(chosenTab(container), "GPT 5.6 Sol");
+  const claude = tabNamed(container, "Claude Opus 5.5");
+  assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
+  assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
+  assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
+  assert.equal(claude.getAttribute("aria-keyshortcuts"), null);
+  assert.equal(container.querySelector('[aria-label="Close Claude Opus 5.5"]'), null);
+  assert.ok(container.querySelector('[aria-label="Close Board"]'));
+  assert.equal(
+    container.querySelector('.side-panel-content[role="tabpanel"]')?.getAttribute("aria-label"),
+    "GPT 5.6 Sol",
+  );
+
+  act(() => claude.click());
+  assert.deepEqual(chosen, [{ agent: running.id }]);
 });
 
 test("closing the chosen tab chooses its neighbour, and closing the last leaves the panel open offering every kind", () => {

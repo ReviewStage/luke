@@ -42,6 +42,8 @@ interface TurnFixture {
   readonly status?: TurnInsertRow["status"];
   readonly startedAgoMs: number;
   readonly userId?: string;
+  /** The conversation's kind; a plan's unless the fixture says a coding agent's. */
+  readonly kind?: (typeof CONVERSATION_KIND)[keyof typeof CONVERSATION_KIND];
 }
 
 /** One conversation holding one turn started as the fixture says, its journal open on an unanswered call. */
@@ -49,7 +51,7 @@ async function turnOf(fixture: TurnFixture) {
   const userId = fixture.userId ?? (await database.createUser());
   const conversationId = await insertConversation(database.run, {
     userId,
-    kind: CONVERSATION_KIND.PLAN,
+    kind: fixture.kind ?? CONVERSATION_KIND.PLAN,
   });
   const startedAt = new Date(NOW - fixture.startedAgoMs);
   const status = fixture.status ?? TURN_STATUS.RUNNING;
@@ -131,4 +133,28 @@ test("the sweep settles the longest running first and no more than its limit in 
 
   assert.equal((await readTurnById(database.run, older.turnId))?.status, TURN_STATUS.FAILED);
   assert.equal((await readTurnById(database.run, newer.turnId))?.status, TURN_STATUS.RUNNING);
+});
+
+test("a coding agent's turn is left running past the hour and settled only past the sandbox's own life", async () => {
+  const userId = await database.createUser();
+  const working = await turnOf({
+    userId,
+    kind: CONVERSATION_KIND.CODING_AGENT,
+    startedAgoMs: TURN_ABANDON.AFTER_MS + 60_000,
+  });
+  const abandoned = await turnOf({
+    userId,
+    kind: CONVERSATION_KIND.CODING_AGENT,
+    startedAgoMs: TURN_ABANDON.CODING_AGENT_AFTER_MS + 60_000,
+  });
+
+  // The count is not read: the file's earlier tests leave settled and standing rows of their own.
+  await database.run(sweepAbandonedTurns({ writer }, { now: NOW }));
+
+  const standing = await readTurnById(database.run, working.turnId);
+  assert.equal(standing?.status, TURN_STATUS.RUNNING);
+  assert.equal(standing?.settledAt, null);
+  const settled = await readTurnById(database.run, abandoned.turnId);
+  assert.equal(settled?.status, TURN_STATUS.FAILED);
+  assert.equal(settled?.failure, BRAIN_REQUEST_FAILURE.ABANDONED);
 });

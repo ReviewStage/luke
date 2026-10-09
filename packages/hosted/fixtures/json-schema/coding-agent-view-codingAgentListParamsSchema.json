@@ -1,0 +1,13 @@
+{
+  "type": "object",
+  "properties": {
+    "planId": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "required": [
+    "planId"
+  ],
+  "additionalProperties": false
+}

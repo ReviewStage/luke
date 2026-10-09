@@ -1,6 +1,6 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -19,6 +19,7 @@ import {
 } from "../../core.js";
 import { db } from "../../db/query.js";
 import { conversations, messages, turns } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
 
 /**
@@ -286,6 +287,91 @@ export function listRecentMessages(
   );
 }
 
+/** Where a transcript reader stands: the highest message sequence it has, and the journal revision it read at. */
+export interface MessageCursor {
+  readonly seq: number;
+  readonly revision: number;
+}
+
+/** A page of messages past a cursor, and the cursor to read on from. */
+export interface MessagePagePast {
+  readonly read: MessageListRead;
+  readonly cursor: MessageCursor;
+}
+
+const findMessagesPast = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    seq: Schema.Number,
+    revision: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          or(gt(messages.seq, options.seq), gt(messages.revision, options.revision)),
+        ),
+      )
+      .orderBy(asc(messages.seq))
+      .limit(options.limit),
+});
+
+const findJournalRevision = SqlSchema.findOneOption({
+  Request: Schema.Struct({ conversationId: Schema.String, userId: Schema.String }),
+  Result: Schema.Struct({ journalRevision: EpochMillisColumnSchema }),
+  execute: (options) =>
+    db
+      .select({ journalRevision: conversations.journalRevision })
+      .from(conversations)
+      .where(
+        and(
+          eq(conversations.id, options.conversationId),
+          eq(conversations.userId, options.userId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/**
+ * The messages a reader has not seen as they now stand: every row past the
+ * cursor's sequence, and every row amended in place past its revision, in
+ * sequence order, read back through the vocabulary. The cursor answered
+ * is the highest sequence on the page or the one asked, and the
+ * conversation's journal revision as it stands now, read before the page
+ * so an amendment that lands between the two is heard again rather than
+ * missed. A conversation that no longer stands answers no rows and the
+ * cursor asked.
+ */
+export function listMessagesPast(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  cursor: MessageCursor,
+): Effect.Effect<MessagePagePast, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const standing = yield* findJournalRevision({ conversationId, userId });
+    if (Option.isNone(standing)) return { read: { ok: true, value: [] }, cursor };
+    const selected = yield* findMessagesPast({
+      conversationId,
+      userId,
+      seq: cursor.seq,
+      revision: cursor.revision,
+      limit: MAXIMUM_READ_PAGE,
+    });
+    const read = yield* readSelected(selected, tools);
+    const seq = selected.reduce((highest, row) => Math.max(highest, row.seq), cursor.seq);
+    return { read, cursor: { seq, revision: standing.value.journalRevision } };
+  });
+}
+
 const findNewestJournals = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,
@@ -362,6 +448,132 @@ export function readMessageByClientId(
   return Effect.flatMap(
     findMessageByClientIdRow({ conversationId, userId, clientId }),
     (selected) => readSelected(selected, tools),
+  );
+}
+
+/** The newest turn of a conversation, as a coding agent's status is read from it. */
+export interface LatestTurn {
+  readonly conversationId: string;
+  readonly id: string;
+  readonly status: string;
+  /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
+  readonly eveTurnId: string | null;
+  readonly cancelRequestedAt: Date | null;
+}
+
+const LatestTurnRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  id: Schema.String,
+  status: Schema.String,
+  eveTurnId: Schema.NullOr(Schema.String),
+  cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+});
+
+/** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
+const findLatestTurns = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Result: LatestTurnRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .selectDistinctOn([turns.conversationId], {
+        conversationId: turns.conversationId,
+        id: turns.id,
+        status: turns.status,
+        eveTurnId: turns.eveTurnId,
+        cancelRequestedAt: turns.cancelRequestedAt,
+      })
+      .from(turns)
+      .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
+      .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
+});
+
+/** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
+export function latestTurnsOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlyMap<string, LatestTurn>, MessageReadFailure, SqlClient.SqlClient> {
+  if (conversationIds.length === 0) return Effect.succeed(new Map());
+  return Effect.map(
+    findLatestTurns({ userId, conversationIds }),
+    (rows) => new Map(rows.map((row) => [row.conversationId, row])),
+  );
+}
+
+const AwaitingLinesRowSchema = Schema.Struct({
+  conversationId: Schema.String,
+  lines: Schema.Number,
+});
+
+/**
+ * How many of the developer's lines stand in each coding-agent conversation
+ * named with no turn yet: each is a message the session took and the next
+ * turn will receive, which is what reads an idle agent as running again
+ * until that turn opens. The kind is held here as the writer holds it when
+ * it takes such a line, since a planning conversation's turnless user rows
+ * are its spoken asks and wait for no turn of eve's.
+ */
+const countAwaitingLines = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
+  Result: AwaitingLinesRowSchema,
+  execute: ({ userId, conversationIds }) =>
+    db
+      .select({
+        conversationId: messages.conversationId,
+        lines: sql<number>`count(*)::int`,
+      })
+      .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
+      .where(
+        and(
+          eq(messages.userId, userId),
+          inArray(messages.conversationId, [...conversationIds]),
+          eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+          eq(messages.role, MESSAGE_ROLE.USER),
+          isNull(messages.turnId),
+        ),
+      )
+      .groupBy(messages.conversationId),
+});
+
+const findSentLine = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    clientId: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, conversationId, clientId }) =>
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.userId, userId),
+          eq(messages.clientId, clientId),
+        ),
+      )
+      .limit(1),
+});
+
+/** Whether a row of the account's conversation stands under the client id: the line a send repeated after a lost answer already wrote, read before anything is sent again. */
+export function sentLineStands(
+  userId: string,
+  conversationId: string,
+  clientId: string,
+): Effect.Effect<boolean, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
+}
+
+/** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
+export function awaitingLinesOf(
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.Effect<ReadonlySet<string>, MessageReadFailure, SqlClient.SqlClient> {
+  if (conversationIds.length === 0) return Effect.succeed(new Set());
+  return Effect.map(
+    countAwaitingLines({ userId, conversationIds }),
+    (rows) => new Set(rows.filter((row) => row.lines > 0).map((row) => row.conversationId)),
   );
 }
 

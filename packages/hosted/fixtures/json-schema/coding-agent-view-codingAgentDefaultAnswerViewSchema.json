@@ -1,0 +1,56 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "choice": {
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "effort": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            }
+          },
+          "required": [
+            "model",
+            "effort"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "choice"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-sign-in-required",
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

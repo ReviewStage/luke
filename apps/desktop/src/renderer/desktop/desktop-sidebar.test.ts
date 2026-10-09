@@ -202,12 +202,14 @@ test("Option-Command-Up and Down walk the list as it reads, New plan at its head
     name: "Invitations",
     createdAt: 1,
     updatedAt: 1,
+    repository: null,
   };
   const SECOND = {
     id: "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c",
     name: "Billing",
     createdAt: 2,
     updatedAt: 2,
+    repository: null,
   };
   const opened: string[] = [];
   let home = 0;

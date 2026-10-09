@@ -11,7 +11,7 @@ import { host } from "../../host.js";
  */
 export default defineAgent({
   description:
-    "Do one job in the background: research on the public Internet, reading the plan's code folder, or both. Returns at once; a short summary with its sources arrives later.",
+    "Do one job in the background: research on the public Internet, reading the plan's repository, or both. Returns at once; a short summary with its sources arrives later.",
   defaultTools: false,
   model: brainModel(host.admitDelegated),
   limits: {

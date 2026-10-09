@@ -320,73 +320,126 @@
   transform: translateX(14px);
 }
 
-/* The voice, offered as macOS offers one value from a small fixed set: a
-   pop-up button — the current value on the face, the up-and-down chevrons on
-   the trailing edge. The `select` underneath is what opens the system's own
-   menu; only the closed control is drawn here, at the window's own control
-   size, corner, and type (desktop.css keeps it out of the page's zoom), and
-   its chevrons are a muted glyph like every other control's rather than a
-   badge of their own. */
-.voice-select {
+/* A row's picker: the chip naming the value, and the app's own menu under
+   it, drawn the way the composer's chips and menus are so Settings reads as
+   the rest of the app. Every chip shares one width, like a column of macOS
+   pop-up buttons: the control sizes the face, not whichever value happens to
+   be chosen, so the rows read as one aligned column and a change of value
+   cannot re-shape its row. The width fits the longest faces a build ships,
+   and a longer model name ellipsizes rather than growing. */
+.settings-picker {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  color: var(--text-secondary);
-  transition: color var(--duration-hover) ease;
 }
 
-.voice-select:hover {
-  color: var(--text-primary);
+/* Scoped under the picker, because the chip and menu classes they add to are
+   written in desktop.css, after this sheet, and would otherwise win back the
+   composer's pill and 340px width at equal specificity. */
+.settings-picker .settings-picker-chip {
+  width: 190px;
+  height: 28px;
+  padding: 0 8px 0 10px;
+  border-radius: 8px;
+  font-size: 12px;
 }
 
-.voice-select select {
-  appearance: none;
-  /* Every pop-up shares one width, like a column of macOS pop-up buttons:
-     the control sizes the face, not whichever value happens to be chosen,
-     so the settings read as one aligned column and a change of value cannot
-     re-shape its row. The width fits the longest faces a build ships —
-     "Conductor's default" and "GPT-5.3 Codex Spark" — and a face only
-     observation could lengthen, a project's name, ellipsizes rather than
-     growing. */
-  width: 184px;
-  height: var(--control-height);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 calc(var(--space-8) + var(--control-glyph) + var(--space-4)) 0 var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
+.settings-picker .settings-picker-chip .plan-compose-chip-name {
+  flex: 1;
+  text-align: left;
+}
+
+.settings-picker .settings-picker-chip .provider-mark {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.settings-picker .settings-picker-chip .settings-chevron {
+  color: var(--text-tertiary);
+}
+
+/* The ring the input draws, because this is the same kind of landing place. */
+.settings-picker .settings-picker-chip:focus-visible {
+  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
+  outline: none;
+}
+
+.settings-picker .settings-picker-chip:disabled {
+  opacity: 0.4;
+}
+
+/* The menu hangs from the chip's trailing edge, where the column is, and
+   stands above the chip instead where the window leaves more room there.
+   Its list is capped to that room, so the menu never runs off the window's
+   edge, and the list scrolls inside the menu rather than the page behind. */
+.settings-picker .settings-picker-menu {
+  right: 0;
+  left: auto;
+  width: 280px;
+}
+
+.settings-picker[data-side="above"] .settings-picker-menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.settings-picker .settings-picker-menu .plan-compose-menu-list {
+  max-height: min(288px, var(--settings-picker-list-max, 288px));
+}
+
+/* A short set of values as one segmented control, in the look the side
+   panel's tabs have: the chosen segment filled, the rest quiet until
+   hovered. The row it stands in wraps, so a narrow page drops the control
+   under its label rather than clipping it or running it under the chip
+   column. */
+.settings-row-wrapping {
+  flex-wrap: wrap;
+}
+
+.settings-row-wrapping .settings-copy {
+  flex: 1 1 200px;
+}
+
+.settings-segments {
+  display: inline-flex;
+  min-inline-size: 0;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  border-radius: 9px;
   background: var(--raised);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 12.5px;
+}
+
+.settings-segment {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11.5px;
   font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
 }
 
-.voice-select select:hover {
+.settings-segment:hover {
+  color: var(--text-primary);
+}
+
+.settings-segment[aria-pressed="true"] {
   background: var(--raised-strong);
+  color: var(--text-primary);
 }
 
-/* The keyboard's ring, the one every button wears. */
-.voice-select select:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 1px;
-}
-
-/* The chevrons answer no pointer — the select under them is the whole control. */
-.voice-select-badge {
-  position: absolute;
-  right: var(--space-8);
-  display: flex;
-  pointer-events: none;
-}
-
-.voice-select-glyph {
-  width: var(--control-glyph);
-  height: var(--control-glyph);
+.settings-segment:disabled {
+  opacity: 0.4;
 }
 
 /* The one green thing on the line, in the same palette a finished session

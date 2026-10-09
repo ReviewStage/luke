@@ -3,83 +3,83 @@ import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
 import { Schema } from "effect";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ACCOUNT_TOKEN_STORAGE, GITHUB_SIGN_IN_SCOPES } from "../server/auth-policy";
+import { ACCOUNT_TOKEN_STORAGE, DISABLED_AUTH_PATHS, GITHUB_SIGN_IN } from "../server/auth-policy";
 import type { WireValue } from "../server/core";
 
 /**
  * A GitHub sign-in, configured as `auth.ts` configures it, over an in-memory
- * database with GitHub a fake behind `fetch`. What it holds is that a GitHub
- * sign-in asks for the developer's profile and email and nothing more, and
- * that moving the client from the OAuth App to the Luke GitHub App keeps
- * every account: GitHub knows the developer by one user id under both.
+ * database with GitHub a fake behind `fetch`. Sign-in is the Luke GitHub
+ * App's user authorization, so what this holds is that GitHub is asked as
+ * the App's client and for no OAuth scope; that an account from before the
+ * App, the same GitHub user, signs in to the user it already has and comes
+ * away holding the App's expiring token and its refresh token, sealed; and
+ * that the auth service hands no browser that token.
  *
  * Synthetic accounts, secrets, and tokens throughout.
  */
 
 const BASE_URL = "https://tryluke.dev";
-const OAUTH_APP_CLIENT = { clientId: "luke-github", clientSecret: "github-secret" };
-const APP_CLIENT = {
-  clientId: "Iv1.fixture-app-client",
-  clientSecret: "fixture-app-client-secret",
-};
+const APP_CLIENT_ID = "Iv1.fixture-app-client";
+const APP_CLIENT_SECRET = "fixture-app-client-secret";
 const GITHUB_ACCOUNT_ID = "4242";
 const GITHUB_EMAIL = "octo@github.test";
-const NOW = new Date("2026-10-04T12:00:00.000Z");
-
-/** The scopes GitHub reports granting a sign-in. */
-const GRANTED_PROFILE = "read:user,user:email";
+const NOW = new Date("2026-10-09T12:00:00.000Z");
+const HOUR_SECONDS = 60 * 60;
 
 const decodeStarted = Schema.decodeUnknownSync(Schema.Struct({ url: Schema.String }));
 
-/** What the fake GitHub answers the next token exchange with. */
+/** What the fake GitHub answers the next token exchange with; the App's answer carries expiries, the OAuth App's did not. */
 interface Grant {
-  token: string;
-  scope: string;
+  readonly access_token: string;
+  readonly refresh_token?: string;
+  readonly expires_in?: number;
+  readonly refresh_token_expires_in?: number;
+  readonly scope: string;
 }
 
-/** The client each token exchange was signed with, in the order GitHub was asked. */
-const exchanges: { clientId: string | null; clientSecret: string | null }[] = [];
+const OAUTH_APP_GRANT: Grant = { access_token: "gho_oauth-app", scope: "read:user,user:email" };
+const APP_GRANT = {
+  access_token: "ghu_app-token",
+  refresh_token: "ghr_app-refresh",
+  expires_in: 8 * HOUR_SECONDS,
+  refresh_token_expires_in: 180 * 24 * HOUR_SECONDS,
+  scope: "",
+} as const satisfies Grant;
+
+/** Every token exchange GitHub was asked for, as the form it was sent. */
+const exchanges: URLSearchParams[] = [];
+let grant: Grant = APP_GRANT;
 
 function json(body: WireValue): Response {
   return new Response(JSON.stringify(body), { headers: { "content-type": "application/json" } });
 }
 
 /** GitHub's token endpoint and the two profile reads, answering whatever `grant` holds. */
-function fakeGitHub(grant: Grant) {
-  return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
-    const url = new URL(input instanceof Request ? input.url : input);
-    if (url.href === "https://github.com/login/oauth/access_token") {
-      const form = new URLSearchParams(
-        input instanceof Request ? await input.text() : String(init?.body ?? ""),
-      );
-      exchanges.push({ clientId: form.get("client_id"), clientSecret: form.get("client_secret") });
-      return json({ access_token: grant.token, token_type: "bearer", scope: grant.scope });
-    }
-    if (url.href === "https://api.github.com/user") {
-      return json({ id: Number(GITHUB_ACCOUNT_ID), login: "octocat", email: null });
-    }
-    if (url.href === "https://api.github.com/user/emails") {
-      return json([{ email: GITHUB_EMAIL, primary: true, verified: true }]);
-    }
-    throw new Error(`this test reaches no network: ${url.href}`);
-  };
+async function fakeGitHub(input: string | URL | Request, init?: RequestInit): Promise<Response> {
+  const url = new URL(input instanceof Request ? input.url : input);
+  if (url.href === "https://github.com/login/oauth/access_token") {
+    const body = input instanceof Request ? await input.text() : String(init?.body ?? "");
+    exchanges.push(new URLSearchParams(body));
+    return json({ token_type: "bearer", ...grant });
+  }
+  if (url.href === "https://api.github.com/user") {
+    return json({ id: Number(GITHUB_ACCOUNT_ID), login: "octocat", email: null });
+  }
+  if (url.href === "https://api.github.com/user/emails") {
+    return json([{ email: GITHUB_EMAIL, primary: true, verified: true }]);
+  }
+  throw new Error(`this test reaches no network: ${url.href}`);
 }
 
-type Database = Parameters<typeof memoryAdapter>[0];
-
-function emptyDatabase(): Database {
-  return { user: [], session: [], account: [], verification: [] };
-}
-
-/** The auth service over `database`, signing in through `client`; the memory adapter writes into the object it is handed. */
-function authService(client = OAUTH_APP_CLIENT, database = emptyDatabase()) {
+function authService() {
   return betterAuth({
     baseURL: BASE_URL,
     secret: "fixture-session-secret-of-enough-length",
-    database: memoryAdapter(database),
+    database: memoryAdapter({ user: [], session: [], account: [], verification: [] }),
     account: ACCOUNT_TOKEN_STORAGE,
+    disabledPaths: [...DISABLED_AUTH_PATHS],
     socialProviders: {
-      github: { ...client, scope: [...GITHUB_SIGN_IN_SCOPES] },
+      github: { clientId: APP_CLIENT_ID, clientSecret: APP_CLIENT_SECRET, ...GITHUB_SIGN_IN },
     },
   });
 }
@@ -108,7 +108,7 @@ async function startSignIn(auth: Auth) {
   };
 }
 
-/** A whole GitHub sign-in: the press, GitHub's consent, and the callback landing. */
+/** A whole GitHub sign-in: the press, GitHub's consent, and the callback landing; answers the session cookie. */
 async function signIn(auth: Auth) {
   const { authorize, cookie } = await startSignIn(auth);
   const callback = new URL(`${BASE_URL}/api/auth/callback/github`);
@@ -119,7 +119,6 @@ async function signIn(auth: Auth) {
   return cookiesFrom(landed);
 }
 
-/** The GitHub account rows of the user GitHub's email names. */
 async function githubAccounts(auth: Auth) {
   const context = await auth.$context;
   const found = await context.internalAdapter.findUserByEmail(GITHUB_EMAIL);
@@ -128,13 +127,12 @@ async function githubAccounts(auth: Auth) {
   return { userId: found.user.id, rows: accounts.filter((row) => row.providerId === "github") };
 }
 
-const grant: Grant = { token: "", scope: "" };
-
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW);
-  vi.stubGlobal("fetch", fakeGitHub(grant));
+  vi.stubGlobal("fetch", fakeGitHub);
   exchanges.length = 0;
+  grant = APP_GRANT;
 });
 
 afterEach(() => {
@@ -142,40 +140,61 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test("a GitHub sign-in asks for the profile and email, and nothing of the developer's repositories", async () => {
+test("a GitHub sign-in is the App's own authorization: its client id, no OAuth scope, and its secret on the exchange", async () => {
   const auth = authService();
   const { authorize } = await startSignIn(auth);
-
-  Object.assign(grant, { token: "gho_signed-in", scope: GRANTED_PROFILE });
   await signIn(auth);
 
-  // Better Auth puts its own defaults beside the configured scopes, so the request is read as a set.
-  assert.deepEqual([...new Set(authorize.searchParams.get("scope")?.split(" "))].sort(), [
-    "read:user",
-    "user:email",
-  ]);
+  assert.equal(authorize.origin + authorize.pathname, "https://github.com/login/oauth/authorize");
+  assert.equal(authorize.searchParams.get("client_id"), APP_CLIENT_ID);
+  assert.equal(authorize.searchParams.get("scope") ?? "", "");
+  const [exchange] = exchanges;
+  assert.ok(exchange);
+  assert.equal(exchange.get("client_id"), APP_CLIENT_ID);
+  assert.equal(exchange.get("client_secret"), APP_CLIENT_SECRET);
 });
 
-test("an account that signed in through the OAuth App signs in to the same user through the App", async () => {
-  const database = emptyDatabase();
-  Object.assign(grant, { token: "gho_oauth-app", scope: GRANTED_PROFILE });
-  await signIn(authService(OAUTH_APP_CLIENT, database));
-  const before = await githubAccounts(authService(OAUTH_APP_CLIENT, database));
+test("an account from before the App signs in to the same user and comes away with the App's tokens, sealed", async () => {
+  const auth = authService();
+  grant = OAUTH_APP_GRANT;
+  await signIn(auth);
+  const before = await githubAccounts(auth);
+  assert.equal(before.rows.length, 1);
+  assert.equal(before.rows[0]?.refreshToken ?? null, null);
 
-  // Production now holds the App's client; GitHub answers the exchange with the same user id.
-  Object.assign(grant, { token: "ghu_app-token", scope: "" });
-  const app = authService(APP_CLIENT, database);
-  const { authorize } = await startSignIn(app);
-  await signIn(app);
-  const after = await githubAccounts(app);
+  grant = APP_GRANT;
+  await signIn(auth);
+  const after = await githubAccounts(auth);
 
-  assert.equal(authorize.searchParams.get("client_id"), APP_CLIENT.clientId);
-  assert.deepEqual(exchanges.at(-1), APP_CLIENT);
   assert.equal(after.userId, before.userId);
-  assert.equal(database.user?.length, 1);
   assert.equal(after.rows.length, 1);
-  assert.equal(after.rows[0]?.accountId, GITHUB_ACCOUNT_ID);
-  assert.equal(before.rows[0]?.accountId, GITHUB_ACCOUNT_ID);
-  // The row signed in through the App now holds the App's token, sealed, in place of the OAuth App's.
-  assert.notEqual(after.rows[0]?.accessToken, before.rows[0]?.accessToken);
+  const [row] = after.rows;
+  assert.ok(row);
+  assert.equal(row.accountId, GITHUB_ACCOUNT_ID);
+  assert.equal(row.accessTokenExpiresAt?.getTime(), NOW.getTime() + APP_GRANT.expires_in * 1000);
+  assert.equal(
+    row.refreshTokenExpiresAt?.getTime(),
+    NOW.getTime() + APP_GRANT.refresh_token_expires_in * 1000,
+  );
+  // Sealed under the session secret: the row holds neither token as GitHub spelled it.
+  assert.ok(row.accessToken && row.refreshToken);
+  assert.notEqual(row.accessToken, APP_GRANT.access_token);
+  assert.notEqual(row.refreshToken, APP_GRANT.refresh_token);
+});
+
+test("the auth service hands no browser the GitHub token: the token endpoints are not served", async () => {
+  const auth = authService();
+  const cookie = await signIn(auth);
+
+  for (const path of ["/get-access-token", "/refresh-token"]) {
+    const response = await auth.handler(
+      new Request(`${BASE_URL}/api/auth${path}`, {
+        method: "POST",
+        headers: { origin: BASE_URL, "content-type": "application/json", cookie },
+        body: JSON.stringify({ providerId: "github" }),
+      }),
+    );
+    assert.equal(response.status, 404, path);
+    assert.equal((await response.text()).includes(APP_GRANT.access_token), false);
+  }
 });

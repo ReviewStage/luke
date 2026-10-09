@@ -30,6 +30,12 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.UNKNOWN_TOOL]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: HOSTED_HTTP_STATUS.PAYLOAD_TOO_LARGE,
   [HOSTED_API_ERROR.UNAVAILABLE]: HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE,
+  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: HOSTED_HTTP_STATUS.FORBIDDEN,
+  [HOSTED_API_ERROR.NO_REPOSITORY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -49,6 +55,14 @@ export const QuotaExhaustedRefusal = refusalSchema(HOSTED_API_ERROR.QUOTA_EXHAUS
 export const UnknownToolRefusal = refusalSchema(HOSTED_API_ERROR.UNKNOWN_TOOL);
 export const RequestTooLargeRefusal = refusalSchema(HOSTED_API_ERROR.REQUEST_TOO_LARGE);
 export const UnavailableRefusal = refusalSchema(HOSTED_API_ERROR.UNAVAILABLE);
+export const GitHubSignInRequiredRefusal = refusalSchema(HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED);
+export const RepositoryNotReachableRefusal = refusalSchema(
+  HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+);
+export const NoRepositoryRefusal = refusalSchema(HOSTED_API_ERROR.NO_REPOSITORY);
+export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_LONG);
+export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
+export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -77,6 +91,18 @@ export const HOSTED_REFUSAL = {
   UNKNOWN_TOOL: { error: HOSTED_API_ERROR.UNKNOWN_TOOL },
   REQUEST_TOO_LARGE: { error: HOSTED_API_ERROR.REQUEST_TOO_LARGE },
   UNAVAILABLE: { error: HOSTED_API_ERROR.UNAVAILABLE },
+  /** The account must sign in with GitHub again before the Luke GitHub App can read for it. */
+  GITHUB_SIGN_IN_REQUIRED: { error: HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED },
+  /** The App reaches no such repository for the account; nothing was written. */
+  REPOSITORY_NOT_REACHABLE: { error: HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE },
+  /** The plan names no repository, so no coding agent can be started on it; nothing was written. */
+  NO_REPOSITORY: { error: HOSTED_API_ERROR.NO_REPOSITORY },
+  /** The message to a coding agent spells more than the wire's bound; nothing was sent. */
+  MESSAGE_TOO_LONG: { error: HOSTED_API_ERROR.MESSAGE_TOO_LONG },
+  /** The agent's session is still coming up; the same message a moment later is taken. */
+  AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
+  /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
+  AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
@@ -93,6 +119,13 @@ export function hostedStoreOrUnavailable<A, R>(
     Effect.tapError(logStoreFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
   );
+}
+
+/** An endpoint's refusal carried back onto the answer channel, so a group registers a route that answers every request. */
+export function hostedRefusing<R>(
+  endpoint: Effect.Effect<HttpServerResponse.HttpServerResponse, HostedRefusal, R>,
+): Effect.Effect<HttpServerResponse.HttpServerResponse, never, R> {
+  return Effect.catch(endpoint, (refusal) => Effect.succeed(hostedRefusalResponse(refusal)));
 }
 
 /** A refusal as the response an `HttpApp` answers with outside an `HttpApi` group. */

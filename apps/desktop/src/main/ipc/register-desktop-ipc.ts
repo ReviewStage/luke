@@ -1,7 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { Effect } from "effect";
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
+import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -10,6 +9,7 @@ import { type ActRows, createActRouter } from "../act-router";
 import { type ReportHandlers, registerBridgeHost } from "../bridge-host";
 import type { DesktopServices } from "../services/compose-desktop";
 import { accountActRows } from "./account-session";
+import { codingAgentActRows } from "./coding-agent-acts";
 import { planningActRows } from "./planning-acts";
 import { settingsActRows } from "./settings-rows";
 import { voiceRuntimeActRows, voiceRuntimeReports } from "./voice-runtime";
@@ -26,7 +26,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
  * it. Nothing else registers IPC.
  */
 export function registerDesktopIpc(services: DesktopServices): void {
-  const { config, state, telemetry, native, updates, operator, windows, run } = services;
+  const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
   const { launch } = config;
   const { panels, voiceWindow, hotkeys, dock } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
@@ -76,15 +76,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({
       host: operator.host,
-      chooseFolder: () =>
-        Effect.map(
-          Effect.promise(() =>
-            dialog.showOpenDialog({ properties: ["openDirectory", "createDirectory"] }),
-          ),
-          (chosen) => (chosen.canceled ? null : (chosen.filePaths[0] ?? null)),
-        ),
-      folders: () => state.snapshot().planning.folders,
-      revealFolder: (folderPath) => shell.showItemInFolder(folderPath),
+      openExternal: config.openExternal,
       activePlanId: () => state.snapshot().planning.activePlanId,
       talkAboutPlan: (planId) => {
         voiceWindow.current()?.webContents.send(channels.onPlanningTalk, { planId });
@@ -97,6 +89,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
         );
       },
     }),
+    ...codingAgentActRows({ host: operator.host, notices }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),
     [ACT_KIND.UPDATE_INSTALL]: () => updates.install(),
     [ACT_KIND.UPDATE_OPEN_RELEASE]: () => updates.openLatestRelease(),

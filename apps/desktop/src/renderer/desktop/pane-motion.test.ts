@@ -22,13 +22,16 @@ const PLAN: Plan = {
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
+  repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
 };
 
 /** The code Luke puts on screen during a call, its pointed lines part way down. */
 const CODE: PlanCode = {
   ref: { path: "src/invite.ts", startLine: 3, endLine: 3 },
+  repository: "acme/relay",
   firstLine: 1,
+  lineCount: 3,
   lines: [[{ text: "import" }], [{ text: "" }], [{ text: "export function accept() {}" }]],
 };
 

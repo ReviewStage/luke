@@ -15,6 +15,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
+import type { GitHubApp } from "../../github/github-app.js";
 import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { readPlanOfConversation } from "../plan-store.js";
@@ -147,7 +148,7 @@ export interface BrainHost {
   seed(admitted: AdmittedConversation): HostEffect<string | undefined>;
   /** The tools every turn is offered, as declarations; the eve project binds each to `runTool`. */
   toolDeclarations(): readonly HostedToolDeclaration[];
-  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it. */
+  /** Carries one call of one declared tool under the binding the tool captured and the standing eve hands it, whose sandbox a repository read runs in. */
   runTool(
     name: string,
     binding: HostedToolBinding,
@@ -156,7 +157,7 @@ export interface BrainHost {
   ): Effect.Effect<
     WireRecord,
     SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient
+    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
   >;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;
@@ -232,33 +233,35 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       const eve = yield* eveSessionsComposer;
       const relay = new StreamRelay({
         writer,
-        asks: askRecord(),
-        // A Stop an ask took while it waited is carried the moment its turn starts, by the
-        // deployment acting for the account, since the hook that sees the start holds no bearer
-        // of the account's; a deployment with no secret or no origin for eve reports the Stop it
-        // could not carry.
-        stopTurn: (target, sessionId, eveTurnId, turnId) =>
-          Effect.suspend(() => {
-            const secret = seams.deploymentSecret();
-            const origin = seams.eveOrigin();
-            if (secret === undefined || origin === undefined) {
-              return Effect.logWarning(
-                `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+        asks: {
+          binding: askRecord(),
+          // A Stop an ask took while it waited is carried the moment its turn starts, by the
+          // deployment acting for the account, since the hook that sees the start holds no bearer
+          // of the account's; a deployment with no secret or no origin for eve reports the Stop it
+          // could not carry.
+          stopTurn: (target, sessionId, eveTurnId, turnId) =>
+            Effect.suspend(() => {
+              const secret = seams.deploymentSecret();
+              const origin = seams.eveOrigin();
+              if (secret === undefined || origin === undefined) {
+                return Effect.logWarning(
+                  `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+                );
+              }
+              return carryStop(
+                {
+                  eve: eve({ origin, caller: { secret, account: target.userId } }),
+                  writer,
+                  now: seams.now,
+                  report: (message) => console.warn(message),
+                },
+                target,
+                sessionId,
+                eveTurnId,
+                turnId,
               );
-            }
-            return carryStop(
-              {
-                eve: eve({ origin, caller: { secret, account: target.userId } }),
-                writer,
-                now: seams.now,
-                report: (message) => console.warn(message),
-              },
-              target,
-              sessionId,
-              eveTurnId,
-              turnId,
-            );
-          }),
+            }),
+        },
         now: seams.now,
         report: (message) => console.warn(message),
       });
@@ -337,6 +340,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
             ? undefined
             : {
                 plan: { userId: target.userId, planId: plan.plan.id },
+                // The repository as the row holds it now, so a plan given one mid-conversation reads it on its next call.
+                repository: {
+                  plan: { userId: target.userId, planId: plan.plan.id },
+                  repository: plan.plan.repository,
+                  sandbox: () => context.getSandbox(),
+                },
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,

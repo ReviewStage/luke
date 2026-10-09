@@ -274,6 +274,10 @@
   font-size: 11.5px;
 }
 
+.code-pane-repository {
+  color: var(--text-tertiary);
+}
+
 .code-pane-path {
   overflow: hidden;
   color: var(--text-primary);
@@ -284,12 +288,6 @@
 
 .code-pane-range {
   flex: 0 0 auto;
-  color: var(--text-secondary);
-}
-
-.code-pane-note {
-  margin: 0;
-  padding: var(--space-12) var(--content-inset);
   color: var(--text-secondary);
 }
 
@@ -349,8 +347,10 @@
   }
 }
 
-/* The open plan's transcript: each call under its day and time, each turn
-   under its speaker, the developer's turns in a bubble as a chat draws them. */
+/* The open plan's transcript: the AI Elements components draw the calls
+   (../planning/plan-transcript.tsx); these are the tab's own frame, its
+   note, and Luke's mark above his turns, drawn at the row's 16px in his
+   voice's colour. */
 .plan-transcript {
   display: flex;
   min-height: 0;
@@ -365,73 +365,249 @@
   text-align: center;
 }
 
-/* The room above the first call is the list's, not the scroll box's, so a
-   call's header sticks flush against the top of what scrolls. */
-.plan-transcript-calls {
-  margin: 0;
-  padding: var(--space-4) 0 0;
-  list-style: none;
-}
-
-.plan-transcript-call-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
+.transcript-luke-mark {
   display: flex;
-  align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-12) 0 var(--space-8);
-  background: var(--desktop-well);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 600;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
-.plan-transcript-call-header::after {
-  height: 1px;
-  flex: 1;
-  background: var(--hairline);
-  content: "";
+.transcript-luke-mark .luke-face {
+  width: 16px;
+  height: 16px;
+  color: var(--voice-luke);
 }
 
-.plan-transcript-live {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-6);
-  color: var(--voice-developer);
-}
+/* Coding agents --------------------------------------------------------- */
 
-.plan-transcript-live::before {
+/* The dot beside an agent's name, on its tab and at its transcript's head:
+   where the agent stands, in the state colours the rest of the window
+   answers in. While the agent may still write it breathes on the skeleton's
+   loop, an endless motion held by `--loop-motion` like every animation with
+   no end of its own. */
+.agent-status-dot {
+  display: inline-block;
   width: 6px;
   height: 6px;
+  flex: 0 0 auto;
   border-radius: 50%;
-  background: currentColor;
-  content: "";
+  background: var(--text-tertiary);
 }
 
-/* Each line is an AI Elements Message (../ai-elements/message.tsx), which
-   draws the words; the speaker above it is this tab's own. */
-.plan-transcript-messages {
+.agent-status-dot[data-status="running"],
+.agent-status-dot[data-status="starting"] {
+  background: var(--state-working);
+}
+
+.agent-status-dot[data-status="completed"] {
+  background: var(--state-complete);
+}
+
+.agent-status-dot[data-status="failed"] {
+  background: var(--danger);
+}
+
+.agent-status-dot[data-status="cancelled"] {
+  background: var(--state-attention);
+}
+
+.agent-status-dot[data-live="true"] {
+  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+/* An agent's tab in the strip: its dot in its glyph's place, on a glyph's
+   footprint, so the note for an end no one saw sits at the same corner. */
+.tab-icon .agent-status-dot {
+  margin: 4px;
+}
+
+/* The agent's tab: its head, then the transcript filling the rest. */
+.agent-tab {
   display: flex;
+  min-height: 0;
+  flex: 1;
   flex-direction: column;
-  gap: var(--space-12);
-  padding-top: var(--space-4);
 }
 
-.plan-transcript-speaker {
-  color: var(--voice-luke);
-  font-size: 11px;
+.agent-tab-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-8);
+  min-height: 36px;
+  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-16);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.agent-tab-title {
+  overflow: hidden;
+  flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-tab-title strong {
+  color: var(--text-primary);
   font-weight: 600;
 }
 
-.plan-transcript-speaker[data-speaker="user"] {
-  color: var(--voice-developer);
+.agent-tab-separator {
+  color: var(--text-tertiary);
+}
+
+.agent-note {
+  margin: 0;
+  color: var(--error-text);
+  font-size: 12px;
+}
+
+/* The room under the transcript for the composer. */
+.agent-tab-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--hairline);
+}
+
+/* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
+   default type, and a note under it, on the transcript's own inset so the
+   card and the column line up. What stands here is the room around the card. */
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 12px;
+}
+
+.agent-composer-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 4px;
+}
+
+/* A link in the transcript: the pull request opens in the browser, drawn
+   as a link; any other address is drawn as words that go nowhere. */
+.agent-link {
+  color: var(--state-working);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.agent-link-inert {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+}
+
+/* What the agent published, in its head: the pull request's pill, coloured
+   by where it stands and dotted by its checks, or the chip naming the
+   branch pushed with no pull request yet; the ⋯ beside either. The pill is
+   a status that opens its pull request rather than one of the window's two
+   buttons: it wears the state's colour and GitHub's own round shape. */
+.agent-pr-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-6);
+  height: 22px;
+  padding: 0 var(--space-8) 0 var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.agent-pr-pill:hover {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.agent-pr-pill[data-state="open"] {
+  --accent: var(--state-complete);
+}
+
+.agent-pr-pill[data-state="draft"] {
+  --accent: var(--text-tertiary);
+}
+
+.agent-pr-pill[data-state="merged"] {
+  --accent: var(--state-merged);
+}
+
+.agent-pr-pill[data-state="closed"] {
+  --accent: var(--danger);
+}
+
+.agent-pr-pill .account-mark,
+.agent-published-row .account-mark {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+/* The one dot for the checks on the pull request's head, in the state colours. */
+.agent-check-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.agent-check-dot[data-checks="pending"] {
+  background: var(--state-attention);
+}
+
+.agent-check-dot[data-checks="passing"] {
+  background: var(--state-complete);
+}
+
+.agent-check-dot[data-checks="failing"] {
+  background: var(--danger);
+}
+
+.agent-branch-chip {
+  display: inline-flex;
+  max-width: 220px;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px 0 7px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+.agent-branch-name {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The row summing a finished turn up, at the transcript's end. */
+.agent-published-row {
+  color: var(--text-secondary);
+}
+
+.agent-published-row[data-state="merged"] .account-mark {
+  color: var(--state-merged);
 }
 
 /* The open plan's Work tab: each planning turn under the time it began, its
    words as a reply reads, and its calls drawn by the AI Elements components
-   (../ai-elements/tool.tsx, task.tsx, reasoning.tsx), as Stage draws
-   Stagent's turns. */
+   (../ai-elements/tool.tsx, reasoning.tsx, fold.tsx), as the agent tabs draw
+   a coding agent's turns. */
 .plan-work {
   display: flex;
   min-height: 0;
@@ -484,10 +660,10 @@
   padding: 4px 0 10px;
 }
 
-/* The line an AI Elements collapsible opens from (../ai-elements/tool.tsx,
-   task.tsx, reasoning.tsx). Note that it is written here rather than as
-   utilities, because base.css sets every button's font and colour outside the
-   utilities' layer, and that rule wins over any utility. */
+/* A quiet button-shaped line of the Work tab: a fold's summary, a worker's
+   line, the way back from a worker's session. Note that it is written here
+   rather than as utilities, because base.css sets every button's font and
+   colour outside the utilities' layer, and that rule wins over any utility. */
 .ai-trigger {
   padding: 0;
   background: none;
@@ -507,45 +683,6 @@
    the Work and Transcript tabs read at the weight of the rest of the window. */
 svg.lucide {
   stroke-width: 1.9;
-}
-
-/* AI Elements' Shimmer: a light sweeping across words for as long as the work
-   they name is under way, held still with every other loop. */
-.ai-shimmer {
-  background:
-    linear-gradient(90deg, transparent 35%, var(--text-primary) 50%, transparent 65%) 0 0 / 250%
-    100% no-repeat,
-    var(--text-secondary);
-  background-clip: text;
-  color: transparent;
-  animation: ai-shimmer 2s linear infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-@keyframes ai-shimmer {
-  from {
-    background-position:
-      100% 0,
-      0 0;
-  }
-
-  to {
-    background-position:
-      -150% 0,
-      0 0;
-  }
-}
-
-/* A call still running turns its ring, on the same terms. */
-.ai-spin {
-  animation: ai-spin 1s linear infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-@keyframes ai-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 /* A subagent's call: a boxed line that opens its session. Note that its edge

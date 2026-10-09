@@ -5,7 +5,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
-import { LID_STATE, MICROPHONE_STATUS, MICROPHONE_TRANSPORT } from "#shared/messages/audio";
 import { type ActHandle, useAct } from "./act";
 
 /** One act the bridge is holding, answered when the test chooses. */
@@ -53,36 +52,33 @@ function mountHandle(): ActHandle {
 
 test("two acts out at once each hear their own answer, however long the first is held", async () => {
   const handle = mountHandle();
-  const status = handle.act(ACT_KIND.MICROPHONE_REQUEST);
-  const route = handle.act(ACT_KIND.MICROPHONE_ROUTE);
+  const models = handle.act(ACT_KIND.CODING_AGENTS_MODELS);
+  const read = handle.act(ACT_KIND.CODING_AGENTS_DEFAULT_READ);
   assert.deepEqual(
     held.map((each) => each.request.kind),
-    [ACT_KIND.MICROPHONE_REQUEST, ACT_KIND.MICROPHONE_ROUTE],
+    [ACT_KIND.CODING_AGENTS_MODELS, ACT_KIND.CODING_AGENTS_DEFAULT_READ],
   );
 
   // The later act answers first, as a short act does while a long one is held.
   held[1]?.answer({
     status: ACT_OUTCOME_STATUS.DONE,
-    value: { defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN, lid: LID_STATE.OPEN },
+    value: { choice: { model: "anthropic/claude-opus-5.5", effort: "high" } },
   });
-  assert.deepEqual(await route, {
-    defaultTransport: MICROPHONE_TRANSPORT.BUILT_IN,
-    lid: LID_STATE.OPEN,
-  });
-  held[0]?.answer({ status: ACT_OUTCOME_STATUS.DONE, value: MICROPHONE_STATUS.GRANTED });
-  assert.equal(await status, MICROPHONE_STATUS.GRANTED);
+  assert.deepEqual(await read, { choice: { model: "anthropic/claude-opus-5.5", effort: "high" } });
+  held[0]?.answer({ status: ACT_OUTCOME_STATUS.DONE, value: { models: [] } });
+  assert.deepEqual(await models, { models: [] });
 });
 
 test("a refused act rejects with the sentence its row gave, and an answer outside the kind's shape rejects too", async () => {
   const handle = mountHandle();
-  const refused = handle.act(ACT_KIND.PLANNING_SELECT, {
-    planId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  const refused = handle.act(ACT_KIND.CODING_AGENTS_STOP, {
+    agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
   });
-  held[0]?.answer({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not open that plan." });
-  await assert.rejects(refused, { message: "Could not open that plan." });
+  held[0]?.answer({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "Could not stop the agent." });
+  await assert.rejects(refused, { message: "Could not stop the agent." });
 
-  const invalid = handle.act(ACT_KIND.VOICE_STOP_SPEAKING);
+  const invalid = handle.act(ACT_KIND.CODING_AGENTS_MODELS);
   // SAFETY: the test hands the kind an answer outside its own shape on purpose, which is what the guard refuses.
-  held[1]?.answer({ status: ACT_OUTCOME_STATUS.DONE, value: "spoken" as never });
-  await assert.rejects(invalid, { message: "Invalid answer to the act voice.stopSpeaking." });
+  held[1]?.answer({ status: ACT_OUTCOME_STATUS.DONE, value: { choice: {} } as never });
+  await assert.rejects(invalid, { message: "Invalid answer to the act codingAgents.models." });
 });

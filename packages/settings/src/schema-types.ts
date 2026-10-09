@@ -8,6 +8,8 @@ export const SETTINGS_PAGE = {
   VOICE: "voice",
   APPEARANCE: "appearance",
   SHORTCUTS: "shortcuts",
+  /** The coding agents' default model and effort, which are the account's on the service rather than a stored setting. */
+  CODING_AGENTS: "coding-agents",
 } as const;
 
 export type SettingsPage = (typeof SETTINGS_PAGE)[keyof typeof SETTINGS_PAGE];

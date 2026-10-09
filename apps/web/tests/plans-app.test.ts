@@ -14,12 +14,12 @@ import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Effect, Layer, Option, Result, type Schema } from "effect";
+import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { user } from "../server/db/auth-schema";
-import { planBoard, planCommand } from "../server/db/plan-schema";
+import { planBoard } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
 import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
 import {
@@ -35,6 +35,13 @@ import {
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
 import { plansApp } from "../server/plans-app";
+import {
+  type FakeGitHub,
+  fakeGitHub,
+  githubReaching,
+  NO_GITHUB,
+  openGithubUser,
+} from "./support/github-app-fake";
 import { INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
 
@@ -44,11 +51,11 @@ import { testSqlClient } from "./support/sql-client";
  * and nothing else does, a plan another account owns answers exactly as one
  * that does not exist, and what the notetaker's notes saved is what the window opens.
  * The path is the one the rewrite hands the group, the plan id moved from
- * the path into the `id` query. Starting a plan names the folder on the Mac
- * it reads, and the Mac claims and settles the planning model's commands
- * through the two command paths.
+ * the path into the `id` query. A plan's repository is kept only once the
+ * Luke GitHub App, over a GitHub the test scripts, confirms the account
+ * reaches it.
  *
- * Synthetic accounts, bearers, and folders throughout.
+ * Synthetic accounts, bearers, tokens, and repositories throughout.
  */
 
 const ORIGIN = "https://luke.test";
@@ -56,8 +63,6 @@ const PLANS = "/api/plans";
 const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
-const COMMAND_CLAIM = "/api/plans/commands/claim";
-const COMMAND = "/api/plans/commands/command";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -72,27 +77,37 @@ interface Answer {
   readonly body: WireBoundaryInput;
 }
 
-/** Two accounts, each behind its own bearer. */
-const openAccounts = () =>
+/** A GitHub on which nobody reaches anything; the routes that read no repository never ask it. */
+const UNREACHED_GITHUB: FakeGitHub = { layer: NO_GITHUB, sent: [] };
+
+/**
+ * Two accounts, each behind its own bearer. The owner signed in with GitHub
+ * through the App; the other signed in with Google alone, and reaches
+ * nothing on GitHub.
+ */
+const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
   Effect.gen(function* () {
-    const owner = `user-${randomUUID()}`;
+    const owner = yield* openGithubUser();
     const other = `user-${randomUUID()}`;
-    for (const id of [owner, other]) {
-      yield* db.insert(user).values({ id, name: "Test User", email: `${id}@luke.test` });
-    }
+    yield* db.insert(user).values({ id: other, name: "Test User", email: `${other}@luke.test` });
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (request: Request) => answer(bearers, request);
+    const ask = (request: Request) => answer(bearers, github, request);
     return { owner, other, ask };
   });
 
-/** The group over the test's own database, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, request: Request) =>
+/** The group over the test's own database and the GitHub given, answering one request. */
+const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
-    const services = Layer.succeed(SqlClient.SqlClient, client);
+    // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
+    const services = Layer.mergeAll(
+      Layer.succeed(SqlClient.SqlClient, client),
+      Layer.succeed(Clock.Clock, yield* Clock.Clock),
+      github.layer,
+    );
     const { handler, dispose } = HttpRouter.toWebHandler(
       plansApp({
         resolveUserId: (incoming) =>
@@ -365,64 +380,231 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       }),
   );
 
-  it.effect("a start that names an account or a repository is refused", () =>
+  it.effect(
+    "a start that names an account, or a repository in no shape GitHub spells, is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const start = (body: WireBoundaryInput) =>
+          ask(request(PLANS, owner, { method: "POST", body }));
+
+        const naming = yield* start({ ...RELAY, userId: other });
+        const shaped = yield* start({
+          name: RELAY.name,
+          repository: { owner: "acme", name: "relay" },
+        });
+        const pathed = yield* start({ name: RELAY.name, repository: "acme/../relay" });
+        const bare = yield* start({ name: RELAY.name, repository: "relay" });
+
+        assert.deepEqual([naming, shaped, pathed, bare], [invalid, invalid, invalid, invalid]);
+        assert.deepEqual(yield* ask(request(PLANS, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { plans: [] },
+        });
+      }),
+  );
+
+  it.effect("a plan starts with no repository, which lists and opens as null", () =>
     Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
-      const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
-      const start = (body: WireBoundaryInput) =>
-        ask(request(PLANS, owner, { method: "POST", body }));
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
 
-      const naming = yield* start({ ...RELAY, userId: other });
-      const repository = yield* start({
-        name: RELAY.name,
-        repository: { owner: "acme", name: "relay" },
-      });
+      const listed = readAnswer(
+        planListAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(PLANS, owner)),
+      );
+      const opened = readAnswer(
+        planAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(ONE_PLAN, owner, { id: planId })),
+      );
 
-      assert.deepEqual([naming, repository], [invalid, invalid]);
-      assert.deepEqual(yield* ask(request(PLANS, owner)), {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: { plans: [] },
-      });
+      assert.equal(listed.plans[0]?.repository, null);
+      assert.equal(opened.plan.repository, null);
     }),
   );
 
-  it.effect("the Mac claims the plan's waiting command and settles it with what it answered", () =>
+  it.effect(
+    "a start naming a repository the App reaches keeps it as GitHub spells it, and a change may clear it",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+
+        const started = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+        );
+        const planId = startedId(started);
+        const cleared = yield* ask(
+          request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: { repository: null } }),
+        );
+
+        assert.equal(
+          readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started).plan.repository,
+          "Acme/Relay",
+        );
+        assert.equal(
+          readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, cleared).plan.repository,
+          null,
+        );
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+        assert.deepEqual(
+          listed.plans.map((plan) => plan.repository),
+          [null],
+        );
+      }),
+  );
+
+  it.effect("a change sets the repository, or the name and the repository at once", () =>
     Effect.gen(function* () {
-      const { owner, other, ask } = yield* openAccounts();
+      const github = githubReaching([
+        {
+          id: 1,
+          login: "acme",
+          repositories: [
+            { owner: "acme", name: "relay" },
+            { owner: "acme", name: "ledger" },
+          ],
+        },
+      ]);
+      const { owner, ask } = yield* openAccounts(github);
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const [queued] = yield* db
-        .insert(planCommand)
-        .values({ planId, command: "ls" })
-        .returning({ id: planCommand.id });
-      assert.ok(queued);
-      const result = { exitCode: 0, stdout: "README.md\n", stderr: "" };
-      const settle = (userId: string) =>
-        ask(
-          request(COMMAND, userId, {
-            method: "POST",
+      const change = (body: WireBoundaryInput) =>
+        ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
+
+      const relay = yield* change({ repository: "acme/relay" });
+      const both = yield* change({ name: "Billing export", repository: "acme/ledger" });
+
+      assert.equal(
+        readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, relay).plan.repository,
+        "acme/relay",
+      );
+      const changed = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, both).plan;
+      assert.deepEqual([changed.name, changed.repository], ["Billing export", "acme/ledger"]);
+      assert.ok(changed.document.body.startsWith("# Billing export\n"));
+    }),
+  );
+
+  it.effect(
+    "a repository the App reaches no installation of for the account is refused, and nothing is written",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching([
+          { id: 1, login: "acme", repositories: [{ owner: "acme", name: "relay" }] },
+        ]);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const notReachable = refusal(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+        );
+
+        const unchosen = yield* ask(
+          request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/ledger" } }),
+        );
+        const elsewhere = yield* ask(
+          request(ONE_PLAN, owner, {
             id: planId,
-            command: queued.id,
-            body: result,
+            method: "PATCH",
+            body: { name: "Team invites", repository: "octocat/relay" },
           }),
         );
 
-      const strangerSettle = yield* settle(other);
-      const claimed = yield* ask(request(COMMAND_CLAIM, owner, { method: "POST", id: planId }));
-      const settled = yield* settle(owner);
-      const again = yield* settle(owner);
+        assert.deepEqual([unchosen, elsewhere], [notReachable, notReachable]);
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+        assert.deepEqual([opened.plan.name, opened.plan.repository], [RELAY.name, null]);
+        assert.equal(
+          readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(request(PLANS, owner)))
+            .plans.length,
+          1,
+        );
+      }),
+  );
 
-      assert.deepEqual(strangerSettle, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });
-      assert.deepEqual(claimed, {
-        status: HOSTED_HTTP_STATUS.OK,
-        body: { command: { id: queued.id, command: "ls" } },
-      });
-      assert.deepEqual(settled, { status: HOSTED_HTTP_STATUS.OK, body: { settled: true } });
-      assert.deepEqual(again, { status: HOSTED_HTTP_STATUS.OK, body: { settled: false } });
-      const [stored] = yield* db
-        .select({ result: planCommand.result })
-        .from(planCommand)
-        .where(eq(planCommand.id, queued.id));
-      assert.deepEqual(stored?.result, result);
+  it.effect(
+    "an account GitHub no longer reads for, or that never signed in with GitHub, must sign in again before naming a repository",
+    () =>
+      Effect.gen(function* () {
+        const revoked = fakeGitHub(() =>
+          Response.json({ message: "Bad credentials" }, { status: 401 }),
+        );
+        const { owner, other, ask } = yield* openAccounts(revoked);
+        const signIn = refusal(
+          HOSTED_HTTP_STATUS.FORBIDDEN,
+          HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED,
+        );
+        const start = (userId: string) =>
+          ask(
+            request(PLANS, userId, {
+              method: "POST",
+              body: { ...RELAY, repository: "acme/relay" },
+            }),
+          );
+
+        assert.deepEqual([yield* start(owner), yield* start(other)], [signIn, signIn]);
+        assert.deepEqual(yield* ask(request(PLANS, owner)), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { plans: [] },
+        });
+      }),
+  );
+
+  it.effect(
+    "a GitHub that could not be read leaves the plan unchanged and answers unavailable",
+    () =>
+      Effect.gen(function* () {
+        const down = fakeGitHub(() => new Response(null, { status: 503 }));
+        const { owner, ask } = yield* openAccounts(down);
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+
+        const changed = yield* ask(
+          request(ONE_PLAN, owner, {
+            id: planId,
+            method: "PATCH",
+            body: { repository: "acme/relay" },
+          }),
+        );
+
+        assert.deepEqual(
+          changed,
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        assert.equal(
+          readAnswer(
+            planAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(ONE_PLAN, owner, { id: planId })),
+          ).plan.repository,
+          null,
+        );
+      }),
+  );
+
+  it.effect("a change naming nothing to change is refused", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+
+      assert.deepEqual(
+        yield* ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body: {} })),
+        refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+      );
     }),
   );
 

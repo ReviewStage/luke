@@ -1,12 +1,22 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { PLANNING_READ, type PlanCode, type PlanningView } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_CALL_FAILURE,
+  PLANNING_READ,
+  type PlanCode,
+  type PlanningView,
+} from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
+import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
-import { FIXTURE_PLANNING_CALL, fixturePlanningView, fixtureSidePanel } from "./planning-fixture";
+import {
+  FIXTURE_PLANNING_CALL,
+  fixturePlanningView,
+  fixtureRepositories,
+  fixtureSidePanel,
+} from "./planning-fixture";
 import {
   type CallStatus,
   COPY_SHOWN,
@@ -25,19 +35,27 @@ import {
   type PlansPage,
   planningCallInProgress,
   plansPage,
-  recentFolders,
+  recentRepositories,
   renamedView,
-  START_FAILED_NOTE,
+  repositoryFailureNote,
+  repositoryPageUrl,
   unsettledRenames,
 } from "./planning-model";
+import type { RepositoryChooser } from "./repository-chip";
 import {
   type HeardCall,
   heardCalls,
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
+import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { usePanelArrivals } from "./use-panel-arrivals";
-import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-side-panel";
+import {
+  isAgentTab,
+  type SidePanelControl,
+  type SidePanelTab,
+  useSidePanel,
+} from "./use-side-panel";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -50,7 +68,13 @@ import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-si
  * goes back to the old one if the service refuses it. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Escape, another plan, New plan, a delete, or a sign-out
- * leaves it. With none open, the tab is the new-plan page.
+ * leaves it. With none open, the tab is the new-plan page. The open plan's
+ * coding agents are the tab's too (`use-coding-agents.ts`): read when the
+ * plan opens, started from the toolbar, and each drawn on a tab of the side
+ * panel. Main is told which agent's tab is shown, so the notification it
+ * posts when an agent ends is held back while the developer is looking at
+ * that agent, and the agents main says ended unseen wear a dot until their
+ * tab is shown (`main/agent-notices.ts`).
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -61,8 +85,6 @@ export interface PlansControl {
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
   plans: PlanningView["plans"];
-  /** The folder of this Mac each plan reads, by plan id. */
-  folders: PlanningView["folders"];
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -82,7 +104,7 @@ export interface PlansControl {
   live: boolean;
   /** The side panel beside the open plan's document: shown or not, its tab, and its width. */
   sidePanel: SidePanelControl;
-  /** The side panel's tabs holding something that arrived while the panel showed another, each until it is shown. */
+  /** The side panel's tabs holding something that arrived while the panel showed another, and the agents that ended unseen, each until it is shown. */
   unreadTabs: readonly SidePanelTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
@@ -92,11 +114,21 @@ export interface PlansControl {
   transcript: { region: TranscriptRegion; onRetry: () => void };
   /** What Luke's planning model wrote and ran on the open plan's calls, and whether its call still stands. */
   work: { turns: PlanningView["work"]; callLive: boolean };
+  /** The open plan's coding agents: their tabs, the Start, and the Stop. */
+  agents: CodingAgentsControl;
   onSelect: (planId: string) => void;
-  /** Chooses a plan's folder on this Mac again, through the folder picker. */
-  onChooseFolder: (planId: string) => void;
-  /** Shows a plan's folder on this Mac in Finder. */
-  onRevealFolder: (planId: string) => void;
+  /** Opens a plan on one agent's tab: what a notification's click asks. */
+  onShowAgent: (planId: string, agentId: string) => void;
+  /** What the repository chip offers, in the composer and on the open plan alike. */
+  repositories: RepositoryChooser;
+  /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
+  repositoryMenu: { planId: string; request: number } | undefined;
+  /** Opens a plan's repository chip menu, opening the plan first where it is not the open one. */
+  onChangeRepository: (planId: string) => void;
+  /** Gives a plan its repository, or takes it away with null; answers why the service refused, or nothing once it is kept. */
+  onSetRepository: (planId: string, repository: string | null) => Promise<string | undefined>;
+  /** Opens a plan's repository on GitHub in the browser. */
+  onOpenOnGitHub: (planId: string) => void;
   onRetryList: () => void;
   onRetryDocument: () => void;
   /** Leaves any open plan for the new-plan page, and has that page focus its name field. */
@@ -105,12 +137,8 @@ export interface PlansControl {
   newPlan: {
     /** Counts the presses of New plan, so the page focuses its name field on each. */
     presses: number;
-    /** The folders this Mac's plans read, the last one used first. */
-    recentFolders: readonly string[];
-    /** Opens the folder picker, answering the chosen folder or null when it is cancelled. */
-    pickFolder: () => Promise<string | null>;
-    /** Starts the plan, which opens it; answers why it did not start, or nothing once it has. */
-    start: (name: string, folderPath: string) => Promise<string | undefined>;
+    /** Starts the plan on the repository given, or none, which opens it; answers why it did not start, or nothing once it has. */
+    start: (name: string, repository: string | null) => Promise<string | undefined>;
   };
   /** Leaves the open plan for the new-plan page, which ends its call. */
   onLeavePlan: () => void;
@@ -156,6 +184,8 @@ export function usePlansTab(input: {
   microphoneStatus: MicrophoneStatus;
   /** Whether the tab is on screen: the panel open, on this tab. */
   shown: boolean;
+  /** The agents main says ended while no one was looking, each until its tab is shown. */
+  unseenAgents: readonly string[];
   voice: {
     view: VoiceView;
     listening: boolean;
@@ -166,13 +196,44 @@ export function usePlansTab(input: {
   const { act, tell } = input.acts;
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
   const [newPlanPresses, setNewPlanPresses] = useState(0);
+  const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
-  const sidePanel = useSidePanel(fixtureSidePanel(input.run));
   const viewed = fixture ?? input.planning;
+  // A started agent's tab opens selected; the panel is built after the
+  // agents it draws, so the opening reaches it through this late binding.
+  const panelRef = useRef<SidePanelControl | undefined>(undefined);
+  const openDocument = viewed.document.plan;
+  // A fixture's plans have no agents, as they are read from nowhere.
+  const agents = useCodingAgents({
+    acts: input.acts,
+    planId: fixture === undefined ? viewed.activePlanId : undefined,
+    repository:
+      openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+    onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
+  });
+  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds);
+  panelRef.current = sidePanel;
+  // Main hears which agent's tab is on screen, and none while the tab is
+  // away or the panel shows something else; a fixture's staged agents are
+  // no one's to announce.
+  const shownAgent =
+    shown &&
+    fixture === undefined &&
+    sidePanel.open &&
+    sidePanel.tab !== undefined &&
+    isAgentTab(sidePanel.tab)
+      ? sidePanel.tab.agent
+      : null;
+  const reportedAgent = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (reportedAgent.current === shownAgent) return;
+    reportedAgent.current = shownAgent;
+    tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
+  }, [shownAgent, tell]);
   // A name given here stands until main's view carries it, so a rename that
   // landed never flickers back while main's copy of the view catches up.
   const [renames, setRenames] = useState<PendingRenames>(new Map());
@@ -241,10 +302,10 @@ export function usePlansTab(input: {
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
-  const openDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
+  const drawnDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
   const pressCopy = () => {
-    if (openDocument === undefined) return;
-    copyPlanDocument(openDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
+    if (drawnDocument === undefined) return;
+    copyPlanDocument(drawnDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
       setCopied,
       () => undefined,
     );
@@ -273,22 +334,52 @@ export function usePlansTab(input: {
   const codeShown = live || fixture !== undefined;
   const code = codeShown ? planning.code : undefined;
   // A fixture's staged plan has nothing arriving on it.
-  const unreadTabs = usePanelArrivals({
+  const arrivedTabs = usePanelArrivals({
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
     code,
     panel: sidePanel,
   });
+  // An agent that ended unseen dots its tab the way an arrival does; main
+  // clears it once the tab is shown.
+  const unreadTabs: readonly SidePanelTab[] = [
+    ...arrivedTabs,
+    ...input.unseenAgents.map((agent): SidePanelTab => ({ agent })),
+  ];
 
-  // A cancelled picker keeps whatever folder the plan had.
-  const chooseFolder = (planId: string) => {
-    act(ACT_KIND.PLANNING_CHOOSE_FOLDER).then(
-      (folderPath) => {
-        if (folderPath !== null) tell(ACT_KIND.PLANNING_SET_FOLDER, { planId, folderPath });
-      },
-      () => undefined,
+  // A fixture's repositories are read from nowhere, as its plans are.
+  const readRepositories = (): Promise<ActResultFor<typeof ACT_KIND.PLANNING_REPOSITORIES>> =>
+    fixture !== undefined
+      ? Promise.resolve(fixtureRepositories())
+      : act(ACT_KIND.PLANNING_REPOSITORIES).catch(() => ({
+          failure: PLAN_CALL_FAILURE.UNANSWERED,
+        }));
+  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
+
+  // A fixture's plans are given no repository, as they are read from nowhere.
+  const setRepository = (
+    planId: string,
+    repository: string | null,
+  ): Promise<string | undefined> => {
+    if (fixture !== undefined) return Promise.resolve(undefined);
+    return act(ACT_KIND.PLANNING_SET_REPOSITORY, { planId, repository }).then(
+      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
+      (refused: Error) => refused.message,
     );
   };
+
+  // The chip's menu stands on the open plan's toolbar, so another plan's is
+  // opened first; the ask is counted so each press opens it again.
+  const changeRepository = (planId: string) => {
+    if (planId !== planning.activePlanId) select(planId);
+    setRepositoryMenu((held) => ({ planId, request: (held?.request ?? 0) + 1 }));
+  };
+
+  const repositoryOf = (planId: string): string | null =>
+    planning.plans.find((plan) => plan.id === planId)?.repository ??
+    (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
+      ? region.plan.repository
+      : null);
 
   // The calls heard on the open plan, each held past its end until the
   // record's copy catches up; a fixture's open plan is drawn with its own
@@ -307,9 +398,12 @@ export function usePlansTab(input: {
   }, [reported.callPlanId, reported.callTranscript, planning.activePlanId]);
 
   // A started plan becomes the host's open one, which turns the page to it.
-  const startPlan = (name: string, folderPath: string): Promise<string | undefined> =>
-    act(ACT_KIND.PLANNING_START, { name, folderPath }).then(
-      (answer) => ("failure" in answer ? START_FAILED_NOTE : undefined),
+  const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
+    act(ACT_KIND.PLANNING_START, {
+      name,
+      ...(repository === null ? undefined : { repository }),
+    }).then(
+      (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
     );
 
@@ -327,13 +421,12 @@ export function usePlansTab(input: {
     shown,
     signedIn,
     plans: planning.plans,
-    folders: planning.folders,
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
     copy: {
-      shown: openDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, openDocument),
+      shown: drawnDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, drawnDocument),
       onPress: pressCopy,
     },
     microphone: {
@@ -365,11 +458,23 @@ export function usePlansTab(input: {
       turns: planning.work,
       callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
     },
+    agents,
     onSelect: select,
-    onChooseFolder: chooseFolder,
-    // A fixture's folders are named nowhere on this Mac, so none is shown.
-    onRevealFolder: (planId) => {
-      if (fixture === undefined) tell(ACT_KIND.PLANNING_REVEAL_FOLDER, { planId });
+    onShowAgent: (planId, agentId) => {
+      if (planId !== planning.activePlanId) select(planId);
+      sidePanel.onChoose({ agent: agentId });
+    },
+    repositories: {
+      recent: recentRepositories(planning.plans),
+      read: readRepositories,
+      openGitHub,
+    },
+    repositoryMenu,
+    onChangeRepository: changeRepository,
+    onSetRepository: setRepository,
+    onOpenOnGitHub: (planId) => {
+      const repository = repositoryOf(planId);
+      if (repository !== null) openGitHub(repositoryPageUrl(repository));
     },
     onRetryList: () => tell(ACT_KIND.PLANNING_REFRESH),
     onRetryDocument: () => {
@@ -381,8 +486,6 @@ export function usePlansTab(input: {
     },
     newPlan: {
       presses: newPlanPresses,
-      recentFolders: recentFolders(planning.plans, planning.folders),
-      pickFolder: () => act(ACT_KIND.PLANNING_CHOOSE_FOLDER),
       start: startPlan,
     },
     onLeavePlan: leavePlan,

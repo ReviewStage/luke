@@ -1,7 +1,9 @@
 import type {
   PlanningBoardSaveParams,
   PlanningRenameParams,
-  PlanningSetFolderParams,
+  PlanningRepositoriesAnswer,
+  PlanningSetRepositoryAnswer,
+  PlanningSetRepositoryParams,
   PlanningStartAnswer,
   PlanningStartRequest,
 } from "@sidecar/hosted/planning-view";
@@ -26,15 +28,14 @@ export interface PlanningActsDependencies {
     planningDelete(planId: string): Effect.Effect<boolean>;
     planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
-    planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
+    planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+    planningSetRepository(
+      params: PlanningSetRepositoryParams,
+    ): Effect.Effect<PlanningSetRepositoryAnswer>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   };
-  /** The folder picker; the chosen folder's absolute path, or null when the developer cancelled. */
-  chooseFolder: () => Effect.Effect<string | null>;
-  /** The folder of this Mac each plan reads, by plan id, as main holds the host's view of them. */
-  folders: () => Readonly<Record<string, string>>;
-  /** Shows a folder in Finder, selected in the folder that holds it. */
-  revealFolder: (folderPath: string) => void;
+  /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
+  openExternal: (url: string) => Promise<void>;
   /** The plan the panel has open, as main holds the host's view of it. */
   activePlanId: () => string | undefined;
   /** Tells the voice window, which owns the call, that the plan's microphone was pressed. */
@@ -50,9 +51,9 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_START
   | typeof ACT_KIND.PLANNING_DELETE
   | typeof ACT_KIND.PLANNING_RENAME
-  | typeof ACT_KIND.PLANNING_CHOOSE_FOLDER
-  | typeof ACT_KIND.PLANNING_SET_FOLDER
-  | typeof ACT_KIND.PLANNING_REVEAL_FOLDER
+  | typeof ACT_KIND.PLANNING_REPOSITORIES
+  | typeof ACT_KIND.PLANNING_SET_REPOSITORY
+  | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE;
 
@@ -102,23 +103,19 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_RENAME, sender);
       return host.planningRename(params);
     },
-    [ACT_KIND.PLANNING_CHOOSE_FOLDER]: (_payload, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_CHOOSE_FOLDER, sender);
-      return dependencies.chooseFolder();
+    [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);
+      return host.planningRepositories();
     },
-    [ACT_KIND.PLANNING_SET_FOLDER]: (params, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_SET_FOLDER, sender);
-      return host.planningSetFolder(params);
+    [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
+      return host.planningSetRepository(params);
     },
-    // The press names a plan rather than a path, so the panel can show in
-    // Finder only a folder the host already holds for one of its plans.
-    [ACT_KIND.PLANNING_REVEAL_FOLDER]: ({ planId }, sender) => {
-      refuseUnlessPanel(ACT_KIND.PLANNING_REVEAL_FOLDER, sender);
-      const folderPath = dependencies.folders()[planId];
-      if (folderPath === undefined) {
-        throw new ActRefused({ message: ACT[ACT_KIND.PLANNING_REVEAL_FOLDER].refusal });
-      }
-      dependencies.revealFolder(folderPath);
+    // The address is GitHub's by the act's own schema, so what opens is a
+    // repository's page or the App's installation page and nothing else.
+    [ACT_KIND.GITHUB_OPEN]: ({ url }, sender) => {
+      refuseUnlessPanel(ACT_KIND.GITHUB_OPEN, sender);
+      return dependencies.openExternal(url);
     },
     // The press names no plan: the plan is the one the host has open, read
     // here, so the panel cannot open a call about a plan it is not showing.

@@ -11,10 +11,11 @@ import {
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted/plan-wire";
-import { and, desc, eq, exists, isNull } from "drizzle-orm";
+import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { codingAgent } from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
@@ -25,13 +26,17 @@ import { InstantColumnSchema } from "./store/database.js";
  * plan-store.ts -- the named plans an account owns, and the one document each holds.
  *
  * Every statement here names the account it runs for beside the plan, so a
- * plan id another account owns reads, saves, renames, and deletes exactly as an
- * id that names nothing: as no plan. A save is one `update` over the row that
+ * plan id another account owns reads, saves, changes, and deletes exactly as an
+ * id that names nothing: as no plan. A plan's repository is kept here as
+ * handed and confirmed nowhere here: whether the account reaches it through
+ * the Luke GitHub App is the route's to settle before it calls, on the
+ * service that reads GitHub (`github/github-app.ts`). A save is one `update` over the row that
  * stands and never an insert, so a plan deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A plan's
  * conversation is a `plan` conversation of the same account, opened once and
  * named on the row, and it goes with the plan: deleting the plan stamps it
- * `deleted_at`, so the purge takes its words thirty days on. Every function is an effect over the ambient `SqlClient` and names
+ * `deleted_at`, and the conversations of the plan's coding agents with it,
+ * so the purge takes their words thirty days on. Every function is an effect over the ambient `SqlClient` and names
  * no database of its own.
  */
 
@@ -47,9 +52,16 @@ export interface StoredPlan {
   readonly conversationId: string | undefined;
 }
 
-/** A plan to start: its name. The folder it reads stays on the developer's Mac. */
+/** A plan to start: its name, and the repository it is about where one is chosen. */
 export interface NewPlan {
   readonly name: string;
+  readonly repository?: string | null;
+}
+
+/** What a change to a plan names: a new name, a repository or null to clear it, or both. */
+export interface PlanChanges {
+  readonly name?: string;
+  readonly repository?: string | null;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -59,6 +71,7 @@ const PLAN_COLUMNS = {
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
+  repository: plan.repository,
   conversationId: plan.conversationId,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
@@ -70,6 +83,7 @@ const PlanRowSchema = Schema.Struct({
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
+  repository: Schema.NullOr(Schema.String),
   conversationId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -113,6 +127,7 @@ function summaryOf(row: PlanRow): PlanSummary {
     name: row.name,
     createdAt,
     updatedAt: row.updatedAt.getTime(),
+    repository: row.repository,
     openedAt: createdAt,
   };
 }
@@ -126,6 +141,7 @@ const insertPlan = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     name: Schema.String,
+    repository: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
@@ -135,6 +151,7 @@ const insertPlan = SqlSchema.findOne({
       .values({
         userId: write.userId,
         name: write.name,
+        repository: write.repository,
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
@@ -186,16 +203,18 @@ const lockPlan = SqlSchema.findOneOption({
     db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).for("update"),
 });
 
-const replaceName = SqlSchema.findOne({
+/** The row changed: whichever of the name, the body, and the repository the change names, in one statement. */
+const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     planId: Schema.String,
-    name: Schema.String,
-    body: Schema.String,
+    name: Schema.optionalKey(Schema.String),
+    body: Schema.optionalKey(Schema.String),
+    repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, name, body }) =>
-    db.update(plan).set({ name, body }).where(ownedPlan(userId, planId)).returning(PLAN_COLUMNS),
+  execute: ({ userId, planId, ...changes }) =>
+    db.update(plan).set(changes).where(ownedPlan(userId, planId)).returning(PLAN_COLUMNS),
 });
 
 const findPlanOfConversation = SqlSchema.findOneOption({
@@ -250,25 +269,36 @@ const removePlan = SqlSchema.findOneOption({
       .returning({ conversationId: plan.conversationId }),
 });
 
-const stampConversation = SqlSchema.findAll({
+const stampConversations = SqlSchema.findAll({
   Request: Schema.Struct({
     userId: Schema.String,
-    conversationId: Schema.String,
+    conversationIds: Schema.Array(Schema.String),
     now: Schema.Date,
   }),
   Result: PlanIdRowSchema,
-  execute: ({ userId, conversationId, now }) =>
+  execute: ({ userId, conversationIds, now }) =>
     db
       .update(conversations)
       .set({ deletedAt: now })
       .where(
         and(
-          eq(conversations.id, conversationId),
+          inArray(conversations.id, conversationIds),
           eq(conversations.userId, userId),
           isNull(conversations.deletedAt),
         ),
       )
       .returning({ id: conversations.id }),
+});
+
+/** The conversations of the plan's coding agents, read before the delete cascades the rows that name them. */
+const findAgentConversations = SqlSchema.findAll({
+  Request: PlanKeySchema,
+  Result: Schema.Struct({ conversationId: Schema.String }),
+  execute: ({ userId, planId }) =>
+    db
+      .select({ conversationId: codingAgent.conversationId })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.planId, planId), eq(codingAgent.userId, userId))),
 });
 
 /**
@@ -308,7 +338,8 @@ const setConversation = SqlSchema.findOneOption({
 
 /**
  * Starts a plan under the account with the fixed template untouched, every
- * field unanswered and nothing assumed; it stands first in the list.
+ * field unanswered and nothing assumed, and the repository it was handed;
+ * it stands first in the list.
  */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
@@ -316,6 +347,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
     const row = yield* insertPlan({
       userId,
       name: started.name,
+      repository: started.repository ?? null,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -399,23 +431,30 @@ function retitledBody(row: PlanRow, name: string): string {
 }
 
 /**
- * Renames the plan, its document's heading with it, and answers it as
- * renamed, or nothing where the account owns no such plan. The name arrives
- * already read under the start's rules. A rename is not a save: the
+ * Changes the plan, a new name with its document's heading, a repository or
+ * none, and answers it as changed, or nothing where the account owns no
+ * such plan. The changes arrive already read under the wire's rules, and a
+ * repository already confirmed reachable. A change is not a save: the
  * document's `updatedAt` and the list's order stand.
  */
-export function renamePlan(
+export function updatePlan(
   userId: string,
   planId: string,
-  name: string,
+  changes: PlanChanges,
 ): PlanStoreEffect<Option.Option<Plan>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
-        const body = retitledBody(locked.value, name);
-        const row = yield* replaceName({ userId, planId, name, body }).pipe(
+        const row = yield* applyChanges({
+          userId,
+          planId,
+          ...(changes.name === undefined
+            ? undefined
+            : { name: changes.name, body: retitledBody(locked.value, changes.name) }),
+          ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+        }).pipe(
           // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
@@ -425,17 +464,27 @@ export function renamePlan(
   );
 }
 
-/** Deletes the plan and its document, and stamps its conversation cleared; false where the account owned no such plan. */
+/**
+ * Deletes the plan and its document, and stamps its conversation and its
+ * coding agents' conversations cleared; false where the account owned no
+ * such plan. The agents' conversations are read before the delete, because
+ * the delete cascades the agent rows that name them.
+ */
 export function deletePlan(userId: string, planId: string): PlanStoreEffect<boolean> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
+        const agents = yield* findAgentConversations({ userId, planId });
         const removed = yield* removePlan({ userId, planId });
         if (Option.isNone(removed)) return false;
         const { conversationId } = removed.value;
-        if (conversationId !== null) {
+        const conversationIds = [
+          ...(conversationId === null ? [] : [conversationId]),
+          ...agents.map((agent) => agent.conversationId),
+        ];
+        if (conversationIds.length > 0) {
           const now = yield* DateTime.nowAsDate;
-          yield* stampConversation({ userId, conversationId, now });
+          yield* stampConversations({ userId, conversationIds, now });
         }
         return true;
       }),
@@ -493,7 +542,7 @@ export function openPlanConversation(
  * The plan a conversation of the account belongs to, with its saved document;
  * nothing for a conversation no plan of the account names. This is how a
  * planning turn, admitted for a conversation, finds the document it is handed
- * and the plan its folder read is bound to.
+ * and the plan whose repository its reads are bound to.
  */
 export function readPlanOfConversation(
   userId: string,

@@ -268,6 +268,18 @@ if [[ -n "$renderer_escapes" ]]; then
     exit 1
 fi
 
+# Every pop-up the renderer draws is the app's own menu: a native `<select>`
+# opens the system's popup list, which draws no provider mark, scrolls the
+# page behind it on a trackpad, and matches nothing else the app draws. The
+# shared menu (`searchable-menu.tsx`) is the one list control, searched or not.
+native_selects=$(grep -rnaE --include='*.tsx' '<select\b' "$SIDECAR_REPO_ROOT/apps/desktop/src/renderer" |
+    grep -vE '\.test\.tsx?:' || true)
+if [[ -n "$native_selects" ]]; then
+    printf 'error: the renderer draws its own menus — no native <select>:\n%s\n' \
+        "$native_selects" >&2
+    exit 1
+fi
+
 # A hosted quota is the service's own accounting, and the customer-facing panel
 # says only that voice is temporarily unavailable — never a number, a meter or a
 # reset time. The diagnostics the renderer receives carry the members, so the
