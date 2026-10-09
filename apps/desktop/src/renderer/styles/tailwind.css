@@ -28,6 +28,8 @@
   --color-primary: var(--text-primary);
   --color-primary-foreground: var(--surface-fill);
   --color-border: var(--hairline);
+  --color-selected-edge: var(--selected-edge);
+  --color-card: var(--desktop-sidebar);
   --color-error: var(--error-text);
   --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);

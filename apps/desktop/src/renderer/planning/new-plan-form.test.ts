@@ -75,7 +75,7 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
     started,
     opened,
     find,
-    nameField: () => find<HTMLInputElement>("input[aria-label='Plan name']"),
+    nameField: () => find<HTMLTextAreaElement>("textarea[aria-label='Plan name']"),
     startButton: () => find<HTMLButtonElement>("button[aria-label='Start plan']"),
     chip: () => find<HTMLButtonElement>(".plan-compose-chip"),
     menu: () => container.querySelector(".plan-compose-menu"),
@@ -96,8 +96,12 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
 }
 
 /** Types into a field the way a key press does, through the setter React watches. */
-function type(field: HTMLInputElement, words: string): void {
-  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+function type(field: HTMLInputElement | HTMLTextAreaElement, words: string): void {
+  const prototype =
+    field instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
+  const setValue = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
   act(() => {
     setValue?.call(field, words);
     field.dispatchEvent(new Event("input", { bubbles: true }));
@@ -132,7 +136,7 @@ test("the page asks what to plan, focuses the name field, and the chip waits on 
   assert.equal(page.startButton().disabled, true);
 });
 
-test("start waits for a name alone, and submitting starts the plan on the chosen repository, or none", async () => {
+test("start waits for a name alone, and Enter, with or without Shift, starts the plan on the chosen repository, or none, and never breaks the name's line", async () => {
   const page = mount();
   await settle();
 
@@ -140,9 +144,30 @@ test("start waits for a name alone, and submitting starts the plan on the chosen
   assert.equal(page.startButton().disabled, false);
   type(page.nameField(), " ");
   assert.equal(page.startButton().disabled, true);
+  press("Enter");
+  assert.deepEqual(page.started, []);
   type(page.nameField(), "Teammate invitations");
-  await act(async () => page.find<HTMLFormElement>("form").requestSubmit());
+  await act(async () => press("Enter"));
   assert.deepEqual(page.started, [["Teammate invitations", null]]);
+  const shifted = new KeyboardEvent("keydown", {
+    key: "Enter",
+    shiftKey: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => page.nameField().dispatchEvent(shifted));
+  assert.equal(shifted.defaultPrevented, true, "no new line");
+  assert.equal(page.started.length, 2);
+  // An input method confirming a candidate with Shift+Enter is still composing: nothing starts.
+  const composing = new KeyboardEvent("keydown", {
+    key: "Enter",
+    shiftKey: true,
+    isComposing: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => page.nameField().dispatchEvent(composing));
+  assert.equal(page.started.length, 2);
 
   // With none recent, the menu lists the repositories Luke reaches as the service ordered them.
   act(() => page.chip().click());

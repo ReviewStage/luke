@@ -938,6 +938,8 @@ body,
   padding: var(--space-24) var(--page-inset) 12vh;
 }
 
+/* The page's card is the shared composer (../ai-elements/prompt-input.tsx)
+   at its hero type; what stands here is the page around it. */
 .plan-compose {
   display: flex;
   width: 100%;
@@ -954,45 +956,6 @@ body,
   font-weight: 650;
   letter-spacing: -0.02em;
   text-align: center;
-}
-
-.plan-compose-card {
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--hairline);
-  border-radius: 22px;
-  background: var(--desktop-sidebar);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
-  transition: border-color var(--duration-hover) ease;
-}
-
-.plan-compose-card:focus-within {
-  border-color: var(--selected-edge);
-}
-
-.plan-compose-name {
-  width: 100%;
-  padding: var(--space-20) var(--space-20) var(--space-12);
-  border: 0;
-  outline: none;
-  background: none;
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 17px;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.plan-compose-name::placeholder {
-  color: var(--text-tertiary);
-}
-
-.plan-compose-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-12);
-  padding: 0 var(--space-12) var(--space-12);
 }
 
 .repository-chip {
@@ -1215,27 +1178,6 @@ body,
   white-space: nowrap;
 }
 
-/* The start press is the card's one filled thing, drawn in the text colour
-   the way a composer's send is, and only filled once it can be pressed. */
-.plan-compose-start {
-  display: grid;
-  flex: 0 0 auto;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: var(--text-primary);
-  color: var(--desktop-ground);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.plan-compose-start:disabled {
-  background: var(--raised-strong);
-  color: var(--text-tertiary);
-}
-
 .plan-compose-chip svg {
   width: 15px;
   height: 15px;
@@ -1276,11 +1218,6 @@ body,
   width: 14px;
   height: 14px;
   margin: 0;
-}
-
-.plan-compose-start svg {
-  width: 17px;
-  height: 17px;
 }
 
 /* The menu opens under its trigger and enters on the tokens reduced motion zeroes. */

@@ -18,7 +18,9 @@ import type { AgentComposerControl } from "./use-agent-composer";
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, one button, and a note under it when a message did not go.
  *
- * Built on AI Elements' PromptInput. The box takes a message to the agent:
+ * The box is the shared composer card (../ai-elements/prompt-input.tsx),
+ * the one the New Plan page draws, at its default type, with nothing at
+ * its foot's left. The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
@@ -93,7 +95,7 @@ export function AgentComposer({
 
   return (
     <div className="agent-composer" data-status={status}>
-      <PromptInput className="agent-composer-form" onSubmit={() => composer.send()}>
+      <PromptInput onSubmit={() => composer.send()}>
         <PromptInputTextarea
           ref={field}
           className="ph-no-capture"

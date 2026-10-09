@@ -1,5 +1,13 @@
-import { ArrowUpIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
+import {
+  COMPOSER_TYPE,
+  PROMPT_INPUT_STATUS,
+  PromptInput,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "../ai-elements/prompt-input";
 import { Tooltip } from "../tooltip";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
@@ -7,10 +15,13 @@ import type { PlansControl } from "./use-plans-tab";
 /**
  * new-plan-form.tsx -- the Plans tab's home: one composer that names a plan and the GitHub repository it is about.
  *
- * Drawn the way a devtool's new-task page is: a heading, and under it a card
+ * Drawn the way a devtool's new-task page is: a heading, and under it the
+ * shared composer card (../ai-elements/prompt-input.tsx) at its hero size,
  * holding the name and, along its foot, the repository chip and the round
  * start button. Ordinary setup fields and nothing spoken: nothing typed here
- * reaches the model as conversation. The repository starts on the one the
+ * reaches the model as conversation. The name is one line, so Enter starts
+ * the plan whatever else is held and never breaks the line. The repository
+ * starts on the one the
  * newest plan was about; the chip offers the other recent ones, a search
  * over every repository Luke reaches, and the page where the developer
  * chooses which ones Luke can see, and the planning model reads that
@@ -37,7 +48,7 @@ interface NewPlanFormViewProps {
 
 function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   const titleId = useId();
-  const nameField = useRef<HTMLInputElement>(null);
+  const nameField = useRef<HTMLTextAreaElement>(null);
   const canStart = props.name.trim().length > 0 && !props.starting;
   const { focusRequest } = props;
 
@@ -48,48 +59,53 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
     nameField.current?.focus();
   }, [focusRequest]);
 
+  // Enter starts the plan with any modifier held, since the name has no second
+  // line to begin; an input method still composing keeps its own Enter.
+  const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== "Enter" || !event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (canStart) props.onStart();
+  };
+
   return (
     <section className="plan-compose" aria-labelledby={titleId}>
       <h1 id={titleId} className="plan-compose-title">
         What are we planning?
       </h1>
-      <form
-        className="plan-compose-card"
-        onSubmit={(event) => {
-          event.preventDefault();
+      <PromptInput
+        className={COMPOSER_TYPE.HERO}
+        onSubmit={() => {
           if (canStart) props.onStart();
         }}
       >
-        <input
+        <PromptInputTextarea
           ref={nameField}
-          type="text"
-          className="plan-compose-name"
           aria-label="Plan name"
           value={props.name}
           placeholder="Name the feature, e.g. Dark mode toggle"
           maxLength={200}
           onChange={(event) => props.onName(event.currentTarget.value)}
+          onKeyDown={onFieldKey}
         />
-        <div className="plan-compose-foot">
-          <RepositoryChip
-            place={CHIP_PLACE.COMPOSER}
-            value={props.repository}
-            chooser={props.chooser}
-            onChoose={props.onRepository}
-          />
+        <PromptInputFooter>
+          <PromptInputTools>
+            <RepositoryChip
+              place={CHIP_PLACE.COMPOSER}
+              value={props.repository}
+              chooser={props.chooser}
+              onChoose={props.onRepository}
+            />
+          </PromptInputTools>
           <Tooltip label={props.starting ? "Starting…" : "Start plan"}>
-            <button
-              type="submit"
-              className="plan-compose-start"
+            <PromptInputSubmit
               aria-label="Start plan"
               aria-busy={props.starting}
+              status={props.starting ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
               disabled={!canStart}
-            >
-              <ArrowUpIcon />
-            </button>
+            />
           </Tooltip>
-        </div>
-      </form>
+        </PromptInputFooter>
+      </PromptInput>
       {props.note !== undefined ? (
         <p className="plan-compose-note" role="alert">
           {props.note}
