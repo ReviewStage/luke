@@ -25,14 +25,15 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import {
   Message,
   MessageContent,
   MessageResponse,
   PANEL_MARKDOWN_COMPONENTS,
 } from "../ai-elements/message";
+import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
+import { Shimmer } from "../ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "../ai-elements/tool";
 import {
   AGENT_PART,
@@ -43,6 +44,7 @@ import {
   agentTabLabel,
   opensOnGitHub,
 } from "./coding-agent-model";
+import { CopyMessageAction } from "./copy-message";
 import { planCardTitle, TOOL_GLYPH, type ToolGlyph, toolCallView } from "./tool-call-model";
 import { useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
@@ -51,19 +53,24 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, the Stop, and its transcript live.
  *
  * The transcript is drawn with the AI Elements components, as the
- * Transcript tab's is, from the agent's stored `UIMessage`s as they are,
- * and reads as a devtool's agent pane: the plan it was handed is a card
- * at the top, folded under its title; each of its own turns runs the
- * column's width with its text as markdown, its reasoning folded under
- * one quiet line, and each tool call one compact row saying what it did
- * (`tool-call-model.ts`), with the input and the answer under the row
- * once opened and a call that ended in an error marked in red. The list
+ * Transcript tab's is and on the same spacing, from the agent's stored
+ * `UIMessage`s as they are, and reads as a devtool's agent pane: the plan
+ * it was handed is a card at the top, folded under its title; each of its
+ * own turns runs the column's width with its text as markdown, its
+ * reasoning folded under one quiet line, and each tool call one compact
+ * row saying what it did (`tool-call-model.ts`), with the input and the
+ * answer under the row once opened and a call that ended in an error
+ * marked in red; a message the developer sent it after the plan is the
+ * developer's bubble, as the Transcript tab draws one; and while the agent
+ * may still write, a shimmering "Working…" stands at the end, gone the
+ * moment it ends so a finished turn ends on its own last line. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
  * drawn and goes nowhere. Every word here is the agent's or the plan's,
  * so the root is left out of the screen recording (`ph-no-capture`) as a
- * second line behind the recording's text masking.
+ * second line behind the recording's text masking. Under the transcript
+ * is the room for a composer, which the tab is handed and does not draw.
  */
 
 /** What the tab says before the agent's first message lands. */
@@ -106,6 +113,14 @@ const TOOL_ICON = {
 
 /** The word before a plan card's title. */
 const PLAN_CARD_LABEL = "Plan";
+
+/** What stands at the end of the transcript while the agent may still write. */
+const WORKING_LINE = "Working…";
+
+/** How a copy of a turn carries its words: the text parts, one paragraph each. */
+function turnWords(parts: readonly AgentPart[]): string {
+  return parts.flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : [])).join("\n\n");
+}
 
 /** One tool call: its row, and its input and answer under it once opened. */
 function ToolCallView({
@@ -169,42 +184,51 @@ function AgentPartView({
 /** The plan the agent was handed: a card across the column, folded under its title. */
 function PlanCard({ text, components }: { text: string; components: Components }): ReactNode {
   return (
-    <Fold
-      className="rounded-lg border border-border bg-muted text-[12.5px]"
-      data-plan-card=""
-      aria-label={PLAN_CARD_LABEL}
-    >
-      <FoldSummary className="flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary">
-        <FoldChevron />
+    <Plan data-plan-card="" aria-label={PLAN_CARD_LABEL}>
+      <PlanHeader>
         <FileTextIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-        <span className="min-w-0 flex-1 truncate">
-          <span className="text-muted-foreground">{PLAN_CARD_LABEL} · </span>
-          <span className="font-medium">{planCardTitle(text)}</span>
-        </span>
-      </FoldSummary>
-      <FoldBody className="border-t border-border px-3 py-2 text-[13px] leading-normal">
+        <PlanTitle label={PLAN_CARD_LABEL}>{planCardTitle(text)}</PlanTitle>
+      </PlanHeader>
+      <PlanContent>
         <MessageResponse mode="static" components={components}>
           {text}
         </MessageResponse>
-      </FoldBody>
-    </Fold>
+      </PlanContent>
+    </Plan>
   );
 }
 
-/** One message: the plan the agent was handed, as a card, or one of the agent's own turns. */
+/**
+ * One message: the plan the agent was handed, as a card; a message the
+ * developer sent it since, as the developer's bubble; or one of the
+ * agent's own turns, with a copy of its words under it where it has any.
+ */
 function AgentMessage({
   message,
+  plan,
   components,
+  copyText,
 }: {
   message: CodingAgentMessage;
+  /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
+  plan: boolean;
   components: Components;
+  copyText: (words: string) => Promise<void>;
 }): ReactNode {
   const parts = agentParts(message);
+  const words = turnWords(parts);
+  if (plan) return <PlanCard text={words} components={components} />;
   if (message.role === MESSAGE_ROLE.USER) {
-    const text = parts
-      .flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : []))
-      .join("\n\n");
-    return <PlanCard text={text} components={components} />;
+    return (
+      <Message from={message.role}>
+        <MessageContent>
+          <MessageResponse mode="static" components={components}>
+            {words}
+          </MessageResponse>
+        </MessageContent>
+        <CopyMessageAction words={words} copyText={copyText} />
+      </Message>
+    );
   }
   return (
     <Message from={message.role}>
@@ -213,6 +237,7 @@ function AgentMessage({
           <AgentPartView key={index} part={part} components={components} />
         ))}
       </MessageContent>
+      {words === "" ? null : <CopyMessageAction words={words} copyText={copyText} />}
     </Message>
   );
 }
@@ -276,24 +301,43 @@ export function AgentTranscriptView({
   messages,
   reading,
   failed,
+  working,
   onRetry,
   openGitHub,
+  copyText,
 }: {
   messages: readonly CodingAgentMessage[];
   reading: boolean;
   failed: boolean;
+  /** Whether the agent may still write, which is when the transcript ends on a working line. */
+  working: boolean;
   onRetry: () => void;
   /** Opens a page of GitHub's in the browser, which is where the agent's pull request lives. */
   openGitHub: (url: string) => void;
+  /** Puts a turn's words on the clipboard; a refusal rejects. */
+  copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
+    // The plan is the first of the developer's messages; the rest the developer sent since.
+    const plan = messages.find((message) => message.role === MESSAGE_ROLE.USER);
     return (
       <Conversation>
         <ConversationContent>
           {messages.map((message) => (
-            <AgentMessage key={message.id} message={message} components={components} />
+            <AgentMessage
+              key={message.id}
+              message={message}
+              plan={message === plan}
+              components={components}
+              copyText={copyText}
+            />
           ))}
+          {working ? (
+            <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
+              <Shimmer>{WORKING_LINE}</Shimmer>
+            </p>
+          ) : null}
           {failed ? (
             <p className="agent-note" role="alert">
               The transcript could not be read.{" "}
@@ -329,13 +373,16 @@ export function AgentTab({
   agent,
   control,
   shown,
+  composer,
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
   /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
   shown: boolean;
+  /** What stands under the transcript, where a message to the agent is written; nothing draws the room without one. */
+  composer?: ReactNode;
 }): React.JSX.Element {
-  const { tell } = useAct();
+  const { act, tell } = useAct();
   const transcript = useAgentTranscript({
     agentId: agent.id,
     status: agent.status,
@@ -350,9 +397,12 @@ export function AgentTab({
         messages={transcript.messages}
         reading={transcript.reading}
         failed={transcript.failed}
+        working={agentStillWriting(agent.status)}
         onRetry={transcript.onRetry}
         openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+        copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
       />
+      {composer === undefined ? null : <footer className="agent-tab-foot">{composer}</footer>}
     </section>
   );
 }

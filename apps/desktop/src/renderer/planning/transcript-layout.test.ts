@@ -222,8 +222,10 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       messages: [PLAN, TURN],
       reading: false,
       failed: false,
+      working: true,
       onRetry: () => undefined,
       openGitHub: () => undefined,
+      copyText: () => Promise.resolve(),
     }),
     createElement(PlanTranscript, {
       region: {
@@ -232,6 +234,7 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
         calls: [{ key: "c1", startedAt: 1, live: true, messages: CALL }],
       },
       onRetry: () => undefined,
+      copyText: () => Promise.resolve(),
     }),
   ];
   for (const surface of surfaces) {

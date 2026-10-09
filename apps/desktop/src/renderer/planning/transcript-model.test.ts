@@ -12,8 +12,10 @@ import {
   type HeardCall,
   heardCalls,
   messageText,
+  speakerTurns,
   TRANSCRIPT_REGION,
   transcriptRegion,
+  turnText,
 } from "./transcript-model";
 
 /** Synthetic plan, calls, and words throughout. */
@@ -220,4 +222,23 @@ test("a call's header names its day as today, yesterday, a weekday this week, or
   assert.equal(callHeading(at(9, 5), now, "en-US"), "Monday, 3:42 PM");
   assert.equal(callHeading(at(8, 21), now, "en-US"), "Sep 21, 3:42 PM");
   assert.equal(callHeading(at(11, 30, 2025), now, "en-US"), "Dec 30, 2025, 3:42 PM");
+});
+
+test("consecutive lines from one speaker are one turn, keyed by the first line, and a copy of it is a paragraph a line", () => {
+  const turns = speakerTurns([
+    spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
+    spoken(1, TRANSCRIPT_SPEAKER.USER, "After a week, say."),
+    spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "A week it is."),
+    spoken(3, TRANSCRIPT_SPEAKER.USER, "And one per address."),
+  ]);
+  assert.deepEqual(
+    turns.map((turn) => [turn.key, turn.role, turn.messages.map(messageText)]),
+    [
+      ["0", TRANSCRIPT_SPEAKER.USER, ["Invites should expire.", "After a week, say."]],
+      ["2", TRANSCRIPT_SPEAKER.ASSISTANT, ["A week it is."]],
+      ["3", TRANSCRIPT_SPEAKER.USER, ["And one per address."]],
+    ],
+  );
+  assert.equal(turnText(turns[0]?.messages ?? []), "Invites should expire.\n\nAfter a week, say.");
+  assert.deepEqual(speakerTurns([]), []);
 });

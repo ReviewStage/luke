@@ -478,8 +478,10 @@
   white-space: pre;
 }
 
-/* The open plan's transcript: each call under its day and time, each turn
-   under its speaker, the developer's turns in a bubble as a chat draws them. */
+/* The open plan's transcript: the AI Elements components draw the calls
+   (../planning/plan-transcript.tsx); these are the tab's own frame, its
+   note, and Luke's mark above his turns, drawn at the row's 16px in his
+   voice's colour. */
 .plan-transcript {
   display: flex;
   min-height: 0;
@@ -494,65 +496,17 @@
   text-align: center;
 }
 
-.plan-transcript-calls {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.plan-transcript-call-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
+.transcript-luke-mark {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 8px;
-  background: var(--desktop-well);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 600;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
 }
 
-.plan-transcript-call-header::after {
-  height: 1px;
-  flex: 1;
-  background: var(--hairline);
-  content: "";
-}
-
-.plan-transcript-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--voice-developer);
-}
-
-.plan-transcript-live::before {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  content: "";
-}
-
-/* Each line is an AI Elements Message (../ai-elements/message.tsx), which
-   draws the words; the speaker above it is this tab's own. */
-.plan-transcript-messages {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding-top: 4px;
-}
-
-.plan-transcript-speaker {
+.transcript-luke-mark .luke-face {
+  width: 16px;
+  height: 16px;
   color: var(--voice-luke);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.plan-transcript-speaker[data-speaker="user"] {
-  color: var(--voice-developer);
 }
 
 /* Coding agents --------------------------------------------------------- */
@@ -659,6 +613,13 @@
   margin: 0;
   color: var(--error-text);
   font-size: 12px;
+}
+
+/* The room under the transcript for a message to the agent, drawn only
+   once the tab is handed one. */
+.agent-tab-foot {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--hairline);
 }
 
 /* A link in the transcript: the pull request opens in the browser, drawn

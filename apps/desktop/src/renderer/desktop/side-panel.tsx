@@ -2,7 +2,9 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { CollapseIcon, ExpandIcon, SidePanelIcon } from "@sidecar/panel";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
@@ -166,6 +168,7 @@ function TabContent({
   /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
 }): React.JSX.Element {
+  const { act } = useAct();
   if (isAgentTab(tab)) {
     const agent = agents.agents?.find((each) => each.id === tab.agent);
     // The tab stands for an agent the list no longer holds only until the
@@ -186,7 +189,13 @@ function TabContent({
         <CodePane code={code} />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
-      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
+      return (
+        <PlanTranscript
+          region={transcript.region}
+          onRetry={transcript.onRetry}
+          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+        />
+      );
   }
 }
 

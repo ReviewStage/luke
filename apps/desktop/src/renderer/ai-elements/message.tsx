@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
 import { type ComponentProps, type HTMLAttributes, memo, type ReactNode } from "react";
 import { type Components, Streamdown } from "streamdown";
+import { Tooltip } from "../tooltip";
 import { cn } from "./utils";
 
 /**
@@ -9,9 +10,13 @@ import { cn } from "./utils";
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
  * restyled to Luke's tokens: the developer's turn stands at the right in a
  * raised bubble, Luke's at the left in plain text across the whole column,
- * as the voice captions draw them. The registry's actions, branches,
- * attachments, and toolbar are not here, because nothing draws them yet;
- * each arrives with the surface that first does.
+ * as the voice captions draw them. The actions on a message are the
+ * registry's, each one a quiet icon button that shows while the pointer or
+ * the keyboard is on the message, floated to its corner rather than drawn
+ * in a row under it, with the window's own hover hint in place of the
+ * registry's tooltip. The registry's branches, attachments, and toolbar are
+ * not here, because nothing draws them yet; each arrives with the surface
+ * that first does.
  *
  * One change of substance from the registry: nothing in a message sets a
  * percentage height. The registry's Response is `size-full`, and in a
@@ -31,7 +36,7 @@ export function Message({ className, from, ...props }: MessageProps): ReactNode 
   return (
     <div
       className={cn(
-        "group flex w-full flex-col gap-1",
+        "group relative flex w-full flex-col gap-1",
         from === "user" ? "is-user ml-auto max-w-[95%] items-end justify-end" : "is-assistant",
         className,
       )}
@@ -55,6 +60,62 @@ export function MessageContent({ children, className, ...props }: MessageContent
       {children}
     </div>
   );
+}
+
+export type MessageActionsProps = ComponentProps<"div">;
+
+/**
+ * The actions on a message, shown while the pointer rests on the message
+ * or the keyboard is on one of them, and hidden the rest of the time so a
+ * transcript of hundreds of lines is not a column of buttons. The registry
+ * draws them in a row under the message; here they float at the message's
+ * top right corner on a small raised card, as a comment's toolbar does, so
+ * a turn takes no room for a bar nobody is looking at and the column keeps
+ * one rhythm whether a turn offers actions or not. Hidden, the bar takes no
+ * pointer either, so the words under it stay selectable.
+ */
+export function MessageActions({ className, children, ...props }: MessageActionsProps): ReactNode {
+  return (
+    <div
+      className={cn(
+        "pointer-events-none absolute -top-2 right-0 z-10 flex items-center gap-0.5 rounded-md border border-border bg-background p-0.5 opacity-0 shadow-md transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+export type MessageActionProps = Omit<ComponentProps<"button">, "aria-label"> & {
+  /** What the action does, which is its accessible name and, when `tooltip` is set, the hint it shows. */
+  label: string;
+  tooltip?: boolean;
+};
+
+/** One action: a 24px ghost button around a 16px icon. */
+export function MessageAction({
+  label,
+  tooltip = false,
+  className,
+  children,
+  ...props
+}: MessageActionProps): ReactNode {
+  const button = (
+    <button
+      type="button"
+      aria-label={label}
+      className={cn(
+        "flex size-6 cursor-default items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground [&>svg]:size-4",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+  return tooltip ? <Tooltip label={label}>{button}</Tooltip> : button;
 }
 
 /**

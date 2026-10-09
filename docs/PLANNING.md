@@ -277,12 +277,19 @@ selected the moment its Start lands.
   Stop stands while the agent may still write; it asks the service to cancel
   the turn and stop the sandbox, and anything the agent pushed stays.
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the same
-  AI Elements components as the Transcript tab: the plan it was handed as
-  the one user turn, folded; and each of its own turns with its text as
-  Markdown, its reasoning folded, each tool call folded under its name with
-  the input and the output inside, a call that ended in an error said in
-  red, and a link to the pull request it opened, which opens on GitHub in
-  the browser. The list keeps to its newest line while it is scrolled there.
+  AI Elements components as the Transcript tab, on the same spacing: the
+  plan it was handed, the first of the developer's messages, as a Plan card
+  folded under its title; any message the developer sent it since as the
+  developer's bubble; and each of its own turns with its text as Markdown,
+  its reasoning folded under one line, each tool call one row saying what
+  it did with the input and the output under it once opened, a call that
+  ended in an error said in red, and a link to the pull request it opened,
+  which opens on GitHub in the browser. A copy of a turn's words waits
+  under it. While the agent may still write, a shimmering "Working…" stands
+  at the end; it goes the moment the agent ends. The list keeps to its
+  newest line while it is scrolled there. Under the transcript is the room
+  for a composer, which the tab is handed (`AgentTab`'s `composer`) and
+  does not draw itself.
 - **Live.** While the tab shows and the agent is starting or running, the
   window reads `GET /api/agents/{id}/messages?after=<cursor>` in a loop on
   the service's held long-poll (`planning/use-agent-transcript.ts`): each
@@ -307,8 +314,10 @@ account starts on Claude Opus 5.5 at high.
 ### Transcript
 
 The Transcript tab reads back what was said on the plan's calls with Luke,
-as a chat does: each call under its day and time, oldest first, and each turn
-under its speaker, `You` or `Luke` (`planning/plan-transcript.tsx`,
+as a chat does: each call from a divider saying its day and time, oldest
+first, and each run of lines from one speaker as one turn, the developer's
+in a bubble at the right and Luke's under his mark at the left, with a copy
+of the turn's words under it (`planning/plan-transcript.tsx`,
 `planning/transcript-model.ts`).
 
 - **The record.** The service keeps each call's words as timed fragments
