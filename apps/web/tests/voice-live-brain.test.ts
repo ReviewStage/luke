@@ -11,17 +11,23 @@ import {
 } from "@sidecar/voice/live-session";
 import { arrival } from "@sidecar/voice/testing";
 import { SCHEMA_REFUSAL } from "@sidecar/wire";
-import { Deferred, Duration, Effect, Exit, Option, Scope } from "effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Deferred, Duration, Effect, Exit, Option, Redacted, Scope } from "effect";
+import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { deploymentActor } from "../server/hosted/brain-host/auth";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { ownedAuth } from "../server/hosted/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
   type EveMessage,
   type EveSessions,
+  eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
@@ -201,6 +207,7 @@ async function stand(
   store: HostedLiveBrainOptions["store"] = database.store,
   conversationId: string = target.conversationId,
   record: HostedLiveBrainOptions["asks"]["asks"] = askEffects,
+  over?: EveSessions,
 ): Promise<Stand> {
   const eve = fakeEve();
   const events: LiveBrainRunEvent[] = [];
@@ -213,7 +220,7 @@ async function stand(
       hostedLiveBrain({
         userId: target.userId,
         conversationId,
-        asks: { asks: record, eve },
+        asks: { asks: record, eve: over ?? eve },
         store,
         writer,
         report: (message) => reports.push(message),
@@ -719,6 +726,115 @@ it.live(
       // The script runs the turn on to a settled end, which had nothing left to cancel.
       assert.equal(ended, LIVE_BRAIN_CANCEL.NOT_RUNNING);
       assert.equal(f.eve.cancelled.length, 2);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+const CRON_SECRET = "cron-secret-1";
+
+/** What eve's door saw of one request the host's client made: its route, its bearer, the account it named, and its body. */
+interface DoorSeen {
+  readonly pathname: string;
+  readonly authorization: string | null;
+  readonly account: string | null;
+  readonly body: unknown;
+}
+
+/**
+ * eve as the deployment reaches it, with the real door in front: the host's
+ * own client over an `HttpClient` whose every request walks `ownedAuth` with
+ * the deployment actor the production channel composes, over an ownership
+ * that attributes the one session and the one conversation to the account
+ * the brain stands for. Note that the ownership is answered from the ids
+ * rather than read from the rows, because a read would wait on the one
+ * PGlite connection the Stop around it is holding; the rows' own reads are
+ * held by the access suite. Past the door, the fake answers as eve's routes
+ * document: an opening names the session minted for it, a cancel is taken.
+ */
+async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
+  const seen: DoorSeen[] = [];
+  const auth: AuthFn<Request> = ownedAuth(
+    [deploymentActor({ secret: Redacted.make(CRON_SECRET), admits: DEPLOYMENT_TURNS })],
+    {
+      sessionOwner: async (id) => (id === sessionId ? target.userId : undefined),
+      ownsConversation: async (userId, conversationId) =>
+        userId === target.userId && conversationId === target.conversationId,
+    },
+  );
+  const door = fakeHttpClientLayer(async (url, init) => {
+    const request = new Request(url, init);
+    seen.push({
+      pathname: new URL(url).pathname,
+      authorization: request.headers.get("authorization"),
+      account: request.headers.get(BRAIN_HOST_HEADER.ACCOUNT),
+      body: JSON.parse(await request.text()),
+    });
+    try {
+      await auth(request);
+    } catch (error) {
+      assert.ok(error instanceof ForbiddenError);
+      return error.response;
+    }
+    return Response.json({ ok: true, sessionId, status: "accepted" }, { status: 202 });
+  });
+  const eve = await database.run(
+    Effect.provide(
+      eveSessions({
+        origin: "https://luke.test",
+        caller: { secret: Redacted.make(CRON_SECRET), account: target.userId },
+      }),
+      door,
+    ),
+  );
+  return { eve, seen };
+}
+
+it.live(
+  "the Stop reaches eve through its door: a run's cancel is the host's own request under the deployment's secret, admitted for the account's recorded session, so the run is told cancelled",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const sessionId = mintSession();
+      const behind = yield* Effect.promise(() => eveBehindDoor(target, sessionId));
+      const f = yield* Effect.promise(() =>
+        stand(target, QUICK, database.store, target.conversationId, askEffects, behind.eve),
+      );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      assert.equal(yield* Effect.promise(() => sessionOf(target, accepted.runId)), sessionId);
+      const standing: RelayStanding = {
+        sessionId,
+        target,
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = spokenTurn(FIRST_EVE_TURN, NOW);
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* f.arrived(1);
+      yield* Effect.promise(() =>
+        database.run(claimRuntimeSession(target, sessionId, new Date(NOW))),
+      );
+
+      assert.equal(
+        yield* Effect.promise(() => database.run(f.brain.cancelRun(accepted.runId))),
+        LIVE_BRAIN_CANCEL.CANCELLED,
+      );
+      const cancel = behind.seen.at(-1);
+      assert.deepEqual(cancel, {
+        pathname: `/eve/v1/session/${sessionId}/cancel`,
+        authorization: `Bearer ${CRON_SECRET}`,
+        account: target.userId,
+        body: { turnId: FIRST_EVE_TURN },
+      });
+      const stamped = yield* Effect.promise(() =>
+        database.run(
+          askStanding({ store: database.store, asks: askEffects }, target.userId, accepted.runId),
+        ),
+      );
+      assert.notEqual(stamped?.turn?.cancelRequestedAt ?? null, null);
       yield* Effect.promise(() => f.stop());
     }),
 );
