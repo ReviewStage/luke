@@ -43,7 +43,10 @@ const DESKTOP_WINDOW = {
   MIN_HEIGHT: 520,
   // Small enough that a 13-inch display's work area still fits the full size.
   MARGIN: 24,
-  BACKGROUND: "#0b0b0d",
+  // The window's ground before the renderer paints, one per appearance; each
+  // is desktop.css's `--desktop-ground` for that appearance, which
+  // design/check-design-contract.mjs holds them to.
+  BACKGROUND: { DARK: "#0c0c0e", LIGHT: "#fcfcfc" },
   // Where the close button's corner sits. desktop.css's `--traffic-lights-*`
   // are measured from it, so the title bar's own buttons clear the lights.
   TRAFFIC_LIGHTS: { x: 18, y: 18 },
@@ -81,6 +84,8 @@ export class PanelManager {
   readonly #windows = new Map<number, BrowserWindow>();
   /** Set once a quit begins, so closing the window then destroys it rather than hiding it. */
   #quitting = false;
+  /** Whether the app draws dark, as the window service last said; dark is the default theme. */
+  #dark = true;
 
   constructor(options: PanelManagerOptions) {
     this.#runMode = options.runMode;
@@ -188,6 +193,23 @@ export class PanelManager {
     }
   }
 
+  /**
+   * Grounds every window, and every window opened after, in the appearance the
+   * app now resolves to, so a resize or a reload never flashes the other one.
+   * The renderer repaints itself from `prefers-color-scheme`; this is only the
+   * native ground under it.
+   */
+  paint(dark: boolean): void {
+    this.#dark = dark;
+    for (const window of this.#windows.values()) {
+      if (!window.isDestroyed()) window.setBackgroundColor(this.#background());
+    }
+  }
+
+  #background(): string {
+    return this.#dark ? DESKTOP_WINDOW.BACKGROUND.DARK : DESKTOP_WINDOW.BACKGROUND.LIGHT;
+  }
+
   /** Re-keys the living window under another display. */
   #rebind(fromDisplayId: number, toDisplayId: number): void {
     const window = this.#windows.get(fromDisplayId);
@@ -219,7 +241,7 @@ export class PanelManager {
       minHeight: DESKTOP_WINDOW.MIN_HEIGHT,
       title: "Luke",
       show: false,
-      backgroundColor: DESKTOP_WINDOW.BACKGROUND,
+      backgroundColor: this.#background(),
       // The renderer draws its own title bar under the traffic lights, so the
       // window keeps its frame, its shadow, and its buttons, and nothing else.
       titleBarStyle: "hiddenInset",

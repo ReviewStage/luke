@@ -33,9 +33,9 @@ function withoutTokenCalcs(value) {
   return rest;
 }
 
-function keyframeBodies(source) {
+// The body of every block whose opening the pattern matches, braces balanced.
+function blockBodies(source, pattern) {
   const bodies = [];
-  const pattern = /@keyframes\s+[\w-]+\s*\{/gu;
   for (const match of source.matchAll(pattern)) {
     const opening = (match.index ?? 0) + match[0].length - 1;
     let depth = 1;
@@ -49,6 +49,48 @@ function keyframeBodies(source) {
   }
   return bodies;
 }
+
+function keyframeBodies(source) {
+  return blockBodies(source, /@keyframes\s+[\w-]+\s*\{/gu);
+}
+
+// The window's native ground shows before the renderer paints and wherever it
+// has not yet, so main's ground for each appearance has to be desktop.css's
+// --desktop-ground for that appearance, or a launch or a resize flashes
+// another colour. The light one is held once the sheet declares it.
+function checkWindowGrounds() {
+  const panelManager = readFileSync(
+    join(ROOT, "apps", "desktop", "src", "main", "window", "panel-manager.ts"),
+    "utf8",
+  );
+  const sheet = readFileSync(join(STYLE_ROOT, "desktop.css"), "utf8");
+  const grounds = /BACKGROUND:\s*\{\s*DARK:\s*"([^"]+)",\s*LIGHT:\s*"([^"]+)"\s*\}/u.exec(
+    panelManager,
+  );
+  if (!grounds) {
+    failures.push("panel-manager.ts: DESKTOP_WINDOW.BACKGROUND is not { DARK, LIGHT }");
+    return;
+  }
+  const lightPattern = /@media\s*\(\s*prefers-color-scheme\s*:\s*light\s*\)\s*\{/gu;
+  const groundIn = (css) => /--desktop-ground\s*:\s*([^;]+);/u.exec(css)?.[1].trim();
+  const lightBodies = blockBodies(sheet, lightPattern);
+  const light = lightBodies.map(groundIn).find(Boolean);
+  const dark = groundIn(lightBodies.reduce((rest, body) => rest.replace(body, ""), sheet));
+  const expected = [
+    ["DARK", grounds[1], dark],
+    ["LIGHT", grounds[2], light],
+  ];
+  for (const [appearance, main, css] of expected) {
+    if (css !== undefined && main.toLowerCase() !== css.toLowerCase()) {
+      failures.push(
+        `panel-manager.ts: the ${appearance} window ground ${main} is not desktop.css's --desktop-ground ${css}`,
+      );
+    }
+  }
+  if (dark === undefined) failures.push("desktop.css: --desktop-ground is not declared");
+}
+
+checkWindowGrounds();
 
 for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".css"))) {
   const source = readFileSync(join(STYLE_ROOT, name), "utf8");
