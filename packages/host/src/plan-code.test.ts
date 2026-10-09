@@ -53,6 +53,8 @@ it.effect(
         assert.deepEqual(textOf(code), INVITE.split("\n"));
         const keyword = code.lines?.[2]?.find((token) => token.text.includes("export"));
         assert.ok(keyword?.color, "a keyword is drawn in a colour of its own");
+        assert.ok(keyword.lightColor, "and in a colour of its own in the light appearance");
+        assert.notEqual(keyword.lightColor, keyword.color);
       }),
     ).pipe(Effect.provide(nodeFiles)),
 );

@@ -17,7 +17,7 @@
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  scrollbar-color: var(--scrollbar) transparent;
   scrollbar-width: thin;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
@@ -42,7 +42,7 @@
   padding: 13px 15px;
   border: 1px solid var(--hairline);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.022);
+  background: var(--section-fill);
 }
 
 /* A section names itself in sentence case, as the sidebar's own heading does;
@@ -123,7 +123,7 @@
    around as the query changed. */
 .search-match {
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--match-wash);
   color: inherit;
 }
 
@@ -295,12 +295,12 @@
   align-items: center;
   padding: 2px;
   border-radius: 999px;
-  background: var(--raised-strong);
+  background: var(--switch-track);
   transition: background-color var(--duration-hover) ease;
 }
 
 .switch[aria-checked="true"] {
-  background: color-mix(in srgb, var(--state-complete) 62%, transparent);
+  background: var(--switch-on);
 }
 
 .switch:disabled {
@@ -311,7 +311,8 @@
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--text-primary);
+  background: var(--switch-thumb);
+  box-shadow: var(--switch-thumb-shadow);
   transition: transform var(--duration-fast) var(--spring-fast);
 }
 
@@ -592,7 +593,7 @@
   padding: 9px 11px;
   border: 1px solid var(--hairline);
   border-radius: 10px;
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--input-fill);
   color: var(--text-primary);
   font-family: inherit;
   font-size: 11.5px;
@@ -609,7 +610,7 @@
 
 .settings-input:focus {
   border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--input-fill-focus);
   outline: none;
 }
 

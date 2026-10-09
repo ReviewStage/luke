@@ -22,6 +22,7 @@ import langTsx from "@shikijs/langs/tsx";
 import langTypescript from "@shikijs/langs/typescript";
 import langYaml from "@shikijs/langs/yaml";
 import githubDarkDefault from "@shikijs/themes/github-dark-default";
+import githubLightDefault from "@shikijs/themes/github-light-default";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   CODE_UNREADABLE,
@@ -48,6 +49,8 @@ import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
  * The colouring runs here rather than in the window, because the window's
  * content policy refuses WebAssembly and its bundle has a budget; Shiki's
  * JavaScript regex engine runs in this process and the window draws spans.
+ * Every run carries its colour in both of GitHub's themes, so the window
+ * follows the appearance as it changes without asking for the code again.
  */
 
 export const PLAN_CODE = {
@@ -95,14 +98,15 @@ const LANGUAGE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
   [".toml", "toml"],
 ]);
 
-const THEME = "github-dark-default";
+/** The themes the code is coloured in, one per appearance. */
+const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
 let highlighter: HighlighterCore | undefined;
 
 /** The one highlighter, built the first time code is coloured, since most launches show none. */
 function sharedHighlighter(): HighlighterCore {
   highlighter ??= createHighlighterCoreSync({
-    themes: [githubDarkDefault],
+    themes: [githubDarkDefault, githubLightDefault],
     langs: [
       langBash,
       langC,
@@ -140,24 +144,28 @@ function windowStart(ref: CodeRef, lineCount: number): number {
   return Math.min(Math.max(1, ref.startLine - margin), latest);
 }
 
-/** Runs of one colour merged, and the theme's own foreground left unnamed, so a line carries little. */
+/** A run's colour in one theme, or nothing for that theme's own foreground. */
+function runColour(color: string | undefined, foreground: string): string | undefined {
+  const lower = color?.toLowerCase();
+  return lower === foreground ? undefined : lower;
+}
+
+/** Runs of one colour in both themes merged, and each theme's own foreground left unnamed, so a line carries little. */
 function compactLine(
-  tokens: readonly { content: string; color?: string | undefined }[],
-  foreground: string,
+  tokens: readonly { content: string; variants: Record<string, { color?: string | undefined }> }[],
+  foreground: { readonly dark: string; readonly light: string },
 ): CodeToken[] {
   const line: CodeToken[] = [];
   for (const token of tokens) {
-    const color =
-      token.color?.toLowerCase() === foreground ? undefined : token.color?.toLowerCase();
+    const color = runColour(token.variants[THEME.DARK]?.color, foreground.dark);
+    const lightColor = runColour(token.variants[THEME.LIGHT]?.color, foreground.light);
     const last = line.at(-1);
-    if (last !== undefined && last.color === color) {
-      line[line.length - 1] =
-        color === undefined
-          ? { text: last.text + token.content }
-          : { text: last.text + token.content, color };
-    } else {
-      line.push(color === undefined ? { text: token.content } : { text: token.content, color });
-    }
+    const merged = last !== undefined && last.color === color && last.lightColor === lightColor;
+    if (merged) line.pop();
+    let run: CodeToken = { text: merged ? last.text + token.content : token.content };
+    if (color !== undefined) run = { ...run, color };
+    if (lightColor !== undefined) run = { ...run, lightColor };
+    line.push(run);
   }
   return line;
 }
@@ -179,10 +187,13 @@ function colouredLines(
     return lines.slice(first - 1, last).map((text) => (text === "" ? [] : [{ text }]));
   }
   const core = sharedHighlighter();
-  const foreground = core.getTheme(THEME).fg.toLowerCase();
-  const tokens = core.codeToTokensBase(lines.slice(0, last).join("\n"), {
+  const foreground = {
+    dark: core.getTheme(THEME.DARK).fg.toLowerCase(),
+    light: core.getTheme(THEME.LIGHT).fg.toLowerCase(),
+  };
+  const tokens = core.codeToTokensWithThemes(lines.slice(0, last).join("\n"), {
     lang: language,
-    theme: THEME,
+    themes: { [THEME.DARK]: THEME.DARK, [THEME.LIGHT]: THEME.LIGHT },
   });
   return tokens.slice(first - 1, last).map((line) => compactLine(line, foreground));
 }

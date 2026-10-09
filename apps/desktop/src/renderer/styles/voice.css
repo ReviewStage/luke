@@ -59,7 +59,7 @@
 /* Recording brightens the words rather than swapping them for a field: the
    edge lighting up is the whole state, and what it says is what to type. */
 .shortcut-state[data-recording="true"] {
-  border-color: rgba(255, 255, 255, 0.35);
+  border-color: var(--edge-strong);
   color: var(--text-secondary);
 }
 
