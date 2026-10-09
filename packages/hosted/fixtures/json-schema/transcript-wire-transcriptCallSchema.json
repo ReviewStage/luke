@@ -10,25 +10,48 @@
       "type": "number",
       "minimum": 0
     },
-    "lines": {
+    "messages": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "speaker": {
+          "id": {
+            "type": "string"
+          },
+          "role": {
             "type": "string",
             "enum": [
               "user",
               "assistant"
             ]
           },
-          "text": {
-            "type": "string"
+          "parts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "type",
+                "text"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
-          "speaker",
-          "text"
+          "id",
+          "role",
+          "parts"
         ],
         "additionalProperties": false
       }
@@ -37,7 +60,7 @@
   "required": [
     "id",
     "startedAt",
-    "lines"
+    "messages"
   ],
   "additionalProperties": false
 }

@@ -1,7 +1,7 @@
 import { Clock, Effect } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { DAY_MS } from "../core.js";
-import { HOSTED_DAILY_LIMIT, utcDayKey } from "../hosted/quota.js";
+import { utcDayKey } from "../hosted/quota.js";
 import {
   ADMIN_ERROR,
   ADMIN_HTTP_STATUS,
@@ -238,10 +238,6 @@ export interface AdminMetrics {
     cohorts: AdminRetentionCohort[];
   };
   reliability: {
-    dailyLimit: number;
-    /** (user, day) rows that reached a ceiling — throttling made visible, since a rejected call still counts. */
-    quotaLimitedUserDaysToday: number;
-    quotaLimitedUserDaysWindow: number;
     /**
      * The analytics project's console, where the per-request error rates this
      * section cannot show actually live. Absent when the deployment names no
@@ -279,8 +275,6 @@ export interface AdminMetricsSource {
     activeByCohortWeek: ReadonlyMap<string, ReadonlyMap<string, number>>;
   };
   reliability: {
-    quotaLimitedUserDaysToday: number;
-    quotaLimitedUserDaysWindow: number;
     /** Read from the environment like the integrations, not from a table. */
     analyticsConsoleUrl?: string | undefined;
   };
@@ -427,12 +421,7 @@ export function buildAdminMetrics(
       weeks: ADMIN_RETENTION_WEEKS,
       cohorts: buildRetentionCohorts(source.retention, now),
     },
-    reliability: {
-      dailyLimit: HOSTED_DAILY_LIMIT,
-      quotaLimitedUserDaysToday: source.reliability.quotaLimitedUserDaysToday,
-      quotaLimitedUserDaysWindow: source.reliability.quotaLimitedUserDaysWindow,
-      analyticsConsoleUrl: source.reliability.analyticsConsoleUrl,
-    },
+    reliability: { analyticsConsoleUrl: source.reliability.analyticsConsoleUrl },
     systemHealth: {
       database: source.systemHealth.database,
       integrations: [...source.systemHealth.integrations],

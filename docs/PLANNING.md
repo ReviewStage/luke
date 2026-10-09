@@ -224,21 +224,35 @@ under its speaker, `You` or `Luke` (`planning/plan-transcript.tsx`,
   (`voice_transcript_segments`) and answers them at
   `GET /api/plans/{id}/transcript` (`hosted/transcript-store.ts`), grouped
   into turns by the same ledger the captions use, so a call that ended reads
-  back in the lines its captions drew. The newest 4,000 fragments are read;
-  past that, the tab says earlier lines are not shown. The host reads it
-  with the plan's document, and again when a call about the plan ends, once
-  at the end and once more five seconds on, after the call's last words have
-  reached the record.
+  back in the lines its captions drew. Each turn is answered as an AI SDK
+  `UIMessage` (`packages/hosted/src/transcript-wire.ts`): its place on the
+  call as the id, the speaker as the role, and its words as one text part,
+  the shape Luke's `messages` table keeps every conversation in. The newest
+  4,000 fragments are read; past that, the tab says earlier lines are not
+  shown. The host reads it with the plan's document, and again when a call
+  about the plan ends, once at the end and once more five seconds on, after
+  the call's last words have reached the record.
 - **The call standing now.** Its words are not on record yet, so the voice
   window reports them as they are said (`VoiceView.callTranscript`),
   whatever the captions preference, and the tab grows the call at the
-  bottom, marked `Live`. The two are told apart by the store's id for the
+  bottom, marked `Live`, each heard line a message of the same shape under
+  the ledger's row id. The two are told apart by the store's id for the
   call's session, so a call is drawn once, from the record once the
   record's copy has as many words as were heard; hanging up, or calling again
   at once, keeps the heard words drawn until then.
+- **The components.** The turns are drawn with AI Elements, the AI SDK's
+  chat components, copied from its registry into
+  `apps/desktop/src/renderer/ai-elements/` and restyled to the renderer's
+  tokens: `Conversation` is the log, `Message` one turn by its role, and
+  `MessageResponse` the turn's words as markdown. They are written in
+  Tailwind utilities, which `scripts/tailwind.mjs` compiles into the one
+  stylesheet the renderer ships, over tokens aliased from `base.css`
+  (`styles/tailwind.css`); the rest of the renderer stays plain CSS. A
+  coding agent's transcript will be drawn with the same components over the
+  same shape.
 - **Following.** The list keeps to its newest line while it is scrolled
-  there; scrolling up to read leaves it in place until the developer scrolls
-  back down.
+  there; scrolling up to read leaves it in place, with a button back to the
+  newest line, until the developer scrolls back down.
 - **States.** Reading, a read that failed with `Try again`, and a plan with
   nothing said yet: "Nothing said yet — start a call and the transcript
   appears here."
@@ -625,8 +639,8 @@ change, the model updates the same document, and Copy copies the new one.
   appear in the panel's caption strip, as for any call ("the microphone is not
   allowed yet", "Voice is temporarily unavailable"). The microphone button
   retries.
-- **Save.** A notetaker run that fails, or that the allowance refuses, saves
-  nothing and says nothing; the next run after the developer speaks again is
+- **Save.** A notetaker run that fails saves nothing and says nothing; the
+  next run after the developer speaks again is
   handed the same lines. The tab keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the model as
   such. Luke says it could not read the file and never describes unread code

@@ -1,0 +1,37 @@
+/* The utility vocabulary the AI Elements components (../ai-elements/) are
+   written in, compiled by scripts/tailwind.mjs as the stylesheet is built.
+   Tailwind's theme and utilities alone: its preflight is left out, because
+   base.css is this renderer's reset and a second one would restyle every
+   element the panel already draws. The utilities sit in a cascade layer, so a
+   hand-written rule beside them always wins. */
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+
+/* Where the utilities are gathered from: every renderer module, and the
+   markdown renderer the components draw a reply with, whose own classes are
+   in the same vocabulary. */
+@source "../";
+@source "../../../node_modules/streamdown/dist/*.js";
+
+/* The components' tokens, each an alias of one base.css names, so a utility
+   and a hand-written rule read one vocabulary and no second gray or hairline
+   is invented here. Only the tokens something draws with. */
+@theme inline {
+  --color-background: var(--surface-overlay);
+  --color-foreground: var(--text-primary);
+  --color-muted: var(--raised);
+  --color-muted-foreground: var(--text-secondary);
+  --color-secondary: var(--raised-strong);
+  --color-secondary-foreground: var(--text-primary);
+  --color-primary: var(--text-primary);
+  --color-primary-foreground: var(--surface-fill);
+  --color-border: var(--hairline);
+  --color-developer: var(--voice-developer);
+  --color-luke: var(--voice-luke);
+
+  /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
+     utility runs on the quick duration and the spring, never on Tailwind's
+     own literal. */
+  --default-transition-duration: var(--duration-quick);
+  --default-transition-timing-function: var(--spring);
+}

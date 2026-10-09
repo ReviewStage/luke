@@ -2,34 +2,13 @@ import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { DAY_MS, type HostedQuota } from "../core.js";
 import { user } from "../db/auth-schema.js";
 import { db } from "../db/query.js";
 import { hostedUsage, voiceSessionUsage } from "../db/usage-schema.js";
 
-/**
- * The free tier's daily ceiling, spent by every hosted operation alike — a
- * voice call opened and a brain turn weighed come out of the same allowance.
- * A product knob, not an implementation detail: the OpenAI project budget
- * behind the key is the backstop it exists to keep distant.
- */
-export const HOSTED_DAILY_LIMIT = 5_000;
-/* The quota shape is the wire contract's, imported rather than restated, so
-   the endpoint and the desktop reading it cannot drift. */
-
-export interface HostedSpend {
-  allowed: boolean;
-  quota: HostedQuota;
-}
-
 /** The UTC day a moment falls on, as the usage table's YYYY-MM-DD key. */
 export function utcDayKey(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
-}
-
-/** The moment a UTC day's counters reset, as epoch milliseconds. */
-export function utcDayEnd(dayKey: string): number {
-  return Date.parse(`${dayKey}T00:00:00.000Z`) + DAY_MS;
 }
 
 /** How a statement here fails: the driver's own refusal, or a row this build cannot decode. */
@@ -74,23 +53,20 @@ const spendHostedUsage = SqlSchema.findOneOption({
 });
 
 /**
- * Spends one hosted use and answers whether it fit inside the day. The
- * increment is a single atomic upsert taken before the upstream call, so two
- * racing requests cannot both be the last allowed use: whichever lands second
- * is refused. A refused attempt still counts — the counter
- * records what was asked, and past the ceiling every answer is the same no.
+ * Counts one hosted use against the account's UTC day and answers the day's
+ * count so far. The increment is a single atomic upsert taken before the
+ * upstream call, so the counter records what was asked whether or not the
+ * call then succeeded. Nothing is refused on the count: the admin pages read
+ * it, and the OpenAI project's own spend limit is the backstop.
  */
 export function spendHostedMeter(input: {
   readonly userId: string;
   readonly now: number;
-}): Effect.Effect<HostedSpend, QuotaFailure, SqlClient.SqlClient> {
+}): Effect.Effect<number, QuotaFailure, SqlClient.SqlClient> {
   const day = utcDayKey(input.now);
   return spendHostedUsage({ userId: input.userId, day }).pipe(
     Effect.flatMap((row) => required(row, "The usage upsert returned no row.")),
-    Effect.map((row) => ({
-      allowed: row.calls <= HOSTED_DAILY_LIMIT,
-      quota: { used: row.calls, limit: HOSTED_DAILY_LIMIT, resetsAt: utcDayEnd(day) },
-    })),
+    Effect.map((row) => row.calls),
   );
 }
 

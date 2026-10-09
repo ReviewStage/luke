@@ -126,6 +126,17 @@ function fakeService(plans: Plan[]): FakeService {
           : { ok: true, answer: found };
       }),
     create: () => Effect.sync(() => service.createAnswer),
+    // The service re-titles the document with the name, as the store does.
+    rename: (planId, { name }) =>
+      Effect.sync(() => {
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return undefined;
+        const renamed = { ...found, name, document: { ...found.document, body: `# ${name}` } };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? renamed : candidate,
+        );
+        return renamed;
+      }),
     delete: (planId) =>
       Effect.sync(() => {
         if (service.deleteFails) return false;
@@ -470,6 +481,56 @@ it.effect("deleting a plan that is not open leaves the open plan and its call st
     assert.deepEqual(standing.about, { planId: INVITES });
     assert.equal(last()?.activePlanId, INVITES);
     assert.deepEqual(last()?.plans, [summary(invites)]);
+  }),
+);
+
+it.effect(
+  "a rename redraws the list's row and the open document in place, reading nothing again",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      const reads = service.reads.length;
+
+      const open = yield* call(GATEWAY_METHOD.PLANNING_RENAME, {
+        planId: INVITES,
+        name: "Team invites",
+      });
+      const listed = yield* call(GATEWAY_METHOD.PLANNING_RENAME, {
+        planId: BILLING,
+        name: "Billing exports",
+      });
+
+      assert.deepEqual([open, listed], [{ renamed: true }, { renamed: true }]);
+      assert.deepEqual(
+        last()?.plans.map((summary) => summary.name),
+        ["Billing exports", "Team invites"],
+      );
+      assert.equal(last()?.document.plan?.name, "Team invites");
+      assert.equal(last()?.document.plan?.document.body, "# Team invites");
+      assert.equal(service.reads.length, reads);
+    }),
+);
+
+it.effect("a rename the service refused leaves the plan as it was named", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const service = fakeService([invites]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    service.plans = [];
+
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.PLANNING_RENAME, { planId: INVITES, name: "Team invites" }),
+      { renamed: false },
+    );
+    assert.deepEqual(last()?.plans, [summary(invites)]);
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
   }),
 );
 
@@ -981,7 +1042,7 @@ function transcriptSaying(words: string): PlanTranscript {
       {
         id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
         startedAt: 1_000,
-        lines: [{ speaker: "user", text: words }],
+        messages: [{ id: "0", role: "user", parts: [{ type: "text", text: words }] }],
       },
     ],
     earlierOmitted: false,

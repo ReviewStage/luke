@@ -84,6 +84,44 @@ it.effect("deleting a plan answers whether the service deleted it", () =>
   }),
 );
 
+it.effect("renaming a plan sends the trimmed name and answers the plan as renamed", () =>
+  Effect.gen(function* () {
+    const renamed = { ...PLAN, name: "Team invites" };
+    const api = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: { answer: () => ({ plan: renamed }) },
+    });
+    const gone = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: {
+        answer: () => ({ error: "not-found" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const answered = yield* Effect.provide(
+      client().rename(PLAN_ID, { name: " Team invites  " }),
+      api.layer,
+    );
+
+    assert.deepEqual(answered, renamed);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { name: "Team invites" });
+    assert.equal(
+      yield* Effect.provide(client().rename(PLAN_ID, { name: "Team invites" }), gone.layer),
+      undefined,
+    );
+  }),
+);
+
+it.effect("a blank rename never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+
+    const answered = yield* Effect.provide(client().rename(PLAN_ID, { name: "  " }), api.layer);
+
+    assert.equal(answered, undefined);
+    assert.deepEqual(api.requests(), []);
+  }),
+);
+
 it.effect("starting a plan names its folder", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({
@@ -138,9 +176,9 @@ it.effect("reads what was said on a plan's calls, and nothing from a service tha
         {
           id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
           startedAt: 1_800_000_300_000,
-          lines: [
-            { speaker: "user", text: "Invites should expire." },
-            { speaker: "assistant", text: "After how many days?" },
+          messages: [
+            { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
+            { id: "1", role: "assistant", parts: [{ type: "text", text: "After how many days?" }] },
           ],
         },
       ],

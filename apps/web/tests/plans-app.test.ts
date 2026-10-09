@@ -4,7 +4,12 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
-import { planTranscriptAnswerSchema, TRANSCRIPT_BOUNDS } from "@sidecar/hosted/transcript-wire";
+import {
+  planTranscriptAnswerSchema,
+  TRANSCRIPT_BOUNDS,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptMessage,
+} from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -186,6 +191,11 @@ const callAbout = (
     return row.id;
   });
 
+/** One line as the transcript answers it: its place on the call, the speaker as the role, the words as one text part. */
+function spoken(index: number, role: TranscriptMessage["role"], text: string): TranscriptMessage {
+  return { id: String(index), role, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+}
+
 /** Luke's drawing of one labelled box. */
 const DRAW_API = {
   elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }],
@@ -196,10 +206,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* saveNotes(
-        { userId: owner, planId, header: { name: RELAY.name } },
-        notesFor(INVITATIONS_DRAFT),
-      );
+      const saved = yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));
@@ -294,6 +301,68 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         body: { plans: [] },
       });
     }),
+  );
+
+  it.effect("a rename answers the plan under its new name, trimmed, and it lists that way", () =>
+    Effect.gen(function* () {
+      const { owner, ask } = yield* openAccounts();
+      const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
+
+      const renamed = yield* ask(
+        request(ONE_PLAN, owner, {
+          id: planId,
+          method: "PATCH",
+          body: { name: "  Team invites " },
+        }),
+      );
+
+      const { plan } = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, renamed);
+      assert.equal(plan.name, "Team invites");
+      assert.ok(plan.document.body.startsWith("# Team invites\n"));
+      const listed = readAnswer(
+        planListAnswerSchema,
+        HOSTED_HTTP_STATUS.OK,
+        yield* ask(request(PLANS, owner)),
+      );
+      assert.deepEqual(
+        listed.plans.map(({ name }) => name),
+        ["Team invites"],
+      );
+    }),
+  );
+
+  it.effect(
+    "a blank, overlong, or widened rename is refused, and another account's plan is none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const rename = (userId: string, body: WireBoundaryInput) =>
+          ask(request(ONE_PLAN, userId, { id: planId, method: "PATCH", body }));
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          [
+            yield* rename(owner, { name: "" }),
+            yield* rename(owner, { name: "   " }),
+            yield* rename(owner, { name: "x".repeat(201) }),
+            yield* rename(owner, { name: "Team invites", userId: other }),
+          ],
+          [invalid, invalid, invalid, invalid],
+        );
+        assert.deepEqual(
+          yield* rename(other, { name: "Mine now" }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+        assert.equal(opened.plan.name, RELAY.name);
+      }),
   );
 
   it.effect("a start that names an account or a repository is refused", () =>
@@ -395,6 +464,17 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(board.elements, [NOTE]);
         assert.equal(board.appliedDrawing, 1);
         assert.equal(board.drawing?.number, 2);
+
+        // A drawing laid over the developer's note is drawn, and the answer says what it covers.
+        const over = yield* runDrawOnBoard(
+          { userId: owner, planId },
+          unparsedWire({ elements: [{ ...DRAW_API.elements[0], y: 180 }] }),
+        );
+        assert.equal(over.status, DRAW_ON_BOARD_STATUS.DRAWN);
+        assert.ok(
+          "layout" in over && over.layout?.some((finding) => finding.includes(NOTE.id)),
+          "the answer names the developer's note",
+        );
       }),
   );
 
@@ -532,16 +612,16 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             {
               id: first,
               startedAt: 1_000_000,
-              lines: [
-                { speaker: TRANSCRIPT_SPEAKER.USER, text: "Invites should expire." },
-                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "Mm." },
-                { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "After how many days?" },
+              messages: [
+                spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
+                spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "Mm."),
+                spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"),
               ],
             },
             {
               id: second,
               startedAt: 2_000_000,
-              lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text: "Seven days." }],
+              messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Seven days.")],
             },
           ],
           earlierOmitted: false,
@@ -573,7 +653,10 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         yield* ask(request(TRANSCRIPT, owner, { id: planId })),
       ).transcript;
       assert.equal(transcript.earlierOmitted, true);
-      const text = transcript.calls.flatMap((call) => call.lines.map((line) => line.text)).join("");
+      const text = transcript.calls
+        .flatMap((call) => call.messages.flatMap((message) => message.parts))
+        .map((part) => part.text)
+        .join("");
       assert.equal(text.startsWith("1 2 "), true);
       assert.equal(text.endsWith(`${TRANSCRIPT_BOUNDS.MAX_SEGMENTS} `), true);
     }),

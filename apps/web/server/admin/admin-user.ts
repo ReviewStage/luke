@@ -82,8 +82,6 @@ export interface AdminUserSource {
     /** The calendar's own rows, read at the trailing-year bound. */
     calendarByDay: ReadonlyMap<string, number>;
     allTime: AdminUserAllTime;
-    /** Window days on which this account reached a hosted daily ceiling. */
-    quotaLimitedDaysWindow: number;
   };
 }
 
@@ -110,7 +108,6 @@ export interface AdminUserDetail {
      */
     currentStreakDays: number;
     callsWindow: number;
-    quotaLimitedDaysWindow: number;
     allTime: AdminUserAllTime;
   };
 }
@@ -160,7 +157,6 @@ export function buildAdminUserDetail(
       ),
       currentStreakDays,
       callsWindow: sum(daily.map((day) => day.calls)),
-      quotaLimitedDaysWindow: source.usage.quotaLimitedDaysWindow,
       allTime: source.usage.allTime,
     },
   };

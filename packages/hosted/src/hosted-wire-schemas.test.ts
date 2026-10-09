@@ -52,6 +52,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
+    planRenameRequestSchema: planWire.planRenameRequestSchema,
     planSummarySchema: planWire.planSummarySchema,
     planSchema: planWire.planSchema,
     planListAnswerSchema: planWire.planListAnswerSchema,
@@ -71,7 +72,8 @@ const EFFECT_MODULE_SCHEMAS = {
     wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "transcript-wire": {
-    transcriptLineSchema: transcriptWire.transcriptLineSchema,
+    transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,
+    transcriptMessageSchema: transcriptWire.transcriptMessageSchema,
     transcriptCallSchema: transcriptWire.transcriptCallSchema,
     planTranscriptSchema: transcriptWire.planTranscriptSchema,
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,

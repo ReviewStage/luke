@@ -5,6 +5,7 @@ import { gzipSync } from "node:zlib";
 import { sentryEsbuildPlugin } from "@sentry/esbuild-plugin";
 import { build } from "esbuild";
 import { signingModeDefine } from "./package-config.mjs";
+import { tailwindPlugin } from "./tailwind.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const appRoot = path.resolve(scriptDirectory, "..");
@@ -106,11 +107,13 @@ await Promise.all([
   }),
   build({
     // The stylesheet entry `@import`s the renderer's stylesheets; esbuild
-    // inlines them into the single `styles.css` the renderer HTML links.
+    // inlines them into the single `styles.css` the renderer HTML links. The
+    // Tailwind entry among them is compiled by the plugin as it is loaded.
     entryPoints: [path.join(appRoot, "src/renderer/styles/index.css")],
     outfile: path.join(outputRoot, "renderer/styles.css"),
     bundle: true,
     target: "chrome140",
+    plugins: [tailwindPlugin()],
     minify: true,
     sourcemap: true,
     logLevel: "info",

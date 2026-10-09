@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -19,10 +20,10 @@ function said(count: number): TranscriptRegion {
         key: "call-1",
         startedAt: 1_000,
         live: true,
-        lines: Array.from({ length: count }, (_, index) => ({
-          key: String(index),
-          speaker: TRANSCRIPT_SPEAKER.USER,
-          text: `Line ${index}`,
+        messages: Array.from({ length: count }, (_, index) => ({
+          id: String(index),
+          role: TRANSCRIPT_SPEAKER.USER,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: `Line ${index}` }],
         })),
       },
     ],
@@ -38,12 +39,83 @@ afterEach(() => {
 
 /** The list's scroll box as jsdom lays it out: a fixed height over a content height the test sets. */
 function scrollBox(container: HTMLElement, contentHeight: number): HTMLElement {
-  const box = container.querySelector<HTMLElement>(".plan-transcript-scroll");
+  const box = container.querySelector<HTMLElement>('[role="log"]');
   assert.ok(box);
   Object.defineProperty(box, "clientHeight", { configurable: true, value: 400 });
   Object.defineProperty(box, "scrollHeight", { configurable: true, value: contentHeight });
   return box;
 }
+
+test("each line is drawn under its speaker, the developer's and Luke's told apart", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(PlanTranscript, {
+      region: {
+        kind: TRANSCRIPT_REGION.READY,
+        earlierOmitted: false,
+        calls: [
+          {
+            key: "call-1",
+            startedAt: 1_000,
+            live: false,
+            messages: [
+              {
+                id: "0",
+                role: TRANSCRIPT_SPEAKER.USER,
+                parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Invites should expire." }],
+              },
+              {
+                id: "1",
+                role: TRANSCRIPT_SPEAKER.ASSISTANT,
+                parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "After how many days?" }],
+              },
+            ],
+          },
+        ],
+      },
+      onRetry: () => undefined,
+    }),
+  );
+  assert.match(drawn, /class="plan-transcript ph-no-capture"/u);
+  assert.match(
+    drawn,
+    /You<\/span>.*Invites should expire\..*Luke<\/span>.*After how many days\?/su,
+  );
+  assert.match(drawn, /is-user.*is-assistant/su);
+});
+
+test("a spoken line that reads as a markdown image draws no image, so the tab asks nothing of its address", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(PlanTranscript, {
+      region: {
+        kind: TRANSCRIPT_REGION.READY,
+        earlierOmitted: false,
+        calls: [
+          {
+            key: "call-1",
+            startedAt: 1_000,
+            live: false,
+            messages: [
+              {
+                id: "0",
+                role: TRANSCRIPT_SPEAKER.USER,
+                parts: [
+                  {
+                    type: TRANSCRIPT_PART_TYPE.TEXT,
+                    text: "Look at ![the chart](https://example.test/chart.png) first.",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      onRetry: () => undefined,
+    }),
+  );
+  assert.doesNotMatch(drawn, /<img/u);
+  assert.doesNotMatch(drawn, /example\.test/u);
+  assert.match(drawn, /Look at/u);
+});
 
 test("the empty, reading, and failed states each say where the transcript stands, and a failure offers Try again", () => {
   const empty = renderToStaticMarkup(

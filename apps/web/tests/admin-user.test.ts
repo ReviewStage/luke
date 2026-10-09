@@ -46,7 +46,6 @@ function userSource(usage: Partial<AdminUserSource["usage"]> = {}): AdminUserSou
         lastActiveDay: null,
         calls: 0,
       },
-      quotaLimitedDaysWindow: 0,
       ...usage,
     },
   };
@@ -197,11 +196,10 @@ test("the account and its all-time history pass through untouched", () => {
     lastActiveDay: "2026-08-17",
     calls: 1020,
   };
-  const detail = build({ allTime, quotaLimitedDaysWindow: 2 });
+  const detail = build({ allTime });
   assert.equal(detail.generatedAt, NOON_UTC);
   assert.deepEqual(detail.account, userSource().account);
   assert.deepEqual(detail.activity.allTime, allTime);
-  assert.equal(detail.activity.quotaLimitedDaysWindow, 2);
 });
 
 test("an account id is read bounded from the query, or not at all", () => {

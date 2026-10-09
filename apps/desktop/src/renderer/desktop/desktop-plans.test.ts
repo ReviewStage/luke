@@ -316,9 +316,17 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
                 key: "call-1",
                 startedAt: 1_000,
                 live: true,
-                lines: [
-                  { key: "0", speaker: "user", text: "Invites should expire." },
-                  { key: "1", speaker: "assistant", text: "After how many days?" },
+                messages: [
+                  {
+                    id: "0",
+                    role: "user",
+                    parts: [{ type: "text", text: "Invites should expire." }],
+                  },
+                  {
+                    id: "1",
+                    role: "assistant",
+                    parts: [{ type: "text", text: "After how many days?" }],
+                  },
                 ],
               },
             ],
@@ -330,13 +338,10 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
   );
 
   assert.match(markup, /<section class="plan-transcript ph-no-capture" aria-label="Transcript">/u);
+  assert.match(markup, /data-speaker="user">You<\/span>.*?<p[^>]*>Invites should expire\.<\/p>/su);
   assert.match(
     markup,
-    /data-speaker="user"><span[^>]*>You<\/span><p[^>]*>Invites should expire\.<\/p>/u,
-  );
-  assert.match(
-    markup,
-    /data-speaker="assistant"><span[^>]*>Luke<\/span><p[^>]*>After how many days\?<\/p>/u,
+    /data-speaker="assistant">Luke<\/span>.*?<p[^>]*>After how many days\?<\/p>/su,
   );
   assert.match(markup, />Live</u);
 });

@@ -181,9 +181,10 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
   const modelFor = (admitted: AdmittedConversation): LanguageModel | undefined => {
     const access = seams.openAi();
     if (!access) return undefined;
-    return meteredModel(openAiBrainModel(access.apiKey, access.modelId), () =>
-      seams.spend(admitted.target.userId),
-    );
+    return meteredModel(openAiBrainModel(access.apiKey, access.modelId), {
+      spend: () => seams.spend(admitted.target.userId),
+      report: (message) => console.warn(message),
+    });
   };
 
   /** The plan a conversation belongs to, as the account owns it now; nothing once it is deleted. */
@@ -257,11 +258,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           plan === undefined
             ? undefined
             : {
-                plan: {
-                  userId: target.userId,
-                  planId: plan.plan.id,
-                  header: { name: plan.plan.name },
-                },
+                plan: { userId: target.userId, planId: plan.plan.id },
                 research: {
                   turnId: binding.turn.turnId,
                   budget: research,
@@ -269,7 +266,7 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                   spend: Effect.tryPromise({
                     try: () => seams.spend(target.userId),
                     catch: (cause) => new MeterUnavailable({ cause }),
-                  }).pipe(Effect.map((spent) => spent.allowed)),
+                  }),
                 },
               },
           input,

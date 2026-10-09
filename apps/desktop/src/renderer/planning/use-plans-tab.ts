@@ -20,12 +20,15 @@ import {
   documentRegion,
   MICROPHONE_PRESS,
   microphoneButton,
+  type PendingRenames,
   PLANS_PAGE,
   type PlansPage,
   planningCallHoldsPanel,
   plansPage,
   recentFolders,
+  renamedView,
   START_FAILED_NOTE,
+  unsettledRenames,
 } from "./planning-model";
 import {
   type HeardCall,
@@ -42,7 +45,9 @@ import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-si
  * The tab draws the planning view main holds and the voice window's report,
  * and every press is an act. It saves nothing and decides nothing about a
  * plan: the plan's notetaker writes the document, and the tab redraws it in
- * place as the host brings its drafts and its reads. The plan the host has open is the
+ * place as the host brings its drafts and its reads. A rename is the one
+ * press drawn before the host answers it: the new name shows at once, and
+ * goes back to the old one if the service refuses it. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Escape, another plan, New plan, a delete, or a sign-out
  * leaves it. With none open, the tab is the new-plan page.
@@ -101,6 +106,12 @@ export interface PlansControl {
   };
   /** Leaves the open plan for the new-plan page, which ends its call. */
   onLeavePlan: () => void;
+  /**
+   * Renames a plan to a name already trimmed and changed, drawn under it at
+   * once and under its old name again if the service refuses; answers
+   * whether it was renamed.
+   */
+  onRenamePlan: (planId: string, name: string) => Promise<boolean>;
   /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
@@ -142,7 +153,12 @@ export function usePlansTab(input: {
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
   const sidePanel = useSidePanel(fixtureSidePanel(input.run));
-  const planning = fixture ?? input.planning;
+  const viewed = fixture ?? input.planning;
+  // A name given here stands until main's view carries it, so a rename that
+  // landed never flickers back while main's copy of the view catches up.
+  const [renames, setRenames] = useState<PendingRenames>(new Map());
+  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  const planning = renamedView(viewed, renames);
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
   const region = documentRegion(planning);
@@ -173,6 +189,21 @@ export function usePlansTab(input: {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.PLANNING_DELETE, { planId }).catch(() => false);
     return deleted ? { status: ACTION_RESULT_STATUS.ACCEPTED } : DELETE_REFUSED;
+  };
+
+  // A fixture's plans are renamed nowhere, as they are read from nowhere.
+  const renamePlan = async (planId: string, name: string): Promise<boolean> => {
+    if (fixture !== undefined) return false;
+    setRenames((held) => new Map(held).set(planId, name));
+    const renamed = await act(ACT_KIND.PLANNING_RENAME, { planId, name }).catch(() => false);
+    if (!renamed) {
+      setRenames((held) =>
+        held.get(planId) === name
+          ? new Map([...held].filter(([pending]) => pending !== planId))
+          : held,
+      );
+    }
+    return renamed;
   };
 
   // Copy formats the document drawn now and hands it to main's clipboard;
@@ -316,6 +347,7 @@ export function usePlansTab(input: {
       start: startPlan,
     },
     onLeavePlan: leavePlan,
+    onRenamePlan: renamePlan,
     onDeletePlan: deletePlan,
     back,
   };

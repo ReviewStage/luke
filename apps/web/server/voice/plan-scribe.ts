@@ -172,14 +172,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     const notesRead = notes.length;
     const stored = yield* readPlan(options.userId, options.planId);
     if (Option.isNone(stored)) return;
-    const spent = yield* spendHostedMeter({
-      userId: options.userId,
-      now: yield* Clock.currentTimeMillis,
-    });
-    if (!spent.allowed) {
-      options.report("The plan's notetaker wrote nothing: the day's allowance is spent");
-      return;
-    }
+    yield* spendHostedMeter({ userId: options.userId, now: yield* Clock.currentTimeMillis });
     const earlier = ledger
       .utterances()
       .filter((line) => line.endMs <= cursor.heardThrough)
@@ -259,7 +252,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       // Notes that change nothing are the model saying nothing new was said, and need no save.
       if (taken.content !== content) {
         const saved = yield* saveNotes(
-          { userId: options.userId, planId: options.planId, header },
+          { userId: options.userId, planId: options.planId },
           output.notes,
         );
         if (saved.status !== PLAN_SAVE_STATUS.SAVED) {

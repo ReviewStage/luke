@@ -1,4 +1,4 @@
-import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
 import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
@@ -8,7 +8,11 @@ import {
   type PlanCode,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
-import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import {
+  type PlanTranscript,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptMessage,
+} from "@sidecar/hosted/transcript-wire";
 import { LIVE_STATUS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import type { VoiceView } from "#shared/messages/voice-view";
@@ -226,24 +230,29 @@ const FIXTURE_CODE: PlanCode = {
 
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
-/** What was said on the fixture plan's one earlier call, as the record answers it. */
+/** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place. */
 const FIXTURE_TRANSCRIPT: PlanTranscript = {
   calls: [
     {
       id: "3c5e7a9b-1d2f-4a6c-8e0b-2d4f6a8c0e1a",
       startedAt: Date.parse("2026-10-07T16:20:00Z"),
-      lines: [
-        { speaker: USER, text: "I want members to be able to invite a teammate by email." },
-        { speaker: ASSISTANT, text: "Who can invite today — only admins?" },
-        {
-          speaker: USER,
-          text: "Right, an admin creates the account by hand. Any member should be able to.",
-        },
-        {
-          speaker: ASSISTANT,
-          text: "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
-        },
-      ],
+      messages: (
+        [
+          [USER, "I want members to be able to invite a teammate by email."],
+          [ASSISTANT, "Who can invite today — only admins?"],
+          [USER, "Right, an admin creates the account by hand. Any member should be able to."],
+          [
+            ASSISTANT,
+            "Got it. I'll model an invite as a pending membership, so removing it works like removing a member.",
+          ],
+        ] as const
+      ).map(
+        ([role, text], index): TranscriptMessage => ({
+          id: String(index),
+          role,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }],
+        }),
+      ),
     },
   ],
   earlierOmitted: false,
@@ -270,26 +279,57 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
  * first time it reads a new drawing.
  */
 const FIXTURE_DRAWING: readonly DrawingElement[] = [
-  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -70, text: "Inviting a teammate" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "member", x: 0, y: 0, label: "Member" },
-  { type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "invites", x: 320, y: 0, label: "POST /invites" },
-  { type: BOARD_ELEMENT_TYPE.ELLIPSE, id: "email", x: 640, y: 0, label: "Invite email" },
+  { type: BOARD_ELEMENT_TYPE.TEXT, id: "title", x: 0, y: -110, text: "Inviting a teammate" },
+  {
+    type: DRAWING_ZONE,
+    id: "service",
+    x: 280,
+    y: -60,
+    width: 280,
+    height: 380,
+    title: "Invites service",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "member",
+    x: 0,
+    y: 0,
+    label: "Member",
+    backgroundColor: "#a5d8ff",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.RECTANGLE,
+    id: "invites",
+    x: 320,
+    y: 0,
+    label: "POST /invites",
+    backgroundColor: "#b2f2bb",
+  },
+  {
+    type: BOARD_ELEMENT_TYPE.ELLIPSE,
+    id: "email",
+    x: 640,
+    y: 0,
+    label: "Invite email",
+    backgroundColor: "#d0bfff",
+  },
   {
     type: BOARD_ELEMENT_TYPE.DIAMOND,
     id: "valid",
-    x: 640,
-    y: 180,
-    width: 200,
-    height: 110,
+    x: 620,
+    y: 160,
+    width: 240,
+    height: 140,
     label: "Link still valid?",
+    backgroundColor: "#fff3bf",
   },
   {
     type: BOARD_ELEMENT_TYPE.RECTANGLE,
     id: "joined",
     x: 320,
-    y: 195,
+    y: 190,
     label: "Joins workspace",
-    backgroundColor: "#1971c2",
+    backgroundColor: "#b2f2bb",
   },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "sends", from: "member", to: "invites", label: "email" },
   { type: BOARD_ELEMENT_TYPE.ARROW, id: "mails", from: "invites", to: "email" },

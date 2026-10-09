@@ -28,7 +28,9 @@
         "src/main/index.ts",
         "src/preload/index.ts",
         "src/renderer/index.tsx",
+        "src/renderer/styles/index.css",
         "src/renderer/whiteboard/index.tsx",
+        "src/renderer/whiteboard/index.css",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

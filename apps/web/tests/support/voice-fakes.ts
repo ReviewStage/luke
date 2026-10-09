@@ -6,7 +6,6 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
-import type { HostedSpend } from "../../server/hosted/quota";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
@@ -167,7 +166,6 @@ export async function startFakeOpenAi(): Promise<FakeOpenAi> {
   return fake;
 }
 
-export const FAKE_QUOTA = { used: 3, limit: 5000, resetsAt: 1_800_000_000_000 };
 export const FAKE_USER_ID = "user-1";
 export const FAKE_BEARER = "Bearer account-token-1";
 
@@ -180,12 +178,10 @@ interface RecordedSeconds {
 export interface FakeAccounts extends VoiceAccounts {
   /** Every bearer resolved, in order, whatever it resolved to. */
   resolved: string[];
-  /** Every account whose allowance was spent, in order. */
+  /** Every account a session was counted against, in order. */
   spent: string[];
   /** Every seconds report taken, repeated ones included. */
   reports: RecordedSeconds[];
-  /** What the next spend answers; open by default. */
-  spendAnswer: HostedSpend;
   /** The one bearer that resolves to `FAKE_USER_ID`; every other resolves to nobody. */
   knownBearer: string;
 }
@@ -197,7 +193,6 @@ export function fakeAccounts(): FakeAccounts {
     resolved: [],
     spent: [],
     reports: [],
-    spendAnswer: { allowed: true, quota: FAKE_QUOTA },
     knownBearer: FAKE_BEARER,
     resolveUserId(authorization) {
       return Effect.sync(() => {
@@ -208,7 +203,6 @@ export function fakeAccounts(): FakeAccounts {
     spend(userId) {
       return Effect.sync(() => {
         fake.spent.push(userId);
-        return fake.spendAnswer;
       });
     },
     recordSeconds(input) {

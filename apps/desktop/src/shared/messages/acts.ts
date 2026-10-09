@@ -16,6 +16,7 @@ import {
 import {
   type PlanningStartAnswer,
   planningBoardSaveParamsSchema,
+  planningRenameParamsSchema,
   planningSetFolderParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
@@ -76,7 +77,7 @@ export const ACT_KIND = {
   /**
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
-   * plan left, a plan started on a folder, and a plan deleted. The view
+   * plan left, a plan started on a folder, and a plan renamed or deleted. The view
    * arrives on the document rather than as an answer; nothing here writes a
    * plan's document, which the plan's notetaker alone saves.
    */
@@ -85,6 +86,7 @@ export const ACT_KIND = {
   PLANNING_CLOSE: "planning.close",
   PLANNING_START: "planning.start",
   PLANNING_DELETE: "planning.delete",
+  PLANNING_RENAME: "planning.rename",
   /** The new-plan form's Choose folder press: the folder picker, answering the chosen path or null. */
   PLANNING_CHOOSE_FOLDER: "planning.chooseFolder",
   /** A plan's folder on this Mac, chosen again for a plan this Mac holds none for. */
@@ -354,6 +356,11 @@ export const ACT = {
     payload: record({ planId: exactId }),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not delete that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_RENAME]: {
+    payload: actSchema(planningRenameParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not rename that plan on this system.",
   },
   [ACT_KIND.PLANNING_CHOOSE_FOLDER]: {
     payload: noPayload,

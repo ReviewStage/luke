@@ -1,7 +1,7 @@
 import { WireValueSchema } from "@sidecar/wire";
 import { declareReader, describeWire, emitJsonSchema, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { BOARD_ELEMENT_TYPE } from "./board-vocabulary.js";
+import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "./board-vocabulary.js";
 
 /**
  * board-wire.ts -- a plan's whiteboard: the Excalidraw scene on it, and Luke's latest drawing for it, as the service stores them and the Plans tab reads them.
@@ -173,6 +173,23 @@ const drawingTextSchema = EffectSchema.Struct({
   strokeColor: EffectSchema.optionalKey(COLOR),
 });
 
+const drawingZoneSchema = EffectSchema.Struct({
+  type: EffectSchema.Literal(DRAWING_ZONE),
+  id: DRAWING_ID,
+  x: describeWire(COORDINATE, "Left edge, in pixels."),
+  y: describeWire(COORDINATE, "Top edge, in pixels."),
+  width: describeWire(SIZE, "Width in pixels, with room for the shapes inside it."),
+  height: describeWire(SIZE, "Height in pixels, with room for the shapes inside it."),
+  title: EffectSchema.optionalKey(
+    describeWire(
+      EffectSchema.String.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(200)),
+      "Words drawn at its top-left corner, clear of the shapes inside it.",
+    ),
+  ),
+  strokeColor: EffectSchema.optionalKey(COLOR),
+  backgroundColor: EffectSchema.optionalKey(COLOR),
+});
+
 const drawingArrowSchema = EffectSchema.Struct({
   type: EffectSchema.Literal(BOARD_ELEMENT_TYPE.ARROW),
   id: DRAWING_ID,
@@ -185,6 +202,7 @@ const drawingArrowSchema = EffectSchema.Struct({
 const drawingElementSchema = EffectSchema.Union([
   drawingShapeSchema,
   drawingTextSchema,
+  drawingZoneSchema,
   drawingArrowSchema,
 ]);
 
@@ -196,7 +214,7 @@ export const drawingElementsSchema = describeWire(
     EffectSchema.isMinLength(1),
     EffectSchema.isMaxLength(BOARD_BOUNDS.MAX_DRAWING_ELEMENTS),
   ),
-  "The whole diagram, every shape, text, and arrow in it.",
+  "The whole diagram, every shape, text, zone, and arrow in it.",
 );
 
 /** A plan's board as it stands: the empty scene and no drawing before anything was drawn. */

@@ -19,8 +19,8 @@ import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
-import { PLANS_PAGE } from "./planning-model";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
+import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB } from "./use-side-panel";
 
@@ -48,8 +48,11 @@ interface Standing {
   voice: VoiceView;
 }
 
-/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order. */
-function mount(initial: Partial<Standing> = {}) {
+/** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
+function mount(
+  initial: Partial<Standing> = {},
+  answers: { [Kind in ActKind]?: () => Promise<ActResultFor<Kind>> } = {},
+) {
   const told: ActKind[] = [];
   let control: PlansControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -66,12 +69,14 @@ function mount(initial: Partial<Standing> = {}) {
     restand = setHeld;
     control = usePlansTab({
       acts: {
-        // Nothing answers in this test: an asked act is recorded and refused.
+        // An act the test does not answer is recorded and refused.
         act: <Kind extends ActKind>(
           kind: Kind,
           ..._args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
           told.push(kind);
+          const answer = answers[kind];
+          if (answer !== undefined) return answer();
           return Promise.reject(new Error("Not answered in this test."));
         },
         tell: (kind: ActKind, ..._args: unknown[]) => {
@@ -207,6 +212,59 @@ test("deleting asks for the named plan's delete and answers a refusal, and a fix
   assert.deepEqual(fixture.told, []);
 });
 
+test("a rename draws the new name at once, keeps it until the view carries it, and puts the old one back when refused", async () => {
+  const { document: _document, ...summary } = PLAN;
+  const listed: PlanningView = { ...OPEN, plans: [summary] };
+  const answers: boolean[] = [false, true];
+  const tab = mount(
+    { shown: true, planning: listed },
+    { [ACT_KIND.PLANNING_RENAME]: () => Promise.resolve(answers.shift() ?? false) },
+  );
+  const names = () => {
+    const { region } = tab.control();
+    return [
+      tab.control().plans.map((plan) => plan.name),
+      region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
+    ];
+  };
+
+  let refused: Promise<boolean> = Promise.resolve(true);
+  act(() => {
+    refused = tab.control().onRenamePlan(PLAN.id, "Team invites");
+  });
+  assert.deepEqual(names(), [["Team invites"], "Team invites"]);
+  await act(async () => {
+    assert.equal(await refused, false);
+  });
+  assert.deepEqual(names(), [["Teammate invitations"], "Teammate invitations"]);
+
+  await act(async () => {
+    assert.equal(await tab.control().onRenamePlan(PLAN.id, "Team invites"), true);
+  });
+  assert.deepEqual(names(), [["Team invites"], "Team invites"]);
+  const renamed = { ...PLAN, name: "Team invites" };
+  tab.stand({
+    planning: {
+      ...listed,
+      plans: [{ ...summary, name: renamed.name }],
+      document: { status: PLANNING_READ.READY, plan: renamed },
+    },
+  });
+  // Carried by the view, the name is the view's again: a later name drawn there is drawn here.
+  tab.stand({ planning: { ...listed, plans: [{ ...summary, name: "Invites v2" }] } });
+  assert.deepEqual(names(), [["Invites v2"], "Teammate invitations"]);
+  assert.deepEqual(
+    tab.told.filter((kind) => kind === ACT_KIND.PLANNING_RENAME),
+    [ACT_KIND.PLANNING_RENAME, ACT_KIND.PLANNING_RENAME],
+  );
+});
+
+test("a fixture's plan is renamed nowhere", async () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
+  assert.equal(await fixture.control().onRenamePlan(PLAN.id, "Team invites"), false);
+  assert.deepEqual(fixture.told, []);
+});
+
 test("the microphone asks for the open plan's call, and the planning profile's fixture reads and leaves nothing", () => {
   const live = mount({ shown: true, planning: OPEN });
   act(() => live.control().microphone.onPress());
@@ -238,7 +296,7 @@ test("the planning profile's fixture shows the planning model's command and the 
 /** The words of every call the transcript draws, in order, with whether each call stands now. */
 function callsDrawn(region: TranscriptRegion): (readonly [boolean, string[]])[] {
   if (region.kind !== TRANSCRIPT_REGION.READY) return [];
-  return region.calls.map((call) => [call.live, call.lines.map((line) => line.text)] as const);
+  return region.calls.map((call) => [call.live, call.messages.map(messageText)] as const);
 }
 
 test("the open plan's call grows the transcript as it is said, and hanging up keeps its words until the record holds them", () => {
@@ -274,7 +332,13 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
       {
         id: CALL,
         startedAt: 1_000,
-        lines: [{ speaker: "user" as const, text: "Invites should expire after a week." }],
+        messages: [
+          {
+            id: "0",
+            role: "user" as const,
+            parts: [{ type: "text" as const, text: "Invites should expire after a week." }],
+          },
+        ],
       },
     ],
     earlierOmitted: false,

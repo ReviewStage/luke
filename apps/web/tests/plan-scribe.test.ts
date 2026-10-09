@@ -79,7 +79,7 @@ const savedBodyOnce = (userId: string, planId: string, expected: (body: string) 
 /** A plan already holding the invitations draft, as an earlier run of the call left it. */
 const openDraftedPlan = Effect.gen(function* () {
   const opened = yield* openPlan;
-  yield* saveNotes({ ...opened, header: RELAY_PLAN }, notesFor(INVITATIONS_DRAFT));
+  yield* saveNotes(opened, notesFor(INVITATIONS_DRAFT));
   return opened;
 });
 

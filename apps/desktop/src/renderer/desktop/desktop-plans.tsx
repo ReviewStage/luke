@@ -1,4 +1,6 @@
+import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import { CheckIcon, CopyIcon } from "@sidecar/panel";
+import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
@@ -14,6 +16,7 @@ import { MicrophoneRow } from "../planning/planning-parts";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
+import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
 
 /**
@@ -22,7 +25,8 @@ import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
  * the window's full height, while that is open (or over them, while it fills
  * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
- * toolbar offers no way out of the open plan, only its actions.
+ * toolbar offers no way out of the open plan, only its actions. Its title is
+ * the plan's name, and a press on it renames the plan in place.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -31,7 +35,7 @@ function Toolbar({
   subtitle,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   subtitle?: string | undefined;
   children?: React.ReactNode;
 }): React.JSX.Element {
@@ -72,10 +76,55 @@ function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element
   );
 }
 
+/**
+ * The open plan's name as the toolbar's title, which a press, or the ⋯
+ * menu's Rename, opens as its field; a key that ends the edit hands focus
+ * back to the title.
+ */
+function PlanTitle({
+  plan,
+  rename,
+}: {
+  plan: PlanSummary;
+  rename: ReturnType<typeof usePlanRename>;
+}): React.JSX.Element {
+  const title = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (rename.editing || !refocus.current) return;
+    refocus.current = false;
+    title.current?.focus();
+  }, [rename.editing]);
+  if (rename.editing) {
+    return (
+      <PlanNameField
+        name={plan.name}
+        className="desktop-toolbar-title-field"
+        onEnd={(edit) => {
+          refocus.current = edit.byKey;
+          rename.end(edit);
+        }}
+      />
+    );
+  }
+  return (
+    <button
+      ref={title}
+      type="button"
+      className="desktop-toolbar-title-button"
+      onClick={rename.begin}
+    >
+      {plan.name}
+    </button>
+  );
+}
+
 /** The open plan's region: its document, or the state standing in its place. */
 function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
+  const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
+  const rename = usePlanRename(planId, plans.onRenamePlan);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
       region.kind === DOCUMENT_REGION.READING
@@ -116,9 +165,14 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
         <Toolbar
-          title={plan.name}
+          title={<PlanTitle plan={plan} rename={rename} />}
           subtitle={folderPath === undefined ? undefined : folderLine(folderPath)}
         >
+          {rename.note !== undefined ? (
+            <p className="desktop-toolbar-note" role="alert">
+              {rename.note}
+            </p>
+          ) : null}
           {folderPath === undefined ? (
             <button
               type="button"
@@ -129,7 +183,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             </button>
           ) : null}
           <CopyButton copy={plans.copy} />
-          <PlanActionsButton key={plan.id} plans={plans} plan={plan} />
+          <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
           {/* The open panel holds its own toggle in its own top row. */}
           {sidePanel.open ? null : <SidePanelToggle panel={sidePanel} />}
         </Toolbar>

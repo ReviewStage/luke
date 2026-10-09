@@ -6,7 +6,7 @@ import type { WebStoreRun } from "../../runtime.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
 import { HostedEnvironment } from "../environment.js";
-import { type HostedSpend, spendHostedMeter } from "../quota.js";
+import { spendHostedMeter } from "../quota.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
 import { BRAIN_HOST_ENVIRONMENT, BRAIN_HOST_MODEL_FIXTURE } from "./bounds.js";
 import { conversationOwnedBy, runtimeSessionOwner } from "./conversation.js";
@@ -18,7 +18,7 @@ import { deploymentEveOrigin } from "./eve-origin.js";
  * over `HostedEnvironment` so every secret is read once, as the environment
  * is, and travels sealed: the bearer's account through the auth service's
  * own userinfo, the writer over the hosted tool set, Luke's own OpenAI key
- * and model, and the daily meter. The writer is built on first use and kept
+ * and model, and the usage meter. The writer is built on first use and kept
  * for the instance, so the agent's discovery, which imports the authored
  * files, touches no database. An authored file hands what it needs here and
  * nothing else.
@@ -44,7 +44,8 @@ export interface BrainHostSeams {
   readonly openAi: () => OpenAiAccess | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
   readonly scriptedModel: () => boolean;
-  readonly spend: (userId: string) => Promise<HostedSpend>;
+  /** Counts one hosted use against the account's day. */
+  readonly spend: (userId: string) => Promise<void>;
   readonly now: () => number;
 }
 
@@ -88,7 +89,7 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
             },
       scriptedModel: () =>
         process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
-      spend: (userId) => run(spendHostedMeter({ userId, now: Date.now() })),
+      spend: (userId) => run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() }))),
       now: () => Date.now(),
     };
   },

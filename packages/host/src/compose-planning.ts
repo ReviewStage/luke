@@ -17,6 +17,7 @@ import {
   type PlanningStartAnswer,
   type PlanningView,
   planningBoardSaveParamsSchema,
+  planningRenameParamsSchema,
   planningSetFolderParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
@@ -105,6 +106,7 @@ export type PlanningClient = Pick<
   | "open"
   | "create"
   | "delete"
+  | "rename"
   | "claimCommand"
   | "settleCommand"
   | "readBoard"
@@ -476,6 +478,40 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             write({ plans, folders: kept });
             yield* readList;
             return { deleted: true };
+          }),
+        );
+      }),
+    // The service answers the plan as renamed, so the list's row and the
+    // open document take it in place and nothing is read again.
+    [GATEWAY_METHOD.PLANNING_RENAME]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningRenameParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("renaming a plan names it and its name");
+        if (!gate()) return { renamed: false };
+        const { planId, name } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const renamed = yield* Effect.provide(
+              client.rename(planId, { name }),
+              FetchHttpClient.layer,
+            );
+            if (renamed === undefined) return { renamed: false };
+            const plans = view.plans.map((plan) =>
+              plan.id === planId ? { ...plan, name: renamed.name } : plan,
+            );
+            const held = heldPlanOf(planId);
+            write(
+              held === undefined
+                ? { plans }
+                : {
+                    plans,
+                    document: {
+                      status: PLANNING_READ.READY,
+                      plan: { ...held, name: renamed.name, document: renamed.document },
+                    },
+                  },
+            );
+            return { renamed: true };
           }),
         );
       }),

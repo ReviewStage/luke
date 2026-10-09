@@ -300,6 +300,23 @@ body,
   font-weight: 600;
 }
 
+/* A sidebar plan renamed in place keeps its row: the field takes the name's
+   own line and type, ringed, and the folder stays beneath it. */
+.sidebar-plan-field {
+  width: calc(100% + 10px);
+  margin: -2px -5px;
+  padding: 1px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--desktop-ground);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  outline: none;
+}
+
 .sidebar-plan-repository {
   color: var(--text-secondary);
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -447,14 +464,54 @@ body,
   flex: 1;
 }
 
+/* Its room reaches 6px left of the words, so the title's own hover fill and
+   field ring, which start there, are not clipped. */
 .desktop-toolbar-title {
-  margin: 0;
+  margin: 0 0 0 -6px;
+  padding-left: 6px;
   overflow: hidden;
   font-size: 15px;
   font-weight: 680;
   letter-spacing: -0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* The title is the plan's name and renames it on a press, the way Linear's
+   and Codex's do: no chrome until the pointer is on it, and then the field
+   opens in the same place and type, ringed rather than bordered so nothing
+   moves. */
+.desktop-toolbar-title-button,
+.desktop-toolbar-title-field {
+  max-width: 100%;
+  margin: 0 0 0 -6px;
+  padding: 1px 6px;
+  border: 0;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-toolbar-title-button {
+  overflow: hidden;
+  background: none;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.desktop-toolbar-title-button:hover {
+  background: var(--raised);
+}
+
+.desktop-toolbar-title-field {
+  width: calc(100% + 6px);
+  background: var(--raised);
+  box-shadow: inset 0 0 0 1px var(--selected-edge);
+  outline: none;
 }
 
 .desktop-toolbar-subtitle {
@@ -717,10 +774,13 @@ body,
 }
 
 .desktop-document .plan-assumptions-heading {
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+  margin-bottom: 0.6em;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-primary);
+  /* The plan body's own h2: 1.3em of its 15px, which this well's 14px would not give. */
+  font-size: 19.5px;
+  letter-spacing: -0.01em;
 }
 
 /* The call bar ------------------------------------------------------------- */
@@ -943,11 +1003,9 @@ body,
 
 .plan-compose-menu-heading {
   margin: 4px 8px 6px;
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .plan-compose-menu-row {
@@ -1141,20 +1199,10 @@ body,
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 0 40px 60px;
-  /* A landed search result scrolls to the top of this column, clear of the
-     page's pinned reset line and with the column's own top margin above it. */
-  scroll-padding-top: 56px;
-}
-
-/* The column's top margin, drawn as a spacer rather than as padding. Note that
-   we keep it out of the padding, because a sticky header pins inside the
-   scroller's padding: a page's pinned head would stand 28px below the toolbar,
-   with rows scrolling past in the gap above it. */
-.settings-page-scroll::before {
-  display: block;
-  height: 28px;
-  content: "";
+  padding: 28px 40px 60px;
+  /* A landed search result scrolls to the top of this column with the
+     column's own top margin above it. */
+  scroll-padding-top: 28px;
 }
 
 /* The page scrolls with the column rather than inside a scroller of its own. */
@@ -1166,32 +1214,12 @@ body,
   zoom: 1.15;
 }
 
-/* The list on the left is the way between pages, so the panel's own index
-   and back buttons are not drawn; a page's reset stays. */
+/* The list on the left is the way between pages and the toolbar names the
+   page and carries its reset, so the panel's own index and page head are not
+   drawn. */
 .settings-page-scroll .settings-index,
-.settings-page-scroll .settings-header > .icon-button,
-.settings-page-scroll .settings-header > strong {
-  display: none;
-}
-
 .settings-page-scroll .settings-header {
-  justify-content: flex-end;
-}
-
-/* The toolbar's hairline already edges the column, so a passing row slides
-   under the pinned head without the panel's dissolve band below it. */
-.settings-page-scroll .settings-header::after {
-  content: none;
-}
-
-/* A section names itself in sentence case, as the sidebar's own heading does;
-   the page's zoom brings this to the sidebar heading's 12px. */
-.settings-page-scroll .settings-section h2 {
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: normal;
-  text-transform: none;
+  display: none;
 }
 
 /* Onboarding ----------------------------------------------------------------- */
