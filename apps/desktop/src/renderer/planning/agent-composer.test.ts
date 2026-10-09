@@ -318,6 +318,25 @@ test("a message that did not go comes back into the box with why under the card 
   assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
 });
 
+test("a send whose answer was lost and whose row has since landed is read back by that row when Retry sends it again under the same key, so the line is drawn once", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.type("Add tests.");
+  tab.key({ key: "Enter" });
+  await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.deepEqual(tab.bubbles(), []);
+  // The service had taken the words after all: its row lands before Retry is pressed.
+  await tab.stand({ messages: [PLAN, row("m-1", "Add tests.")] });
+  assert.deepEqual(tab.bubbles(), ["Add tests."]);
+  const retry = tab.retry();
+  assert.ok(retry);
+  act(() => retry.click());
+  assert.equal(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
+  // The service answers the repeat with nothing new written: the row that stands is the line's.
+  await tab.answer(1, RUNNING_AGENT);
+  assert.deepEqual(tab.bubbles(), ["Add tests."]);
+  assert.equal(tab.field().value, "");
+});
+
 test("two lines of the same words sent before either is read back are read back one row at a time, across pages", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.type("Add tests.");

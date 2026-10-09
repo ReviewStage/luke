@@ -162,6 +162,23 @@ function refusedPart(
   return undefined;
 }
 
+/**
+ * The one key an earlier build wrote on a developer's line to a coding
+ * agent while it awaited its turn, naming how it was to be delivered. No
+ * row carries it any more and the vocabulary no longer admits it, but a
+ * row written before that build retired still may, so it is dropped on
+ * read and the row reads as the ordinary line it is, rather than refusing
+ * the page it stands on.
+ */
+const LEGACY_USER_METADATA_KEY = "delivery";
+
+/** The user metadata with the legacy key gone; anything else exactly as it came, for the schema to judge. */
+function withoutLegacyUserKey(metadata: UnparsedWireValue): UnparsedWireValue {
+  if (!isRecord(metadata) || !(LEGACY_USER_METADATA_KEY in metadata)) return metadata;
+  const { [LEGACY_USER_METADATA_KEY]: _legacy, ...rest } = metadata;
+  return rest;
+}
+
 /** A validated row typed by its role, its metadata read under that role's schema. */
 function readStoredMessage(
   message: ValidatedMessage,
@@ -173,12 +190,10 @@ function readStoredMessage(
   switch (message.role) {
     case MESSAGE_ROLE.USER: {
       const role = message.role;
-      return Result.map(underMetadata(readUserMetadata(metadata)), (value) => ({
-        id,
-        role,
-        parts,
-        metadata: value,
-      }));
+      return Result.map(
+        underMetadata(readUserMetadata(withoutLegacyUserKey(metadata))),
+        (value) => ({ id, role, parts, metadata: value }),
+      );
     }
     case MESSAGE_ROLE.ASSISTANT: {
       const role = message.role;
