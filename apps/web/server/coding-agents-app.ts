@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_STATUS,
   type CodingAgentSummary,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
@@ -559,12 +560,20 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* ownedAgent(seams, request);
-  const answer = yield* Cache.get(published, new PublishedKey({ userId, agentId: agent.id })).pipe(
+  // Whether the agent has ended is part of the key, so the first ask after its turn ends reads GitHub afresh.
+  const { status } = yield* summaryOf(userId, agent);
+  const ended = status !== CODING_AGENT_STATUS.STARTING && status !== CODING_AGENT_STATUS.RUNNING;
+  const answer = yield* Cache.get(
+    published,
+    new PublishedKey({ userId, agentId: agent.id, ended }),
+  ).pipe(
     Effect.catch((failure) => {
       switch (failure._tag) {
         // The row stood a statement ago; an agent gone between the two is not found, as it would be on the next ask.
         case "NoSuchAgent":
           return Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+        case "RepositoryNotReachable":
+          return Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
         case "SqlError":
         case "SchemaError":
           return hostedStoreOrUnavailable(Effect.fail(failure));

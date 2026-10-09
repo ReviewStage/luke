@@ -273,16 +273,30 @@ const PUBLISHED_VERB = {
 /** GitHub's own page of a pull request's changes: its Files tab. */
 const FILES_TAB = "/files";
 
-/** The command that brings the agent's branch onto a developer's machine, as Copy checkout command puts it on the clipboard. */
+/** The characters a branch name may hold and still stand bare in a shell; anything else is quoted. */
+const BARE_SHELL_WORD = /^[\w./-]+$/u;
+
+/** A word as a POSIX shell takes it whole: bare where every character is plain, else in single quotes, with a quote inside closed, escaped, and reopened. */
+function shellWord(word: string): string {
+  return BARE_SHELL_WORD.test(word) ? word : `'${word.replaceAll("'", "'\\''")}'`;
+}
+
+/** The command that brings the agent's branch onto a developer's machine, as Copy checkout command puts it on the clipboard; the branch quoted where a shell would read into it. */
 export function checkoutCommand(branch: string): string {
-  return `git fetch origin ${branch} && git switch ${branch}`;
+  const name = shellWord(branch);
+  return `git fetch origin ${name} && git switch ${name}`;
+}
+
+/** A branch as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
+function branchPath(branch: string): string {
+  return encodeURIComponent(branch).replaceAll("%2F", "/");
 }
 
 /** Where the agent's changes are read on GitHub: the pull request's Files tab, or the branch compared against the repository's default where there is no pull request yet. */
 export function changesUrl(published: CodingAgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return `${published.pullRequest.url}${FILES_TAB}`;
   if (published.branch === null) return undefined;
-  return `https://github.com/${published.repository}/compare/${published.branch}?expand=1`;
+  return `https://github.com/${published.repository}/compare/${branchPath(published.branch)}?expand=1`;
 }
 
 /** The number as the pill and the summary spell it. */

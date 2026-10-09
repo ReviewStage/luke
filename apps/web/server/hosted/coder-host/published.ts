@@ -22,7 +22,7 @@ import {
   pullRequestOfBranch,
 } from "../../github/pull-requests.js";
 import { type CodingAgent, readCodingAgent } from "../coding-agent-store.js";
-import { listMessagesPast } from "../store/index.js";
+import { listMessagesPast, type MessageCursor } from "../store/index.js";
 import type { StoreFailure } from "../store-failure.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
@@ -32,19 +32,27 @@ import { CURSOR_START } from "./transcript.js";
  * published.ts -- what a coding agent published: the branch it pushed and the pull request from it, found in its own transcript and confirmed on GitHub.
  *
  * The agent reaches GitHub through `git` and `gh` in its shell alone, so
- * its own transcript rows are where its branch and pull request are named,
- * and are named for this agent and no other: a second agent on the same
- * repository has rows of its own. The branch is read off the commands the
- * agent ran (a push, a branch cut, a pull request opened on a head, or any
- * branch spelled under `CODER.BRANCH_PREFIX`), the newest naming winning;
- * the pull request off any address of one on the agent's repository in
- * its words or in a tool's answer, case aside, the newest winning. GitHub
- * then says what stands: the pull request by its number, or the newest
- * from the branch where the words named none, with its head's checks, and
- * failing both, whether the branch was pushed at all. The answer is kept
- * per agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every
- * page of a held transcript asks GitHub a few times a minute at most, and
- * a read that failed is kept for no time, so the next ask tries again.
+ * its own transcript rows, every page of them, are where its branch and
+ * pull request are named, and are named for this agent and no other: a
+ * second agent on the same repository has rows of its own. The branch is
+ * read off the commands the agent ran (a push, a branch cut, a pull
+ * request opened on a head, or any branch spelled under
+ * `CODER.BRANCH_PREFIX`), the newest naming winning; the pull request off
+ * any address of one on the agent's repository in its words or in a
+ * tool's answer, case aside, the newest winning. The branch is the anchor:
+ * an agent whose commands named none published nothing, whatever
+ * addresses its reads turned up, and a pull request named by number is
+ * the agent's only where its head is that branch, so a link in a file the
+ * agent read is never worn as its own. GitHub then says what stands, once
+ * the developer's reach of the repository through the App is confirmed as
+ * a Start confirms it: the pull request by its number on that head, else
+ * the newest from the branch, else whether the branch was pushed at all,
+ * with the pull request's head's checks. The answer is kept per agent for
+ * `CODER.PUBLISHED_TTL` so a tab reading it beside every page of a held
+ * transcript asks GitHub a few times a minute at most, under a key that
+ * says whether the agent had ended, so the first read after a turn ends
+ * is a fresh one rather than the running turn's kept answer; a read that
+ * failed is kept for no time, so the next ask tries again.
  */
 
 /** The branch and the pull request number the agent's own transcript names, each where it does. */
@@ -145,10 +153,36 @@ export function publishedInTranscript(
   return { branch, pullRequestNumber };
 }
 
-/** What a read of what an agent published may fail with: the store, or GitHub on the developer's token. */
-type PublishedReadFailure = StoreFailure | GitHubUserReadFailure;
+/** The developer no longer reaches the agent's repository through the App, so nothing of it is read. */
+class RepositoryNotReachable extends Data.TaggedError("RepositoryNotReachable")<{
+  readonly repository: string;
+}> {}
+
+/** What a read of what an agent published may fail with: the store, GitHub on the developer's token, or a repository out of reach. */
+type PublishedReadFailure = StoreFailure | GitHubUserReadFailure | RepositoryNotReachable;
 
 type PublishedServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+
+/** The most pages of an agent's rows the scan walks: fifty of two hundred rows is far past any agent's conversation, and a scan past it has stopped reading rather than stopped quietly. */
+const SCAN_PAGES = 50;
+
+/** Every readable row of the agent's conversation, page after page from the start, in order. */
+const allMessages = (
+  userId: string,
+  agent: CodingAgent,
+): Effect.Effect<readonly StoredUIMessage[], StoreFailure, SqlClient.SqlClient> =>
+  Effect.gen(function* () {
+    const messages: StoredUIMessage[] = [];
+    let cursor: MessageCursor = CURSOR_START;
+    for (let page = 0; page < SCAN_PAGES; page += 1) {
+      const read = yield* listMessagesPast(userId, agent.conversationId, CODER_TOOL_SET, cursor);
+      // A page the vocabulary refuses holds nothing readable past the cursor; the scan ends on what it has.
+      if (!read.read.ok || read.read.value.length === 0) return messages;
+      messages.push(...read.read.value.map((record) => record.message));
+      cursor = read.cursor;
+    }
+    return yield* Effect.die(new Error(`an agent's conversation ran past ${SCAN_PAGES} pages`));
+  });
 
 /** The wire's pull request from GitHub's, with its head's checks read beside it. */
 function withChecks(
@@ -178,24 +212,29 @@ function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
 
 /**
  * What the agent published as GitHub holds it now: the pull request its
- * rows name, else the newest from the branch they name, else the branch
- * alone where GitHub holds it, else nothing.
+ * rows name on the branch they name, else the newest from that branch,
+ * else the branch alone where GitHub holds it, else nothing.
  */
 const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
-  const page = yield* listMessagesPast(userId, agent.conversationId, CODER_TOOL_SET, CURSOR_START);
-  const messages = page.read.ok ? page.read.value.map((record) => record.message) : [];
-  const named = publishedInTranscript(messages, agent.repository);
-  if (named.branch === undefined && named.pullRequestNumber === undefined) return nothing(agent);
+  const named = publishedInTranscript(yield* allMessages(userId, agent), agent.repository);
+  // No branch of its own, no publication: an address its reads turned up is someone else's.
+  if (named.branch === undefined) return nothing(agent);
   const app = yield* GitHubApp;
+  const reached = yield* app.userRepository(userId, agent.repository);
+  if (Option.isNone(reached)) {
+    return yield* new RepositoryNotReachable({ repository: agent.repository });
+  }
   const token = yield* app.userToken(userId);
   if (named.pullRequestNumber !== undefined) {
     const byNumber = yield* pullRequestByNumber(token, agent.repository, named.pullRequestNumber);
-    if (Option.isSome(byNumber)) return yield* withChecks(token, agent, byNumber.value);
+    // The number is the agent's only on its own head; any other is a link it read, not a pull request it opened.
+    if (Option.isSome(byNumber) && byNumber.value.headRef === named.branch) {
+      return yield* withChecks(token, agent, byNumber.value);
+    }
   }
-  if (named.branch === undefined) return nothing(agent);
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, named.branch);
   if (Option.isSome(ofBranch)) return yield* withChecks(token, agent, ofBranch.value);
   const pushed = yield* branchStands(token, agent.repository, named.branch);
@@ -204,10 +243,11 @@ const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function*
     : nothing(agent);
 });
 
-/** One agent of one account, as the kept answers are keyed. */
+/** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */
 export class PublishedKey extends Data.Class<{
   readonly userId: string;
   readonly agentId: string;
+  readonly ended: boolean;
 }> {}
 
 /** The kept answers of one function instance: an agent's answer for the TTL, a failure for no time. */

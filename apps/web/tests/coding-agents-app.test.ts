@@ -19,6 +19,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
+import type { UIMessage } from "ai";
 import {
   Cause,
   Clock,
@@ -832,6 +833,121 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(found.branch, HEAD.ref);
       }),
   );
+
+  it.effect(
+    "the agent's turn ending is read afresh inside the TTL, so the pull request it opened last shows at once; a link it merely read is not its own, and a pull request on another head falls back to the branch's",
+    () =>
+      Effect.gen(function* () {
+        const repository: RepositoryFixture = { pullRequest: undefined, pushed: false };
+        const { owner, plan, github, ask } = yield* openPlan({
+          github: (sent) => relayRepository(repository)(sent),
+        });
+        const read = (agentId: string) =>
+          Effect.map(ask(request(AGENT_PULL_REQUEST, owner, { id: agentId })), (answered) =>
+            readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const nothing = { repository: RELAY_FULL_NAME, branch: null, pullRequest: null };
+
+        // A link read out of a file, with no branch of the agent's own, is no publication, and GitHub is not asked.
+        const reader = yield* startedAgent(owner, plan.id, ask);
+        yield* agentWrote(
+          reader.target,
+          [
+            [
+              "cat README.md",
+              `See https://github.com/${RELAY_FULL_NAME}/pull/${FOREIGN.number}.\n`,
+            ],
+          ],
+          "Read the notes.",
+        );
+        assert.deepEqual(yield* read(reader.agent.id), nothing);
+        assert.equal(
+          github.sent.some((sent) => new URL(sent.url).pathname.startsWith("/repos/")),
+          false,
+        );
+
+        // Running: nothing pushed yet, and the empty answer is kept.
+        const worker = yield* startedAgent(owner, plan.id, ask);
+        const turnId = yield* agentWroteMessages(worker.target, [
+          agentMessage(
+            agentParts(
+              [
+                [
+                  "cat README.md",
+                  `See https://github.com/${RELAY_FULL_NAME}/pull/${FOREIGN.number}.\n`,
+                ],
+                ["git switch -c luke/teammate-invitations", ""],
+              ],
+              "Starting.",
+            ),
+          ),
+        ]);
+        assert.deepEqual(yield* read(worker.agent.id), nothing);
+
+        // The push, the pull request, and the end land inside the TTL: the first read after the end
+        // is fresh, and the pull request it finds is the branch's own, not the one the README named.
+        repository.pushed = true;
+        repository.pullRequest = pullRequestFixture({ number: 7 });
+        yield* agentEnded(worker.target, turnId);
+        const published = yield* read(worker.agent.id);
+        assert.equal(published.pullRequest?.number, 7);
+        assert.equal(published.branch, HEAD.ref);
+      }),
+  );
+
+  it.effect(
+    "an agent whose rows run past one page, as a turn the developer steered two hundred times does, is read whole, so a pull request opened late is found; a repository the developer no longer reaches is refused",
+    () =>
+      Effect.gen(function* () {
+        const repository: RepositoryFixture = {
+          pullRequest: pullRequestFixture({ number: 41 }),
+          pushed: true,
+        };
+        const { owner, plan, ask } = yield* openPlan({
+          github: (sent) => relayRepository(repository)(sent),
+        });
+        const { agent, target } = yield* startedAgent(owner, plan.id, ask);
+        const notes = Array.from({ length: 200 }, (_, index) => developerNote(`Note ${index}.`));
+        yield* agentWroteMessages(target, [
+          ...notes,
+          agentMessage(
+            agentParts(
+              [
+                ["git push -u origin luke/teammate-invitations", ""],
+                ["gh pr create --fill", `https://github.com/${RELAY_FULL_NAME}/pull/41\n`],
+              ],
+              "Opened the pull request.",
+            ),
+          ),
+        ]);
+        const published = readAnswer(
+          codingAgentPullRequestAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id })),
+        );
+        assert.equal(published.pullRequest?.number, 41);
+
+        // An agent on a repository the App no longer reaches for the developer: nothing of it is read.
+        const away = yield* createCodingAgent(owner, {
+          planId: plan.id,
+          idempotencyKey: randomUUID(),
+          model: CODING_AGENT_DEFAULT_CHOICE.model,
+          effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+          planSnapshot: "# Ledger\n",
+          repository: "Acme/Ledger",
+        });
+        assert.ok(Option.isSome(away));
+        yield* agentWrote(
+          { userId: owner, conversationId: away.value.agent.conversationId },
+          [["git push -u origin luke/ledger", ""]],
+          "Pushed.",
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_PULL_REQUEST, owner, { id: away.value.agent.id })),
+          refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
+        );
+      }),
+  );
 });
 
 /** A message to the agent as the bearer given, with the body given. */
@@ -1265,6 +1381,9 @@ interface PullRequestFixture {
 
 const HEAD = { ref: "luke/teammate-invitations", sha: "0123abcd" } as const;
 
+/** A pull request of the repository that is not the agent's: a teammate's, on a head of their own. */
+const FOREIGN = { number: 12, ref: "main-fixups", sha: "89abcdef" } as const;
+
 function pullRequestFixture(overrides: Partial<PullRequestFixture> = {}): PullRequestFixture {
   return {
     number: 41,
@@ -1321,6 +1440,13 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
     if (path === `/pulls/${pullRequest?.number}` && pullRequest !== undefined) {
       return Response.json(pullJson(pullRequest));
     }
+    if (path === `/pulls/${FOREIGN.number}`) {
+      return Response.json({
+        ...pullJson(pullRequestFixture({ number: FOREIGN.number })),
+        head: { ref: FOREIGN.ref, sha: FOREIGN.sha, label: `${RELAY.owner}:${FOREIGN.ref}` },
+        user: { login: "teammate", type: "User" },
+      });
+    }
     if (path === `/branches/${encodeURIComponent(HEAD.ref)}`) {
       return fixture.pushed
         ? Response.json({ name: HEAD.ref, commit: { sha: HEAD.sha } })
@@ -1342,12 +1468,39 @@ function relayRepository(fixture: RepositoryFixture): RepositoryScript {
   };
 }
 
-/** The agent's one turn written into its conversation: the commands it ran, each with what it printed, and its closing words. */
-const agentWrote = (
-  target: { userId: string; conversationId: string },
-  calls: readonly (readonly [command: string, stdout: string])[],
-  words: string,
-) =>
+type Target = { userId: string; conversationId: string };
+
+/** The parts of one of the agent's messages: the commands it ran, each with what it printed, then its words. */
+function agentParts(calls: readonly (readonly [command: string, stdout: string])[], words: string) {
+  return [
+    ...calls.map(([command, stdout], index) => ({
+      type: `tool-${CODER_TOOL.BASH}` as const,
+      toolCallId: `call-${index}-${command.length}`,
+      state: "output-available" as const,
+      input: { command },
+      output: { status: "completed", exitCode: 0, stdout, stderr: "" },
+    })),
+    { type: "text" as const, text: words },
+  ];
+}
+
+/** One of the agent's own messages, as the relay writes it. */
+function agentMessage(parts: ReturnType<typeof agentParts>): UIMessage {
+  return {
+    id: randomUUID(),
+    role: MESSAGE_ROLE.ASSISTANT,
+    metadata: { author: MESSAGE_AUTHOR.BRAIN },
+    parts,
+  };
+}
+
+/** A note the developer sent the agent mid-turn, as the relay writes one. */
+function developerNote(text: string): UIMessage {
+  return userMessage(randomUUID(), text, userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined));
+}
+
+/** The agent's turn written into its conversation, the messages given in order; answers the turn's id, for its end. */
+const agentWroteMessages = (target: Target, messages: readonly UIMessage[]) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const turnId = randomUUID();
@@ -1361,26 +1514,39 @@ const agentWrote = (
       trigger: BRAIN_TURN_TRIGGER.ASK,
       at: 0,
     });
+    let sequence = 1;
+    for (const message of messages) {
+      sequence += 1;
+      yield* writer.consume(target, {
+        kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+        conversationId: sessionKey(target.conversationId),
+        turnId,
+        sequence,
+        message,
+      });
+    }
+    return turnId;
+  });
+
+/** The agent's one turn written into its conversation: the commands it ran, each with what it printed, and its closing words. */
+const agentWrote = (
+  target: Target,
+  calls: readonly (readonly [command: string, stdout: string])[],
+  words: string,
+) => agentWroteMessages(target, [agentMessage(agentParts(calls, words))]);
+
+/** The agent's turn ended well, so the agent reads as completed. */
+const agentEnded = (target: Target, turnId: string) =>
+  Effect.gen(function* () {
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     yield* writer.consume(target, {
-      kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+      kind: BRAIN_RUN_EVENT.TURN_ENDED,
       conversationId: sessionKey(target.conversationId),
       turnId,
-      sequence: 2,
-      message: {
-        id: randomUUID(),
-        role: MESSAGE_ROLE.ASSISTANT,
-        metadata: { author: MESSAGE_AUTHOR.BRAIN },
-        parts: [
-          ...calls.map(([command, stdout], index) => ({
-            type: `tool-${CODER_TOOL.BASH}` as const,
-            toolCallId: `call-${index}`,
-            state: "output-available" as const,
-            input: { command },
-            output: { status: "completed", exitCode: 0, stdout, stderr: "" },
-          })),
-          { type: "text" as const, text: words },
-        ],
-      },
+      sequence: 1_000,
+      status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+      responseIds: [],
+      at: 1,
     });
   });
 

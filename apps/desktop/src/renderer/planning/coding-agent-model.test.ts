@@ -200,6 +200,15 @@ test("the checkout command fetches and switches to the branch, and the changes o
     "https://github.com/acme/relay/compare/luke/x?expand=1",
   );
   assert.equal(changesUrl({ repository, branch: null, pullRequest: null }), undefined);
+  // A branch a shell or an address would read into is quoted or encoded, never read.
+  assert.equal(
+    checkoutCommand("luke/$(touch pwned)'x"),
+    "git fetch origin 'luke/$(touch pwned)'\\''x' && git switch 'luke/$(touch pwned)'\\''x'",
+  );
+  assert.equal(
+    changesUrl({ repository, branch: "luke/issue#12 fix", pullRequest: null }),
+    "https://github.com/acme/relay/compare/luke/issue%2312%20fix?expand=1",
+  );
 });
 
 test("the row sums a finished turn up by where the pull request stands and how much changed, and is drawn only once the agent has ended with one", () => {
