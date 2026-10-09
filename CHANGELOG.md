@@ -51,8 +51,8 @@ in the sidebar.
 A plan's whiteboard, the code Luke shows, and the transcript of what was said
 now sit in a right side panel with tabs. The panel runs full height, goes full
 screen, and opens by itself the first time Luke draws or shows code in a plan.
-Luke draws on the whiteboard as he talks, and lays it out by Excalidraw's
-guides.
+Luke draws on the whiteboard as he talks, lays it out by Excalidraw's guides,
+then looks at what he drew and fixes what he sees.
 
 ### Luke as a planning teammate
 
