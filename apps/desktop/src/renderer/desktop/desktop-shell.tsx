@@ -196,8 +196,16 @@ export function DesktopShell({
       </div>
     );
   }
+  // Note that the shell says whether the panel's toggle stands, because the
+  // toolbar beneath it leaves the toggle room then and only then.
+  const panelToggle = plans.page === PLANS_PAGE.DOCUMENT;
   return (
-    <div ref={shell} className="desktop-shell" data-sidebar-collapsed={String(sidebar.collapsed)}>
+    <div
+      ref={shell}
+      className="desktop-shell"
+      data-sidebar-collapsed={String(sidebar.collapsed)}
+      data-panel-toggle={String(panelToggle)}
+    >
       <DesktopSidebar
         sidebar={sidebar}
         identity={identity}
@@ -217,7 +225,7 @@ export function DesktopShell({
           <TitleBarNewPlan plans={plans} />
         ) : null}
       </div>
-      {plans.page === PLANS_PAGE.DOCUMENT ? (
+      {panelToggle ? (
         <div className="title-bar-controls" data-edge="end">
           <SidePanelToggle
             panel={plans.sidePanel}
