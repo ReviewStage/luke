@@ -118,7 +118,7 @@ it.layer(testSqlClient)("run_in_repository in the session's sandbox", (it) => {
               "*": [],
               "github.com": [
                 {
-                  match: { path: { startsWith: `/${RELAY_FULL_NAME}` } },
+                  match: { path: { startsWith: `/${RELAY_FULL_NAME}.git/` } },
                   transform: [{ headers: { authorization: TOKEN_HEADER } }],
                 },
               ],
@@ -145,7 +145,7 @@ it.layer(testSqlClient)("run_in_repository in the session's sandbox", (it) => {
         assert.equal(ran.command.includes("invite"), false);
         assert.match(
           ran.command,
-          new RegExp(`timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s`, "u"),
+          new RegExp(`timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i `, "u"),
         );
       }),
   );

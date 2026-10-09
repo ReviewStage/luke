@@ -97,13 +97,28 @@ const GITHUB_HOST = "github.com";
 /** The firewall with nothing injected: eve's default open internet, which is what every command but the clone runs under. */
 const OPEN_INTERNET = "allow-all";
 
-/** The environment every command in the checkout sees beside the sandbox's own: no pager, and git taking no lock. */
+/** The environment the checkout and every command see: no pager, git taking no lock and asking nothing. */
 const COMMAND_ENVIRONMENT = {
   PAGER: "cat",
   GIT_PAGER: "cat",
   GIT_OPTIONAL_LOCKS: "0",
   GIT_TERMINAL_PROMPT: "0",
+  TERM: "dumb",
 } as const;
+
+/**
+ * The whole environment the model's command sees, as the Mac runner once
+ * gave one: a search path and a home carried over from the sandbox's own,
+ * the fixed values above, and nothing else the sandbox's process carries,
+ * so `env` prints no variable of the sandbox's or eve's into a stored
+ * result.
+ */
+const COMMAND_CLEAN_ENVIRONMENT = [
+  'PATH="$PATH"',
+  'HOME="$HOME"',
+  'LANG="${LANG:-C.UTF-8}"',
+  ...Object.entries(COMMAND_ENVIRONMENT).map(([name, value]) => `${name}=${value}`),
+].join(" ");
 
 /**
  * Whether the checkout standing is this repository's: exit 0 when the
@@ -134,8 +149,8 @@ const CHECKOUT_SCRIPT = [
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
 ].join("\n");
 
-/** The model's command, run by its own bash under the time bound, from the checkout root. */
-const COMMAND_SCRIPT = `timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s bash -c "$${SANDBOX_VARIABLE.COMMAND}"`;
+/** The model's command, run by its own bash under the time bound and the clean environment, from the checkout root. Note that the variable is read by the outer bash, ahead of `env -i`, so the command reaches the inner bash as an argument and no variable. */
+const COMMAND_SCRIPT = `timeout ${REPOSITORY_SHELL_BOUNDS.COMMAND_TIMEOUT_SECONDS}s env -i ${COMMAND_CLEAN_ENVIRONMENT} bash -c "$${SANDBOX_VARIABLE.COMMAND}"`;
 
 /**
  * The sandbox as the shell reaches it: one command run, and, where the
@@ -208,7 +223,17 @@ function truncated(output: string): string {
   return output.slice(0, REPOSITORY_SHELL_BOUNDS.OUTPUT_MAX_CHARS);
 }
 
-/** The firewall for the clone: open internet, and the token as GitHub's header on the one repository's own paths. */
+/** The path every request of the clone is under: the repository's own git endpoint, which no other repository's path shares. */
+function cloneUrl(repository: string): string {
+  return `https://${GITHUB_HOST}/${repository}.git`;
+}
+
+/**
+ * The firewall for the clone: open internet, and the token as GitHub's
+ * header on requests under the one repository's git endpoint alone, so a
+ * request for a neighbouring repository, or for the repository's pages
+ * outside git, carries nothing.
+ */
 function cloneNetworkPolicy(repository: string, token: Redacted.Redacted) {
   const basic = Buffer.from(`x-access-token:${Redacted.value(token)}`).toString("base64");
   return {
@@ -216,7 +241,7 @@ function cloneNetworkPolicy(repository: string, token: Redacted.Redacted) {
       "*": [],
       [GITHUB_HOST]: [
         {
-          match: { path: { startsWith: `/${repository}` } },
+          match: { path: { startsWith: `/${repository}.git/` } },
           transform: [{ headers: { authorization: `Basic ${basic}` } }],
         },
       ],
@@ -276,7 +301,7 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
         ...COMMAND_ENVIRONMENT,
         [SANDBOX_VARIABLE.REPOSITORY]: repository,
         [SANDBOX_VARIABLE.BRANCH]: confirmed.defaultBranch,
-        [SANDBOX_VARIABLE.URL]: `https://${GITHUB_HOST}/${confirmed.fullName}.git`,
+        [SANDBOX_VARIABLE.URL]: cloneUrl(confirmed.fullName),
       },
     },
     REPOSITORY_SHELL_REFUSAL.CHECKOUT_FAILED,

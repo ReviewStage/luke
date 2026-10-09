@@ -802,13 +802,15 @@ and the worker subagent shares the session's sandbox
 checkout reads through the Luke GitHub App: `repositoryReadToken` confirms
 the owner still reaches the repository and mints a token for that one
 repository with contents read, which the shell sets as GitHub's `Basic`
-header at the sandbox's firewall, on `github.com` for the repository's own
-paths, for the clone alone, and sets back to open internet as the clone
-ends, in a finalizer, so the token never enters the sandbox's filesystem or
-environment and no command or output can carry it. The command runs from
-the checkout root under a 60-second bound, with its text handed to bash in
-a variable rather than spliced into shell text, and answers its exit code
-and up to 20,000 characters each of stdout and stderr. Every refusal is
+header at the sandbox's firewall, on `github.com` under the repository's own
+`.git/` endpoint alone, for the clone alone, and sets back to open internet
+as the clone ends, in a finalizer, so the token never enters the sandbox's
+filesystem or environment and no command or output can carry it. The
+command runs from the checkout root under a 60-second bound and a clean
+environment (`env -i` with a search path, a home, and git's fixed values,
+as the Mac runner once gave one), with its text handed to bash as an
+argument rather than spliced into shell text, and answers its exit code and
+up to 20,000 characters each of stdout and stderr. Every refusal is
 `not-run` with a reason the model can act on, and each is answered ahead of
 anything it would need: a plan with no repository yet opens no sandbox; a
 developer who must sign in with GitHub again, a repository the App no longer
