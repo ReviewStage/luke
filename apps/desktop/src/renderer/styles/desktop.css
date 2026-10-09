@@ -1684,7 +1684,7 @@ body,
 .tab[data-dragging="true"] {
   z-index: 1;
   background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-well);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 12px var(--shadow);
   color: var(--text-primary);
   transition:
     background-color var(--duration-hover) ease,
