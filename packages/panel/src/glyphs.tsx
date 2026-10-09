@@ -460,6 +460,16 @@ export function CodeIcon(): React.JSX.Element {
   );
 }
 
+/** A prompt and a line run at it: what Luke's planning model wrote and ran. */
+export function WorkIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.6 6.8 9.8 12l-5.2 5.2" />
+      <path d="M12.4 17.6h7" />
+    </Glyph>
+  );
+}
+
 /** A speech bubble with lines of words in it: what was said on a call. */
 export function TranscriptIcon(): React.JSX.Element {
   return (

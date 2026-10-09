@@ -738,7 +738,9 @@ changes when a check is run, not when one is planned.
   plan's whiteboard (`app-smoke-planning-board.png`, from
   `--profile planning-board --expanded`), on its transcript mid-call
   (`app-smoke-planning-transcript.png`, from
-  `--profile planning-transcript --expanded`), and over
+  `--profile planning-transcript --expanded`), on its Work tab mid-call
+  (`app-smoke-planning-work.png`, from `--profile planning-work --expanded`),
+  and over
   the synthetic plan list with none open (`app-smoke-expanded.png`, the
   window opening on Plans), but neither
   capture has been taken yet.

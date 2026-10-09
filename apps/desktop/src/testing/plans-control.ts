@@ -43,6 +43,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     board: undefined,
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
+    work: { turns: undefined, callLive: false },
     onSelect: ignore,
     onChooseFolder: ignore,
     onRevealFolder: ignore,

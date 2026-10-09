@@ -1,5 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import type { PlanCode } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
   CodeIcon,
@@ -8,6 +8,7 @@ import {
   PlusIcon,
   SidePanelIcon,
   TranscriptIcon,
+  WorkIcon,
 } from "@sidecar/panel";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
@@ -15,6 +16,7 @@ import { useAppCommand } from "../app-commands";
 import { CodePane } from "../planning/code-pane";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
+import { PlanWork } from "../planning/plan-work";
 import type { TranscriptRegion } from "../planning/transcript-model";
 import {
   SIDE_PANEL_TAB,
@@ -72,6 +74,7 @@ const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
   [SIDE_PANEL_TAB.TRANSCRIPT]: <TranscriptIcon />,
+  [SIDE_PANEL_TAB.WORK]: <WorkIcon />,
 } as const satisfies Record<SidePanelTab, React.JSX.Element>;
 
 /** The shortcut that shows each tab. */
@@ -79,6 +82,7 @@ const TAB_COMMAND = {
   [SIDE_PANEL_TAB.BOARD]: APP_COMMAND.SHOW_BOARD,
   [SIDE_PANEL_TAB.CODE]: APP_COMMAND.SHOW_CODE,
   [SIDE_PANEL_TAB.TRANSCRIPT]: APP_COMMAND.SHOW_TRANSCRIPT,
+  [SIDE_PANEL_TAB.WORK]: APP_COMMAND.SHOW_WORK,
 } as const satisfies Record<SidePanelTab, AppCommand>;
 /** How the drawn panel is on its way to the one asked for, if it is: shutting, or leaving full screen. */
 const PANEL_LEAVING = {
@@ -223,6 +227,12 @@ interface SidePanelTranscript {
   onRetry: () => void;
 }
 
+/** What Luke's planning model wrote and ran on the open plan's calls, and whether a call still stands. */
+interface SidePanelWork {
+  turns: readonly PlanWorkTurn[] | undefined;
+  callLive: boolean;
+}
+
 /** What the chosen tab shows. */
 function TabContent({
   tab,
@@ -230,12 +240,14 @@ function TabContent({
   board,
   code,
   transcript,
+  work,
 }: {
   tab: SidePanelTab;
   planId: string;
   board: Board | undefined;
   code: PlanCode | undefined;
   transcript: SidePanelTranscript;
+  work: SidePanelWork;
 }): React.JSX.Element {
   switch (tab) {
     case SIDE_PANEL_TAB.BOARD:
@@ -248,6 +260,8 @@ function TabContent({
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
       return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
+    case SIDE_PANEL_TAB.WORK:
+      return <PlanWork turns={work.turns} callLive={work.callLive} />;
   }
 }
 
@@ -282,6 +296,10 @@ export function SidePanelToggle({
   useAppCommand(
     APP_COMMAND.SHOW_TRANSCRIPT,
     offer(() => panel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT)),
+  );
+  useAppCommand(
+    APP_COMMAND.SHOW_WORK,
+    offer(() => panel.onChoose(SIDE_PANEL_TAB.WORK)),
   );
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
@@ -470,6 +488,7 @@ export function SidePanel({
   board,
   code,
   transcript,
+  work,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
   /** The tabs holding something that arrived while another was shown, each dotted until it is shown. */
@@ -478,6 +497,7 @@ export function SidePanel({
   board: Board | undefined;
   code: PlanCode | undefined;
   transcript: SidePanelTranscript;
+  work: SidePanelWork;
 }): React.JSX.Element {
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
@@ -528,6 +548,7 @@ export function SidePanel({
               board={board}
               code={code}
               transcript={transcript}
+              work={work}
             />
           </div>
         )}

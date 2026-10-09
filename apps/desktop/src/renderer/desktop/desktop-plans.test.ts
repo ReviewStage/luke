@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -340,6 +341,65 @@ test("a tab with something new on it carries a dot, and the tab shown carries no
   assert.ok(tabNamed(page, "Board").querySelector(".tab-note"));
   assert.equal(tabNamed(page, "Code").querySelector(".tab-note"), null);
   assert.equal(tabNamed(page, "Transcript").querySelector(".tab-note"), null);
+});
+
+test("the Work tab draws each turn's calls as lines that open onto their output, left out of the screen recording", () => {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopPlans, {
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+        work: {
+          callLive: true,
+          turns: [
+            {
+              turnId: "turn-1",
+              startedAt: 1_000,
+              state: PLAN_WORK_STATE.RUNNING,
+              earlierOmitted: false,
+              parts: [
+                {
+                  type: PLAN_WORK_PART.TOOL,
+                  id: "call-1",
+                  tool: PLAN_WORK_TOOL.REPOSITORY,
+                  name: "run_in_repository",
+                  state: PLAN_WORK_STATE.DONE,
+                  subject: "ls src",
+                  input: '{ "command": "ls src" }',
+                  output: "invite.ts",
+                },
+              ],
+            },
+          ],
+        },
+      }),
+    }),
+  );
+
+  assert.match(markup, /<section class="plan-work ph-no-capture" aria-label="Work">/u);
+  assert.match(markup, /Ran<\/span><code class="work-call-subject">ls src<\/code>/u);
+  assert.match(
+    markup,
+    /<details[^>]*class="work-call"[^>]*>.*?<pre class="work-call-text">invite\.ts<\/pre>/su,
+  );
+  assert.match(markup, /Working/u);
+});
+
+test("the Work tab with no turn says what will appear there", () => {
+  const markup = renderToStaticMarkup(
+    createElement(DesktopPlans, {
+      plans: plansControl({
+        page: PLANS_PAGE.DOCUMENT,
+        activePlanId: PLAN.id,
+        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+      }),
+    }),
+  );
+
+  assert.match(markup, /When Luke works on a call, what he reads and runs appears here\./u);
 });
 
 test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
@@ -700,13 +760,15 @@ test("Option-Command-B shows and hides the panel by its key, though Option makes
   assert.equal(panelShown(page), false);
 });
 
-test("Option-Command-1, 2, and 3 open the panel on its tabs in their order", () => {
+test("Option-Command-1, 2, 3, and 4 open the panel on its tabs in their order", () => {
   const page = mountOpenPlan();
 
   keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
   assert.equal(tabNamed(page, "Code").getAttribute("aria-selected"), "true");
   keydown({ code: "Digit3", key: "£", metaKey: true, altKey: true });
   assert.equal(tabNamed(page, "Transcript").getAttribute("aria-selected"), "true");
+  keydown({ code: "Digit4", key: "¢", metaKey: true, altKey: true });
+  assert.equal(tabNamed(page, "Work").getAttribute("aria-selected"), "true");
   keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
   assert.equal(tabNamed(page, "Board").getAttribute("aria-selected"), "true");
 });
@@ -853,13 +915,15 @@ test("closing the chosen tab chooses its neighbour, and closing the last leaves 
 
   act(() => tabNamed(page, "Code").click());
   press(page, '[aria-label="Close Code"]');
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Transcript", "the tab after it");
   assert.ok(documentShown(page));
 
-  press(page, '[aria-label="Close Transcript"]');
-  assert.equal(chosenTab(page), "Board", "the tab before the last");
+  act(() => tabNamed(page, "Work").click());
+  press(page, '[aria-label="Close Work"]');
+  assert.equal(chosenTab(page), "Transcript", "the tab before the last");
 
+  press(page, '[aria-label="Close Transcript"]');
   press(page, '[aria-label="Close Board"]');
   assert.ok(panelShown(page));
   assert.deepEqual(panelTabs(page), []);
@@ -868,6 +932,7 @@ test("closing the chosen tab chooses its neighbour, and closing the last leaves 
     ["Board", "⌥⌘1", true],
     ["Code", "⌥⌘2", true],
     ["Transcript", "⌥⌘3", true],
+    ["Work", "⌥⌘4", true],
   ]);
 
   const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
@@ -883,7 +948,7 @@ test("the panel's tabs are one stop for Tab that the arrow keys move along, and 
   const tabs = () => [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')];
   assert.deepEqual(
     tabs().map((tab) => tab.tabIndex),
-    [0, -1, -1],
+    [0, -1, -1, -1],
   );
 
   const board = tabNamed(page, "Board");
@@ -891,16 +956,16 @@ test("the panel's tabs are one stop for Tab that the arrow keys move along, and 
   key(board, "ArrowRight");
   assert.equal(document.activeElement, tabNamed(page, "Code"));
   key(tabNamed(page, "Code"), "End");
-  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
-  key(tabNamed(page, "Transcript"), "ArrowRight");
+  assert.equal(document.activeElement, tabNamed(page, "Work"));
+  key(tabNamed(page, "Work"), "ArrowRight");
   assert.equal(document.activeElement, board);
   assert.equal(chosenTab(page), "Board", "moving along the tabs chooses none of them");
 
   key(board, "Delete");
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work"]);
   assert.equal(document.activeElement, tabNamed(page, "Code"));
   key(tabNamed(page, "Code"), "Backspace");
-  assert.deepEqual(panelTabs(page), ["Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Transcript", "Work"]);
   assert.equal(document.activeElement, tabNamed(page, "Transcript"));
 });
 
@@ -926,12 +991,13 @@ test("the + offers every kind with its shortcut, those open dimmed, and opens a 
     ["Board", "Open", false],
     ["Code", "⌥⌘2", true],
     ["Transcript", "Open", false],
+    ["Work", "Open", false],
   ]);
   assert.equal(document.activeElement, menuItem("Code"), "focus starts on the one kind to open");
 
   act(() => menuItem("Code").click());
   assert.equal(document.querySelector('[role="menu"]'), null);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Code");
 });
 
@@ -941,12 +1007,12 @@ test("Option-Command-2 opens a closed Code tab again and chooses it, and no kind
   press(page, '[aria-label="Close Code"]');
 
   keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Code");
 
   keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
   keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
 });
 
 test("the next launch opens the panel with the tabs this one left open, in their order", () => {
@@ -957,7 +1023,7 @@ test("the next launch opens the panel with the tabs this one left open, in their
   unmountAll();
 
   const next = mountOpenPlan();
-  assert.deepEqual(panelTabs(next), ["Code", "Transcript"]);
+  assert.deepEqual(panelTabs(next), ["Code", "Transcript", "Work"]);
   assert.equal(chosenTab(next), "Transcript");
 });
 
@@ -968,7 +1034,7 @@ test("a panel an earlier version kept, before its tabs could close, opens as it 
   );
   const earlier = mountOpenPlan();
   assert.ok(panelShown(earlier));
-  assert.deepEqual(panelTabs(earlier), ["Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(earlier), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(earlier), "Code");
   assert.equal(earlier.querySelector<HTMLElement>(".side-panel")?.style.width, "500px");
   unmountAll();
@@ -977,7 +1043,7 @@ test("a panel an earlier version kept, before its tabs could close, opens as it 
   const unread = mountOpenPlan();
   assert.equal(panelShown(unread), false);
   press(unread, '[aria-label="Show panel"]');
-  assert.deepEqual(panelTabs(unread), ["Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(unread), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(unread), "Board");
 });
 
@@ -989,11 +1055,12 @@ test("Delete on a tab the arrow keys reached closes it and hands focus to the ta
 
   key(board, "ArrowRight");
   key(tabNamed(page, "Code"), "Delete");
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
   assert.equal(document.activeElement, tabNamed(page, "Transcript"));
   assert.equal(chosenTab(page), "Board", "closing another tab leaves the chosen one chosen");
 
   key(tabNamed(page, "Transcript"), "Delete");
+  key(tabNamed(page, "Work"), "Delete");
   key(tabNamed(page, "Board"), "Delete");
   assert.deepEqual(panelTabs(page), []);
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Open a tab");
