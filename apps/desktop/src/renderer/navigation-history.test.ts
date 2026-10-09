@@ -100,7 +100,12 @@ function Window({
   });
   useHistoryMouseButtons(history, true);
   return createElement(DesktopShell, {
-    gates: { accountRequired: false, onBeginSignIn: ignore, signInFace: { play: 0 } },
+    gates: {
+      accountRequired: false,
+      onBeginSignIn: ignore,
+      onCancelSignIn: ignore,
+      signInFace: { play: 0 },
+    },
     identity: {
       speakers: { listening: false, lukeSpeaking: false },
       voiceActive: { developer: false, luke: false },

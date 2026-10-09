@@ -102,9 +102,8 @@ the surface's is wrong, whatever it looks like at speed.
 
 Content leaves first, over `--duration-exit`, and only its end releases the
 room: the surface must never shrink out from under something still drawn. For
-elements that unmount, hold them mounted through their own exit (the sign-in
-slot and the feedback preview both keep drawing what they last held) and take them
-out when the exit finishes, never on the frame the state changed.
+elements that unmount, hold them mounted through their own exit (the feedback
+preview keeps drawing what it last held) and take them out when the exit finishes, never on the frame the state changed.
 
 ## Mount animations, not `@starting-style`, for reveals
 
@@ -167,8 +166,8 @@ plan's tab, the side panel's first tab, the transcript, and Settings' page list
 all read down that one edge. Controls in a row stand `--control-gap` apart, a
 glyph `--glyph-gap` from its words, a column's groups `--section-gap`, and a
 page's content `--page-inset` from its column. `check-design-contract.mjs`
-refuses a pixel of padding, margin, or gap in `desktop.css` and `tooltip.css`
-that is not one of these; the optical exception above is marked
+refuses a pixel of padding, margin, or gap in `desktop.css`, `sign-in.css`,
+and `tooltip.css` that is not one of these; the optical exception above is marked
 `/* off-scale */` on its declaration, so a reader sees it is deliberate.
 
 ## The keys Luke takes from the machine

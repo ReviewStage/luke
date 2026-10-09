@@ -30,7 +30,6 @@ import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
-import { SignInSlot } from "./sign-in-slot";
 import { CAPTION_TONE } from "./strip-hold";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
@@ -49,12 +48,8 @@ import {
   volumeHintText,
 } from "./volume-hint";
 
-function surfaceHeightStyle(
-  slotHeight: number | undefined,
-  feedbackHeight: number | undefined,
-): CSSProperties {
+function surfaceHeightStyle(feedbackHeight: number | undefined): CSSProperties {
   const properties: Partial<Record<SurfaceProperty, string>> = {};
-  if (slotHeight !== undefined) properties[SURFACE_PROPERTY.SLOT_HEIGHT] = `${slotHeight}px`;
   if (feedbackHeight !== undefined) {
     properties[SURFACE_PROPERTY.FEEDBACK_HEIGHT] = `${feedbackHeight}px`;
   }
@@ -76,7 +71,6 @@ export function App(): React.JSX.Element {
     () => (state?.settings ? appSettingsView(state.settings) : undefined),
     [state?.settings],
   );
-  const [signInSlotElement, signInSlotHeight] = useMeasuredHeight();
   const [feedbackElement, feedbackHeight] = useMeasuredHeight();
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
@@ -178,7 +172,7 @@ export function App(): React.JSX.Element {
     heldRef: feedbackHeld,
   };
 
-  const signIn = useSignIn({ surface: panelEntrySurface, expand });
+  const signIn = useSignIn();
 
   const stillMotion = usePrefersReducedMotion();
 
@@ -398,9 +392,9 @@ export function App(): React.JSX.Element {
         stopSpeaking();
         return;
       }
-      // Escape out of the slot withdraws the sign-in it waits on: the slot is
-      // the only thing on screen, so there is nothing else it could mean.
-      if (presentation === PANEL_PRESENTATION.SLOT) {
+      // Escape on a gate waiting for the browser withdraws the sign-in, as
+      // its Cancel does: the wait is the only thing on screen.
+      if (signIn.signInWait) {
         signIn.cancelSignIn();
         return;
       }
@@ -431,6 +425,7 @@ export function App(): React.JSX.Element {
     feedback.control.dismiss,
     presentation,
     signIn.cancelSignIn,
+    signIn.signInWait,
     listening,
     plans.back,
     speaking,
@@ -450,7 +445,6 @@ export function App(): React.JSX.Element {
 
   const shownStopHotkey = state.hotkeys.stop;
   const panelOpen = presentation === PANEL_PRESENTATION.PANEL;
-  const slotOpen = presentation === PANEL_PRESENTATION.SLOT;
   const feedbackOpen = presentation === PANEL_PRESENTATION.FEEDBACK;
 
   const microphone: MicrophoneControl = {
@@ -500,8 +494,7 @@ export function App(): React.JSX.Element {
       // lays it out.
       data-surface="desktop"
       style={{
-        // The slot follows the height of the sign-in wait drawn in it.
-        ...surfaceHeightStyle(signInSlotHeight, feedbackHeight),
+        ...surfaceHeightStyle(feedbackHeight),
         ...caption.style,
         // The sidebar's width lays out the shell and Settings' page list, and
         // places the captions over the work column beside it.
@@ -516,8 +509,10 @@ export function App(): React.JSX.Element {
         <DesktopShell
           gates={{
             accountRequired: state.run.accountRequired,
+            signInWait: signIn.signInWait,
             signInFailure: signIn.signInFailure,
             onBeginSignIn: signIn.beginSignIn,
+            onCancelSignIn: signIn.cancelSignIn,
             signInFace,
           }}
           identity={{
@@ -566,15 +561,8 @@ export function App(): React.JSX.Element {
       </div>
       <span className="desktop-scrim" aria-hidden="true" />
 
-      {/* The panel stood down to the account sign-in it is waiting on, drawn
-          as a sheet in the same window. */}
-      <SignInSlot
-        {...(signIn.signInWait ? { provider: signIn.signInWait } : undefined)}
-        drawn={slotOpen}
-        onCancel={signIn.cancelSignIn}
-        measure={signInSlotElement}
-      />
-      {/* The panel stood down to the composer, on the same terms. */}
+      {/* The panel stood down to the composer, drawn as a sheet in the same
+          window. */}
       <FeedbackSlot
         control={feedback.control}
         drawn={feedbackOpen}

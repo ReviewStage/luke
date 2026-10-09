@@ -1,13 +1,10 @@
 /**
  * What the surface is currently drawn as. The window always holds the panel;
- * the slot is the panel stood down to the sign-in it waits on, drawn in the
- * same window, so entering it costs no IPC. The feedback shape is the second
- * thing the panel stands down to: the composer for a note to the founders,
- * asking for one thing the way the slot does and morphing the same way.
+ * the feedback shape is the panel stood down to the composer for a note to
+ * the founders, drawn in the same window, so entering it costs no IPC.
  */
 export const PANEL_PRESENTATION = {
   PANEL: "panel",
-  SLOT: "slot",
   FEEDBACK: "feedback",
 } as const;
 

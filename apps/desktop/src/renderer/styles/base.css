@@ -193,12 +193,7 @@
      bottom edge that much lower than its growth. Beside a housing the shape
      starts at the display's edge, the lift is zero, and this is nothing. */
   --voice-band-origin: calc(0px - var(--shape-top, 0px));
-  /* Wide enough for a key, a way out, and a way on, and no wider — the page the
-     key was copied from is behind this and has to stay readable. The floor is
-     what those three need on a display with no housing to grow from. */
-  --slot-width: max(460px, calc(var(--notch-housing-width) + 300px));
-  /* Wider than the key slot — a note wraps where a key scrolls, and the credit
-     fields share a line — and narrower than the panel, so the composer reads as
+  /* Narrower than the panel, so the composer reads as
      the panel stood down to one thing rather than as the panel refilled. */
   --feedback-width: max(520px, calc(var(--notch-housing-width) + 340px));
   /* A popup's one vertical inset, above its first row and below its last. The
@@ -207,10 +202,6 @@
      strip is nothing the row sits one inset from each curved edge of the pill,
      so the row is centred by construction rather than by a second number. */
   --slot-inset: 12px;
-  /* The mark sits outside the field's column, so everything else in the slot is
-     indented past it by the same amount. */
-  --slot-mark-size: 22px;
-  --slot-gutter-gap: 9px;
   /* Measured off photographs of the hardware rather than guessed: the housing's
      own corners are a convex 0.348 of its height. */
   --notch-convex-radius: calc(var(--capsule-height) * 0.348);
@@ -313,22 +304,12 @@ button:disabled {
 /* The capsule joins the list only once the caption has grown it past the
    housing: a shape that has left the housing's footprint needs the depth, and
    one still inside it must stay indistinguishable from the hardware. */
-.app-stage[data-presentation="slot"] .panel-surface,
 .app-stage[data-presentation="feedback"] .panel-surface,
 .app-stage[data-presentation="panel"] .panel-surface {
   box-shadow: var(--surface-shadow);
 }
 
-/* The panel narrowed to the width of one field. It is only ever arrived at from
-   the panel, which is a shrink, so the base rule's timing is already right:
-   content leaves over `--duration-exit` and the shape follows it in. */
-.app-stage[data-presentation="slot"] .panel-surface {
-  width: var(--slot-width);
-  height: var(--slot-height, 96px);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-/* The panel narrowed to the composer, in the slot's own family: reached from
+/* The panel narrowed to the composer: reached from
    the panel it is a shrink, and reached from the tray it retargets the growth
    already under way, so the base rule's timing serves both. */
 .app-stage[data-presentation="feedback"] .panel-surface {
@@ -1414,73 +1395,6 @@ button:disabled {
   }
 }
 
-/* Key slot --------------------------------------------------------------- */
-
-/* Layered like the panel and animated like it, because it is the panel: the
-   stage carries the arrival and the shape underneath carries the size. */
-.slot-stage {
-  position: absolute;
-  z-index: 2;
-  top: 0;
-  left: 50%;
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-  transform: translateX(-50%) translateY(-6px);
-  transition:
-    opacity var(--duration-exit) var(--motion-exit),
-    transform var(--duration-shape) var(--spring),
-    visibility 0s linear var(--duration-exit);
-  will-change: opacity, transform;
-}
-
-/* Only the stage whose entry holds the slot comes forward: the others keep
-   whatever pill they last held — that is what lets an exit finish saying what
-   it was saying — so without the drawn gate a stale pill would resurface
-   under another occupant's wait. */
-.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] {
-  opacity: 1;
-  visibility: visible;
-  transform: translateX(-50%) translateY(0);
-  transition:
-    opacity var(--duration-quick) var(--motion-exit) var(--slot-delay),
-    transform var(--duration-shape) var(--spring) var(--slot-delay),
-    visibility 0s linear var(--slot-delay);
-}
-
-/* Rounded like the shape it sits on, for the same reason the panel body is:
-   past the corner is desktop, and a press there belongs to whatever is behind
-   Luke — which, here, is the page the key was copied from. */
-.key-slot {
-  display: flex;
-  width: var(--slot-width);
-  flex-direction: column;
-  gap: 7px;
-  padding: calc(var(--strip-height) + var(--slot-inset)) 16px var(--slot-inset);
-  border-radius: 0 0 var(--slot-radius) var(--slot-radius);
-}
-
-.app-stage[data-presentation="slot"] .slot-stage[data-drawn="true"] .key-slot {
-  pointer-events: auto;
-}
-
-.key-slot-row {
-  display: flex;
-  align-items: center;
-  gap: var(--slot-gutter-gap);
-}
-
-/* Larger than the mark on a settings line: here it is the only thing naming the
-   provider, rather than a glyph beside its name. The badge grows with it. */
-.key-slot-mark {
-  position: relative;
-  display: grid;
-  width: var(--slot-mark-size);
-  height: var(--slot-mark-size);
-  flex: 0 0 auto;
-  place-items: center;
-}
-
 /* Evidence capture screenshots a fixed moment after the renderer reports ready.
    The panel's height is only known once it has been measured, so without this a
    capture could land mid-transition and the PNGs would stop being reproducible.
@@ -1533,7 +1447,6 @@ button:disabled {
   }
 
   .panel-surface,
-  .slot-stage,
   .feedback-stage {
     transition-duration: 1ms;
     transition-delay: 0ms;
