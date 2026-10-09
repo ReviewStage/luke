@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { isTextUIPart } from "ai";
+import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -10,7 +10,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
-  OBSERVATION_SOURCE,
+  TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
@@ -21,7 +21,10 @@ import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../../server/hosted/brain-host/ids";
-import { planningToolDeclarations } from "../../server/hosted/brain-host/planning";
+import {
+  EVE_DELEGATION_TOOL,
+  planningToolDeclarations,
+} from "../../server/hosted/brain-host/planning";
 import {
   createPlan,
   openPlanConversation,
@@ -204,9 +207,10 @@ export default defineEval({
       const runtimeSessionId = await readConversationRuntimeSessionId(run, planConversationId);
       assert.equal(runtimeSessionId, planning.sessionId);
 
-      // Research handed to the worker subagent returns at once, and the
-      // worker's result wakes the planning session in a turn of its own,
-      // recorded as a child completion with the result as the brain's line.
+      // Research handed to the worker subagent returns a receipt at once, and
+      // the planning turn stays open until the worker's result reaches the
+      // model inside it: one turn on record, settled, holding the call, the
+      // words before the wait, and the words after it.
       const researchPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
       const researchConversationId = await planConversation(run, researchPlan.id);
       const research = await openSession(
@@ -215,23 +219,34 @@ export default defineEval({
       );
       const researchSession = await t.target.attachSession(research.sessionId);
       researchSession.succeeded();
-      let woken: Awaited<ReturnType<typeof readTurnById>> | undefined;
-      for (let waited = 0; waited < 120 && woken?.status !== TURN_STATUS.SETTLED; waited += 1) {
-        woken = await readTurnById(run, hostTurnId(research.sessionId, "turn_1"));
+      const researchTurnId = hostTurnId(research.sessionId, "turn_0");
+      let held: Awaited<ReturnType<typeof readTurnById>> | undefined;
+      for (let waited = 0; waited < 120 && held?.status !== TURN_STATUS.SETTLED; waited += 1) {
+        held = await readTurnById(run, researchTurnId);
         await t.sleep(500);
       }
-      assert.ok(woken);
-      assert.equal(woken.origin, TURN_ORIGIN.CHILD_COMPLETION);
-      assert.equal(woken.status, TURN_STATUS.SETTLED);
-      const wokenRows = await readMessagesByTurn(run, researchConversationId, woken.id);
-      assert.deepEqual(wokenRows[0]?.metadata, {
-        author: MESSAGE_AUTHOR.BRAIN,
-        source: OBSERVATION_SOURCE.CHILD_COMPLETION,
-      });
+      assert.ok(held);
+      assert.equal(held.origin, TURN_ORIGIN.TYPED);
+      assert.equal(held.status, TURN_STATUS.SETTLED);
+      assert.equal(await readTurnById(run, hostTurnId(research.sessionId, "turn_1")), undefined);
       // The worker ran to its end on its own model and tools, rather than failing for want of them.
-      const notification = wokenRows[0]?.parts.find((part) => isTextUIPart(part));
-      assert.ok(notification && isTextUIPart(notification));
-      assert.match(notification.text, /\(worker\) is completed\./);
+      const settled = researchSession.events.find((event) => event.type === "task.settled");
+      assert.ok(settled && settled.type === "task.settled");
+      assert.equal(settled.data.name, EVE_DELEGATION_TOOL.WORKER);
+      assert.equal(settled.data.status, "completed");
+      const researchRows = await readMessagesByTurn(run, researchConversationId, held.id);
+      assert.deepEqual(
+        researchRows.map((row) => row.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
+      );
+      const researchAnswer = researchRows[1];
+      assert.ok(researchAnswer);
+      const delegation = researchAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(delegation);
+      assert.equal(delegation.type, `tool-${EVE_DELEGATION_TOOL.WORKER}`);
+      assert.equal(delegation.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      // The words before the wait and the words after it, in one answer.
+      assert.ok(researchAnswer.parts.filter((part) => isTextUIPart(part)).length >= 2);
     } finally {
       await runtime.dispose();
     }

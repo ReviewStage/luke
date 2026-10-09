@@ -10,6 +10,6 @@
     "test:agent": "LUKE_BRAIN_MODEL_FIXTURE=scripted eve eval"
   },
   "dependencies": {
-    "eve": "0.53.1"
+    "eve": "0.74.0"
   }
 }

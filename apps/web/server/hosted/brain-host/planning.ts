@@ -124,7 +124,7 @@ The board as it stands is handed to you every turn under [board], with every ele
 
 You can hand work to the worker, a subagent that runs in the background while you keep working. It can search the Internet, read web pages, and read the plan's folder. A call returns at once and its findings arrive later as a message of their own, so a call never holds up your answer or the questions you queue. Hand it anything that takes more than a lookup or two: a comparison of libraries, how a part of the codebase fits together, every place a change would touch. Answer from what you already know until its findings arrive. Never wait on a worker and never guess what it will find.
 
-Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its agentId and the new message; to stop one whose job no longer matters, use task_cancel.
+Each call starts a worker that knows nothing of this conversation, so say everything it needs in the message: the objective, what to return (a short summary with its sources or file paths), and what is out of scope. Give workers running at once different jobs, and start at most three at once. To redirect one, call the worker again with its taskId and the new message; to stop one whose job no longer matters, use task_cancel.
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
@@ -287,31 +287,37 @@ const PLANNING_TOOLS_BY_NAME = new Map(PLANNING_TOOLS.map((tool) => [tool.name, 
 
 /**
  * The tools eve puts beside the planning tools: one per declared subagent,
- * named by its directory under `eve/subagents/`, and `task_cancel`. eve runs
+ * named by its directory under `eve/subagents/`, and the two task controls
+ * eve adds beside any agent tool, `task_wait` and `task_cancel`. eve runs
  * them, so they are no planning tool, but a turn's rows name them, and the
  * writer holds every row to the hosted tool set.
  */
 export const EVE_DELEGATION_TOOL = {
   WORKER: "worker",
+  TASK_WAIT: "task_wait",
   TASK_CANCEL: "task_cancel",
 } as const;
 
 /**
  * What a subagent's call carries, as eve declares it: the message, and the
- * child to continue or steer. Note that eve's optional output schema is left
- * out, because the planning prompt never asks for structured output and an
- * arbitrary JSON Schema has no form the wire can show.
+ * task of the child to continue or steer.
  */
 const SUBAGENT_CALL_INPUT = Schema.Struct({
   message: Schema.String,
-  agentId: Schema.optionalKey(Schema.NullOr(Schema.String)),
+  taskId: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 
-/** What `task_cancel` carries, as eve declares it: the tasks to cancel. */
-const TASK_CANCEL_INPUT = Schema.Struct({ taskIds: Schema.Array(Schema.String) });
+/** What `task_wait` carries, as eve declares it: the seconds to wait for a result before returning without one, or nothing to wait for one. */
+const TASK_WAIT_INPUT = Schema.Struct({
+  timeoutSeconds: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+});
+
+/** What `task_cancel` carries, as eve declares it: the task to cancel. */
+const TASK_CANCEL_INPUT = Schema.Struct({ taskId: Schema.String });
 
 const EVE_DELEGATION_INPUT = {
   [EVE_DELEGATION_TOOL.WORKER]: SUBAGENT_CALL_INPUT,
+  [EVE_DELEGATION_TOOL.TASK_WAIT]: TASK_WAIT_INPUT,
   [EVE_DELEGATION_TOOL.TASK_CANCEL]: TASK_CANCEL_INPUT,
 } as const;
 

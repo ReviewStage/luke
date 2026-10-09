@@ -36,11 +36,8 @@ import {
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
   RECEIVED_LINE,
-  RELAY_TURN,
-  type RelayTurn,
 } from "./bounds.js";
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
-import { EVE_DELEGATION_TOOL } from "./planning.js";
 
 /**
  * The relay from eve's stream into the brain's own: every event eve records
@@ -65,7 +62,11 @@ import { EVE_DELEGATION_TOOL } from "./planning.js";
  * journal while it runs only a finished sentence at a time: eve's deltas are
  * gathered here, and the writer is told the step's words through their last
  * finished sentence each time another finishes, never at every token, so
- * the voice can say what follows settled calls before the turn ends.
+ * the voice can say what follows settled calls before the turn ends. A
+ * turn eve parks on the tasks it started (`turn.waiting`) is still under
+ * way: nothing is told for the park, the next step under the same id adds
+ * to the same turn, and a subagent's findings reach the record as the steps
+ * that follow them, never as a turn of their own.
  */
 
 /** One part of the answer as a step produced it, kept until the turn completes and the message is told whole. */
@@ -120,7 +121,7 @@ function joinedWords(head: string, tail: string): string {
 }
 
 interface RelayTurnState {
-  readonly kind: RelayTurn;
+  readonly kind: BrainHostTurn;
   readonly sequence: number;
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
@@ -129,13 +130,15 @@ interface RelayTurnState {
   readonly drafts?: Readonly<Record<string, RelayDraft>>;
   /** Whether the store refused the ask that opened the turn: a turn with no ask on record settles no answer. */
   readonly askRefused?: true;
+  /** The deliveries bound to the turn so far: those its start named, and each that joined it under way; absent in state an earlier build kept. */
+  readonly deliveries?: readonly string[];
+  /** How many developer lines the turn has received, and eve's id for the last one read, so a line eve delivers again adds nothing; absent in state an earlier build kept. */
+  readonly received?: { readonly count: number; readonly eventId: string };
 }
 
 /** What one session's relay keeps: the turns still under way, by eve's own turn id. */
 export interface RelayState {
   readonly turns: Readonly<Record<string, RelayTurnState>>;
-  /** Whether the session has delegated to a subagent, so a turn no ask opened is a subagent's wake-up. */
-  readonly delegated?: true;
 }
 
 export const EMPTY_RELAY_STATE: RelayState = { turns: {} };
@@ -200,15 +203,33 @@ interface StreamRelaySeams {
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-  [RELAY_TURN.CHILD_COMPLETION]: TURN_ORIGIN.CHILD_COMPLETION,
-} as const satisfies Record<RelayTurn, TurnOrigin>;
+} as const satisfies Record<BrainHostTurn, TurnOrigin>;
 
 const TOOL_CALL_KIND = "tool-call";
+/** eve's own kind of action for a call to a declared subagent, named by the tool eve lowers the subagent into, which is the name its result carries. */
+const SUBAGENT_CALL_KIND = "subagent-call";
 
-/** The tools that delegate to a subagent, whose result eve hands back in a turn of its own. */
-const SUBAGENT_TOOLS: ReadonlySet<string> = new Set([EVE_DELEGATION_TOOL.WORKER]);
 const TOOL_RESULT_KIND = "tool-result";
 const EVE_ACTION_COMPLETED = "completed";
+
+type RequestedAction = Extract<
+  MessageStreamEvent,
+  { readonly type: "actions.requested" }
+>["data"]["actions"][number];
+
+/** The call an action requests, as the record names it; nothing for an action that is no call of a tool. */
+function requestedCallOf(
+  action: RequestedAction,
+): { readonly callId: string; readonly name: string } | undefined {
+  switch (action.kind) {
+    case TOOL_CALL_KIND:
+      return { callId: action.callId, name: action.toolName };
+    case SUBAGENT_CALL_KIND:
+      return { callId: action.callId, name: action.name };
+    default:
+      return undefined;
+  }
+}
 
 /** The status word a tool's own output carries, when it is a record with one. */
 function statusWordOf(output: UnparsedWireValue): string | undefined {
@@ -395,23 +416,23 @@ export class StreamRelay {
       case "turn.started":
         return this.#turnStarted(event.data.turnId, event.meta.deliveryIds ?? [], standing);
       case "message.received":
-        return this.#received(event.data.turnId, event.data.message, standing);
+        return Effect.andThen(
+          this.#joined(event.data.turnId, event.meta.deliveryIds ?? [], standing),
+          this.#received(event.data.turnId, event.data.message, event.meta.id, standing),
+        );
       case "step.started":
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
       case "actions.requested": {
         const { turnId, stepIndex, actions } = event.data;
         return Effect.gen({ self: this }, function* () {
           for (const action of actions) {
-            if (action.kind !== TOOL_CALL_KIND) continue;
-            // A call to a subagent is the session's delegation: its result comes back in a turn no ask opened.
-            if (SUBAGENT_TOOLS.has(action.toolName) && !standing.state.get().delegated) {
-              standing.state.update((state) => ({ ...state, delegated: true }));
-            }
+            const call = requestedCallOf(action);
+            if (!call) continue;
             yield* this.#toolCall(
               turnId,
               stepIndex,
-              action.callId,
-              action.toolName,
+              call.callId,
+              call.name,
               unparsedWire(action.input),
               standing,
             );
@@ -519,13 +540,7 @@ export class StreamRelay {
       // A start eve emits again finds its turn already under way and leaves what it accumulated standing.
       const state = standing.state.get();
       if (state.turns[eveTurnId]) return;
-      // Note that eve marks nothing on the turn it opens to hand a subagent's
-      // result back: it runs under the last request's auth and carries no
-      // delivery, where every ask after the session's opening one carries its
-      // own. So a turn with no delivery, in a session that has delegated, is
-      // that wake-up, and is recorded as the subagent's and not the last ask's.
-      const kind =
-        deliveryIds.length === 0 && state.delegated ? RELAY_TURN.CHILD_COMPLETION : standing.turn;
+      const kind = standing.turn;
       if (kind === undefined) {
         this.#seams.report(
           `Turn ${eveTurnId} of session ${standing.sessionId} named no kind of turn and is not recorded.`,
@@ -534,7 +549,16 @@ export class StreamRelay {
       }
       standing.state.update((state) => ({
         ...state,
-        turns: { ...state.turns, [eveTurnId]: { kind, sequence: 0, steps: {}, usageBySteps: {} } },
+        turns: {
+          ...state.turns,
+          [eveTurnId]: {
+            kind,
+            sequence: 0,
+            steps: {},
+            usageBySteps: {},
+            deliveries: [...deliveryIds],
+          },
+        },
       }));
       const { origin, trigger } = BRAIN_HOST_TURN_KIND[kind];
       // The turn row is queued ahead of its start with what it will run under,
@@ -597,10 +621,58 @@ export class StreamRelay {
     return { ...state, turns: rest };
   }
 
-  #received(eveTurnId: string, text: string, standing: RelayStanding): RelayEffect<void> {
+  /**
+   * Binds to the turn each delivery that joined it under way and carries the
+   * Stop an ask took while it waited, as the start does for the deliveries
+   * eve folded into the turn. A message that steers a turn (`channel.ts`)
+   * rides on every later event of the turn with its own delivery beside the
+   * start's, so the binding runs where a received line first names one, and
+   * a delivery the turn already holds binds nothing again.
+   */
+  #joined(
+    eveTurnId: string,
+    deliveryIds: readonly string[],
+    standing: RelayStanding,
+  ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
       const turn = standing.state.get().turns[eveTurnId];
       if (!turn) return;
+      const bound = new Set(turn.deliveries ?? []);
+      const joining = deliveryIds.filter((id) => !bound.has(id));
+      if (joining.length === 0) return;
+      const turnId = hostTurnId(standing.sessionId, eveTurnId);
+      yield* this.#seams.asks.bindDeliveries(standing.target, joining, turnId);
+      const stopped = yield* this.#seams.asks.stoppedOn(standing.target, turnId);
+      if (stopped.length > 0) {
+        yield* this.#seams.stopTurn(standing.target, standing.sessionId, eveTurnId, turnId);
+      }
+      standing.state.update((state) =>
+        withTurn(state, eveTurnId, (held) => ({
+          ...held,
+          deliveries: [...(held.deliveries ?? []), ...joining],
+        })),
+      );
+    });
+  }
+
+  #received(
+    eveTurnId: string,
+    text: string,
+    eventId: string | undefined,
+    standing: RelayStanding,
+  ): RelayEffect<void> {
+    return Effect.gen({ self: this }, function* () {
+      const turn = standing.state.get().turns[eveTurnId];
+      if (!turn) return;
+      // A line eve delivers again adds nothing; the lines read before this one number its row.
+      const read = turn.received ?? { count: 0, eventId: "" };
+      if (eventId !== undefined && eventId <= read.eventId) return;
+      standing.state.update((state) =>
+        withTurn(state, eveTurnId, (held) => ({
+          ...held,
+          received: { count: read.count + 1, eventId: eventId ?? read.eventId },
+        })),
+      );
       const { trigger, receivedLine } = BRAIN_HOST_TURN_KIND[turn.kind];
       if (receivedLine === RECEIVED_LINE.TRANSCRIPT) {
         // The developer's line is the transcript's, under the ask's own id; a row
@@ -621,7 +693,7 @@ export class StreamRelay {
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         message: userMessage(
-          receivedMessageId(standing.sessionId, eveTurnId),
+          receivedMessageId(standing.sessionId, eveTurnId, read.count),
           text,
           userMetadataOf(
             trigger,
