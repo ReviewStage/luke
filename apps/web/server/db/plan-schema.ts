@@ -94,9 +94,7 @@ export const planBoard = pgTable("plan_board", {
   drawing: jsonb("drawing").$type<readonly DrawingElement[]>(),
   /** The latest drawing's number, one more for each drawing; 0 before he drew. */
   drawingNumber: integer("drawing_number").notNull().default(0),
-  /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `image_drawing`; null before one. */
+  /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `applied_drawing`; null before one. */
   image: text("image"),
-  /** The number of Luke's drawing the image holds; 0 before there is one. */
-  imageDrawing: integer("image_drawing").notNull().default(0),
   updatedAt: instant("updated_at").notNull().defaultNow(),
 });

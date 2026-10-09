@@ -100,6 +100,21 @@ it.layer(testSqlClient)("look_at_board", (it) => {
     }),
   );
 
+  it.effect("a save of a new drawing that carried no image drops the old drawing's image", () =>
+    Effect.gen(function* () {
+      const { userId, planId, binding } = yield* openPlan;
+      yield* writeDrawing(userId, planId, BOX);
+      yield* writeScene(userId, planId, SCENE, 1, OLDER_IMAGE);
+      yield* writeDrawing(userId, planId, BOX);
+      yield* writeScene(userId, planId, SCENE, 2);
+
+      const look = yield* Effect.forkChild(runLookAtBoard(binding, unparsedWire({})));
+      const answered = yield* driven(look, BOARD_LOOK_WAIT.DEADLINE);
+
+      assert.equal(answered.status, LOOK_AT_BOARD_STATUS.NOT_LOOKED);
+    }),
+  );
+
   it.effect("another account's plan shows nothing", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;

@@ -27,9 +27,9 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * as in `plan-store.ts`.
  *
  * The Mac's first save to hold a new drawing of Luke's carries the scene
- * drawn as a PNG, which the board keeps with that drawing's number until the
- * next such save, and which only `look_at_board` reads (`readBoardImage`): a
- * board read never carries it.
+ * drawn as a PNG, which the board keeps until the next such save, so it
+ * shows the drawing the scene holds; only `look_at_board` reads it
+ * (`readBoardImage`), and a board read never carries it.
  */
 
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
@@ -88,21 +88,24 @@ function upsertScene(elements: readonly BoardElement[], image: string | undefine
     Result: BoardRowSchema,
     execute: ({ planId, appliedDrawing, now }) => {
       const scene = { elements, appliedDrawing, updatedAt: now };
-      const written =
-        image === undefined ? scene : { ...scene, image, imageDrawing: appliedDrawing };
+      // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
+      const kept = sql`case when ${planBoard.appliedDrawing} = ${appliedDrawing} then ${planBoard.image} end`;
       return db
         .insert(planBoard)
-        .values({ planId, ...written })
-        .onConflictDoUpdate({ target: planBoard.planId, set: written })
+        .values({ planId, ...scene, image: image ?? null })
+        .onConflictDoUpdate({
+          target: planBoard.planId,
+          set: { ...scene, image: image ?? kept },
+        })
         .returning(BOARD_COLUMNS);
     },
   });
 }
 
-/** The board's image, the drawing it holds, and Luke's latest drawing's number. */
+/** The board's image, the drawing its scene holds, and Luke's latest drawing's number. */
 const BoardImageRowSchema = Schema.Struct({
   image: Schema.NullOr(Schema.String),
-  imageDrawing: Schema.NullOr(Schema.Int),
+  appliedDrawing: Schema.NullOr(Schema.Int),
   drawingNumber: Schema.NullOr(Schema.Int),
 });
 
@@ -113,7 +116,7 @@ const findBoardImage = SqlSchema.findOneOption({
     db
       .select({
         image: planBoard.image,
-        imageDrawing: planBoard.imageDrawing,
+        appliedDrawing: planBoard.appliedDrawing,
         drawingNumber: planBoard.drawingNumber,
       })
       .from(plan)
@@ -178,11 +181,11 @@ export function readBoardImage(
   planId: string,
 ): PlanStoreEffect<Option.Option<string>> {
   return Effect.map(findBoardImage({ userId, planId }), (row) =>
-    Option.flatMap(row, ({ image, imageDrawing, drawingNumber }) =>
+    Option.flatMap(row, ({ image, appliedDrawing, drawingNumber }) =>
       image !== null &&
       drawingNumber !== null &&
       drawingNumber > 0 &&
-      imageDrawing === drawingNumber
+      appliedDrawing === drawingNumber
         ? Option.some(image)
         : Option.none(),
     ),
