@@ -39,6 +39,8 @@ let sent: Act[] = [];
 let refuseWrites = false;
 /** Whether the models read is answered with a failure rather than the catalog. */
 let refuseModels = false;
+/** Whether the default read is answered with a failure rather than the stored choice. */
+let refuseDefaultRead = false;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -51,7 +53,13 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
-      return Promise.resolve(done({ choice: stored }));
+      return Promise.resolve(
+        done(
+          refuseDefaultRead
+            ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }
+            : { choice: stored },
+        ),
+      );
     case ACT_KIND.CODING_AGENTS_MODELS:
       return Promise.resolve(
         done(refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: MODELS }),
@@ -74,6 +82,7 @@ beforeEach(() => {
   sent = [];
   refuseWrites = false;
   refuseModels = false;
+  refuseDefaultRead = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -173,6 +182,28 @@ test("a models read that fails says so in the menu, and the stored effort still 
     "The models could not be read. Open Settings again to try again.",
   );
   assert.deepEqual([...page.querySelectorAll('[role="menuitem"]')], []);
+});
+
+test("a retry whose models read fails does not keep the earlier catalog on offer", async () => {
+  refuseDefaultRead = true;
+  const page = await mount();
+  assert.ok(page.querySelector('[role="alert"]'));
+
+  refuseDefaultRead = false;
+  refuseModels = true;
+  act(() => {
+    [...page.querySelectorAll<HTMLElement>("button")]
+      .find((each) => each.textContent === "Try again")
+      ?.click();
+  });
+  await settle();
+  assert.deepEqual(efforts(page), [["high", "true"]]);
+  act(() => page.querySelector<HTMLElement>(".settings-model-chip")?.click());
+  assert.deepEqual([...page.querySelectorAll('[role="menuitem"]')], []);
+  assert.equal(
+    page.querySelector('[role="menu"] [role="alert"]')?.textContent,
+    "The models could not be read. Open Settings again to try again.",
+  );
 });
 
 test("a stored model the catalog has stopped offering keeps its effort drawn rather than an empty row", async () => {

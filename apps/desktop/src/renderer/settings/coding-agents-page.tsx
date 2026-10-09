@@ -233,6 +233,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
     // Nothing of an earlier read, or an earlier account, stands while this one is out.
     setChoice(undefined);
     setReadFailed(false);
+    setModels(undefined);
     setModelsFailed(false);
     act(ACT_KIND.CODING_AGENTS_DEFAULT_READ).then(
       (answer) => {
