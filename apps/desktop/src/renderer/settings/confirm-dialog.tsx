@@ -186,19 +186,13 @@ export function ConfirmDialog({
           <button
             type="button"
             ref={cancel}
-            className="confirm-dialog-button"
+            className="toolbar-button"
             disabled={acting}
             onClick={dismiss}
           >
             Cancel
           </button>
-          <button
-            type="button"
-            className="confirm-dialog-button"
-            data-danger="true"
-            disabled={acting}
-            onClick={act}
-          >
+          <button type="button" className="danger-button" disabled={acting} onClick={act}>
             {acting ? question.running : question.verb}
           </button>
         </div>

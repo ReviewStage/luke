@@ -206,8 +206,8 @@ body,
   --title-bar-ground: var(--desktop-well);
 }
 
-.title-bar-controls .toolbar-button:hover:not(:disabled) {
-  background: linear-gradient(var(--selected), var(--selected)) var(--title-bar-ground);
+.title-bar-controls .icon-button {
+  --button-ground: var(--title-bar-ground);
 }
 
 .title-bar-controls[data-edge="end"] {
@@ -327,9 +327,7 @@ body,
 }
 
 .sidebar-new-plan svg,
-.sidebar-item svg,
-.toolbar-button svg,
-.primary-button svg {
+.sidebar-item svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
   flex: 0 0 auto;
@@ -612,7 +610,9 @@ body,
 }
 
 .toolbar-button,
+.icon-button,
 .primary-button,
+.danger-button,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
 .sidebar-plan,
@@ -620,12 +620,31 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* Ghost, labelled or not: no fill until the pointer is on it, the way a
-   native window's toolbar draws its buttons, and the platform's focus ring
-   for the keyboard. */
-.toolbar-button {
-  display: flex;
+/* Buttons --------------------------------------------------------------------- */
+
+/* Two buttons, drawn the way a native window's toolbar draws its own: a
+   labelled one (`.toolbar-button`) and a glyph alone in a square
+   (`.icon-button`), the title bar's expand, panel, and ⋯ buttons being the
+   first of those. Both are one control's box, corner, and glyph, with no
+   fill until the pointer is on them, and the labelled one fills with the
+   accent (`.primary-button`) for the act a place exists for, or with red
+   (`.danger-button`) for one that destroys. Every button that is not one of
+   these is a row, a tab, or a call control, and says why where it is drawn.
+
+   A button's hover lays the translucent fill over `--button-ground`, which is
+   nothing unless the button stands over something moving beneath it: the
+   title bar's panes, the transcript's lines. The glyph keeps its box
+   whatever the button's width, since a user-agent padding left on a button
+   is what once squeezed one narrower than the glyphs beside it. */
+.toolbar-button,
+.icon-button,
+.primary-button,
+.danger-button {
+  --button-ground: transparent;
+  display: inline-flex;
+  flex: none;
   align-items: center;
+  justify-content: center;
   gap: var(--glyph-gap);
   height: var(--control-height);
   padding: 0 var(--space-12);
@@ -633,29 +652,72 @@ body,
   background: none;
   font-size: 12.5px;
   font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
+  white-space: nowrap;
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease,
+    filter var(--duration-hover) ease;
 }
 
-.toolbar-button:hover {
-  background: var(--selected);
+.icon-button-glyph,
+.toolbar-button svg,
+.icon-button svg,
+.primary-button svg,
+.danger-button svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: 0 0 auto;
 }
 
-.toolbar-button:disabled {
-  opacity: 0.45;
-  background: none;
-}
-
-/* Square however tight its row, so only the tabs beside it give way. */
-.toolbar-icon-button {
-  flex: none;
-  justify-content: center;
+/* Square however tight its row, so only the tabs beside it give way, and
+   muted until the pointer is on it, as a toolbar's glyphs are. */
+.icon-button {
   width: var(--control-height);
   padding: 0;
   color: var(--text-secondary);
 }
 
-.toolbar-icon-button:hover {
+/* A state weighs a class and its pseudo-class alone, so a button that says
+   more of itself, Sign out's red hover or a toggle drawn on, still wins. A
+   button whose menu is open keeps its hover for as long as the menu stands. */
+:is(.toolbar-button, .icon-button):hover:where(:not(:disabled, [aria-disabled="true"])),
+:is(.toolbar-button, .icon-button):where([aria-haspopup][aria-expanded="true"]) {
+  background: linear-gradient(var(--selected), var(--selected)) var(--button-ground);
   color: var(--text-primary);
+}
+
+:is(.toolbar-button, .icon-button):active:where(:not(:disabled, [aria-disabled="true"])) {
+  background: linear-gradient(var(--pressed), var(--pressed)) var(--button-ground);
+}
+
+.primary-button {
+  background: var(--message-sent);
+  color: #fff;
+}
+
+.danger-button {
+  background: var(--danger-fill);
+  color: #fff;
+}
+
+:is(.primary-button, .danger-button):hover:where(:not(:disabled)) {
+  filter: brightness(1.1);
+}
+
+:is(.primary-button, .danger-button):active:where(:not(:disabled)) {
+  filter: brightness(0.92);
+}
+
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):where(
+  :disabled,
+  [aria-disabled="true"]
+) {
+  opacity: 0.45;
+}
+
+:is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* Plan actions ---------------------------------------------------------- */
@@ -710,15 +772,15 @@ body,
    one line down the menu. Muted beside its label, and red with it on Delete. */
 .plan-menu-icon {
   display: flex;
-  width: 16px;
-  height: 16px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
   flex: 0 0 auto;
   color: var(--text-secondary);
 }
 
 .plan-menu-icon svg {
-  width: 16px;
-  height: 16px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
 }
 
 .plan-menu-item[data-danger="true"] .plan-menu-icon {
@@ -761,23 +823,6 @@ body,
    right-click is about, so the menu is plainly about that plan. */
 .sidebar-plan[data-menu-open="true"] {
   box-shadow: inset 0 0 0 1px var(--selected-edge);
-}
-
-.primary-button {
-  display: flex;
-  align-items: center;
-  gap: var(--glyph-gap);
-  height: 36px;
-  padding: 0 var(--space-16);
-  border-radius: 9px;
-  background: var(--message-sent);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 620;
-}
-
-.primary-button:hover {
-  filter: brightness(1.1);
 }
 
 /* Empty and waiting states ---------------------------------------------- */
@@ -1194,7 +1239,7 @@ body,
   align-items: center;
   gap: var(--glyph-gap);
   height: 30px;
-  padding: 0 var(--space-6) 0 calc(var(--row-inset) - 1px);
+  padding: 0 var(--space-2) 0 calc(var(--row-inset) - 1px);
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--raised);
@@ -1208,8 +1253,8 @@ body,
 }
 
 .settings-search-well .search-glyph {
-  width: 14px;
-  height: 14px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
   flex: 0 0 auto;
 }
 
@@ -1232,7 +1277,7 @@ body,
 
 /* The search's chord, printed in the empty field until the caret arrives. */
 .settings-search-shortcut {
-  padding-right: 3px; /* off-scale */
+  padding-right: var(--space-6);
 }
 
 .settings-search-well:focus-within .settings-search-shortcut {
@@ -1240,25 +1285,11 @@ body,
 }
 
 .settings-search-clear {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  place-items: center;
-  transition: color var(--duration-hover) ease;
-}
-
-.settings-search-clear:hover {
-  color: var(--text-primary);
-}
-
-.settings-search-clear .icon-button-glyph {
-  width: 9px;
-  height: 9px;
+  /* An icon button nested in the well: as far inside the well's edge on
+     every side as it is from the end, with the corner that inset leaves. */
+  width: calc(var(--control-height) - 2px - 2 * var(--space-2));
+  height: calc(var(--control-height) - 2px - 2 * var(--space-2));
+  border-radius: calc(var(--control-radius) - var(--space-2));
 }
 
 /* What a query found, in the list's place: each page's heading, then its
@@ -1303,13 +1334,32 @@ body,
   scroll-padding-top: var(--page-inset);
 }
 
-/* The page scrolls with the column rather than inside a scroller of its own. */
+/* The page scrolls with the column rather than inside a scroller of its own.
+   Its rows are drawn at a size the window reads at by zooming them, which
+   would zoom the controls among them past every other button in the window,
+   so the controls take the zoom back off and stand at the window's own size. */
 .settings-page-scroll .settings {
+  --settings-zoom: 1.15;
   max-width: 600px;
   margin: 0 auto;
   overflow: visible;
   animation: none;
-  zoom: 1.15;
+  zoom: var(--settings-zoom);
+}
+
+.settings-page-scroll
+  .settings
+  :is(.toolbar-button, .icon-button, .primary-button, .danger-button, .voice-select) {
+  zoom: calc(1 / var(--settings-zoom));
+}
+
+/* Note that the ring is restated at the zoom it is drawn under, because the
+   engine rounds an outline's width at the control's own zoom and would draw
+   the 2px ring a pixel thin. */
+.settings-page-scroll
+  .settings
+  :is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
+  outline-width: calc(2px * var(--settings-zoom));
 }
 
 /* The list on the left is the way between pages and the toolbar names the
@@ -1573,12 +1623,6 @@ body,
   gap: var(--list-gap);
 }
 
-.side-panel-tabs .toolbar-icon-button[aria-disabled="true"] {
-  opacity: 0.45;
-  background: none;
-  color: var(--text-secondary);
-}
-
 /* With every tab closed, the panel offers what the "+" menu offers, as the
    same rows, at the top of its well. */
 .side-panel-no-tabs {
@@ -1629,6 +1673,21 @@ body,
   font-size: 12.5px;
   line-height: 1.5;
   text-align: center;
+}
+
+/* The transcript's way back to its newest line floats over the lines, so it
+   stands on the panel's ground, edged and lifted off them, and its hover
+   fills over that ground. */
+.conversation-scroll {
+  --button-ground: var(--desktop-well);
+  position: absolute;
+  bottom: var(--space-16);
+  left: 50%;
+  background: var(--button-ground);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    0 6px 16px rgba(0, 0, 0, 0.4);
+  translate: -50% 0;
 }
 
 .side-panel-toggle[data-open="true"] {
@@ -1897,33 +1956,10 @@ body,
   margin-top: var(--space-12);
 }
 
-.confirm-dialog-button {
-  height: 32px;
+/* A dialog's answers hold a common width, so a short verb is not a smaller
+   target than Cancel beside it. */
+.confirm-dialog-actions > button {
   min-width: 80px;
-  padding: 0 var(--space-12);
-  border-radius: 8px;
-  background: var(--raised);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-weight: 600;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.confirm-dialog-button:hover:not(:disabled) {
-  background: var(--raised-strong);
-}
-
-.confirm-dialog-button[data-danger="true"] {
-  background: var(--danger-fill);
-  color: #fff;
-}
-
-.confirm-dialog-button[data-danger="true"]:hover:not(:disabled) {
-  filter: brightness(1.1);
-}
-
-.confirm-dialog-button:disabled {
-  opacity: 0.5;
 }
 
 @keyframes confirm-dialog-dim {

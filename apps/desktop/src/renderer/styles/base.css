@@ -44,6 +44,11 @@
      entirely. */
   --selected: rgba(255, 255, 255, 0.2);
   --selected-edge: rgba(255, 255, 255, 0.32);
+  /* A button held down: a step past its hover, so the press is seen. */
+  --pressed: rgba(255, 255, 255, 0.26);
+  /* The keyboard's ring around whatever control it is on, in the system's
+     own default accent. */
+  --focus-ring: var(--message-sent);
   --hairline: rgba(255, 255, 255, 0.08);
 
   /* A key drawn on screen is a physical thing quoted, so it gets what the
@@ -253,7 +258,10 @@ body,
   user-select: text;
 }
 
+/* No user-agent padding either: a button keeps none it did not ask for, so a
+   glyph centred in a fixed box is never squeezed narrower than its own. */
 button {
+  padding: 0;
   border: 0;
   color: inherit;
   cursor: pointer;
@@ -1048,7 +1056,7 @@ button:disabled {
 }
 
 /* Held to the width of its longest word, so saying "Sending…" does not slide
-   the Cancel beside it — the same floor the slot's confirm keeps. */
+   the Cancel beside it. */
 .feedback-send {
   min-width: 76px;
 }
@@ -1220,51 +1228,10 @@ button:disabled {
   object-fit: contain;
 }
 
-/* Offers like the quiet buttons around it, with the picture glyph saying what
-   it takes. */
-.feedback-attach {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 11px;
-  border-radius: 10px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 640;
-  white-space: nowrap;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.feedback-attach:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.feedback-attach:disabled {
-  opacity: 0.4;
-}
-
-.feedback-attach:disabled:hover {
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.feedback-attach .icon-button-glyph {
-  width: 12px;
-  height: 12px;
-}
-
-/* The settings section's two offers share one row, half the width each. */
+/* The settings section's two offers share one row, side by side. */
 .feedback-offers {
   display: flex;
   gap: 7px;
-}
-
-.feedback-offer {
-  flex: 1 1 0;
 }
 
 /* A send that landed, said in the palette every settled answer uses. */

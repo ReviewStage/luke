@@ -64,7 +64,7 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
       <Tooltip label="Back" command={APP_COMMAND.BACK}>
         <button
           type="button"
-          className="toolbar-button toolbar-icon-button"
+          className="icon-button"
           aria-label="Back"
           disabled={!history.canGoBack}
           onClick={history.onBack}
@@ -75,7 +75,7 @@ export function HistoryButtons({ history }: { history: NavigationHistory }): Rea
       <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
         <button
           type="button"
-          className="toolbar-button toolbar-icon-button"
+          className="icon-button"
           aria-label="Forward"
           disabled={!history.canGoForward}
           onClick={history.onForward}

@@ -153,8 +153,8 @@ export type ConversationScrollButtonProps = ComponentProps<"button">;
 
 /**
  * The way back to the newest line, shown while the reader has scrolled away
- * from it. The lines scroll beneath it, so its hover lays the translucent
- * fill over its own opaque ground as a layer rather than in place of it.
+ * from it: the window's icon button, floating over the lines on a ground of
+ * its own (`.conversation-scroll` in desktop.css).
  */
 export function ConversationScrollButton({
   className,
@@ -166,14 +166,11 @@ export function ConversationScrollButton({
     <button
       type="button"
       aria-label="Scroll to the newest line"
-      className={cn(
-        "absolute bottom-4 left-1/2 flex size-8 -translate-x-1/2 cursor-default items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-[linear-gradient(var(--color-secondary),var(--color-secondary))]",
-        className,
-      )}
+      className={cn("icon-button conversation-scroll", className)}
       onClick={scrollToBottom}
       {...props}
     >
-      <ArrowDownIcon className="size-4" aria-hidden="true" />
+      <ArrowDownIcon aria-hidden="true" />
     </button>
   );
 }

@@ -320,14 +320,23 @@
 }
 
 /* The voice, offered as macOS offers one value from a small fixed set: a
-   pop-up button — the current value on the face, the up-and-down badge on the
-   trailing edge. The `select` underneath is what opens the system's own menu;
-   only the closed control is drawn here, and only its colors move. */
+   pop-up button — the current value on the face, the up-and-down chevrons on
+   the trailing edge. The `select` underneath is what opens the system's own
+   menu; only the closed control is drawn here, at the window's own control
+   size, corner, and type (desktop.css keeps it out of the page's zoom), and
+   its chevrons are a muted glyph like every other control's rather than a
+   badge of their own. */
 .voice-select {
   position: relative;
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.voice-select:hover {
+  color: var(--text-primary);
 }
 
 .voice-select select {
@@ -339,52 +348,44 @@
      "Conductor's default" and "GPT-5.3 Codex Spark" — and a face only
      observation could lengthen, a project's name, ellipsizes rather than
      growing. */
-  width: 150px;
+  width: 184px;
+  height: var(--control-height);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 6px 27px 6px 11px;
+  padding: 0 calc(var(--space-8) + var(--control-glyph) + var(--space-4)) 0 var(--space-12);
   border: 1px solid var(--hairline);
-  border-radius: 7px;
+  border-radius: var(--control-radius);
   background: var(--raised);
   color: var(--text-primary);
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
-  font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    border-color var(--duration-hover) ease;
+  font-size: 12.5px;
+  font-weight: 600;
+  transition: background-color var(--duration-hover) ease;
 }
 
 .voice-select select:hover {
   background: var(--raised-strong);
 }
 
-/* The ring the input draws, because this is the same kind of landing place. */
+/* The keyboard's ring, the one every button wears. */
 .voice-select select:focus-visible {
-  border-color: color-mix(in srgb, var(--state-working) 45%, transparent);
-  outline: none;
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
-/* The badge answers no pointer — the select under it is the whole control. */
+/* The chevrons answer no pointer — the select under them is the whole control. */
 .voice-select-badge {
   position: absolute;
-  right: 5px;
+  right: var(--space-8);
   display: flex;
-  width: 16px;
-  height: 16px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--state-working) 24%, transparent);
-  color: var(--state-working);
   pointer-events: none;
 }
 
 .voice-select-glyph {
-  width: 10px;
-  height: 10px;
+  width: var(--control-glyph);
+  height: var(--control-glyph);
 }
 
 /* The one green thing on the line, in the same palette a finished session
@@ -395,41 +396,6 @@
   flex: 0 0 auto;
   color: var(--state-complete);
   opacity: 1;
-}
-
-/* Square, quiet, and captioned only for a reader: a trash can and a pencil say
-   what they do, and a label beside each would say it twice. */
-.icon-button {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.icon-button:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-.icon-button:disabled {
-  opacity: 0.4;
-}
-
-.icon-button:disabled:hover {
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.icon-button-glyph {
-  width: 13px;
-  height: 13px;
 }
 
 /* A name and what is true of it, on one line: the same 7px the credential rows
@@ -534,17 +500,18 @@
    grows back out of, its own right edge: the group folds toward the corner the
    trash sits in rather than shrinking about its middle.
  *
- * Matched through the layer rather than by class, because `.quiet-button` and
- * `.danger-button` are written further down the sheet and would otherwise win
- * this declaration back at equal specificity. Their transition declares only
- * the hover pair, so this replaces it rather than adding to it and has to carry
- * that pair along. */
+ * Matched through the layer rather than by class, because `.toolbar-button`
+ * and `.danger-button` are written in desktop.css, later in the stylesheet,
+ * and would otherwise win this declaration back at equal specificity. Their
+ * transition declares only the hover's own, so this replaces it rather than
+ * adding to it and has to carry those along. */
 .credential-actions > [data-drawn] > * {
   transform-origin: 100% 50%;
   transition:
     transform var(--duration-fast) var(--spring-fast) var(--answer-delay, 0s),
     background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
+    color var(--duration-hover) ease,
+    filter var(--duration-hover) ease;
 }
 
 /* Standing down happens all at once: a group leaving in sequence reads as
@@ -658,75 +625,10 @@
   gap: 7px;
 }
 
-.action-button:disabled,
-.quiet-button:disabled,
-.danger-button:disabled {
-  opacity: 0.4;
-}
-
-.action-button:disabled:hover,
-.quiet-button:disabled:hover,
-.danger-button:disabled:hover {
-  background: var(--raised);
-}
-
-.action-button,
-.quiet-button {
-  padding: 8px 13px;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 640;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-  white-space: nowrap;
-}
-
-.action-button {
-  background: color-mix(in srgb, var(--state-working) 15%, transparent);
-  color: var(--state-working);
-}
-
-.action-button:hover {
-  background: color-mix(in srgb, var(--state-working) 22%, transparent);
-}
-
-.quiet-button {
-  background: var(--raised);
-  color: var(--text-secondary);
-}
-
-.quiet-button:hover {
-  background: var(--raised-strong);
-  color: var(--text-primary);
-}
-
-/* Shaped like the editor's Save and coloured like the trash that opened it. It
-   is the one control in the app that sits in red before anything hovers it:
-   every other destructive control admits what it is on the way past, and by the
-   time this one is drawn the question has already been asked. */
-.danger-button {
-  padding: 8px 13px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--danger) 16%, transparent);
-  color: var(--danger-text);
-  font-size: 10px;
-  font-weight: 640;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-  white-space: nowrap;
-}
-
-.danger-button:hover {
-  background: color-mix(in srgb, var(--danger) 26%, transparent);
-}
-
 /* Held to the width of its longest word, so saying "Deleting…" does not widen
-   the group and slide the answer beside it along — the same floor the slot's
-   confirm keeps, and by measurement the same number. */
+   the group and slide the answer beside it along. */
 .credential-confirm .danger-button {
-  min-width: 76px;
+  min-width: 96px;
 }
 
 .error-message {

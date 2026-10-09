@@ -155,7 +155,7 @@ function AddTabButton({
         <button
           ref={opener}
           type="button"
-          className="toolbar-button toolbar-icon-button tab-add"
+          className="icon-button tab-add"
           aria-label="Open a tab"
           aria-haspopup="menu"
           aria-expanded={menu !== undefined}
@@ -318,7 +318,7 @@ export function SidePanelToggle({
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDE_PANEL}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button side-panel-toggle"
+        className="icon-button side-panel-toggle"
         aria-label={label}
         aria-expanded={panel.open}
         data-open={String(panel.open)}
@@ -354,7 +354,7 @@ function FullScreenToggle({
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_FULL_SCREEN}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button side-panel-full-screen"
+        className="icon-button side-panel-full-screen"
         aria-label={label}
         aria-pressed={fullScreen}
         onClick={onToggle}

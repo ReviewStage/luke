@@ -21,11 +21,7 @@ function FeedbackOffer({
   const copy = FEEDBACK_COPY[kind];
   const holdsDraft = control.entry?.kind === kind;
   return (
-    <button
-      type="button"
-      className="quiet-button feedback-offer"
-      onClick={() => control.begin(kind)}
-    >
+    <button type="button" className="toolbar-button" onClick={() => control.begin(kind)}>
       {holdsDraft ? "Keep writing" : copy.title}
     </button>
   );

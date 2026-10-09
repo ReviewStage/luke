@@ -350,7 +350,7 @@ export function FeedbackSlot({
           {entry.images.length < FEEDBACK_LIMITS.MAX_IMAGES ? (
             <button
               type="button"
-              className="feedback-attach"
+              className="toolbar-button"
               disabled={busy}
               onClick={() => filePicker.current?.click()}
             >
@@ -418,7 +418,7 @@ export function FeedbackSlot({
             <span className="settings-actions">
               <button
                 type="button"
-                className="quiet-button"
+                className="toolbar-button"
                 disabled={busy}
                 onClick={() => control.cancel()}
               >
@@ -426,7 +426,7 @@ export function FeedbackSlot({
               </button>
               <button
                 type="button"
-                className="action-button feedback-send"
+                className="primary-button feedback-send"
                 disabled={!ready}
                 onClick={() => control.commit()}
               >
