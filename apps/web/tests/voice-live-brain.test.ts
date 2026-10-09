@@ -21,8 +21,9 @@ import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { deploymentActor } from "../server/hosted/brain-host/auth";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { ownedAuth } from "../server/hosted/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
@@ -31,6 +32,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { childConversationId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
@@ -1511,6 +1513,81 @@ it.effect(
       const looked = f.looks();
       yield* TestClock.adjust(Duration.times(POLL, 3));
       assert.equal(f.looks(), looked);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "the session of a parked turn's worker reaches its work inside the worker's call, a poll after the call is found",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      yield* parkedOnTask(target, f);
+      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+
+      // The worker's own session, relayed into the child conversation of the call that started it.
+      const child = {
+        userId: target.userId,
+        conversationId: childConversationId(target.conversationId, worker.id),
+      };
+      yield* Effect.promise(() =>
+        database.run(openChildConversation(target, child.conversationId, "worker")),
+      );
+      yield* Effect.promise(() =>
+        play(
+          [
+            stampedEveEvent(
+              { type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: 0 } },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "message.received",
+                data: { turnId: FIRST_EVE_TURN, sequence: 0, message: "Compare the queues." },
+              },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "step.started",
+                data: { turnId: FIRST_EVE_TURN, sequence: 0, stepIndex: 0, modelId: "m" },
+              },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "message.completed",
+                data: {
+                  turnId: FIRST_EVE_TURN,
+                  sequence: 0,
+                  stepIndex: 0,
+                  finishReason: "stop",
+                  message: "Queue A lets an admin revoke.",
+                },
+              },
+              NOW,
+            ),
+          ],
+          {
+            sessionId: `wrun_${randomUUID()}`,
+            target: child,
+            turn: RELAY_TURN.CHILD,
+            model: "scripted-model",
+            state: memoryRelayState(),
+          },
+        ),
+      );
+      yield* f.polls(2);
+
+      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+      assert.deepEqual(drawn.session?.parts, [
+        { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+      ]);
       yield* Effect.promise(() => f.stop());
     }),
 );

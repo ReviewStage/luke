@@ -745,17 +745,76 @@ code.work-call-subject {
   word-break: break-word;
 }
 
+/* A subagent's call: one line that opens its session in the tab's place. */
 .work-worker {
-  padding: 6px 8px;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
 }
 
-.work-worker-note {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 4px 0 0 12px;
+.work-worker:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.work-worker[data-state="running"] .work-worker-name {
   color: var(--voice-luke);
-  font-size: 11.5px;
+}
+
+.work-worker-name {
+  flex: none;
+  font-weight: 600;
+}
+
+.work-worker-job {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-worker-open {
+  flex: none;
+}
+
+/* An opened subagent's session: the way back, and its job, above its blocks. */
+.work-session-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+.work-session-back {
+  align-self: flex-start;
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.work-session-back:hover {
+  color: var(--text-primary);
+}
+
+.work-session-job {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
 }

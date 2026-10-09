@@ -387,6 +387,68 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   assert.match(markup, /Working/u);
 });
 
+test("a worker in the Work tab opens its own session in the tab's place, and the way back returns to every turn", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DesktopPlans, {
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
+          work: {
+            callLive: true,
+            turns: [
+              {
+                turnId: "turn-1",
+                startedAt: 1_000,
+                state: PLAN_WORK_STATE.RUNNING,
+                earlierOmitted: false,
+                parts: [
+                  {
+                    type: PLAN_WORK_PART.TOOL,
+                    id: "call-worker",
+                    tool: PLAN_WORK_TOOL.WORKER,
+                    name: "worker",
+                    state: PLAN_WORK_STATE.RUNNING,
+                    subject: "Compare the two queue libraries.",
+                    input: "{}",
+                    session: {
+                      earlierOmitted: false,
+                      parts: [{ type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." }],
+                    },
+                  },
+                  { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm reading the code." },
+                ],
+              },
+            ],
+          },
+        }),
+      }),
+    ),
+  );
+  const work = container.querySelector('section[aria-label="Work"]');
+  assert.ok(work);
+  const button = (text: string) =>
+    [...work.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes(text));
+
+  assert.equal(work.textContent?.includes("Queue A lets an admin revoke."), false);
+  const worker = button("Compare the two queue libraries.");
+  assert.ok(worker);
+  act(() => worker.click());
+  assert.ok(work.textContent?.includes("Queue A lets an admin revoke."));
+  assert.equal(work.textContent?.includes("While that runs"), false);
+
+  const back = button("All work");
+  assert.ok(back);
+  act(() => back.click());
+  assert.ok(work.textContent?.includes("While that runs"));
+});
+
 test("the Work tab with no turn says what will appear there", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {

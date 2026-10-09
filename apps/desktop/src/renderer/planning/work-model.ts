@@ -56,7 +56,13 @@ export type WorkBlock =
   | { kind: typeof WORK_BLOCK.TEXT; key: string; text: string }
   | { kind: typeof WORK_BLOCK.REASONING; key: string; text: string }
   | { kind: typeof WORK_BLOCK.CALL; key: string; call: WorkCallRow }
-  | { kind: typeof WORK_BLOCK.WORKER; key: string; call: WorkCallRow }
+  | {
+      kind: typeof WORK_BLOCK.WORKER;
+      key: string;
+      call: WorkCallRow;
+      /** The subagent's own session as blocks, drawn the way a turn is; absent before any of it was read. */
+      session?: WorkSessionRow;
+    }
   | {
       kind: typeof WORK_BLOCK.GROUP;
       key: string;
@@ -71,6 +77,12 @@ export type WorkBlock =
       summary: string;
       blocks: readonly WorkBlock[];
     };
+
+/** A subagent's session as the tab draws it when opened: its blocks, and whether older ones were left out. */
+interface WorkSessionRow {
+  earlierOmitted: boolean;
+  blocks: readonly WorkBlock[];
+}
 
 /** One turn as the tab draws it. */
 export interface WorkTurnRow {
@@ -145,12 +157,22 @@ function foldedSummary(calls: number, messages: number): string {
  * its own row, unless it is that latest work, which is drawn as a group so
  * the calls after it join it rather than redraw it.
  */
-function blocksOf(turn: PlanWorkTurn, moving: boolean): WorkBlock[] {
+function blocksOf(
+  parts: readonly PlanWorkPart[],
+  keyPrefix: string,
+  moving: boolean,
+  grouped: boolean,
+): WorkBlock[] {
   const blocks: WorkBlock[] = [];
   let group: WorkCallRow[] = [];
   const flush = (trailing: boolean) => {
     const [first] = group;
     if (first === undefined) return;
+    if (!grouped) {
+      blocks.push(...group.map((call) => ({ kind: WORK_BLOCK.CALL, key: call.id, call })));
+      group = [];
+      return;
+    }
     const open = trailing && moving;
     blocks.push(
       group.length > 1 || open
@@ -165,11 +187,26 @@ function blocksOf(turn: PlanWorkTurn, moving: boolean): WorkBlock[] {
     );
     group = [];
   };
-  turn.parts.forEach((part, index) => {
-    const key = `${turn.turnId}-${index}`;
+  parts.forEach((part, index) => {
+    const key = `${keyPrefix}-${index}`;
     if (part.type === PLAN_WORK_PART.TOOL && part.tool === PLAN_WORK_TOOL.WORKER) {
       flush(false);
-      blocks.push({ kind: WORK_BLOCK.WORKER, key: part.id, call: callRowOf(part, moving) });
+      // The subagent's session is drawn by this same walk, moving while the subagent does.
+      const call = callRowOf(part, moving);
+      blocks.push({
+        kind: WORK_BLOCK.WORKER,
+        key: part.id,
+        call,
+        ...(part.session === undefined
+          ? undefined
+          : {
+              session: {
+                earlierOmitted: part.session.earlierOmitted,
+                // An opened session is read for its detail, so its calls stand each on a line of its own.
+                blocks: blocksOf(part.session.parts, part.id, call.running, false),
+              },
+            }),
+      });
     } else if (part.type === PLAN_WORK_PART.TOOL) {
       group.push(callRowOf(part, moving));
     } else {
@@ -233,7 +270,44 @@ export function workRowsOf(
       startedAt: turn.startedAt,
       state: left ? PLAN_WORK_STATE.FAILED : turn.state,
       earlierOmitted: turn.earlierOmitted,
-      blocks: foldedLead(blocksOf(turn, moving), turn.turnId, turn.state === PLAN_WORK_STATE.DONE),
+      blocks: foldedLead(
+        blocksOf(turn.parts, turn.turnId, moving, true),
+        turn.turnId,
+        turn.state === PLAN_WORK_STATE.DONE,
+      ),
     };
   });
+}
+
+/** The worker block a call id names among the blocks, at their level or inside a finished turn's fold. */
+function workerNamed(
+  blocks: readonly WorkBlock[],
+  callId: string,
+): Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }> | undefined {
+  for (const block of blocks) {
+    if (block.kind === WORK_BLOCK.WORKER && block.key === callId) return block;
+    const inner = block.kind === WORK_BLOCK.FOLDED ? workerNamed(block.blocks, callId) : undefined;
+    if (inner !== undefined) return inner;
+  }
+  return undefined;
+}
+
+/**
+ * The subagent the developer opened, by the calls that lead to it,
+ * outermost first: the worker the first names in the turns, then the one the
+ * next names in that worker's session, and so on. Nothing once the rows no
+ * longer hold one of them, so the tab falls back to every turn.
+ */
+export function openedWorker(
+  rows: readonly WorkTurnRow[],
+  opened: readonly string[],
+): Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }> | undefined {
+  let blocks: readonly WorkBlock[] = rows.flatMap((turn) => turn.blocks);
+  let worker: Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }> | undefined;
+  for (const callId of opened) {
+    worker = workerNamed(blocks, callId);
+    if (worker === undefined) return undefined;
+    blocks = worker.session?.blocks ?? [];
+  }
+  return worker;
 }

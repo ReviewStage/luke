@@ -28,6 +28,7 @@ import {
   BRAIN_HOST_MODEL_FIXTURE,
   BRAIN_HOST_TURN_KIND,
   type BrainHostTurn,
+  RELAY_TURN,
 } from "./bounds.js";
 import { readRecentMessages } from "./context.js";
 import {
@@ -35,12 +36,14 @@ import {
   admitConversation,
   type ConversationAdmission,
   claimRuntimeSession,
+  openChildConversation,
   SESSION_STANDING,
 } from "./conversation.js";
 import { eveSessionsComposer } from "./eve-sessions.js";
-import { hostTurnId } from "./ids.js";
+import { childConversationId, hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel } from "./model.js";
 import {
+  EVE_DELEGATION_TOOL,
   type HostedToolDeclaration,
   PLANNING_INSTRUCTIONS,
   planningStandingContext,
@@ -48,7 +51,7 @@ import {
   runPlanningTool,
 } from "./planning.js";
 import type { BrainHostSeams } from "./production.js";
-import { type RelayStateStore, StreamRelay } from "./relay.js";
+import { type RelayStanding, type RelayStateStore, StreamRelay } from "./relay.js";
 import { rotationSeedText } from "./seed.js";
 import { carryStop } from "./stop-carrier.js";
 
@@ -159,6 +162,20 @@ export interface BrainHost {
   model(admitted: AdmittedConversation): LanguageModel | undefined;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
+  /**
+   * Relays one event of a subagent's session into the child conversation of
+   * the call that started it, as a child turn; a session with no parent, or
+   * one the account does not own, relays nothing.
+   */
+  relayChild(
+    event: MessageStreamEvent,
+    session: SessionContext["session"],
+    state: RelayStateStore,
+  ): Effect.Effect<
+    void,
+    SqlError | Schema.SchemaError,
+    SqlClient.SqlClient | HttpClient.HttpClient
+  >;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -190,6 +207,67 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
   /** The plan a conversation belongs to, as the account owns it now; nothing once it is deleted. */
   const planOf = (target: ConversationTarget) =>
     Effect.map(readPlanOfConversation(target.userId, target.conversationId), Option.getOrUndefined);
+
+  /**
+   * Relays one event of a session's stream into the conversation and turn
+   * kind the caller admitted it under: the planning session's own, or a
+   * subagent's child conversation.
+   */
+  const relayEvent = (
+    event: MessageStreamEvent,
+    standing: Pick<RelayStanding, "sessionId" | "target" | "turn" | "state"> & {
+      readonly promptHash?: string;
+    },
+  ) =>
+    Effect.gen(function* () {
+      const model = seams.scriptedModel()
+        ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
+        : seams.openAi()?.modelId;
+      // The tool set's hash is taken as each turn starts, from the same
+      // declarations the tools resolver hands eve, so the hash names what
+      // the model is offered and not a list kept beside it.
+      const toolSetHash =
+        event.type === "turn.started" ? toolSetHashOf(planningToolDeclarations()) : undefined;
+      const writer = yield* seams.writer();
+      const eve = yield* eveSessionsComposer;
+      const relay = new StreamRelay({
+        writer,
+        asks: askRecord(),
+        // A Stop an ask took while it waited is carried the moment its turn starts, by the
+        // deployment acting for the account, since the hook that sees the start holds no bearer
+        // of the account's; a deployment with no secret or no origin for eve reports the Stop it
+        // could not carry.
+        stopTurn: (target, sessionId, eveTurnId, turnId) =>
+          Effect.suspend(() => {
+            const secret = seams.deploymentSecret();
+            const origin = seams.eveOrigin();
+            if (secret === undefined || origin === undefined) {
+              return Effect.logWarning(
+                `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
+              );
+            }
+            return carryStop(
+              {
+                eve: eve({ origin, caller: { secret, account: target.userId } }),
+                writer,
+                now: seams.now,
+                report: (message) => console.warn(message),
+              },
+              target,
+              sessionId,
+              eveTurnId,
+              turnId,
+            );
+          }),
+        now: seams.now,
+        report: (message) => console.warn(message),
+      });
+      yield* relay.handle(event, {
+        ...standing,
+        ...(model !== undefined ? { model } : undefined),
+        ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
+      });
+    });
 
   return {
     admit: (auth, sessionId) =>
@@ -279,56 +357,39 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
       claimRuntimeSession(admitted.target, sessionId, new Date(seams.now())),
 
     relay: (event, admitted, session, state, prompt) =>
+      relayEvent(event, {
+        sessionId: session.id,
+        target: admitted.target,
+        turn: turnKindOf(session.auth.current),
+        state,
+        ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
+      }),
+
+    relayChild: (event, session, state) =>
       Effect.gen(function* () {
-        const model = seams.scriptedModel()
-          ? BRAIN_HOST_MODEL_FIXTURE.SCRIPTED_MODEL_ID
-          : seams.openAi()?.modelId;
-        // The tool set's hash is taken as each turn starts, from the same
-        // declarations the tools resolver hands eve, so the hash names what
-        // the model is offered and not a list kept beside it.
-        const toolSetHash =
-          event.type === "turn.started" ? toolSetHashOf(planningToolDeclarations()) : undefined;
-        const writer = yield* seams.writer();
-        const eve = yield* eveSessionsComposer;
-        const relay = new StreamRelay({
-          writer,
-          asks: askRecord(),
-          // A Stop an ask took while it waited is carried the moment its turn starts, by the
-          // deployment acting for the account, since the hook that sees the start holds no bearer
-          // of the account's; a deployment with no secret or no origin for eve reports the Stop it
-          // could not carry.
-          stopTurn: (target, sessionId, eveTurnId, turnId) =>
-            Effect.suspend(() => {
-              const secret = seams.deploymentSecret();
-              const origin = seams.eveOrigin();
-              if (secret === undefined || origin === undefined) {
-                return Effect.logWarning(
-                  `The Stop on turn ${eveTurnId} of session ${sessionId} could not be carried.`,
-                );
-              }
-              return carryStop(
-                {
-                  eve: eve({ origin, caller: { secret, account: target.userId } }),
-                  writer,
-                  now: seams.now,
-                  report: (message) => console.warn(message),
-                },
-                target,
-                sessionId,
-                eveTurnId,
-                turnId,
-              );
-            }),
-          now: seams.now,
-          report: (message) => console.warn(message),
+        const parent = session.parent;
+        if (parent === undefined) return;
+        // Admitted on ownership alone, as the subagent's resolvers are: claiming the parent's
+        // record for the child's session would refuse every later call of the planning session.
+        const admitted = yield* admitConversation(session.auth, {
+          id: session.id,
+          standing: SESSION_STANDING.DELEGATED,
         });
-        yield* relay.handle(event, {
+        if (Result.isFailure(admitted)) return;
+        const { target } = admitted.success;
+        const child = {
+          userId: target.userId,
+          conversationId: childConversationId(target.conversationId, parent.callId),
+        };
+        // The child conversation is opened as each of its turns starts, so a start the store
+        // missed is opened by the next, and every event after finds it standing.
+        if (event.type === "turn.started") {
+          yield* openChildConversation(target, child.conversationId, EVE_DELEGATION_TOOL.WORKER);
+        }
+        yield* relayEvent(event, {
           sessionId: session.id,
-          target: admitted.target,
-          turn: turnKindOf(session.auth.current),
-          ...(model !== undefined ? { model } : undefined),
-          ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
-          ...(toolSetHash !== undefined ? { toolSetHash } : undefined),
+          target: child,
+          turn: RELAY_TURN.CHILD,
           state,
         });
       }),

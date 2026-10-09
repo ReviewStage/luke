@@ -186,10 +186,33 @@ const planWorkToolPartSchema = EffectSchema.Struct({
   output: EffectSchema.optionalKey(workText),
 });
 
-const planWorkPartSchema = EffectSchema.Union([
+/** What a subagent's session is made of: its words, its reasoning, and its calls, none of which starts a subagent of its own. */
+const planWorkSessionPartSchema = EffectSchema.Union([
   planWorkTextPartSchema,
   planWorkReasoningPartSchema,
   planWorkToolPartSchema,
+]);
+
+/**
+ * A subagent's session as the Work tab draws it: the newest of what it
+ * wrote and called, oldest first, in the same parts as the planning
+ * model's. Note that it stands one level deep, because the wire shows no
+ * recursive declaration and no subagent is offered a subagent of its own.
+ */
+const planWorkSessionSchema = EffectSchema.Struct({
+  /** Whether older parts than these were left out. */
+  earlierOmitted: EffectSchema.Boolean,
+  parts: EffectSchema.Array(planWorkSessionPartSchema),
+});
+
+const planWorkPartSchema = EffectSchema.Union([
+  planWorkTextPartSchema,
+  planWorkReasoningPartSchema,
+  EffectSchema.Struct({
+    ...planWorkToolPartSchema.fields,
+    /** For a call that started a subagent, the subagent's own session as far as it has got; absent for any other call. */
+    session: EffectSchema.optionalKey(planWorkSessionSchema),
+  }),
 ]);
 
 export type PlanWorkPart = typeof planWorkPartSchema.Type;

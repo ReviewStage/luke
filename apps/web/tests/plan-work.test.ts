@@ -13,8 +13,9 @@ import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
+import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,
@@ -31,6 +32,7 @@ import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hoste
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { listJournals } from "../server/hosted/store/message-reads";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, parkedTurn, resumedTurn } from "./support/eve-turns";
@@ -388,4 +390,78 @@ test("a call the turn ended without answering says it may have run rather than t
   assert.ok(call?.type === PLAN_WORK_PART.TOOL);
   assert.equal(call.state, PLAN_WORK_STATE.DONE);
   assert.match(call.output ?? "", /it may have run/);
+});
+
+test("a worker's call carries the worker's own session, read from its child conversation: what it searched, read, and ran, and its findings, running while the worker does", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+
+  // The worker's session, relayed into the child conversation of the call that started it.
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, worker.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SEARCH_WEB_TOOL.name,
+          input: { query: "invite revoke api" },
+          output: { status: "found" },
+        },
+        { toolName: RUN_IN_REPOSITORY_TOOL.name, input: { command: "ls vendor" } },
+      ]),
+    ],
+    childStanding,
+  );
+  const childJournals = async () => {
+    const read = await database.run(
+      listJournals(child.userId, child.conversationId, HOSTED_TOOL_SET, 10),
+    );
+    assert.ok(read.ok);
+    return read.value.map((row) => row.message);
+  };
+  const projected = async () => {
+    const turnId = hostTurnId(standing.sessionId, FIRST_EVE_TURN);
+    const [turn] = await database.run(database.store.turns.named(target.userId, [turnId]));
+    assert.ok(turn);
+    const journal = await database.run(
+      database.store.messages.byClientId(
+        target.userId,
+        turn.conversationId,
+        HOSTED_TOOL_SET,
+        turn.id,
+      ),
+    );
+    assert.ok(journal.ok);
+    const [drawn] = planWorkOf(
+      turn,
+      journal.value[0]?.message,
+      new Map([[worker.id, await childJournals()]]),
+    ).parts;
+    assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+    return drawn.session?.parts.map((part) =>
+      part.type === PLAN_WORK_PART.TOOL
+        ? [part.tool, part.subject, part.state]
+        : [part.type, part.text],
+    );
+  };
+
+  assert.deepEqual(await projected(), [
+    [PLAN_WORK_TOOL.SEARCH_WEB, "invite revoke api", PLAN_WORK_STATE.DONE],
+    [PLAN_WORK_TOOL.REPOSITORY, "ls vendor", PLAN_WORK_STATE.RUNNING],
+  ]);
+
+  await play(
+    answeringStep(FIRST_EVE_TURN, 1, "Both libraries let an admin revoke."),
+    childStanding,
+  );
+  const findings = await projected();
+  assert.deepEqual(findings?.at(-1), [PLAN_WORK_PART.TEXT, "Both libraries let an admin revoke."]);
 });

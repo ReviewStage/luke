@@ -1,4 +1,5 @@
 import { PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import { createContext, useCallback, useContext, useState } from "react";
 import type { Components } from "streamdown";
 import {
   Conversation,
@@ -10,6 +11,7 @@ import { MessageResponse } from "../ai-elements/message";
 import { ThinkingDots } from "../thinking-dots";
 import { callHeading } from "./transcript-model";
 import {
+  openedWorker,
   WORK_BLOCK,
   WORK_EMPTY_LINE,
   type WorkBlock,
@@ -70,6 +72,29 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   );
 }
 
+/** Opens a subagent's session in the tab's place; a row deep in the tree reaches it through this rather than through every row above it. */
+const OpenSubagent = createContext<(callId: string) => void>(() => undefined);
+
+/** A subagent's call as one line that opens its session: its job, and whether it still runs. */
+function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
+  const open = useContext(OpenSubagent);
+  return (
+    <button
+      type="button"
+      className="work-worker"
+      data-state={call.state}
+      onClick={() => open(call.id)}
+    >
+      <span className="work-worker-name">Worker</span>
+      <span className="work-worker-job">{call.subject ?? call.verb}</span>
+      {call.running ? <ThinkingDots /> : null}
+      <span className="work-worker-open" aria-hidden="true">
+        ›
+      </span>
+    </button>
+  );
+}
+
 /** One block of a turn. */
 function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
   switch (block.kind) {
@@ -89,16 +114,7 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
     case WORK_BLOCK.CALL:
       return <WorkCall call={block.call} />;
     case WORK_BLOCK.WORKER:
-      return (
-        <div className="work-worker" data-state={block.call.state}>
-          <WorkCall call={block.call} />
-          {block.call.running ? (
-            <p className="work-worker-note">
-              <ThinkingDots /> The worker is on it
-            </p>
-          ) : null}
-        </div>
-      );
+      return <WorkerLine call={block.call} />;
     case WORK_BLOCK.GROUP:
       return (
         <details className="work-fold" open={block.open}>
@@ -148,6 +164,40 @@ function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.
   );
 }
 
+/** A subagent's session in the tab's place: the way back, its job, and its blocks, drawn as a turn's are. */
+function SubagentSession({
+  worker,
+  onBack,
+}: {
+  worker: Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
+  onBack: () => void;
+}): React.JSX.Element {
+  const { session } = worker;
+  return (
+    <Conversation>
+      <ConversationContent>
+        <header className="work-session-header">
+          <button type="button" className="work-session-back" onClick={onBack}>
+            ‹ All work
+          </button>
+          <p className="work-session-job">{worker.call.subject ?? worker.call.verb}</p>
+        </header>
+        {session?.earlierOmitted ? <p className="work-note">Earlier steps are not shown.</p> : null}
+        {session === undefined || session.blocks.length === 0 ? (
+          <p className="work-note">{worker.call.running ? "Starting…" : "Nothing recorded."}</p>
+        ) : (
+          <div className="work-blocks">
+            {session.blocks.map((block) => (
+              <WorkBlockView key={block.key} block={block} />
+            ))}
+          </div>
+        )}
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
+  );
+}
+
 export function PlanWork({
   turns,
   callLive,
@@ -157,24 +207,39 @@ export function PlanWork({
 }): React.JSX.Element {
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
+  // The subagents opened, outermost first: one opened inside another's session stacks on it.
+  const [opened, setOpened] = useState<readonly string[]>([]);
+  const worker = openedWorker(rows, opened);
+  const open = useCallback((callId: string) => setOpened((held) => [...held, callId]), []);
+  if (worker !== undefined) {
+    return (
+      <section className="plan-work ph-no-capture" aria-label="Work">
+        <OpenSubagent.Provider value={open}>
+          <SubagentSession worker={worker} onBack={() => setOpened((held) => held.slice(0, -1))} />
+        </OpenSubagent.Provider>
+      </section>
+    );
+  }
   return (
     <section className="plan-work ph-no-capture" aria-label="Work">
-      {rows.length === 0 ? (
-        <ConversationEmptyState>
-          <p className="m-0">{WORK_EMPTY_LINE}</p>
-        </ConversationEmptyState>
-      ) : (
-        <Conversation>
-          <ConversationContent>
-            <ol className="work-turns">
-              {rows.map((turn) => (
-                <WorkTurn key={turn.key} turn={turn} now={now} />
-              ))}
-            </ol>
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
-      )}
+      <OpenSubagent.Provider value={open}>
+        {rows.length === 0 ? (
+          <ConversationEmptyState>
+            <p className="m-0">{WORK_EMPTY_LINE}</p>
+          </ConversationEmptyState>
+        ) : (
+          <Conversation>
+            <ConversationContent>
+              <ol className="work-turns">
+                {rows.map((turn) => (
+                  <WorkTurn key={turn.key} turn={turn} now={now} />
+                ))}
+              </ol>
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+        )}
+      </OpenSubagent.Provider>
     </section>
   );
 }

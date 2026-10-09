@@ -159,19 +159,17 @@ function turnStateOf(turn: StoredTurnRecord): PlanWorkState {
   return turn.status === TURN_STATUS.SETTLED ? PLAN_WORK_STATE.DONE : PLAN_WORK_STATE.FAILED;
 }
 
+/** A tool part as the walk below draws it, before a subagent's session is joined to it. */
+type ToolPart = Omit<Extract<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>, "session">;
+
+/** A part as the walk below draws it: words, reasoning, or a call with no session joined yet. */
+type WalkedPart = ToolPart | Exclude<PlanWorkPart, { type: typeof PLAN_WORK_PART.TOOL }>;
+
 /** One tool part as the tab draws it, a worker's state read off the turn's steps. */
-function toolPartOf(
-  part: StoredToolPart,
-  turnState: PlanWorkState,
-  answered: boolean,
-): PlanWorkPart {
+function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolean): ToolPart {
   const name = storedToolName(part);
   const tool = TOOL_OF_NAME.get(name) ?? PLAN_WORK_TOOL.OTHER;
-  const called = callStateOf(part, turnState);
-  const state =
-    tool === PLAN_WORK_TOOL.WORKER && called === PLAN_WORK_STATE.DONE && !answered
-      ? turnState
-      : called;
+  const called = callStateOf(part, state);
   const subject = subjectOf(tool, part);
   const output = outputOf(tool, part);
   return {
@@ -179,7 +177,10 @@ function toolPartOf(
     id: part.toolCallId,
     tool,
     name: cut(name, PLAN_WORK_BOUNDS.NAME_CHARS),
-    state,
+    state:
+      tool === PLAN_WORK_TOOL.WORKER && called === PLAN_WORK_STATE.DONE && !answered
+        ? state
+        : called,
     ...(subject === undefined
       ? undefined
       : { subject: cut(subject, PLAN_WORK_BOUNDS.SUBJECT_CHARS) }),
@@ -189,44 +190,79 @@ function toolPartOf(
 }
 
 /**
+ * An agent's journals as parts, in the order it wrote them: its words, its
+ * reasoning that has any, and every call, each running only while `state`
+ * is. The parts are split at each step marker, which is no part of the
+ * work, so a worker's answer can be read off the steps after its call.
+ */
+function partsOf(journals: readonly StoredUIMessage[], state: PlanWorkState): WalkedPart[] {
+  const parts: WalkedPart[] = [];
+  for (const journal of journals) {
+    const steps: StoredUIMessage["parts"][number][][] = [[]];
+    for (const part of journal.parts) {
+      if (part.type === UI_PART_TYPE.STEP_START) steps.push([]);
+      else steps.at(-1)?.push(part);
+    }
+    steps.forEach((step, index) => {
+      for (const part of step) {
+        if (isStoredToolPart(part)) {
+          parts.push(toolPartOf(part, state, workerAnswered(steps, index)));
+        } else if (part.type === UI_PART_TYPE.TEXT && part.text.trim() !== "") {
+          parts.push({
+            type: PLAN_WORK_PART.TEXT,
+            text: cut(part.text, PLAN_WORK_BOUNDS.TEXT_CHARS),
+          });
+        } else if (part.type === UI_PART_TYPE.REASONING && part.text.trim() !== "") {
+          parts.push({
+            type: PLAN_WORK_PART.REASONING,
+            text: cut(part.text, PLAN_WORK_BOUNDS.TEXT_CHARS),
+          });
+        }
+      }
+    });
+  }
+  return parts;
+}
+
+/** The newest parts of a walk, and whether older ones were left out. */
+function newest<Part>(parts: readonly Part[]) {
+  return {
+    earlierOmitted: parts.length > PLAN_WORK_BOUNDS.PARTS,
+    parts: parts.slice(-PLAN_WORK_BOUNDS.PARTS),
+  };
+}
+
+/** The planning model's `worker` calls in a journal, whose subagents' sessions the work draws inside them. */
+export function workerCallIdsOf(journal: StoredUIMessage | undefined): readonly string[] {
+  return (journal?.parts ?? [])
+    .filter(isStoredToolPart)
+    .filter((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER)
+    .map((part) => part.toolCallId);
+}
+
+/**
  * One planning turn's work, from its row and its journal (absent before the
  * turn wrote any): its state, when it started, and the newest of its words,
- * reasoning, and calls in the order the model wrote them.
+ * reasoning, and calls in the order the model wrote them. A call that started
+ * a subagent carries the subagent's own session, read from the journals of
+ * its child conversation (`subagents`, by the call's id) and drawn by the same
+ * walk, its calls running while the subagent does.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
   journal: StoredUIMessage | undefined,
+  subagents: ReadonlyMap<string, readonly StoredUIMessage[]> = new Map(),
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
-  // The parts are split at each step marker, which is no part of the work, so a worker's answer can be read off the steps after its call.
-  const steps: StoredUIMessage["parts"][number][][] = [[]];
-  for (const part of journal?.parts ?? []) {
-    if (part.type === UI_PART_TYPE.STEP_START) steps.push([]);
-    else steps.at(-1)?.push(part);
-  }
-  const parts: PlanWorkPart[] = [];
-  steps.forEach((step, index) => {
-    for (const part of step) {
-      if (isStoredToolPart(part)) {
-        parts.push(toolPartOf(part, turnState, workerAnswered(steps, index)));
-      } else if (part.type === UI_PART_TYPE.TEXT && part.text.trim() !== "") {
-        parts.push({
-          type: PLAN_WORK_PART.TEXT,
-          text: cut(part.text, PLAN_WORK_BOUNDS.TEXT_CHARS),
-        });
-      } else if (part.type === UI_PART_TYPE.REASONING && part.text.trim() !== "") {
-        parts.push({
-          type: PLAN_WORK_PART.REASONING,
-          text: cut(part.text, PLAN_WORK_BOUNDS.TEXT_CHARS),
-        });
-      }
-    }
+  const parts = partsOf(journal === undefined ? [] : [journal], turnState).map((part) => {
+    const journals = part.type === PLAN_WORK_PART.TOOL ? subagents.get(part.id) : undefined;
+    if (part.type !== PLAN_WORK_PART.TOOL || journals === undefined) return part;
+    return { ...part, session: newest(partsOf(journals, part.state)) };
   });
   return {
     turnId: turn.id,
     startedAt: (turn.startedAt ?? turn.queuedAt).getTime(),
     state: turnState,
-    earlierOmitted: parts.length > PLAN_WORK_BOUNDS.PARTS,
-    parts: parts.slice(-PLAN_WORK_BOUNDS.PARTS),
+    ...newest(parts),
   };
 }
