@@ -14,8 +14,22 @@ export const accountPreference = pgTable("account_preference", {
     .references(() => user.id, { onDelete: "cascade" }),
   voice: text("voice"),
   defaultWorkspaceProvider: text("default_workspace_provider"),
+  /**
+   * The model and effort a coding agent starts on when Start is clicked, as
+   * AI Gateway's catalog names them (`hosted/model-catalog.ts`); null on both
+   * means the account has never chosen and starts on the catalog's default.
+   */
+  codingAgentModel: text("coding_agent_model"),
+  codingAgentEffort: text("coding_agent_effort"),
   createdAt: instant("created_at").notNull().defaultNow(),
-  updatedAt: instant("updated_at").notNull().defaultNow(),
+  /**
+   * When the preferences part was last written; null on a row only a
+   * coding-agent choice opened. The desktop reads the instant's presence as
+   * a snapshot to apply over its own settings, so a row with none written
+   * must answer none, or a never-synced Mac would take an empty snapshot
+   * over the voice it holds.
+   */
+  updatedAt: instant("updated_at"),
 });
 
 /**

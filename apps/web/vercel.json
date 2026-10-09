@@ -65,6 +65,10 @@
           "dest": "/api/default.js?route=events"
         },
         {
+          "src": "/api/models",
+          "dest": "/api/default.js?route=models"
+        },
+        {
           "src": "/api/plans",
           "dest": "/api/default.js?route=plans"
         },

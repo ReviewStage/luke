@@ -10,7 +10,7 @@ builds it, and once in the `server/db/*-schema.ts` module the query builder
 reads it through. "The data layer" below is what holds the two together.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `server/db/auth-schema.ts` (see below), which is in the same barrel as
-the ten Luke-owned modules, so a migration that changes an auth column's type
+the eleven Luke-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
 Every instant column is `timestamp with time zone` (migration 0026 moved the
@@ -508,6 +508,52 @@ carries one — a test provides its own fake `HttpClient` layer instead.
 a write, a refused method, an invalid token, an invalid body, and a path
 outside the group, with `content-length` checked against the body it frames and
 then dropped before comparing.
+
+The preferences snapshot carries two parts. `preferences` is the settings
+snapshot the desktop syncs, replaced whole by a write that names it.
+`codingAgent` is the account's default model and effort for a coding agent —
+what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
+spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses.
+Settings › Coding agents and the Start menu's chevron both write it, as one
+value rather than two that could disagree. A PUT carries either part or both;
+a part left out stands as it was, so the desktop's settings sync never
+resets the chosen model and the Start menu never touches the voice. A
+`codingAgent` write is accepted only as the instance's model catalog accepts
+it (below): a model it does not offer or an effort that model does not list
+is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
+The store keeps the two columns beside `voice` on `account_preference`, and
+reads a half-written pair as the default. `updated_at` is the preferences
+part's own instant, nullable since migration 0062 and left null by a write
+that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
+as a snapshot to apply over its own settings, so a row a choice alone opened
+must answer none, or a Mac that never synced would take an empty snapshot
+over the voice it holds.
+
+## The models group
+
+`server/models-app.ts` answers `GET /api/models`: the models a coding agent
+may run on, as `{ models: [{ id, name, provider, efforts }] }`. The list is
+`server/hosted/model-catalog.ts`'s read of AI Gateway's public catalog
+(`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
+boundary and kept to the Anthropic and OpenAI models whose tags carry both
+`tool-use` and `reasoning`; each model's efforts are the `values` of the
+`effort` entry among its `reasoning_options`, and a model listing none is
+left out, since no Start could name an effort for it. The read is the
+`ModelCatalog` service `server/runtime.ts` builds once per instance, cached
+for an hour on a success and for no time on a failure, so an outage at the
+gateway is retried on the next request rather than answered for the hour.
+The bearer is resolved before the read, as every hosted endpoint resolves
+it, though the catalog is public and the same for every account.
+
+The same module holds the two functions the coding-agent routes will stand
+on: `validateModelChoice`, which accepts a `(model, effort)` only for an
+offered model at an effort it lists, and `providerModelOf`, which turns a
+catalog id into the id the provider's own API takes — model calls go to
+Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
+`anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
+catalog's after its prefix. `tests/model-catalog.test.ts` reads the catalog
+through a scripted gateway and the test clock; `tests/models-app.test.ts`
+answers the route over a fixed catalog.
 
 ## The plans group
 

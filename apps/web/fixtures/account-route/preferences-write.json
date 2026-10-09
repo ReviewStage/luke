@@ -7,5 +7,5 @@
       "application/json"
     ]
   ],
-  "body": "{\"preferences\":{\"voice\":\"marin\"},\"updatedAt\":1788868800000}"
+  "body": "{\"preferences\":{\"voice\":\"marin\"},\"codingAgent\":{\"model\":\"anthropic/claude-opus-5.5\",\"effort\":\"high\"},\"updatedAt\":1788868800000}"
 }

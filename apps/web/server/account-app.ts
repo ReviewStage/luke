@@ -1,6 +1,7 @@
-import { type AccountPreferences, accountPreferencesFromWire } from "@sidecar/settings";
+import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
-import { Effect, Layer, Option, Redacted } from "effect";
+import { readEither } from "@sidecar/wire/effect";
+import { Effect, Layer, Option, Redacted, Result, Schema } from "effect";
 import {
   type HttpClient,
   HttpRouter,
@@ -8,7 +9,11 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import type { AccountPreferencesRow, AccountSeamEffect } from "./hosted/account-store.js";
+import type {
+  AccountPreferencesRow,
+  AccountPreferencesWrite,
+  AccountSeamEffect,
+} from "./hosted/account-store.js";
 import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -21,6 +26,12 @@ import {
   hostedStoreOrUnavailable,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
+import {
+  acceptedModelChoice,
+  CODING_AGENT_DEFAULT_CHOICE,
+  type ModelCatalog,
+  type ModelChoice,
+} from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -32,6 +43,13 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * credential or account secret ever travels in an answer, so what each
  * endpoint answers is a boolean or the caller's own stored snapshot, never a
  * token or a session id.
+ *
+ * The preferences snapshot is two parts: the settings preferences the
+ * desktop syncs, and the coding agents' default model and effort beside
+ * them, which Settings and the Start menu both write. A write carries either
+ * part or both, and a coding-agent choice is accepted only as the catalog
+ * accepts it (`hosted/model-catalog.ts`), so what is stored is always a
+ * choice a Start could run.
  */
 
 const ACCOUNT_PATH = {
@@ -50,7 +68,29 @@ export interface AccountAppSeams {
   /** Deletes the user row; every dependent row cascades with it. */
   deleteUser: (userId: string) => AccountSeamEffect<void>;
   readPreferences: (userId: string) => AccountSeamEffect<AccountPreferencesRow | undefined>;
-  writePreferences: (userId: string, preferences: AccountPreferences) => AccountSeamEffect<Date>;
+  /** Writes each part the write carries and answers the snapshot as it then stands. */
+  writePreferences: (
+    userId: string,
+    write: AccountPreferencesWrite,
+  ) => AccountSeamEffect<AccountPreferencesRow>;
+}
+
+/** A coding-agent choice as a write names it; the catalog decides whether it is one. */
+const ModelChoiceSchema = Schema.Struct({
+  model: Schema.String,
+  effort: Schema.String,
+});
+
+const readModelChoice = readEither(ModelChoiceSchema);
+
+/** The snapshot as the group answers it, the preferences' instant beside it where the preferences were ever written. */
+function snapshotAnswer(row: AccountPreferencesRow | undefined) {
+  const updatedAt = row?.updatedAt;
+  return {
+    preferences: row?.preferences ?? {},
+    codingAgent: row?.codingAgent ?? CODING_AGENT_DEFAULT_CHOICE,
+    ...(updatedAt === undefined ? undefined : { updatedAt: updatedAt.getTime() }),
+  };
 }
 
 /** The bearer resolved against the deployment's own account store, or the invalid-token refusal. */
@@ -114,7 +154,7 @@ const accountDeleteEndpoint = /* @__PURE__ */ Effect.fn("web/accountDeleteEndpoi
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });
 });
 
-/** GET: the caller's own stored preferences, or an empty snapshot for a user with none stored. */
+/** GET: the caller's own stored snapshot, or the defaults for a user with none stored. */
 const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEndpoint")(function* (
   seams: AccountAppSeams,
 ): Effect.fn.Return<
@@ -124,36 +164,65 @@ const preferencesReadEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesReadEn
 > {
   const userId = yield* resolvedUserId(seams);
   const row = yield* hostedStoreOrUnavailable(seams.readPreferences(userId));
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    preferences: row?.preferences ?? {},
-    ...(row ? { updatedAt: row.updatedAt.getTime() } : undefined),
-  });
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, snapshotAnswer(row));
 });
 
-/** PUT: replaces the caller's stored preferences with a validated snapshot. */
+/**
+ * The write's coding-agent part, as the catalog accepts it: a choice the
+ * catalog does not offer is a bad request, and a catalog the instance
+ * cannot read is an outage the caller may retry.
+ */
+const acceptedCodingAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
+  value: UnparsedWireValue,
+): Effect.fn.Return<ModelChoice, HostedRefusal, ModelCatalog> {
+  const read = readModelChoice(value);
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return yield* acceptedModelChoice(read.success).pipe(
+    Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
+    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
+      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
+        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
+      ),
+    ),
+  );
+});
+
+/**
+ * PUT: writes each part the body carries — `preferences`, a validated
+ * settings snapshot that replaces the stored one whole, and `codingAgent`, a
+ * choice the catalog accepts — and answers the snapshot as it then stands.
+ * A body carrying neither asks for nothing and is refused.
+ */
 const preferencesWriteEndpoint = /* @__PURE__ */ Effect.fn("web/preferencesWriteEndpoint")(
   function* (
     seams: AccountAppSeams,
   ): Effect.fn.Return<
     ReturnType<typeof hostedJsonResponse>,
     HostedRefusal,
-    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient
+    HttpServerRequest.HttpServerRequest | SqlClient.SqlClient | ModelCatalog
   > {
     const userId = yield* resolvedUserId(seams);
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     const parsed = yield* incoming.json.pipe(Effect.mapError(() => HOSTED_REFUSAL.INVALID_REQUEST));
-    // SAFETY: Request JSON is untrusted boundary data; accountPreferencesFromWire validates it before use.
+    // SAFETY: Request JSON is untrusted boundary data; each part's reader validates it before use.
     const body = parsed as UnparsedWireValue;
     if (!isRecord(body)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    if (body.preferences === undefined && body.codingAgent === undefined) {
+      return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    }
 
-    const preferences = accountPreferencesFromWire(body.preferences);
-    if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+    const write: AccountPreferencesWrite = {};
+    if (body.preferences !== undefined) {
+      const preferences = accountPreferencesFromWire(body.preferences);
+      if (preferences === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+      write.preferences = preferences;
+    }
+    if (body.codingAgent !== undefined) {
+      write.codingAgent = yield* acceptedCodingAgent(body.codingAgent);
+    }
 
-    const updatedAt = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, preferences));
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      preferences,
-      updatedAt: updatedAt.getTime(),
-    });
+    const row = yield* hostedStoreOrUnavailable(seams.writePreferences(userId, write));
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, snapshotAnswer(row));
   },
 );
 
@@ -164,7 +233,7 @@ const accountPreferencesEndpoint = /* @__PURE__ */ Effect.fn("web/accountPrefere
   ): Effect.fn.Return<
     HttpServerResponse.HttpServerResponse,
     HostedRefusal,
-    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest
+    SqlClient.SqlClient | HttpServerRequest.HttpServerRequest | ModelCatalog
   > {
     const incoming = yield* HttpServerRequest.HttpServerRequest;
     if (incoming.method === HTTP_METHOD.GET) return yield* preferencesReadEndpoint(seams);
@@ -192,7 +261,7 @@ function refusing<R>(
  */
 export function accountApp(
   seams: AccountAppSeams,
-): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient> {
+): WebRoutes<HostedEnvironment | HttpClient.HttpClient | SqlClient.SqlClient | ModelCatalog> {
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, ACCOUNT_PATH.DELETE, refusing(accountDeleteEndpoint(seams))),
     HttpRouter.add(

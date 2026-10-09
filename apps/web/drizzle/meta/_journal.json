@@ -421,6 +421,20 @@
       "when": 1790625000000,
       "tag": "0060_plan_drop_opened_at",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790650000000,
+      "tag": "0061_coding_agent",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1790675000000,
+      "tag": "0062_coding_agent_default_model",
+      "breakpoints": true
     }
   ]
 }

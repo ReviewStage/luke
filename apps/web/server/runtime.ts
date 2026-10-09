@@ -3,6 +3,7 @@ import { FetchHttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { hostedEnvironment } from "./hosted/environment.js";
+import { modelCatalogLayer } from "./hosted/model-catalog.js";
 
 /**
  * The deployment's own environment, read as these services are built rather
@@ -36,6 +37,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * is the one place `OPENAI_API_KEY`, the brain model override, and the
  * analytics processor's own deletion key and project are read.
  *
+ * `ModelCatalog` is here for the same reason: its read of AI Gateway's
+ * public catalog is cached on the service, so one instance reads the catalog
+ * once an hour for every route that offers or checks a model.
+ *
  * `@effect/platform-node` has no entry: a Vercel function's platform is the
  * Web `fetch` its runtime already carries, and a Node-reaching companion
  * behind this door would have to be traced into every bundle. `@effect/sql-pg`
@@ -48,6 +53,7 @@ const webServices = Layer.mergeAll(
   webSqlClient,
   hostedEnvironment,
   webLogger,
+  modelCatalogLayer.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));
 
 /** What an effect run at this edge may require. */
