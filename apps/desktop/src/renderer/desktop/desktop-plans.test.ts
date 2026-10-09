@@ -1,25 +1,29 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { act, createElement } from "react";
+import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
-import { plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
   type SidePanelState,
+  type SidePanelTab,
   useSidePanel,
 } from "../planning/use-side-panel";
 import { DesktopPlans } from "./desktop-plans";
+import { SidePanelToggle } from "./side-panel";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -52,12 +56,16 @@ type PanelDrawn = (typeof PANEL)[keyof typeof PANEL];
 /** What the toolbar's Copy was asked to do, across the presses and the chord. */
 let copies = 0;
 
-/** The open plan's page over the real side panel, staged where a fixture run would stage it, with the window's keymap. */
+/**
+ * The open plan's page over the real side panel, staged where a fixture run
+ * would stage it, with the window's keymap and the panel's toggle the window
+ * stands beside the page (desktop-shell.tsx).
+ */
 function Page({ staged }: { staged: SidePanelState | undefined }) {
   const sidePanel = useSidePanel(staged);
   useAppKeymap(true);
   useMenuCommands(true);
-  return createElement(DesktopPlans, {
+  const page = createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN.id,
@@ -71,6 +79,12 @@ function Page({ staged }: { staged: SidePanelState | undefined }) {
       },
     }),
   });
+  return createElement(
+    Fragment,
+    null,
+    page,
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+  );
 }
 
 /** A key pressed anywhere in the window, answering whether the window claimed it. */
@@ -219,14 +233,18 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-test("a first launch shows the document alone, with the panel's toggle last on the toolbar", () => {
+test("a first launch shows the document alone, its toolbar ending at the plan's menu and the panel shut", () => {
   const page = mountOpenPlan();
 
   assert.ok(documentShown(page));
   assert.equal(page.querySelector(".side-panel"), null);
-  const toggle = page.querySelector(".desktop-toolbar-actions")?.lastElementChild;
-  assert.equal(toggle?.getAttribute("aria-label"), "Show panel");
-  assert.equal(toggle?.getAttribute("aria-expanded"), "false");
+  const last = page.querySelector(".desktop-toolbar-actions")?.lastElementChild;
+  assert.equal(last?.getAttribute("aria-label"), "Plan actions");
+  assert.equal(page.querySelector(".desktop-toolbar .side-panel-toggle"), null);
+  assert.equal(
+    page.querySelector('[aria-label="Show panel"]')?.getAttribute("aria-expanded"),
+    "false",
+  );
 });
 
 test("the toggle opens the panel on the board and closes it, the document shown throughout", () => {
@@ -384,7 +402,12 @@ test("the next launch opens the panel as this one left it, and a fixture run nei
   unmountAll();
 
   const staged = mountOpenPlan({
-    staged: { open: false, tab: SIDE_PANEL_TAB.BOARD, width: SIDE_PANEL_WIDTH.DEFAULT },
+    staged: {
+      open: false,
+      tabs: SIDE_PANEL_TABS,
+      tab: SIDE_PANEL_TAB.BOARD,
+      width: SIDE_PANEL_WIDTH.DEFAULT,
+    },
   });
   assert.equal(staged.querySelector(".side-panel"), null);
   press(staged, '[aria-label="Show panel"]');
@@ -402,7 +425,12 @@ test("a fixture run known only a render in still opens the panel it stages, and 
 
   // The run is known only once the first state arrives, a render in.
   const staged = mountOpenPlan();
-  restage({ open: false, tab: SIDE_PANEL_TAB.BOARD, width: SIDE_PANEL_WIDTH.DEFAULT });
+  restage({
+    open: false,
+    tabs: SIDE_PANEL_TABS,
+    tab: SIDE_PANEL_TAB.BOARD,
+    width: SIDE_PANEL_WIDTH.DEFAULT,
+  });
   assert.equal(panelShown(staged), false, "the developer's panel is not drawn");
   press(staged, '[aria-label="Show panel"]');
   assert.equal(tabNamed(staged, "Board").getAttribute("aria-selected"), "true");
@@ -439,25 +467,26 @@ test("the panel's edge widens it from the keyboard, no wider than its bound", ()
   assert.equal(edge.getAttribute("aria-valuenow"), String(SIDE_PANEL_WIDTH.MAX));
 });
 
-test("the open panel holds its own toggle, beside its full-screen button, and none of the plan's actions", () => {
+test("the open panel's row ends at its full-screen button, holding neither the toggle nor any of the plan's actions", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  const actions = page.querySelector(".side-panel-bar-actions");
-  assert.deepEqual(
-    [...(actions?.children ?? [])].map((each) => each.getAttribute("aria-label")),
-    ["Expand panel", "Hide panel"],
-  );
-  assert.equal(page.querySelector('.desktop-toolbar [aria-label="Hide panel"]'), null);
   assert.ok(page.querySelector('.desktop-toolbar [aria-label="Plan actions"]'));
   assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Start/u);
 
   for (const fullScreen of [false, true]) {
     if (fullScreen) press(page, '[aria-label="Expand panel"]');
     const panel = page.querySelector(".side-panel");
+    const last = panel?.querySelector(".side-panel-bar")?.lastElementChild;
+    assert.equal(
+      last?.getAttribute("aria-label"),
+      fullScreen ? "Exit full screen" : "Expand panel",
+    );
+    assert.equal(panel?.querySelector(".side-panel-toggle"), null);
     assert.doesNotMatch(panel?.textContent ?? "", /Copy plan/u);
     assert.equal(panel?.querySelector('[aria-label="Plan actions"]'), null);
   }
+  assert.equal(page.querySelector(".desktop-toolbar .side-panel-toggle"), null);
 });
 
 test("the full-screen button grows the panel over the document, and back to the width it had", () => {
@@ -780,4 +809,290 @@ test("a plan opened from the list, read after the page first drew it reading, dr
   act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
   assert.equal(documentShown(container), false);
   assert.match(container.textContent ?? "", /Reading the plan…/u);
+});
+
+/** The panel's tabs, in the strip's order. */
+function panelTabs(page: HTMLElement): string[] {
+  return [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')].map(
+    (tab) => tab.textContent ?? "",
+  );
+}
+
+function chosenTab(page: HTMLElement): string | undefined {
+  return (
+    page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent ?? undefined
+  );
+}
+
+/** The rows a list of the tab kinds draws: each label, what it says at its end, and whether it may be chosen. */
+function kindRows(rows: Iterable<HTMLButtonElement>): [string, string, boolean][] {
+  return [...rows].map((row) => [
+    row.querySelector(".plan-menu-label")?.textContent ?? "",
+    row.querySelector(".plan-menu-end")?.textContent ?? "",
+    !row.disabled,
+  ]);
+}
+
+function menuItem(label: string): HTMLButtonElement {
+  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.querySelector(".plan-menu-label")?.textContent === label,
+  );
+  assert.ok(item, `no ${label} item`);
+  return item;
+}
+
+test("the plan's tab names the plan, has no × to close it, and its hint says the plan's repository", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (repository: string | null) =>
+    act(() =>
+      root.render(
+        createElement(DesktopPlans, {
+          plans: plansControl({
+            page: PLANS_PAGE.DOCUMENT,
+            activePlanId: PLAN.id,
+            region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, repository } },
+          }),
+        }),
+      ),
+    );
+
+  render(null);
+  const tab = container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]');
+  assert.ok(tab, "the plan's tab stands");
+  assert.equal(tab.textContent, PLAN.name);
+  assert.equal(tab.getAttribute("aria-selected"), "true");
+  assert.equal(container.querySelector(".desktop-toolbar .tab-close"), null);
+  key(tab, "Delete");
+  assert.equal(container.querySelector('.desktop-toolbar [role="tab"]')?.textContent, PLAN.name);
+  assert.match(
+    container.querySelector(".desktop-toolbar")?.textContent ?? "",
+    /Choose repository/u,
+  );
+
+  render("dean/invites");
+  const filed = container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]');
+  assert.ok(filed);
+  assert.equal(hover(filed), "dean/invites");
+  assert.doesNotMatch(
+    container.querySelector(".desktop-toolbar")?.textContent ?? "",
+    /Choose repository/u,
+  );
+});
+
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by model, dotted for where each stands and for an end unseen, with no × and no shortcut", () => {
+  const running: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const ended: CodingAgentSummary = {
+    ...running,
+    id: "1f6d2c3b-5a4e-4f7d-9c8b-2e3f4a5b6c7d",
+    model: "openai/gpt-5.6-sol",
+    status: CODING_AGENT_STATUS.COMPLETED,
+  };
+  const chosen: SidePanelTab[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(DesktopPlans, {
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+          sidePanel: {
+            ...plansControl().sidePanel,
+            open: true,
+            tabs: [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.TRANSCRIPT],
+            tab: { agent: ended.id },
+            onChoose: (tab) => chosen.push(tab),
+          },
+          unreadTabs: [{ agent: running.id }],
+          agents: codingAgentsControl({
+            agents: [running, ended],
+            agentIds: [running.id, ended.id],
+          }),
+        }),
+      }),
+    ),
+  );
+
+  assert.deepEqual(panelTabs(container), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+  assert.equal(chosenTab(container), "GPT 5.6 Sol");
+  const claude = tabNamed(container, "Claude Opus 5.5");
+  assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
+  assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
+  assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
+  assert.equal(claude.getAttribute("aria-keyshortcuts"), null);
+  assert.equal(container.querySelector('[aria-label="Close Claude Opus 5.5"]'), null);
+  assert.ok(container.querySelector('[aria-label="Close Board"]'));
+  assert.equal(
+    container.querySelector('.side-panel-content[role="tabpanel"]')?.getAttribute("aria-label"),
+    "GPT 5.6 Sol",
+  );
+
+  act(() => claude.click());
+  assert.deepEqual(chosen, [{ agent: running.id }]);
+});
+
+test("closing the chosen tab chooses its neighbour, and closing the last leaves the panel open offering every kind", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+
+  act(() => tabNamed(page, "Code").click());
+  press(page, '[aria-label="Close Code"]');
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.equal(chosenTab(page), "Transcript", "the tab after it");
+  assert.ok(documentShown(page));
+
+  press(page, '[aria-label="Close Transcript"]');
+  assert.equal(chosenTab(page), "Board", "the tab before the last");
+
+  press(page, '[aria-label="Close Board"]');
+  assert.ok(panelShown(page));
+  assert.deepEqual(panelTabs(page), []);
+  const rows = page.querySelectorAll<HTMLButtonElement>(".side-panel-no-tabs button");
+  assert.deepEqual(kindRows(rows), [
+    ["Board", "⌥⌘1", true],
+    ["Code", "⌥⌘2", true],
+    ["Transcript", "⌥⌘3", true],
+  ]);
+
+  const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
+  assert.ok(code);
+  act(() => code.click());
+  assert.deepEqual(panelTabs(page), ["Code"]);
+  assert.equal(chosenTab(page), "Code");
+});
+
+test("the panel's tabs are one stop for Tab that the arrow keys move along, and Delete closes the one focused and hands focus on", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const tabs = () => [...page.querySelectorAll<HTMLElement>('.side-panel [role="tab"]')];
+  assert.deepEqual(
+    tabs().map((tab) => tab.tabIndex),
+    [0, -1, -1],
+  );
+
+  const board = tabNamed(page, "Board");
+  act(() => board.focus());
+  key(board, "ArrowRight");
+  assert.equal(document.activeElement, tabNamed(page, "Code"));
+  key(tabNamed(page, "Code"), "End");
+  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+  key(tabNamed(page, "Transcript"), "ArrowRight");
+  assert.equal(document.activeElement, board);
+  assert.equal(chosenTab(page), "Board", "moving along the tabs chooses none of them");
+
+  key(board, "Delete");
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript"]);
+  assert.equal(document.activeElement, tabNamed(page, "Code"));
+  key(tabNamed(page, "Code"), "Backspace");
+  assert.deepEqual(panelTabs(page), ["Transcript"]);
+  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+});
+
+test("the + offers every kind with its shortcut, those open dimmed, and opens a closed one at the strip's end", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const add = () => {
+    const button = page.querySelector<HTMLElement>('.side-panel [aria-label="Open a tab"]');
+    assert.ok(button, "the panel draws its +");
+    return button;
+  };
+
+  // Every kind is open, so there is nothing to add.
+  assert.equal(add().getAttribute("aria-disabled"), "true");
+  assert.equal(hover(add()), "Every tab is open");
+  act(() => add().click());
+  assert.equal(document.querySelector('[role="menu"]'), null);
+
+  press(page, '[aria-label="Close Code"]');
+  assert.equal(add().getAttribute("aria-disabled"), "false");
+  act(() => add().click());
+  assert.deepEqual(kindRows(document.querySelectorAll('[role="menuitem"]')), [
+    ["Board", "Open", false],
+    ["Code", "⌥⌘2", true],
+    ["Transcript", "Open", false],
+  ]);
+  assert.equal(document.activeElement, menuItem("Code"), "focus starts on the one kind to open");
+
+  act(() => menuItem("Code").click());
+  assert.equal(document.querySelector('[role="menu"]'), null);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.equal(chosenTab(page), "Code");
+});
+
+test("Option-Command-2 opens a closed Code tab again and chooses it, and no kind is ever open twice", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  press(page, '[aria-label="Close Code"]');
+
+  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.equal(chosenTab(page), "Code");
+
+  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
+  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+});
+
+test("the next launch opens the panel with the tabs this one left open, in their order", () => {
+  const first = mountOpenPlan();
+  press(first, '[aria-label="Show panel"]');
+  press(first, '[aria-label="Close Board"]');
+  act(() => tabNamed(first, "Transcript").click());
+  unmountAll();
+
+  const next = mountOpenPlan();
+  assert.deepEqual(panelTabs(next), ["Code", "Transcript"]);
+  assert.equal(chosenTab(next), "Transcript");
+});
+
+test("a panel an earlier version kept, before its tabs could close, opens as it was with every tab, and one that no longer reads opens as a first launch", () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ open: true, tab: SIDE_PANEL_TAB.CODE, width: 500 }),
+  );
+  const earlier = mountOpenPlan();
+  assert.ok(panelShown(earlier));
+  assert.deepEqual(panelTabs(earlier), ["Board", "Code", "Transcript"]);
+  assert.equal(chosenTab(earlier), "Code");
+  assert.equal(earlier.querySelector<HTMLElement>(".side-panel")?.style.width, "500px");
+  unmountAll();
+
+  window.localStorage.setItem("luke.sidePanel", JSON.stringify({ open: true, tabs: "code" }));
+  const unread = mountOpenPlan();
+  assert.equal(panelShown(unread), false);
+  press(unread, '[aria-label="Show panel"]');
+  assert.deepEqual(panelTabs(unread), ["Board", "Code", "Transcript"]);
+  assert.equal(chosenTab(unread), "Board");
+});
+
+test("Delete on a tab the arrow keys reached closes it and hands focus to the tab after it, and the last tab closed hands it to the +", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const board = tabNamed(page, "Board");
+  act(() => board.focus());
+
+  key(board, "ArrowRight");
+  key(tabNamed(page, "Code"), "Delete");
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
+  assert.equal(document.activeElement, tabNamed(page, "Transcript"));
+  assert.equal(chosenTab(page), "Board", "closing another tab leaves the chosen one chosen");
+
+  key(tabNamed(page, "Transcript"), "Delete");
+  key(tabNamed(page, "Board"), "Delete");
+  assert.deepEqual(panelTabs(page), []);
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Open a tab");
 });

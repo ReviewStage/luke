@@ -567,6 +567,61 @@ test("an arrival while the panel shows another tab leaves it there and dots the 
   assert.deepEqual(tab.control().unreadTabs, []);
 });
 
+test("Luke's first drawing opens a closed Board tab again at the strip's end, dotted while the panel shows another", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.BOARD,
+  ]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("Luke's first code opens a shut panel on a Code tab the developer had closed", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
+  tab.stand({ voice: ON_CALL });
+
+  tab.stand({ planning: { ...OPEN, code: CODE } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(tab.control().sidePanel.tabs, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.CODE,
+  ]);
+});
+
+test("an arrival on an open panel with every tab closed shows the arrival's tab, with no dot", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  act(() => tab.control().sidePanel.onToggle());
+  for (const closed of [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]) {
+    act(() => tab.control().sidePanel.onClose(closed));
+  }
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(tab.control().unreadTabs, []);
+});
+
+test("the board and the code arriving on one read of an open panel with every tab closed show the board and dot the code", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD }, voice: ON_CALL });
+  act(() => tab.control().sidePanel.onToggle());
+  for (const closed of [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]) {
+    act(() => tab.control().sidePanel.onClose(closed));
+  }
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1), code: CODE } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);
+});
+
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
 const RUNNING_AGENT: CodingAgentSummary = {

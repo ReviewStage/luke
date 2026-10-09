@@ -1,15 +1,19 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import type { AppCommand } from "#shared/shortcuts";
+import { ShortcutGlyphs } from "../tooltip";
 
 /**
- * action-menu.tsx -- a menu of actions dropped from a button or opened at a pointer, drawn over the window.
+ * action-menu.tsx -- the window's own drop-down menu: a plan's actions, an agent's actions, and the side panel's tabs to open.
  *
- * The one menu the plan's ⋯ and right-click, and an agent's ⋯, all draw.
- * It is drawn here rather than asked of the system so that every door
- * draws it the same way and an action can be drawn red. It behaves as a
- * system menu does: focus on its first item, the arrow keys between items,
- * and Escape, Tab, a press elsewhere, or the window losing the keyboard
- * closing it with focus back where it was.
+ * The one menu the plan's ⋯ and right-click, an agent's ⋯, and the panel's
+ * "+" all draw. It is drawn here rather than asked of the system so that
+ * every door draws it the same way and an action can be drawn red. It
+ * behaves as a system menu does: focus on its first item, the arrow keys
+ * between items, and Escape, Tab, a press elsewhere, or the window losing
+ * the keyboard closing it with focus back where it was. An item that cannot
+ * be chosen now is drawn dimmed and skipped by the keys, the way a system
+ * menu draws one.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -22,9 +26,9 @@ type MenuAlign = (typeof MENU_ALIGN)[keyof typeof MENU_ALIGN];
 
 /** The gap a menu keeps from the window's edges, in CSS pixels. */
 const MENU_MARGIN = 8;
-/** The gap between the ⋯ button and the menu dropped from it. */
+/** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-const MENU_ITEM = '[role="menuitem"]';
+const MENU_ITEM = '[role="menuitem"]:not(:disabled)';
 
 /** Where a menu hangs: a point in the window, and which way from it the menu grows. */
 export interface MenuPlacement {
@@ -40,6 +44,10 @@ export interface MenuAction {
   onSelect: () => void;
   /** Drawn red: the action cannot be taken back. */
   danger?: boolean;
+  /** The shortcut that takes the same action, printed muted at the item's end. */
+  command?: AppCommand;
+  /** Why the item cannot be chosen now, printed muted at its end in the shortcut's place; the item is dimmed. */
+  unavailable?: string;
 }
 
 /** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
@@ -68,19 +76,55 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
   }
 }
 
+/** What an item prints at its end: why it cannot be chosen, or its shortcut, or nothing. */
+function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
+  if (action.unavailable !== undefined) {
+    return <span className="plan-menu-end">{action.unavailable}</span>;
+  }
+  if (action.command === undefined) return null;
+  return <ShortcutGlyphs command={action.command} className="plan-menu-end" />;
+}
+
+/** One item, as a menu draws it and as a list of the same offers outside a menu draws it. */
+export function MenuItem({
+  action,
+  inMenu,
+  onChoose,
+}: {
+  action: MenuAction;
+  /** A menu's item, reached by the menu's keys, or else a button of its own in the page's order. */
+  inMenu: boolean;
+  onChoose: () => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      role={inMenu ? "menuitem" : undefined}
+      tabIndex={inMenu ? -1 : undefined}
+      className="plan-menu-item"
+      data-danger={action.danger ? "true" : undefined}
+      disabled={action.unavailable !== undefined}
+      onClick={onChoose}
+    >
+      <span className="plan-menu-icon">{action.icon}</span>
+      <span className="plan-menu-label">{action.label}</span>
+      <ItemEnd action={action} />
+    </button>
+  );
+}
+
 /**
  * The menu itself, drawn over the window at the point it hangs from. It is
  * measured before it is painted, so it is drawn once and where it fits.
  */
 export function ActionMenu({
+  label,
   menu,
   groups,
-  label,
   onClose,
 }: {
-  menu: OpenMenu;
-  /** What the menu is about, for a reader who cannot see it. */
   label: string;
+  menu: OpenMenu;
   groups: readonly (readonly MenuAction[])[];
   /** Closes the menu, handing focus back to its opener where nothing else has taken it. */
   onClose: (returnFocus: boolean) => void;
@@ -105,7 +149,7 @@ export function ActionMenu({
     if (placed) element.current?.querySelector<HTMLElement>(MENU_ITEM)?.focus();
   }, [placed]);
 
-  // Note that a press on the opener is left to the opener, because the ⋯
+  // Note that a press on the opener is left to the opener, because the
   // button's own press is what closes the menu it opened.
   useEffect(() => {
     const pressed = (event: PointerEvent) => {
@@ -164,21 +208,15 @@ export function ActionMenu({
         <Fragment key={group[0]?.label}>
           {index > 0 ? <hr className="plan-menu-rule" /> : null}
           {group.map((action) => (
-            <button
+            <MenuItem
               key={action.label}
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className="plan-menu-item"
-              data-danger={action.danger ? "true" : undefined}
-              onClick={() => {
+              action={action}
+              inMenu
+              onChoose={() => {
                 onClose(true);
                 action.onSelect();
               }}
-            >
-              <span className="plan-menu-icon">{action.icon}</span>
-              {action.label}
-            </button>
+            />
           ))}
         </Fragment>
       ))}

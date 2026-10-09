@@ -7,6 +7,7 @@ import { afterEach, test } from "vitest";
 import {
   isAgentTab,
   SIDE_PANEL_TAB,
+  SIDE_PANEL_TABS,
   type SidePanelControl,
   sameTab,
   shownTab,
@@ -60,11 +61,13 @@ test("a tab is a fixed word or one agent's, told apart and keyed without a joine
   assert.equal(tabKey(SIDE_PANEL_TAB.CODE), SIDE_PANEL_TAB.CODE);
 });
 
-test("a kept agent tab stands while the agents are unread, shows while its agent is among them, and reads as the board once it is not", () => {
-  assert.deepEqual(shownTab({ agent: AGENT }, undefined), { agent: AGENT });
-  assert.deepEqual(shownTab({ agent: AGENT }, [OTHER, AGENT]), { agent: AGENT });
-  assert.equal(shownTab({ agent: AGENT }, [OTHER]), SIDE_PANEL_TAB.BOARD);
-  assert.equal(shownTab(SIDE_PANEL_TAB.TRANSCRIPT, []), SIDE_PANEL_TAB.TRANSCRIPT);
+test("a kept agent tab stands while the agents are unread, shows while its agent is among them, and reads as the first open tab once it is not", () => {
+  assert.deepEqual(shownTab({ agent: AGENT }, SIDE_PANEL_TABS, undefined), { agent: AGENT });
+  assert.deepEqual(shownTab({ agent: AGENT }, SIDE_PANEL_TABS, [OTHER, AGENT]), { agent: AGENT });
+  assert.equal(shownTab({ agent: AGENT }, SIDE_PANEL_TABS, [OTHER]), SIDE_PANEL_TAB.BOARD);
+  assert.equal(shownTab({ agent: AGENT }, [SIDE_PANEL_TAB.CODE], [OTHER]), SIDE_PANEL_TAB.CODE);
+  assert.equal(shownTab({ agent: AGENT }, [], [OTHER]), undefined);
+  assert.equal(shownTab(SIDE_PANEL_TAB.TRANSCRIPT, SIDE_PANEL_TABS, []), SIDE_PANEL_TAB.TRANSCRIPT);
 });
 
 test("choosing an agent's tab opens the panel on it and keeps it across a launch, where the plan's agents decide whether it shows", () => {

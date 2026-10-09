@@ -418,6 +418,18 @@ export function TerminalIcon(): React.JSX.Element {
   );
 }
 
+/** A page with its corner turned down and lines of text on it: the plan's own document. */
+export function DocumentIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M14.2 3.4H7.2a2 2 0 0 0-2 2v13.2a2 2 0 0 0 2 2h9.6a2 2 0 0 0 2-2V8Z" />
+      <path d="M14.2 3.4V8h4.6" />
+      <path d="M8.8 12.6h6.4" />
+      <path d="M8.8 16.2h4.4" />
+    </Glyph>
+  );
+}
+
 /** Starts a run: the triangle every transport draws for play. */
 export function PlayIcon(): React.JSX.Element {
   return (
@@ -427,11 +439,45 @@ export function PlayIcon(): React.JSX.Element {
   );
 }
 
+/** A board on its stand with a line drawn across it: the plan's whiteboard. */
+export function BoardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3.4" y="4" width="17.2" height="12" rx="1.8" />
+      <path d="M12 16v4.2" />
+      <path d="M8.6 20.2h6.8" />
+      <path d="m7.4 12 2.8-3 2.6 2.2 3.8-3.6" />
+    </Glyph>
+  );
+}
+
 /** Points down into a menu: the half of a split button that opens its choices. */
 export function ChevronDownIcon(): React.JSX.Element {
   return (
     <Glyph className="settings-chevron">
       <path d="m5.8 9.4 6.2 6.2 6.2-6.2" />
+    </Glyph>
+  );
+}
+
+/** A pair of angle brackets with a slash between them: code. */
+export function CodeIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M8.2 7.4 3.6 12l4.6 4.6" />
+      <path d="M15.8 7.4 20.4 12l-4.6 4.6" />
+      <path d="M13.6 5 10.4 19" />
+    </Glyph>
+  );
+}
+
+/** A speech bubble with lines of words in it: what was said on a call. */
+export function TranscriptIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M20.4 14.6a2 2 0 0 1-2 2H8.6l-4.8 3.8V5.6a2 2 0 0 1 2-2h12.6a2 2 0 0 1 2 2Z" />
+      <path d="M7.8 8.4h8.4" />
+      <path d="M7.8 12h5.4" />
     </Glyph>
   );
 }

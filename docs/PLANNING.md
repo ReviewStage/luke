@@ -190,8 +190,9 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   toolbar's. It is always enabled, however much of the plan is written, and
   copies the current document as described in "Copy". It never launches an
   agent and never asks the model anything.
-- The side panel's toggle, last on the toolbar ("Show panel" / "Hide panel",
-  ⌥⌘B).
+- The side panel's toggle ("Show panel" / "Hide panel", ⌥⌘B) stands at the
+  window's top right, past the toolbar's last button, and stays there whether
+  the panel is hidden, beside the document, or full screen.
 
 ### Document
 

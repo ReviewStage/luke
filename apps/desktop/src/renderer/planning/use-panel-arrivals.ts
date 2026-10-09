@@ -18,7 +18,8 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  *
  * A closed panel opens on the arrival's tab. An open one is left as it is,
  * its tab and full screen included, and the arrival's tab carries a dot
- * until it is shown. Nothing here moves focus.
+ * until it is shown. Either way a tab the developer had closed is opened
+ * again for the arrival. Nothing here moves focus.
  *
  * Which plans' arrivals have happened is this window's to remember, so it
  * is kept in the renderer's own storage beside the panel's preference, read
@@ -131,6 +132,10 @@ export function usePanelArrivals(input: {
       [SIDE_PANEL_TAB.BOARD]: board,
       [SIDE_PANEL_TAB.CODE]: code,
     } satisfies Record<ArrivingTab, boolean | undefined>;
+    // Note that the panel is followed through the loop as each arrival
+    // leaves it, because two arriving on one read see the same props.
+    let open = panel.open;
+    let shown = panel.tab;
     for (const tab of ARRIVING_TABS) {
       const held = holds[tab];
       if (held === undefined) continue;
@@ -142,10 +147,17 @@ export function usePanelArrivals(input: {
         continue;
       }
       if (!held || !waiting.delete(tab) || !recordArrival(planId, tab)) continue;
-      if (!panel.open) panel.onChoose(tab);
-      else if (panel.tab !== tab) setUnread((was) => withUnread(was, planId, tab));
+      if (!open) {
+        panel.onChoose(tab);
+        open = true;
+        shown = tab;
+        continue;
+      }
+      panel.onAdd(tab);
+      if (shown === undefined) shown = tab;
+      else if (shown !== tab) setUnread((was) => withUnread(was, planId, tab));
     }
-  }, [planId, board, code, panel.open, panel.tab, panel.onChoose]);
+  }, [planId, board, code, panel.open, panel.tab, panel.onChoose, panel.onAdd]);
 
   // A tab shown is a tab seen.
   const shownTab = panel.open ? panel.tab : undefined;

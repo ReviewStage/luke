@@ -1,5 +1,6 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { useEffect, useRef, useState } from "react";
+import { DocumentIcon } from "@sidecar/panel";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
@@ -15,8 +16,9 @@ import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
-import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
+import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
+import { Tab, TabStrip } from "./tab-strip";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -26,26 +28,27 @@ import { StartAgentButton } from "./start-agent-button";
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
- * rest stand. Its title is the plan's name, and a press on it renames the
- * plan in place. The toolbar is one row, the side panel's bar's height
- * exactly; the plan's repository is the sidebar's row's to name, so the
- * toolbar draws the repository chip only while the plan has none, and
+ * rest stand. Its one tab is the plan's, named for it, and a press on it
+ * renames the plan in place. The toolbar is one row, the side panel's bar's
+ * height exactly; the plan's repository is the sidebar's row's to name, so
+ * the toolbar draws the repository chip only while the plan has none, and
  * otherwise only the chip's menu, which Change repository… opens.
  */
 
-/** The strip across the top of the work column, which is also the window's drag handle. */
+/**
+ * The strip across the top of the work column, which is also the window's
+ * drag handle: the plan's tab at its left and the plan's actions at its right.
+ */
 function Toolbar({
-  title,
+  heading,
   children,
 }: {
-  title: React.ReactNode;
+  heading: React.ReactNode;
   children?: React.ReactNode;
 }): React.JSX.Element {
   return (
     <header className="desktop-toolbar">
-      <div className="desktop-toolbar-heading">
-        <h1 className="desktop-toolbar-title">{title}</h1>
-      </div>
+      {heading}
       {children ? <div className="desktop-toolbar-actions">{children}</div> : null}
     </header>
   );
@@ -76,45 +79,63 @@ function CopyNote({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element |
 }
 
 /**
- * The open plan's name as the toolbar's title, which a press, or the ⋯
- * menu's Rename, opens as its field; a key that ends the edit hands focus
- * back to the title.
+ * The plan's one tab, standing while no plan is drawn yet as well, so the
+ * row does not move when one is. It is the column's only tab and never
+ * closes: the plan is always the column's content, and the sidebar is the
+ * way to another plan. Note that there is no "+" beside it, because the
+ * column has no second kind of tab to open.
  */
-function PlanTitle({
+function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
+  return (
+    <TabStrip label="Plan" className="desktop-toolbar-heading">
+      {tab}
+    </TabStrip>
+  );
+}
+
+/**
+ * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
+ * opens as its field, and its repository in the hint the pointer resting on
+ * it raises. A key that ends the edit hands focus back to the tab.
+ */
+function PlanTab({
   plan,
   rename,
 }: {
   plan: PlanSummary;
   rename: ReturnType<typeof usePlanRename>;
 }): React.JSX.Element {
-  const title = useRef<HTMLButtonElement | null>(null);
+  const tab = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
     if (rename.editing || !refocus.current) return;
     refocus.current = false;
-    title.current?.focus();
+    tab.current?.focus();
   }, [rename.editing]);
-  if (rename.editing) {
-    return (
-      <PlanNameField
-        name={plan.name}
-        className="desktop-toolbar-title-field"
-        onEnd={(edit) => {
-          refocus.current = edit.byKey;
-          rename.end(edit);
-        }}
-      />
-    );
-  }
+  const editor = rename.editing ? (
+    <PlanNameField
+      name={plan.name}
+      className="tab-field"
+      onEnd={(edit) => {
+        refocus.current = edit.byKey;
+        rename.end(edit);
+      }}
+    />
+  ) : undefined;
   return (
-    <button
-      ref={title}
-      type="button"
-      className="desktop-toolbar-title-button"
-      onClick={rename.begin}
-    >
-      {plan.name}
-    </button>
+    <PlanTabStrip
+      tab={
+        <Tab
+          icon={<DocumentIcon />}
+          label={plan.name}
+          selected
+          tooltip={plan.repository ?? undefined}
+          editor={editor}
+          tabRef={tab}
+          onSelect={rename.begin}
+        />
+      }
+    />
   );
 }
 
@@ -141,7 +162,13 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             : "Choose a plan, or start a new one.";
     return (
       <>
-        <Toolbar title="Plan" />
+        <Toolbar
+          heading={
+            <PlanTabStrip
+              tab={<Tab icon={<DocumentIcon />} label="Plan" selected onSelect={() => undefined} />}
+            />
+          }
+        />
         <section className="desktop-empty" aria-busy={region.kind === DOCUMENT_REGION.READING}>
           <p role={region.kind === DOCUMENT_REGION.READING ? undefined : "alert"}>{line}</p>
           {region.kind === DOCUMENT_REGION.FAILED ? (
@@ -173,13 +200,15 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   };
   const menuRequest =
     plans.repositoryMenu?.planId === plan.id ? plans.repositoryMenu.request : undefined;
+  // The panel's toggle is the window's (desktop-shell.tsx); while no panel
+  // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
-    <div className="desktop-plan">
+    <div className="desktop-plan" data-panel-open={String(sidePanel.open)}>
       {/* Note that the document is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar title={<PlanTitle plan={plan} rename={rename} />}>
+        <Toolbar heading={<PlanTab plan={plan} rename={rename} />}>
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
@@ -191,20 +220,21 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             </p>
           ) : null}
           <CopyNote copy={plans.copy} />
-          <RepositoryChip
-            key={plan.id}
-            place={CHIP_PLACE.TOOLBAR}
-            value={plan.repository}
-            chooser={plans.repositories}
-            onChoose={chooseRepository}
-            openRequest={menuRequest}
-          />
-          <StartAgentButton control={plans.agents} />
-          <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
-          {/* The open panel holds its own toggle in its own top row. */}
-          {sidePanel.open ? null : <SidePanelToggle panel={sidePanel} />}
+          {/* Keyed once for the chip and the menu alike, so another plan
+              starts both afresh and the same plan keeps them. */}
+          <Fragment key={plan.id}>
+            <RepositoryChip
+              place={CHIP_PLACE.TOOLBAR}
+              value={plan.repository}
+              chooser={plans.repositories}
+              onChoose={chooseRepository}
+              openRequest={menuRequest}
+            />
+            <StartAgentButton control={plans.agents} />
+            <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
+          </Fragment>
         </Toolbar>
-        <section className="desktop-document" aria-label={plan.name}>
+        <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
         </section>
         <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
