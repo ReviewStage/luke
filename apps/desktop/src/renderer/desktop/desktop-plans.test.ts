@@ -200,7 +200,10 @@ beforeEach(() => {
     },
   });
   // The whiteboard bundle already loaded, as it is once a board has been shown in this window.
-  window.lukeWhiteboard = { mount: () => ({ show: () => undefined, unmount: () => undefined }) };
+  window.lukeWhiteboard = {
+    mount: () => ({ show: () => undefined, scene: () => undefined, unmount: () => undefined }),
+    render: () => Promise.resolve(undefined),
+  };
   // jsdom captures no pointer; the drag's own events are dispatched at the edge.
   HTMLElement.prototype.setPointerCapture = () => undefined;
 });

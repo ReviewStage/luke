@@ -9,6 +9,7 @@ import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import type { ToolDefinition } from "eve/tools";
 import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
+import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { StoredPlan } from "../plan-store.js";
@@ -127,7 +128,7 @@ Plan the grid before you draw, because you cannot see the board:
 - Fill boxes from one palette, the same meaning every time: "#a5d8ff" for what exists today, "#b2f2bb" for what this plan adds, "#ffc9c9" for what it removes or a risk, "#fff3bf" for a decision still open, and "#d0bfff" for a service outside the codebase.
 - Put your drawing beside what the developer drew, never over it, unless you are marking one of their shapes on purpose.
 
-When draw_on_board answers with layout problems, draw again with them fixed before you return.
+When draw_on_board answers with layout problems, draw again with them fixed. Then call look_at_board and check the image the way Excalidraw's guides ask: every label whole and inside its shape, no shapes overlapping, no arrow crossing a shape it does not join, at least 40px between shapes, and every zone holding its shapes with room to spare. If you see a problem, fix it, draw again, and look again before you return; look at most three times a turn. If the look answers not-looked, go on without it.
 
 The board as it stands is handed to you every turn under [board], with every element's id. Anything the developer drew or moved since your last turn is there: read it as part of what they are telling you, and ask about it when its meaning is unclear.
 
@@ -148,6 +149,7 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 - worker does a job in the background, as above.
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
+- look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
 
 ## Return the result
 
@@ -259,8 +261,9 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient;
  * command in the plan's folder on the developer's Mac, under the same
  * binding; the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
- * whiteboard under the same binding (`board-tool.ts`). Every read's result
- * goes back to the model as data.
+ * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
+ * hands back the board as the Mac draws it (`board-look.ts`). Every read's
+ * result goes back to the model as data, a look's as an image.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
@@ -291,6 +294,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...DRAW_ON_BOARD_TOOL,
     run: (call, input) => Effect.map(runDrawOnBoard(call.plan, input), (result) => ({ ...result })),
+  },
+  {
+    ...LOOK_AT_BOARD_TOOL,
+    run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
   },
 ];
 

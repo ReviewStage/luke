@@ -30,6 +30,7 @@ import {
 } from "../eve/scripted-model";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
+import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { readBoard, writeScene } from "../server/hosted/board-store";
 import { DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import {
@@ -473,6 +474,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             SEARCH_WEB_TOOL.name,
             READ_WEB_PAGE_TOOL.name,
             DRAW_ON_BOARD_TOOL.name,
+            LOOK_AT_BOARD_TOOL.name,
           ],
         );
       }),

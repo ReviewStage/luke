@@ -181,18 +181,19 @@ export class HostedPlanClient {
     );
   }
 
-  /** The board's scene written whole, with the number of Luke's drawing it holds; the board as written, or nothing where the service did not answer. */
+  /** The board's scene written whole, with the number of Luke's drawing it holds and, when it is the first to hold it, the scene's image; the board as written, or nothing where the service did not answer. */
   saveBoard(
     planId: string,
     elements: readonly BoardElement[],
     appliedDrawing: number,
+    image?: string,
   ): Effect.Effect<Board | undefined, never, HttpClient.HttpClient> {
     return Effect.map(
       this.#call.ask(
         {
           method: HTTP_METHOD.PUT,
           path: planBoardPath(planId),
-          body: JSON.stringify({ elements, appliedDrawing }),
+          body: JSON.stringify({ elements, appliedDrawing, image }),
         },
         boardAnswerSchema,
       ),

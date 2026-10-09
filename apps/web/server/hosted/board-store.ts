@@ -25,6 +25,11 @@ import type { PlanStoreEffect } from "./plan-store.js";
  * than written back into being. Every statement names the account beside the
  * plan, so a plan another account owns reads and writes as no plan, exactly
  * as in `plan-store.ts`.
+ *
+ * The Mac's first save to hold a new drawing of Luke's carries the scene
+ * drawn as a PNG, which the board keeps until the next such save, so it
+ * shows the drawing the scene holds; only `look_at_board` reads it
+ * (`readBoardImage`), and a board read never carries it.
  */
 
 const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
@@ -72,25 +77,53 @@ const lockPlan = SqlSchema.findOneOption({
 });
 
 /**
- * The scene written whole. Note that the elements are closed over rather
- * than carried in the request, because the request is handed to the
- * statement encoded and an element's encoded side is any wire value.
+ * The scene written whole, with its image where the save carried one. Note
+ * that the elements are closed over rather than carried in the request,
+ * because the request is handed to the statement encoded and an element's
+ * encoded side is any wire value.
  */
-function upsertScene(elements: readonly BoardElement[]) {
+function upsertScene(elements: readonly BoardElement[], image: string | undefined) {
   return SqlSchema.findOne({
     Request: Schema.Struct({ planId: Schema.String, appliedDrawing: Schema.Int, now: Schema.Date }),
     Result: BoardRowSchema,
-    execute: ({ planId, appliedDrawing, now }) =>
-      db
+    execute: ({ planId, appliedDrawing, now }) => {
+      const scene = { elements, appliedDrawing, updatedAt: now };
+      // Note that a save moving to a new drawing with no image drops the old one, which shows a drawing gone.
+      const kept = sql`case when ${planBoard.appliedDrawing} = ${appliedDrawing} then ${planBoard.image} end`;
+      return db
         .insert(planBoard)
-        .values({ planId, elements, appliedDrawing, updatedAt: now })
+        .values({ planId, ...scene, image: image ?? null })
         .onConflictDoUpdate({
           target: planBoard.planId,
-          set: { elements, appliedDrawing, updatedAt: now },
+          set: { ...scene, image: image ?? kept },
         })
-        .returning(BOARD_COLUMNS),
+        .returning(BOARD_COLUMNS);
+    },
   });
 }
+
+/** The board's image, the drawing its scene holds, and Luke's latest drawing's number. */
+const BoardImageRowSchema = Schema.Struct({
+  image: Schema.NullOr(Schema.String),
+  appliedDrawing: Schema.NullOr(Schema.Int),
+  drawingNumber: Schema.NullOr(Schema.Int),
+});
+
+const findBoardImage = SqlSchema.findOneOption({
+  Request: PlanKeySchema,
+  Result: BoardImageRowSchema,
+  execute: ({ userId, planId }) =>
+    db
+      .select({
+        image: planBoard.image,
+        appliedDrawing: planBoard.appliedDrawing,
+        drawingNumber: planBoard.drawingNumber,
+      })
+      .from(plan)
+      .leftJoin(planBoard, eq(planBoard.planId, plan.id))
+      .where(ownedPlan(userId, planId))
+      .limit(1),
+});
 
 /** Luke's drawing written whole, as the next number. */
 function upsertDrawing(drawing: readonly DrawingElement[]) {
@@ -138,17 +171,35 @@ export function readBoard(userId: string, planId: string): PlanStoreEffect<Optio
   return Effect.map(findBoard({ userId, planId }), Option.map(boardOf));
 }
 
-/** The Mac's scene, written whole with the number of Luke's drawing it holds; the board as written. */
+/**
+ * The image of Luke's latest drawing as the Mac drew it on the board, once a
+ * save holding that drawing has carried one; none before, and none where the
+ * account owns no such plan.
+ */
+export function readBoardImage(
+  userId: string,
+  planId: string,
+): PlanStoreEffect<Option.Option<string>> {
+  return Effect.map(findBoardImage({ userId, planId }), (row) =>
+    Option.flatMap(row, ({ image, appliedDrawing, drawingNumber }) =>
+      image !== null && appliedDrawing === drawingNumber ? Option.some(image) : Option.none(),
+    ),
+  );
+}
+
+/** The Mac's scene, written whole with the number of Luke's drawing it holds and any image of it; the board as written. */
 export function writeScene(
   userId: string,
   planId: string,
   elements: readonly BoardElement[],
   appliedDrawing: number,
+  image?: string,
 ): PlanStoreEffect<Option.Option<Board>> {
   return underPlanLock(userId, planId, (now) =>
-    upsertScene(elements)({ planId, appliedDrawing, now }).pipe(
-      Effect.catchTag("NoSuchElementError", Effect.die),
-    ),
+    upsertScene(
+      elements,
+      image,
+    )({ planId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
   );
 }
 

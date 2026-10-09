@@ -421,6 +421,13 @@
       "when": 1790625000000,
       "tag": "0060_plan_drop_opened_at",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1790711400000,
+      "tag": "0061_plan_board_image",
+      "breakpoints": true
     }
   ]
 }

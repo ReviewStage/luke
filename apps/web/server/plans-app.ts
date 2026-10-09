@@ -81,8 +81,8 @@ const PLAN_ID_QUERY = "id";
 /** A start or a rename is a name, so a body past this is not one. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
-/** A save is a scene at its byte bound, with room for the drawing's number around it. */
-const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + 1_024;
+/** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
+const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
 
 /** A result is two outputs of at most `PLAN_COMMAND_OUTPUT_MAX_CHARS` each, every character escaped at worst. */
 const MAXIMUM_RESULT_BODY_BYTES = 2 * PLAN_COMMAND_OUTPUT_MAX_CHARS * 6 + 1_024;
@@ -207,7 +207,13 @@ const boardEndpoint = /* @__PURE__ */ Effect.fn("web/planBoardEndpoint")(functio
   const save = readEither(boardSaveRequestSchema)(body);
   if (Result.isFailure(save)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const written = yield* hostedStoreOrUnavailable(
-    writeScene(userId, planId, save.success.elements, save.success.appliedDrawing),
+    writeScene(
+      userId,
+      planId,
+      save.success.elements,
+      save.success.appliedDrawing,
+      save.success.image,
+    ),
   );
   if (Option.isNone(written)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { board: written.value });

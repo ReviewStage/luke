@@ -1,4 +1,5 @@
 import { useAtomSet, useAtomValue } from "@effect/atom-react";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -7,6 +8,7 @@ import { useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
+import { useAppState } from "../use-app-state";
 import {
   WHITEBOARD_ASSET,
   type WhiteboardHandle,
@@ -24,9 +26,18 @@ import { admittedElements } from "./board-scene";
  * scene, the developer's or a drawing put in, is saved once the canvas
  * pauses, whole, the last write winning.
  *
+ * A save that is the first to hold a new drawing of Luke's carries the scene
+ * drawn as a PNG beside it, which is what the planning model looks at
+ * (`look_at_board`). Note that "first" is read off the board main last
+ * handed over: until a save holding the drawing lands, main's board still
+ * names the drawing before it, so a save that interrupts the first one still
+ * carries the image. While the planning model's pending call is a look, the
+ * canvas saves the scene it holds with its image as well, so a look at a
+ * board Luke did not just draw on still finds one.
+ *
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
- * reach.
+ * reach. The image is drawn off the document, so the recording never sees it.
  */
 
 /** How long the developer's drawing rests before it is saved. */
@@ -63,11 +74,13 @@ const whiteboardModuleAtom = Atom.keepAlive(
   ),
 );
 
-/** One save the canvas asked for: the plan, its scene, and the number of Luke's drawing the scene holds. */
+/** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
 interface BoardSave {
   readonly planId: string;
   readonly elements: readonly object[];
   readonly appliedDrawing: number;
+  readonly module: WhiteboardModule;
+  readonly withImage: boolean;
 }
 
 /**
@@ -78,11 +91,15 @@ interface BoardSave {
 const boardSaveAtom = rendererRuntime.fn((save: BoardSave) =>
   Effect.gen(function* () {
     yield* Effect.sleep(SAVE_PAUSE);
-    const payload: ActPayload<typeof ACT_KIND.PLANNING_BOARD_SAVE> = {
+    const scene: ActPayload<typeof ACT_KIND.PLANNING_BOARD_SAVE> = {
       planId: save.planId,
       elements: admittedElements(save.elements),
       appliedDrawing: save.appliedDrawing,
     };
+    const image = save.withImage
+      ? yield* Effect.promise(() => save.module.render(save.elements))
+      : undefined;
+    const payload = image === undefined ? scene : { ...scene, image };
     yield* Effect.tryPromise({
       try: () => window.sidecar.act(actRequest(ACT_KIND.PLANNING_BOARD_SAVE, payload)),
       catch: (error) => error,
@@ -103,14 +120,24 @@ function BoardCanvas({
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<WhiteboardHandle | undefined>(undefined);
   const firstBoard = useRef(board);
+  const latestBoard = useRef(board);
+  latestBoard.current = board;
   const save = useAtomSet(boardSaveAtom);
+  const looking = useAppState()?.planning.activity?.planner?.action === LOOK_AT_BOARD_TOOL_NAME;
 
   useEffect(() => {
     const element = host.current;
     if (element === null) return undefined;
     const mounted = module.mount(element, {
       board: firstBoard.current,
-      onScene: (elements, appliedDrawing) => save({ planId, elements, appliedDrawing }),
+      onScene: (elements, appliedDrawing) =>
+        save({
+          planId,
+          elements,
+          appliedDrawing,
+          module,
+          withImage: appliedDrawing > latestBoard.current.appliedDrawing,
+        }),
     });
     handle.current = mounted;
     return () => {
@@ -122,6 +149,11 @@ function BoardCanvas({
   useEffect(() => {
     if (board !== firstBoard.current) handle.current?.show(board);
   }, [board]);
+
+  useEffect(() => {
+    const scene = looking ? handle.current?.scene() : undefined;
+    if (scene !== undefined) save({ planId, ...scene, module, withImage: true });
+  }, [looking, module, planId, save]);
 
   return <div ref={host} className="plan-board-canvas" />;
 }
