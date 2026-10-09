@@ -176,6 +176,20 @@ test("a press mints one key, a press asked again after no answer carries the sam
   ]);
 });
 
+test("a second press before the first is answered starts nothing more", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] });
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { agent: STARTED });
+  await tab.mount();
+
+  // Two clicks are two discrete events, each flushed before the next, so the second finds the first under way.
+  act(() => tab.control().start.onPress());
+  act(() => tab.control().start.onPress());
+  await settle();
+  assert.deepEqual(startPayloads(tab.asked), [{ planId: PLAN, idempotencyKey: "key-1" }]);
+  assert.deepEqual(tab.started, [AGENT]);
+});
+
 test("a Stop reads the list again, a read that fails keeps the agents drawn, a page's status moves the agent's dot, and leaving the plan drops its agents", async () => {
   const running = { ...STARTED, status: CODING_AGENT_STATUS.RUNNING };
   const tab = mount({ planId: PLAN, repository: "acme/relay" });

@@ -542,7 +542,7 @@ export function openPlanConversation(
  * The plan a conversation of the account belongs to, with its saved document;
  * nothing for a conversation no plan of the account names. This is how a
  * planning turn, admitted for a conversation, finds the document it is handed
- * and the plan its folder read is bound to.
+ * and the plan whose repository its reads are bound to.
  */
 export function readPlanOfConversation(
   userId: string,

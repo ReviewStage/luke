@@ -284,7 +284,10 @@ test("the Code tab draws the code Luke has on screen", () => {
     }),
   );
 
-  assert.match(markup, /<aside class="side-panel"[\s\S]*class="code-pane"[\s\S]*src\/invite\.ts/u);
+  assert.match(
+    markup,
+    /<aside class="side-panel"[\s\S]*class="code-pane ph-no-capture"[\s\S]*src\/invite\.ts/u,
+  );
 });
 
 test("a tab with something new on it carries a dot, and the tab shown carries none", () => {

@@ -59,10 +59,9 @@ sidebar, one page at a time:
  ┌──────────────────────────────────────────────────────────────┐
  │  [ Plans ]   Settings                                        │
  │  ‹  Teammate invitations                 [ ▶ Start ▾ ] [ ⋯ ]   │
- │     acme/relay · main @ 4f2c9e1                              │
+ │     acme/relay                                               │
  │ ──────────────────────────────────────────────────────────── │
  │  # Teammate invitations                          (scrolls)   │
- │  Repository: acme/relay, branch main                         │
  │  ## Goal                                                     │
  │  ### Problem                                                 │
  │  Only an admin can add someone to a workspace...             │
@@ -121,7 +120,7 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 - `New plan` at the head of the list leaves any open plan for the new-plan
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-plan page shows.
-- There is no rename, delete, archive, or search in this journey.
+- There is no archive or search in this journey.
 
 ### New plan
 
@@ -243,8 +242,12 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   stands ("Agent tabs" below). With none on screen, the Code tab says so
   quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
-- **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it;
-  choosing a tab, or Luke putting code up, never opens it. Its left edge
+- **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
+  A closed panel opens on its own only for Luke's first drawing on the
+  plan's board, the first code he puts up, each once per plan
+  (`planning/use-panel-arrivals.ts`), and an agent just started, whose tab
+  it opens on; an open panel keeps its tab, and an arrival on another tab
+  marks that tab with a dot until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
@@ -560,8 +563,10 @@ instructions.
 ### 1. Starting from a GitHub repository
 
 The developer opens the panel's Plans tab. They press
-`New plan`, connect GitHub once, name the plan "Teammate invitations", pick
-`acme/relay`, and press `Start plan`. The header's chip reads `acme/relay`,
+`New plan`, name the plan "Teammate invitations", pick `acme/relay` from the
+chip (a repository is reachable once they have signed in with GitHub and
+installed the Luke GitHub App on it, which the chip's menu offers), and press
+`Start plan`. The header's chip reads `acme/relay`,
 and the document shows the untouched template, every field "Unanswered".
 
 They press the microphone. The call opens and Luke speaks first, without
@@ -598,8 +603,6 @@ of the template, most of them still null. The body it becomes reads, in part:
 
 ```markdown
 # Teammate invitations
-
-Repository: acme/relay, branch main
 
 ## Goal
 
@@ -691,7 +694,7 @@ not leave the plan: the call goes on.
 
 The next day they open the Plans tab. The plan list shows
 "Teammate invitations" first. Selecting it draws the saved document with the
-same `acme/relay · main @ 4f2c9e1`. They press the microphone, and the model
+same `acme/relay` on its chip. They press the microphone, and the model
 starts with the saved document and the plan's relevant conversation. Luke
 picks up where they stopped:
 
@@ -736,7 +739,8 @@ assumption.
 
 ### 7. Copy
 
-The developer presses `Copy`, and the button shows the check mark. The
+The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
+toolbar reads `Copied`. The
 clipboard holds the current document as readable Markdown: the body as saved,
 every section of the template in order, then the assumption list, which
 reads `_None recorded_` while the list is empty:
@@ -755,8 +759,12 @@ reads `_None recorded_` while the list is empty:
 This is direct formatting of the saved document, not a second model step. It
 is the same whether or not the review has happened. There is no separate
 handoff prompt: the plan is what the coding agent reads. They paste
-it into the coding agent of their choice. If they later ask Luke for one more
-change, the model updates the same document, and Copy copies the new one.
+it into the coding agent of their choice, or press `Start` instead, and a
+coding agent of Luke's own checks `acme/relay` out in a sandbox, implements
+the plan, and decides on a pull request, watched from its tab in the side
+panel ("From a plan to a pull request" above). If they later ask Luke for one
+more change, the model updates the same document, and Copy copies the new
+one.
 
 ## Failures the developer sees
 
@@ -772,6 +780,13 @@ change, the model updates the same document, and Copy copies the new one.
   as inspected. If access is revoked, the reads fail the same way. Starting a
   new plan shows the reason on the new-plan page.
 - **Loading a plan.** The document region shows the failure and `Try again`.
+- **Start.** The service refuses to start an agent on a plan with no
+  repository (`no-repository`, 409), on one the Luke GitHub App no longer
+  reaches for the account (`repository-not-reachable`, 403), or while the
+  account must sign in with GitHub again (`github-sign-in-required`, 403),
+  and answers `unavailable` where eve did not take the session; the reason is
+  said beside the button until the next press. An agent that ends `failed`
+  or `cancelled` says so in its tab's head, and anything it pushed stays.
 
 ## What each part reuses
 
@@ -781,7 +796,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, and the microphone. |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
@@ -790,6 +805,7 @@ the exact shape.
 | Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the sidebar's waveform (`desktop/luke-identity.tsx`), unchanged | None. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
+| Start, agent tabs, Settings › Coding agents | The toolbar and the side panel (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:
@@ -803,8 +819,10 @@ Two existing rules carry over unchanged:
   also left out of the recording (`ph-no-capture`), as a second line behind
   the masking, since every word in it is the developer's or Luke's.
 - **Secrets.** No credential or account secret enters the document, a caption,
-  a counted event, or a trace. The GitHub token lives in connection handling,
-  and the model is told to keep secrets out of the plan.
+  a counted event, or a trace. The GitHub user token is sealed on the
+  `account` row and read only by `apps/web/server/github/github-app.ts`; the
+  installation tokens it mints are set at the sandbox's firewall and never
+  enter the sandbox; and the model is told to keep secrets out of the plan.
   Nothing scans for this, so each owning issue holds it by construction.
 
 ## Known limitations and validation
@@ -819,8 +837,16 @@ changes when a check is run, not when one is planned.
   covers repository checks, types, lint, the hermetic unit and store tests,
   and the builds.
 - The journey is held by hermetic tests at the model and transport
-  boundaries (fake OpenAI, fake eve, scripted model, fake GitHub MCP, PGlite):
-  - starting a plan at a resolved commit, and reads at that commit;
+  boundaries (fake OpenAI, fake eve, scripted model, a scripted GitHub and a
+  sandbox double, PGlite):
+  - the checkout of a plan's repository at its default branch, one commit
+    deep, with the token at the firewall for the clone alone, and every
+    refusal (no repository, not reachable, sign-in required, no sandbox or
+    firewall) checking nothing out (`apps/web/tests/repository-shell.test.ts`);
+    a coding agent's checkout on the same terms
+    (`apps/web/tests/coder-host-checkout.test.ts`); and the Start, list,
+    messages, and Stop routes over a fake eve
+    (`apps/web/tests/coding-agents-app.test.ts`);
   - the notetaker saves what the developer said once they are quiet a beat,
     and its drafts are drawn on the Mac as the model writes them;
   - a spoken turn reaching the planning model in the plan's own
@@ -874,19 +900,31 @@ changes when a check is run, not when one is planned.
   held against a sandbox double at eve's boundary and a scripted GitHub
   (`apps/web/tests/repository-shell.test.ts`), and the eve build's sandbox
   prewarm has not been run on Vercel.
+- **A coding agent.** No coding agent has run against a real provider, a
+  real checkout, a push, or a pull request. The coder eval
+  (`apps/web/coder/evals/coder.eval.ts`) runs one turn under a scripted model
+  that calls no tool, so no sandbox opens and no repository is checked out,
+  and the `coder` service's sandbox `prepare` has not been run on Vercel.
 
 ### Known limitations
 
-- **GitHub's `repo` scope is broader than Luke's use.** GitHub sign-in and the
-  Connect GitHub page (`/connect-github.html`) both ask under the existing OAuth App for the classic `repo` scope,
-  which grants read and write to every repository the developer can reach.
-  Luke only reads, through GitHub's read-only MCP endpoint, but the token
-  itself could write. `PRIVACY.md` discloses it under "Your account".
-- **Connecting on a Preview.** A Preview's link goes through production's
-  registered callback on the OAuth proxy, as sign-in does, and lands on the
-  Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy);
-  it is held end to end against a fake GitHub in
-  `apps/web/tests/auth-proxy-link.test.ts` and has not yet been exercised
+- **The GitHub App's user token can write.** GitHub sign-in is the Luke
+  GitHub App's user authorization (`apps/web/server/auth-policy.ts`,
+  `GITHUB_SIGN_IN` with `disableDefaultScope`): it names no OAuth scope, and
+  the token reaches the repositories the App is installed on and the
+  developer can reach, with the App's registered permissions, contents and
+  pull requests read and write among them. The server reads it only to list
+  installations and repositories and to confirm a plan's repository is
+  reachable (`apps/web/server/github/github-app.ts`); a planning checkout
+  runs on an installation token cut to contents read, and a coding agent on
+  one cut to contents and pull requests write. An account that signed in
+  under the earlier OAuth App may still hold its classic `repo` token until
+  it signs in again. `PRIVACY.md` discloses it under "Your account".
+- **Signing in with GitHub on a Preview.** A Preview's sign-in goes through
+  production's registered callback on the OAuth proxy and lands on the
+  Preview's signed-in user (`apps/web/server/README.md`, the OAuth proxy); it
+  is held end to end against a fake GitHub in
+  `apps/web/tests/auth-proxy-sign-in.test.ts` and has not yet been exercised
   against a deployed Preview.
 - **`read_web_page` checks addresses without pinning them.** Every host the
   read reaches, and every redirect hop, is resolved and refused unless all of

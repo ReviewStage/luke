@@ -205,15 +205,17 @@ installation through `installation(id)`, and sends the browser on to
 (`@sidecar/hosted`): `installed`, `updated`, `requested` (a member asked an
 organization's owner, so there is no installation yet), `not-found`, or
 `unavailable`. The page draws a fixed card per status and interpolates
-nothing the address brought it; the desktop will later pick the landing up.
+nothing the address brought it; the desktop's repository chip picks the
+installation up by reading the account's repositories again when the window
+next takes focus (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 Nothing is stored at install time: which installations a user can reach is
 read from GitHub on the user's own token when a repository is chosen.
 
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
 client: a Preview carrying the App's client id can complete a sign-in only
-while production's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` hold the
-App's client id and secret, a Vercel project setting rather than anything in
+while production's `GITHUB_APP_CLIENT_ID` and `GITHUB_APP_CLIENT_SECRET`
+hold the App's client id and secret, a Vercel project setting rather than anything in
 this repository. Nothing on the branch is Preview-specific.
 
 Every function Vercel deploys is plain ESM. The route sources live under
@@ -319,7 +321,7 @@ at the `VOICE_SERVICE_PATH` path and the desktop posts feedback to
 commit with no migration and no dashboard state, and the deploy shape returns
 to Vercel's own pass.
 
-The Vercel project is two services in one deployment, declared under `services`
+The Vercel project is three services in one deployment, declared under `services`
 in `vercel.json`, which Vercel reads only while the project's Framework Preset
 is Services. `web` is this app at its root and carries the migrate-and-seed
 build, the install filter, the ignore rule, and the `routes` above unchanged.
@@ -331,17 +333,20 @@ Output there, which is where static-build reads a service's output, so nothing
 relocates it and no variable of eve's own is set by hand. The block is one
 isolated declaration with no shared keys, so replacing it with a generated
 service later is removing a block rather than untangling one (LUKE-183).
+`coder` is the coding-agent service, a second eve app root at `coder/` built
+and deployed on the same terms ("The coding-agent service" below).
 Public routing is the top-level `rewrites`:
-`/eve/v1/*` enters the eve service and everything else the web service, and a
+`/eve/coder/v1/*` enters the coder service, `/eve/v1/*` the eve service, and
+everything else the web service, and a
 service's own routes run only once a request has entered it. That is why the
 generated `/api/` rewrites live under the web service's `routes` and the
 generator (`server/function-rewrites.ts`) refuses a `routes` key at the top
 level beside `services`: Vercel ignores one there rather than erroring, so a
 file generated into the old location would pass every check and 404 every
 `/api/` route in production. The project's
-environment variables reach both services alike, and each service's own
+environment variables reach all three services alike, and each service's own
 `ignoreCommand` is what skips its build, so a commit that changes nothing under
-`apps/web`, `packages`, or the workspace manifests deploys neither.
+`apps/web`, `packages`, or the workspace manifests deploys none of them.
 
 ## The data layer
 
@@ -660,8 +665,9 @@ gateway is retried on the next request rather than answered for the hour.
 The bearer is resolved before the read, as every hosted endpoint resolves
 it, though the catalog is public and the same for every account.
 
-The same module holds the two functions the coding-agent routes will stand
-on: `validateModelChoice`, which accepts a `(model, effort)` only for an
+The same module holds the functions the coding-agent routes and the coder
+host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
+through `validateModelChoice`, accepts a `(model, effort)` only for an
 offered model at an effort it lists, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
 Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
@@ -678,7 +684,9 @@ started first, `POST /api/plans` starts one with its name, the untouched
 template as its document, and the repository it is about where one is
 chosen, `GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, or both, and
-`DELETE /api/plans/{id}` deletes it, the id moved into
+`DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
+and their conversations stamped deleted beside the plan's own (`deletePlan`),
+the id moved into
 the query by the rewrite `server/function-rewrites.ts` makes of every
 segment-captured id.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
@@ -900,8 +908,10 @@ carries the relay hooks, while only a positively identified Preview accepts the
 returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`BETTER_AUTH_PROXY_SECRET`, and both providers' `CLIENT_ID` and
-`CLIENT_SECRET`, the same values production holds. Production is the end that
+`BETTER_AUTH_PROXY_SECRET`, Google's `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
+`GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
+`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the end that
 exchanges the code, but Better Auth's Google provider refuses to build the
 authorization URL without a client secret, so a Preview without
 `GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
@@ -1437,7 +1447,9 @@ less the `prompts` table it drew and less the `tool_sets` table
 `0039_dead_tool_sets` dropped: a turn keeps the composed prompt's hash and the
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
-conversation row names its kind (`plan` is the one any code still opens), the
+conversation row names its kind (`plan`, which `server/hosted/plan-store.ts`
+opens, and `coding_agent`, which `server/hosted/coding-agent-store.ts` opens,
+are the two any code still opens), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
 metadata as plain `jsonb`, unique on `(conversation_id, client_id)` as its
@@ -1604,7 +1616,13 @@ git; `eve build` prewarms its snapshot on Vercel, so the eve service's build
 needs Vercel Sandbox credentials (the build's own `VERCEL_OIDC_TOKEN`, or
 `VERCEL_TOKEN` with `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and a prewarm
 that fails stops the deployment. `tests/eve-layout.test.ts` builds with
-`--skip-sandbox-prewarm`, so it says nothing about the snapshot.
+`--skip-sandbox-prewarm`, so it says nothing about the snapshot. The running
+service needs the GitHub App's five variables and `BETTER_AUTH_SECRET` as the
+web functions do: `run_in_repository`'s checkout confirms the plan's
+repository is reachable and mints its token through `GitHubApp`, which the
+shared runtime builds from them (`server/runtime.ts`,
+`githubAppFromEnvironment`), the session secret being what the account's
+user token is sealed under.
 
 `eve/evals/brain-host.eval.ts` is the planning brain's end-to-end eval, and nothing local
 runs it. `./scripts/check.sh` runs vitest over the workspaces
@@ -1698,8 +1716,10 @@ declares every request and answer, and `service-paths.ts` the addresses.
 both of the choice or neither, the account's default (`/api/account/preferences`)
 where neither, checked against the catalog with `acceptedModelChoice`, which
 also refuses a stored default that has since left the catalog. It refuses a
-plan with no repository (`no-repository`, 409) and one the account no
-longer reaches through the App (`repository-not-reachable`), snapshots the
+plan with no repository (`no-repository`, 409), one the account no
+longer reaches through the App (`repository-not-reachable`, 403), and an
+account that must sign in with GitHub again before the App can read for it
+(`github-sign-in-required`, 403), snapshots the
 plan's document as the Markdown Copy puts on the clipboard
 (`@sidecar/hosted/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
@@ -1750,8 +1770,10 @@ The sweep ends what no request will, and it reads no word of any account.
 It runs three things in turn and answers what each did: the purge of
 conversations stamped deleted more than thirty days ago, which is what a
 deleted plan's conversation comes to, counted as `purged`; the sweep over
-turns still running an hour after they started
-(`server/hosted/store/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS`), whose end
+turns still running past their kind's bound, an hour for a planning turn
+and a day and an hour for a coding agent's
+(`server/hosted/store/abandoned-turns.ts`, `TURN_ABANDON.AFTER_MS` and
+`TURN_ABANDON.CODING_AGENT_AFTER_MS`), whose end
 the relay never heard and which are settled as failed for `abandoned`
 through the same write the relay's own end takes, at most fifty a sweep and
 counted as `abandoned`; and the bound on a detached voice session described

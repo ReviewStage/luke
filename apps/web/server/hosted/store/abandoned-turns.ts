@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, lt } from "drizzle-orm";
+import { and, asc, eq, isNull, lt, ne, or } from "drizzle-orm";
 import { Effect, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
@@ -12,6 +12,7 @@ import {
 } from "../../core.js";
 import { db } from "../../db/query.js";
 import { conversations, turns } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { STORE_WRITE_EFFECT, type StoreWriter } from "./writer.js";
 
 /**
@@ -36,6 +37,15 @@ export const TURN_ABANDON = {
    * coming.
    */
   AFTER_MS: 60 * 60 * 1000,
+  /**
+   * How long a coding agent's turn may stand running before the sweep
+   * settles it. A coding agent's one turn is its whole run, and its sandbox
+   * lives up to the platform's day (`coder-host/bounds.ts`'s
+   * `SANDBOX_TIMEOUT_MS`), so an hour would fail an agent still at work and
+   * leave its Stop with nothing to stop; the day and an hour's grace past
+   * it is a run whose end is not coming.
+   */
+  CODING_AGENT_AFTER_MS: 25 * 60 * 60 * 1000,
   /** The most turns one sweep settles; the rest wait for the next minute. */
   LIMIT: 50,
 } as const;
@@ -46,9 +56,13 @@ const AbandonedTurnRowSchema = Schema.Struct({
   conversationId: Schema.String,
 });
 
-/** The running turns started before the instant, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
+/** The running turns started before the instant of their conversation's kind, longest running first, of conversations still standing; a cleared conversation's turns go with its purge. */
 const abandonedTurns = SqlSchema.findAll({
-  Request: Schema.Struct({ startedBefore: Schema.Date, limit: Schema.Int }),
+  Request: Schema.Struct({
+    startedBefore: Schema.Date,
+    codingAgentStartedBefore: Schema.Date,
+    limit: Schema.Int,
+  }),
   Result: AbandonedTurnRowSchema,
   execute: (request) =>
     db
@@ -58,8 +72,17 @@ const abandonedTurns = SqlSchema.findAll({
       .where(
         and(
           eq(turns.status, TURN_STATUS.RUNNING),
-          lt(turns.startedAt, request.startedBefore),
           isNull(conversations.deletedAt),
+          or(
+            and(
+              ne(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+              lt(turns.startedAt, request.startedBefore),
+            ),
+            and(
+              eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
+              lt(turns.startedAt, request.codingAgentStartedBefore),
+            ),
+          ),
         ),
       )
       .orderBy(asc(turns.startedAt), asc(turns.id))
@@ -76,13 +99,14 @@ export interface AbandonedTurnSweepOptions {
   readonly limit?: number | undefined;
 }
 
-/** Settles every running turn started more than the bound ago as failed for abandonment; answers how many it settled. */
+/** Settles every running turn started more than its kind's bound ago as failed for abandonment; answers how many it settled. */
 export const sweepAbandonedTurns = /* @__PURE__ */ Effect.fn("web/sweepAbandonedTurns")(function* (
   store: AbandonedTurnSweepStore,
   options: AbandonedTurnSweepOptions,
 ): Effect.fn.Return<number, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
   const turns = yield* abandonedTurns({
     startedBefore: new Date(options.now - TURN_ABANDON.AFTER_MS),
+    codingAgentStartedBefore: new Date(options.now - TURN_ABANDON.CODING_AGENT_AFTER_MS),
     limit: options.limit ?? TURN_ABANDON.LIMIT,
   });
   let settled = 0;

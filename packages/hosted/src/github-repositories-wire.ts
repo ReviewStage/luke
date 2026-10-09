@@ -13,7 +13,7 @@ import { countedNumber } from "./service-wire.js";
  * is the one form a plan stores and a coding agent checks out.
  */
 
-export const GITHUB_REPOSITORY_BOUNDS = {
+const GITHUB_REPOSITORY_BOUNDS = {
   /** GitHub's own bound on an owner's login. */
   MAX_OWNER_CHARS: 39,
   /** GitHub's own bound on a repository's name. */

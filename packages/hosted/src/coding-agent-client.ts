@@ -59,16 +59,12 @@ import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./serv
  */
 
 /** How long a transcript read may stand: the service's hold, and room for the answer to travel after it. */
-export const CODING_AGENT_CLIENT_DEFAULTS = {
-  HELD_READ_TIMEOUT_MS: 35_000,
-} as const;
+const HELD_READ_TIMEOUT_MS = 35_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
   /** The hosted service origin, without a trailing slash. */
   serviceBaseUrl: string;
   requestTimeoutMs?: number;
-  /** The deadline the held transcript read travels under, past the service's own hold. */
-  heldReadTimeoutMs?: number;
 }
 
 const UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
@@ -148,8 +144,7 @@ export class HostedCodingAgentClient {
     this.#held = accountCall({
       baseUrl: options.serviceBaseUrl,
       credential,
-      requestTimeoutMs:
-        options.heldReadTimeoutMs ?? CODING_AGENT_CLIENT_DEFAULTS.HELD_READ_TIMEOUT_MS,
+      requestTimeoutMs: HELD_READ_TIMEOUT_MS,
     });
   }
 

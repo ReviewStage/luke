@@ -57,7 +57,7 @@ export function CodePane({ code }: { code: PlanCode }): React.JSX.Element {
   const label = rangeLabel(code.ref);
 
   return (
-    <section className="code-pane" aria-label="Code on screen">
+    <section className="code-pane ph-no-capture" aria-label="Code on screen">
       <header className="code-pane-header">
         <span className="code-pane-repository">{code.repository}</span>
         <span className="code-pane-path">{code.ref.path}</span>

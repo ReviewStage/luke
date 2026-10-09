@@ -1,3 +1,4 @@
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -30,7 +31,6 @@ import {
   acceptedModelChoice,
   CODING_AGENT_DEFAULT_CHOICE,
   type ModelCatalog,
-  type ModelChoice,
 } from "./hosted/model-catalog.js";
 import { forgetPosthogPersonEffect } from "./hosted/posthog.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";

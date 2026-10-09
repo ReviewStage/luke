@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   HTTP_STATUS,
   type JsonValue,
@@ -9,14 +10,13 @@ import {
 import { Duration, Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
   MODEL_CATALOG_TTL,
   MODEL_CATALOG_URL,
   MODEL_CHOICE_REFUSAL,
-  MODEL_PROVIDER,
   ModelCatalog,
   modelCatalogLayer,
+  type OfferedModel,
   providerModelOf,
   validateModelChoice,
 } from "../server/hosted/model-catalog";
@@ -82,7 +82,7 @@ const CATALOG: JsonValue = {
   ],
 };
 
-const OFFERED: readonly CatalogModel[] = [
+const OFFERED: readonly OfferedModel[] = [
   {
     id: "anthropic/claude-opus-5.5",
     name: "Claude Opus 5.5",

@@ -137,5 +137,3 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   cursor: codingAgentCursorSchema,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
 });
-
-export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;

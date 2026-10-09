@@ -3,7 +3,8 @@ import {
   type CodingAgentSummary,
   codingAgentCursorSchema,
   codingAgentStartRequestSchema,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-wire";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { readEither } from "@sidecar/wire/effect";
 import { Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
@@ -20,6 +21,7 @@ import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { readAccountPreferences, writeAccountPreferences } from "./hosted/account-store.js";
 import { BRAIN_HOST_TURN } from "./hosted/brain-host/bounds.js";
 import {
+  describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
   EVE_SEND_OUTCOME,
@@ -55,7 +57,6 @@ import {
   acceptedModelChoice,
   CODING_AGENT_DEFAULT_CHOICE,
   type ModelCatalog,
-  type ModelChoice,
 } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
@@ -239,7 +240,9 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>
         Effect.as(
-          Effect.logWarning("eve could not be reached to start a coding agent", failure),
+          Effect.logWarning(
+            `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
+          ),
           undefined,
         ),
       ),
@@ -370,14 +373,18 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
   const eve = yield* eveFor(seams, request);
-  const cancelled = yield* eve.cancel(sessionId, turn.eveTurnId).pipe(
-    Effect.catchTag("EveUnreachable", (failure) =>
-      Effect.as(Effect.logWarning("eve could not be reached to stop a coding agent", failure), {
-        outcome: EVE_CANCEL_OUTCOME.FAILED,
-        status: HOSTED_HTTP_STATUS.BAD_GATEWAY,
-      } as const),
-    ),
-  );
+  const cancelled = yield* eve
+    .cancel(sessionId, turn.eveTurnId)
+    .pipe(
+      Effect.catchTag("EveUnreachable", (failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `eve could not be reached to stop a coding agent: ${describeUnreachable(failure)}`,
+          ),
+          { outcome: EVE_CANCEL_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+        ),
+      ),
+    );
   if (cancelled.outcome === EVE_CANCEL_OUTCOME.FAILED) {
     return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
   }

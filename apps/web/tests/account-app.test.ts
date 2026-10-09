@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { LIVE_VOICE } from "@sidecar/live";
 import type { AccountPreferences } from "@sidecar/settings";
 import type { WireBoundaryInput } from "@sidecar/wire";
@@ -16,12 +17,9 @@ import type {
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
-  type CatalogModel,
   CODING_AGENT_DEFAULT_CHOICE,
-  MODEL_PROVIDER,
   ModelCatalog,
   ModelCatalogUnavailable,
-  type ModelChoice,
   modelCatalogOf,
 } from "../server/hosted/model-catalog.js";
 import { noDatabase } from "./support/no-database.js";

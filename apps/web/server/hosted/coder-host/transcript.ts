@@ -2,7 +2,7 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";

@@ -25,6 +25,8 @@ function paneMarkup(code: PlanCode): string {
 test("the pane names the repository and numbers the window's lines from where it starts in the file, lighting the lines pointed at", () => {
   const markup = paneMarkup(CODE);
 
+  // The pane blocks its whole subtree from the recording, a second line behind the text mask.
+  assert.match(markup, /^<section class="code-pane ph-no-capture"/u);
   assert.match(markup, /<span class="code-pane-repository">acme\/relay<\/span>/u);
   assert.match(markup, /src\/invite\.ts/u);
   assert.match(markup, /Lines 11–12/u);

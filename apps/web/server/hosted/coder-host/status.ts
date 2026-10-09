@@ -2,7 +2,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentStatus,
   type CodingAgentSummary,
-} from "@sidecar/hosted";
+} from "@sidecar/hosted/coding-agent-wire";
 import { Duration } from "effect";
 import { TURN_STATUS } from "../../core.js";
 import type { CodingAgent, CodingAgentLatestTurn } from "../coding-agent-store.js";
