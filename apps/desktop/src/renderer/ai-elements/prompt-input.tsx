@@ -11,21 +11,26 @@ import {
 import { cn } from "./utils";
 
 /**
- * prompt-input.tsx -- AI Elements' PromptInput: the box a message to a model is written in, and the row of controls under it.
+ * prompt-input.tsx -- AI Elements' PromptInput as Luke's one composer: the card a message is written in, and the row of controls under it.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to Luke's tokens: one rounded card on the panel's raised
- * surface behind its hairline, which brightens while the card holds focus,
- * the textarea in the panel's own font sizing itself to its words from one
- * line to about eight and scrolling past that, and under it a footer with
- * whatever the owner puts at either end. The field is the panel's font and
- * no border because base.css resets a textarea to that, where Tailwind's
- * preflight would have; the utilities here say only what the reset does
- * not. The registry's
- * attachments, speech button, selects, hover cards, tabs, and command
- * palette are not here, because nothing draws them yet; each arrives with
- * the surface that first does, and the submit button's status icons are
- * the registry's own.
+ * restyled to the card the New Plan page established: one rounded card on
+ * the sidebar's ground behind its hairline and a soft shadow, its edge
+ * brightening to the selected one while the card holds focus, the textarea
+ * sizing itself to its words from one line to about eight and scrolling
+ * past that, and under it a footer with whatever the owner puts at its
+ * left and the round submit at its right. The New Plan page and the agent
+ * tab's message box draw this one card, so a change here is the look of
+ * both. One thing differs between them and it is one variable: the type
+ * (`--composer-type`), which an owner sets on the card, and from which the
+ * field's line and so its least and greatest heights follow; the radius,
+ * border, padding, placeholder, and button are the same at either size.
+ * The field is the panel's font and no border because base.css resets a
+ * textarea to that, where Tailwind's preflight would have; the utilities
+ * here say only what the reset does not. The registry's attachments,
+ * speech button, selects, hover cards, tabs, and command palette are not
+ * here, because nothing draws them yet; each arrives with the surface that
+ * first does, and the submit button's status icons are the registry's own.
  *
  * Two changes of substance from the registry. The form reads the words
  * from the textarea named `message` as the registry does, but it does not
@@ -58,6 +63,14 @@ export type PromptInputProps = Omit<HTMLAttributes<HTMLFormElement>, "onSubmit">
 /** The name the textarea stands under in its form, which the form reads the words back by. */
 const MESSAGE_FIELD = "message";
 
+/** The card's one size: the type its field is set in, which an owner raises for a hero card. */
+export const COMPOSER_TYPE = {
+  /** A message box under a transcript. */
+  DEFAULT: "[--composer-type:13px]",
+  /** The New Plan page's card, the window's home. */
+  HERO: "[--composer-type:17px]",
+} as const;
+
 export function PromptInput({
   className,
   onSubmit,
@@ -72,7 +85,8 @@ export function PromptInput({
   return (
     <form
       className={cn(
-        "flex w-full flex-col rounded-xl border border-border bg-muted transition-colors focus-within:border-muted-foreground/40",
+        COMPOSER_TYPE.DEFAULT,
+        "flex w-full flex-col rounded-[22px] border border-border bg-card shadow-[0_18px_48px_rgba(0,0,0,0.35)] transition-colors focus-within:border-selected-edge",
         className,
       )}
       onSubmit={handleSubmit}
@@ -114,7 +128,7 @@ export function PromptInputTextarea({
   return (
     <textarea
       className={cn(
-        "field-sizing-content max-h-[calc(8*1.45em+20px)] min-h-[calc(1.45em+20px)] w-full resize-none overflow-y-auto bg-transparent px-3 py-[10px] text-[13px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60",
+        "field-sizing-content max-h-[calc(8*1.45em+24px)] min-h-[calc(1.45em+24px)] w-full resize-none overflow-y-auto bg-transparent px-4 pt-4 pb-2 text-(length:--composer-type) leading-[1.45] text-foreground outline-none select-text placeholder:text-muted-foreground disabled:opacity-60",
         className,
       )}
       name={MESSAGE_FIELD}
@@ -133,7 +147,7 @@ export type PromptInputFooterProps = HTMLAttributes<HTMLDivElement>;
 export function PromptInputFooter({ className, ...props }: PromptInputFooterProps): ReactNode {
   return (
     <div
-      className={cn("flex items-center justify-between gap-1 px-2 pb-2", className)}
+      className={cn("flex items-center justify-between gap-3 px-3 pb-3", className)}
       {...props}
     />
   );
@@ -141,8 +155,9 @@ export function PromptInputFooter({ className, ...props }: PromptInputFooterProp
 
 export type PromptInputToolsProps = HTMLAttributes<HTMLDivElement>;
 
+/** The footer's left: the owner's controls, or nothing, which still holds the submit at the right. */
 export function PromptInputTools({ className, ...props }: PromptInputToolsProps): ReactNode {
-  return <div className={cn("flex items-center gap-1", className)} {...props} />;
+  return <div className={cn("flex min-w-0 items-center gap-1", className)} {...props} />;
 }
 
 /** Where the exchange stands, which decides the submit's icon: the registry's `ChatStatus` words. */
@@ -158,7 +173,7 @@ export type PromptInputSubmitProps = ComponentProps<"button"> & {
   status?: PromptInputStatus;
 };
 
-/** The submit: a filled round 28px button that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
+/** The submit: a filled round 34px button that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
 export function PromptInputSubmit({
   className,
   status = PROMPT_INPUT_STATUS.READY,
@@ -166,12 +181,12 @@ export function PromptInputSubmit({
   children,
   ...props
 }: PromptInputSubmitProps): ReactNode {
-  let icon = <ArrowUpIcon className="size-4" />;
+  let icon = <ArrowUpIcon className="size-[17px]" />;
   if (status === PROMPT_INPUT_STATUS.SUBMITTED) {
-    icon = <Loader2Icon className="size-4 animate-spin" />;
+    icon = <Loader2Icon className="size-[17px] animate-spin" />;
   } else if (status === PROMPT_INPUT_STATUS.STREAMING) {
     // Filled, as every chat draws its Stop; the registry's outline reads as a checkbox at this size.
-    icon = <SquareIcon className="size-3.5 fill-current" />;
+    icon = <SquareIcon className="size-4 fill-current" />;
   }
   return (
     <button
@@ -179,7 +194,7 @@ export function PromptInputSubmit({
       aria-label="Send"
       aria-disabled={disabled === true ? true : undefined}
       className={cn(
-        "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
+        "flex size-[34px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
         className,
       )}
       disabled={disabled}

@@ -478,11 +478,9 @@
   border-top: 1px solid var(--hairline);
 }
 
-/* The composer: one card, and a note under it, on the transcript's own
-   inset so the card and the column line up. The card, its field, and its
-   button are AI Elements' PromptInput's own utilities
-   (../ai-elements/prompt-input.tsx); what stands here is what those do not
-   say. */
+/* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
+   default type, and a note under it, on the transcript's own inset so the
+   card and the column line up. What stands here is the room around the card. */
 .agent-composer {
   display: flex;
   flex-direction: column;

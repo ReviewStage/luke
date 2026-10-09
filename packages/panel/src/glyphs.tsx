@@ -305,16 +305,6 @@ export function PlusIcon(): React.JSX.Element {
   );
 }
 
-/** Sends what was composed, drawn the way every composer draws it: an arrow up. */
-export function ArrowUpIcon(): React.JSX.Element {
-  return (
-    <Glyph className="icon-button-glyph">
-      <path d="M12 18.6V5.4" />
-      <path d="m6.4 11 5.6-5.6 5.6 5.6" />
-    </Glyph>
-  );
-}
-
 /** A window with a pane down its right side: the side panel beside the document, shown or hidden. */
 export function SidePanelIcon(): React.JSX.Element {
   return (
