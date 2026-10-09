@@ -154,8 +154,9 @@ function layOutArrivingCode(): void {
 function installScrollIntoView(): void {
   Element.prototype.scrollIntoView = function (this: Element) {
     const past = this.getBoundingClientRect().right - window.innerWidth;
+    if (past <= 0) return;
     for (let box = this.parentElement; box !== null; box = box.parentElement) {
-      if (past > 0) box.scrollLeft += past;
+      box.scrollLeft += past;
     }
   };
 }
@@ -204,10 +205,10 @@ function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
 
 let root: Root | undefined;
 
-function show(code?: PlanCode): HTMLElement {
+function show(): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   root = createRoot(container);
-  act(() => root?.render(createElement(Window, { code })));
+  act(() => root?.render(createElement(Window, {})));
   return container;
 }
 
