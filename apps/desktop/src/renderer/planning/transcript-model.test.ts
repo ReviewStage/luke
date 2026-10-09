@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { PLANNING_READ } from "@sidecar/hosted/planning-view";
-import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import {
+  type PlanTranscript,
+  TRANSCRIPT_PART_TYPE,
+  type TranscriptMessage,
+} from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { test } from "vitest";
 import {
   callHeading,
-  followsNewest,
   type HeardCall,
   heardCalls,
+  messageText,
   TRANSCRIPT_REGION,
   transcriptRegion,
 } from "./transcript-model";
@@ -18,15 +22,20 @@ const EARLIER_CALL = "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81";
 const LIVE_CALL = "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e";
 const NEXT_CALL = "2a4c6e8f-0b1d-4f3a-a5c7-9e1b3d5f7a9c";
 
+/** One line as the record answers it: its place on the call, the speaker as the role, the words as one text part. */
+function spoken(index: number, role: TranscriptMessage["role"], text: string): TranscriptMessage {
+  return { id: String(index), role, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+}
+
 const STORED: PlanTranscript = {
   calls: [
     {
       id: EARLIER_CALL,
       startedAt: 1_000,
-      lines: [
-        { speaker: TRANSCRIPT_SPEAKER.USER, text: " Invites  should\nexpire. " },
-        { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "   " },
-        { speaker: TRANSCRIPT_SPEAKER.ASSISTANT, text: "After how many days?" },
+      messages: [
+        spoken(0, TRANSCRIPT_SPEAKER.USER, " Invites  should\nexpire. "),
+        spoken(1, TRANSCRIPT_SPEAKER.ASSISTANT, "   "),
+        spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"),
       ],
     },
   ],
@@ -45,7 +54,7 @@ function liveReport(voiceSessionId: string, words: string) {
 
 const NO_CALL = { callPlanId: undefined, callTranscript: undefined };
 
-test("the stored calls are drawn oldest first with their words settled, and blank lines left out", () => {
+test("the stored calls are drawn oldest first as messages with their words settled, and blank lines left out", () => {
   const region = transcriptRegion({
     transcript: { status: PLANNING_READ.READY, transcript: STORED },
     heard: [],
@@ -53,13 +62,11 @@ test("the stored calls are drawn oldest first with their words settled, and blan
 
   assert.equal(region.kind, TRANSCRIPT_REGION.READY);
   assert.deepEqual(
-    region.kind === TRANSCRIPT_REGION.READY
-      ? region.calls.map((call) => call.lines.map((line) => [line.speaker, line.text]))
-      : [],
+    region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((call) => call.messages) : [],
     [
       [
-        [TRANSCRIPT_SPEAKER.USER, "Invites should expire."],
-        [TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"],
+        spoken(0, TRANSCRIPT_SPEAKER.USER, "Invites should expire."),
+        spoken(2, TRANSCRIPT_SPEAKER.ASSISTANT, "After how many days?"),
       ],
     ],
   );
@@ -85,7 +92,10 @@ test("a plan with nothing said is empty, a read out is reading, and a read that 
 /** The calls drawn, each as its key, whether it is live, and its first line's words. */
 function drawn(region: ReturnType<typeof transcriptRegion>) {
   return region.kind === TRANSCRIPT_REGION.READY
-    ? region.calls.map((call) => [call.key, call.live, call.lines[0]?.text])
+    ? region.calls.map((call) => {
+        const [first] = call.messages;
+        return [call.key, call.live, first === undefined ? undefined : messageText(first)];
+      })
     : [];
 }
 
@@ -95,7 +105,7 @@ function recordedSaying(text: string): PlanTranscript {
     ...STORED,
     calls: [
       ...STORED.calls,
-      { id: LIVE_CALL, startedAt: 4_000, lines: [{ speaker: TRANSCRIPT_SPEAKER.USER, text }] },
+      { id: LIVE_CALL, startedAt: 4_000, messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, text)] },
     ],
   };
 }
@@ -210,10 +220,4 @@ test("a call's header names its day as today, yesterday, a weekday this week, or
   assert.equal(callHeading(at(9, 5), now, "en-US"), "Monday, 3:42 PM");
   assert.equal(callHeading(at(8, 21), now, "en-US"), "Sep 21, 3:42 PM");
   assert.equal(callHeading(at(11, 30, 2025), now, "en-US"), "Dec 30, 2025, 3:42 PM");
-});
-
-test("the list follows the newest line only while it is scrolled to the bottom", () => {
-  assert.equal(followsNewest({ scrollTop: 600, scrollHeight: 1_000, clientHeight: 400 }), true);
-  assert.equal(followsNewest({ scrollTop: 590, scrollHeight: 1_000, clientHeight: 400 }), true);
-  assert.equal(followsNewest({ scrollTop: 300, scrollHeight: 1_000, clientHeight: 400 }), false);
 });

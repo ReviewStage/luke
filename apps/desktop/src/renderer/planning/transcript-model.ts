@@ -1,5 +1,7 @@
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
-import { TRANSCRIPT_SPEAKER, type TranscriptSpeaker } from "@sidecar/live";
+import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
+import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import type { UIMessage } from "ai";
 import type { VoiceView } from "#shared/messages/voice-view";
 
 /**
@@ -13,21 +15,15 @@ import type { VoiceView } from "#shared/messages/voice-view";
  * already holds is drawn from the record once the record has caught up with
  * what was heard, so the live call and its stored copy are never drawn
  * twice. The heard words outlast the call itself until then, so hanging up,
- * or calling again at once, never blanks the words just said.
+ * or calling again at once, never blanks the words just said. Both sources
+ * are drawn as the AI SDK's `UIMessage`, the shape the record answers and
+ * the one the tab's components take, so a line heard is a message exactly as
+ * a line on record is.
  */
-
-/** Who each speaker is on the tab. */
-export const SPEAKER_LABEL = {
-  [TRANSCRIPT_SPEAKER.USER]: "You",
-  [TRANSCRIPT_SPEAKER.ASSISTANT]: "Luke",
-} as const satisfies Record<TranscriptSpeaker, string>;
 
 /** What the tab says before anything was said on any call about the plan. */
 export const TRANSCRIPT_EMPTY_LINE =
   "Nothing said yet — start a call and the transcript appears here.";
-
-/** How far from the bottom, in pixels, the list still counts as following the newest line. */
-const FOLLOW_SLACK_PX = 24;
 
 /** Which state the tab draws. */
 export const TRANSCRIPT_REGION = {
@@ -39,20 +35,13 @@ export const TRANSCRIPT_REGION = {
   READY: "ready",
 } as const;
 
-/** One line as the tab draws it: who said it and the words, whitespace settled. */
-interface TranscriptRow {
-  readonly key: string;
-  readonly speaker: TranscriptSpeaker;
-  readonly text: string;
-}
-
-/** One call as the tab draws it: when it started, whether it stands now, and its lines. */
+/** One call as the tab draws it: when it started, whether it stands now, and its lines, each a message with its words settled. */
 export interface TranscriptCallRow {
   readonly key: string;
   /** Epoch milliseconds the call started; for the call standing, when this window first heard it. */
   readonly startedAt: number;
   readonly live: boolean;
-  readonly lines: readonly TranscriptRow[];
+  readonly messages: readonly UIMessage[];
 }
 
 export type TranscriptRegion =
@@ -79,14 +68,38 @@ export interface HeardCall {
   readonly live: boolean;
 }
 
+/** Who said a message, on the tab: the developer, or Luke. */
+export function speakerLabel(role: UIMessage["role"]): string {
+  return role === TRANSCRIPT_SPEAKER.USER ? "You" : "Luke";
+}
+
+/** A message's words: its text parts, run together. */
+export function messageText(message: UIMessage): string {
+  return message.parts
+    .flatMap((part) => (part.type === TRANSCRIPT_PART_TYPE.TEXT ? [part.text] : []))
+    .join(" ");
+}
+
 /** Words as the tab draws them: runs of whitespace one space, the ends trimmed. */
 function settledText(text: string): string {
   return text.replace(/\s+/gu, " ").trim();
 }
 
-/** How many words a call's lines hold, which is how far its copy has got. */
-function wordCount(texts: readonly string[]): number {
-  return texts.reduce((count, text) => count + (text === "" ? 0 : text.split(" ").length), 0);
+/**
+ * A message as the tab draws it, its words settled into one text part, or
+ * nothing where it holds no words. A line on record is one of the SDK's
+ * messages already, so this is also where the wire's shape is held to the
+ * SDK's: a call's messages are taken as they are.
+ */
+function settledMessage(message: UIMessage): UIMessage | undefined {
+  const text = settledText(messageText(message));
+  if (text === "") return undefined;
+  return { ...message, parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text }] };
+}
+
+/** How many words a call's messages hold, which is how far its copy has got. */
+function wordCount(messages: readonly UIMessage[]): number {
+  return messages.reduce((count, message) => count + messageText(message).split(" ").length, 0);
 }
 
 /**
@@ -117,18 +130,23 @@ export function heardCalls(input: {
   return standing === undefined ? [...kept, live] : kept;
 }
 
-/** A heard call as a row of the list, or nothing where nothing was said on it. */
+/** A heard call as a row of the list, or nothing where nothing was said on it: each line a message under the ledger's row id. */
 function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
-  const lines = heard.transcript.lines
-    .map((line) => ({ key: line.rowId, speaker: line.speaker, text: settledText(line.words) }))
-    .filter((line) => line.text !== "");
-  const [first] = lines;
+  const messages = heard.transcript.lines.flatMap((line) => {
+    const message = settledMessage({
+      id: line.rowId,
+      role: line.speaker,
+      parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: line.words }],
+    });
+    return message === undefined ? [] : [message];
+  });
+  const [first] = messages;
   if (first === undefined) return undefined;
   return {
-    key: heard.transcript.voiceSessionId ?? first.key,
+    key: heard.transcript.voiceSessionId ?? first.id,
     startedAt: heard.heardAt,
     live: heard.live,
-    lines,
+    messages,
   };
 }
 
@@ -156,23 +174,17 @@ export function transcriptRegion(input: {
     else unrecorded.push(row);
   }
   const calls: TranscriptCallRow[] = (stored?.calls ?? []).flatMap((call) => {
-    const lines = call.lines
-      .map((line, index) => ({
-        key: String(index),
-        speaker: line.speaker,
-        text: settledText(line.text),
-      }))
-      .filter((line) => line.text !== "");
+    const messages = call.messages.flatMap((message) => {
+      const settled = settledMessage(message);
+      return settled === undefined ? [] : [settled];
+    });
     const ahead = heard.get(call.id);
     const behind =
-      ahead !== undefined &&
-      (ahead.live ||
-        wordCount(lines.map((line) => line.text)) <
-          wordCount(ahead.lines.map((line) => line.text)));
+      ahead !== undefined && (ahead.live || wordCount(messages) < wordCount(ahead.messages));
     if (ahead !== undefined && behind) return [{ ...ahead, startedAt: call.startedAt }];
-    return lines.length === 0
+    return messages.length === 0
       ? []
-      : [{ key: call.id, startedAt: call.startedAt, live: false, lines }];
+      : [{ key: call.id, startedAt: call.startedAt, live: false, messages }];
   });
   calls.push(...unrecorded);
   if (calls.length > 0) {
@@ -208,13 +220,4 @@ export function callHeading(startedAt: number, now: number, locale?: string): st
         : { month: "short", day: "numeric", year: "numeric" };
   const day = started.toLocaleDateString(locale, options);
   return `${day}, ${time}`;
-}
-
-/** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
-export function followsNewest(list: {
-  scrollTop: number;
-  scrollHeight: number;
-  clientHeight: number;
-}): boolean {
-  return list.scrollHeight - list.scrollTop - list.clientHeight <= FOLLOW_SLACK_PX;
 }

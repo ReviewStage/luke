@@ -1,8 +1,15 @@
-import { useLayoutEffect, useRef } from "react";
+import type { UIMessage } from "ai";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "../ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "../ai-elements/message";
 import {
   callHeading,
-  followsNewest,
-  SPEAKER_LABEL,
+  messageText,
+  speakerLabel,
   TRANSCRIPT_EMPTY_LINE,
   TRANSCRIPT_REGION,
   type TranscriptCallRow,
@@ -12,12 +19,28 @@ import {
 /**
  * plan-transcript.tsx -- the open plan's Transcript tab: what was said on its calls with Luke, grouped by call, the call standing now growing at the bottom.
  *
- * The list keeps to its newest line while it is scrolled there, so a live
- * call reads like a chat; scrolling up to read an earlier line leaves it
- * where it is until the developer scrolls back down. Every word here is the
- * developer's or Luke's, so the root is left out of the screen recording
- * (`ph-no-capture`) as a second line behind the recording's text masking.
+ * The calls are drawn with the AI Elements components (`../ai-elements/`),
+ * each line one of the SDK's messages: the list keeps to its newest line
+ * while it is scrolled there, so a live call reads like a chat, and
+ * scrolling up to read an earlier line leaves it where it is until the
+ * developer scrolls back down. Every word here is the developer's or Luke's,
+ * so the root is left out of the screen recording (`ph-no-capture`) as a
+ * second line behind the recording's text masking.
  */
+
+/** One line: who said it, and the words. */
+function TranscriptMessage({ message }: { message: UIMessage }): React.JSX.Element {
+  return (
+    <Message from={message.role}>
+      <span className="plan-transcript-speaker" data-speaker={message.role}>
+        {speakerLabel(message.role)}
+      </span>
+      <MessageContent>
+        <MessageResponse mode="static">{messageText(message)}</MessageResponse>
+      </MessageContent>
+    </Message>
+  );
+}
 
 /** One call: its day and time, whether it stands now, and each speaker's turns. */
 function TranscriptCall({
@@ -33,14 +56,11 @@ function TranscriptCall({
         <span>{callHeading(call.startedAt, now)}</span>
         {call.live ? <span className="plan-transcript-live">Live</span> : null}
       </header>
-      <ol className="plan-transcript-lines">
-        {call.lines.map((line) => (
-          <li key={line.key} className="plan-transcript-line" data-speaker={line.speaker}>
-            <span className="plan-transcript-speaker">{SPEAKER_LABEL[line.speaker]}</span>
-            <p className="plan-transcript-text">{line.text}</p>
-          </li>
+      <div className="plan-transcript-messages">
+        {call.messages.map((message) => (
+          <TranscriptMessage key={message.id} message={message} />
         ))}
-      </ol>
+      </div>
     </li>
   );
 }
@@ -51,32 +71,21 @@ function TranscriptCalls({
 }: {
   region: Extract<TranscriptRegion, { kind: typeof TRANSCRIPT_REGION.READY }>;
 }): React.JSX.Element {
-  const list = useRef<HTMLDivElement>(null);
-  const following = useRef(true);
-  // Note that this runs after every render, because a line growing a word
-  // changes the height as much as a new line does.
-  useLayoutEffect(() => {
-    const element = list.current;
-    if (element !== null && following.current) element.scrollTop = element.scrollHeight;
-  });
   const now = Date.now();
   return (
-    <div
-      ref={list}
-      className="plan-transcript-scroll"
-      onScroll={(event) => {
-        following.current = followsNewest(event.currentTarget);
-      }}
-    >
-      {region.earlierOmitted ? (
-        <p className="plan-transcript-note">Earlier lines are not shown.</p>
-      ) : null}
-      <ol className="plan-transcript-calls">
-        {region.calls.map((call) => (
-          <TranscriptCall key={call.key} call={call} now={now} />
-        ))}
-      </ol>
-    </div>
+    <Conversation>
+      <ConversationContent>
+        {region.earlierOmitted ? (
+          <p className="plan-transcript-note">Earlier lines are not shown.</p>
+        ) : null}
+        <ol className="plan-transcript-calls">
+          {region.calls.map((call) => (
+            <TranscriptCall key={call.key} call={call} now={now} />
+          ))}
+        </ol>
+      </ConversationContent>
+      <ConversationScrollButton />
+    </Conversation>
   );
 }
 
@@ -92,21 +101,24 @@ export function PlanTranscript({
       {region.kind === TRANSCRIPT_REGION.READY ? (
         <TranscriptCalls region={region} />
       ) : (
-        <div
-          className="plan-transcript-state"
-          aria-busy={region.kind === TRANSCRIPT_REGION.READING}
-        >
-          {region.kind === TRANSCRIPT_REGION.READING ? <p>Reading the transcript…</p> : null}
-          {region.kind === TRANSCRIPT_REGION.EMPTY ? <p>{TRANSCRIPT_EMPTY_LINE}</p> : null}
+        <ConversationEmptyState aria-busy={region.kind === TRANSCRIPT_REGION.READING}>
+          {region.kind === TRANSCRIPT_REGION.READING ? (
+            <p className="m-0">Reading the transcript…</p>
+          ) : null}
+          {region.kind === TRANSCRIPT_REGION.EMPTY ? (
+            <p className="m-0">{TRANSCRIPT_EMPTY_LINE}</p>
+          ) : null}
           {region.kind === TRANSCRIPT_REGION.FAILED ? (
             <>
-              <p role="alert">The transcript could not be read.</p>
+              <p className="m-0" role="alert">
+                The transcript could not be read.
+              </p>
               <button type="button" className="plan-button" onClick={onRetry}>
                 Try again
               </button>
             </>
           ) : null}
-        </div>
+        </ConversationEmptyState>
       )}
     </section>
   );

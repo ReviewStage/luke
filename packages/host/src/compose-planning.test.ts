@@ -981,7 +981,7 @@ function transcriptSaying(words: string): PlanTranscript {
       {
         id: "5d2c8f61-3a7e-4b19-8c0d-2e9f4a6b7c81",
         startedAt: 1_000,
-        lines: [{ speaker: "user", text: words }],
+        messages: [{ id: "0", role: "user", parts: [{ type: "text", text: words }] }],
       },
     ],
     earlierOmitted: false,

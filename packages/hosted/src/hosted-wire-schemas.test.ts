@@ -71,7 +71,8 @@ const EFFECT_MODULE_SCHEMAS = {
     wireUuidSchema: serviceWire.wireUuidSchema,
   } satisfies RecordedEffectJsonSchemas<typeof serviceWire>,
   "transcript-wire": {
-    transcriptLineSchema: transcriptWire.transcriptLineSchema,
+    transcriptTextPartSchema: transcriptWire.transcriptTextPartSchema,
+    transcriptMessageSchema: transcriptWire.transcriptMessageSchema,
     transcriptCallSchema: transcriptWire.transcriptCallSchema,
     planTranscriptSchema: transcriptWire.planTranscriptSchema,
     planTranscriptAnswerSchema: transcriptWire.planTranscriptAnswerSchema,
