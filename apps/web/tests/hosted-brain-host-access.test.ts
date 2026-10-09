@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { Redacted, Result } from "effect";
+import { fakeHttpClientLayer } from "@sidecar/wire/testing";
+import { Effect, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -35,6 +36,11 @@ import {
   type SessionOwnership,
   sessionIdOf,
 } from "../server/hosted/brain-host/door";
+import {
+  EVE_CANCEL_OUTCOME,
+  EVE_SEND_OUTCOME,
+  eveSessions,
+} from "../server/hosted/brain-host/eve-sessions";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 
@@ -50,6 +56,7 @@ afterAll(() => database.close());
 
 const CONVERSATION_ID = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 const SESSION_A = "wrun_01SESSIONOFACCOUNTA0000000";
+const SESSION_B = "wrun_01SESSIONOFACCOUNTB0000000";
 const SESSION_NEW = "wrun_01SESSIONNOTYETRECORDED00";
 /** A session claiming the conversation as it starts: ownership alone decides. */
 const CLAIMING = { id: SESSION_A, standing: SESSION_STANDING.CLAIMING } as const;
@@ -423,6 +430,12 @@ test("the deployment is a principal of its own type acting for the named account
     scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}`),
   );
   assert.equal(actedForAccount(followUp ?? null), "user-a");
+  // The Stop: a cancel opens no turn and so names no kind; it is admitted on the session's
+  // cancel route as the same principal, for the door's ownership check to read the account.
+  const cancel = await actor(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`));
+  assert.equal(cancel?.principalId, BRAIN_HOST_DEPLOYMENT_PRINCIPAL);
+  assert.equal(cancel?.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
+  assert.equal(actedForAccount(cancel ?? null), "user-a");
 
   assert.equal(await actor(request("/eve/v1/session", "user-a")), null);
   assert.equal(
@@ -448,9 +461,10 @@ test("the deployment is a principal of its own type acting for the named account
   for (const forbidden of [
     scheduled("user-a", BRAIN_HOST_TURN.TYPED),
     scheduled("user-a", undefined),
-    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`),
-    scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}/cancel`),
     scheduled("user-a", undefined, "/eve/v1/session/cancel"),
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`, "GET"),
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/compact`),
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/reset`),
     scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, `/eve/v1/session/${SESSION_A}/stream`, "GET"),
     scheduled("user-a", BRAIN_HOST_TURN.SPOKEN, "/eve/v1/info", "GET"),
   ]) {
@@ -504,6 +518,72 @@ test("at the door the deployment is admitted for the named account's own convers
     ),
     BRAIN_HOST_REFUSAL.NOT_OWNER,
   );
+  // The Stop the deployment carries for the account: admitted on the account's own recorded
+  // session, refused on another account's and on one no record attributes to anybody.
+  const cancelled = await auth(
+    scheduled("user-a", undefined, `/eve/v1/session/${SESSION_A}/cancel`),
+  );
+  assert.equal(actedForAccount(cancelled ?? null), "user-a");
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-b", undefined, `/eve/v1/session/${SESSION_A}/cancel`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+  assert.equal(
+    await refusal(() =>
+      auth(scheduled("user-a", undefined, `/eve/v1/session/${SESSION_NEW}/cancel`)),
+    ),
+    BRAIN_HOST_REFUSAL.NOT_OWNER,
+  );
+});
+
+/** The door's answer as eve's route would hand it to a client: the refusal's own 403, or an accepted cancel or opening. */
+async function doorAnswer(auth: AuthFn<Request>, request: Request): Promise<Response> {
+  try {
+    await auth(request);
+  } catch (error) {
+    assert.ok(error instanceof ForbiddenError);
+    return error.response;
+  }
+  return Response.json({ ok: true, sessionId: SESSION_A, status: "accepted" }, { status: 202 });
+}
+
+test("the cancel the host's own eve client makes under the deployment's secret is the request the door admits for the named account's session and refuses for another's; the same client still opens only the turns the table admits", async () => {
+  const auth = ownedAuth(
+    [deploymentActor(DEPLOYMENT), bearerOf("user-a")],
+    ownershipOf({ [SESSION_A]: "user-a", [SESSION_B]: "user-b" }, { [CONVERSATION_ID]: "user-a" }),
+  );
+  const door = fakeHttpClientLayer((url, init) => doorAnswer(auth, new Request(url, init)));
+  const eve = await database.run(
+    Effect.provide(
+      eveSessions({
+        origin: "https://luke.test",
+        caller: { secret: Redacted.make(CRON_SECRET), account: "user-a" },
+      }),
+      door,
+    ),
+  );
+  assert.deepEqual(await database.run(eve.cancel(SESSION_A, "turn_1")), {
+    outcome: EVE_CANCEL_OUTCOME.ACCEPTED,
+  });
+  assert.deepEqual(await database.run(eve.cancel(SESSION_B, "turn_1")), {
+    outcome: EVE_CANCEL_OUTCOME.FAILED,
+    status: 403,
+  });
+  assert.deepEqual(await database.run(eve.cancel(SESSION_NEW, "turn_1")), {
+    outcome: EVE_CANCEL_OUTCOME.FAILED,
+    status: 403,
+  });
+  const message = { conversationId: CONVERSATION_ID, message: "hello" };
+  assert.deepEqual(await database.run(eve.open({ ...message, turn: BRAIN_HOST_TURN.SPOKEN })), {
+    outcome: EVE_SEND_OUTCOME.ACCEPTED,
+    sessionId: SESSION_A,
+  });
+  assert.deepEqual(await database.run(eve.open({ ...message, turn: BRAIN_HOST_TURN.TYPED })), {
+    outcome: EVE_SEND_OUTCOME.FAILED,
+    status: 403,
+  });
 });
 
 test("a session the deployment opened for an account admits that account's own bearer as the same initiator, and another account not at all", async () => {
