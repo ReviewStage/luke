@@ -1,60 +1,3 @@
-.plan-list {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.plan-list-note {
-  margin: 0 6px;
-  color: var(--text-secondary);
-}
-
-.plan-list-rows {
-  flex: 1;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  list-style: none;
-  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
-  scrollbar-width: thin;
-}
-
-.plan-list-row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 7px 8px;
-  border-radius: 7px;
-  background: none;
-  text-align: left;
-}
-
-.plan-list-row:hover {
-  background: var(--raised);
-}
-
-.plan-list-row[aria-current="true"] {
-  background: var(--selected);
-}
-
-.plan-list-name {
-  font-weight: 600;
-}
-
-.plan-list-repository {
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.plan-list-new {
-  align-self: flex-start;
-}
-
 .plan-button {
   display: inline-flex;
   align-items: center;
@@ -72,54 +15,6 @@
 .plan-button:disabled {
   cursor: default;
   opacity: 0.45;
-}
-
-.plan-button-primary {
-  background: var(--message-sent);
-}
-
-.plan-document {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.plan-document-state {
-  gap: 12px;
-  color: var(--text-secondary);
-}
-
-.plan-document-state > p {
-  margin: 0;
-}
-
-/* Back, then the plan's two lines, then Copy at the far end. */
-.plan-header {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 9px;
-  padding: 0 2px 10px;
-  border-bottom: 1px solid var(--hairline);
-}
-
-.plan-heading {
-  min-width: 0;
-  flex: 1;
-}
-
-.plan-copy {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 10px;
-}
-
-.plan-copy-failed {
-  margin: 0;
-  color: var(--error-text);
-  font-size: 12px;
 }
 
 /* The whiteboard fills the page between the header and the microphone row;
@@ -147,25 +42,6 @@
 .plan-board-canvas {
   position: absolute;
   inset: 0;
-}
-
-.plan-title {
-  margin: 0;
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 680;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.plan-repository {
-  margin: 2px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
 }
 
 /* The document is the record: it reads as text and is selectable, so Cmd-C
@@ -410,8 +286,8 @@
 .code-pane-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
+  gap: var(--control-gap);
+  padding: var(--space-6) var(--row-inset) var(--space-6) var(--content-inset);
   border-bottom: 1px solid var(--hairline);
   background: var(--raised);
   font-size: 11.5px;
@@ -437,7 +313,7 @@
 .code-lines {
   min-height: 0;
   flex: 1;
-  padding: 6px 0;
+  padding: var(--space-6) 0;
   overflow: auto;
   overscroll-behavior: contain;
   color: #e6edf3;
@@ -462,7 +338,7 @@
 .code-line-number {
   flex: 0 0 auto;
   width: 48px;
-  padding: 0 12px 0 0;
+  padding: 0 var(--space-12) 0 0;
   color: rgba(230, 237, 243, 0.32);
   text-align: right;
   user-select: none;
@@ -473,7 +349,7 @@
 }
 
 .code-line-text {
-  padding-right: 16px;
+  padding-right: var(--content-inset);
   font: inherit;
   white-space: pre;
 }
@@ -490,7 +366,7 @@
 }
 
 .plan-transcript-note {
-  margin: 12px 0 0;
+  margin: var(--space-12) 0 0;
   color: var(--text-tertiary);
   font-size: 11.5px;
   text-align: center;
@@ -565,9 +441,9 @@
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-8);
   min-height: 36px;
-  padding: 6px 12px 6px 16px;
+  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-16);
   border-bottom: 1px solid var(--hairline);
   color: var(--text-secondary);
   font-size: 12px;
@@ -652,9 +528,9 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-6);
   height: 22px;
-  padding: 0 8px 0 7px;
+  padding: 0 var(--space-8) 0 var(--space-6);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -754,4 +630,105 @@
 
 .agent-published-open {
   height: 24px;
+}
+
+/* The open plan's Work tab: each planning turn under the time it began, its
+   words as a reply reads, and its calls drawn by the AI Elements components
+   (../ai-elements/tool.tsx, reasoning.tsx, fold.tsx), as the agent tabs draw
+   a coding agent's turns. */
+.plan-work {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.work-turns {
+  margin: 0;
+  padding: 4px 0 0;
+  list-style: none;
+}
+
+.work-turn-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 8px;
+  background: var(--desktop-well);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.work-turn-header::after {
+  height: 1px;
+  flex: 1;
+  background: var(--hairline);
+  content: "";
+  order: 1;
+}
+
+.work-turn-state {
+  order: 2;
+}
+
+.work-note {
+  margin: 0 0 6px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.work-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 4px 0 10px;
+}
+
+/* A quiet button-shaped line of the Work tab: a fold's summary, a worker's
+   line, the way back from a worker's session. Note that it is written here
+   rather than as utilities, because base.css sets every button's font and
+   colour outside the utilities' layer, and that rule wins over any utility. */
+.ai-trigger {
+  padding: 0;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  text-align: left;
+  transition: color var(--duration-hover) ease;
+}
+
+.ai-trigger:hover {
+  color: var(--text-primary);
+}
+
+/* A subagent's call: a boxed line that opens its session. Note that its edge
+   is written here, because base.css takes every button's border away outside
+   the utilities' layer. */
+.work-worker-line {
+  padding: 8px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.work-worker-line:hover {
+  background: var(--raised);
+}
+
+/* An opened subagent's session: the way back, and its job and state, above its blocks. */
+.work-session-header {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--desktop-well);
 }

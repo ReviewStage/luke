@@ -25,7 +25,7 @@ import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
 import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
-import { SIDE_PANEL_TAB } from "./use-side-panel";
+import { SIDE_PANEL_TAB, SIDE_PANEL_TABS } from "./use-side-panel";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -576,6 +576,7 @@ test("Luke's first drawing opens a closed Board tab again at the strip's end, do
   assert.deepEqual(tab.control().sidePanel.tabs, [
     SIDE_PANEL_TAB.CODE,
     SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.WORK,
     SIDE_PANEL_TAB.BOARD,
   ]);
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
@@ -592,6 +593,7 @@ test("Luke's first code opens a shut panel on a Code tab the developer had close
   assert.deepEqual(tab.control().sidePanel.tabs, [
     SIDE_PANEL_TAB.BOARD,
     SIDE_PANEL_TAB.TRANSCRIPT,
+    SIDE_PANEL_TAB.WORK,
     SIDE_PANEL_TAB.CODE,
   ]);
 });
@@ -599,7 +601,7 @@ test("Luke's first code opens a shut panel on a Code tab the developer had close
 test("an arrival on an open panel with every tab closed shows the arrival's tab, with no dot", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
   act(() => tab.control().sidePanel.onToggle());
-  for (const closed of [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]) {
+  for (const closed of SIDE_PANEL_TABS) {
     act(() => tab.control().sidePanel.onClose(closed));
   }
   assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
@@ -612,7 +614,7 @@ test("an arrival on an open panel with every tab closed shows the arrival's tab,
 test("the board and the code arriving on one read of an open panel with every tab closed show the board and dot the code", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD }, voice: ON_CALL });
   act(() => tab.control().sidePanel.onToggle());
-  for (const closed of [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]) {
+  for (const closed of SIDE_PANEL_TABS) {
     act(() => tab.control().sidePanel.onClose(closed));
   }
 

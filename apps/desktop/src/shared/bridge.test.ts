@@ -29,11 +29,14 @@ test("the act channel takes one act of any kind and nothing else", () => {
   for (const kind of KINDS) assert.equal(guard([ONE_ACT_OF_EACH_KIND[kind]]), true, kind);
   // One argument, and it is one act of a kind this build knows.
   assert.equal(guard([]), false);
-  assert.equal(guard([{ kind: ACT_KIND.WINDOW_QUIT }, { kind: ACT_KIND.WINDOW_QUIT }]), false);
-  assert.equal(guard(["window.quit"]), false);
+  assert.equal(
+    guard([{ kind: ACT_KIND.WINDOW_FOCUS_PANEL }, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }]),
+    false,
+  );
+  assert.equal(guard(["window.focusPanel"]), false);
   assert.equal(guard([{ kind: "window.sleep" }]), false);
   assert.equal(guard([{ kind: ACT_KIND.WINDOW_COPY_TEXT }]), false);
-  assert.equal(guard([{ kind: ACT_KIND.WINDOW_QUIT, payload: { now: true } }]), false);
+  assert.equal(guard([{ kind: ACT_KIND.WINDOW_FOCUS_PANEL, payload: { now: true } }]), false);
   const answer = BRIDGE.act.result;
   assert.ok(answer);
   assert.equal(answer({ status: "done", value: undefined }), true);

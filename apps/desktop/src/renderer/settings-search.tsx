@@ -132,12 +132,6 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           haystack: ["Delete account", "account erase remove"],
         }
       : undefined,
-    {
-      id: SETTINGS_SEARCH_ROW.QUIT,
-      label: "Quit Luke",
-      page: SETTINGS_VIEW.ROOT,
-      haystack: ["Quit Luke", "quit exit close the app"],
-    },
     // The Voice page's permission row, drawn once there is a voice to reach.
     input.settings.voiceAvailable
       ? {

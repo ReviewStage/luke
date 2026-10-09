@@ -13,15 +13,6 @@ export const PANEL_PRESENTATION = {
 
 export type PanelPresentation = (typeof PANEL_PRESENTATION)[keyof typeof PANEL_PRESENTATION];
 
-/** What takes the pointer, named so the test can tell one from another. */
-export const HIT_REGION = {
-  /** The black shape itself, whatever size it is drawn at. */
-  SURFACE: "surface",
-  PANEL: "panel",
-  SLOT: "slot",
-  FEEDBACK: "feedback",
-} as const;
-
 /**
  * Short: a panel that lingered after the pointer had gone felt like a
  * different object. A search being typed opts the panel out of pointer-driven

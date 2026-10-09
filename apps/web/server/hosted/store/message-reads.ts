@@ -372,6 +372,47 @@ export function listMessagesPast(
   });
 }
 
+const findNewestJournals = SqlSchema.findAll({
+  Request: Schema.Struct({
+    conversationId: Schema.String,
+    userId: Schema.String,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          eq(messages.role, MESSAGE_ROLE.ASSISTANT),
+        ),
+      )
+      .orderBy(desc(messages.seq))
+      .limit(options.limit),
+});
+
+/**
+ * The newest turn journals of a conversation, answered oldest first: each
+ * turn's assistant message, a journal still being written included, which is
+ * how a subagent's session is read while it runs. Answers an empty page for
+ * a conversation that has none or does not stand.
+ */
+export function listJournals(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  limit: number,
+): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.flatMap(
+    findNewestJournals({ conversationId, userId, limit: pageLimit({ limit }) }),
+    (selected) => readSelected([...selected].reverse(), tools),
+  );
+}
+
 const findMessageByClientIdRow = SqlSchema.findAll({
   Request: Schema.Struct({
     conversationId: Schema.String,

@@ -142,8 +142,10 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   icon: ReactNode;
   /** The verb before the subject; none for a command, which is its own line. */
   label: string | undefined;
-  /** What the call was done to, in mono. */
-  code: string;
+  /** What the call was done to; none for a call that has no one input a reader looks for first. */
+  subject: string | undefined;
+  /** Whether the subject is code (a command, a path), set in mono, rather than words. */
+  subjectIsCode?: boolean;
 };
 
 /** The one line a call shows: what it did, and where it stands. */
@@ -151,7 +153,8 @@ export function ToolHeader({
   state,
   icon,
   label,
-  code,
+  subject,
+  subjectIsCode = true,
   className,
   ...props
 }: ToolHeaderProps): ReactNode {
@@ -172,7 +175,9 @@ export function ToolHeader({
       </span>
       <span className="min-w-0 flex-1 truncate">
         {label === undefined ? null : <span className="text-muted-foreground">{label} </span>}
-        <span className="font-mono text-[11.5px]">{code}</span>
+        {subject === undefined ? null : (
+          <span className={subjectIsCode ? "font-mono text-[11.5px]" : undefined}>{subject}</span>
+        )}
       </span>
       <ToolStateMark state={state} />
     </FoldSummary>

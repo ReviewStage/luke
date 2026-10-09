@@ -10,7 +10,7 @@ import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wi
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
 import { planDocumentSchema, shownCodeSchema } from "./plan-wire.js";
-import { planActivitySchema } from "./planning-view.js";
+import { planActivitySchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -157,6 +157,13 @@ export const VOICE_SERVICE_FRAME = {
    * says it.
    */
   PLAN_CODE: "plan.code",
+  /**
+   * The service's fifth frame to the desktop, on a planning call alone: one
+   * planning turn's work as it stands, what the model wrote and each call
+   * it made with its output, sent whole each time it changes, so the Plans
+   * tab's Work tab reads like an agent's own transcript.
+   */
+  PLAN_WORK: "plan.work",
 } as const;
 
 /**
@@ -373,6 +380,15 @@ export const planCodeFrameSchema = Schema.Struct({
 
 export type PlanCodeFrame = typeof planCodeFrameSchema.Type;
 
+/** One planning turn's work on the call about the plan named, as the service sends it to the desktop. */
+export const planWorkFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_WORK),
+  planId: wireUuidSchema,
+  turn: planWorkTurnSchema,
+});
+
+export type PlanWorkFrame = typeof planWorkFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -452,6 +468,11 @@ export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivit
 /** The code Luke put on screen on a planning call, read the same answering way. */
 export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame | undefined {
   return admittedAnswer(planCodeFrameSchema, value);
+}
+
+/** One planning turn's work on a planning call, read the same answering way. */
+export function planWorkFrameFromWire(value: UnparsedWireValue): PlanWorkFrame | undefined {
+  return admittedAnswer(planWorkFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

@@ -99,6 +99,7 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.SHOW_BOARD),
         commandItem(APP_COMMAND.SHOW_CODE),
         commandItem(APP_COMMAND.SHOW_TRANSCRIPT),
+        commandItem(APP_COMMAND.SHOW_WORK),
         SEPARATOR,
         commandItem(APP_COMMAND.PREVIOUS_PLAN),
         commandItem(APP_COMMAND.NEXT_PLAN),

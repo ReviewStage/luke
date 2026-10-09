@@ -142,7 +142,7 @@ function ToolCallView({
         state={part.state}
         icon={<Icon aria-hidden="true" />}
         label={view.summary.label}
-        code={view.summary.code}
+        subject={view.summary.code}
       />
       <ToolContent>
         <ToolInput block={view.input} />

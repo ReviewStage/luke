@@ -14,6 +14,7 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
+  type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
 import {
@@ -546,6 +547,16 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.PLAN_CODE,
             planId: opened.planId,
             code,
+          };
+          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+        },
+        // Each planning turn's work, sent the same way, so the Plans tab's
+        // Work tab reads what Luke's planning model wrote and ran as it goes.
+        onWork: (turn) => {
+          const frame: PlanWorkFrame = {
+            type: VOICE_SERVICE_FRAME.PLAN_WORK,
+            planId: opened.planId,
+            turn,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

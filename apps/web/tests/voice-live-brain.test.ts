@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   LIVE_BRAIN_CANCEL,
   LIVE_BRAIN_RUN_END,
@@ -20,8 +21,9 @@ import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
 import { deploymentActor } from "../server/hosted/brain-host/auth";
-import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { ownedAuth } from "../server/hosted/brain-host/door";
 import {
   EVE_CANCEL_OUTCOME,
@@ -30,6 +32,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { childConversationId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
@@ -1076,6 +1079,75 @@ it.live(
 );
 
 it.live(
+  "a planning turn's work is shown once per change, its repository command with the output the Mac read, and its last as the turn ended",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const planConversation = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      const showing = (count: number) =>
+        arrival(
+          (notify) => f.brain.onWork(notify),
+          () => shown.length >= count,
+          `${count} works`,
+        );
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: RUN_IN_REPOSITORY_TOOL.name,
+        input: { command: "ls src" },
+        output: {
+          status: REPOSITORY_SHELL_STATUS.RAN,
+          exitCode: 0,
+          stdout: "invite.ts",
+          stderr: "",
+        },
+      });
+      const requested = events.findIndex((event) => event.type === "actions.requested") + 1;
+      yield* Effect.promise(() => play(events.slice(0, requested), standing));
+      yield* showing(1);
+      // The journal standing still is read again and again, and shows nothing new.
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      assert.equal(shown.length, 1);
+
+      yield* Effect.promise(() => play(events.slice(requested), standing));
+      yield* f.arrived(1);
+      yield* Effect.sleep(POLL_MS * QUIET_POLLS.AFTER_END);
+      const calls = shown.map((work) =>
+        work.parts.flatMap((part) =>
+          part.type === PLAN_WORK_PART.TOOL ? [[part.subject, part.state, part.output]] : [],
+        ),
+      );
+      assert.deepEqual(calls[0], [["ls src", PLAN_WORK_STATE.RUNNING, undefined]]);
+      assert.deepEqual(calls.at(-1), [["ls src", PLAN_WORK_STATE.DONE, "invite.ts"]]);
+      assert.equal(shown.at(-1)?.state, PLAN_WORK_STATE.DONE);
+      assert.equal(
+        new Set(shown.map((work) => JSON.stringify(work))).size,
+        shown.length,
+        "a work was shown twice",
+      );
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
   "a question the planning model queued reaches the service while its turn still runs, ahead of the reply",
   () =>
     Effect.gen(function* () {
@@ -1439,6 +1511,81 @@ it.effect(
       const looked = f.looks();
       yield* TestClock.adjust(Duration.times(POLL, 3));
       assert.equal(f.looks(), looked);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "the session of a parked turn's worker reaches its work inside the worker's call, a poll after the call is found",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+      yield* parkedOnTask(target, f);
+      const worker = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+
+      // The worker's own session, relayed into the child conversation of the call that started it.
+      const child = {
+        userId: target.userId,
+        conversationId: childConversationId(target.conversationId, worker.id),
+      };
+      yield* Effect.promise(() =>
+        database.run(openChildConversation(target, child.conversationId, "worker")),
+      );
+      yield* Effect.promise(() =>
+        play(
+          [
+            stampedEveEvent(
+              { type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: 0 } },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "message.received",
+                data: { turnId: FIRST_EVE_TURN, sequence: 0, message: "Compare the queues." },
+              },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "step.started",
+                data: { turnId: FIRST_EVE_TURN, sequence: 0, stepIndex: 0, modelId: "m" },
+              },
+              NOW,
+            ),
+            stampedEveEvent(
+              {
+                type: "message.completed",
+                data: {
+                  turnId: FIRST_EVE_TURN,
+                  sequence: 0,
+                  stepIndex: 0,
+                  finishReason: "stop",
+                  message: "Queue A lets an admin revoke.",
+                },
+              },
+              NOW,
+            ),
+          ],
+          {
+            sessionId: `wrun_${randomUUID()}`,
+            target: child,
+            turn: RELAY_TURN.CHILD,
+            model: "scripted-model",
+            state: memoryRelayState(),
+          },
+        ),
+      );
+      yield* f.polls(2);
+
+      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+      assert.deepEqual(drawn.session?.parts, [
+        { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+      ]);
       yield* Effect.promise(() => f.stop());
     }),
 );

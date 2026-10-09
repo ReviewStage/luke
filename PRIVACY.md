@@ -17,8 +17,9 @@ only coding agents the Mac app lists are the ones you start on a plan from
 its Start button, which our service runs in a sandbox of its own as described
 under "Who we send it to" below; it reads no other agent's session, on your
 Mac or anywhere else. No part of Luke's judgment runs on this Mac, so no
-transcript, working memory, or inbox of his is held here, in memory or on
-disk.
+transcript, working memory, or inbox of his is held here on disk, and in
+memory only the Work tab's turns described under "Your conversation with
+Luke" below.
 
 **Your conversation with Luke.** No part of Luke's judgment runs on your
 Mac, so no record of what he did at your ask is kept on this machine, and
@@ -30,11 +31,19 @@ for each coding agent you started on the plan, that agent's transcript for
 its own tab, its words, reasoning summaries, and tool calls with their
 output, read while the tab is showing and the agent runs; both are held in
 the window's memory to show them and go when you leave the plan or quit
-Luke. The agent tabs, like the Transcript tab, are left out of the screen
-recording described under "Usage data and screen recordings" below. Your
-default model and effort for a coding agent are kept with your account
-preferences on our service, chosen in Settings › Coding agents or by the
-model you last started with.
+Luke. The other is a plan's Work tab: during a planning call, our service
+sends Luke on your Mac each of the planning model's turns as it works, and
+the turns of the worker it hands research to: what each wrote, the summary
+of its reasoning that OpenAI returns for each step, and each tool it called
+with the call's input and what the call answered, such as a command's output
+from the plan's repository in its sandbox or a public page's text, each cut
+short. Luke holds them in the panel's memory to show them, never in the
+voice window and never on disk, and they go when you leave the plan or quit
+Luke. The agent tabs and the Work tab, like the Transcript tab, are left out
+of the screen recording described under "Usage data and screen recordings"
+below. Your default model and effort for a coding agent are kept with your
+account preferences on our service, chosen in Settings › Coding agents or by
+the model you last started with.
 A voice session on this Mac is a call about one plan, and it opens with
 nothing of your coding agent sessions and no line of your conversation, from
 here or from our service; what Luke knows when he answers a spoken ask he
@@ -199,8 +208,8 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. A screenshot
 you attach to the feedback form is left out, since a picture of your screen
 could carry another app's words, and so are the feedback form's message
-field, a plan's whiteboard, a plan's transcript, and each coding agent's
-tab, as a second line. The whiteboard draws its
+field, a plan's whiteboard, a plan's transcript, a plan's Work tab, and each
+coding agent's tab, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.

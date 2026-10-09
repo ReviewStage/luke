@@ -13,7 +13,6 @@ import {
 } from "./feedback-entry";
 import { imageFiles } from "./feedback-images";
 import { parseMilliseconds, parsePixels, STILL_MS } from "./motion-tokens";
-import { HIT_REGION } from "./panel-state";
 import { useStagedFocus } from "./staged-focus";
 
 const MESSAGE_FIELD_ID = "feedback-message";
@@ -197,7 +196,7 @@ export function FeedbackSlot({
   if (landing) {
     return (
       <div className="feedback-stage" inert>
-        <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
+        <div className="feedback-slot" ref={measure}>
           <FeedbackLanding key={landing.play} confirming={landing} still={still} />
         </div>
       </div>
@@ -249,7 +248,7 @@ export function FeedbackSlot({
 
   return (
     <div className="feedback-stage" aria-hidden={!live} inert={!live}>
-      <div className="feedback-slot" ref={measure} data-hit-region={HIT_REGION.FEEDBACK}>
+      <div className="feedback-slot" ref={measure}>
         <label className="settings-label" htmlFor={MESSAGE_FIELD_ID}>
           {copy.label}
         </label>

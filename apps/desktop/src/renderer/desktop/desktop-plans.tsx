@@ -250,6 +250,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           board={plans.board}
           code={plans.code}
           transcript={plans.transcript}
+          work={plans.work}
           agents={plans.agents}
           shown={plans.shown}
         />

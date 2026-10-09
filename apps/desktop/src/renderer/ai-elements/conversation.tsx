@@ -158,7 +158,11 @@ export function ConversationEmptyState({
 
 export type ConversationScrollButtonProps = ComponentProps<"button">;
 
-/** The way back to the newest line, shown while the reader has scrolled away from it. */
+/**
+ * The way back to the newest line, shown while the reader has scrolled away
+ * from it. The lines scroll beneath it, so its hover lays the translucent
+ * fill over its own opaque ground as a layer rather than in place of it.
+ */
 export function ConversationScrollButton({
   className,
   ...props
@@ -170,7 +174,7 @@ export function ConversationScrollButton({
       type="button"
       aria-label="Scroll to the newest line"
       className={cn(
-        "absolute bottom-4 left-1/2 flex size-8 -translate-x-1/2 cursor-default items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md transition-colors hover:bg-secondary",
+        "absolute bottom-4 left-1/2 flex size-8 -translate-x-1/2 cursor-default items-center justify-center rounded-full border border-border bg-background text-foreground shadow-md hover:bg-[linear-gradient(var(--color-secondary),var(--color-secondary))]",
         className,
       )}
       onClick={scrollToBottom}

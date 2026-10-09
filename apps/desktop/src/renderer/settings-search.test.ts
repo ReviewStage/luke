@@ -149,6 +149,11 @@ test("the rows that are not settings are found by what they are", () => {
   assert.equal(signOut.find((entry) => entry.label === "Sign out")?.page, SETTINGS_VIEW.ROOT);
 });
 
+test("no row offers to quit, which the app menu's Quit already does", () => {
+  const entries = settingsSearchEntries(everythingDrawn());
+  assert.equal(searchSettings(entries, "quit")?.matched, 0);
+});
+
 test("a page's own name finds everything the page holds", () => {
   // Each entry carries its page's word in its haystack, so someone who only
   // remembers where a row lives can still get there — the whole page comes

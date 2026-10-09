@@ -84,13 +84,20 @@ export function FoldSummary({
   );
 }
 
-/** The chevron at a summary's head, turned down while the fold is open. */
+/**
+ * The chevron at a summary's head, turned down while the fold is open. Note
+ * that it reads its own fold's state rather than the `details` element's
+ * open state through a CSS group, because folds nest (a group of calls holds
+ * each call's fold), and an ancestor's open would turn every chevron inside it.
+ */
 export function FoldChevron({ className }: { className?: string }): ReactNode {
+  const { open } = useFold();
   return (
     <ChevronRightIcon
       aria-hidden="true"
       className={cn(
-        "size-4 shrink-0 text-muted-foreground transition-transform group-open/fold:rotate-90",
+        "size-4 shrink-0 text-muted-foreground transition-transform",
+        open && "rotate-90",
         className,
       )}
     />

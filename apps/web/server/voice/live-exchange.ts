@@ -1,5 +1,5 @@
 import type { ShownCode } from "@sidecar/hosted/plan-wire";
-import type { PlanActivity } from "@sidecar/hosted/planning-view";
+import type { PlanActivity, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import { serialQueue } from "@sidecar/runtime/effect";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
@@ -82,6 +82,8 @@ export interface HostedLiveExchangeOptions {
   readonly onActivity?: (activity: PlanActivity) => void;
   /** Code Luke is about to talk about, with its lines, told as he starts to speak; a planning call's device is shown it. */
   readonly onCode?: (code: ShownCode) => void;
+  /** Each planning turn's work, told whole on each change; a planning call's device is shown it. */
+  readonly onWork?: (work: PlanWorkTurn) => void;
 }
 
 /** One signed-in session the voice service created or re-attached, as an exchange is offered it. */
@@ -100,6 +102,8 @@ export interface AttachedSession {
   readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
   readonly onCode?: ((code: ShownCode) => void) | undefined;
+  /** The device's door for each planning turn's work on the call; absent where the route sends it nothing of its own. */
+  readonly onWork?: ((work: PlanWorkTurn) => void) | undefined;
 }
 
 /**
@@ -245,6 +249,10 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   if (scribe !== undefined) {
     const unheard = brain.onRunEvent(scribe.observeRun);
     yield* Effect.addFinalizer(() => Effect.sync(unheard));
+  }
+  if (options.onWork !== undefined) {
+    const unshown = brain.onWork(options.onWork);
+    yield* Effect.addFinalizer(() => Effect.sync(unshown));
   }
 
   /** The sideband with the record, and the notetaker, listening ahead of the service, on every session adopted. */

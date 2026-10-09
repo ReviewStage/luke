@@ -18,7 +18,7 @@ import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AgentPlace } from "../agent-notices";
-import type { AppStateStore } from "../app-state";
+import { type AppStateStore, voiceWindowState } from "../app-state";
 import { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
@@ -184,13 +184,13 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
   function publishAppState(): void {
     const held = state.snapshot();
-    const send = (sender: WebContents) => {
-      const snapshot: AppStateSnapshot = { ...held, window: windowFactsFor(sender) };
+    const send = (sender: WebContents, shown: typeof held) => {
+      const snapshot: AppStateSnapshot = { ...shown, window: windowFactsFor(sender) };
       sendTo(sender, channels.onAppState, snapshot);
     };
-    for (const sender of panels.senders()) send(sender);
+    for (const sender of panels.senders()) send(sender, held);
     const voice = voiceWindow.current();
-    if (voice && !voice.isDestroyed()) send(voice.webContents);
+    if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {

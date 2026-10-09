@@ -106,6 +106,8 @@ export interface PlansControl {
   code: PlanCode | undefined;
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
+  /** What Luke's planning model wrote and ran on the open plan's calls, and whether its call still stands. */
+  work: { turns: PlanningView["work"]; callLive: boolean };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
   onSelect: (planId: string) => void;
@@ -418,6 +420,11 @@ export function usePlansTab(input: {
     transcript: {
       region: transcriptRegion({ transcript: planning.transcript, heard }),
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
+    },
+    // A fixture's open plan is drawn mid-call, as its status and transcript are.
+    work: {
+      turns: planning.work,
+      callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
     },
     agents,
     onSelect: select,

@@ -105,17 +105,17 @@ it.effect(
       const ran: ActKind[] = [];
       const router = createActRouter(
         rowsRecording(ran, {
-          [ACT_KIND.WINDOW_QUIT]: () => {
-            throw new ActRefused({ message: "A quit is held while the update installs." });
+          [ACT_KIND.WINDOW_FOCUS_PANEL]: () => {
+            throw new ActRefused({ message: "The panel is held while the update installs." });
           },
           [ACT_KIND.PLANNING_REFRESH]: () => {
             throw new Error("EPIPE writing to the host");
           },
         }),
       );
-      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: "A quit is held while the update installs.",
+        reason: "The panel is held while the update installs.",
       });
       // Nothing an exception carried reaches the window: the kind's own sentence does.
       assert.deepEqual(yield* perform(router, { kind: ACT_KIND.PLANNING_REFRESH }, PANEL), {
@@ -156,8 +156,10 @@ it.effect(
               return "expanded";
             }),
           [ACT_KIND.PLANNING_REFRESH]: () => Effect.die(new Error("planning.refresh was refused")),
-          [ACT_KIND.WINDOW_QUIT]: () =>
-            Effect.fail(new ActRefused({ message: "A quit is held while the update installs." })),
+          [ACT_KIND.WINDOW_FOCUS_PANEL]: () =>
+            Effect.fail(
+              new ActRefused({ message: "The panel is held while the update installs." }),
+            ),
         }),
       );
       assert.deepEqual(
@@ -173,9 +175,9 @@ it.effect(
         status: ACT_OUTCOME_STATUS.REFUSED,
         reason: ACT[ACT_KIND.PLANNING_REFRESH].refusal,
       });
-      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_QUIT }, PANEL), {
+      assert.deepEqual(yield* perform(router, { kind: ACT_KIND.WINDOW_FOCUS_PANEL }, PANEL), {
         status: ACT_OUTCOME_STATUS.REFUSED,
-        reason: "A quit is held while the update installs.",
+        reason: "The panel is held while the update installs.",
       });
     }),
 );

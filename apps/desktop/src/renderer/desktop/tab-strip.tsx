@@ -1,5 +1,5 @@
 import { CloseIcon } from "@sidecar/panel";
-import { useLayoutEffect, useRef } from "react";
+import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -13,10 +13,17 @@ import { Tooltip } from "../tooltip";
  * and Delete or Backspace closes it, handing focus to the tab chosen in its
  * place. The × is for the pointer alone, so it takes no stop of its own.
  *
+ * Squeezed past holding its tabs whole, the strip stands compact: the
+ * unchosen tabs stand as their glyphs alone, each naming itself in its hint,
+ * and the chosen tab keeps its glyph, label, and ×, its label truncated.
+ *
  * Its words are text, which the session recording masks with the rest.
  */
 
 const TAB = '[role="tab"]';
+
+/** Whether the strip stands compact, every tab but the chosen one its glyph alone. */
+const Compact = createContext(false);
 
 /** The tab a navigation key moves to from the focused one, or nothing for any other key. */
 function tabAfter(key: string, at: number, count: number): number | undefined {
@@ -39,6 +46,18 @@ function closesTab(key: string): boolean {
 }
 
 /**
+ * Whether the strip's tabs overflow it drawn whole, marked on the strip for
+ * the stylesheet. Note that the mark is taken down to measure and set again in
+ * the same task, so the full layout it is read from is never painted.
+ */
+function fitTabs(strip: HTMLElement): boolean {
+  strip.dataset.compact = "false";
+  const compact = strip.scrollWidth > strip.clientWidth;
+  strip.dataset.compact = String(compact);
+  return compact;
+}
+
+/**
  * The strip of tabs. Note that focus follows a tab closed from the keyboard
  * to the tab that took its place a render later, because the tab it was on
  * is gone by then; with none left, it goes on to the control after the
@@ -56,6 +75,7 @@ export function TabStrip({
   const strip = useRef<HTMLDivElement | null>(null);
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
+  const [compact, setCompact] = useState(false);
   useLayoutEffect(() => {
     const at = closedAt.current;
     if (at === undefined || strip.current === null) return;
@@ -66,6 +86,19 @@ export function TabStrip({
       tabs[Math.min(at, tabs.length - 1)] ?? (after instanceof HTMLElement ? after : null);
     next?.focus();
   });
+  // Fitted again on every render, for a tab opened, closed, chosen, or
+  // renamed, and whenever the row it stands in is resized.
+  useLayoutEffect(() => {
+    if (strip.current !== null) setCompact(fitTabs(strip.current));
+  });
+  useLayoutEffect(() => {
+    const node = strip.current;
+    const row = node?.parentElement;
+    if (node === null || row === null || row === undefined) return;
+    const observer = new ResizeObserver(() => setCompact(fitTabs(node)));
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, []);
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     const tabs = [...event.currentTarget.querySelectorAll<HTMLElement>(TAB)];
@@ -89,7 +122,7 @@ export function TabStrip({
       className={className ? `tab-strip ${className}` : "tab-strip"}
       onKeyDown={keyDown}
     >
-      {children}
+      <Compact.Provider value={compact}>{children}</Compact.Provider>
     </div>
   );
 }
@@ -98,6 +131,7 @@ export function TabStrip({
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `editor`, while given, is drawn in the label's place
  * as a field of its own, outside the tab's role, so a reader reaches it.
+ * Unchosen in a compact strip, the tab's hint is its label.
  */
 export function Tab({
   icon,
@@ -124,7 +158,14 @@ export function Tab({
   onSelect: () => void;
   onClose?: (() => void) | undefined;
 }): React.JSX.Element {
-  const glyph = <span className="tab-icon">{icon}</span>;
+  const compact = useContext(Compact);
+  const hint = compact && !selected ? label : tooltip;
+  const glyph = (
+    <span className="tab-icon">
+      {icon}
+      {unread ? <span className="tab-note" aria-hidden="true" /> : null}
+    </span>
+  );
   const tab = (
     <button
       ref={tabRef}
@@ -143,7 +184,6 @@ export function Tab({
     >
       {glyph}
       <span className="tab-label">{label}</span>
-      {unread ? <span className="tab-note" aria-hidden="true" /> : null}
     </button>
   );
   return (
@@ -153,11 +193,7 @@ export function Tab({
       data-closable={String(onClose !== undefined)}
     >
       {editor === undefined ? (
-        tooltip === undefined ? (
-          tab
-        ) : (
-          <Tooltip label={tooltip}>{tab}</Tooltip>
-        )
+        <Tooltip label={hint}>{tab}</Tooltip>
       ) : (
         <span className="tab-button" data-editing="true">
           {glyph}

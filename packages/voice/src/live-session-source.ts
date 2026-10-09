@@ -10,9 +10,11 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
+  type PlanWorkFrame,
   planActivityFrameFromWire,
   planCodeFrameFromWire,
   planDraftFrameFromWire,
+  planWorkFrameFromWire,
   type SessionActivityFrame,
   type SessionAttachFrame,
   type SessionCreateFrame,
@@ -38,6 +40,7 @@ import {
   HTTP_STATUS,
   positiveInteger,
   text,
+  type UnparsedWireValue,
   unparsedWire,
   type WireRecord,
 } from "@sidecar/wire";
@@ -52,6 +55,7 @@ import {
   Option,
   Result,
   Schedule,
+  Schema,
   type Scope,
   Stream,
 } from "effect";
@@ -154,6 +158,8 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
   /** Tells the listener each time Luke puts code on screen on a planning call, on the same terms as `onPlanDraft`. */
   onPlanCode?(listener: (code: PlanCodeFrame) => void): void;
+  /** Tells the listener each planning turn's work as it changes on a planning call, on the same terms as `onPlanDraft`. */
+  onPlanWork?(listener: (work: PlanWorkFrame) => void): void;
 }
 
 export interface LiveSessionSource {
@@ -881,6 +887,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
       const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const codeListeners = new Set<(code: PlanCodeFrame) => void>();
+      const workListeners = new Set<(work: PlanWorkFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onPlanDraft: (draft) => {
@@ -891,6 +898,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           },
           onPlanCode: (code) => {
             for (const listener of [...codeListeners]) listener(code);
+          },
+          onPlanWork: (work) => {
+            for (const listener of [...workListeners]) listener(work);
           },
         }),
       );
@@ -932,17 +942,39 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanCode: (listener) => {
           codeListeners.add(listener);
         },
+        onPlanWork: (listener) => {
+          workListeners.add(listener);
+        },
       };
     });
   }
 }
 
+/** The prefix every service frame's type shares, which no Live event's type begins with. */
+const SERVICE_FRAME_PREFIX = "plan.";
+
+/** A frame whose type is one of the service's own, read for its type alone so it can be routed to that type's schema. */
+const isServiceFrame = Schema.is(
+  Schema.Struct({
+    type: Schema.Literals([
+      VOICE_SERVICE_FRAME.PLAN_DRAFT,
+      VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+      VOICE_SERVICE_FRAME.PLAN_CODE,
+      VOICE_SERVICE_FRAME.PLAN_WORK,
+    ]),
+  }),
+);
+
 /**
  * The socket with the service's own frames, `plan.draft`, `plan.activity`,
- * and `plan.code`, taken off its arrivals and told to their listeners, so the
- * sideband over it reads only what the session said. Every frame is checked
- * by the frame's own schema; the substring test ahead of it is only what
- * keeps a transcript delta from being decoded twice.
+ * `plan.code`, and `plan.work`, taken off its arrivals and told to their
+ * listeners, so the sideband over it reads only what the session said. A
+ * frame is routed by the type it decodes to and then checked by that type's
+ * own schema. The substring test ahead of the decode only keeps a transcript
+ * delta from being decoded twice; note that it never picks the frame's kind,
+ * because a frame's own text, a command a turn ran or a draft's words, can
+ * name another kind's type, and a frame read as the wrong kind would be
+ * dropped as nothing.
  */
 function withoutServiceFrames(
   socket: LiveSocket,
@@ -950,35 +982,38 @@ function withoutServiceFrames(
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
     readonly onPlanActivity: (activity: PlanActivityFrame) => void;
     readonly onPlanCode: (code: PlanCodeFrame) => void;
+    readonly onPlanWork: (work: PlanWorkFrame) => void;
   },
 ): LiveSocket {
+  const routes = {
+    [VOICE_SERVICE_FRAME.PLAN_DRAFT]: (value: UnparsedWireValue) =>
+      told(planDraftFrameFromWire(value), listeners.onPlanDraft),
+    [VOICE_SERVICE_FRAME.PLAN_ACTIVITY]: (value: UnparsedWireValue) =>
+      told(planActivityFrameFromWire(value), listeners.onPlanActivity),
+    [VOICE_SERVICE_FRAME.PLAN_CODE]: (value: UnparsedWireValue) =>
+      told(planCodeFrameFromWire(value), listeners.onPlanCode),
+    [VOICE_SERVICE_FRAME.PLAN_WORK]: (value: UnparsedWireValue) =>
+      told(planWorkFrameFromWire(value), listeners.onPlanWork),
+  };
   return {
     send: (data) => socket.send(data),
     ping: () => socket.ping(),
     close: () => socket.close(),
     arrivals: Stream.filter(socket.arrivals, (arrival) => {
       if ("close" in arrival) return true;
-      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_DRAFT)) {
-        const draft = planDraftFrameFromWire(decodeLivePayload(arrival.frame));
-        if (draft === undefined) return true;
-        listeners.onPlanDraft(draft);
-        return false;
-      }
-      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_ACTIVITY)) {
-        const activity = planActivityFrameFromWire(decodeLivePayload(arrival.frame));
-        if (activity === undefined) return true;
-        listeners.onPlanActivity(activity);
-        return false;
-      }
-      if (arrival.frame.includes(VOICE_SERVICE_FRAME.PLAN_CODE)) {
-        const code = planCodeFrameFromWire(decodeLivePayload(arrival.frame));
-        if (code === undefined) return true;
-        listeners.onPlanCode(code);
-        return false;
-      }
-      return true;
+      if (!arrival.frame.includes(SERVICE_FRAME_PREFIX)) return true;
+      const value = decodeLivePayload(arrival.frame);
+      if (!isServiceFrame(value)) return true;
+      return !routes[value.type](value);
     }),
   };
+}
+
+/** Tells the listener the frame its schema admitted, answering whether there was one. */
+function told<Frame>(frame: Frame | undefined, listener: (frame: Frame) => void): boolean {
+  if (frame === undefined) return false;
+  listener(frame);
+  return true;
 }
 
 /**

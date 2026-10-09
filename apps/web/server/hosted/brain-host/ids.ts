@@ -41,12 +41,25 @@ function coordinate(parts: readonly string[]): string {
 }
 
 const ID_KIND = {
+  CHILD: "child",
   TURN: "turn",
   RECEIVED: "received",
   ANSWER: "answer",
   REASONING: "reasoning",
   SENT: "sent",
 } as const;
+
+/**
+ * The store's id for the child conversation a subagent's session is recorded
+ * in: one per call that started a subagent, so the parent's call alone finds
+ * its subagent's record.
+ */
+export function childConversationId(parentConversationId: string, callId: string): string {
+  return nameBasedUuid(
+    BRAIN_HOST_ID_NAMESPACE,
+    coordinate([ID_KIND.CHILD, parentConversationId, callId]),
+  );
+}
 
 /** The store's id for one turn of one eve session. */
 export function hostTurnId(sessionId: string, eveTurnId: string): string {

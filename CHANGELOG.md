@@ -36,6 +36,35 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.9.0 — 2026-10-09
+
+### A Work tab for what Luke thought and ran
+
+A new Work tab in the side panel shows each planning turn like an agent
+transcript: what Luke's planning model thought, the tools it called, and what
+it wrote. A background worker's whole session opens from its call in the tab.
+
+### Improvements
+
+- The plan column and the side panel use Cursor-style tabs that go icon-only
+  when narrow
+- The window uses one spacing scale throughout
+- Transcript call headers stick flush to the top of the scroll area
+- A tab's close button draws full size, dim at rest and brighter on hover
+
+### Fixes
+
+- Fixed Luke falling silent or losing the lead on a planning call
+- Fixed the right-panel toggle moving and missing rapid clicks
+- Fixed title-bar buttons showing through sliding panes
+- Fixed New plan in the folded sidebar not leaving the new-plan page
+- Fixed the sidebar's plan row missing its rename pencil
+
+### Misc
+
+- Removed the Quit Luke buttons from sign-in and Settings, since ⌘Q in the
+  app menu quits Luke
+
 ## 0.8.0 — 2026-10-09
 
 ### A new home for your plans

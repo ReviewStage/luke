@@ -112,6 +112,17 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 }
 
 /**
+ * The document as the hidden voice window is sent it: the whole of it but
+ * the planning turns' work. Note that the work is kept from that window
+ * because it draws none, and the work carries the output of commands run in
+ * the developer's repository, which nothing there needs.
+ */
+export function voiceWindowState<State extends Pick<AppState, "planning">>(held: State): State {
+  const { work: _work, ...planning } = held.planning;
+  return { ...held, planning };
+}
+
+/**
  * The document as a launch begins it: this process's own facts, and an empty
  * standing for everything the host has not answered yet. Nothing here reads
  * a device or the host — the first bootstrap and the events after it are

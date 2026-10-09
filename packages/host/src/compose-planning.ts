@@ -12,12 +12,14 @@ import type { Plan, ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
+  PLAN_WORK_BOUNDS,
   PLANNING_READ,
   type PlanningDocument,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   type PlanningView,
+  type PlanWorkTurn,
   planningBoardSaveParamsSchema,
   planningRenameParamsSchema,
   planningSetRepositoryParamsSchema,
@@ -124,6 +126,13 @@ export interface PlanningComposer extends Composer {
    * dropped.
    */
   showCode: (planId: string, code: ShownCode) => void;
+  /**
+   * Shows a planning turn's work on the call about the open plan, in place
+   * of the same turn as last told, the newest turns kept; work about any
+   * other plan is dropped. Leaving or switching plans clears it, and the
+   * call's end keeps it.
+   */
+  showWork: (planId: string, turn: PlanWorkTurn) => void;
   /** The call about `planId` ended: the code it put on screen goes with it, and its words are read back from the record. */
   callEnded: (planId: string) => void;
 }
@@ -168,12 +177,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, no board, no transcript, and no code, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, no code, and no work, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
     transcript: _transcript,
     code: _code,
+    work: _work,
     ...rest
   }: PlanningView): PlanningView {
     return rest;
@@ -309,6 +319,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   function showCode(planId: string, code: ShownCode): void {
     if (view.activePlanId !== planId) return;
     write({ code: highlightCode(code) });
+  }
+
+  function showWork(planId: string, turn: PlanWorkTurn): void {
+    if (view.activePlanId !== planId) return;
+    const held = view.work ?? [];
+    // A turn told again stays where it first stood, so the tab never reorders what it drew.
+    const turns = held.some((standing) => standing.turnId === turn.turnId)
+      ? held.map((standing) => (standing.turnId === turn.turnId ? turn : standing))
+      : [...held, turn];
+    write({ work: turns.slice(-PLAN_WORK_BOUNDS.TURNS) });
   }
 
   function callEnded(planId: string): void {
@@ -542,6 +562,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     showDraft,
     showActivity,
     showCode,
+    showWork,
     callEnded,
     reset: Effect.gen(function* () {
       yield* endPlanCall(undefined);

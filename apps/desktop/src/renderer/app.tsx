@@ -20,7 +20,7 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
-import { HIT_REGION, PANEL_PRESENTATION } from "./panel-state";
+import { PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { planningCallHoldsPanel } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
@@ -496,9 +496,6 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Who is being heard.
-      data-luke-speaking={String(speakers.lukeSpeaking)}
-      data-listening={String(speakers.listening)}
       // Whether there are words to draw under the shape — a caption or a
       // failure borrowing its strip — so the surface can grow the room they
       // are drawn in.
@@ -507,9 +504,6 @@ export function App(): React.JSX.Element {
       // a band of its own below the caption block.
       data-volume-hint={String(volumeHint)}
       data-presentation={presentation}
-      // Whether sign-in still stands between Luke and the plans, so the
-      // stylesheet knows the strip holds nothing while a popup is drawn.
-      data-gated={String(accountGated)}
       data-capture={String(state.run.captureMode)}
       // The panel is drawn as an ordinary app window's content; desktop.css
       // lays it out.
@@ -523,7 +517,7 @@ export function App(): React.JSX.Element {
         ...cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` }),
       }}
     >
-      <span className="panel-surface" data-hit-region={HIT_REGION.SURFACE} aria-hidden="true" />
+      <span className="panel-surface" aria-hidden="true" />
 
       {/* The window's content. Inert while the panel stands down to a sign-in
           wait or a note, which are drawn as a sheet over it. */}
@@ -574,7 +568,6 @@ export function App(): React.JSX.Element {
             settings,
             feedback: feedback.control,
             panelOpen,
-            onQuit: () => tell(ACT_KIND.WINDOW_QUIT),
             shortcuts,
           }}
         />

@@ -10,6 +10,7 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
+  type PlanWorkFrame,
 } from "@sidecar/hosted";
 import { LIVE_SESSION_END_CAUSE } from "@sidecar/voice/live-session";
 import { Effect, Layer } from "effect";
@@ -95,6 +96,7 @@ export const hostAssemblyLayer: Layer.Layer<
     let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
     let planCallEnded: (planId: string) => void = () => undefined;
     let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
+    let showPlanWork: (work: PlanWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
       account,
@@ -103,6 +105,7 @@ export const hostAssemblyLayer: Layer.Layer<
       showPlanActivity: (activity) => showPlanActivity(activity),
       planCallEnded: (planId) => planCallEnded(planId),
       showPlanCode: (code) => showPlanCode(code),
+      showPlanWork: (work) => showPlanWork(work),
     });
     const planning = yield* composePlanning({
       kernel,
@@ -126,6 +129,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
     showPlanCode = (frame) => planning.showCode(frame.planId, frame.code);
+    showPlanWork = (work) => planning.showWork(work.planId, work.turn);
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch

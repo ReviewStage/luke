@@ -101,8 +101,8 @@ export function ResetIcon(): React.JSX.Element {
 export function CloseIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="M6.8 6.8 17.2 17.2" />
-      <path d="M17.2 6.8 6.8 17.2" />
+      <path d="M5.2 5.2 18.8 18.8" />
+      <path d="M18.8 5.2 5.2 18.8" />
     </Glyph>
   );
 }
@@ -206,15 +206,6 @@ export function UserIcon(): React.JSX.Element {
     <Glyph>
       <circle cx="12" cy="8.2" r="3.6" />
       <path d="M5.4 19.8a6.6 6.6 0 0 1 13.2 0" />
-    </Glyph>
-  );
-}
-
-export function PowerIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M12 3v8.4" />
-      <path d="M17.6 6.2a7.6 7.6 0 1 1-11.2 0" />
     </Glyph>
   );
 }
@@ -457,6 +448,16 @@ export function CodeIcon(): React.JSX.Element {
       <path d="M8.2 7.4 3.6 12l4.6 4.6" />
       <path d="M15.8 7.4 20.4 12l-4.6 4.6" />
       <path d="M13.6 5 10.4 19" />
+    </Glyph>
+  );
+}
+
+/** A prompt and a line run at it: what Luke's planning model wrote and ran. */
+export function WorkIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M4.6 6.8 9.8 12l-5.2 5.2" />
+      <path d="M12.4 17.6h7" />
     </Glyph>
   );
 }

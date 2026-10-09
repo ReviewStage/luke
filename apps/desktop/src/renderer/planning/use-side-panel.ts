@@ -6,15 +6,16 @@ import { useCallback, useEffect, useState } from "react";
  *
  * The plan's document is always the page's main content; what supports it
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
- * calls, and each coding agent started on the plan) stands in a panel at
- * the window's right that the developer opens and closes, as every devtool
+ * calls, what Luke's planning model wrote and ran on them, and each coding
+ * agent started on the plan) stands in a panel at the window's right that
+ * the developer opens and closes, as every devtool
  * window's secondary sidebar does. The one thing that opens it on its own is
  * Luke first drawing on a plan's board or first showing its code
  * (`use-panel-arrivals.ts`), once per plan and kind, and a coding agent
  * just started, whose tab opens selected. Not to be confused with "the
  * panel", which in this renderer is Luke's whole surface.
  *
- * The three fixed kinds are a constant; the agent tabs are the plan's, one
+ * The four fixed kinds are a constant; the agent tabs are the plan's, one
  * per agent, drawn after them, and come and go with the plan, so none of
  * them closes. A kept tab naming an agent the open plan has none of reads
  * as the first open fixed tab, so leaving a plan or opening another never
@@ -39,11 +40,12 @@ import { useCallback, useEffect, useState } from "react";
  * the document.
  */
 
-/** The panel's kinds of tab, the fixed three. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   TRANSCRIPT: "transcript",
+  WORK: "work",
 } as const;
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
@@ -72,6 +74,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.BOARD]: { label: "Board", singleInstance: true },
   [SIDE_PANEL_TAB.CODE]: { label: "Code", singleInstance: true },
   [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript", singleInstance: true },
+  [SIDE_PANEL_TAB.WORK]: { label: "Work", singleInstance: true },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order a first launch opens them and the "+" offers them; the agent tabs follow them. */

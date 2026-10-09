@@ -113,7 +113,8 @@ function usePlaceCommands(
 /**
  * The sidebar's New plan, kept in reach while the sidebar is folded: an icon
  * beside the toggle, the way a chat app keeps its compose button beside its
- * own. It asks for exactly what the sidebar's button asks for.
+ * own. It asks for exactly what the sidebar's button asks for, so the shell
+ * leaves it out on the new-plan page, where it would ask for the page it is on.
  */
 function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element {
   return (
@@ -173,7 +174,6 @@ export function DesktopShell({
           account={account}
           {...(gates.signInFailure ? { failure: gates.signInFailure } : undefined)}
           onBegin={gates.onBeginSignIn}
-          onQuit={settings.onQuit}
         />
       </Onboarding>
     );
@@ -213,7 +213,9 @@ export function DesktopShell({
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls">
         <SidebarToggle sidebar={sidebar} />
-        {sidebar.collapsed ? <TitleBarNewPlan plans={plans} /> : null}
+        {sidebar.collapsed && plans.page !== PLANS_PAGE.NEW ? (
+          <TitleBarNewPlan plans={plans} />
+        ) : null}
       </div>
       {plans.page === PLANS_PAGE.DOCUMENT ? (
         <div className="title-bar-controls" data-edge="end">

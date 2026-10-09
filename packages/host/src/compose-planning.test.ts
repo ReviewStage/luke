@@ -21,10 +21,16 @@ import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import type { Plan, PlanSummary, ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
+  PLAN_WORK_BOUNDS,
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanActivity,
   type PlanCallFailure,
   type PlanningView,
+  type PlanWorkState,
+  type PlanWorkTurn,
   planningViewSchema,
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
@@ -402,6 +408,92 @@ it.effect("leaving the open plan or switching to another clears the activity dra
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
     assert.equal(last()?.activePlanId, undefined);
     assert.equal(last()?.activity, undefined);
+  }),
+);
+
+/** A planning turn's work at `state`, its one call to `command` answered with `output` where it has one. */
+function workTurn(
+  turnId: string,
+  state: PlanWorkState,
+  command: string,
+  output?: string,
+): PlanWorkTurn {
+  return {
+    turnId,
+    startedAt: 0,
+    state,
+    earlierOmitted: false,
+    parts: [
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: `${turnId}-call`,
+        tool: PLAN_WORK_TOOL.REPOSITORY,
+        name: "run_in_repository",
+        state,
+        subject: command,
+        input: JSON.stringify({ command }),
+        ...(output === undefined ? undefined : { output }),
+      },
+    ],
+  };
+}
+
+it.effect(
+  "each planning turn's work on the open plan's call is drawn in the order the turns began, a turn told again in its own place, and the call's end keeps it",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const first = workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls src");
+      const second = workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat package.json");
+      const answered = workTurn("turn-1", PLAN_WORK_STATE.DONE, "ls src", "invite.ts");
+      planning.showWork(INVITES, first);
+      planning.showWork(INVITES, second);
+      planning.showWork(INVITES, answered);
+      assert.deepEqual(last()?.work, [answered, second]);
+
+      planning.showWork(BILLING, workTurn("turn-3", PLAN_WORK_STATE.RUNNING, "ls"));
+      assert.deepEqual(last()?.work, [answered, second]);
+
+      planning.callEnded(INVITES);
+      assert.deepEqual(last()?.work, [answered, second]);
+    }),
+);
+
+it.effect("the open plan's call keeps only its newest turns' work", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const { call, last, planning } = yield* subject(fakeService([invites]));
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    for (let turn = 0; turn < PLAN_WORK_BOUNDS.TURNS + 2; turn += 1) {
+      planning.showWork(INVITES, workTurn(`turn-${turn}`, PLAN_WORK_STATE.DONE, "ls"));
+    }
+    const kept = last()?.work ?? [];
+    assert.equal(kept.length, PLAN_WORK_BOUNDS.TURNS);
+    assert.equal(kept[0]?.turnId, "turn-2");
+  }),
+);
+
+it.effect("leaving the open plan or switching to another clears the work drawn for it", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const { call, last, planning } = yield* subject(fakeService([billing, invites]));
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+    planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.DONE, "ls"));
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+    assert.equal(last()?.work, undefined);
+
+    planning.showWork(BILLING, workTurn("turn-2", PLAN_WORK_STATE.DONE, "ls"));
+    yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+    assert.equal(last()?.work, undefined);
   }),
 );
 

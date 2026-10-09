@@ -68,6 +68,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     board: undefined,
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
+    work: { turns: undefined, callLive: false },
     agents: codingAgentsControl(),
     onSelect: ignore,
     onShowAgent: ignore,
