@@ -3,7 +3,17 @@ import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
-import { type Duration, Effect, Fiber, Layer, Option, Redacted, Result, Schema } from "effect";
+import {
+  Clock,
+  type Duration,
+  Effect,
+  Fiber,
+  Layer,
+  Option,
+  Redacted,
+  Result,
+  Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -36,7 +46,7 @@ import {
 import { createCodingAgent, latestTurnsOf } from "../server/hosted/coding-agent-store";
 import { type CatalogModel, MODEL_PROVIDER, modelCatalogOf } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { type ConversationTarget, type MessageCursor, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
@@ -349,7 +359,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.equal(turn.reasoningEffort, agent.effort);
         assert.equal(turn.promptHash, prompt.hash);
 
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
         assert.deepEqual(
           page.messages.map((message) => message.role),
           [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
@@ -377,7 +387,10 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
 
         const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
         assert.equal(
-          codingAgentStatusOf(turns.get(target.conversationId)),
+          codingAgentStatusOf(turns.get(target.conversationId), {
+            createdAt: agent.createdAt,
+            now: yield* Clock.currentTimeMillis,
+          }),
           CODING_AGENT_STATUS.COMPLETED,
         );
       }),
@@ -402,14 +415,20 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             });
           }
           const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
-          assert.equal(codingAgentStatusOf(turns.get(target.conversationId)), status);
+          assert.equal(
+            codingAgentStatusOf(turns.get(target.conversationId), {
+              createdAt: agent.createdAt,
+              now: yield* Clock.currentTimeMillis,
+            }),
+            status,
+          );
           assert.equal(turns.size, 1);
         }
       }),
   );
 
   it.effect(
-    "a transcript read past the cursor is held open while the turn runs, answers the moment a message lands, hears an amended journal again, and lets go at the hold on an idle agent at once",
+    "a transcript read past the cursor is held open while the agent is starting or the turn runs, answers the moment a message lands with the agent's status, hears an amended journal again, and lets go at the hold; an agent that ended answers at once",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore;
@@ -422,20 +441,28 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
             host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
           );
+        const read = (after: MessageCursor) => transcriptPast(target, CODER_TOOL_SET, after, agent);
 
-        // Idle before the first turn: nothing stands, and the read answers at once.
-        const idle = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START);
+        // Starting, before the first turn: the read holds rather than spinning, and lets go at the
+        // hold with the status it stands at, so a tab on a starting agent costs one read per hold.
+        const starting = yield* Effect.forkChild(read(CURSOR_START));
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        assert.equal(starting.pollUnsafe(), undefined);
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        const idle: TranscriptPage = yield* driven(starting, CODER.MESSAGES_POLL);
         assert.deepEqual(idle.messages, []);
         assert.equal(cursorToWire(idle.cursor), "0:0");
+        assert.equal(idle.status, CODING_AGENT_STATUS.STARTING);
 
-        // The turn starts and the plan lands: a held read answers with it.
+        // The turn starts and the plan lands: a held read answers with it, running.
         yield* play(0, 2);
-        const first = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START);
+        const first = yield* read(CURSOR_START);
         assert.equal(first.messages.length, 1);
         assert.equal(first.messages[0]?.role, MESSAGE_ROLE.USER);
+        assert.equal(first.status, CODING_AGENT_STATUS.RUNNING);
 
         // Past that, nothing new while the turn runs: the read holds, and the journal's next write releases it.
-        const held = yield* Effect.forkChild(transcriptPast(target, CODER_TOOL_SET, first.cursor));
+        const held = yield* Effect.forkChild(read(first.cursor));
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
         assert.equal(held.pollUnsafe(), undefined);
         yield* play(2, 5);
@@ -449,26 +476,44 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
 
         // The journal grows in place: the same row is heard again past the cursor it was last read at.
         yield* play(5, 7);
-        const amended = yield* transcriptPast(target, CODER_TOOL_SET, released.cursor);
+        const amended = yield* read(released.cursor);
         assert.equal(amended.messages.length, 1);
         assert.ok(amended.messages[0]?.parts.some((part) => isReasoningUIPart(part)));
 
         // Nothing lands inside the hold: the read lets go empty with the cursor to read on from.
-        const expiring = yield* Effect.forkChild(
-          transcriptPast(target, CODER_TOOL_SET, amended.cursor),
-        );
+        const expiring = yield* Effect.forkChild(read(amended.cursor));
         yield* TestClock.adjust(CODER.MESSAGES_HOLD);
         const expired: TranscriptPage = yield* driven(expiring, CODER.MESSAGES_POLL);
         assert.deepEqual(expired.messages, []);
         assert.deepEqual(cursorOfWire(cursorToWire(expired.cursor)), amended.cursor);
+        assert.equal(expired.status, CODING_AGENT_STATUS.RUNNING);
 
-        // The turn ends: the finished answer replaces the journal, and an idle agent's empty read answers at once.
+        // The turn ends: the finished answer replaces the journal and the page says the agent
+        // completed, and an ended agent's empty read answers at once.
         yield* play(7, events.length);
-        const finished = yield* transcriptPast(target, CODER_TOOL_SET, expired.cursor);
+        const finished = yield* read(expired.cursor);
         assert.equal(finished.messages.length, 1);
         assert.ok(finished.messages[0]?.parts.some((part) => isTextUIPart(part)));
-        const done = yield* transcriptPast(target, CODER_TOOL_SET, finished.cursor);
+        assert.equal(finished.status, CODING_AGENT_STATUS.COMPLETED);
+        const done = yield* read(finished.cursor);
         assert.deepEqual(done.messages, []);
+        assert.equal(done.status, CODING_AGENT_STATUS.COMPLETED);
+      }),
+  );
+
+  it.effect(
+    "a starting agent whose first turn never lands reads as failed past the grace, and its read is not held",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { agent, target } = yield* openAgent(host);
+        yield* TestClock.adjust(CODER.STARTING_GRACE);
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+
+        assert.deepEqual(page.messages, []);
+        assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
       }),
   );
 

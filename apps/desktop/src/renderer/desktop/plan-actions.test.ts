@@ -187,8 +187,10 @@ test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last
   openMenu(mountToolbar(unset.plans));
   assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
+  // Copy plan is the menu's alone: the toolbar keeps Start and the ⋯.
   const toolbar = document.querySelector(".desktop-toolbar-actions");
-  assert.match(toolbar?.textContent ?? "", /Copy plan/u);
+  assert.doesNotMatch(toolbar?.textContent ?? "", /Copy plan/u);
+  assert.match(toolbar?.textContent ?? "", /Start/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
   // The plan's chip stands under its title, waiting on a pick.
   assert.equal(

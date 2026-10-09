@@ -55,6 +55,11 @@ function mount(
   answers: { [Kind in ActKind]?: () => Promise<ActResultFor<Kind>> } = {},
 ) {
   const told: ActKind[] = [];
+  /** The coding-agent acts, kept apart: they are the agents' own and no planning press tells them. */
+  const agentActs: ActKind[] = [];
+  const record = (kind: ActKind) => {
+    (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
+  };
   let control: PlansControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
   let standing: Standing = {
@@ -75,13 +80,13 @@ function mount(
           kind: Kind,
           ..._args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
-          told.push(kind);
+          record(kind);
           const answer = answers[kind];
           if (answer !== undefined) return answer();
           return Promise.reject(new Error("Not answered in this test."));
         },
         tell: (kind: ActKind, ..._args: unknown[]) => {
-          told.push(kind);
+          record(kind);
         },
       },
       planning: held.planning,
@@ -101,6 +106,7 @@ function mount(
   });
   return {
     told,
+    agentActs,
     control: () => {
       assert.ok(control);
       return control;

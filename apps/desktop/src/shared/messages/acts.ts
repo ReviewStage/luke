@@ -13,6 +13,23 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
+import {
+  type CodingAgentAgentAnswer,
+  type CodingAgentDefaultAnswer,
+  type CodingAgentListAnswer,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentModelsAnswer,
+  codingAgentAgentAnswerSchema,
+  codingAgentDefaultAnswerViewSchema,
+  codingAgentDefaultWriteParamsSchema,
+  codingAgentListAnswerViewSchema,
+  codingAgentListParamsSchema,
+  codingAgentMessagesAnswerViewSchema,
+  codingAgentMessagesParamsSchema,
+  codingAgentModelsAnswerSchema,
+  codingAgentStartParamsSchema,
+  codingAgentStopParamsSchema,
+} from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type PlanningRepositoriesAnswer,
@@ -102,6 +119,21 @@ export const ACT_KIND = {
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /**
+   * A plan's coding agents, asked of the service: the models one may run
+   * on, the account's default among them read and written, the plan's
+   * agents with their status, one started under the press's own key, one's
+   * transcript past a cursor (held open by the service while the agent
+   * runs), and one stopped. The window holds what it draws; nothing here
+   * does.
+   */
+  CODING_AGENTS_MODELS: "codingAgents.models",
+  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  CODING_AGENTS_LIST: "codingAgents.list",
+  CODING_AGENTS_START: "codingAgents.start",
+  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  CODING_AGENTS_STOP: "codingAgents.stop",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -396,6 +428,43 @@ export const ACT = {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,
     refusal: "Could not save the board on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_MODELS]: {
+    payload: noPayload,
+    result: wireResult<CodingAgentModelsAnswer>(isReadable(codingAgentModelsAnswerSchema)),
+    refusal: "Could not read the models on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_READ]: {
+    payload: noPayload,
+    result: wireResult<CodingAgentDefaultAnswer>(isReadable(codingAgentDefaultAnswerViewSchema)),
+    refusal: "Could not read the default model on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_DEFAULT_WRITE]: {
+    payload: actSchema(codingAgentDefaultWriteParamsSchema),
+    result: wireResult<CodingAgentDefaultAnswer>(isReadable(codingAgentDefaultAnswerViewSchema)),
+    refusal: "Could not change the default model on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_LIST]: {
+    payload: actSchema(codingAgentListParamsSchema),
+    result: wireResult<CodingAgentListAnswer>(isReadable(codingAgentListAnswerViewSchema)),
+    refusal: "Could not read the plan's agents on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_START]: {
+    payload: actSchema(codingAgentStartParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not start an agent on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_MESSAGES]: {
+    payload: actSchema(codingAgentMessagesParamsSchema),
+    result: wireResult<CodingAgentMessagesAnswerView>(
+      isReadable(codingAgentMessagesAnswerViewSchema),
+    ),
+    refusal: "Could not read the agent's transcript on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_STOP]: {
+    payload: actSchema(codingAgentStopParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not stop the agent on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

@@ -79,6 +79,7 @@ const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
+  [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */
@@ -160,6 +161,23 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       page: SETTINGS_VIEW.SHORTCUTS,
       haystack: ["Stop Luke", SHORTCUT_WORDS, "stop interrupt quiet cut off a reply"],
     },
+    // The coding agents' default, which is the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL,
+          label: "Default model",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: ["Default model", "coding agent model claude gpt start"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.CODING_AGENT_EFFORT,
+          label: "Default effort",
+          page: SETTINGS_VIEW.CODING_AGENTS,
+          haystack: ["Default effort", "coding agent effort reasoning low medium high max"],
+        }
+      : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.
     ...APP_SHORTCUT_GROUPS.flatMap((group) =>
       group.commands.map((command) => ({

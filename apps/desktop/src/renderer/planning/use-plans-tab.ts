@@ -48,6 +48,7 @@ import {
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
+import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-side-panel";
 
@@ -62,7 +63,10 @@ import { type SidePanelControl, type SidePanelTab, useSidePanel } from "./use-si
  * goes back to the old one if the service refuses it. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Escape, another plan, New plan, a delete, or a sign-out
- * leaves it. With none open, the tab is the new-plan page.
+ * leaves it. With none open, the tab is the new-plan page. The open plan's
+ * coding agents are the tab's too (`use-coding-agents.ts`): read when the
+ * plan opens, started from the toolbar, and each drawn on a tab of the side
+ * panel.
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -94,6 +98,8 @@ export interface PlansControl {
   code: PlanCode | undefined;
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
+  /** The open plan's coding agents: their tabs, the Start, and the Stop. */
+  agents: CodingAgentsControl;
   onSelect: (planId: string) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
   repositories: RepositoryChooser;
@@ -165,8 +171,21 @@ export function usePlansTab(input: {
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
-  const sidePanel = useSidePanel(fixtureSidePanel(input.run));
   const viewed = fixture ?? input.planning;
+  // A started agent's tab opens selected; the panel is built after the
+  // agents it draws, so the opening reaches it through this late binding.
+  const panelRef = useRef<SidePanelControl | undefined>(undefined);
+  const openDocument = viewed.document.plan;
+  // A fixture's plans have no agents, as they are read from nowhere.
+  const agents = useCodingAgents({
+    acts: input.acts,
+    planId: fixture === undefined ? viewed.activePlanId : undefined,
+    repository:
+      openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+    onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
+  });
+  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds);
+  panelRef.current = sidePanel;
   // A name given here stands until main's view carries it, so a rename that
   // landed never flickers back while main's copy of the view catches up.
   const [renames, setRenames] = useState<PendingRenames>(new Map());
@@ -221,10 +240,10 @@ export function usePlansTab(input: {
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
-  const openDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
+  const drawnDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
   const pressCopy = () => {
-    if (openDocument === undefined) return;
-    copyPlanDocument(openDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
+    if (drawnDocument === undefined) return;
+    copyPlanDocument(drawnDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
       setCopied,
       () => undefined,
     );
@@ -338,7 +357,7 @@ export function usePlansTab(input: {
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
     copy: {
-      shown: openDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, openDocument),
+      shown: drawnDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, drawnDocument),
       onPress: pressCopy,
     },
     microphone: {
@@ -365,6 +384,7 @@ export function usePlansTab(input: {
       region: transcriptRegion({ transcript: planning.transcript, heard }),
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
     },
+    agents,
     onSelect: select,
     repositories: {
       recent: recentRepositories(planning.plans),

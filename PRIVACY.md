@@ -11,18 +11,28 @@ what we collect, who we send it to, and how to turn it off.
 on it reads message history, file contents, or command output. The planning
 model reads a plan's code in a sandbox on our service, never on your Mac,
 as described under "How the planning model reads your repository" below. The
-Mac app lists no coding agent sessions, and our service reads none either.
-No part of Luke's judgment runs on this Mac, so no transcript, working
-memory, or inbox of his is held here, in memory or on disk.
+only coding agents the Mac app lists are the ones you start on a plan from
+its Start button, which our service runs in a sandbox of its own as described
+under "Who we send it to" below; it reads no other agent's session, on your
+Mac or anywhere else. No part of Luke's judgment runs on this Mac, so no
+transcript, working memory, or inbox of his is held here, in memory or on
+disk.
 
 **Your conversation with Luke.** No part of Luke's judgment runs on your
 Mac, so no record of what he did at your ask is kept on this machine, and
-nothing on it writes what you said or what he spoke to disk. The one read of
-those words back is a plan's Transcript tab: while the plan is open, Luke on
-your Mac reads what was said on the plan's calls from our service, the spoken
-words alone and never his judgment's record, and holds them in the window's
-memory to show them, beside the words of the call in progress; they go when
-you leave the plan or quit Luke.
+nothing on it writes what you said or what he spoke to disk. The reads of
+those words back are a plan's side panel tabs: while the plan is open, Luke
+on your Mac reads what was said on the plan's calls from our service for the
+Transcript tab, the spoken words alone and never his judgment's record, and,
+for each coding agent you started on the plan, that agent's transcript for
+its own tab, its words, reasoning summaries, and tool calls with their
+output, read while the tab is showing and the agent runs; both are held in
+the window's memory to show them and go when you leave the plan or quit
+Luke. The agent tabs, like the Transcript tab, are left out of the screen
+recording described under "Usage data and screen recordings" below. Your
+default model and effort for a coding agent are kept with your account
+preferences on our service, chosen in Settings › Coding agents or by the
+model you last started with.
 A voice session on this Mac is a call about one plan, and it opens with
 nothing of your coding agent sessions and no line of your conversation, from
 here or from our service; what Luke knows when he answers a spoken ask he

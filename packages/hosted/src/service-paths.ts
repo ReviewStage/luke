@@ -13,6 +13,8 @@ export const HOSTED_SERVICE_PATH = {
    * `@sidecar/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
+  /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
+  MODELS: "/api/models",
   /**
    * The account's named feature plans: list them, newest started first
    * (GET), or start one (POST) with its name and, where one is chosen, the

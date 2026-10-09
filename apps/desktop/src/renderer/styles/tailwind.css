@@ -28,6 +28,7 @@
   --color-border: var(--hairline);
   --color-developer: var(--voice-developer);
   --color-luke: var(--voice-luke);
+  --color-danger: var(--danger-text);
 
   /* Motion comes from the motion tokens alone (docs/DESIGN.md): a `transition`
      utility runs on the quick duration and the spring, never on Tailwind's

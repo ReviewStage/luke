@@ -11,6 +11,34 @@ export {
 export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
+  CODING_AGENT_CLIENT_DEFAULTS,
+  HostedCodingAgentClient,
+  type HostedCodingAgentClientOptions,
+} from "./coding-agent-client.js";
+export {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
+  type CodingAgentCallFailure,
+  type CodingAgentDefaultAnswer,
+  type CodingAgentListAnswer,
+  type CodingAgentListParams,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentMessagesParams,
+  type CodingAgentModelsAnswer,
+  type CodingAgentStartParams,
+  type CodingAgentStopParams,
+  codingAgentAgentAnswerSchema,
+  codingAgentDefaultAnswerViewSchema,
+  codingAgentDefaultWriteParamsSchema,
+  codingAgentListAnswerViewSchema,
+  codingAgentListParamsSchema,
+  codingAgentMessagesAnswerViewSchema,
+  codingAgentMessagesParamsSchema,
+  codingAgentModelsAnswerSchema,
+  codingAgentStartParamsSchema,
+  codingAgentStopParamsSchema,
+} from "./coding-agent-view.js";
+export {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
@@ -81,6 +109,17 @@ export {
   VOICE_SERVICE_ORIGIN_VARIABLE,
   webSocketOrigin,
 } from "./live-contract.js";
+export {
+  type CatalogModel,
+  catalogModelSchema,
+  codingAgentDefaultAnswerSchema,
+  codingAgentDefaultWriteSchema,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+  modelChoiceSchema,
+  modelsAnswerSchema,
+} from "./models-wire.js";
 export {
   HostedPlanClient,
   type HostedPlanClientOptions,

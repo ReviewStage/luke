@@ -64,7 +64,8 @@ export function useConfirmDialog(
 /** The move Tab makes from the focused element, kept to the card's own buttons. */
 function trappedTab(event: React.KeyboardEvent<HTMLElement>): void {
   const buttons = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)];
-  const at = buttons.findIndex((button) => button === document.activeElement);
+  const focused = buttons.find((button) => button === document.activeElement);
+  const at = focused === undefined ? -1 : buttons.indexOf(focused);
   // Note that the ends wrap and a focus off the buttons (the card itself,
   // while the act runs) comes back onto them, because past either end the
   // browser's own move would leave the card for the window behind it.

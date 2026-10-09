@@ -16,6 +16,24 @@ import {
   voiceStopSpeakingResultSchema,
 } from "@sidecar/gateway";
 import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
+  type CodingAgentDefaultAnswer,
+  type CodingAgentListAnswer,
+  type CodingAgentListParams,
+  type CodingAgentMessagesAnswerView,
+  type CodingAgentMessagesParams,
+  type CodingAgentModelsAnswer,
+  type CodingAgentStartParams,
+  type CodingAgentStopParams,
+  codingAgentAgentAnswerSchema,
+  codingAgentDefaultAnswerViewSchema,
+  codingAgentListAnswerViewSchema,
+  codingAgentMessagesAnswerViewSchema,
+  codingAgentModelsAnswerSchema,
+} from "@sidecar/hosted/coding-agent-view";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
   type PlanningRenameParams,
@@ -42,7 +60,7 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Clock, Effect, Option, Result } from "effect";
+import { Clock, Effect, type Schema as EffectSchema, Option, Result } from "effect";
 
 /**
  * The desktop's client over the host's own vocabulary: the settings, account,
@@ -132,6 +150,22 @@ export interface HostOperator {
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
+  /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
+  codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
+  /** The account's default model and effort for a coding agent; or why there is none. */
+  codingAgentDefaultRead(): Effect.Effect<CodingAgentDefaultAnswer>;
+  /** The default written; the choice as kept, or why it is unchanged. */
+  codingAgentDefaultWrite(choice: ModelChoice): Effect.Effect<CodingAgentDefaultAnswer>;
+  /** One plan's coding agents with their status; or why there is no list. */
+  codingAgentList(params: CodingAgentListParams): Effect.Effect<CodingAgentListAnswer>;
+  /** An agent started on a plan under the press's own key; the agent, or why none started. */
+  codingAgentStart(params: CodingAgentStartParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent's transcript past a cursor, held by the service while the agent runs; or why there is none. */
+  codingAgentMessages(
+    params: CodingAgentMessagesParams,
+  ): Effect.Effect<CodingAgentMessagesAnswerView>;
+  /** One agent stopped; the agent as it then stands, or why it was not. */
+  codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -173,6 +207,9 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
   return value === undefined ? undefined : (value as unknown as Value);
 }
 
+/** What a coding-agent call the host could not answer is drawn as. */
+const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -209,6 +246,18 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
    */
   const wireValue = <Value>(value: Value | undefined) =>
     value !== undefined ? { value: carried(value) } : undefined;
+
+  /**
+   * A coding-agent answer as the host's method documents it, or unanswered
+   * where the host refused the call or answered a shape the view cannot
+   * read: the window draws why and offers to try again either way.
+   */
+  const codingAgentAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof CODING_AGENT_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? CODING_AGENT_UNANSWERED;
 
   return {
     bootstrap: () =>
@@ -353,6 +402,52 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           elements: params.elements,
           appliedDrawing: params.appliedDrawing,
         }),
+      ),
+    codingAgentModels: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MODELS),
+        codingAgentAnswer(codingAgentModelsAnswerSchema),
+      ),
+    codingAgentDefaultRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_READ),
+        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+      ),
+    codingAgentDefaultWrite: (choice) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
+          model: choice.model,
+          effort: choice.effort,
+        }),
+        codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
+      ),
+    codingAgentList: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_LIST, { planId: params.planId }),
+        codingAgentAnswer(codingAgentListAnswerViewSchema),
+      ),
+    codingAgentStart: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_START, {
+          planId: params.planId,
+          idempotencyKey: params.idempotencyKey,
+          ...("model" in params ? { model: params.model } : undefined),
+          ...("effort" in params ? { effort: params.effort } : undefined),
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentMessages: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+          agentId: params.agentId,
+          after: params.after,
+        }),
+        codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
+      ),
+    codingAgentStop: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

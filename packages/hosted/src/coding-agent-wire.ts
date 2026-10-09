@@ -14,8 +14,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * agent's summary: its id, what it runs on, when it started, and where it
  * stands, which is the status of its newest turn. Its transcript is the
  * conversation's own `messages` rows, each an AI SDK `UIMessage`, read after
- * a cursor the service hands back with every page, so a tab held open hears
- * each message once as it lands and again when it changes in place.
+ * a cursor the service hands back with every page beside the agent's status
+ * as the page was read, so a tab held open hears each message once as it
+ * lands and again when it changes in place, and hears the agent end from
+ * the page that ends the hold.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -124,10 +126,16 @@ export const codingAgentCursorSchema = EffectSchema.String.check(
 /** The cursor a reader starts from: before every message. */
 export const CODING_AGENT_CURSOR_START = "0:0";
 
-/** The messages past a cursor (GET), and the cursor to read on from. */
+/**
+ * The messages past a cursor (GET), the cursor to read on from, and where
+ * the agent stood as the page was read, so a reader held on a running agent
+ * learns from the page that ends the hold that there is nothing more to
+ * wait for.
+ */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
 });
 
 export type CodingAgentMessagesAnswer = typeof codingAgentMessagesAnswerSchema.Type;

@@ -31,6 +31,20 @@ export const GATEWAY_METHOD = {
   PLANNING_SET_REPOSITORY: "planning.setRepository",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /** The models a coding agent may run on, read from the service's catalog now. */
+  CODING_AGENTS_MODELS: "codingAgents.models",
+  /** The account's default model and effort for a coding agent, read from the service now. */
+  CODING_AGENTS_DEFAULT_READ: "codingAgents.defaultRead",
+  /** The account's default model and effort for a coding agent, written to the service; the default as kept, or why it is unchanged. */
+  CODING_AGENTS_DEFAULT_WRITE: "codingAgents.defaultWrite",
+  /** One plan's coding agents with their status, read from the service now. */
+  CODING_AGENTS_LIST: "codingAgents.list",
+  /** A coding agent started on one plan under the panel's own key; the agent, or why none started. */
+  CODING_AGENTS_START: "codingAgents.start",
+  /** One agent's transcript past a cursor, held open by the service while the agent runs. */
+  CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /** One agent stopped; the agent as it then stands, or why it was not. */
+  CODING_AGENTS_STOP: "codingAgents.stop",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

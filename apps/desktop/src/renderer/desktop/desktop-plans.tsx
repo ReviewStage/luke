@@ -1,5 +1,4 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CheckIcon, CopyIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -14,10 +13,10 @@ import {
 import { MicrophoneRow } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { Tooltip } from "../tooltip";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
+import { StartAgentButton } from "./start-agent-button";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -25,9 +24,11 @@ import { SidePanel, SidePanelToggle, useSidePanelDrawing } from "./side-panel";
  * the window's full height, while that is open (or over them, while it fills
  * the window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
- * toolbar offers no way out of the open plan, only its actions. Its title is
- * the plan's name, and a press on it renames the plan in place; under it
- * stands the plan's repository chip, which names the repository and changes it.
+ * toolbar offers no way out of the open plan, only its actions: Start, which
+ * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
+ * rest stand. Its title is the plan's name, and a press on it renames the
+ * plan in place; under it stands the plan's repository chip, which names the
+ * repository and changes it.
  */
 
 /** The strip across the top of the work column, which is also the window's drag handle. */
@@ -51,30 +52,28 @@ function Toolbar({
   );
 }
 
-/** Copy, the plan's own action and so never folded into its menu, with its refusal said beside it. */
-function CopyButton({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element {
-  const copied = copy.shown === COPY_SHOWN.COPIED;
+/**
+ * Copy's chord and what the last Copy came to, said in the toolbar: the
+ * press itself stands in the ⋯ menu, so a copy's check mark and a copy that
+ * failed are said here, where the menu was.
+ */
+function CopyNote({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element | null {
   useAppCommand(APP_COMMAND.COPY_PLAN, copy.onPress);
-  return (
-    <>
-      {copy.shown === COPY_SHOWN.FAILED ? (
-        <p className="desktop-toolbar-note" role="alert">
-          {COPY_FAILED_NOTE}
-        </p>
-      ) : null}
-      <Tooltip label="Copy plan" command={APP_COMMAND.COPY_PLAN}>
-        <button
-          type="button"
-          className="toolbar-button"
-          data-copied={copied ? "true" : undefined}
-          onClick={copy.onPress}
-        >
-          {copied ? <CheckIcon /> : <CopyIcon />}
-          {copied ? "Copied" : "Copy plan"}
-        </button>
-      </Tooltip>
-    </>
-  );
+  if (copy.shown === COPY_SHOWN.FAILED) {
+    return (
+      <p className="desktop-toolbar-note" role="alert">
+        {COPY_FAILED_NOTE}
+      </p>
+    );
+  }
+  if (copy.shown === COPY_SHOWN.COPIED) {
+    return (
+      <p className="desktop-toolbar-word" role="status">
+        Copied
+      </p>
+    );
+  }
+  return null;
 }
 
 /**
@@ -200,7 +199,8 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               {repositoryNote}
             </p>
           ) : null}
-          <CopyButton copy={plans.copy} />
+          <CopyNote copy={plans.copy} />
+          <StartAgentButton control={plans.agents} />
           <PlanActionsButton key={plan.id} plans={plans} plan={plan} onRename={rename.begin} />
           {/* The open panel holds its own toggle in its own top row. */}
           {sidePanel.open ? null : <SidePanelToggle panel={sidePanel} />}
@@ -221,6 +221,8 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           board={plans.board}
           code={plans.code}
           transcript={plans.transcript}
+          agents={plans.agents}
+          shown={plans.shown}
         />
       ) : null}
     </div>

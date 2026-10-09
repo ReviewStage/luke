@@ -252,18 +252,23 @@ test("the tabs switch the panel between the board and the code, which is quiet w
   assert.ok(page.querySelector(".side-panel .plan-board"));
 });
 
-test("the panel's tabs hang no pill, their words being enough, while Copy plan still names its chord", () => {
+test("the panel's tabs hang no pill, their words being enough, while Copy plan's chord still copies from the ⋯ menu's toolbar", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   assert.equal(hover(tabNamed(page, "Code")), undefined);
   assert.equal(tabNamed(page, "Code").getAttribute("aria-keyshortcuts"), "Meta+Alt+2");
 
+  // Copy plan stands in the ⋯ menu now, so the toolbar draws no button for
+  // it; its chord is still the toolbar's, and Start stands where Copy was.
   const copy = [...page.querySelectorAll<HTMLElement>("button")].find(
     (each) => each.textContent === "Copy plan",
   );
-  assert.ok(copy, "the toolbar draws Copy plan");
-  assert.equal(hover(copy), "Copy plan⇧⌘C");
+  assert.equal(copy, undefined, "the toolbar draws no Copy plan of its own");
+  assert.ok(page.querySelector('.desktop-toolbar [aria-label="Start a coding agent"]'));
+  const before = copies;
+  assert.equal(keydown({ key: "c", code: "KeyC", metaKey: true, shiftKey: true }), true);
+  assert.equal(copies, before + 1);
 });
 
 test("the Code tab draws the code Luke has on screen", () => {
@@ -435,7 +440,7 @@ test("the open panel holds its own toggle, beside its full-screen button, and no
   );
   assert.equal(page.querySelector('.desktop-toolbar [aria-label="Hide panel"]'), null);
   assert.ok(page.querySelector('.desktop-toolbar [aria-label="Plan actions"]'));
-  assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Copy plan/u);
+  assert.match(page.querySelector(".desktop-toolbar")?.textContent ?? "", /Start/u);
 
   for (const fullScreen of [false, true]) {
     if (fullScreen) press(page, '[aria-label="Expand panel"]');
