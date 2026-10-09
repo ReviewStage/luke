@@ -460,7 +460,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
           agentId: params.agentId,
           text: params.text,
-          delivery: params.delivery,
+          clientKey: params.clientKey,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

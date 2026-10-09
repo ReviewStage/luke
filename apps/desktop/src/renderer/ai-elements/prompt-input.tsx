@@ -14,10 +14,14 @@ import { cn } from "./utils";
  * prompt-input.tsx -- AI Elements' PromptInput: the box a message to a model is written in, and the row of controls under it.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to Luke's tokens: one rounded field on the panel's raised
- * surface behind its hairline, the textarea sizing itself to its words
- * from one line to about eight and scrolling past that, and under it a
- * footer with whatever the owner puts at either end. The registry's
+ * restyled to Luke's tokens: one rounded card on the panel's raised
+ * surface behind its hairline, which brightens while the card holds focus,
+ * the textarea in the panel's own font sizing itself to its words from one
+ * line to about eight and scrolling past that, and under it a footer with
+ * whatever the owner puts at either end. The field is the panel's font and
+ * no border because base.css resets a textarea to that, where Tailwind's
+ * preflight would have; the utilities here say only what the reset does
+ * not. The registry's
  * attachments, speech button, selects, hover cards, tabs, and command
  * palette are not here, because nothing draws them yet; each arrives with
  * the surface that first does, and the submit button's status icons are
@@ -100,7 +104,7 @@ export function PromptInputTextarea({
   return (
     <textarea
       className={cn(
-        "field-sizing-content max-h-[calc(8*1.45em+16px)] min-h-[calc(1.45em+16px)] w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-[13px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60",
+        "field-sizing-content max-h-[calc(8*1.45em+20px)] min-h-[calc(1.45em+20px)] w-full resize-none overflow-y-auto bg-transparent px-3 py-[10px] text-[13px] leading-[1.45] text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60",
         className,
       )}
       name={MESSAGE_FIELD}
@@ -131,22 +135,6 @@ export function PromptInputTools({ className, ...props }: PromptInputToolsProps)
   return <div className={cn("flex items-center gap-1", className)} {...props} />;
 }
 
-export type PromptInputButtonProps = ComponentProps<"button">;
-
-/** One control in the footer: a 28px ghost button around a 16px icon. */
-export function PromptInputButton({ className, ...props }: PromptInputButtonProps): ReactNode {
-  return (
-    <button
-      type="button"
-      className={cn(
-        "flex size-7 cursor-default items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-45 [&>svg]:size-4",
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
 /** Where the exchange stands, which decides the submit's icon: the registry's `ChatStatus` words. */
 export const PROMPT_INPUT_STATUS = {
   READY: "ready",
@@ -160,7 +148,7 @@ export type PromptInputSubmitProps = ComponentProps<"button"> & {
   status?: PromptInputStatus;
 };
 
-/** The submit: a filled 28px button that sends, or shows that a send is out or a reply streams. */
+/** The submit: a filled round 28px button that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
 export function PromptInputSubmit({
   className,
   status = PROMPT_INPUT_STATUS.READY,
@@ -171,14 +159,15 @@ export function PromptInputSubmit({
   if (status === PROMPT_INPUT_STATUS.SUBMITTED) {
     icon = <Loader2Icon className="size-4 animate-spin" />;
   } else if (status === PROMPT_INPUT_STATUS.STREAMING) {
-    icon = <SquareIcon className="size-4" />;
+    // Filled, as every chat draws its Stop; the registry's outline reads as a checkbox at this size.
+    icon = <SquareIcon className="size-3.5 fill-current" />;
   }
   return (
     <button
       type="submit"
       aria-label="Send"
       className={cn(
-        "flex size-7 cursor-default items-center justify-center rounded-md bg-primary text-primary-foreground transition-opacity disabled:opacity-45",
+        "flex size-7 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-45",
         className,
       )}
       {...props}

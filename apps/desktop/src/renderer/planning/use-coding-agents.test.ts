@@ -233,16 +233,16 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   );
   await tab.mount();
 
-  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "queue");
+  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1");
   await settle();
   assert.deepEqual(answer, { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } });
   assert.deepEqual(tab.asked[1], {
     kind: ACT_KIND.CODING_AGENTS_MESSAGE,
-    payload: { agentId: AGENT, text: "Also expire them after a week.", delivery: "queue" },
+    payload: { agentId: AGENT, text: "Also expire them after a week.", clientKey: "send-1" },
   });
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
-  answer = await tab.control().onMessage(AGENT, "And tests.", "steer");
+  answer = await tab.control().onMessage(AGENT, "And tests.", "send-2");
   await settle();
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
   // Nothing was read again: the answer is the status, and a refusal is none.
@@ -250,7 +250,7 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
   // A service that never answered reads as unanswered.
-  answer = await tab.control().onMessage(AGENT, "Hello?", "steer");
+  answer = await tab.control().onMessage(AGENT, "Hello?", "send-3");
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
 });
 

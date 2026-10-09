@@ -142,7 +142,7 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         const { agentId, ...request } = yield* read(
           codingAgentMessageParamsSchema,
           params,
-          "messaging an agent names the agent, its words, and their delivery",
+          "messaging an agent names the agent, its words, and the send's key",
         );
         const answer = yield* asked(client.message(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);

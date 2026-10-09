@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import {
-  awaitedDeliveryOf,
-  CODING_AGENT_DELIVERY,
-  CODING_AGENT_STATUS,
-} from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
@@ -33,7 +29,7 @@ import {
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { awaitingLineId, hostTurnId } from "../server/hosted/brain-host/ids";
+import { hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
@@ -59,6 +55,7 @@ import {
   type ConversationTarget,
   listMessagesPast,
   type MessageCursor,
+  STORE_WRITE_EFFECT,
   storeWriter,
 } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
@@ -250,37 +247,45 @@ function codingTurn(
 
 const STEP_START = "step-start";
 
-/** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it under the delivery given. */
-const awaitingLine = (
-  target: ConversationTarget,
-  text: string,
-  delivery: (typeof CODING_AGENT_DELIVERY)[keyof typeof CODING_AGENT_DELIVERY],
-  deliveryId: string,
-) =>
+/** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it, under the key given. */
+const awaitingLine = (target: ConversationTarget, text: string, clientKey: string) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const written = yield* writer.writeAwaitingLine(
       target,
-      { text, delivery },
-      Effect.succeed(Option.some(deliveryId)),
+      { text, clientKey },
+      Effect.succeed(true),
     );
     assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
-    return written.success.value.id;
+    return written.success.value;
   });
 
-/** Each user line of the transcript by eve's delivery for it, with the turn that owns it; a line no delivery named is absent. */
-const linesByDelivery = (target: ConversationTarget, deliveryIds: readonly string[]) =>
+/** Each user line of the transcript by the key it was sent under, with the turn that owns it; a line no key named is absent. */
+const linesByKey = (target: ConversationTarget, keys: readonly string[]) =>
   Effect.map(
     listMessagesPast(target.userId, target.conversationId, CODER_TOOL_SET, CURSOR_START),
     (page) => {
       assert.ok(page.read.ok);
       const rows = page.read.value;
-      return deliveryIds.map((deliveryId) => {
-        const row = rows.find((record) => record.clientId === awaitingLineId(deliveryId));
-        return row === undefined
-          ? undefined
-          : { turnId: row.turnId, awaits: awaitedDeliveryOf(row.message) };
+      return keys.map((key) => {
+        const row = rows.find((record) => record.clientId === sentLineId(key));
+        return row === undefined ? undefined : { turnId: row.turnId };
       });
+    },
+  );
+
+/** The developer's lines of the conversation in order: each line's words, and whether a turn has taken it. */
+const developerLines = (target: ConversationTarget) =>
+  Effect.map(
+    listMessagesPast(target.userId, target.conversationId, CODER_TOOL_SET, CURSOR_START),
+    (page) => {
+      assert.ok(page.read.ok);
+      return page.read.value
+        .filter((record) => record.message.role === MESSAGE_ROLE.USER)
+        .map((record) => ({
+          text: record.message.parts.find(isTextUIPart)?.text,
+          taken: record.turnId !== undefined,
+        }));
     },
   );
 
@@ -566,7 +571,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "a line the developer sent ahead of its turn is taken by the turn that receives it, in place: its delivery clears, no second row is written, and the agent reads as running from the send until the turn opens on it",
+    "a line the developer sent ahead of its turn is taken by the turn that receives it, in place: no second row is written, and the agent reads as running from the send until the turn opens on it",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore;
@@ -588,30 +593,17 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
               lineAwaits: awaiting.has(target.conversationId),
             });
           });
-        const lines = () =>
-          Effect.map(transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent), (page) =>
-            page.messages
-              .filter((message) => message.role === MESSAGE_ROLE.USER)
-              .map((message) => ({
-                text: message.parts.find(isTextUIPart)?.text,
-                awaits: awaitedDeliveryOf(message),
-              })),
-          );
+        const lines = () => developerLines(target);
         const first = codingTurn("turn_0", "turn.completed");
         const [started, received, ...rest] = first;
         assert.ok(started && received);
 
         // The turn opens on the plan; a steer sent while it runs stands at once, awaiting it.
         yield* play([started, received]);
-        yield* awaitingLine(
-          target,
-          "Use the shared helper.",
-          CODING_AGENT_DELIVERY.STEER,
-          "d-steer",
-        );
+        yield* awaitingLine(target, "Use the shared helper.", "k-steer");
         assert.deepEqual(yield* lines(), [
-          { text: PLAN_TEXT, awaits: undefined },
-          { text: "Use the shared helper.", awaits: CODING_AGENT_DELIVERY.STEER },
+          { text: PLAN_TEXT, taken: true },
+          { text: "Use the shared helper.", taken: false },
         ]);
         assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
         // The turn receives the steer: the line is its now, in place, and no row is written beside it.
@@ -626,8 +618,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           ),
         ]);
         assert.deepEqual(yield* lines(), [
-          { text: PLAN_TEXT, awaits: undefined },
-          { text: "Use the shared helper.", awaits: undefined },
+          { text: PLAN_TEXT, taken: true },
+          { text: "Use the shared helper.", taken: true },
         ]);
         const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
         assert.equal(
@@ -635,9 +627,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           2,
         );
 
-        // A queued line sent while the turn still runs waits for it: the turn ends, and the
-        // agent reads as running on the line's account alone until the next turn opens on it.
-        yield* awaitingLine(target, "Now add the tests.", CODING_AGENT_DELIVERY.QUEUE, "d-queue");
+        // A line sent as the turn ends awaits the next turn: the agent reads as running on the
+        // line's account alone until that turn opens on it.
+        yield* awaitingLine(target, "Now add the tests.", "k-next");
         yield* play(rest);
         const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
         assert.equal(turns.get(target.conversationId)?.status, TURN_STATUS.SETTLED);
@@ -657,7 +649,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           ),
         ]);
         const taken = yield* lines();
-        assert.deepEqual(taken.at(-1), { text: "Now add the tests.", awaits: undefined });
+        assert.deepEqual(taken.at(-1), { text: "Now add the tests.", taken: true });
         assert.equal(taken.length, 3);
         assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
         yield* play([stamped({ type: "turn.completed", data: { turnId: "turn_1", sequence: 1 } })]);
@@ -666,7 +658,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "two awaiting lines with the same words are told apart by eve's delivery: a steer sent after a queue is received first and takes its own row, and the queue's turn takes the queue's; a stream naming no delivery falls back to the words",
+    "two awaiting lines with the same words are taken in the order sent, each by the turn that receives it, and a line sent again under its key is the one already standing: nothing is dispatched and no second row is written",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore;
@@ -681,57 +673,53 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const [started, received] = codingTurn("turn_0", "turn.completed");
         assert.ok(started && received);
         yield* play([started, received]);
-        yield* awaitingLine(target, "Run checks", CODING_AGENT_DELIVERY.QUEUE, "d-queue");
-        yield* awaitingLine(target, "Run checks", CODING_AGENT_DELIVERY.STEER, "d-steer");
+        const first = yield* awaitingLine(target, "Run checks", "k-1");
+        yield* awaitingLine(target, "Run checks", "k-2");
+        assert.equal(first.effect, STORE_WRITE_EFFECT.WRITTEN);
 
-        // The steer is received in the turn under way, named by its own delivery beside the start's.
-        yield* play([
-          stampedEveEvent(
-            {
-              type: "message.received",
-              data: { turnId: "turn_0", sequence: 0, message: "Run checks" },
-            },
-            NOW,
-            ["d-plan", "d-steer"],
-          ),
-        ]);
-        assert.deepEqual(yield* linesByDelivery(target, ["d-queue", "d-steer"]), [
-          { turnId: undefined, awaits: CODING_AGENT_DELIVERY.QUEUE },
-          { turnId: hostTurnId(sessionId, "turn_0"), awaits: undefined },
-        ]);
+        // The same key again: the line stands, eve is not asked, and the row is the first's.
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        let dispatched = false;
+        const again = yield* writer.writeAwaitingLine(
+          target,
+          { text: "Run checks", clientKey: "k-1" },
+          Effect.sync(() => {
+            dispatched = true;
+            return true;
+          }),
+        );
+        assert.ok(Result.isSuccess(again) && Option.isSome(again.success));
+        assert.deepEqual(again.success.value, {
+          id: first.id,
+          effect: STORE_WRITE_EFFECT.REPEATED,
+        });
+        assert.equal(dispatched, false);
+        assert.equal((yield* developerLines(target)).length, 3);
 
-        // The next turn opens on the queued line, named by its delivery.
-        yield* TestClock.adjust("1 minute");
+        // The turn under way receives the words once: the older line is its.
         yield* play([
-          stampedEveEvent({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }, NOW, [
-            "d-queue",
-          ]),
-          stampedEveEvent(
-            {
-              type: "message.received",
-              data: { turnId: "turn_1", sequence: 1, message: "Run checks" },
-            },
-            NOW,
-            ["d-queue"],
-          ),
-        ]);
-        assert.deepEqual(yield* linesByDelivery(target, ["d-queue", "d-steer"]), [
-          { turnId: hostTurnId(sessionId, "turn_1"), awaits: undefined },
-          { turnId: hostTurnId(sessionId, "turn_0"), awaits: undefined },
-        ]);
-
-        // A stream that names no delivery still takes the oldest line with the words received.
-        yield* awaitingLine(target, "And lint", CODING_AGENT_DELIVERY.QUEUE, "d-lint");
-        yield* TestClock.adjust("1 minute");
-        yield* play([
-          stamped({ type: "turn.started", data: { turnId: "turn_2", sequence: 2 } }),
           stamped({
             type: "message.received",
-            data: { turnId: "turn_2", sequence: 2, message: "And lint" },
+            data: { turnId: "turn_0", sequence: 0, message: "Run checks" },
           }),
         ]);
-        assert.deepEqual(yield* linesByDelivery(target, ["d-lint"]), [
-          { turnId: hostTurnId(sessionId, "turn_2"), awaits: undefined },
+        assert.deepEqual(yield* linesByKey(target, ["k-1", "k-2"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
+          { turnId: undefined },
+        ]);
+
+        // The next turn opens on the other.
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
+          stamped({
+            type: "message.received",
+            data: { turnId: "turn_1", sequence: 1, message: "Run checks" },
+          }),
+        ]);
+        assert.deepEqual(yield* linesByKey(target, ["k-1", "k-2"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
+          { turnId: hostTurnId(sessionId, "turn_1") },
         ]);
       }),
   );

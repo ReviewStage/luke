@@ -1,14 +1,14 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
-  type CodingAgentDelivery,
   type CodingAgentMessage,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -18,6 +18,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
+
+/**
+ * The message box under an agent's transcript: one card that reads the
+ * same whatever the agent is doing, one button that is Send or Stop, Enter
+ * to send, a send that stands in the transcript at once and is reconciled
+ * with the service's row, and Retry under the card carrying the failed
+ * send's key again. The stylesheet's part, a textarea reset to the panel's
+ * font with no border of the browser's, is held as a contract on base.css,
+ * since jsdom computes no cascade.
+ */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
@@ -39,14 +49,13 @@ const PLAN: CodingAgentMessage = {
 
 const RUNNING_AGENT = { agent: { ...AGENT, status: CODING_AGENT_STATUS.RUNNING } } as const;
 
-/** A row of the developer's as the service writes one: awaiting its delivery, or taken into its turn. */
-function row(id: string, text: string, awaiting?: CodingAgentDelivery): CodingAgentMessage {
-  return {
-    id,
-    role: "user",
-    parts: [{ type: "text", text }],
-    ...(awaiting === undefined ? undefined : { metadata: { delivery: awaiting } }),
-  };
+const PLACEHOLDER = "Message the agent…";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+
+/** A row of the developer's as the service writes one. */
+function row(id: string, text: string): CodingAgentMessage {
+  return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
 interface Standing {
@@ -57,7 +66,7 @@ interface Standing {
 /** One message sent, held until the test answers it. */
 interface Sent {
   text: string;
-  delivery: CodingAgentDelivery;
+  clientKey: string;
   answer: (answer: CodingAgentAgentAnswer) => void;
 }
 
@@ -92,9 +101,9 @@ function mount(initial: Standing) {
     const composer = useAgentComposer({
       agentId: AGENT_ID,
       messages: held.messages,
-      send: (_agentId, text, delivery) =>
+      send: (_agentId, text, clientKey) =>
         new Promise((answer) => {
-          sends.push({ text, delivery, answer });
+          sends.push({ text, clientKey, answer });
         }),
       onStatus: (_agentId, status) => {
         statuses.push(status);
@@ -126,6 +135,8 @@ function mount(initial: Standing) {
     assert.ok(found, "the box is drawn");
     return found;
   };
+  const button = (label: string) =>
+    container.querySelector<HTMLButtonElement>(`.agent-composer button[aria-label="${label}"]`);
   return {
     container,
     sends,
@@ -166,179 +177,145 @@ function mount(initial: Standing) {
     /** The developer's bubbles in the transcript, by their words. */
     bubbles: () =>
       [...container.querySelectorAll('[role="log"] .is-user')].map((each) => each.textContent),
-    /** The queued rows above the box, by their words. */
-    queued: () =>
-      [...container.querySelectorAll("[data-queued-id]")].map((each) => ({
-        id: each.getAttribute("data-queued-id"),
-        words: each.querySelector("span:not([aria-hidden])")?.textContent,
-      })),
-    buttons: (label: string) => [
-      ...container.querySelectorAll<HTMLButtonElement>(`button[aria-label="${label}"]`),
-    ],
+    /** The one button at the card's right: its name and whether it takes a press; none drawn reads as none. */
+    control: () => {
+      const buttons = [...container.querySelectorAll<HTMLButtonElement>(".agent-composer button")];
+      const [one] = buttons.filter((each) => each.textContent !== "Retry");
+      assert.equal(buttons.filter((each) => each.textContent !== "Retry").length, 1);
+      return one === undefined
+        ? undefined
+        : { label: one.getAttribute("aria-label"), disabled: one.disabled, type: one.type };
+    },
+    send: () => button("Send"),
+    stop: () => button("Stop"),
     note: () => container.querySelector('[role="alert"]')?.textContent ?? undefined,
+    retry: () => container.querySelector<HTMLButtonElement>('[role="alert"] button'),
   };
 }
 
-test("Enter sends the words now while a turn runs and the line stands in the transcript at once; Shift+Enter is the browser's new line", async () => {
+test("the box reads the same running or idle: one placeholder, no hint, no queue, and no menu; Enter sends under a fresh key and Shift+Enter is the browser's new line", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
-  assert.equal(tab.field().placeholder, "Message the agent…");
+  const same = () => {
+    assert.equal(tab.field().placeholder, PLACEHOLDER);
+    assert.equal(tab.container.querySelector(".agent-composer-hint"), null);
+    assert.equal(tab.container.querySelector("[data-queued-id]"), null);
+    assert.equal(tab.container.querySelector('[role="menu"], [aria-haspopup="menu"]'), null);
+    assert.equal(tab.container.querySelectorAll(".agent-composer textarea").length, 1);
+  };
+  same();
   tab.type("Also expire them after a week.");
 
   // Shift+Enter is left to the browser, which is a new line; nothing goes.
   assert.equal(tab.key({ key: "Enter", shiftKey: true }), true);
-  assert.deepEqual(tab.sends, []);
+  assert.equal(tab.sends.length, 0);
 
   assert.equal(tab.key({ key: "Enter" }), false);
   assert.deepEqual(
-    tab.sends.map(({ text, delivery }) => ({ text, delivery })),
-    [{ text: "Also expire them after a week.", delivery: CODING_AGENT_DELIVERY.STEER }],
+    tab.sends.map(({ text }) => text),
+    ["Also expire them after a week."],
   );
-  // The box is held while the message is out, and the line is the developer's bubble already.
+  assert.match(tab.sends[0]?.clientKey ?? "", UUID);
+  await tab.answer(0, RUNNING_AGENT);
+
+  // Idle, the box is the same box, and a modified Enter has no meaning of its own: it sends.
+  await tab.stand({ status: CODING_AGENT_STATUS.COMPLETED });
+  same();
+  tab.type("And the docs.");
+  assert.equal(tab.key({ key: "Enter", altKey: true }), false);
+  assert.equal(tab.sends.length, 2);
+  assert.equal(tab.sends[1]?.text, "And the docs.");
+  assert.notEqual(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
+  await tab.stand({ status: CODING_AGENT_STATUS.STARTING });
+  same();
+});
+
+test("the one button is Send with words, disabled with none while the agent is idle or starting, and Stop with none while a turn runs; Stop stops the agent, and Enter on an empty box does nothing", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+  tab.type("Also handle the empty case.");
+  assert.deepEqual(tab.control(), { label: "Send", disabled: false, type: "submit" });
+  tab.type("");
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+
+  await tab.stand({ status: CODING_AGENT_STATUS.RUNNING });
+  assert.deepEqual(tab.control(), { label: "Stop", disabled: false, type: "button" });
+  assert.equal(tab.key({ key: "Enter" }), false);
+  assert.equal(tab.sends.length, 0);
+  assert.equal(tab.stops(), 0);
+  tab.type("Push what you have.");
+  assert.deepEqual(tab.control(), { label: "Send", disabled: false, type: "submit" });
+  tab.type("");
+  const stop = tab.stop();
+  assert.ok(stop);
+  await act(async () => {
+    stop.click();
+    await Promise.resolve();
+  });
+  assert.equal(tab.stops(), 1);
+  assert.equal(tab.container.querySelector("header button"), null);
+
+  // A starting agent has no turn the service could cancel yet, so Stop waits for one.
+  await tab.stand({ status: CODING_AGENT_STATUS.STARTING });
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+});
+
+test("a send stands in the transcript at once as the developer's line and holds the box; the service's answer moves the status and frees it, and the service's own row takes the line's place", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  tab.type("Also expire them after a week.");
+  tab.key({ key: "Enter" });
   assert.equal(tab.field().value, "");
   assert.equal(tab.field().disabled, true);
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
   assert.deepEqual(tab.bubbles(), ["Also expire them after a week."]);
-  assert.deepEqual(tab.queued(), []);
 
   await tab.answer(0, RUNNING_AGENT);
   assert.equal(tab.field().disabled, false);
   assert.deepEqual(tab.statuses, [CODING_AGENT_STATUS.RUNNING]);
+  assert.deepEqual(tab.control(), { label: "Stop", disabled: false, type: "button" });
 
   // The service's own row for the line arrives, and takes the line's place: one bubble, not two.
-  await tab.stand({
-    messages: [PLAN, row("m-1", "Also expire them after a week.", CODING_AGENT_DELIVERY.STEER)],
-  });
-  assert.deepEqual(tab.bubbles(), ["Also expire them after a week."]);
   await tab.stand({ messages: [PLAN, row("m-1", "Also expire them after a week.")] });
   assert.deepEqual(tab.bubbles(), ["Also expire them after a week."]);
 });
 
-test("⌥Enter queues, and so does the menu on the send: the lines stand above the box marked Queued, in order, until their turn takes them", async () => {
-  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
-  assert.match(tab.container.querySelector(".agent-composer-hint")?.textContent ?? "", /queue/u);
-  tab.type("Then add tests.");
-  assert.equal(tab.key({ key: "Enter", altKey: true }), false);
-  assert.deepEqual(
-    tab.sends.map(({ text, delivery }) => ({ text, delivery })),
-    [{ text: "Then add tests.", delivery: CODING_AGENT_DELIVERY.QUEUE }],
-  );
-  assert.deepEqual(
-    tab.queued().map((each) => each.words),
-    ["Then add tests."],
-  );
-  assert.match(tab.container.querySelector("[data-queued-id]")?.textContent ?? "", /Queued/u);
-  assert.deepEqual(tab.bubbles(), []);
-  await tab.answer(0, RUNNING_AGENT);
-
-  tab.type("And docs.");
-  const chevron = tab.buttons("How to send")[0];
-  assert.ok(chevron);
-  act(() => chevron.click());
-  const menu = tab.container.querySelector('[role="menu"]');
-  assert.ok(menu, "the menu opens");
-  assert.deepEqual(
-    [...menu.querySelectorAll('[role="menuitem"]')].map((each) => each.textContent),
-    ["Send now", "Queue for after this turn"],
-  );
-  const queue = menu.querySelector<HTMLButtonElement>(
-    `[data-delivery="${CODING_AGENT_DELIVERY.QUEUE}"]`,
-  );
-  assert.ok(queue);
-  act(() => queue.click());
-  assert.equal(tab.container.querySelector('[role="menu"]'), null);
-  assert.deepEqual(tab.sends[1]?.delivery, CODING_AGENT_DELIVERY.QUEUE);
-  assert.deepEqual(
-    tab.queued().map((each) => each.words),
-    ["Then add tests.", "And docs."],
-  );
-  await tab.answer(1, RUNNING_AGENT);
-
-  // The service's rows take the lines' places, in the same order, still waiting.
-  await tab.stand({
-    messages: [
-      PLAN,
-      row("m-1", "Then add tests.", CODING_AGENT_DELIVERY.QUEUE),
-      row("m-2", "And docs.", CODING_AGENT_DELIVERY.QUEUE),
-    ],
-  });
-  assert.deepEqual(tab.queued(), [
-    { id: "m-1", words: "Then add tests." },
-    { id: "m-2", words: "And docs." },
-  ]);
-  assert.deepEqual(tab.bubbles(), []);
-
-  // Their turn takes them: the rows join the transcript and the queue clears.
-  await tab.stand({ messages: [PLAN, row("m-1", "Then add tests."), row("m-2", "And docs.")] });
-  assert.deepEqual(tab.queued(), []);
-  assert.deepEqual(tab.bubbles(), ["Then add tests.", "And docs."]);
-});
-
-test("idle, a send opens a new turn: the status goes back to running and the Stop and the keys come with it", async () => {
-  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
-  assert.equal(tab.field().placeholder, "Ask for changes or a follow-up…");
-  assert.equal(tab.container.querySelector(".agent-composer-hint")?.textContent, "");
-  assert.deepEqual(tab.buttons("Stop"), []);
-  assert.deepEqual(tab.buttons("How to send"), []);
-  // ⌥Enter idle goes the plain way, since an idle agent takes either as its next turn.
-  tab.type("Also handle the empty case.");
-  assert.equal(tab.key({ key: "Enter", altKey: true }), false);
-  assert.deepEqual(
-    tab.sends.map(({ text, delivery }) => ({ text, delivery })),
-    [{ text: "Also handle the empty case.", delivery: CODING_AGENT_DELIVERY.STEER }],
-  );
-
-  await tab.answer(0, RUNNING_AGENT);
-  assert.deepEqual(tab.statuses, [CODING_AGENT_STATUS.RUNNING]);
-  assert.equal(tab.field().placeholder, "Message the agent…");
-  assert.equal(tab.buttons("Stop").length, 1);
-  assert.match(tab.container.querySelector(".agent-composer-hint")?.textContent ?? "", /send now/u);
-});
-
-test("a message that did not go comes back into the box with why and Retry, which sends it the same way; an agent ended for good closes the box with the reason", async () => {
+test("a message that did not go comes back into the box with why under the card and Retry, which sends it again under the same key; an edit is a new message under a new key; an agent ended for good keeps the box, disabled, with the reason and no Retry", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.type("Then add tests.");
-  tab.key({ key: "Enter", altKey: true });
-  assert.deepEqual(
-    tab.queued().map((each) => each.words),
-    ["Then add tests."],
-  );
+  tab.key({ key: "Enter" });
+  assert.deepEqual(tab.bubbles(), ["Then add tests."]);
 
   await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
   assert.equal(tab.field().value, "Then add tests.");
   assert.equal(tab.field().disabled, false);
-  assert.deepEqual(tab.queued(), []);
+  assert.deepEqual(tab.bubbles(), []);
   assert.match(tab.note() ?? "", /still starting/u);
 
-  const retry = tab.container.querySelector<HTMLButtonElement>('[role="alert"] button');
+  const retry = tab.retry();
   assert.ok(retry);
   act(() => retry.click());
   assert.deepEqual(
-    tab.sends.map(({ text, delivery }) => ({ text, delivery })),
-    [
-      { text: "Then add tests.", delivery: CODING_AGENT_DELIVERY.QUEUE },
-      { text: "Then add tests.", delivery: CODING_AGENT_DELIVERY.QUEUE },
-    ],
+    tab.sends.map(({ text }) => text),
+    ["Then add tests.", "Then add tests."],
   );
+  assert.equal(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
   assert.equal(tab.note(), undefined);
 
-  // Editing the words is a new message: Retry goes with the edit, and the edit goes the way the developer next chooses.
-  await tab.answer(1, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
-  assert.match(tab.note() ?? "", /still starting/u);
+  // Editing the words is a new message: Retry goes with the edit, and the edit goes under a key of its own.
+  await tab.answer(1, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+  assert.match(tab.note() ?? "", /didn't hear back/u);
   tab.type("Then add tests and docs.");
   assert.equal(tab.note(), undefined);
-  assert.equal(tab.container.querySelector('[role="alert"] button'), null);
+  assert.equal(tab.retry(), null);
   tab.key({ key: "Enter" });
-  assert.deepEqual(tab.sends[2] && { text: tab.sends[2].text, delivery: tab.sends[2].delivery }, {
-    text: "Then add tests and docs.",
-    delivery: CODING_AGENT_DELIVERY.STEER,
-  });
+  assert.equal(tab.sends[2]?.text, "Then add tests and docs.");
+  assert.notEqual(tab.sends[2]?.clientKey, tab.sends[0]?.clientKey);
 
   await tab.answer(2, { failure: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED });
-  assert.equal(tab.container.querySelector("textarea"), null);
-  assert.match(
-    tab.container.querySelector(".agent-composer-closed")?.textContent ?? "",
-    /ended for good/u,
-  );
-  assert.equal(tab.note(), undefined);
+  assert.equal(tab.field().placeholder, PLACEHOLDER);
+  assert.equal(tab.field().disabled, true);
+  assert.match(tab.note() ?? "", /ended for good/u);
+  assert.equal(tab.retry(), null);
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
 });
 
 test("two lines of the same words sent before either is read back are read back one row at a time, across pages", async () => {
@@ -358,22 +335,6 @@ test("two lines of the same words sent before either is read back are read back 
   assert.deepEqual(tab.bubbles(), ["Add tests.", "Add tests."]);
 });
 
-test("the tab has one Stop, the composer's, while a turn runs, and it stops the agent", async () => {
-  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
-  assert.equal(tab.container.querySelector("header button"), null);
-  const stops = tab.buttons("Stop");
-  assert.equal(stops.length, 1);
-  await act(async () => {
-    stops[0]?.click();
-    await Promise.resolve();
-  });
-  assert.equal(tab.stops(), 1);
-
-  // A starting agent has no turn the service could cancel yet, so Stop waits for one.
-  await tab.stand({ status: CODING_AGENT_STATUS.STARTING });
-  assert.deepEqual(tab.buttons("Stop"), []);
-});
-
 test("the box takes focus as the tab opens unless the developer is typing elsewhere, Escape leaves it, and an empty box sends nothing", () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   assert.equal(document.activeElement, tab.field());
@@ -389,4 +350,21 @@ test("the box takes focus as the tab opens unless the developer is typing elsewh
   const other = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   assert.equal(document.activeElement, editor);
   assert.notEqual(document.activeElement, other.field());
+});
+
+test("the stylesheet resets a textarea to the panel's font with no border and no surface of the browser's, since Tailwind's preflight is left out, so the box is the card's and never a monospace well", () => {
+  const css = readFileSync(join(import.meta.dirname, "..", "styles", "base.css"), "utf8");
+  const rule = /^textarea \{([^}]*)\}/mu.exec(css);
+  assert.ok(rule, "base.css resets the textarea element");
+  const declarations = (rule[1] ?? "")
+    .split(";")
+    .map((each) => each.trim())
+    .filter((each) => each !== "");
+  for (const expected of ["font: inherit", "border: 0", "background: none", "color: inherit"]) {
+    assert.ok(declarations.includes(expected), expected);
+  }
+  // Nothing of the box's own names a font: the field is the panel's font by the reset alone.
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  assert.doesNotMatch(tab.field().className, /font-mono|font-\[/u);
+  assert.equal(tab.container.querySelector("form.agent-composer-form")?.tagName, "FORM");
 });

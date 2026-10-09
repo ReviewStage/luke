@@ -9,7 +9,6 @@ import {
   COMPACTION_METADATA,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
-  MESSAGE_DELIVERY,
   OBSERVATION_SOURCE,
   USER_MESSAGE_METADATA,
 } from "./ui-message-metadata.js";
@@ -58,25 +57,15 @@ test("a user row is a typed ask, a spoken ask, or an observation, each admitted 
     }),
     { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
   );
-  // A typed ask awaiting its turn carries how it reaches one; nothing else carries a delivery.
-  for (const delivery of Object.values(MESSAGE_DELIVERY)) {
-    assert.deepEqual(
-      parse(USER_MESSAGE_METADATA, {
-        author: MESSAGE_AUTHOR.DEVELOPER,
-        channel: MESSAGE_CHANNEL.TYPED,
-        delivery,
-      }),
-      { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED, delivery },
-    );
-  }
-  const refusedDelivery: UnparsedWireValue[] = [
-    { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED, delivery: "later" },
-    { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.VOICE, delivery: "queue" },
-    { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.HOOK, delivery: "steer" },
-  ];
-  for (const value of refusedDelivery) {
-    assert.equal(refusalOf(USER_MESSAGE_METADATA, value), SCHEMA_REFUSAL.MALFORMED);
-  }
+  // A typed ask carries nothing of how it was delivered: a row naming one is malformed.
+  assert.equal(
+    refusalOf(USER_MESSAGE_METADATA, {
+      author: MESSAGE_AUTHOR.DEVELOPER,
+      channel: MESSAGE_CHANNEL.TYPED,
+      delivery: "steer",
+    }),
+    SCHEMA_REFUSAL.MALFORMED,
+  );
   assert.deepEqual(parse(USER_MESSAGE_METADATA, spokenAsk), {
     author: MESSAGE_AUTHOR.DEVELOPER,
     channel: MESSAGE_CHANNEL.VOICE,
@@ -257,7 +246,7 @@ test("the emitted schema offers the three user shapes and names only the fields 
       : undefined,
   );
   assert.deepEqual(shapes, [
-    { keys: ["author", "channel", "delivery"], required: ["author", "channel"] },
+    { keys: ["author", "channel"], required: ["author", "channel"] },
     {
       keys: ["author", "channel", "delegation_id", "from_ms", "to_ms", "voice_session_id"],
       required: ["author", "channel"],

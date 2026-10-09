@@ -7,7 +7,6 @@ import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
-  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
 } from "./coding-agent-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
@@ -208,7 +207,7 @@ it.effect("reads the transcript past the cursor at the agent's messages address"
 );
 
 it.effect(
-  "messages an agent with its words and their delivery, and answers it running; each refusal the route names reads as its own failure",
+  "messages an agent with its words under the send's key, and answers it running; each refusal the route names reads as its own failure",
   () =>
     Effect.gen(function* () {
       const api = fakeCloudApi({
@@ -218,15 +217,15 @@ it.effect(
       const answer = yield* Effect.provide(
         client().message(AGENT_ID, {
           text: "  Also expire them after a week.  ",
-          delivery: CODING_AGENT_DELIVERY.QUEUE,
+          clientKey: "send-1",
         }),
         api.layer,
       );
       assert.deepEqual(answer, { agent: AGENT });
-      // The words travel trimmed, as the service keeps them.
+      // The words travel trimmed, as the service keeps them, with the key a retry carries again.
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
         text: "Also expire them after a week.",
-        delivery: CODING_AGENT_DELIVERY.QUEUE,
+        clientKey: "send-1",
       });
 
       const refusals = [
@@ -243,7 +242,7 @@ it.effect(
           },
         });
         const refused = yield* Effect.provide(
-          client().message(AGENT_ID, { text: "Go on.", delivery: CODING_AGENT_DELIVERY.STEER }),
+          client().message(AGENT_ID, { text: "Go on.", clientKey: "send-2" }),
           refusing.layer,
         );
         assert.deepEqual(refused, { failure });
@@ -253,13 +252,13 @@ it.effect(
       const tooLong = yield* Effect.provide(
         client().message(AGENT_ID, {
           text: "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
-          delivery: CODING_AGENT_DELIVERY.STEER,
+          clientKey: "send-3",
         }),
         api.layer,
       );
       assert.deepEqual(tooLong, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
       const blank = yield* Effect.provide(
-        client().message(AGENT_ID, { text: "   ", delivery: CODING_AGENT_DELIVERY.STEER }),
+        client().message(AGENT_ID, { text: "   ", clientKey: "send-4" }),
         api.layer,
       );
       assert.deepEqual(blank, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });

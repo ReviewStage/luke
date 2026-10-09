@@ -1671,7 +1671,7 @@ admission as the planning brain's (`brain-host/door.ts`,
 `brain-host/conversation.ts`), with the developer's own bearer the only
 caller the channel walks in (`coder-host/channel.ts`): a Start and a Stop
 come from a route still holding it, so no deployment actor acts here, and a
-follow-up queues. The agent (`coder/agent.ts`) runs none of eve's default
+follow-up steers. The agent (`coder/agent.ts`) runs none of eve's default
 tools and authors its own under `coder/tools/`, which is exactly the set the
 store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, `glob`, `web_fetch`, and `web_search`, and the code
@@ -1764,29 +1764,34 @@ every half second and let go at twenty seconds, so the desktop's loop of
 held reads ends on the page whose status says the agent ended and a tab on
 a starting agent costs one held read per hold; an agent that has ended
 answers at once.
-`POST /api/agents/{id}/messages` takes `{ text, delivery }`, the words
+`POST /api/agents/{id}/messages` takes `{ text, clientKey }`, the words
 trimmed and at most `CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS` long
-(`message-too-long`, 400, past that) and the delivery `steer` or `queue`:
-a steer joins the turn under way, so the model sees it at its next step and
-a call still generating is cut short and run again with it; a queue waits
-for the turn to end and opens the next; an idle agent opens a new turn on
-either. It confirms the developer still reaches the repository
+(`message-too-long`, 400, past that) and the client's own key for the send,
+at most `MAX_KEY_CHARS` long. The message steers the turn under way, which
+is the coder channel's own policy (`coder-host/channel.ts`): the model sees
+it at its next step, and a call still generating is cut short and run again
+with it; an idle agent opens a new turn on it. Nothing is handed to eve to
+hold for later, because eve can neither withdraw nor edit a message once it
+queues one. The route first reads whether a line already stands under the
+key (`sentLineStands`, by the `messages` row's `client_id`, which is
+`sentLineId(clientKey)`), and answers the agent as it stands with nothing
+sent again where one does, which is what makes a send repeated after a lost
+answer safe; then confirms the developer still reaches the repository
 (`repository-not-reachable` or `github-sign-in-required`, as a Start does),
-then hands the words to the agent's eve session under the developer's own
-bearer with eve's `turnPolicy` named per message, inside the conversation's
-lock (`writeAwaitingLine`), and writes them as a user row with no turn yet
-and `metadata.delivery` on it once eve has taken them, so the transcript
-shows the line at once and the turn eve opens on it finds the row standing
-when its own first write takes the lock; the relay's receipt of the line
-(`message.received`) takes that row into the turn in place, dropping the
-delivery and bumping the row's revision (`takeAwaitingLine`), rather than
-writing it again, so a reader tells a line still waiting from one the model
-has. An agent whose session has not claimed the conversation, or whose
-session eve answers is still coming up past the client's twenty-second
-loop, is `agent-not-ready` (409, tried again); a session eve no longer runs
-is `agent-retired` (409), since the agent's sandbox lives with its session;
-any other answer is `unavailable`, and none of them leaves a row behind.
-eve offers no way to withdraw a queued message, so there is no DELETE.
+hands the words to the agent's eve session under the developer's own
+bearer inside the conversation's lock (`writeAwaitingLine`, which reads the
+key again under the lock so two sends racing under one key send once), and
+writes them as a user row with no turn yet once eve has taken them, so the
+transcript shows the line at once and the turn eve opens on it finds the
+row standing when its own first write takes the lock; the relay's receipt
+of the line (`message.received`) takes the oldest turnless row with those
+words into the turn in place, bumping its revision (`takeAwaitingLine`),
+rather than writing it again. An agent whose session has not claimed the
+conversation, or whose session eve answers is still coming up past the
+client's twenty-second loop, is `agent-not-ready` (409, tried again); a
+session eve no longer runs is `agent-retired` (409), since the agent's
+sandbox lives with its session; any other answer is `unavailable`, and none
+of them leaves a row behind.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.

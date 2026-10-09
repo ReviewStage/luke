@@ -117,7 +117,7 @@ export const codingAgentMessagesAnswerViewSchema = EffectSchema.Union([
 
 export type CodingAgentMessagesAnswerView = typeof codingAgentMessagesAnswerViewSchema.Type;
 
-/** Messaging an agent, as the window asks it: the agent, and the message request the service takes. */
+/** Messaging an agent, as the window asks it: the agent, and the message request the service takes, its key the window's own. */
 export const codingAgentMessageParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   ...codingAgentMessageRequestSchema.fields,

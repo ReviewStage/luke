@@ -2,11 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type {
-  CodingAgentDelivery,
-  CodingAgentMessage,
-  CodingAgentStatus,
-} from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import {
   closesComposer,
@@ -26,19 +22,20 @@ import {
  * it, so a message to an agent that had finished turns its status back
  * and starts the transcript reading again; the row the service wrote for
  * the line arrives on that read, and the line is let go in its favour
- * (`unreadSentLines`). A message that did not go comes back into the box
- * with why beside it and Retry, which sends the words again the same way;
- * editing the words is a new message, sent the way the developer next
- * chooses, so Retry goes with the edit. A refusal that is for good closes
- * the box with its reason in place of the field. Another agent's tab
- * starts from nothing of this one's.
+ * (`unreadSentLines`). Every send goes under a key of its own, minted
+ * here, and a message that did not go comes back into the box with why
+ * under it and Retry, which sends the words again under the same key, so
+ * a send whose answer was lost reaches the agent once; editing the words
+ * is a new message under a new key, so Retry goes with the edit. A refusal
+ * that is for good holds the box, disabled, with its reason under it.
+ * Another agent's tab starts from nothing of this one's.
  */
 
-/** How one message is sent: the agent, the words, and how they reach a turn under way, answered as the view hears it. */
+/** How one message is sent: the agent, the words, and the key this send is known by, which Retry carries again, answered as the view hears it. */
 export type MessageSender = (
   agentId: string,
   text: string,
-  delivery: CodingAgentDelivery,
+  clientKey: string,
 ) => Promise<CodingAgentAgentAnswer>;
 
 /** Everything the composer draws and presses. */
@@ -52,9 +49,9 @@ export interface AgentComposerControl {
   note: string | undefined;
   /** Why the agent takes no message any more, in the host's words; nothing while it does. */
   closed: string | undefined;
-  /** Sends the words in the box, trimmed, the way named; nothing on an empty box, a send out, or a closed agent. */
-  send: (delivery: CodingAgentDelivery) => void;
-  /** Sends the words in the box again, the way the failed message went. */
+  /** Sends the words in the box, trimmed, under a fresh key; nothing on an empty box, a send out, or a closed agent. */
+  send: () => void;
+  /** Sends the words in the box again under the failed message's key, so a send whose answer was lost reaches the agent once. */
   retry: () => void;
   /** The lines sent that the transcript has not read back yet, in order. */
   sent: readonly SentLine[];
@@ -64,8 +61,8 @@ interface Held {
   agentId: string;
   draft: string;
   sending: boolean;
-  /** The last message that did not go: how it went, and why not. */
-  failed: { delivery: CodingAgentDelivery; note: string } | undefined;
+  /** The last message that did not go: the key it went under, which Retry sends again, and why not. */
+  failed: { clientKey: string; note: string } | undefined;
   closed: string | undefined;
   sent: readonly SentLine[];
   /** The service's rows that have answered a sent line, which no later line is read back by. */
@@ -121,11 +118,11 @@ export function useAgentComposer(input: {
     });
   }, [sent.length, held.sent.length]);
 
-  const sendDraft = (delivery: CodingAgentDelivery) => {
+  const sendDraft = (clientKey: string = crypto.randomUUID()) => {
     const text = held.draft.trim();
     if (text === "" || held.sending || held.closed !== undefined) return;
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
-    const line: SentLine = { id, text, delivery, known: knownDeveloperRows(messages) };
+    const line: SentLine = { id, text, known: knownDeveloperRows(messages) };
     setHeld((was) => ({
       ...was,
       draft: "",
@@ -135,7 +132,7 @@ export function useAgentComposer(input: {
       count: was.count + 1,
     }));
     latest.current
-      .send(agentId, text, delivery)
+      .send(agentId, text, clientKey)
       .catch((): CodingAgentAgentAnswer => UNANSWERED)
       .then((answer) => {
         // An answer to another agent's tab, or to a tab since remounted, is nobody's.
@@ -147,7 +144,7 @@ export function useAgentComposer(input: {
             ...was,
             draft: was.draft === "" ? text : was.draft,
             sending: false,
-            failed: { delivery, note },
+            failed: { clientKey, note },
             closed: closesComposer(answer.failure) ? note : was.closed,
             sent: was.sent.filter((each) => each.id !== id),
           }));
@@ -170,9 +167,9 @@ export function useAgentComposer(input: {
     sending: held.sending,
     note: held.closed === undefined ? held.failed?.note : undefined,
     closed: held.closed,
-    send: sendDraft,
+    send: () => sendDraft(),
     retry: () => {
-      if (held.failed !== undefined) sendDraft(held.failed.delivery);
+      if (held.failed !== undefined) sendDraft(held.failed.clientKey);
     },
     sent,
   };

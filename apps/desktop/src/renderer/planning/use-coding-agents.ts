@@ -67,7 +67,7 @@ export interface CodingAgentsControl {
   };
   /** Stops one agent; the list is read again once the service answers. */
   onStop: (agentId: string) => Promise<void>;
-  /** Sends one agent a message the way named, and takes the agent's status from the answer. */
+  /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
   onMessage: MessageSender;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
@@ -238,11 +238,11 @@ export function useCodingAgents(input: {
   };
 
   const onMessage = useCallback<MessageSender>(
-    async (agentId, text, delivery) => {
+    async (agentId, text, clientKey) => {
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
         agentId,
         text,
-        delivery,
+        clientKey,
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>

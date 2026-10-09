@@ -37,6 +37,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
+import { sentLineId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import {
   type PublishedCache,
@@ -75,6 +76,7 @@ import {
 } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
+import { sentLineStands } from "./hosted/store/message-reads.js";
 import { STORE_WRITE_REFUSAL } from "./hosted/store/writer.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -98,13 +100,14 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
  * cursor, held open while the agent runs (`hosted/coder-host/transcript.ts`).
  * A message (`POST /api/agents/{id}/messages`) is the developer's words
- * handed to the session the agent runs in, under the developer's own bearer,
- * naming how they reach a turn under way: a steer joins it and a queue
- * waits for it to end, and an idle agent opens a new turn on either. The
- * words are written as a user row awaiting its turn, under the
- * conversation's lock around eve's acceptance, so the transcript shows the
- * line at once with its delivery on it and the agent reads as running until
- * the turn that receives the line takes it (`brain-host/relay.ts`). The
+ * handed to the session the agent runs in, under the developer's own
+ * bearer, with the client's own key for the send: the words steer the turn
+ * under way, or open a turn where none runs, and are written as a user row
+ * awaiting its turn, under the conversation's lock around eve's acceptance,
+ * so the transcript shows the line at once and the agent reads as running
+ * until the turn that receives the line takes it (`brain-host/relay.ts`).
+ * A send repeated under its key, after its answer was lost, finds the line
+ * it already wrote and hands eve nothing again. The
  * route confirms the developer still reaches the repository first, so a
  * sign-in that lapsed is refused here rather than failing the turn's
  * checkout; the session's own step hook renews the credential at the
@@ -139,7 +142,7 @@ const QUERY = { ID: "id", AFTER: "after" } as const;
 /** A Start names a key and a choice at most, so a body past this is no Start. */
 const MAXIMUM_START_BODY_BYTES = 4_096;
 
-/** A message is its words and a delivery: the bound's characters at JSON's widest escape, and room for the keys around them. */
+/** A message is its words and a key: the bound's characters at JSON's widest escape, and room for the keys around them. */
 const MAXIMUM_MESSAGE_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1_024;
 
 export interface CodingAgentsAppSeams {
@@ -385,14 +388,18 @@ const REFUSAL_OF_SEND_OUTCOME = {
 
 /**
  * POST sends the agent a message: the developer's words handed to the
- * session the agent runs in with the delivery named, written as a line
- * awaiting its turn once eve has taken them. The hand-over runs inside the
- * conversation's lock, so the turn eve opens on the line finds the row
- * standing when its own first write takes the lock, and an eve that did not
- * take the message leaves no row behind; the writer fences the write
- * against the request going away between the two. A row the store failed
- * to write after eve took the message is the one gap left, and the relay
- * still writes the line when the turn receives it, without its marker.
+ * session the agent runs in, where they steer the turn under way or open
+ * one, written as a line awaiting its turn once eve has taken them. The
+ * hand-over runs inside the conversation's lock, so the turn eve opens on
+ * the line finds the row standing when its own first write takes the lock,
+ * and an eve that did not take the message leaves no row behind; the
+ * writer fences the write against the request going away between the two.
+ * A send repeated under its key finds the line it already wrote and hands
+ * eve nothing again: read once here, before GitHub is asked, and once more
+ * by the writer under the lock, so two sends racing under one key still
+ * send once. A row the store failed to write after eve took the message is
+ * the one gap left, and the relay still writes the line when the turn
+ * receives it.
  */
 const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
@@ -403,7 +410,15 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const { text, delivery } = asked.success;
+  const { text, clientKey } = asked.success;
+  const repeated = yield* hostedStoreOrUnavailable(
+    sentLineStands(userId, agent.conversationId, sentLineId(clientKey)),
+  );
+  if (repeated) {
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
+      agent: yield* summaryOf(userId, agent),
+    });
+  }
   // The turn's checkout and its credential renewals run on the developer's standing with GitHub,
   // so a sign-in that lapsed is the route's refusal rather than a turn failed at its first step.
   const app = yield* GitHubApp;
@@ -419,7 +434,6 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
       message: text,
-      delivery,
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>
@@ -431,14 +445,14 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
         ),
       ),
       Effect.map((sent) => {
-        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return Option.some(sent.deliveryId);
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
         refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
-        return Option.none();
+        return false;
       }),
     );
   const written = yield* hostedStoreOrUnavailable(
     Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { text, delivery }, dispatch),
+      write.writeAwaitingLine(target, { text, clientKey }, dispatch),
     ),
   );
   if (Result.isFailure(written)) {
