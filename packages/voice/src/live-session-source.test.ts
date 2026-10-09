@@ -5,9 +5,11 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
+  type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
   LIVE_DEFAULTS,
@@ -780,6 +782,70 @@ it.live(
         "both activity frames and the session's event to land",
       );
       assert.deepEqual(told, [busy, idle]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+    }),
+);
+
+it.live(
+  "a planning turn's work is taken off the socket for its listener, and a frame whose own words name another frame's kind still reaches its own listener",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+      assert.ok(opened?.onPlanWork && opened.onPlanActivity);
+      const worked: PlanWorkFrame[] = [];
+      const active: PlanActivityFrame[] = [];
+      opened.onPlanWork((work) => worked.push(work));
+      opened.onPlanActivity((activity) => active.push(activity));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const planId = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
+      const command = "grep -rn plan.draft src";
+      const work: PlanWorkFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_WORK,
+        planId,
+        turn: {
+          turnId: "turn-1",
+          startedAt: 0,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-1",
+              tool: PLAN_WORK_TOOL.REPOSITORY,
+              name: "run_in_repository",
+              state: PLAN_WORK_STATE.RUNNING,
+              subject: command,
+              input: JSON.stringify({ command }),
+            },
+          ],
+        },
+      };
+      const busy: PlanActivityFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
+        planId,
+        planner: { action: command },
+        notes: false,
+      };
+      first.receive(work);
+      first.receive(busy);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      yield* settled(
+        () => worked.length === 1 && active.length === 1 && reading.events.length === 1,
+        "the work, the activity, and the session's event to land",
+      );
+      assert.deepEqual(worked, [work]);
+      assert.deepEqual(active, [busy]);
       assert.deepEqual(
         reading.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],

@@ -6,7 +6,13 @@ import {
   LIVE_TRANSPORT_STATE,
   type VoiceLiveSessionChanged,
 } from "@sidecar/gateway";
-import { type PlanActivityFrame, type PlanCodeFrame, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  type PlanActivityFrame,
+  type PlanCodeFrame,
+  type PlanWorkFrame,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
+import { PLAN_WORK_PART, PLAN_WORK_STATE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLOSE_REASON,
   LIVE_DELEGATION_TARGET,
@@ -115,6 +121,10 @@ interface Fixture {
   code: PlanCodeFrame[];
   /** The service's code frame, as the source's door would deliver it. */
   tellCode(code: PlanCodeFrame): void;
+  /** Every work frame the holder told its caller, in order. */
+  work: PlanWorkFrame[];
+  /** The service's work frame, as the source's door would deliver it. */
+  tellWork(work: PlanWorkFrame): void;
   /** Every plan whose call the holder told its caller ended, in order. */
   callsEnded: string[];
   created: number;
@@ -136,6 +146,8 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     let activityListener: ((activity: PlanActivityFrame) => void) | undefined;
     const code: PlanCodeFrame[] = [];
     let codeListener: ((code: PlanCodeFrame) => void) | undefined;
+    const work: PlanWorkFrame[] = [];
+    let workListener: ((work: PlanWorkFrame) => void) | undefined;
     const callsEnded: string[] = [];
     const state = {
       sourceAvailable: true,
@@ -171,6 +183,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   onPlanCode: (listener: (code: PlanCodeFrame) => void) => {
                     codeListener = listener;
                   },
+                  onPlanWork: (listener: (work: PlanWorkFrame) => void) => {
+                    workListener = listener;
+                  },
                 }
               : undefined),
           };
@@ -189,6 +204,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       },
       onPlanCode: (frame) => {
         code.push(frame);
+      },
+      onPlanWork: (frame) => {
+        work.push(frame);
       },
       onPlanCallEnded: (planId) => {
         callsEnded.push(planId);
@@ -222,6 +240,10 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       code,
       tellCode: (frame) => {
         codeListener?.(frame);
+      },
+      work,
+      tellWork: (frame) => {
+        workListener?.(frame);
       },
       callsEnded,
       get reportsActivity() {
@@ -683,6 +705,40 @@ it.effect(
       // Code arriving after the call ended reaches nobody.
       f.tellCode(shown);
       assert.equal(f.code.length, 1);
+    }),
+);
+
+it.effect(
+  "a planning call passes on its own plan's turn work, drops work about another, and passes on none once the call ended",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+
+      const told: PlanWorkFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_WORK,
+        planId: INVITES_PLAN,
+        turn: {
+          turnId: "turn-1",
+          startedAt: 0,
+          state: PLAN_WORK_STATE.DONE,
+          earlierOmitted: false,
+          parts: [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+        },
+      };
+      f.tellWork(told);
+      f.tellWork({ ...told, planId: BILLING_PLAN });
+      assert.deepEqual(f.work, [told]);
+
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 4);
+      yield* settle();
+      f.tellWork(told);
+      assert.equal(f.work.length, 1);
     }),
 );
 

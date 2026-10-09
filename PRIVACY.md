@@ -13,7 +13,8 @@ read-only commands the planning model asks for in a plan's folder, described
 under "How the planning model reads your folder" below. The Mac app lists no
 coding agent sessions, and our service reads none either. No part of Luke's
 judgment runs on this Mac, so no transcript, working memory, or inbox of his
-is held here, in memory or on disk.
+is held here on disk, and in memory only the Work tab's turns described under
+"Your conversation with Luke" below.
 
 **Your conversation with Luke.** No part of Luke's judgment runs on your
 Mac, so no record of what he did at your ask is kept on this machine, and
@@ -22,6 +23,12 @@ those words back is a plan's Transcript tab: while the plan is open, Luke on
 your Mac reads what was said on the plan's calls from our service, the spoken
 words alone and never his judgment's record, and holds them in the window's
 memory to show them, beside the words of the call in progress; they go when
+you leave the plan or quit Luke. The other is a plan's Work tab: during a
+planning call, our service sends Luke on your Mac each of the planning model's
+turns as it works, what it wrote and each tool it called with the call's input
+and what the call answered, such as a command's output from the plan's folder
+or a public page's text, each cut short. Luke holds them in the panel's memory
+to show them, never in the voice window and never on disk, and they go when
 you leave the plan or quit Luke.
 A voice session on this Mac is a call about one plan, and it opens with
 nothing of your coding agent sessions and no line of your conversation, from

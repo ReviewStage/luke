@@ -11,6 +11,7 @@ import {
   type PlanActivityFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
+  type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
 } from "@sidecar/hosted";
 import {
@@ -83,6 +84,8 @@ export interface LiveSessionHolderOptions {
   onPlanActivity?: (activity: PlanActivityFrame) => void;
   /** Luke put code on screen on the standing planning call, on the same terms as `onPlanDraft`. */
   onPlanCode?: (code: PlanCodeFrame) => void;
+  /** A planning turn's work on the standing planning call changed, on the same terms as `onPlanDraft`. */
+  onPlanWork?: (work: PlanWorkFrame) => void;
   /** The planning call about the plan named ended, so what it put on screen goes with it. */
   onPlanCallEnded?: (planId: string) => void;
 }
@@ -336,6 +339,7 @@ export class LiveSessionHolder {
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       opened.onPlanActivity?.((activity) => this.#activity(session, activity));
       opened.onPlanCode?.((code) => this.#code(session, code));
+      opened.onPlanWork?.((work) => this.#work(session, work));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -556,6 +560,12 @@ export class LiveSessionHolder {
   #code(session: HeldSession, code: PlanCodeFrame): void {
     if (session.ended || code.planId !== session.planId) return;
     this.#options.onPlanCode?.(code);
+  }
+
+  /** A planning turn's work on the call about the plan the session is bound to, passed on while the session stands. */
+  #work(session: HeldSession, work: PlanWorkFrame): void {
+    if (session.ended || work.planId !== session.planId) return;
+    this.#options.onPlanWork?.(work);
   }
 
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {

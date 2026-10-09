@@ -12,7 +12,12 @@ import {
   voiceReportLiveActivityParamsSchema,
   voiceReportLiveTransportParamsSchema,
 } from "@sidecar/gateway";
-import type { PlanActivityFrame, PlanCodeFrame, PlanDraftFrame } from "@sidecar/hosted";
+import type {
+  PlanActivityFrame,
+  PlanCodeFrame,
+  PlanDraftFrame,
+  PlanWorkFrame,
+} from "@sidecar/hosted";
 import { unavailableLiveDiagnostics } from "@sidecar/voice";
 import { LiveSessionHolder } from "@sidecar/voice/live-session";
 import { readEither } from "@sidecar/wire/effect";
@@ -37,6 +42,8 @@ export interface LiveDependencies {
   showPlanActivity: (activity: PlanActivityFrame) => void;
   /** Where code Luke puts on screen during a planning call goes. */
   showPlanCode: (code: PlanCodeFrame) => void;
+  /** Where each planning turn's work during a planning call goes. */
+  showPlanWork: (work: PlanWorkFrame) => void;
   /** Where a planning call's end goes, so the code it put on screen is cleared with it. */
   planCallEnded: (planId: string) => void;
 }
@@ -77,6 +84,7 @@ export const composeLive = /* @__PURE__ */ Effect.fn("host/composeLive")(functio
     // What each part of Luke is doing on the call, as the service says it.
     onPlanActivity: (activity) => dependencies.showPlanActivity(activity),
     onPlanCode: (code) => dependencies.showPlanCode(code),
+    onPlanWork: (work) => dependencies.showPlanWork(work),
     onPlanCallEnded: (planId) => dependencies.planCallEnded(planId),
   });
 
