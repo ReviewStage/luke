@@ -161,12 +161,15 @@ What the user reaches through the App is read the same way.
 each, `GET /user/installations/{id}/repositories`, which is the repositories
 the installation covers that the user can also access, and answers them
 most recently updated first with whether there was any installation at all;
-a listing is paged the same way and stops at a thousand items (`PAGING`), and an
-installation uninstalled between the two reads reaches nothing rather than
-failing the whole. `userRepository(userId, "owner/name")` is the check a
-plan's repository passes before it is kept: only the installation on the
-owner can reach it, so only that one is paged, the name is matched the way
-GitHub folds case, and what is answered is the full name as GitHub spells it.
+a listing is paged the same way, and one GitHub is still answering full
+pages of at the bound (`PAGING`, fifty pages) is answered as unreadable
+rather than as the part that was read; an installation uninstalled between
+the two reads reaches nothing rather than failing the whole.
+`userRepository(userId, "owner/name")` is the check a plan's repository
+passes before it is kept: only the installation on the owner can reach it,
+so only that one is paged, and only as far as the page the repository is on,
+the name is matched the way GitHub folds case, and what is answered is the
+full name as GitHub spells it.
 A repository is reachable only through an installation. A public repository
 the token could read without one is deliberately not, because what the
 repository is for, a coding agent's checkout and pull request, needs the

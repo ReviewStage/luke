@@ -86,12 +86,13 @@ const HTTP_STATUS = { UNAUTHORIZED: 401, NOT_FOUND: 404 } as const;
 
 /**
  * GitHub pages a listing at most a hundred to a page. A listing is read page
- * by page until one comes back short, and never past this many pages, so a
- * GitHub that kept answering full pages could not keep the read going: a
- * user reaching more than a thousand repositories through one installation
- * sees its first thousand, most recently updated first.
+ * by page until one comes back short, or until the caller has what it came
+ * for, and never past this many pages: a GitHub still answering full pages
+ * at the bound is a listing that did not end, and is answered as unreadable
+ * rather than as the part of it that was read, so a repository past the
+ * bound is never refused as one the user cannot reach.
  */
-const PAGING = { PER_PAGE: 100, MAX_PAGES: 10 } as const;
+const PAGING = { PER_PAGE: 100, MAX_PAGES: 50 } as const;
 
 export interface GitHubAppSettings {
   /** The App's numeric id, which is the JWT's issuer. */
@@ -139,6 +140,8 @@ export const GITHUB_FAILURE = {
   STATUS: "status",
   /** GitHub answered, but not in the shape the read declares. */
   UNREADABLE: "unreadable",
+  /** GitHub was still answering full pages of a listing at the bound, so the listing did not end. */
+  UNBOUNDED: "unbounded",
 } as const;
 type GitHubFailure = (typeof GITHUB_FAILURE)[keyof typeof GITHUB_FAILURE];
 
@@ -218,7 +221,8 @@ export interface GitHubAppService {
    * One repository by `owner/name`, where the user reaches it through the
    * App, spelled as GitHub spells it; none where they do not, which is also
    * what an App installed nowhere answers. Only the installation on the
-   * owner can reach it, so only that one is read.
+   * owner can reach it, so only that one is read, and only as far as the
+   * repository.
    */
   readonly userRepository: (
     userId: string,
@@ -455,10 +459,16 @@ function sendAsUser(
   );
 }
 
+/** Whether a listing read so far holds what the caller came for, so no further page is asked. */
+type Enough<A> = (items: readonly A[]) => boolean;
+
+const WHOLE_LISTING: Enough<unknown> = () => false;
+
 /**
- * Every item of a paged listing on the user's token, read a hundred at a
- * time until a page comes back short, and never past `PAGING.MAX_PAGES`.
- * Each page's answer is read and closed before the next is asked for.
+ * A paged listing on the user's token, read a hundred at a time until a
+ * page comes back short or the items read are enough, and never past
+ * `PAGING.MAX_PAGES`, where a listing still going is unbounded. Each page's
+ * answer is read and closed before the next is asked for.
  */
 function readPages<A>(
   path: string,
@@ -466,6 +476,7 @@ function readPages<A>(
   readPage: (
     response: HttpClientResponse.HttpClientResponse,
   ) => Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired>,
+  enough: Enough<A> = WHOLE_LISTING,
 ): Effect.Effect<readonly A[], GitHubUnavailable | GitHubSignInRequired, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const items: A[] = [];
@@ -475,9 +486,9 @@ function readPages<A>(
       );
       const read = yield* Effect.scoped(Effect.flatMap(sendAsUser(request), readPage));
       items.push(...read);
-      if (read.length < PAGING.PER_PAGE) break;
+      if (read.length < PAGING.PER_PAGE || enough(items)) return items;
     }
-    return items;
+    return yield* new GitHubUnavailable({ reason: GITHUB_FAILURE.UNBOUNDED, status: undefined });
   });
 }
 
@@ -498,24 +509,29 @@ function installationsOnToken(
 
 /**
  * The repositories one installation reaches for the token's user, every page
- * of them. An installation GitHub no longer knows, uninstalled between the
- * listing that named it and this read, reaches nothing rather than failing
- * the whole.
+ * of them or as many as are enough. An installation GitHub no longer knows,
+ * uninstalled between the listing that named it and this read, reaches
+ * nothing rather than failing the whole.
  */
 function repositoriesOfInstallation(
   token: Redacted.Redacted,
   installationId: number,
+  enough: Enough<GitHubRepository> = WHOLE_LISTING,
 ): Effect.Effect<
   readonly GitHubRepository[],
   GitHubUnavailable | GitHubSignInRequired,
   HttpClient.HttpClient
 > {
-  return readPages(`/user/installations/${installationId}/repositories`, token, (response) =>
-    response.status === HTTP_STATUS.NOT_FOUND
-      ? Effect.succeed([])
-      : Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
-          answer.repositories.map(repositoryOf),
-        ),
+  return readPages(
+    `/user/installations/${installationId}/repositories`,
+    token,
+    (response) =>
+      response.status === HTTP_STATUS.NOT_FOUND
+        ? Effect.succeed([])
+        : Effect.map(readBody(response, InstallationRepositoriesSchema), (answer) =>
+            answer.repositories.map(repositoryOf),
+          ),
+    enough,
   );
 }
 
@@ -692,10 +708,12 @@ function githubAppService(
             sameName(installation.accountLogin, owner ?? ""),
         );
         if (onOwner === undefined) return Option.none();
-        const repositories = yield* repositoriesOfInstallation(token, onOwner.id);
-        return Option.fromNullishOr(
-          repositories.find((repository) => sameName(repository.fullName, fullName)),
+        const isNamed = (repository: GitHubRepository) => sameName(repository.fullName, fullName);
+        // The owner's listing is read only as far as the repository, which may be any page of it.
+        const repositories = yield* repositoriesOfInstallation(token, onOwner.id, (read) =>
+          read.some(isNamed),
         );
+        return Option.fromNullishOr(repositories.find(isNamed));
       }),
     userToken,
   };

@@ -651,6 +651,62 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
   );
 
   it.effect(
+    "the owner's listing is read only as far as the repository, which may be past its first page",
+    () =>
+      Effect.gen(function* () {
+        const many: RepositoryFixture[] = Array.from({ length: 250 }, (_, index) => ({
+          owner: "octo-org",
+          name: `service-${String(index).padStart(3, "0")}`,
+        }));
+        const fake = githubReaching([{ id: 2, login: "octo-org", repositories: many }]);
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const onPageTwo = yield* app
+          .userRepository(userId, "octo-org/service-150")
+          .pipe(Effect.provide(fake.layer));
+        const pagesRead = fake.sent.length;
+        const onPageThree = yield* app
+          .userRepository(userId, "octo-org/service-249")
+          .pipe(Effect.provide(fake.layer));
+
+        assert.equal(Option.getOrUndefined(onPageTwo)?.fullName, "octo-org/service-150");
+        assert.equal(Option.getOrUndefined(onPageThree)?.fullName, "octo-org/service-249");
+        // The installations, then pages one and two: the third page was never asked for.
+        assert.equal(pagesRead, 3);
+        assert.equal(fake.sent.length - pagesRead, 4);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
+    "a listing GitHub keeps answering full pages of is unreadable, never the part that was read",
+    () =>
+      Effect.gen(function* () {
+        const page = Array.from({ length: 100 }, (_, index) => ({
+          id: index,
+          account: { login: `org-${index}` },
+          repository_selection: GITHUB_REPOSITORY_SELECTION.ALL,
+        }));
+        const endless = fakeGitHub(() => Response.json({ installations: page }));
+        const userId = yield* openGithubUser();
+        const app = yield* GitHubApp;
+
+        const listing = yield* app
+          .userRepositories(userId)
+          .pipe(Effect.provide(endless.layer), Effect.flip);
+        const check = yield* app
+          .userRepository(userId, "acme/relay")
+          .pipe(Effect.provide(endless.layer), Effect.flip);
+
+        for (const failure of [listing, check]) {
+          assert.ok(failure._tag === "GitHubUnavailable");
+          assert.equal(failure.reason, GITHUB_FAILURE.UNBOUNDED);
+        }
+        assert.equal(endless.sent.length, 100);
+      }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
+  );
+
+  it.effect(
     "an installation uninstalled between the two reads reaches nothing rather than failing the listing",
     () =>
       Effect.gen(function* () {
