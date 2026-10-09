@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -31,11 +32,12 @@ const MODELS: readonly CatalogModel[] = [
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "xhigh"],
   },
+  // The fast version lists fewer levels than its base.
   {
     id: "anthropic/claude-opus-5.5-fast",
     name: "Claude Opus 5.5 (Fast)",
     provider: MODEL_PROVIDER.ANTHROPIC,
-    efforts: ["low", "high", "max"],
+    efforts: ["low", "high"],
   },
 ];
 
@@ -331,19 +333,26 @@ test("the Fast switch keeps the model's fast version as the default without clos
 });
 
 test("a stored fast version shows its base model checked with Fast on, and a pick of a model without a fast version turns Fast off", async () => {
-  const { writes, control } = standing({ model: "anthropic/claude-opus-5.5-fast", effort: "max" });
+  const { writes, control } = standing({ model: "anthropic/claude-opus-5.5-fast", effort: "high" });
   const page = mount(control);
   await settle();
-  assert.equal(hoverLine(page), "Claude Opus 5.5 · Max · Fast");
+  assert.equal(hoverLine(page), "Claude Opus 5.5 · High · Fast");
   const menu = await openMenu(page);
   const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
   assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Claude Opus 5.5");
-  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "Max · Fast");
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High · Fast");
   assert.equal(fastRow(menu).getAttribute("aria-checked"), "true");
+  // The Effort row and its submenu list the fast version's own levels.
+  hover(effortRow(menu));
+  assert.deepEqual(submenuRows(page), [
+    ["Low", null],
+    ["High", "true"],
+  ]);
+  press("Escape");
 
-  // Fable lists no fast version and no max: the pick stores its base id at its first effort.
+  // Fable lists no fast version: the pick stores its base id, at high, which it lists.
   act(() => menu.querySelectorAll<HTMLElement>('[role="option"]')[1]?.click());
-  assert.deepEqual(writes, [{ model: "anthropic/claude-fable-5", effort: "low" }]);
+  assert.deepEqual(writes, [{ model: "anthropic/claude-fable-5", effort: "high" }]);
   assert.equal(page.querySelector(".plan-compose-menu"), null);
 
   const again = await openMenu(page);
@@ -392,4 +401,76 @@ test("why the last Start did not start is said beside the button", () => {
     page.querySelector('[role="alert"]')?.textContent,
     "Sign in with GitHub again to start an agent.",
   );
+});
+
+test("Fast re-checks the effort against the fast version's own levels, falling to the nearest below, and off again against the base's", async () => {
+  const { writes, control } = standing({ model: "anthropic/claude-opus-5.5", effort: "max" });
+  const page = mount(control);
+  const menu = await openMenu(page);
+  assert.equal(effortRow(menu).querySelector(".plan-compose-menu-detail")?.textContent, "Max");
+
+  // The fast version lists no max: on lands on high, the nearest below, and the row says so.
+  act(() => fastRow(menu).click());
+  assert.deepEqual(writes, [{ model: "anthropic/claude-opus-5.5-fast", effort: "high" }]);
+  assert.equal(effortRow(menu).querySelector(".plan-compose-menu-detail")?.textContent, "High");
+  hover(effortRow(menu));
+  assert.deepEqual(submenuRows(page), [
+    ["Low", null],
+    ["High", "true"],
+  ]);
+  press("Escape");
+
+  // Off re-checks against the base, which lists high, so it is kept and the base's levels return.
+  act(() => fastRow(menu).click());
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "high" });
+  hover(effortRow(menu));
+  assert.deepEqual(submenuRows(page), [
+    ["Low", null],
+    ["High", "true"],
+    ["Max", null],
+  ]);
+});
+
+test("an Extra high carried to a model listing low, medium, and high lands on High", async () => {
+  const models: readonly CatalogModel[] = [
+    ...MODELS,
+    {
+      id: "anthropic/claude-sonnet-5.5",
+      name: "Claude Sonnet 5.5",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["low", "medium", "high"],
+    },
+  ];
+  const { writes, control } = standing({ model: "openai/gpt-6.1-sol", effort: "xhigh" });
+  const page = mount({ ...control, models });
+  const menu = await openMenu(page);
+  const sonnet = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.textContent === "Claude Sonnet 5.5",
+  );
+  act(() => sonnet?.click());
+  assert.deepEqual(writes, [{ model: "anthropic/claude-sonnet-5.5", effort: "high" }]);
+});
+
+test("a change the service refused gives way to the default it still holds, on the checked row and the hover line alike", async () => {
+  const { control } = standing();
+  let refuse = false;
+  const page = mount({
+    ...control,
+    writeDefault: (choice) =>
+      Promise.resolve(refuse ? { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE } : { choice }),
+  });
+  const menu = await openMenu(page);
+  refuse = true;
+  act(() => fastRow(menu).click());
+  assert.equal(fastRow(menu).getAttribute("aria-checked"), "true", "drawn at once");
+  await settle();
+  assert.equal(
+    fastRow(menu).getAttribute("aria-checked"),
+    "false",
+    "and back as the service refused",
+  );
+  const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High");
+  press("Escape");
+  assert.equal(hoverLine(page), "Claude Opus 5.5 · High");
 });

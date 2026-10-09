@@ -85,6 +85,8 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const chevron = useRef<HTMLButtonElement>(null);
   const latest = useRef(control);
   latest.current = control;
+  /** How many changes have been kept, so an answer to an earlier one is told apart from the latest. */
+  const writes = useRef(0);
 
   // The models and the default are read as the button mounts, for its hover
   // line, and again as the menu opens, so the menu lands on the default as
@@ -126,10 +128,23 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const unavailable = !start.available;
 
   // A change is kept as the default the main part starts on, and drawn at
-  // once; a write that did not take is said beside Start by the control.
+  // once; what the service answers then stands, and a write that did not
+  // take (said beside Start by the control) gives way to the default as the
+  // service still holds it. An answer that a later change overtook is let go.
   const keep = (next: ModelChoice) => {
+    writes.current += 1;
+    const write = writes.current;
     setChoice(next);
-    latest.current.writeDefault(next);
+    latest.current.writeDefault(next).then((answer) => {
+      if (write !== writes.current) return;
+      if (!("failure" in answer)) {
+        setChoice(answer.choice);
+        return;
+      }
+      latest.current.readDefault().then((read) => {
+        if (write === writes.current && !("failure" in read)) setChoice(read.choice);
+      });
+    });
   };
 
   /** The choice at a model, at the effort chosen where the model lists it, else its first. */

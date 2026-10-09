@@ -77,6 +77,22 @@ const SUBMENU_SIDE = {
 
 type SubmenuSide = (typeof SUBMENU_SIDE)[keyof typeof SUBMENU_SIDE];
 
+/** How a submenu stands against its row: down from the row's top, or up from its foot where the window's bottom would cut it. */
+const SUBMENU_STAND = {
+  DOWN: "down",
+  UP: "up",
+} as const;
+
+type SubmenuStand = (typeof SUBMENU_STAND)[keyof typeof SUBMENU_STAND];
+
+/** Where a submenu stands, measured as it opens. */
+interface SubmenuPlace {
+  side: SubmenuSide;
+  stand: SubmenuStand;
+}
+
+const SUBMENU_FIRST_PLACE: SubmenuPlace = { side: SUBMENU_SIDE.RIGHT, stand: SUBMENU_STAND.DOWN };
+
 /** The rows whose label or terms hold every word of the query, case aside; all of them for no query. */
 function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
@@ -87,12 +103,24 @@ function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string):
   });
 }
 
-/** Where the arrows take the highlight: a step on, wrapping at either end; from nowhere, to the first or the last. */
-function stepped(at: number, count: number, key: string): number {
+/**
+ * Where the arrows take the highlight: a step on, wrapping at either end,
+ * and on past any row that cannot be pressed; from nowhere, to the first or
+ * the last. Where no row can be, the highlight stays.
+ */
+function stepped(
+  at: number,
+  count: number,
+  key: string,
+  skipped: (index: number) => boolean = () => false,
+): number {
   if (count === 0) return 0;
   const down = key === "ArrowDown";
-  if (at < 0) return down ? 0 : count - 1;
-  return (at + (down ? 1 : -1) + count) % count;
+  let next = at < 0 ? (down ? 0 : count - 1) : (at + (down ? 1 : -1) + count) % count;
+  for (let steps = 1; steps < count && skipped(next); steps += 1) {
+    next = (next + (down ? 1 : -1) + count) % count;
+  }
+  return skipped(next) ? at : next;
 }
 
 /** Where no row is highlighted: nothing matches and the arrows have not moved on to a pinned row. */
@@ -170,7 +198,7 @@ export function SearchableMenu(props: {
   const branch = footAt >= 0 ? foot[footAt]?.submenu : undefined;
   // The submenu open under the highlighted pinned row, and the highlight inside it.
   const [submenu, setSubmenu] = useState<{ moved: number | undefined } | undefined>(undefined);
-  const [side, setSide] = useState<SubmenuSide>(SUBMENU_SIDE.RIGHT);
+  const [place, setPlace] = useState<SubmenuPlace>(SUBMENU_FIRST_PLACE);
   const open = branch !== undefined && submenu !== undefined ? branch : undefined;
   const subChosen = open?.rows.findIndex((row) => row.id === open.value) ?? -1;
   const subAt = highlightOver({
@@ -196,15 +224,18 @@ export function SearchableMenu(props: {
     row?.scrollIntoView({ block: "nearest" });
   }, [at]);
 
-  // A submenu opens to the right and turns to the left where the window ends before it does, measured before it is painted.
+  // A submenu opens to the right and down from its row, and turns to the
+  // left or stands up where the window ends before it does, measured
+  // before it is painted.
   const opened = open !== undefined;
   useLayoutEffect(() => {
     if (!opened || panel.current === null) return;
-    setSide(
-      panel.current.getBoundingClientRect().right > document.documentElement.clientWidth
-        ? SUBMENU_SIDE.LEFT
-        : SUBMENU_SIDE.RIGHT,
-    );
+    const bounds = panel.current.getBoundingClientRect();
+    const room = document.documentElement;
+    setPlace({
+      side: bounds.right > room.clientWidth ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
+      stand: bounds.bottom > room.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
+    });
   }, [opened]);
 
   const moveTo = (index: number | undefined) => {
@@ -212,7 +243,7 @@ export function SearchableMenu(props: {
     setSubmenu(undefined);
   };
   const openSubmenu = () => {
-    setSide(SUBMENU_SIDE.RIGHT);
+    setPlace(SUBMENU_FIRST_PLACE);
     setSubmenu({ moved: undefined });
   };
   const pressFoot = (row: FootRow) => {
@@ -265,7 +296,15 @@ export function SearchableMenu(props: {
       setSubmenu({ moved: stepped(subAt, open.rows.length, event.key) });
       return;
     }
-    setHighlight(stepped(at, matches.length + foot.length, event.key));
+    // A pinned row that cannot be pressed is passed over, and never a dead stop.
+    setHighlight(
+      stepped(
+        at,
+        matches.length + foot.length,
+        event.key,
+        (index) => foot[index - matches.length]?.disabled !== undefined,
+      ),
+    );
   };
 
   const root =
@@ -353,6 +392,7 @@ export function SearchableMenu(props: {
               "data-highlighted": index === footAt ? "true" : undefined,
               onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
               onMouseMove: () => {
+                if (row.disabled !== undefined) return;
                 if (index === footAt && (open !== undefined || row.submenu === undefined)) return;
                 setHighlight(matches.length + index);
                 if (row.submenu === undefined) setSubmenu(undefined);
@@ -399,7 +439,8 @@ export function SearchableMenu(props: {
                     className="plan-compose-submenu"
                     role="listbox"
                     aria-label={open.label}
-                    data-side={side}
+                    data-side={place.side}
+                    data-stand={place.stand}
                     onMouseDown={(event) => event.preventDefault()}
                   >
                     {open.rows.map((sub, subIndex) => (

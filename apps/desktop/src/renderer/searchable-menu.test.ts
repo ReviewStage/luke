@@ -313,16 +313,21 @@ test("Left and Escape close only the submenu, leaving the highlight on its row; 
   assert.equal(menu.highlighted(), "acme/relay");
 });
 
-test("the submenu stands to the right of the menu, and turns to the left where the window ends before it does", () => {
+test("the submenu stands to the right of the menu and down from its row, turning left or standing up where the window ends before it does", () => {
   Object.defineProperty(document.documentElement, "clientWidth", {
     configurable: true,
     value: 800,
   });
+  Object.defineProperty(document.documentElement, "clientHeight", {
+    configurable: true,
+    value: 600,
+  });
   const measure = HTMLElement.prototype.getBoundingClientRect;
   let right = 700;
+  let bottom = 500;
   HTMLElement.prototype.getBoundingClientRect = function () {
     return this.classList.contains("plan-compose-submenu")
-      ? new DOMRect(right - 200, 0, 200, 120)
+      ? new DOMRect(right - 200, bottom - 120, 200, 120)
       : measure.call(this);
   };
   try {
@@ -330,10 +335,18 @@ test("the submenu stands to the right of the menu, and turns to the left where t
     press("ArrowUp");
     press("ArrowRight");
     assert.equal(submenuOf(menu)?.dataset["side"], "right");
+    assert.equal(submenuOf(menu)?.dataset["stand"], "down");
     press("ArrowLeft");
     right = 900;
     press("ArrowRight");
     assert.equal(submenuOf(menu)?.dataset["side"], "left");
+    assert.equal(submenuOf(menu)?.dataset["stand"], "down");
+    press("ArrowLeft");
+    right = 700;
+    bottom = 700;
+    press("ArrowRight");
+    assert.equal(submenuOf(menu)?.dataset["side"], "right");
+    assert.equal(submenuOf(menu)?.dataset["stand"], "up", "stands up from the row's foot");
   } finally {
     HTMLElement.prototype.getBoundingClientRect = measure;
   }
@@ -510,4 +523,31 @@ test("a switch row turns on a press or Enter without closing anything, and a mut
   assert.equal(muted.getAttribute("aria-disabled"), "true");
   act(() => muted.click());
   assert.deepEqual(turns, [1, 1], "a muted row turns nothing");
+});
+
+test("a muted pinned row is passed over by the arrows and takes no highlight from the pointer, so it is never a dead stop", () => {
+  const menu = mount({
+    value: undefined,
+    foot: [
+      { id: "effort", label: "Effort", detail: "High", onPress: () => undefined },
+      {
+        id: "fast",
+        label: "Fast",
+        toggle: { on: false, onToggle: () => undefined },
+        disabled: "No fast version of this one",
+      },
+    ],
+  });
+  const muted = menu.find<HTMLButtonElement>('[role="switch"]');
+  press("ArrowUp");
+  assert.equal(menu.highlighted(), "EffortHigh", "Up from the first row passes the muted row");
+  press("ArrowDown");
+  assert.equal(
+    menu.highlighted(),
+    "acme/relay",
+    "and Down from the last pressable row wraps past it",
+  );
+  hover(muted);
+  assert.equal(menu.highlighted(), "acme/relay", "the pointer over it moves nothing");
+  assert.equal(muted.dataset["highlighted"], undefined);
 });

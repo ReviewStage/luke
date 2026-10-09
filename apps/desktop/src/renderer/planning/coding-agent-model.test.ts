@@ -18,6 +18,7 @@ import {
   checkoutCommand,
   choiceLabel,
   choiceModelId,
+  effortFor,
   followsAgent,
   modelLabel,
   offeredModels,
@@ -287,4 +288,24 @@ test("a fast version is folded into its base model by its id, read back as the b
     choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
     "Claude Fable 5 · Extra high",
   );
+});
+
+test("an effort carried to a model that lacks it falls to the nearest the model lists at or below it on the scale, else the lowest above, else the model's first", () => {
+  assert.equal(effortFor(["low", "medium", "high"], "high"), "high", "listed, kept");
+  assert.equal(effortFor(["low", "medium", "high"], "xhigh"), "high", "Extra high lands on High");
+  assert.equal(effortFor(["low", "high", "max"], "medium"), "low");
+  assert.equal(effortFor(["minimal", "low"], "max"), "low");
+  assert.equal(effortFor(["high", "max"], "low"), "high", "nothing below, so the lowest above");
+  assert.equal(effortFor(["low", "high"], undefined), "low", "nothing chosen yet");
+  assert.equal(
+    effortFor(["turbo", "high"], "ludicrous"),
+    "turbo",
+    "a name off the scale takes the first",
+  );
+  assert.equal(
+    effortFor(["turbo", "medium"], "high"),
+    "medium",
+    "names off the scale are passed over",
+  );
+  assert.equal(effortFor([], "high"), undefined);
 });

@@ -1077,9 +1077,10 @@ body,
   background: none;
 }
 
-/* A submenu stands beside the pinned row that opened it, its first row
-   level with that row and its near edge at the menu's own, and turns to
-   the menu's other side where the window ends before it does. */
+/* A submenu stands beside the pinned row that opened it, its top level
+   with that row's and its near edge at the menu's own; it turns to the
+   menu's other side where the window ends before it does, and stands up
+   from the row's foot where the window's bottom would cut it. */
 .plan-compose-menu-branch {
   position: relative;
 }
@@ -1087,7 +1088,7 @@ body,
 .plan-compose-submenu {
   position: absolute;
   z-index: 1;
-  top: -7px;
+  top: 0;
   left: calc(100% + 9px);
   width: 200px;
   padding: 6px;
@@ -1101,6 +1102,11 @@ body,
 .plan-compose-submenu[data-side="left"] {
   right: calc(100% + 9px);
   left: auto;
+}
+
+.plan-compose-submenu[data-stand="up"] {
+  top: auto;
+  bottom: 0;
 }
 
 .plan-compose-chip {
