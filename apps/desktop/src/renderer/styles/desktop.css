@@ -1,7 +1,7 @@
 /* Luke's app window: a sidebar of places on the left, the chosen work on the
-   right, a call bar under an open plan, and the key, consent, and feedback
-   entries as sheets over a dimmed window. Last in index.css, so a rule here
-   wins over a panel rule of equal weight. */
+   right, a call bar under an open plan, and the confirm and feedback dialogs
+   over it. Last in index.css, so a rule here wins over a panel rule of equal
+   weight. */
 
 :root {
   --desktop-ground: #0c0c0e;
@@ -1384,23 +1384,6 @@ body,
 
 /* Entry sheets --------------------------------------------------------------- */
 
-/* The key, consent, and feedback entries stand the window down to one thing:
-   the window dims and the entry is a sheet over it. */
-.desktop-scrim {
-  position: absolute;
-  z-index: 7;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-quick) var(--motion-exit);
-}
-
-.app-stage[data-surface="desktop"][data-presentation="feedback"] .desktop-scrim {
-  opacity: 1;
-  pointer-events: auto;
-}
-
 .app-stage[data-surface="desktop"] .panel-surface {
   z-index: 8;
   border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
@@ -1410,10 +1393,6 @@ body,
 
 .app-stage[data-surface="desktop"][data-presentation="panel"] .panel-surface {
   visibility: hidden;
-}
-
-.app-stage[data-surface="desktop"] .feedback-stage {
-  z-index: 9;
 }
 
 /* Luke's words --------------------------------------------------------------- */
@@ -1972,5 +1951,186 @@ body,
   from {
     opacity: 0;
     transform: scale(0.96);
+  }
+}
+
+/* Feedback dialog ------------------------------------------------------------ */
+
+/* A note to the people who make Luke, on the confirm dialog's backdrop and
+   card: wider, because a note wraps, and its foot carries the screenshot
+   button at its start and the answers at its end. A screenshot dragged over
+   the window rings the card that will take it. */
+.feedback-dialog {
+  width: min(520px, 100%);
+  gap: var(--space-12);
+  transition: box-shadow var(--duration-hover) ease;
+}
+
+.feedback-dialog[data-dropping="true"] {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--message-sent) 70%, transparent),
+    0 24px 64px rgba(0, 0, 0, 0.6);
+}
+
+/* The note grows with its words, up to where scrolling it is kinder than a
+   card the height of the window. No resize handle: the box is already sized
+   by what it holds. */
+.feedback-dialog-message {
+  width: 100%;
+  min-height: 112px;
+  max-height: min(320px, 50vh);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: 1.5;
+  field-sizing: content;
+  resize: none;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.feedback-dialog-message::placeholder {
+  color: var(--text-tertiary);
+}
+
+.feedback-dialog-message:focus {
+  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
+  outline: none;
+}
+
+.feedback-dialog-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A screenshot at the size of a control row: enough to recognise, with its
+   way off on its own corner. */
+.feedback-dialog-image {
+  position: relative;
+  width: 64px;
+  height: 48px;
+}
+
+.feedback-dialog-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.feedback-dialog-image-remove {
+  position: absolute;
+  top: calc(-1 * var(--space-6));
+  right: calc(-1 * var(--space-6));
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 50%;
+  background: var(--desktop-sidebar);
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.feedback-dialog-image-remove:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.feedback-dialog-image-remove:disabled {
+  opacity: 0.5;
+}
+
+.feedback-dialog-image-remove svg {
+  width: 8px;
+  height: 8px;
+}
+
+/* The signature as one quiet line: the choice at its start, and who the note
+   is signed as, or that it is not, at its end. */
+.feedback-dialog-signature {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--control-gap);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.feedback-dialog-signature label {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.feedback-dialog-signature input {
+  margin: 0;
+  accent-color: var(--message-sent);
+}
+
+.feedback-dialog-identity {
+  overflow: hidden;
+  min-width: 0;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The screenshot button leads the foot, square like every icon button, and
+   the answers keep its end. */
+.confirm-dialog-actions > .feedback-dialog-attach {
+  min-width: 0;
+  margin-right: auto;
+}
+
+/* Send's chord, muted against its own fill rather than the card's. */
+.feedback-dialog .primary-button .shortcut-glyphs {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+/* Said quietly at the window's foot once a note has gone, and gone itself a
+   moment later. */
+.feedback-sent {
+  position: fixed;
+  z-index: 31;
+  bottom: var(--space-24);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--glyph-gap);
+  margin: 0;
+  padding: var(--space-8) var(--space-16);
+  border: 1px solid var(--hairline-strong, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  background: var(--desktop-sidebar);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 560;
+  transform: translateX(-50%);
+  animation: feedback-sent-rise var(--duration-fast) var(--spring-fast);
+}
+
+.feedback-sent svg {
+  width: 14px;
+  height: 14px;
+  color: var(--state-complete);
+}
+
+@keyframes feedback-sent-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(var(--space-8));
   }
 }

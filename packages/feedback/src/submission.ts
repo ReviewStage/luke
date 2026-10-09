@@ -5,9 +5,9 @@ import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
  * Luke should have handled better. Both travel the same way — typed in the
  * panel, carried by the main process to one fixed endpoint, and forwarded from
  * there as email to the founders. Nothing observed ever rides along: a
- * submission holds only what the composer's fields showed the user — their
- * words, the signature those fields started with from their own signed-in
- * account and left theirs to edit or clear, and the screenshots they chose.
+ * submission holds only what the dialog showed the user — their words, their
+ * signed-in account's name and address while they left "Include my name and
+ * email" ticked, and the screenshots they chose.
  */
 export const FEEDBACK_KIND = {
   FEEDBACK: "feedback",

@@ -33,8 +33,8 @@ timed to a generated face gesture may also use the gesture's literal phase,
 but it must answer `--face-motion`, live beside a comment naming the generated
 cycle and phase it follows, and do no work when that gesture is not selected.
 A TypeScript
-constant that mirrors a CSS total (`CONFIRMATION_ENTRANCE_MS` in
-`feedback-confirmation.ts`) names the `MOTION_DURATION_MS` tokens it mirrors.
+constant that mirrors a CSS timing (`WARM_MS` in `tooltip.tsx`) names the
+`MOTION_DURATION_MS` or `MOTION_DELAY_MS` tokens it mirrors.
 
 ## The surface owns size; everything else owns transform and opacity
 
@@ -83,13 +83,12 @@ Three rules, one per element involved:
    on `--spring`) delayed until the surface has grown under it. A large
    element cannot rely on a fade alone: reveal it with a `clip-path` that
    rides the **surface's own delay, duration, and spring**, so the shape's
-   edge is what uncovers it (the caption and the feedback preview both do
-   this). The element itself does not move; it is uncovered.
+   edge is what uncovers it (the caption does this). The element itself does
+   not move; it is uncovered.
 3. **Whatever its room displaced replays the journey.** Layout has already
    moved the elements below it; animate them FLIP-style from where they were
    to where they now are, on the same spring (`session-motion` does this for
-   the wing's re-sorted marks; `.feedback-follow` does it for the composer's
-   send row).
+   the wing's re-sorted marks).
 
 Ordering comes from delay, and direction decides it: against a **growing**
 edge, trail it (`--slot-delay`-class delays keep a traveling element behind
@@ -102,8 +101,8 @@ the surface's is wrong, whatever it looks like at speed.
 
 Content leaves first, over `--duration-exit`, and only its end releases the
 room: the surface must never shrink out from under something still drawn. For
-elements that unmount, hold them mounted through their own exit (the feedback
-preview keeps drawing what it last held) and take them out when the exit finishes, never on the frame the state changed.
+elements that unmount, hold them mounted through their own exit and take them
+out when the exit finishes, never on the frame the state changed.
 
 ## Mount animations, not `@starting-style`, for reveals
 

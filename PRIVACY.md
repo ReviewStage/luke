@@ -173,10 +173,10 @@ screen, your editor, your terminal, or any other app. The recording is the
 shape of the panel, not its words: before it leaves your Mac, every piece of
 text the panel shows is replaced with blocks of the same length, so a plan's
 name and its document, a caption of what you or Luke said, your name and email
-address, and anything you type into a field all appear as blocks. A screenshot
-you attach to the feedback form is left out, since a picture of your screen
-could carry another app's words, and so are the feedback form's message
-field, a plan's whiteboard, a plan's transcript, and a plan's Work tab, as a second line. The whiteboard draws its
+address, and anything you type into a field all appear as blocks. The
+feedback form is left out whole, since a screenshot you attach to it is a
+picture of your screen and could carry another app's words, and so are a
+plan's whiteboard, a plan's transcript, and a plan's Work tab, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.
@@ -217,8 +217,9 @@ encrypted: this version neither reads nor sends it. A key of your own an
 earlier version stored for voice is removed from your Mac the next time Luke
 opens, without being read.
 
-**Feedback.** If you use the feedback form, we receive what you typed, the name
-and email you signed it with, and any screenshots you attached; they reach us
+**Feedback.** If you use the feedback form, we receive what you typed, any
+screenshots you attached, and — unless you untick "Include my name and email"
+— the name and email of the account you are signed in with; they reach us
 only when you press Send.
 
 ## Who we send it to

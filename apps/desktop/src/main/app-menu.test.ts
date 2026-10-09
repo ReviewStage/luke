@@ -75,3 +75,13 @@ test("Go holds Back and Forward, each handed to the window it was chosen over", 
     [channels.onMenuCommand, APP_COMMAND.FORWARD],
   ]);
 });
+
+test("Help offers the two notes to the people who make Luke, each handing the window its own command", () => {
+  const window = new FakeBrowserWindow();
+  choose("Send Feedback…", window, false);
+  choose("Suggest a Feature…", window, false);
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.SEND_FEEDBACK],
+    [channels.onMenuCommand, APP_COMMAND.SUGGEST_FEATURE],
+  ]);
+});

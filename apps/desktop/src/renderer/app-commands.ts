@@ -11,10 +11,11 @@
 
 import { useEffect, useLayoutEffect, useRef } from "react";
 import {
-  APP_COMMANDS,
   APP_SHORTCUTS,
   type AppCommand,
   commandForKey,
+  KEYED_COMMANDS,
+  type KeyedCommand,
   shortcutEditsText,
   shortcutLayered,
 } from "#shared/shortcuts";
@@ -25,7 +26,7 @@ type CommandRun = { current: () => void };
 const offers = new Map<AppCommand, CommandRun[]>();
 
 /** The commands the keymap answers: every one but those whose key is the window's layered Escape. */
-const KEYED: readonly AppCommand[] = APP_COMMANDS.filter(
+const KEYED: readonly KeyedCommand[] = KEYED_COMMANDS.filter(
   (command) => !shortcutLayered(APP_SHORTCUTS[command].chord),
 );
 

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { AppCommand } from "#shared/shortcuts";
+import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs } from "../tooltip";
 
 /**
@@ -43,7 +43,7 @@ export interface MenuAction {
   /** Drawn red: the action cannot be taken back. */
   danger?: boolean;
   /** The shortcut that takes the same action, printed muted at the item's end. */
-  command?: AppCommand;
+  command?: KeyedCommand;
   /** Why the item cannot be chosen now, printed muted at its end in the shortcut's place; the item is dimmed. */
   unavailable?: string;
 }

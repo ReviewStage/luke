@@ -14,6 +14,9 @@ import {
   APP_COMMAND,
   APP_SHORTCUTS,
   type AppCommand,
+  type KeyedCommand,
+  MENU_COMMAND_LABELS,
+  type MenuCommand,
   shortcutAccelerator,
 } from "#shared/shortcuts";
 
@@ -34,29 +37,40 @@ function menuTitle(label: string): string {
     .join(" ");
 }
 
-function commandItem(command: AppCommand): MenuItemConstructorOptions {
+/** Hands a chosen item's command to the window it was chosen over. */
+function sendCommand(command: AppCommand): NonNullable<MenuItemConstructorOptions["click"]> {
+  return (_item, window: BaseWindow | undefined, event) => {
+    // Note that a key reaching the menu is one the window chose not to
+    // claim: nothing offered its command, a text field kept its own ⌘⌫,
+    // or it was the window's layered Escape. The keymap is the one reader
+    // of keys, so only a click runs an item.
+    if (event.triggeredByAccelerator) return;
+    // The window arrives as the base type, and only a browser window has a
+    // page to hand the command to.
+    if (window instanceof BrowserWindow) window.webContents.send(channels.onMenuCommand, command);
+  };
+}
+
+function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
   const shortcut = APP_SHORTCUTS[command];
   return {
     label: menuTitle(shortcut.label),
     accelerator: shortcutAccelerator(shortcut.chord),
-    click: (_item, window: BaseWindow | undefined, event) => {
-      // Note that a key reaching the menu is one the window chose not to
-      // claim: nothing offered its command, a text field kept its own ⌘⌫,
-      // or it was the window's layered Escape. The keymap is the one reader
-      // of keys, so only a click runs an item.
-      if (event.triggeredByAccelerator) return;
-      // The window arrives as the base type, and only a browser window has a
-      // page to hand the command to.
-      if (window instanceof BrowserWindow) window.webContents.send(channels.onMenuCommand, command);
-    },
+    click: sendCommand(command),
   };
+}
+
+/** A command with no key: named with an ellipsis, as an item that opens a dialog is. */
+function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
+  return { label: `${menuTitle(MENU_COMMAND_LABELS[command])}…`, click: sendCommand(command) };
 }
 
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, the window's
  * columns are View's, back and forward are Go's as Finder and Safari keep
- * them, and the shortcuts are Help's.
+ * them, and the shortcuts and the notes to the people who make Luke are
+ * Help's.
  */
 export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
   return [
@@ -109,6 +123,14 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
     },
     { label: "Go", submenu: [commandItem(APP_COMMAND.BACK), commandItem(APP_COMMAND.FORWARD)] },
     { role: "windowMenu" },
-    { role: "help", submenu: [commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS)] },
+    {
+      role: "help",
+      submenu: [
+        commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS),
+        SEPARATOR,
+        dialogItem(APP_COMMAND.SEND_FEEDBACK),
+        dialogItem(APP_COMMAND.SUGGEST_FEATURE),
+      ],
+    },
   ];
 }
