@@ -1,5 +1,5 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CheckIcon, CopyIcon, DocumentIcon } from "@sidecar/panel";
+import { CheckIcon, CopyIcon, DocumentIcon, FolderIcon } from "@sidecar/panel";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -203,6 +203,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               className="toolbar-button"
               onClick={() => plans.onChooseFolder(plan.id)}
             >
+              <FolderIcon />
               Choose folder
             </button>
           ) : null}

@@ -338,7 +338,7 @@ export function SettingsSearchField({
         {query.length > 0 ? (
           <button
             type="button"
-            className="settings-search-clear"
+            className="icon-button settings-search-clear"
             aria-label="Clear search"
             onClick={() => {
               // A cleared field keeps the caret, ready for the next question.

@@ -160,7 +160,7 @@ export function PlanActionsButton({
       <Tooltip label="Plan actions">
         <button
           type="button"
-          className="toolbar-button toolbar-icon-button"
+          className="icon-button"
           aria-label="Plan actions"
           aria-haspopup="menu"
           aria-expanded={actions.open}

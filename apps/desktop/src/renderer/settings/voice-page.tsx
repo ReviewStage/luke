@@ -105,7 +105,7 @@ export function VoiceSection({
                 </Tooltip>
               ) : null}
               {microphoneRow.offerAccess ? (
-                <button type="button" className="quiet-button" onClick={microphone.onRequest}>
+                <button type="button" className="toolbar-button" onClick={microphone.onRequest}>
                   Allow
                 </button>
               ) : null}

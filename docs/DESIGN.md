@@ -170,6 +170,22 @@ refuses a pixel of padding, margin, or gap in `desktop.css`, `sign-in.css`,
 and `tooltip.css` that is not one of these; the optical exception above is marked
 `/* off-scale */` on its declaration, so a reader sees it is deliberate.
 
+The window has two buttons, both in `desktop.css`. A glyph alone is an
+`.icon-button`: a `--control-height` square with a `--control-glyph` glyph in
+`--text-secondary`, nothing behind it at rest, the `--selected` fill and
+`--text-primary` under the pointer, `--pressed` held down, and the
+`--focus-ring` for the keyboard. A glyph and words, or words alone, is a
+`.toolbar-button` of the same height, corner, glyph, and states, its glyph
+`--glyph-gap` from its words; `.primary-button` and `.danger-button` are that
+button filled with the accent or with red. Every glyph is drawn in a 24 box at
+the one stroke `glyphs.tsx` draws with, so the button sizes the glyph and
+never the glyph its button. A button floating over something that moves
+beneath it, the title bar over a sliding pane or the transcript's way back to
+its newest line, sets `--button-ground` and fills over that rather than over
+what passes. What is not one of these is a row, a tab, or a call control and
+says why where it is drawn: the round microphone and stop, the new-plan
+composer's round start, and a tab's ×, which brightens without a fill.
+
 ## The keys Luke takes from the machine
 
 A key Luke registers takes its chord away from every other app on the Mac, so

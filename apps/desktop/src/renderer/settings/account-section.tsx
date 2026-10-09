@@ -89,7 +89,7 @@ export function AccountSection({
         >
           <button
             type="button"
-            className="quiet-button account-signout"
+            className="toolbar-button account-signout"
             disabled={signOut.busy}
             /* The ellipsis is the promise that it asks first. */
             title="Sign out…"
@@ -115,7 +115,7 @@ export function AccountSection({
         >
           <button
             type="button"
-            className="quiet-button account-delete"
+            className="toolbar-button account-delete"
             disabled={deletion.busy}
             /* The ellipsis is the promise that it asks first. */
             title="Delete account…"

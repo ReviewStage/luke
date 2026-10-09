@@ -126,7 +126,7 @@ export function ConfirmSwap({
           <button
             type="button"
             ref={keep}
-            className="quiet-button"
+            className="toolbar-button"
             style={answerOrder(ANSWER_INDEX.KEEP)}
             disabled={acting}
             onClick={keepPressed}

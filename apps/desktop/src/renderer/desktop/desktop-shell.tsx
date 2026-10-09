@@ -44,12 +44,7 @@ function SidebarToggle({ sidebar }: { sidebar: SidebarCollapse }): React.JSX.Ele
   useAppCommand(APP_COMMAND.TOGGLE_SIDEBAR, sidebar.onToggle);
   return (
     <Tooltip label={label} command={APP_COMMAND.TOGGLE_SIDEBAR}>
-      <button
-        type="button"
-        className="toolbar-button toolbar-icon-button"
-        aria-label={label}
-        onClick={sidebar.onToggle}
-      >
+      <button type="button" className="icon-button" aria-label={label} onClick={sidebar.onToggle}>
         <SidebarIcon />
       </button>
     </Tooltip>
@@ -108,7 +103,7 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
     <Tooltip label="New plan" command={APP_COMMAND.NEW_PLAN}>
       <button
         type="button"
-        className="toolbar-button toolbar-icon-button"
+        className="icon-button"
         aria-label="New plan"
         disabled={!plans.signedIn}
         onClick={plans.onNewPlan}
