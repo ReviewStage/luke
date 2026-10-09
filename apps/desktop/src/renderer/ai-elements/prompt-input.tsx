@@ -14,9 +14,10 @@ import { cn } from "./utils";
  * prompt-input.tsx -- AI Elements' PromptInput as Luke's one composer: the card a message is written in, and the row of controls under it.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to the card the New Plan page established: one rounded card on
- * the sidebar's ground behind its hairline and a soft shadow, its edge
- * brightening to the selected one while the card holds focus, the textarea
+ * restyled to the card the New Plan page established, on the corner, the
+ * hairline, and the shadow the window's menus and cards share: one card on
+ * the sidebar's ground, its edge brightening to the selected one while the
+ * card holds focus, the textarea
  * sizing itself to its words from one line to about eight and scrolling
  * past that, and under it a footer with whatever the owner puts at its
  * left and the round submit at its right. The New Plan page and the agent
@@ -86,7 +87,7 @@ export function PromptInput({
     <form
       className={cn(
         COMPOSER_TYPE.DEFAULT,
-        "flex w-full flex-col rounded-[22px] border border-border bg-card shadow-[0_18px_48px_rgba(0,0,0,0.35)] transition-colors focus-within:border-selected-edge",
+        "flex w-full flex-col rounded-xl border border-border bg-card shadow-[0_16px_40px_rgba(0,0,0,0.5)] transition-colors focus-within:border-selected-edge",
         className,
       )}
       onSubmit={handleSubmit}
@@ -173,7 +174,7 @@ export type PromptInputSubmitProps = ComponentProps<"button"> & {
   status?: PromptInputStatus;
 };
 
-/** The submit: a filled round 34px button that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
+/** The submit: a filled round button at the window's control height that sends, or shows that a send is out or a reply streams; an owner may make the streaming one its Stop. */
 export function PromptInputSubmit({
   className,
   status = PROMPT_INPUT_STATUS.READY,
@@ -181,12 +182,12 @@ export function PromptInputSubmit({
   children,
   ...props
 }: PromptInputSubmitProps): ReactNode {
-  let icon = <ArrowUpIcon className="size-[17px]" />;
+  let icon = <ArrowUpIcon className="size-[15px]" />;
   if (status === PROMPT_INPUT_STATUS.SUBMITTED) {
-    icon = <Loader2Icon className="size-[17px] animate-spin" />;
+    icon = <Loader2Icon className="size-[15px] animate-spin" />;
   } else if (status === PROMPT_INPUT_STATUS.STREAMING) {
     // Filled, as every chat draws its Stop; the registry's outline reads as a checkbox at this size.
-    icon = <SquareIcon className="size-4 fill-current" />;
+    icon = <SquareIcon className="size-3.5 fill-current" />;
   }
   return (
     <button
@@ -194,7 +195,7 @@ export function PromptInputSubmit({
       aria-label="Send"
       aria-disabled={disabled === true ? true : undefined}
       className={cn(
-        "flex size-[34px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
+        "flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors disabled:bg-secondary disabled:text-muted-foreground",
         className,
       )}
       disabled={disabled}

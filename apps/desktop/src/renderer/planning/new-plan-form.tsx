@@ -59,9 +59,10 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
     nameField.current?.focus();
   }, [focusRequest]);
 
-  // Enter starts the plan with any modifier held: the name has no second line to begin.
+  // Enter starts the plan with any modifier held, since the name has no second
+  // line to begin; an input method still composing keeps its own Enter.
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || !event.shiftKey) return;
+    if (event.key !== "Enter" || !event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     if (canStart) props.onStart();
   };

@@ -158,6 +158,16 @@ test("start waits for a name alone, and Enter, with or without Shift, starts the
   await act(async () => page.nameField().dispatchEvent(shifted));
   assert.equal(shifted.defaultPrevented, true, "no new line");
   assert.equal(page.started.length, 2);
+  // An input method confirming a candidate with Shift+Enter is still composing: nothing starts.
+  const composing = new KeyboardEvent("keydown", {
+    key: "Enter",
+    shiftKey: true,
+    isComposing: true,
+    bubbles: true,
+    cancelable: true,
+  });
+  await act(async () => page.nameField().dispatchEvent(composing));
+  assert.equal(page.started.length, 2);
 
   // With none recent, the menu lists the repositories Luke reaches as the service ordered them.
   act(() => page.chip().click());

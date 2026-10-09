@@ -158,8 +158,8 @@ test("the submit is one round button that never changes size or place, and the s
     assert.doesNotMatch(ink, /var\(/u, `${name}: the ink resolves to a colour: ${ink}`);
     assert.notEqual(disc, ink, `${name}: the glyph is a colour apart from its disc`);
     assert.equal(settled(own, "border-radius"), "calc(infinity * 1px)");
-    assert.equal(settled(own, "width"), "34px", name);
-    assert.equal(settled(own, "height"), "34px", name);
+    assert.equal(settled(own, "width"), "30px", name);
+    assert.equal(settled(own, "height"), "30px", name);
     assert.equal(
       own.find((d) => d.selector.includes(":hover")),
       undefined,
@@ -175,6 +175,10 @@ test("the submit is one round button that never changes size or place, and the s
     );
   }
   assert.equal(classes.size, 1, "one class list in every state");
+  // The card wears the 12px corner the window's menus and cards do (0.75rem at the root's 16px), not one of its own.
+  const form = states.active.querySelector("form");
+  assert.ok(form);
+  assert.equal(resolved(settled(ownDeclarations(rules, form), "border-radius"), rules), "0.75rem");
   // The dim disc is a lower emphasis of its own, not the filled one seen through an opacity.
   assert.notEqual(discs.get("dim"), discs.get("active"));
   assert.equal(discs.get("stop"), discs.get("active"));
