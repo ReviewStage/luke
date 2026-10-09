@@ -7,6 +7,31 @@ import { fileURLToPath } from "node:url";
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const STYLE_ROOT = join(ROOT, "apps", "desktop", "src", "renderer", "styles");
 const failures = [];
+// The window's own sheets, which spend the spacing scale in desktop.css's
+// :root rather than a pixel of their own (docs/DESIGN.md).
+const SPACED_SHEETS = new Set(["desktop.css", "tooltip.css"]);
+const SPACING_DECLARATION =
+  /(?<![\w-])((?:padding|margin)(?:-[a-z-]+)?|(?:row-|column-)?gap)\s*:\s*([^;]+);([ \t]*\/\*\s*off-scale\b)?/gu;
+
+// A value less every calc that spends a token, which may adjust it by a pixel
+// as a border asks.
+function withoutTokenCalcs(value) {
+  let rest = value;
+  let start = rest.indexOf("calc(");
+  while (start >= 0) {
+    let depth = 0;
+    let end = start + "calc".length;
+    do {
+      if (rest[end] === "(") depth += 1;
+      if (rest[end] === ")") depth -= 1;
+      end += 1;
+    } while (depth > 0 && end < rest.length);
+    const spends = rest.slice(start, end).includes("var(");
+    if (spends) rest = rest.slice(0, start) + rest.slice(end);
+    start = rest.indexOf("calc(", spends ? start : end);
+  }
+  return rest;
+}
 
 function keyframeBodies(source) {
   const bodies = [];
@@ -39,6 +64,17 @@ for (const name of readdirSync(STYLE_ROOT).filter((entry) => entry.endsWith(".cs
 
   const rules = source.matchAll(/([^{}]+)\{([^{}]*)\}/gsu);
   for (const [, selector, body] of rules) {
+    if (SPACED_SHEETS.has(name)) {
+      for (const [, property, value, offScale] of body.matchAll(SPACING_DECLARATION)) {
+        if (offScale || !/(?<![\w.])0*[1-9]\d*(?:\.\d+)?px\b/u.test(withoutTokenCalcs(value))) {
+          continue;
+        }
+        failures.push(
+          `${name}: ${selector.replace(/\/\*[\s\S]*?\*\//gu, "").trim()} spends a literal ${property}; use the spacing scale or mark it /* off-scale */`,
+        );
+      }
+    }
+
     for (const declaration of body.matchAll(
       /\b(animation(?:-duration|-delay)?|transition(?:-duration|-delay|-property)?)\s*:\s*([^;]+);/gu,
     )) {

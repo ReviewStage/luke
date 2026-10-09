@@ -158,6 +158,19 @@ it. Repeated structural widths, heights, gaps, radii, colors, and motion belong
 to semantic or generated tokens; a repeated literal is evidence that the
 vocabulary is missing a name.
 
+Spacing in the desktop window comes from one scale, `--space-2` through
+`--space-48` in `desktop.css`'s `:root`, and the names built from it. Every
+column holds its rows `--column-inset` from its edges, every row holds its
+glyph or words `--row-inset` from its own, so a column's words start at
+`--content-inset` whether a row carries them or not: the sidebar's text, the
+plan's tab, the side panel's first tab, the transcript, and Settings' page list
+all read down that one edge. Controls in a row stand `--control-gap` apart, a
+glyph `--glyph-gap` from its words, a column's groups `--section-gap`, and a
+page's content `--page-inset` from its column. `check-design-contract.mjs`
+refuses a pixel of padding, margin, or gap in `desktop.css` and `tooltip.css`
+that is not one of these; the optical exception above is marked
+`/* off-scale */` on its declaration, so a reader sees it is deliberate.
+
 ## The keys Luke takes from the machine
 
 A key Luke registers takes its chord away from every other app on the Mac, so

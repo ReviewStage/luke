@@ -286,8 +286,8 @@
 .code-pane-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px 6px 12px;
+  gap: var(--control-gap);
+  padding: var(--space-6) var(--row-inset) var(--space-6) var(--content-inset);
   border-bottom: 1px solid var(--hairline);
   background: var(--raised);
   font-size: 11.5px;
@@ -308,14 +308,14 @@
 
 .code-pane-note {
   margin: 0;
-  padding: 14px 12px;
+  padding: var(--space-12) var(--content-inset);
   color: var(--text-secondary);
 }
 
 .code-lines {
   min-height: 0;
   flex: 1;
-  padding: 6px 0;
+  padding: var(--space-6) 0;
   overflow: auto;
   overscroll-behavior: contain;
   color: #e6edf3;
@@ -340,7 +340,7 @@
 .code-line-number {
   flex: 0 0 auto;
   width: 48px;
-  padding: 0 12px 0 0;
+  padding: 0 var(--space-12) 0 0;
   color: rgba(230, 237, 243, 0.32);
   text-align: right;
   user-select: none;
@@ -351,7 +351,7 @@
 }
 
 .code-line-text {
-  padding-right: 16px;
+  padding-right: var(--content-inset);
   font: inherit;
   white-space: pre;
 }
@@ -366,7 +366,7 @@
 }
 
 .plan-transcript-note {
-  margin: 12px 0 0;
+  margin: var(--space-12) 0 0;
   color: var(--text-tertiary);
   font-size: 11.5px;
   text-align: center;
@@ -376,7 +376,7 @@
    call's header sticks flush against the top of what scrolls. */
 .plan-transcript-calls {
   margin: 0;
-  padding: 4px 0 0;
+  padding: var(--space-4) 0 0;
   list-style: none;
 }
 
@@ -386,8 +386,8 @@
   top: 0;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 0 8px;
+  gap: var(--space-8);
+  padding: var(--space-12) 0 var(--space-8);
   background: var(--desktop-well);
   color: var(--text-tertiary);
   font-size: 11.5px;
@@ -404,7 +404,7 @@
 .plan-transcript-live {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-6);
   color: var(--voice-developer);
 }
 
@@ -421,8 +421,8 @@
 .plan-transcript-messages {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 4px;
+  gap: var(--space-12);
+  padding-top: var(--space-4);
 }
 
 .plan-transcript-speaker {
