@@ -9,6 +9,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
@@ -35,13 +36,14 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       onToggle: ignore,
       onResize: ignore,
     },
+    history: navigationHistory(),
     settings: settingsPanelProps({
       view,
       onViewChange: setView,
       ...(settings ? { settings } : undefined),
     }),
     onSearchEngaged: ignore,
-    onBack: ignore,
+    onExit: ignore,
   });
 }
 

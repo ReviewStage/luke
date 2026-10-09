@@ -33,7 +33,9 @@ export const APP_COMMAND = {
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
   FIND: "find",
+  EXIT_SETTINGS: "exit-settings",
   BACK: "back",
+  FORWARD: "forward",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -70,6 +72,7 @@ const SHORTCUT_KEY = {
   ENTER: { accelerator: "Enter", glyph: "↩", key: "Enter", code: "Enter" },
   ESCAPE: { accelerator: "Escape", glyph: "Esc", key: "Escape", code: "Escape" },
   OPEN_BRACKET: { accelerator: "[", glyph: "[", key: "[", code: "BracketLeft" },
+  CLOSE_BRACKET: { accelerator: "]", glyph: "]", key: "]", code: "BracketRight" },
   BACKSPACE: {
     accelerator: "Backspace",
     glyph: "⌫",
@@ -101,8 +104,9 @@ export interface AppShortcut {
 /**
  * Every shortcut. The chords are the ones Mac devtools already taught: ⌘N and ⌘, everywhere,
  * ⌥⌘B for the secondary sidebar and ⌥⌘R for Reveal in Finder as VS Code and
- * Cursor have them, ⌘/ for the shortcuts as ChatGPT has it, ⌘[ for back,
- * and ⇧⌘↩ to fill the window with a pane as iTerm and Warp have it.
+ * Cursor have them, ⌘/ for the shortcuts as ChatGPT has it, ⌘[ and ⌘] for
+ * back and forward as Finder and Safari have them, and ⇧⌘↩ to fill the window
+ * with a pane as iTerm and Warp have it.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -143,7 +147,12 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.SLASH },
   },
   [APP_COMMAND.FIND]: { label: "Search settings", chord: { key: SHORTCUT_KEY.F } },
-  [APP_COMMAND.BACK]: { label: "Back to plans", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
+  [APP_COMMAND.EXIT_SETTINGS]: {
+    label: "Exit settings",
+    chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
+  },
+  [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
+  [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
 } as const satisfies Record<AppCommand, AppShortcut>;
 
 /** The shortcuts as the Keyboard shortcuts page lists them: in groups, under the group's name. */
@@ -158,6 +167,10 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.REVEAL_FOLDER,
       APP_COMMAND.DELETE_PLAN,
     ],
+  },
+  {
+    title: "Navigation",
+    commands: [APP_COMMAND.BACK, APP_COMMAND.FORWARD],
   },
   {
     title: "Window",
@@ -178,7 +191,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SETTINGS,
       APP_COMMAND.KEYBOARD_SHORTCUTS,
       APP_COMMAND.FIND,
-      APP_COMMAND.BACK,
+      APP_COMMAND.EXIT_SETTINGS,
     ],
   },
 ] as const satisfies readonly { title: string; commands: readonly AppCommand[] }[];

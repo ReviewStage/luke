@@ -1,8 +1,9 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ComposeIcon, GearIcon, UserIcon } from "@sidecar/panel";
+import { ArrowLeftIcon, ArrowRightIcon, ComposeIcon, GearIcon, UserIcon } from "@sidecar/panel";
 import { useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -46,6 +47,44 @@ export function useSidebarEdge(
 export function SidebarResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   // biome-ignore lint/a11y/useSemanticElements: a resize edge is a focusable separator that takes keys, which an <hr> cannot be.
   return <div className="sidebar-resize" {...edge} />;
+}
+
+/**
+ * Back and forward, at the right of the left column's title-bar row, level
+ * with the traffic lights, the way Cursor and Codex keep them: in the
+ * column, so they ride its right edge as it is dragged and slide away with
+ * it when it folds, after the column's drag strip so they claim their
+ * presses back from the window frame. A way with nothing along it is dimmed
+ * rather than gone, so neither button moves. The chords are the shell's to
+ * offer, since they answer while the column is folded too.
+ */
+export function HistoryButtons({ history }: { history: NavigationHistory }): React.JSX.Element {
+  return (
+    <div className="title-bar-controls" data-edge="column">
+      <Tooltip label="Back" command={APP_COMMAND.BACK}>
+        <button
+          type="button"
+          className="toolbar-button toolbar-icon-button"
+          aria-label="Back"
+          disabled={!history.canGoBack}
+          onClick={history.onBack}
+        >
+          <ArrowLeftIcon />
+        </button>
+      </Tooltip>
+      <Tooltip label="Forward" command={APP_COMMAND.FORWARD}>
+        <button
+          type="button"
+          className="toolbar-button toolbar-icon-button"
+          aria-label="Forward"
+          disabled={!history.canGoForward}
+          onClick={history.onForward}
+        >
+          <ArrowRightIcon />
+        </button>
+      </Tooltip>
+    </div>
+  );
 }
 
 /**
@@ -135,13 +174,14 @@ function AccountButton({
  * developer moves between things; what they work on is the column beside it.
  * A plan's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
- * room. Its right edge resizes it, and a drag well past its least width
+ * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
  * folds it away. Folded away, it is inert as well as out of sight, so no key
  * reaches a row nobody can see.
  */
 export function DesktopSidebar({
   sidebar,
   identity,
+  history,
   plans,
   tab,
   onTabChange,
@@ -150,6 +190,7 @@ export function DesktopSidebar({
 }: {
   sidebar: SidebarCollapse;
   identity: LukeIdentityProps;
+  history: NavigationHistory;
   plans: PlansControl;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
@@ -190,6 +231,7 @@ export function DesktopSidebar({
   return (
     <aside className="desktop-sidebar" inert={sidebar.collapsed}>
       <div className="desktop-drag-strip" />
+      <HistoryButtons history={history} />
       <LukeIdentity {...identity} />
 
       <button

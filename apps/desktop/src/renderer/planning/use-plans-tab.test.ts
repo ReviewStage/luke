@@ -165,6 +165,36 @@ test("stepping back leaves an open plan for the new-plan page, which has nothing
   assert.equal(tab.told.filter((kind) => kind === ACT_KIND.PLANNING_CLOSE).length, 1);
 });
 
+test("the tab is bound for the plan a press asked for until the host answers, and a select or a leave that fails falls back to the open plan", async () => {
+  const OTHER = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+  let refuse: ((reason: Error) => void) | undefined;
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    {
+      [ACT_KIND.PLANNING_SELECT]: () =>
+        new Promise((_resolve, reject) => {
+          refuse = reject;
+        }),
+    },
+  );
+  assert.equal(tab.control().boundFor, PLAN.id);
+
+  act(() => tab.control().onSelect(OTHER));
+  assert.equal(tab.control().boundFor, OTHER, "said at once");
+  assert.equal(tab.control().activePlanId, PLAN.id, "while the host still has the old one open");
+  await act(async () => refuse?.(new Error("refused")));
+  assert.equal(tab.control().boundFor, PLAN.id);
+
+  // The harness refuses the leave, which it does not answer.
+  await act(async () => tab.control().onLeavePlan());
+  assert.equal(tab.control().boundFor, PLAN.id, "a refused leave stays on the plan");
+
+  act(() => tab.control().onLeavePlan());
+  assert.equal(tab.control().boundFor, undefined, "the new-plan page, asked for");
+  tab.stand({ planning: { ...OPEN, activePlanId: OTHER } });
+  assert.equal(tab.control().boundFor, OTHER, "the host's own move answers whatever was asked");
+});
+
 test("New plan leaves an open plan and asks the new-plan page for its name field on every press", () => {
   const tab = mount({ shown: true, planning: OPEN });
   const before = tab.control().newPlan.presses;
