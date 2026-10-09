@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { Effect, Option, Result } from "effect";
+import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
@@ -7,17 +8,21 @@ import {
   ACTION_RESULT_STATUS,
   BRAIN_TURN_TRIGGER,
   isWireString,
+  TURN_ORIGIN,
   type WireRecord,
 } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
+import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import { listJournals } from "../server/hosted/store/message-reads";
+import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { noNetwork } from "./support/no-network";
 import { insertConversation } from "./support/store-rows";
@@ -165,4 +170,75 @@ test("a conversation no plan names runs none of the planning tools, the question
 
   assert.equal(answer.status, ACTION_RESULT_STATUS.REJECTED);
   assert.ok(isWireString(answer.reason));
+});
+
+test("a worker's session is recorded in its child conversation as a child turn, and the planning session keeps the conversation's record", async () => {
+  const target = await planConversation();
+  const host = brainHost(seams);
+  const rootId = sessionId();
+  const auth = seat(target);
+  const starting = await database.run(host.admitStarting(auth, rootId));
+  if (Result.isFailure(starting)) return assert.fail(starting.failure);
+  assert.equal(await database.run(host.sessionStarted(starting.success, rootId)), true);
+
+  const turn = { id: "turn_0", sequence: 0 };
+  const child = {
+    id: `${rootId}-child`,
+    auth,
+    turn,
+    parent: { callId: "call-worker-1", rootSessionId: rootId, sessionId: rootId, turn },
+  };
+  const state = memoryRelayState();
+  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, NOW);
+  for (const event of [
+    stamped({ type: "turn.started", data: { turnId: "turn_0", sequence: 0 } }),
+    stamped({
+      type: "message.received",
+      data: { turnId: "turn_0", sequence: 0, message: "Compare the queues." },
+    }),
+    stamped({
+      type: "step.started",
+      data: { turnId: "turn_0", sequence: 0, stepIndex: 0, modelId: "m" },
+    }),
+    stamped({
+      type: "message.completed",
+      data: {
+        turnId: "turn_0",
+        sequence: 0,
+        stepIndex: 0,
+        finishReason: "stop",
+        message: "Queue A wins.",
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId: "turn_0", sequence: 0, stepIndex: 0, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId: "turn_0", sequence: 0 } }),
+  ]) {
+    await database.run(host.relayChild(event, child, state).pipe(Effect.provide(noNetwork)));
+  }
+
+  const journals = await database.run(
+    listJournals(
+      target.userId,
+      childConversationId(target.conversationId, "call-worker-1"),
+      HOSTED_TOOL_SET,
+      10,
+    ),
+  );
+  assert.ok(journals.ok);
+  assert.deepEqual(
+    journals.value.flatMap((row) =>
+      row.message.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])),
+    ),
+    ["Queue A wins."],
+  );
+  const [childTurn] = await database.run(
+    database.store.turns.named(target.userId, [hostTurnId(child.id, "turn_0")]),
+  );
+  assert.equal(childTurn?.origin, TURN_ORIGIN.CHILD);
+  // The planning session still stands for its conversation, so its own calls still run.
+  assert.ok(Result.isSuccess(await database.run(host.admit(auth, rootId))));
 });

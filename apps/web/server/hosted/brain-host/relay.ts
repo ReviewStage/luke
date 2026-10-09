@@ -35,8 +35,9 @@ import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,
-  type BrainHostTurn,
   RECEIVED_LINE,
+  RELAY_TURN,
+  type RelayTurn,
 } from "./bounds.js";
 import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
 
@@ -122,7 +123,7 @@ function joinedWords(head: string, tail: string): string {
 }
 
 interface RelayTurnState {
-  readonly kind: BrainHostTurn;
+  readonly kind: RelayTurn;
   readonly sequence: number;
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
@@ -165,7 +166,7 @@ export interface RelayStanding {
   readonly sessionId: string;
   readonly target: ConversationTarget;
   /** The kind of turn the request that opened the current turn named; nothing when it named none. */
-  readonly turn: BrainHostTurn | undefined;
+  readonly turn: RelayTurn | undefined;
   /** The model eve resolved the session's turns to, as the turn row records it; nothing where none is known. */
   readonly model?: string;
   /** The content address of the prompt the session runs under, as the turn row records it; nothing before the session composed one. */
@@ -204,7 +205,8 @@ interface StreamRelaySeams {
 const TURN_ORIGIN_OF_HOST_TURN = {
   [BRAIN_HOST_TURN.TYPED]: TURN_ORIGIN.TYPED,
   [BRAIN_HOST_TURN.SPOKEN]: TURN_ORIGIN.SPOKEN,
-} as const satisfies Record<BrainHostTurn, TurnOrigin>;
+  [RELAY_TURN.CHILD]: TURN_ORIGIN.CHILD,
+} as const satisfies Record<RelayTurn, TurnOrigin>;
 
 const TOOL_CALL_KIND = "tool-call";
 /** eve's own kind of action for a call to a declared subagent, named by the tool eve lowers the subagent into, which is the name its result carries. */

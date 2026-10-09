@@ -101,6 +101,19 @@ export function isBrainHostTurn(value: string): value is BrainHostTurn {
 }
 
 /**
+ * The kinds of turn the relay records: each a request names, and a
+ * subagent's task run in its own child session. Note that the child's is
+ * kept apart from `BRAIN_HOST_TURN`, because no request names it and the
+ * door must never admit it as one.
+ */
+export const RELAY_TURN = {
+  ...BRAIN_HOST_TURN,
+  CHILD: "child",
+} as const;
+
+export type RelayTurn = (typeof RELAY_TURN)[keyof typeof RELAY_TURN];
+
+/**
  * Where the developer's line of a turn stands on the record. Eve's received
  * message is the brain's input: for a typed ask it is the developer's own
  * words and the relay writes it as the user row. A spoken ask is the
@@ -121,7 +134,7 @@ export const RECEIVED_LINE = {
 
 export type ReceivedLine = (typeof RECEIVED_LINE)[keyof typeof RECEIVED_LINE];
 
-/** The run stream's origin and trigger for each kind of turn a request opens, and whose row its received message is. */
+/** The run stream's origin and trigger for each kind of turn the relay records, and whose row its received message is. */
 export const BRAIN_HOST_TURN_KIND = {
   [BRAIN_HOST_TURN.TYPED]: {
     origin: BRAIN_TURN_ORIGIN.TYPED,
@@ -133,8 +146,14 @@ export const BRAIN_HOST_TURN_KIND = {
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
   },
+  // The task the planning model handed the subagent is the child turn's received line.
+  [RELAY_TURN.CHILD]: {
+    origin: BRAIN_TURN_ORIGIN.CHILD,
+    trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+    receivedLine: RECEIVED_LINE.RELAY,
+  },
 } as const satisfies Record<
-  BrainHostTurn,
+  RelayTurn,
   {
     readonly origin: BrainTurnOrigin;
     readonly trigger: BrainTurnTrigger;

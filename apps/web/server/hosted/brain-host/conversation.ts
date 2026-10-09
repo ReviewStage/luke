@@ -6,6 +6,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { SessionAuth } from "eve/context";
 import { db } from "../../db/query.js";
 import { conversations } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import type { ConversationTarget } from "../store/index.js";
 import { actedForAccount, conversationIdOf } from "./auth.js";
 import { BRAIN_HOST_REFUSAL, type BrainHostRefusal } from "./bounds.js";
@@ -127,5 +128,50 @@ export function runtimeSessionOwner(
 ): Effect.Effect<string | undefined, ConversationFailure, SqlClient.SqlClient> {
   return Effect.map(findRuntimeSessionOwner(runtimeSessionId), (found) =>
     Option.getOrUndefined(Option.map(found, (row) => row.userId)),
+  );
+}
+
+const insertChildConversation = SqlSchema.findAll({
+  Request: Schema.Struct({
+    id: Schema.String,
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    label: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ id, userId, parentConversationId, label }) =>
+    db
+      .insert(conversations)
+      .values({
+        id,
+        userId,
+        kind: CONVERSATION_KIND.CHILD,
+        parentConversationId,
+        label,
+        expectsCompletion: false,
+      })
+      .onConflictDoNothing({ target: conversations.id })
+      .returning({ id: conversations.id }),
+});
+
+/**
+ * The child conversation a subagent's session is recorded in, opened beside
+ * its parent's the first time the subagent's task starts a turn and left as
+ * it stands every time after. It owes its parent no completion: eve hands
+ * the subagent's findings to the parent turn itself, so `expectsCompletion`
+ * is false and no completion sweep reads it.
+ */
+export function openChildConversation(
+  parent: ConversationTarget,
+  childId: string,
+  label: string,
+): Effect.Effect<void, SqlError | Schema.SchemaError, SqlClient.SqlClient> {
+  return Effect.asVoid(
+    insertChildConversation({
+      id: childId,
+      userId: parent.userId,
+      parentConversationId: parent.conversationId,
+      label,
+    }),
   );
 }

@@ -408,6 +408,34 @@ const FIXTURE_WORK: readonly PlanWorkTurn[] = [
         state: PLAN_WORK_STATE.RUNNING,
         subject: "Compare how two invite libraries let an admin revoke a pending invite.",
         input: "{}",
+        session: {
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "fixture-worker-1",
+              tool: PLAN_WORK_TOOL.SEARCH_WEB,
+              name: "search_web",
+              state: PLAN_WORK_STATE.DONE,
+              subject: "invite library revoke pending invite admin",
+              input: JSON.stringify(
+                { query: "invite library revoke pending invite admin" },
+                null,
+                2,
+              ),
+              output: "invite-kit docs: Revoking invites\ninvitely API: DELETE /invites/:id",
+            },
+            fixtureCommand(
+              "fixture-worker-2",
+              "grep -rn revoke node_modules/invite-kit/README.md",
+              "README.md:88:Admins may revoke any pending invite with revoke(invite).",
+            ),
+            {
+              type: PLAN_WORK_PART.TEXT,
+              text: "invite-kit lets any admin revoke a pending invite; invitely only lets its sender.",
+            },
+          ],
+        },
       },
       { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm checking how removal works now." },
       fixtureCommand(

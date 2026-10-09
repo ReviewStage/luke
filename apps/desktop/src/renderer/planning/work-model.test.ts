@@ -9,7 +9,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
-import { WORK_BLOCK, type WorkBlock, workRowsOf } from "./work-model";
+import { openedWorker, WORK_BLOCK, type WorkBlock, workRowsOf } from "./work-model";
 
 /** A call of `tool` about `subject`, at `state`. */
 function call(
@@ -155,4 +155,32 @@ test("each call says what it did, the subject set apart as code where it is code
       ["Used", "summon_reviewer", true],
     ],
   );
+});
+
+test("a worker's session is walked into blocks the way a turn is, each call on its own line, and opening it finds it inside a finished turn's fold", () => {
+  const worker = {
+    ...call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
+    session: {
+      earlierOmitted: false,
+      parts: [
+        call("s1", PLAN_WORK_TOOL.SEARCH_WEB, "queue revoke api"),
+        call("s2", PLAN_WORK_TOOL.READ_WEB_PAGE, "https://example.com/queue-a"),
+        words("Queue A lets an admin revoke."),
+      ],
+    },
+  };
+  const rows = workRowsOf(
+    [turn(PLAN_WORK_STATE.DONE, [worker, words("Queue A is the one to use.")])],
+    false,
+  );
+
+  const opened = openedWorker(rows, ["w"]);
+  assert.ok(opened?.session);
+  assert.deepEqual(scanned(opened.session.blocks), [
+    [WORK_BLOCK.CALL, "queue revoke api"],
+    [WORK_BLOCK.CALL, "example.com/queue-a"],
+    [WORK_BLOCK.TEXT, "Queue A lets an admin revoke."],
+  ]);
+  assert.equal(openedWorker(rows, ["w", "gone"]), undefined);
+  assert.equal(openedWorker(rows, ["gone"]), undefined);
 });

@@ -24,3 +24,15 @@ export const seams: BrainHostSeams = Effect.runSync(
 );
 
 export const host: BrainHost = brainHost(seams);
+
+/**
+ * Relays one event of a subagent's session into its child conversation, for
+ * the subagent's own hook, which runs here rather than at an edge of its own.
+ */
+export function relayChildEvent(
+  event: Parameters<BrainHost["relayChild"]>[0],
+  session: Parameters<BrainHost["relayChild"]>[1],
+  state: Parameters<BrainHost["relayChild"]>[2],
+): Promise<void> {
+  return runWeb(host.relayChild(event, session, state));
+}
