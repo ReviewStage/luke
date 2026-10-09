@@ -146,6 +146,15 @@ export function BackIcon(): React.JSX.Element {
   );
 }
 
+/** Points on, the way back came: the control that goes forward again. */
+export function ForwardIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="m9.4 5.8 6.2 6.2-6.2 6.2" />
+    </Glyph>
+  );
+}
+
 /** Sound leaving the machine: everything about how Luke is heard. */
 export function SpeakerIcon(): React.JSX.Element {
   return (

@@ -55,7 +55,8 @@ function commandItem(command: AppCommand): MenuItemConstructorOptions {
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, the window's
- * columns are View's, and the shortcuts are Help's.
+ * columns are View's, back and forward are Go's as Finder and Safari keep
+ * them, and the shortcuts are Help's.
  */
 export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
   return [
@@ -106,6 +107,7 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.NEXT_PLAN),
       ],
     },
+    { label: "Go", submenu: [commandItem(APP_COMMAND.BACK), commandItem(APP_COMMAND.FORWARD)] },
     { role: "windowMenu" },
     { role: "help", submenu: [commandItem(APP_COMMAND.KEYBOARD_SHORTCUTS)] },
   ];

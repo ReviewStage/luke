@@ -14,12 +14,14 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
-import { useAppKeymap, useMenuCommands } from "./app-commands";
+import { runAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackSlot } from "./feedback-slot";
 import { MarkdownMessage } from "./markdown-message";
+import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_PRESENTATION } from "./panel-state";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { planningCallHoldsPanel } from "./planning/planning-model";
@@ -272,6 +274,16 @@ export function App(): React.JSX.Element {
     shown: presentation === PANEL_PRESENTATION.PANEL && tab === PANEL_TAB.PLANS,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
+  // Where the window has stood, for back and forward, from the moment it
+  // knows where it stands.
+  const history = useWindowHistory({
+    known: state !== undefined && !accountGated,
+    tab,
+    onTabChange: changeTab,
+    settingsView,
+    onSettingsViewChange: setSettingsView,
+    plans,
+  });
   // The sidebar folds only where it is drawn: Settings keeps its page list,
   // and the sign-in gate draws no sidebar at all.
   const sidebar = useSidebarCollapse(state?.run.fixtureMode === true);
@@ -398,36 +410,31 @@ export function App(): React.JSX.Element {
         return;
       }
       if (presentation !== PANEL_PRESENTATION.PANEL) return;
+      // A dialog that took the press for itself is the nearest layer of all.
+      if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: a settings page back to the front page, then the settings tab
-      // back to Plans, then a side panel filling the window back beside its
-      // plan, then an open plan back to the new-plan page, then the panel
-      // itself. The settings search answers its own Escapes while the
-      // caret is in it — clearing, then letting go of the caret — so it is no
-      // layer here.
-      if (tab === PANEL_TAB.SETTINGS && settingsView !== SETTINGS_VIEW.ROOT) {
-        setSettingsView(SETTINGS_VIEW.ROOT);
-      } else if (tab === PANEL_TAB.SETTINGS) changeTab(PANEL_TAB.PLANS);
+      // time: Settings back to wherever it was opened from, then a side panel
+      // filling the window back beside its plan, then an open plan back to
+      // the new-plan page, then the panel itself. A menu and the settings
+      // search answer their own Escapes and keep them — the search clearing,
+      // then letting go of the caret — so neither is a layer here.
+      if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
       // its call. That page is the home tab, so the press past it closes the
       // panel.
-      else if (!plans.back()) void changeMode(false);
+      if (!plans.back()) void changeMode(false);
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, [
     changeMode,
-    changeTab,
     feedback.control.dismiss,
     presentation,
-    setSettingsView,
-    settingsView,
     signIn.cancelSignIn,
     listening,
     plans.back,
     speaking,
     stopSpeaking,
-    tab,
   ]);
 
   // The window's shortcuts, from the keys and from the menu bar alike, are
@@ -435,6 +442,7 @@ export function App(): React.JSX.Element {
   // app then, and no sheet stands over the controls that offer them.
   useAppKeymap(presentation === PANEL_PRESENTATION.PANEL);
   useMenuCommands(presentation === PANEL_PRESENTATION.PANEL);
+  useHistoryMouseButtons(history, presentation === PANEL_PRESENTATION.PANEL);
 
   // Nothing is drawn over a state the window has not been told, nor over a
   // runtime that could not answer for the settings every row reads.
@@ -522,6 +530,7 @@ export function App(): React.JSX.Element {
           tab={tab}
           onTabChange={changeTab}
           plans={plans}
+          history={history}
           sidebar={sidebar}
           // One caret anywhere in the panel is hands being here.
           onSettingsSearchEngaged={changeAskEngagement}

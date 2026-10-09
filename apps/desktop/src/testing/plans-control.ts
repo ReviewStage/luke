@@ -10,7 +10,10 @@ import {
 
 const ignore = () => undefined;
 
-/** A signed-in Plans tab on screen on its new-plan page with no plans, every press ignored. */
+/**
+ * A signed-in Plans tab on screen on its new-plan page with no plans, every
+ * press ignored, bound for whichever plan it is given as open.
+ */
 export function plansControl(overrides: Partial<PlansControl> = {}): PlansControl {
   return {
     page: PLANS_PAGE.NEW,
@@ -19,6 +22,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     plans: [],
     folders: {},
     activePlanId: undefined,
+    boundFor: overrides.activePlanId,
     listFailed: false,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { shown: COPY_SHOWN.IDLE, onPress: ignore },

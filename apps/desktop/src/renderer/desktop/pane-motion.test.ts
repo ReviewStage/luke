@@ -6,6 +6,7 @@ import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
@@ -197,6 +198,7 @@ function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
       unreadTabs,
       code,
     }),
+    history: navigationHistory(),
     sidebar,
     settings: settingsPanelProps(),
     onSettingsSearchEngaged: ignore,

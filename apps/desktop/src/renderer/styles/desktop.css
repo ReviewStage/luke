@@ -217,6 +217,18 @@ body,
   background: var(--title-bar-ground);
 }
 
+/* Back and forward at the right of the left column's title-bar row, the
+   plans' sidebar or Settings' page list, as far in from the column's edge as
+   its rows are. They stand in the column, so they keep to its right edge as
+   it is dragged and slide away with it, and nothing passes beneath them but
+   the column's own ground. At the column's least width they still end short
+   of the sidebar toggle's cluster. */
+.title-bar-controls[data-edge="column"] {
+  --title-bar-ground: var(--desktop-sidebar);
+  right: var(--column-inset);
+  left: auto;
+}
+
 .desktop-sidebar {
   display: flex;
   min-height: 0;
