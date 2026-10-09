@@ -209,11 +209,13 @@ export function usePlansTab(input: {
     },
     [act, fixture, openPlanId],
   );
+  // A leave is asked rather than told, so a refused one takes its ask back too.
   const leavePlan = useCallback(() => {
     if (fixture !== undefined) return;
-    setAsked({ planId: undefined, over: openPlanId });
-    tell(ACT_KIND.PLANNING_CLOSE);
-  }, [fixture, openPlanId, tell]);
+    const ask = { planId: undefined, over: openPlanId };
+    setAsked(ask);
+    act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
+  }, [act, fixture, openPlanId]);
 
   // A fixture's plans are deleted nowhere, as they are read from nowhere.
   const deletePlan = async (planId: string): Promise<ActionResult> => {

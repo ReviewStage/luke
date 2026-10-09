@@ -149,9 +149,11 @@ function useHistory(input: {
 /**
  * The window's history: Plans on the plan it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
- * or Settings on its page. A plan the account no longer lists is passed
- * over, unless the list itself could not be read; a plan that cannot be read
- * is still a place, and says so when it is gone back to. Going to a place
+ * or Settings on its page. A plan the account's list once held and holds no
+ * more is passed over, unless the list itself could not be read. Note that a
+ * plan no list has held yet is still a place, because the list may not have
+ * landed or may not yet carry a plan just started; a plan that cannot be read
+ * is a place too, and says so when it is gone back to. Going to a place
  * changes the tab only when it must, so a tab change is counted as any other.
  */
 export function useWindowHistory(input: {
@@ -165,6 +167,9 @@ export function useWindowHistory(input: {
 }): NavigationHistory {
   const { known, tab, settingsView, plans } = input;
   const { boundFor } = plans;
+  // Only grows, so writing it as the list is drawn is the same on every render.
+  const everListed = useRef(new Set<string>()).current;
+  for (const plan of plans.plans) everListed.add(plan.id);
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };
@@ -175,6 +180,7 @@ export function useWindowHistory(input: {
   const reachable = (to: Place) =>
     to.kind !== PLACE_KIND.PLAN ||
     plans.listFailed ||
+    !everListed.has(to.planId) ||
     plans.plans.some((plan) => plan.id === to.planId);
   const go = (to: Place) => {
     if (to.kind === PLACE_KIND.SETTINGS) {

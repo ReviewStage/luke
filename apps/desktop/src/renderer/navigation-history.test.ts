@@ -53,13 +53,16 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 function Window({
   start,
   listed,
+  restored,
 }: {
   start: PanelTab;
   listed: readonly PlanSummary[];
+  /** The plan the host has open at launch, before any list has landed. */
+  restored: string | undefined;
 }): React.JSX.Element {
   const [tab, setTab] = useState(start);
   const [view, setView] = useState<SettingsView>(SETTINGS_VIEW.ROOT);
-  const [open, setOpen] = useState<string | undefined>(undefined);
+  const [open, setOpen] = useState(restored);
   const sidebar = useSidebarCollapse(false);
   useAppKeymap(true);
   useMenuCommands(true);
@@ -72,8 +75,9 @@ function Window({
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
-  // A deleted plan the host had open is closed with it.
-  const shown = listed.some((plan) => plan.id === open) ? open : undefined;
+  // A deleted plan the host had open is closed with it; a list still on its
+  // way leaves the open plan as it is.
+  const shown = listed.length === 0 || listed.some((plan) => plan.id === open) ? open : undefined;
   const plans = plansControl({
     page: shown === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT,
     plans: listed,
@@ -116,10 +120,14 @@ function Window({
 let root: Root | undefined;
 
 /** Stands the window, or stands it again over a changed plan list, keeping where it has been. */
-function show(listed: readonly PlanSummary[] = EVERY_PLAN, start: PanelTab = PANEL_TAB.PLANS) {
+function show(
+  listed: readonly PlanSummary[] = EVERY_PLAN,
+  start: PanelTab = PANEL_TAB.PLANS,
+  restored: string | undefined = undefined,
+) {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Window, { start, listed }));
+    root.render(createElement(Window, { start, listed, restored }));
   });
 }
 
@@ -279,6 +287,16 @@ test("a deleted plan is passed over both ways", () => {
   command("]");
   assert.equal(where(), NEW_PLAN_PAGE, "forward skips Exports to where the delete left");
   assert.equal(historyButton("Forward").disabled, true);
+});
+
+test("a plan open before the account's list has landed is still a place to go back to", () => {
+  show([], PANEL_TAB.PLANS, INVITATIONS.id);
+  command(",");
+  assert.equal(historyButton("Back").disabled, false, "the open plan is behind Settings");
+
+  show(EVERY_PLAN);
+  click(historyButton("Back"));
+  assert.equal(where(), INVITATIONS.name);
 });
 
 test("the buttons are dimmed at the ends and hidden with the folded sidebar, whose chords still answer", () => {
