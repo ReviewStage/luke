@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentListAnswer,
+  type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
@@ -9,7 +10,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
-import { Duration, Effect, Schedule, type Scope } from "effect";
+import { Duration, Effect, Queue, Schedule, type Scope } from "effect";
 import { modelLabel } from "#shared/model-label";
 
 /**
@@ -38,7 +39,12 @@ import { modelLabel } from "#shared/model-label";
  * its agents with it.
  *
  * The notification says the plan's name, the model's name, and how the turn
- * ended, and nothing of the transcript.
+ * ended, and nothing of the transcript. A turn that completed is announced
+ * as the pull request it opened where one is found: each end is queued
+ * from the ledger's own synchronous path and a fiber on the notices' scope
+ * takes it, reads what the agent published once, and posts; an end whose
+ * read found nothing, or could not be made, says finished as before. The
+ * agent's unseen dot is set as the end is seen, ahead of the read.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
@@ -80,6 +86,8 @@ export interface AgentPlace {
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's one read. */
   listAgents: (planId: string) => Effect.Effect<CodingAgentListAnswer>;
+  /** What the agent published, read once as a completed turn ends for the pull request the notice names. */
+  readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** The plan's name as main holds it, or nothing for a plan it holds no name for. */
   planName: (planId: string) => string | undefined;
   poster: AgentNoticePoster;
@@ -117,6 +125,12 @@ interface HeldAgent {
   turnId: string | null;
   /** Whether a message of the developer's awaits a turn not yet opened, which keeps the plan watched past the end already announced. */
   awaiting: boolean;
+}
+
+/** One turn's end as the ledger saw it, waiting to be announced. */
+interface TurnEnd {
+  agentId: string;
+  agent: HeldAgent;
 }
 
 function stillWriting(status: CodingAgentStatus): boolean {
@@ -157,9 +171,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
   function* (
     dependencies: AgentNoticesDependencies,
   ): Effect.fn.Return<AgentNotices, never, Scope.Scope> {
-    const { listAgents, planName, poster, open, onUnseenChanged, report } = dependencies;
+    const { listAgents, readPullRequest, planName, poster, open, onUnseenChanged, report } =
+      dependencies;
     const ledger = new Map<string, HeldAgent>();
     const unseen = new Set<string>();
+    const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
@@ -168,20 +184,59 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       onUnseenChanged([...unseen]);
     }
 
-    /** A turn ended: announce it, unless the developer is looking at it. */
+    /** A turn ended: dot its tab and queue the announcement, unless the developer is looking at it. */
     function ended(agentId: string, agent: HeldAgent): void {
-      const text = noticeText({
-        planName: planName(agent.planId),
-        model: agent.model,
-        status: agent.status,
-        models,
-      });
-      if (text === undefined) return;
+      if (
+        agent.status !== CODING_AGENT_STATUS.COMPLETED &&
+        agent.status !== CODING_AGENT_STATUS.FAILED
+      ) {
+        return;
+      }
       if (focused && shownAgent === agentId) return;
       unseen.add(agentId);
       publishUnseen();
-      poster.post({ ...text, onClick: () => open({ planId: agent.planId, agentId }) });
+      Queue.offerUnsafe(ends, { agentId, agent });
     }
+
+    /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
+    const pullRequestOf = (end: TurnEnd): Effect.Effect<number | undefined> =>
+      end.agent.status !== CODING_AGENT_STATUS.COMPLETED
+        ? Effect.succeed(undefined)
+        : readPullRequest(end.agentId).pipe(
+            Effect.map((answer) =>
+              "pullRequest" in answer && answer.pullRequest !== null
+                ? answer.pullRequest.number
+                : undefined,
+            ),
+            Effect.catchDefect((defect) =>
+              Effect.sync(() => {
+                report(
+                  `the agent's pull request could not be read for its notice: ${defect instanceof Error ? defect.message : String(defect)}`,
+                );
+                return undefined;
+              }),
+            ),
+          );
+
+    /** One end announced: what the agent published read, then the notification posted. */
+    const announce = Effect.gen(function* () {
+      const end = yield* Queue.take(ends);
+      const pullRequest = yield* pullRequestOf(end);
+      const text = noticeText({
+        planName: planName(end.agent.planId),
+        model: end.agent.model,
+        status: end.agent.status,
+        models,
+        ...(pullRequest === undefined ? undefined : { pullRequest }),
+      });
+      if (text === undefined) return;
+      poster.post({
+        ...text,
+        onClick: () => open({ planId: end.agent.planId, agentId: end.agentId }),
+      });
+    });
+    // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
+    yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
 
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {

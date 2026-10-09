@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentListAnswer,
+  type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
@@ -46,6 +47,8 @@ function agent(
  */
 function fixture() {
   const listed: string[] = [];
+  const readPullRequests: string[] = [];
+  const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
   const opened: AgentPlace[] = [];
   const unseen: (readonly string[])[] = [];
@@ -59,6 +62,11 @@ function fixture() {
         const queue = answers.get(planId) ?? [];
         const answer = queue.length > 1 ? queue.shift() : queue[0];
         return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+      }),
+    readPullRequest: (agentId) =>
+      Effect.sync(() => {
+        readPullRequests.push(agentId);
+        return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     planName: (planId) => (planId === PLAN_ID ? PLAN_NAME : undefined),
     poster: { post: (notice) => posted.push(notice) },
@@ -82,7 +90,11 @@ function fixture() {
   return {
     notices,
     listed,
+    readPullRequests,
     posted,
+    /** What the agent's pull-request read answers, for the notice of its end. */
+    publish: (agentId: string, answer: CodingAgentPullRequestAnswerView) =>
+      published.set(agentId, answer),
     opened,
     unseen,
     /** The list answers a plan's reads hear, in order; the last stands for every read after it. */
@@ -132,6 +144,7 @@ it.effect(
       f.focus(false);
       notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
       notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      yield* Effect.yieldNow;
       assert.equal(f.posted.length, 1);
 
       // The message's answer: running, still under the ended turn's id, as
@@ -140,6 +153,7 @@ it.effect(
       notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.RUNNING);
       notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      yield* Effect.yieldNow;
       assert.equal(f.posted.length, 1);
 
       // The plan is watched until the next turn names itself.
@@ -196,6 +210,7 @@ it.effect("a window focused on another tab, or a plan left behind, is told", () 
     notices.shown(null);
     notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING)]);
     notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.FAILED);
+    yield* Effect.yieldNow;
     assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Claude Opus 5.5 failed" }]);
   }),
 );
@@ -220,6 +235,7 @@ it.effect("the click brings Luke to the plan on the agent's tab", () =>
     f.focus(false);
     notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
     notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+    yield* Effect.yieldNow;
 
     f.posted[0]?.onClick();
     assert.deepEqual(f.opened, [{ planId: PLAN_ID, agentId: AGENT_ID }]);
@@ -249,6 +265,7 @@ it.effect(
       assert.deepEqual(f.unseen.at(-1), [second]);
       f.focus(true);
       assert.deepEqual(f.unseen.at(-1), []);
+      yield* Effect.yieldNow;
       assert.equal(f.posted.length, 2);
     }),
 );
@@ -292,6 +309,7 @@ it.effect("the model is named as the catalog names it once the catalog has been 
     ]);
     notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { planId: OTHER_PLAN_ID })]);
     notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { planId: OTHER_PLAN_ID })]);
+    yield* Effect.yieldNow;
     assert.deepEqual(f.said(), [{ title: "Luke", body: "Claude Opus 5.5 (Anthropic) finished" }]);
   }),
 );
@@ -373,5 +391,54 @@ it.effect(
       yield* TestClock.adjust(WATCH);
       assert.equal(f.posted.length, 1);
       assert.deepEqual(f.listed, []);
+    }),
+);
+
+it.effect(
+  "a completed turn is announced as the pull request it opened, read once as it ends; one that opened none, or whose read did not answer, finished; a failed turn is not read",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      const opened = AGENT_ID;
+      const branchOnly = "a1b2c3d4-0000-4000-8000-000000000011";
+      const unanswered = "a1b2c3d4-0000-4000-8000-000000000012";
+      const failed = "a1b2c3d4-0000-4000-8000-000000000013";
+      f.publish(opened, {
+        repository: "acme/relay",
+        branch: "luke/teammate-invitations",
+        pullRequest: {
+          number: 123,
+          title: "Teammate invitations",
+          url: "https://github.com/acme/relay/pull/123",
+          state: "open",
+          checks: "passing",
+          additions: 210,
+          deletions: 14,
+          changedFiles: 6,
+        },
+      });
+      f.publish(branchOnly, { repository: "acme/relay", branch: "luke/x", pullRequest: null });
+      for (const id of [opened, branchOnly, unanswered, failed]) {
+        notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id })]);
+      }
+      for (const id of [opened, branchOnly, unanswered]) {
+        notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id })]);
+      }
+      notices.observeAgents([agent(CODING_AGENT_STATUS.FAILED, { id: failed })]);
+      // The dots are set as the ends are seen, ahead of any read.
+      assert.deepEqual(f.unseen.at(-1), [opened, branchOnly, unanswered, failed]);
+
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.said(), [
+        { title: PLAN_NAME, body: "Claude Opus 5.5 opened #123" },
+        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Claude Opus 5.5 failed" },
+      ]);
+      assert.deepEqual(f.readPullRequests, [opened, branchOnly, unanswered]);
+      f.posted[0]?.onClick();
+      assert.deepEqual(f.opened, [{ planId: PLAN_ID, agentId: opened }]);
     }),
 );

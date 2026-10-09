@@ -7,10 +7,12 @@ import {
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
   codingAgentDefaultWriteParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
+  codingAgentPullRequestParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
@@ -24,7 +26,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one stopped.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one stopped, what one published.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -40,7 +42,15 @@ import type { RunMode } from "./run-mode.js";
 /** The service's side of the agents, as this concern asks it. */
 export type CodingAgentClient = Pick<
   HostedCodingAgentClient,
-  "models" | "readDefault" | "writeDefault" | "list" | "start" | "messages" | "message" | "stop"
+  | "models"
+  | "readDefault"
+  | "writeDefault"
+  | "list"
+  | "start"
+  | "messages"
+  | "message"
+  | "stop"
+  | "pullRequest"
 >;
 
 export interface CodingAgentsDependencies {
@@ -146,6 +156,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.stop(agentId));
         return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST]: (params) =>
+      Effect.gen(function* () {
+        const { agentId } = yield* read(
+          codingAgentPullRequestParamsSchema,
+          params,
+          "reading what an agent published names one agent",
+        );
+        const answer = yield* asked(client.pullRequest(agentId));
+        return carried<CodingAgentPullRequestAnswerView>(answer);
       }),
   };
 

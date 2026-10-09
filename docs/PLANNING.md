@@ -276,6 +276,29 @@ selected the moment its Start lands.
   wears: starting or running (pulsing), completed, failed, or cancelled. A
   Stop stands while the agent may still write; it asks the service to cancel
   the turn and stop the sandbox, and anything the agent pushed stays.
+- **What it published.** Once the agent has pushed, the head wears a pill
+  for its pull request (`planning/agent-published.tsx`): the GitHub mark
+  and `#123`, coloured by where the pull request stands (open green, draft
+  grey, merged purple, closed red) with a dot for the checks on its head
+  (pending, passing, failing, or none), which opens the pull request in the
+  browser; or, with a branch pushed and no pull request from it yet, a chip
+  naming the branch. A ⋯ beside either offers Open pull request, Copy
+  branch name, Copy checkout command (`git fetch origin <branch> && git
+  switch <branch>`), and View changes on GitHub (the pull request's Files
+  tab, or the branch compared). Once the agent has ended with a pull
+  request, the transcript ends on one row summing it up ("Opened #123 ·
+  +210 −14 in 6 files") with Open. The window reads
+  `GET /api/agents/{id}/pull-request` (`planning/use-agent-pull-request.ts`)
+  as the tab comes on screen, as pages of the transcript land no closer
+  than fifteen seconds apart, and the moment a page says the agent ended;
+  the service keeps its answer thirty seconds per agent, reading afresh
+  the first time after the agent ends, so a tab reading beside every held
+  page asks GitHub a few times a minute at most and the pull request an
+  agent opens last shows the moment it ends. The branch and the pull
+  request are the agent's own: read off the commands it ran and the
+  addresses in its words and its tools' answers, with a pull request
+  counted only on the branch the agent itself named, so a link in a file
+  it read is never worn as its own.
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the same
   AI Elements components as the Transcript tab, on the same spacing: the
   plan it was handed, the first of the developer's messages, as a Plan card
@@ -830,7 +853,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { test } from "vitest";
@@ -13,6 +16,8 @@ import {
   agentLines,
   agentParts,
   applyMessagesPage,
+  changesUrl,
+  checkoutCommand,
   closesComposer,
   followsAgent,
   knownDeveloperRows,
@@ -21,8 +26,11 @@ import {
   modelLabel,
   opensOnGitHub,
   orderedModels,
+  publishedSummary,
+  pullRequestPillLabel,
   type SentLine,
   START_NEEDS_REPOSITORY,
+  showsPublishedRow,
   startFailureNote,
   unreadSentLines,
 } from "./coding-agent-model";
@@ -247,4 +255,66 @@ test("the menus list the models by provider, Anthropic first, and newest first w
       "openai/gpt-5.1-codex-max",
     ],
   );
+});
+
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 123,
+  title: "Teammate invitations",
+  url: "https://github.com/acme/relay/pull/123",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PASSING,
+  additions: 210,
+  deletions: 14,
+  changedFiles: 6,
+};
+
+test("the checkout command fetches and switches to the branch, and the changes open on the pull request's Files tab, else as the branch compared, else nowhere", () => {
+  assert.equal(
+    checkoutCommand("luke/teammate-invitations"),
+    "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
+  );
+  const repository = "acme/relay";
+  assert.equal(
+    changesUrl({ repository, branch: "luke/x", pullRequest: PULL_REQUEST }),
+    "https://github.com/acme/relay/pull/123/files",
+  );
+  assert.equal(
+    changesUrl({ repository, branch: "luke/x", pullRequest: null }),
+    "https://github.com/acme/relay/compare/luke/x?expand=1",
+  );
+  assert.equal(changesUrl({ repository, branch: null, pullRequest: null }), undefined);
+  // A branch a shell or an address would read into is quoted or encoded, never read.
+  assert.equal(
+    checkoutCommand("luke/$(touch pwned)'x"),
+    "git fetch origin 'luke/$(touch pwned)'\\''x' && git switch 'luke/$(touch pwned)'\\''x'",
+  );
+  assert.equal(
+    changesUrl({ repository, branch: "luke/issue#12 fix", pullRequest: null }),
+    "https://github.com/acme/relay/compare/luke/issue%2312%20fix?expand=1",
+  );
+});
+
+test("the row sums a finished turn up by where the pull request stands and how much changed, and is drawn only once the agent has ended with one", () => {
+  assert.equal(publishedSummary(PULL_REQUEST), "Opened #123 · +210 −14 in 6 files");
+  assert.equal(
+    publishedSummary({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED, changedFiles: 1 }),
+    "Merged #123 · +210 −14 in 1 file",
+  );
+  assert.equal(
+    publishedSummary({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.DRAFT }),
+    "Opened draft #123 · +210 −14 in 6 files",
+  );
+  assert.equal(
+    pullRequestPillLabel({ ...PULL_REQUEST, checks: CHECK_SUMMARY.FAILING }),
+    "Pull request #123, open, checks failing",
+  );
+  const published = { repository: "acme/relay", branch: "luke/x", pullRequest: PULL_REQUEST };
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, published), true);
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.CANCELLED, published), true);
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.RUNNING, published), false);
+  assert.equal(
+    showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, { ...published, pullRequest: null }),
+    false,
+  );
+  assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, undefined), false);
 });

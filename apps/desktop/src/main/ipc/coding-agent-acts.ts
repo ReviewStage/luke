@@ -8,6 +8,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
 } from "@sidecar/hosted/coding-agent-view";
@@ -39,6 +41,9 @@ export interface CodingAgentActsDependencies {
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentPullRequest(
+      params: CodingAgentPullRequestParams,
+    ): Effect.Effect<CodingAgentPullRequestAnswerView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -56,7 +61,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_MESSAGES
   | typeof ACT_KIND.CODING_AGENTS_MESSAGE
   | typeof ACT_KIND.CODING_AGENTS_STOP
-  | typeof ACT_KIND.CODING_AGENTS_SHOWN;
+  | typeof ACT_KIND.CODING_AGENTS_SHOWN
+  | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -124,6 +130,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
+    },
+    [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
+      return host.codingAgentPullRequest(params);
     },
   };
 }

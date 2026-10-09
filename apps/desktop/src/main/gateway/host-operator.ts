@@ -25,6 +25,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
+  type CodingAgentPullRequestAnswerView,
+  type CodingAgentPullRequestParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   codingAgentAgentAnswerSchema,
@@ -32,6 +34,7 @@ import {
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
+  codingAgentPullRequestAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
@@ -169,6 +172,10 @@ export interface HostOperator {
   codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
+  codingAgentPullRequest(
+    params: CodingAgentPullRequestParams,
+  ): Effect.Effect<CodingAgentPullRequestAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -461,6 +468,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentPullRequest: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
+        codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

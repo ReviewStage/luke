@@ -90,3 +90,8 @@ export function agentMessagesPath(agentId: string, after?: string): string {
 export function agentStopPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/stop`;
 }
+
+/** What one agent published (GET): the branch it pushed and the pull request from it, as GitHub holds them; `coding-agent-wire.ts` declares the answer. */
+export function agentPullRequestPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}/pull-request`;
+}

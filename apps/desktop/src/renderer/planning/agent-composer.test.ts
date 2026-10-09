@@ -106,6 +106,8 @@ function mount(initial: Standing) {
       models: undefined,
       transcript: { messages: held.messages, reading: false, failed: false, onRetry: ignore },
       composer,
+      published: undefined,
+      doors: { openGitHub: ignore, copy: ignore },
       onStop: () => {
         stops += 1;
         return Promise.resolve();

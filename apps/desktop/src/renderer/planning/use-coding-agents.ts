@@ -11,6 +11,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
 import { START_NEEDS_REPOSITORY, startFailureNote, withAgentStatus } from "./coding-agent-model";
 import type { MessageSender } from "./use-agent-composer";
+import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
 
 /**
@@ -63,6 +64,8 @@ export interface CodingAgentsControl {
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
   readTranscript: TranscriptReader;
+  /** One read of what an agent published, as its tab asks it. */
+  readPullRequest: PullRequestReader;
 }
 
 /** A Start on its way or asked again: the plan, the key the press minted, and the choice it was for. */
@@ -246,6 +249,11 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readPullRequest = useCallback<PullRequestReader>(
+    (agentId) => act(ACT_KIND.CODING_AGENTS_PULL_REQUEST, { agentId }),
+    [act],
+  );
+
   return {
     agents,
     agentIds: agents?.map((agent) => agent.id),
@@ -265,5 +273,6 @@ export function useCodingAgents(input: {
     onMessage,
     onStatus,
     readTranscript,
+    readPullRequest,
   };
 }

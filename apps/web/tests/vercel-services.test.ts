@@ -130,6 +130,8 @@ test("the /api/ rewrites are generated into the web service's routes, ahead of i
   const regenerated = JSON.parse(await vercelConfigSource(WEB)) as typeof vercel;
   assert.equal("routes" in regenerated, false);
   assert.deepEqual(regenerated.services[SERVICE.WEB].routes, web.routes);
+  // The generator carries every service whole, the coder's mount route included.
+  assert.deepEqual(regenerated.services, vercel.services);
 });
 
 test("a top-level routes key beside services is refused by the generator before the file is read for anything else", async () => {
