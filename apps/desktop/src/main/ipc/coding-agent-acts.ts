@@ -4,6 +4,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
+  type CodingAgentMessageParams,
   type CodingAgentMessagesAnswerView,
   type CodingAgentMessagesParams,
   type CodingAgentModelsAnswer,
@@ -36,6 +37,7 @@ export interface CodingAgentActsDependencies {
     codingAgentMessages(
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
+    codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
@@ -52,6 +54,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_LIST
   | typeof ACT_KIND.CODING_AGENTS_START
   | typeof ACT_KIND.CODING_AGENTS_MESSAGES
+  | typeof ACT_KIND.CODING_AGENTS_MESSAGE
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_SHOWN;
 
@@ -109,6 +112,10 @@ export function codingAgentActRows(
       return noted(host.codingAgentMessages(params), (answer) => {
         if ("status" in answer) notices.observeStatus(params.agentId, answer.status);
       });
+    },
+    [ACT_KIND.CODING_AGENTS_MESSAGE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGE, sender);
+      return notedAgent(host.codingAgentMessage(params));
     },
     [ACT_KIND.CODING_AGENTS_STOP]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);

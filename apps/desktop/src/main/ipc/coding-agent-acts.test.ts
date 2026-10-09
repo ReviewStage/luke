@@ -85,6 +85,11 @@ function fixture() {
           asked.push(`messages:${agentId}:${after}`);
           return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING };
         }),
+      codingAgentMessage: ({ agentId, text, delivery }) =>
+        Effect.sync(() => {
+          asked.push(`message:${agentId}:${delivery}:${text}`);
+          return STARTED;
+        }),
       codingAgentStop: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`stop:${agentId}`);
@@ -131,6 +136,25 @@ it.effect("a transcript read carries the agent and the cursor the panel stands a
     });
     assert.deepEqual(asked, [`messages:${AGENT_ID}:3:2`]);
   }),
+);
+
+it.effect(
+  "a message carries the agent, the words, and their delivery, and hears the agent back",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+
+      const outcome = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+          payload: { agentId: AGENT_ID, text: "Also expire them after a week.", delivery: "queue" },
+        },
+        PANEL,
+      );
+
+      assert.deepEqual(outcome, { status: ACT_OUTCOME_STATUS.DONE, value: STARTED });
+      assert.deepEqual(asked, [`message:${AGENT_ID}:queue:Also expire them after a week.`]);
+    }),
 );
 
 it.effect(

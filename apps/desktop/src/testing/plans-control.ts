@@ -23,6 +23,7 @@ export function codingAgentsControl(
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
     onStop: () => Promise.resolve(),
+    onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     onStatus: ignore,
     readTranscript: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     ...overrides,

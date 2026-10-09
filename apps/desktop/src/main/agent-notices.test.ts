@@ -19,6 +19,8 @@ const OTHER_PLAN_ID = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const PLAN_NAME = "Teammate invitations";
 const MODEL = "anthropic/claude-opus-5.5";
+const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
+const NEXT_TURN_ID = "4a2d3c8b-0e5f-4b7c-9d2e-3f6a7b8c9d0e";
 const WATCH = Duration.seconds(30);
 
 function agent(
@@ -32,7 +34,7 @@ function agent(
     effort: "high",
     createdAt: 1_800_000_000_000,
     status,
-    turnId: null,
+    turnId: TURN_ID,
     ...patch,
   };
 }
@@ -118,6 +120,48 @@ it.effect(
       notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
       assert.deepEqual(f.listed, [PLAN_ID]);
       assert.equal(f.posted.length, 1);
+    }),
+);
+
+it.effect(
+  "a message to an agent that had ended opens a run of its own: the ended turn read running again announces nothing and keeps the plan watched, and the next turn's end is the second notice",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      assert.equal(f.posted.length, 1);
+
+      // The message's answer: running, still under the ended turn's id, as
+      // eve has not opened the next turn yet. The transcript page the open
+      // tab reads says the same, and then says the old end again.
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.RUNNING);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.equal(f.posted.length, 1);
+
+      // The plan is watched until the next turn names itself.
+      f.answer(
+        PLAN_ID,
+        { agents: [agent(CODING_AGENT_STATUS.RUNNING)] },
+        { agents: [agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })] },
+        { agents: [agent(CODING_AGENT_STATUS.COMPLETED, { turnId: NEXT_TURN_ID })] },
+      );
+      yield* TestClock.adjust(Duration.times(WATCH, 2));
+      assert.equal(f.posted.length, 1);
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.said(), [
+        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
+      ]);
+      assert.deepEqual(f.listed, [PLAN_ID, PLAN_ID, PLAN_ID]);
+
+      // Ended under the new turn, the agent is left alone again.
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.listed, [PLAN_ID, PLAN_ID, PLAN_ID]);
+      assert.equal(f.posted.length, 2);
     }),
 );
 

@@ -4,7 +4,12 @@ import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
-import { CODING_AGENT_CURSOR_START, CODING_AGENT_STATUS } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_CURSOR_START,
+  CODING_AGENT_DELIVERY,
+  CODING_AGENT_STATUS,
+} from "./coding-agent-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -200,6 +205,66 @@ it.effect("reads the transcript past the cursor at the agent's messages address"
       `https://tryluke.dev/api/agents/${AGENT_ID}/messages?after=${encodeURIComponent(CODING_AGENT_CURSOR_START)}`,
     );
   }),
+);
+
+it.effect(
+  "messages an agent with its words and their delivery, and answers it running; each refusal the route names reads as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`POST /api/agents/${AGENT_ID}/messages`]: { answer: () => ({ agent: AGENT }) },
+      });
+
+      const answer = yield* Effect.provide(
+        client().message(AGENT_ID, {
+          text: "  Also expire them after a week.  ",
+          delivery: CODING_AGENT_DELIVERY.QUEUE,
+        }),
+        api.layer,
+      );
+      assert.deepEqual(answer, { agent: AGENT });
+      // The words travel trimmed, as the service keeps them.
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), {
+        text: "Also expire them after a week.",
+        delivery: CODING_AGENT_DELIVERY.QUEUE,
+      });
+
+      const refusals = [
+        [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY],
+        [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_CALL_FAILURE.AGENT_RETIRED],
+        [HOSTED_API_ERROR.MESSAGE_TOO_LONG, CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG],
+        [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST /api/agents/${AGENT_ID}/messages`]: {
+            status: HTTP_STATUS.CONFLICT,
+            answer: () => ({ error }),
+          },
+        });
+        const refused = yield* Effect.provide(
+          client().message(AGENT_ID, { text: "Go on.", delivery: CODING_AGENT_DELIVERY.STEER }),
+          refusing.layer,
+        );
+        assert.deepEqual(refused, { failure });
+      }
+
+      // Words past the bound, or none, never travel.
+      const tooLong = yield* Effect.provide(
+        client().message(AGENT_ID, {
+          text: "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+          delivery: CODING_AGENT_DELIVERY.STEER,
+        }),
+        api.layer,
+      );
+      assert.deepEqual(tooLong, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      const blank = yield* Effect.provide(
+        client().message(AGENT_ID, { text: "   ", delivery: CODING_AGENT_DELIVERY.STEER }),
+        api.layer,
+      );
+      assert.deepEqual(blank, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1);
+    }),
 );
 
 it.effect(

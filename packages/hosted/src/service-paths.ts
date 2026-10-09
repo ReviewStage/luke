@@ -74,9 +74,14 @@ export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;
 }
 
-/** One agent's transcript past a cursor (GET), held open while the agent runs; `coding-agent-wire.ts` declares the answer. */
-export function agentMessagesPath(agentId: string, after: string): string {
+/**
+ * One agent's messages: its transcript past a cursor (GET), held open while
+ * the agent runs, or, with no cursor, a message sent to it (POST).
+ * `coding-agent-wire.ts` declares the answer and the request.
+ */
+export function agentMessagesPath(agentId: string, after?: string): string {
   const path = `/api/agents/${encodeURIComponent(agentId)}/messages`;
+  if (after === undefined) return path;
   const query = new URLSearchParams({ after });
   return `${path}?${query}`;
 }

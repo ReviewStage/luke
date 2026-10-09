@@ -21,15 +21,21 @@ import { modelLabel } from "#shared/model-label";
  * by one read of its own: while any agent in the ledger is starting or
  * running, its plan's agents are listed again every `WATCH_INTERVAL`, the
  * panel's own list read on a clock rather than a second kind of read, so an
- * agent on a plan the developer has left is still watched. An agent whose
- * status moves from still writing to ended is a turn end, announced once:
- * as a notification, unless the window is focused and that agent's tab is
- * the one shown; and as the agent's unseen dot, until its tab is shown or
- * the window comes forward on it. A Stop is the developer's own and
- * announces nothing. The ledger is this launch's and this account's, so an
- * agent that ended before Luke watched it, or while Luke was not running,
- * is not announced, a reload of the window announces nothing twice, and an
- * account that signs out takes its agents with it.
+ * agent on a plan the developer has left is still watched. The ledger
+ * keys an agent's run by the turn its status is read from (`turnId`): a
+ * status that moves from still writing to ended under one turn is that
+ * turn's end, announced once, as a notification, unless the window is
+ * focused and that agent's tab is the one shown, and as the agent's unseen
+ * dot, until its tab is shown or the window comes forward on it. A message
+ * to an agent that had ended reads it running under the ended turn's id
+ * until eve opens the next turn, which is the old run read again and not
+ * a new one: the ledger keeps the end it announced and keeps the plan
+ * watched until the new turn's id arrives, whose own end is the next
+ * notice. A Stop is the developer's own and announces nothing. The ledger
+ * is this launch's and this account's, so an agent that ended before Luke
+ * watched it, or while Luke was not running, is not announced, a reload of
+ * the window announces nothing twice, and an account that signs out takes
+ * its agents with it.
  *
  * The notification says the plan's name, the model's name, and how the turn
  * ended, and nothing of the transcript.
@@ -102,11 +108,15 @@ export interface AgentNotices {
   shown(agentId: string | null): void;
 }
 
-/** What the ledger keeps of one agent: enough to watch it and to name it. */
+/** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
 interface HeldAgent {
   planId: string;
   model: string;
   status: CodingAgentStatus;
+  /** The turn the status is read from; none before the first. */
+  turnId: string | null;
+  /** Whether a message of the developer's awaits a turn not yet opened, which keeps the plan watched past the end already announced. */
+  awaiting: boolean;
 }
 
 function stillWriting(status: CodingAgentStatus): boolean {
@@ -176,16 +186,22 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      // An agent that ended stays ended: the reads overlap, and a list that
+      const sameTurn = was !== undefined && was.turnId === next.turnId;
+      // A turn that ended stays ended: the reads overlap, and a list that
       // read the agent running before it ended can land after the page that
-      // read it ended, which must not make its end a second turn's. A turn
-      // the developer starts after the end will need the wire to name the
-      // turn before the ledger can take it.
-      if (was !== undefined && !stillWriting(was.status) && stillWriting(next.status)) return;
+      // read it ended, which must not make its end a second turn's; and a
+      // message awaiting its turn reads the agent running under the ended
+      // turn's id, which is the same run until the next turn names itself.
+      // The plan stays watched meanwhile, so the next turn's id is read.
+      if (sameTurn && !stillWriting(was.status) && stillWriting(next.status)) {
+        ledger.set(agentId, { ...was, awaiting: true });
+        return;
+      }
       ledger.set(agentId, next);
-      // Only a move from still writing to ended is a turn's end: an agent
-      // first seen ended ended before Luke watched it.
-      if (was === undefined || !stillWriting(was.status) || stillWriting(next.status)) return;
+      // An agent first seen ended ended before Luke watched it; a turn that
+      // may still write has not ended; and one turn ends once.
+      if (was === undefined || stillWriting(next.status)) return;
+      if (sameTurn && !stillWriting(was.status)) return;
       ended(agentId, next);
     }
 
@@ -205,17 +221,25 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       publishUnseen();
     }
 
-    /** The plans with an agent still writing, each listed again on the watch's clock. */
+    /** The plans with an agent still writing, or one awaiting the turn a message opens, each listed again on the watch's clock. */
     function watchedPlans(): readonly string[] {
       const plans = new Set<string>();
-      for (const agent of ledger.values()) if (stillWriting(agent.status)) plans.add(agent.planId);
+      for (const agent of ledger.values()) {
+        if (stillWriting(agent.status) || agent.awaiting) plans.add(agent.planId);
+      }
       return [...plans];
     }
 
     const notices: AgentNotices = {
       observeAgents: (agents) => {
         for (const agent of agents) {
-          observe(agent.id, { planId: agent.planId, model: agent.model, status: agent.status });
+          observe(agent.id, {
+            planId: agent.planId,
+            model: agent.model,
+            status: agent.status,
+            turnId: agent.turnId,
+            awaiting: false,
+          });
         }
       },
       observeStatus: (agentId, status) => {

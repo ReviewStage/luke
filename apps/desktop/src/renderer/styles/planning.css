@@ -593,33 +593,96 @@
   color: var(--text-tertiary);
 }
 
-.agent-stop {
-  height: 26px;
-  padding: 0 9px;
-  color: var(--danger-text);
-  font-size: 12px;
-}
-
-.agent-stop:hover {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-}
-
-.agent-stop svg {
-  width: 12px;
-  height: 12px;
-}
-
 .agent-note {
   margin: 0;
   color: var(--error-text);
   font-size: 12px;
 }
 
-/* The room under the transcript for a message to the agent, drawn only
-   once the tab is handed one. */
+/* The room under the transcript for the composer. */
 .agent-tab-foot {
   flex: 0 0 auto;
   border-top: 1px solid var(--hairline);
+}
+
+/* The composer: the lines queued, the box, and a note under it, on the
+   transcript's own inset so the box and the column line up. */
+.agent-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 16px 12px;
+}
+
+.agent-composer-queued-mark {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+/* The keys, said small under the box while a turn runs; the line keeps
+   its height idle so the footer does not move as the turn ends. */
+.agent-composer-hint {
+  --keycap-size: 16px;
+  --keycap-text: 10px;
+
+  display: flex;
+  min-height: 16px;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding-left: 4px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.agent-composer-stop {
+  color: var(--danger-text);
+}
+
+.agent-composer-stop:hover {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger-text);
+}
+
+/* The send and its chevron, one pill: the chevron hangs the menu above. */
+.agent-composer-send {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.agent-composer-chevron {
+  width: 20px;
+}
+
+.agent-composer-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The menu opens above the send, since the box is the panel's last row,
+   and enters on the tokens reduced motion zeroes. */
+.agent-composer-menu.plan-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.agent-composer-closed {
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.agent-composer-note .plan-button {
+  padding: 2px 8px;
+  font-size: 12px;
 }
 
 /* A link in the transcript: the pull request opens in the browser, drawn

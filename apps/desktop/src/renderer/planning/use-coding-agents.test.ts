@@ -221,6 +221,39 @@ test("a Stop reads the list again, a read that fails keeps the agents drawn, a p
   assert.equal(tab.control().start.reason, undefined);
 });
 
+test("a message carries the agent, the words, and their delivery, and the agent's status takes the answer; a refusal is handed back as it is", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, {
+    agents: [{ ...STARTED, status: CODING_AGENT_STATUS.COMPLETED }],
+  });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_MESSAGE,
+    { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } },
+    { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY },
+  );
+  await tab.mount();
+
+  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "queue");
+  await settle();
+  assert.deepEqual(answer, { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } });
+  assert.deepEqual(tab.asked[1], {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+    payload: { agentId: AGENT, text: "Also expire them after a week.", delivery: "queue" },
+  });
+  assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
+
+  answer = await tab.control().onMessage(AGENT, "And tests.", "steer");
+  await settle();
+  assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+  // Nothing was read again: the answer is the status, and a refusal is none.
+  assert.equal(tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_LIST).length, 1);
+  assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
+
+  // A service that never answered reads as unanswered.
+  answer = await tab.control().onMessage(AGENT, "Hello?", "steer");
+  assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+});
+
 test("a Start that lands after the developer left the plan opens no tab on the plan now open", async () => {
   const other = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
   const tab = mount({ planId: PLAN, repository: "acme/relay" });

@@ -1,19 +1,30 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_DELIVERY,
+  CODING_AGENT_STATUS,
+  type CodingAgentMessage,
+} from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
   AGENT_PART,
+  agentLines,
   agentParts,
   applyMessagesPage,
+  closesComposer,
   followsAgent,
+  knownDeveloperRows,
+  messageFailureNote,
+  messageWords,
   modelLabel,
   opensOnGitHub,
   orderedModels,
+  type SentLine,
   START_NEEDS_REPOSITORY,
   startFailureNote,
+  unreadSentLines,
 } from "./coding-agent-model";
 
 function message(id: string, text: string): CodingAgentMessage {
@@ -125,6 +136,81 @@ test("only a page on GitHub opens from the transcript, and each Start refusal ha
   assert.equal(startFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY), START_NEEDS_REPOSITORY);
   const notes = new Set(Object.values(CODING_AGENT_CALL_FAILURE).map(startFailureNote));
   assert.equal(notes.size, Object.values(CODING_AGENT_CALL_FAILURE).length);
+});
+
+test("a message's refusals each say what to do, the agent ended for good closes the box, and a refusal no message meets reads as no answer", () => {
+  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), /still starting/u);
+  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG), /too long/u);
+  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), /ended for good/u);
+  assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.NOT_FOUND), /no longer exists/u);
+  assert.equal(
+    messageFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY),
+    messageFailureNote(CODING_AGENT_CALL_FAILURE.UNANSWERED),
+  );
+  assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), true);
+  assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), false);
+});
+
+/** A row of the developer's, awaiting its delivery or taken. */
+function developer(
+  id: string,
+  text: string,
+  awaiting?: typeof CODING_AGENT_DELIVERY.STEER | typeof CODING_AGENT_DELIVERY.QUEUE,
+): CodingAgentMessage {
+  return {
+    id,
+    role: "user",
+    parts: [{ type: "text", text }],
+    ...(awaiting === undefined ? undefined : { metadata: { delivery: awaiting } }),
+  };
+}
+
+test("a sent line is read back by a developer's row it did not know holding its words, one row answering one line in order", () => {
+  const plan = developer("m-plan", "Go on.");
+  const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
+    id,
+    text,
+    delivery: CODING_AGENT_DELIVERY.STEER,
+    known: knownDeveloperRows(known),
+  });
+  // The plan already says the same words: the line is not read back by it.
+  const first = sent("sent-1", "Go on.", [plan]);
+  assert.deepEqual(unreadSentLines([first], [plan]), [first]);
+  // Two lines of the same words are read back one row at a time, in order.
+  const second = sent("sent-2", "Go on.", [plan]);
+  const one = [plan, developer("m-1", "Go on.", CODING_AGENT_DELIVERY.STEER)];
+  assert.deepEqual(unreadSentLines([first, second], one), [second]);
+  const two = [...one, developer("m-2", "Go on.")];
+  assert.deepEqual(unreadSentLines([first, second], two), []);
+  // Other words are nobody's.
+  assert.deepEqual(unreadSentLines([first], [plan, developer("m-3", "Stop.")]), [first]);
+  assert.equal(messageWords(two[2] ?? plan), "Go on.");
+});
+
+test("the rows awaiting the end of the turn stand in the queue and every other row in the transcript, the lines sent and not read back among them", () => {
+  const plan = developer("m-plan", "Go on.");
+  const steered = developer("m-1", "Now.", CODING_AGENT_DELIVERY.STEER);
+  const queued = developer("m-2", "Later.", CODING_AGENT_DELIVERY.QUEUE);
+  const taken = developer("m-3", "Taken.");
+  const line: SentLine = {
+    id: "sent-1",
+    text: "Soon.",
+    delivery: CODING_AGENT_DELIVERY.QUEUE,
+    known: new Set(),
+  };
+  const lines = agentLines([plan, steered, queued, taken], [line]);
+  assert.deepEqual(
+    lines.transcript.map((each) => each.id),
+    ["m-plan", "m-1", "m-3"],
+  );
+  assert.deepEqual(
+    lines.queued.map((each) => [each.id, messageWords(each)]),
+    [
+      ["m-2", "Later."],
+      ["sent-1", "Soon."],
+    ],
+  );
+  assert.equal(lines.queued[1]?.role, "user");
 });
 
 test("the menus list the models by provider, Anthropic first, and newest first within each, the catalog's order kept between one version's models", () => {

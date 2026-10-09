@@ -101,6 +101,8 @@ export const codingAgentMessageRequestSchema = EffectSchema.Struct({
   delivery: EffectSchema.Literals(Object.values(CODING_AGENT_DELIVERY)),
 });
 
+export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
+
 /** The one metadata key a message's row carries while it awaits its turn, read with every other key dropped. */
 const awaitedDeliverySchema = EffectSchema.Struct({
   delivery: EffectSchema.Literals(Object.values(CODING_AGENT_DELIVERY)),

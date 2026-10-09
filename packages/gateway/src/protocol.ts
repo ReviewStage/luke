@@ -43,6 +43,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_START: "codingAgents.start",
   /** One agent's transcript past a cursor, held open by the service while the agent runs. */
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
+  /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
+  CODING_AGENTS_MESSAGE: "codingAgents.message",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** Everything a window's bootstrap reads of the host, in one answer. */

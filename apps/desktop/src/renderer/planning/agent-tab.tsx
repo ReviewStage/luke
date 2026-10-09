@@ -1,10 +1,5 @@
-import {
-  CODING_AGENT_STATUS,
-  type CodingAgentMessage,
-  type CodingAgentSummary,
-} from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentMessage, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
-import { StopIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import {
   FilePenIcon,
@@ -15,7 +10,7 @@ import {
   TerminalIcon,
   WrenchIcon,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import type { ReactNode } from "react";
 import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -35,22 +30,26 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "../ai-elements/tool";
+import { AgentComposer } from "./agent-composer";
 import {
   AGENT_PART,
   AGENT_STATUS_LABEL,
   type AgentPart,
+  agentLines,
   agentParts,
   agentStillWriting,
   agentTabLabel,
+  messageWords,
   opensOnGitHub,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
 import { planCardTitle, TOOL_GLYPH, type ToolGlyph, toolCallView } from "./tool-call-model";
-import { useAgentTranscript } from "./use-agent-transcript";
+import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
+import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, the Stop, and its transcript live.
+ * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, its transcript live, and the message box under it.
  *
  * The transcript is drawn with the AI Elements components, as the
  * Transcript tab's is and on the same spacing, from the agent's stored
@@ -70,7 +69,11 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * drawn and goes nowhere. Every word here is the agent's or the plan's,
  * so the root is left out of the screen recording (`ph-no-capture`) as a
  * second line behind the recording's text masking. Under the transcript
- * is the room for a composer, which the tab is handed and does not draw.
+ * stands the composer (`agent-composer.tsx`): a line the developer sends
+ * joins the transcript at once as theirs and is read back from the
+ * service's own row, a line queued for after the turn stands above the
+ * box until its turn opens, and the Stop is the composer's, the one the
+ * tab has.
  */
 
 /** What the tab says before the agent's first message lands. */
@@ -116,11 +119,6 @@ const PLAN_CARD_LABEL = "Plan";
 
 /** What stands at the end of the transcript while the agent may still write. */
 const WORKING_LINE = "Working…";
-
-/** How a copy of a turn carries its words: the text parts, one paragraph each. */
-function turnWords(parts: readonly AgentPart[]): string {
-  return parts.flatMap((part) => (part.kind === AGENT_PART.TEXT ? [part.text] : [])).join("\n\n");
-}
 
 /** One tool call: its row, and its input and answer under it once opened. */
 function ToolCallView({
@@ -216,7 +214,7 @@ function AgentMessage({
   copyText: (words: string) => Promise<void>;
 }): ReactNode {
   const parts = agentParts(message);
-  const words = turnWords(parts);
+  const words = messageWords(message);
   if (plan) return <PlanCard text={words} components={components} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
@@ -254,20 +252,14 @@ export function AgentStatusDot({ status }: { status: CodingAgentSummary["status"
   );
 }
 
-/** The tab's head: model · effort · status, and the Stop while the agent may still write. */
+/** The tab's head: model · effort · status. The Stop is the composer's, under the transcript. */
 export function AgentHeader({
   agent,
   models,
-  onStop,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
-  onStop: (agentId: string) => Promise<void>;
 }): React.JSX.Element {
-  const [stopping, setStopping] = useState(false);
-  // Note that Stop stands only once a turn runs, because the service cancels
-  // the turn under way and a starting agent has none yet to cancel.
-  const stoppable = agent.status === CODING_AGENT_STATUS.RUNNING;
   return (
     <header className="agent-tab-header">
       <AgentStatusDot status={agent.status} />
@@ -278,20 +270,6 @@ export function AgentHeader({
         <span className="agent-tab-separator"> · </span>
         <span data-status={agent.status}>{AGENT_STATUS_LABEL[agent.status]}</span>
       </span>
-      {stoppable ? (
-        <button
-          type="button"
-          className="toolbar-button agent-stop"
-          disabled={stopping}
-          onClick={() => {
-            setStopping(true);
-            onStop(agent.id).finally(() => setStopping(false));
-          }}
-        >
-          <StopIcon />
-          {stopping ? "Stopping…" : "Stop"}
-        </button>
-      ) : null}
     </header>
   );
 }
@@ -369,18 +347,62 @@ export function AgentTranscriptView({
   );
 }
 
+/**
+ * The tab as drawn from what it holds: the head, the transcript with the
+ * lines sent and not yet read back at its end, and the composer under it
+ * with the lines queued above its box.
+ */
+export function AgentTabView({
+  agent,
+  models,
+  transcript,
+  composer,
+  onStop,
+  openGitHub,
+  copyText,
+}: {
+  agent: CodingAgentSummary;
+  models: readonly CatalogModel[] | undefined;
+  transcript: AgentTranscriptControl;
+  composer: AgentComposerControl;
+  onStop: () => Promise<void>;
+  openGitHub: (url: string) => void;
+  copyText: (words: string) => Promise<void>;
+}): React.JSX.Element {
+  const lines = agentLines(transcript.messages, composer.sent);
+  return (
+    <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
+      <AgentHeader agent={agent} models={models} />
+      <AgentTranscriptView
+        messages={lines.transcript}
+        reading={transcript.reading}
+        failed={transcript.failed}
+        working={agentStillWriting(agent.status)}
+        onRetry={transcript.onRetry}
+        openGitHub={openGitHub}
+        copyText={copyText}
+      />
+      <footer className="agent-tab-foot">
+        <AgentComposer
+          status={agent.status}
+          composer={composer}
+          queued={lines.queued}
+          onStop={onStop}
+        />
+      </footer>
+    </section>
+  );
+}
+
 export function AgentTab({
   agent,
   control,
   shown,
-  composer,
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
   /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
   shown: boolean;
-  /** What stands under the transcript, where a message to the agent is written; nothing draws the room without one. */
-  composer?: ReactNode;
 }): React.JSX.Element {
   const { act, tell } = useAct();
   const transcript = useAgentTranscript({
@@ -390,19 +412,21 @@ export function AgentTab({
     read: control.readTranscript,
     onStatus: control.onStatus,
   });
+  const composer = useAgentComposer({
+    agentId: agent.id,
+    messages: transcript.messages,
+    send: control.onMessage,
+    onStatus: control.onStatus,
+  });
   return (
-    <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, control.models)}>
-      <AgentHeader agent={agent} models={control.models} onStop={control.onStop} />
-      <AgentTranscriptView
-        messages={transcript.messages}
-        reading={transcript.reading}
-        failed={transcript.failed}
-        working={agentStillWriting(agent.status)}
-        onRetry={transcript.onRetry}
-        openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
-        copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
-      />
-      {composer === undefined ? null : <footer className="agent-tab-foot">{composer}</footer>}
-    </section>
+    <AgentTabView
+      agent={agent}
+      models={control.models}
+      transcript={transcript}
+      composer={composer}
+      onStop={() => control.onStop(agent.id)}
+      openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+      copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+    />
   );
 }

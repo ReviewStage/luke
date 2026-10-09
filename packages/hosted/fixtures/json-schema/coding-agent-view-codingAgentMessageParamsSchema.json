@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "agentId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000
+    },
+    "delivery": {
+      "type": "string",
+      "enum": [
+        "steer",
+        "queue"
+      ]
+    }
+  },
+  "required": [
+    "agentId",
+    "text",
+    "delivery"
+  ],
+  "additionalProperties": false
+}

@@ -251,7 +251,7 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
 });
 
-test("the head says model · effort · status with the dot, and offers Stop only while a turn runs", () => {
+test("the head says model · effort · status with the dot, and holds no Stop of its own: the composer's is the one", () => {
   const agent = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
@@ -261,36 +261,22 @@ test("the head says model · effort · status with the dot, and offers Stop only
     status: CODING_AGENT_STATUS.RUNNING,
     turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
   } as const;
-  const running = renderToStaticMarkup(
-    createElement(AgentHeader, { agent, models: undefined, onStop: () => Promise.resolve() }),
-  );
+  const running = renderToStaticMarkup(createElement(AgentHeader, { agent, models: undefined }));
   assert.match(running, /class="agent-status-dot" data-status="running" data-live="true"/u);
   assert.match(
     running,
     /Claude Opus 5\.5<\/strong><span[^>]*> · <\/span>high<span[^>]*> · <\/span><span data-status="running">Running/u,
   );
-  assert.match(running, /Stop<\/button>/u);
+  assert.doesNotMatch(running, /<button/u);
 
   const ended = renderToStaticMarkup(
     createElement(AgentHeader, {
       agent: { ...agent, status: CODING_AGENT_STATUS.COMPLETED },
       models: undefined,
-      onStop: () => Promise.resolve(),
     }),
   );
   assert.match(ended, /data-status="completed" data-live="false"/u);
-  assert.doesNotMatch(ended, /Stop<\/button>/u);
-
-  // A starting agent has no turn the service could cancel yet, so Stop waits for one.
-  const starting = renderToStaticMarkup(
-    createElement(AgentHeader, {
-      agent: { ...agent, status: CODING_AGENT_STATUS.STARTING },
-      models: undefined,
-      onStop: () => Promise.resolve(),
-    }),
-  );
-  assert.match(starting, /data-status="starting" data-live="true"/u);
-  assert.doesNotMatch(starting, /Stop<\/button>/u);
+  assert.match(ended, /data-status="completed">Completed/u);
 });
 
 test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {
