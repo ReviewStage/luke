@@ -103,7 +103,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
     [ACT_KIND.UPDATE_OPEN_CHANGELOG]: () => updates.openChangelog(),
     [ACT_KIND.FEEDBACK_SEND]: ({ submission }) => telemetry.deliverFeedback(submission),
     [ACT_KIND.WINDOW_COPY_TEXT]: ({ words }) => clipboard.writeText(words),
-    [ACT_KIND.WINDOW_QUIT]: () => config.quit(),
   };
 
   const reports: ReportHandlers = {

@@ -220,15 +220,6 @@ export function UserIcon(): React.JSX.Element {
   );
 }
 
-export function PowerIcon(): React.JSX.Element {
-  return (
-    <Glyph>
-      <path d="M12 3v8.4" />
-      <path d="M17.6 6.2a7.6 7.6 0 1 1-11.2 0" />
-    </Glyph>
-  );
-}
-
 /** A magnifier: the list read for the rows that say the typed words. */
 export function SearchIcon(): React.JSX.Element {
   return (

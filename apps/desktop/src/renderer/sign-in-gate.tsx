@@ -64,14 +64,12 @@ export function SignInGate({
   account,
   failure,
   onBegin,
-  onQuit,
 }: {
   account: AccountSnapshot;
   /** Why the last attempt ended without landing, from the flow's owner. */
   failure?: string;
   /** Starts the flow; the app stands the panel down to the waiting popup. */
   onBegin: (provider: AccountProvider) => void;
-  onQuit: () => void;
 }): React.JSX.Element {
   const pending = account.status === ACCOUNT_STATUS.SIGNING_IN;
 
@@ -104,11 +102,6 @@ export function SignInGate({
         </button>
       </div>
       {failure ? <small className="sign-in-error">{failure}</small> : null}
-      {/* The way out, quiet on purpose: it is the one control here that is not
-          the reason the screen exists. */}
-      <button type="button" className="sign-in-quit" onClick={onQuit}>
-        Quit Luke
-      </button>
     </section>
   );
 }

@@ -69,28 +69,6 @@
   color: var(--state-attention);
 }
 
-/* Quiet on purpose: leaving is the one action here that is not the reason the
-   screen exists, so it reads as a footnote until it is asked after — and then
-   admits what it is the way every destructive control does. */
-.sign-in-quit {
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 8px;
-  margin-top: 4px;
-  background: none;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-  font-weight: 620;
-  transition:
-    background-color var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.sign-in-quit:hover {
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
-  color: var(--danger-text);
-}
-
 /* The waiting popup's one line: whose sign-in, what is being waited for, and
    the way to take it back. */
 .sign-in-slot-copy {

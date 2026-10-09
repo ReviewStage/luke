@@ -122,7 +122,6 @@ export const ACT_KIND = {
   WINDOW_SET_EXPANDED: "window.setExpanded",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
-  WINDOW_QUIT: "window.quit",
   FEEDBACK_SEND: "feedback.send",
 } as const;
 
@@ -453,7 +452,6 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not copy that to the clipboard on this system.",
   },
-  [ACT_KIND.WINDOW_QUIT]: press("Could not quit on this system."),
   [ACT_KIND.FEEDBACK_SEND]: {
     payload: fields<{ submission: FeedbackSubmission }>({
       submission: (value) => feedbackSubmission(value) !== undefined,

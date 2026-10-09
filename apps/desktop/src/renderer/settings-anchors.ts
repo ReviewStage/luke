@@ -25,7 +25,6 @@ export const SETTINGS_SEARCH_ROW = {
   FEEDBACK: "feedback",
   SIGN_OUT: "sign-out",
   DELETE_ACCOUNT: "delete-account",
-  QUIT: "quit",
   MICROPHONE: "microphone",
   TALK_KEY: "talk-key",
   STOP_KEY: "stop-key",
