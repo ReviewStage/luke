@@ -11,6 +11,13 @@ export {
 export { AccountRefreshFailed, type AccountToken } from "./account-token.js";
 export { ASK_ORIGIN, type AskOrigin } from "./ask-wire.js";
 export {
+  GITHUB_INSTALL_LANDING,
+  GITHUB_INSTALL_STATUS,
+  type GitHubInstallStatus,
+  githubInstallLandingPath,
+  githubInstallStatusFromWire,
+} from "./github-install-wire.js";
+export {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,
   hostedVoiceServiceOrigin,

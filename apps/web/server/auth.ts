@@ -8,8 +8,9 @@ import { authDatabase, authDatabaseAdapter } from "./auth-database.js";
 import { authDeployment, authSecrets, type SocialClient } from "./auth-deployment.js";
 import {
   ACCOUNT_TOKEN_STORAGE,
+  DISABLED_AUTH_PATHS,
   denyOAuthClientPrivileges,
-  GITHUB_SIGN_IN_SCOPES,
+  GITHUB_SIGN_IN,
   JWT_KEY_STORAGE,
 } from "./auth-policy.js";
 import { authProxy } from "./auth-proxy.js";
@@ -41,11 +42,10 @@ const refuseWithoutSessionSecret = createAuthMiddleware(async () => {
 });
 
 /** The one place a social secret is revealed: handed to Better Auth, which puts it on the provider's token request. */
-function socialProvider(client: SocialClient, scope: readonly string[]) {
+function socialProvider(client: SocialClient) {
   return {
     clientId: client.clientId,
     clientSecret: client.clientSecret === undefined ? "" : Redacted.value(client.clientSecret),
-    scope: [...scope],
   };
 }
 
@@ -67,10 +67,13 @@ export const auth = betterAuth({
       role: { type: "string", required: false, defaultValue: USER_ROLE.USER, input: false },
     },
   },
-  disabledPaths: ["/token"],
+  disabledPaths: [...DISABLED_AUTH_PATHS],
   socialProviders: {
-    google: socialProvider(secrets.google, ["email", "profile"]),
-    github: socialProvider(secrets.github, GITHUB_SIGN_IN_SCOPES),
+    google: { ...socialProvider(secrets.google), scope: ["email", "profile"] },
+    // The Luke GitHub App's client: signing in is the user's authorization
+    // of the App, and the token it leaves on the account row is the App's
+    // expiring user token, refreshed by `github/github-app.ts`.
+    github: { ...socialProvider(secrets.github), ...GITHUB_SIGN_IN },
   },
   plugins: [
     // Ahead of the social sign-in it rewrites, and of the provider plugin whose

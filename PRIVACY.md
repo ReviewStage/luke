@@ -125,12 +125,22 @@ beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
 OpenAI keeps the request and its reply under its own retention policy.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email
-address, and which of the two you used. Signing in with GitHub grants no
-access to your repositories: plans read a folder on your Mac instead. An
-account that signed in with GitHub before this may still hold GitHub's `repo`
-permission, which Luke no longer uses; you can revoke it at any time in
-GitHub's settings under Applications. We also keep the records that keep you
-signed in, and a daily count of how much voice and review you have used.
+address, and which of the two you used. Signing in with GitHub is your
+authorization of the Luke GitHub App: the token GitHub gives us reaches only
+the repositories where you have installed the App and that you can already
+see, with the App's permissions (reading a repository's details, reading and
+writing its contents and pull requests, and reading your email addresses),
+and it reaches none until you install the App. We keep that token and the
+refresh token that renews it sealed under a server-only secret, read them
+only on our service, and never hand them to your Mac, a browser, or anyone
+else; they go when you delete your account, and you can revoke the App's
+access at any time in GitHub's settings under Applications. An account that
+signed in with GitHub before the App may still hold the earlier sign-in's
+`repo` permission, which Luke no longer uses; revoke it in the same place.
+Installing the App stores nothing about you with us: which repositories it
+can see is read from GitHub when you choose one. We also keep the records
+that keep you signed in, and a daily count of how much voice and review you
+have used.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an

@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { symmetricEncrypt } from "better-auth/crypto";
 import { oAuthProxy } from "better-auth/plugins";
+import { Redacted } from "effect";
 import { test } from "vitest";
-import { authDeployment, LOCAL_AUTH_URL } from "../server/auth-deployment";
+import {
+  authDeployment,
+  authSecrets,
+  GITHUB_APP_ENVIRONMENT,
+  LOCAL_AUTH_URL,
+} from "../server/auth-deployment";
 import {
   authProxy,
   isTrustedProxyCallback,
@@ -225,4 +231,17 @@ test("only a preview carries the sign-in hook that names that return, ahead of t
   assert.notEqual(preview.hooks.before[0], plugin.hooks.before[0]);
   assert.equal(production.hooks.before.length, plugin.hooks.before.length + 1);
   assert.equal(production.hooks.before[0] === preview.hooks.before[0], false);
+});
+
+test("the GitHub sign-in's client is the Luke GitHub App's, read from the App's own variables", () => {
+  const secrets = authSecrets({
+    [GITHUB_APP_ENVIRONMENT.CLIENT_ID]: "Iv1.fixture-app-client",
+    [GITHUB_APP_ENVIRONMENT.CLIENT_SECRET]: "fixture-app-client-secret",
+    GITHUB_CLIENT_ID: "the-oauth-app-from-before",
+    GITHUB_CLIENT_SECRET: "its-secret",
+  });
+
+  assert.equal(secrets.github.clientId, "Iv1.fixture-app-client");
+  assert.ok(secrets.github.clientSecret);
+  assert.equal(Redacted.value(secrets.github.clientSecret), "fixture-app-client-secret");
 });

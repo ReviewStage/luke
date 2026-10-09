@@ -2,6 +2,7 @@ import { ConfigProvider, Effect, Layer, Logger, ManagedRuntime } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
+import { githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";
 import { modelCatalogLayer } from "./hosted/model-catalog.js";
 
@@ -35,7 +36,9 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * What the deployment's environment says about the hosted tier is read here
  * too, once per instance rather than at each invocation: `HostedEnvironment`
  * is the one place `OPENAI_API_KEY`, the brain model override, and the
- * analytics processor's own deletion key and project are read.
+ * analytics processor's own deletion key and project are read, and
+ * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
+ * private key are.
  *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
@@ -52,6 +55,7 @@ const webServices = Layer.mergeAll(
   FetchHttpClient.layer,
   webSqlClient,
   hostedEnvironment,
+  githubAppFromEnvironment,
   webLogger,
   modelCatalogLayer.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));

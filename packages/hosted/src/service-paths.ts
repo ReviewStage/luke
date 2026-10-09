@@ -19,6 +19,19 @@ export const HOSTED_SERVICE_PATH = {
    * reads. `plan-wire.ts` declares both.
    */
   PLANS: "/api/plans",
+  /**
+   * Sends the browser to GitHub to install the Luke GitHub App, or to change
+   * which repositories it reaches (GET). GitHub returns the browser to
+   * `GITHUB_INSTALLED` afterwards.
+   */
+  GITHUB_INSTALL: "/api/github/install",
+  /**
+   * The App's Setup URL (GET): GitHub lands here after an install or an
+   * update with the installation's id, and the route confirms it before
+   * sending the browser on to the landing page `github-install-wire.ts`
+   * names.
+   */
+  GITHUB_INSTALLED: "/api/github/installed",
 } as const;
 
 /**
