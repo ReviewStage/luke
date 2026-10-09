@@ -237,25 +237,10 @@ export function DashboardScreen({
             <TopAccountsNote />
 
             <SectionHeading>Reliability</SectionHeading>
-            <StatGroup columns={2}>
-              <StatCard
-                label="Throttled account-days · today"
-                value={formatNumber(metrics.reliability.quotaLimitedUserDaysToday)}
-                hint="an account that reached a daily ceiling"
-                grouped
-              />
-              <StatCard
-                label={`Throttled account-days · ${metrics.windowDays} days`}
-                value={formatNumber(metrics.reliability.quotaLimitedUserDaysWindow)}
-                grouped
-              />
-            </StatGroup>
             <p className="mt-3 text-sm text-muted-foreground">
-              A hosted request that reaches the daily ceiling —{" "}
-              {formatNumber(metrics.reliability.dailyLimit)} calls per account per day — is refused
-              with <code className="font-mono text-xs">quota-exhausted</code>; the count above is
-              the closest rejection signal the service's own tables hold. Per-request error rates
-              and client-side failures are recorded as product-analytics events, which live with{" "}
+              The service's own tables hold no rejection signal: nothing is refused on the usage
+              counts above. Per-request error rates and client-side failures are recorded as
+              product-analytics events, which live with{" "}
               {metrics.reliability.analyticsConsoleUrl ? (
                 <a
                   href={metrics.reliability.analyticsConsoleUrl}

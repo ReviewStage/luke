@@ -126,9 +126,11 @@ function searchService(answered: boolean) {
 
 const TEST_OPENAI = () => ({ apiKey: Redacted.make("sk-test-planning"), modelId: "gpt-test" });
 
-/** The daily meter as a fixed answer: every spend admitted, or every spend refused. */
-function meter(allowed: boolean): BrainHostSeams["spend"] {
-  return async () => ({ allowed, quota: { used: 1, limit: 100, resetsAt: NOW + 1 } });
+/** The usage meter as a fixed answer: every use counted, or none writable. */
+function meter(writable: boolean): BrainHostSeams["spend"] {
+  return async () => {
+    if (!writable) throw new Error("fixture: store down");
+  };
 }
 
 /** A spoken ask as the voice's delegation words it: the recent lines, then the developer's latest named as the ask. */
@@ -667,7 +669,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a search with the account's allowance spent sends nothing and reaches the model as nothing found",
+    "a search whose use could not be counted is sent anyway and reaches the model with its source",
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
@@ -685,8 +687,8 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           search.layer,
         );
 
-        assert.equal(reply, SCRIPTED_NO_SOURCE_REPLY);
-        assert.equal(search.requests.length, 0);
+        assert.equal(reply, `${SCRIPTED_RESEARCH_REPLY} ${EXPIRY_SOURCE}`);
+        assert.equal(search.requests.length, 1);
       }),
   );
 });

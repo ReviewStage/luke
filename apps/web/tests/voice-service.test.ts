@@ -47,7 +47,6 @@ import { settled } from "./support/settle";
 import {
   connect,
   FAKE_BEARER,
-  FAKE_QUOTA,
   FAKE_SDP_ANSWER,
   FAKE_USER_ID,
   type FakeAccounts,
@@ -242,25 +241,7 @@ test("an unknown path is refused with 404", async () => {
   assert.deepEqual(await connect(context.url("/elsewhere")), { status: UPGRADE_STATUS.NOT_FOUND });
 });
 
-test("a spent allowance closes the socket behind one hosted error frame and spends no session", async () => {
-  const context = await stand();
-  onTestFinished(() => context.stop());
-  context.accounts.spendAnswer = { allowed: false, quota: FAKE_QUOTA };
-
-  const opened = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), { authorization: BEARER });
-  assert.ok("reader" in opened);
-  await send(opened.reader.socket, createFrame());
-
-  assert.equal(hostedError(record(await opened.reader.next())), HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  const end = await opened.reader.closed;
-  assert.equal(end.code, SOCKET_CLOSE_CODE.POLICY_VIOLATION);
-  assert.equal(end.reason, HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-  assert.equal(context.openAi.creates.length, 0);
-  assert.deepEqual(context.accounts.resolved, [BEARER]);
-  assert.deepEqual(context.accounts.spent, [FAKE_USER_ID]);
-});
-
-test("a bearer no account stands behind is refused as an invalid token and spends nothing", async () => {
+test("a bearer no account stands behind is refused as an invalid token and counts nothing", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
 
@@ -286,7 +267,7 @@ test("a first frame that is not session.create is refused as an invalid request"
   assert.equal(context.accounts.resolved.length, 0);
 });
 
-test("a session is authorized, created, registered to its account, attached, and answered in that order", async () => {
+test("a session is authorized, counted, created, registered to its account, attached, and answered in that order", async () => {
   const context = await stand();
   onTestFinished(() => context.stop());
 
@@ -334,7 +315,7 @@ test("a session is authorized, created, registered to its account, attached, and
   // The answer names the store's own row for the session, as register answered it.
   assert.equal(created.voiceSessionId, context.record.voiceSessionIds.get(created.sessionId));
   assert.ok(created.voiceSessionId);
-  assert.deepEqual(created.quota, FAKE_QUOTA);
+  assert.equal("quota" in created, false);
   assert.equal(await context.sessions(), 1);
 });
 

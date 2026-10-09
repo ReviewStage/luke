@@ -118,9 +118,9 @@ for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
 carrying the plan as it is saved, both sides of what was said since its last
 note with a few lines before them, and the words of Luke's own replies, and
 saves the fields that call answers into that one plan. It runs only during a
-planning call you started and only for that call's plan, each run counts
-against the same daily allowance as Luke's turns, and a run the allowance
-refuses, or that fails, writes nothing. Nothing it reads or answers is kept
+planning call you started and only for that call's plan, each run is counted
+in your daily usage as Luke's turns are, and a run that fails writes nothing.
+Nothing it reads or answers is kept
 beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
 OpenAI keeps the request and its reply under its own retention policy.
 
@@ -248,14 +248,14 @@ only when you press Send.
   OpenAI stores the request and its reply under its own
   retention policy, and our service performs one model call per request and
   stores and logs none of the request, the reply, or the encrypted reasoning
-  that travels in it. Each call counts against your daily review allowance.
+  that travels in it. Each call is counted in your daily usage.
   Every such call also carries a prompt cache key: a hash of the
   conversation's own internal name, sent so a later call reuses the earlier
   calls' billing prefix instead of paying for it again. It identifies nothing
   — no session id or title can be read out of a hash — and our service passes
-  it upstream and keeps it no longer than the request. The same allowance
-  meters a request to count a call's tokens or to fold Luke's working memory,
-  and each note the planning notetaker writes.
+  it upstream and keeps it no longer than the request. The same count
+  includes a request to count a call's tokens or to fold Luke's working
+  memory, and each note the planning notetaker writes.
   A
   development build run from a checkout can write a local trace of this
   traffic when the developer's own shell asks for one; a packaged build has no

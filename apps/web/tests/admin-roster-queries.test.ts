@@ -17,7 +17,6 @@ import {
 import { account, session, user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { hostedUsage } from "../server/db/usage-schema";
-import { HOSTED_DAILY_LIMIT } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -34,6 +33,8 @@ import { testSqlClient } from "./support/sql-client";
 const NOW = Date.parse("2097-03-15T12:00:00.000Z");
 const TODAY = "2097-03-15";
 const YESTERDAY = "2097-03-14";
+/** A day's count past the ceiling the service used to refuse at, read like any other. */
+const BUSY_DAY_CALLS = 6_000;
 const SESSION_SEEN_AT = "2097-03-15T09:00:00.000Z";
 
 it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (it) => {
@@ -71,7 +72,7 @@ it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (
         const spend = (userId: string, day: string, calls: number) =>
           Effect.asVoid(db.insert(hostedUsage).values({ userId, day, calls }));
         yield* spend(ada, TODAY, 3);
-        yield* spend(ada, YESTERDAY, HOSTED_DAILY_LIMIT + 2);
+        yield* spend(ada, YESTERDAY, BUSY_DAY_CALLS);
         yield* spend(bo, YESTERDAY, 1);
         yield* spend(cy, TODAY, 7);
         return { ada, bo, zed, cy };
@@ -100,7 +101,7 @@ it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (
           row.admin,
         ]),
         [
-          [ids.ada, 2, TODAY, HOSTED_DAILY_LIMIT + 5, false],
+          [ids.ada, 2, TODAY, BUSY_DAY_CALLS + 3, false],
           [ids.bo, 1, YESTERDAY, 1, false],
           [ids.zed, 0, null, 0, false],
         ],
@@ -187,23 +188,22 @@ it.layer(testSqlClient)("the dashboard's roster, day, account page, and star", (
         [...(detail?.usage.byDay ?? [])].toSorted(),
         [
           [TODAY, 3],
-          [YESTERDAY, HOSTED_DAILY_LIMIT + 2],
+          [YESTERDAY, BUSY_DAY_CALLS],
         ].toSorted(),
       );
       assert.deepEqual(
         [...(detail?.usage.calendarByDay ?? [])].toSorted(),
         [
           [TODAY, 3],
-          [YESTERDAY, HOSTED_DAILY_LIMIT + 2],
+          [YESTERDAY, BUSY_DAY_CALLS],
         ].toSorted(),
       );
       assert.deepEqual(detail?.usage.allTime, {
         activeDays: 2,
         firstActiveDay: YESTERDAY,
         lastActiveDay: TODAY,
-        calls: HOSTED_DAILY_LIMIT + 5,
+        calls: BUSY_DAY_CALLS + 3,
       });
-      assert.equal(detail?.usage.quotaLimitedDaysWindow, 1);
 
       assert.equal(
         yield* readAdminUserSource({
