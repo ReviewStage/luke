@@ -36,6 +36,8 @@ interface Asked {
   revealed: string[];
   chosen: string[];
   deleted: string[];
+  /** Each rename asked, as the plan and the name it was given. */
+  renamed: string[][];
 }
 
 const roots: Root[] = [];
@@ -55,8 +57,9 @@ function openTab(
   folders: Readonly<Record<string, string>> = {},
   deletes: () => Promise<ActionResult> = () =>
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+  renames: () => Promise<boolean> = () => Promise.resolve(true),
 ) {
-  const asked: Asked = { opened: [], revealed: [], chosen: [], deleted: [] };
+  const asked: Asked = { opened: [], revealed: [], chosen: [], deleted: [], renamed: [] };
   const plans: PlansControl = plansControl({
     page: PLANS_PAGE.DOCUMENT,
     plans: [PLAN, OTHER],
@@ -68,6 +71,10 @@ function openTab(
     onDeletePlan: (planId) => {
       asked.deleted.push(planId);
       return deletes();
+    },
+    onRenamePlan: (planId, name) => {
+      asked.renamed.push([planId, name]);
+      return renames();
     },
   });
   return { plans, asked };
@@ -170,7 +177,7 @@ async function confirmDelete(): Promise<void> {
 test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
   const folderless = openTab();
   openMenu(mountToolbar(folderless.plans));
-  assert.deepEqual(labels(), ["Copy plan", "Choose folder", "Delete plan"]);
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
   const toolbar = document.querySelector(".desktop-toolbar-actions");
   assert.match(toolbar?.textContent ?? "", /Choose folder.*Copy plan/u);
@@ -179,7 +186,13 @@ test("the open plan's ⋯ offers Copy, its folder's actions, and Delete last, an
   unmountAll();
   const kept = openTab({ [PLAN.id]: "/Users/dev/relay" });
   openMenu(mountToolbar(kept.plans));
-  assert.deepEqual(labels(), ["Copy plan", "Reveal in Finder", "Change folder", "Delete plan"]);
+  assert.deepEqual(labels(), [
+    "Copy plan",
+    "Rename",
+    "Reveal in Finder",
+    "Change folder",
+    "Delete plan",
+  ]);
   for (const item of menuItems()) {
     assert.ok(item.querySelector(".plan-menu-icon svg"), `${item.textContent} leads with its icon`);
   }
@@ -203,18 +216,150 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
 
   rightClick(other, 40, 60);
   // Copy formats the document drawn, which is the open plan's alone.
-  assert.deepEqual(labels(), ["Reveal in Finder", "Change folder", "Delete plan"]);
+  assert.deepEqual(labels(), ["Rename", "Reveal in Finder", "Change folder", "Delete plan"]);
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   assert.equal(menu?.style.left, "40px");
   assert.equal(menu?.style.top, "60px");
   choose("Change folder");
 
   rightClick(open, 40, 120);
-  assert.deepEqual(labels(), ["Copy plan", "Choose folder", "Delete plan"]);
+  assert.deepEqual(labels(), ["Copy plan", "Rename", "Choose folder", "Delete plan"]);
   choose("Choose folder");
 
   assert.deepEqual(asked.chosen, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
+});
+
+/** The plan's name field standing now, if one does. */
+function nameField(): HTMLInputElement | null {
+  return document.querySelector<HTMLInputElement>('input[aria-label="Plan name"]');
+}
+
+/** Types into the name field standing now, as the browser would. */
+function type(words: string): HTMLInputElement {
+  const field = nameField();
+  assert.ok(field, "a name field stands");
+  act(() => {
+    field.value = words;
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  return field;
+}
+
+/** Ends the edit with the focus leaving the field, as a press elsewhere does. */
+function leave(field: HTMLInputElement): void {
+  act(() => field.blur());
+}
+
+test("Rename on a sidebar plan turns its row into a field with the name selected: Return renames, Escape and an empty name keep it", async () => {
+  const { plans, asked } = openTab();
+  const escapes: string[] = [];
+  const listen = (event: KeyboardEvent) => {
+    if (event.key === "Escape") escapes.push(event.key);
+  };
+  window.addEventListener("keydown", listen);
+  const container = mount(sidebarPlan(plans, OTHER, asked));
+  const row = () => container.querySelector<HTMLButtonElement>("button.sidebar-plan");
+
+  rightClick(row() ?? assert.fail("the row stands"), 40, 60);
+  choose("Rename");
+  const field = nameField();
+  assert.ok(field);
+  assert.equal(document.activeElement, field);
+  assert.equal(field.value, "Billing export");
+  assert.equal([field.selectionStart, field.selectionEnd].join(), `0,${OTHER.name.length}`);
+  assert.equal(field.maxLength, 200);
+  assert.equal(row(), null, "the row is the field while it stands");
+
+  type("  Billing exports ");
+  await act(async () => key("Enter"));
+  assert.equal(nameField(), null);
+  assert.equal(document.activeElement, row(), "Return hands focus back to the row");
+
+  rightClick(row() ?? assert.fail("the row stands"), 40, 60);
+  choose("Rename");
+  type("Never kept");
+  key("Escape");
+  assert.equal(nameField(), null);
+
+  rightClick(row() ?? assert.fail("the row stands"), 40, 60);
+  choose("Rename");
+  leave(type("   "));
+  window.removeEventListener("keydown", listen);
+
+  assert.equal(nameField(), null);
+  assert.deepEqual(asked.renamed, [[OTHER.id, "Billing exports"]]);
+  assert.deepEqual(asked.opened, []);
+  assert.deepEqual(escapes, [], "Escape in the field leaves the window's own Escape alone");
+});
+
+test("the toolbar's title renames the open plan in place on a press and from the ⋯ menu, and a press elsewhere keeps what was typed", async () => {
+  const { plans, asked } = openTab();
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const title = () =>
+    container.querySelector<HTMLButtonElement>(".desktop-toolbar-title button") ??
+    assert.fail("the title stands");
+
+  assert.equal(title().textContent, "Teammate invitations");
+  act(() => title().click());
+  const field = type("Team invites");
+  await act(async () => leave(field));
+
+  const more = container.querySelector<HTMLButtonElement>('[aria-label="Plan actions"]');
+  assert.ok(more);
+  openMenu(more);
+  choose("Rename");
+  assert.equal(document.activeElement, nameField(), "the ⋯ menu opens the title as the field");
+  key("Escape");
+
+  assert.deepEqual(asked.renamed, [[PLAN.id, "Team invites"]]);
+  assert.equal(nameField(), null);
+  assert.equal(document.activeElement, title());
+});
+
+test("a rename the service refused says so quietly beside the name until the next edit", async () => {
+  const { plans, asked } = openTab({}, undefined, () => Promise.resolve(false));
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const title = () =>
+    container.querySelector<HTMLButtonElement>(".desktop-toolbar-title button") ??
+    assert.fail("the title stands");
+  const note = () => container.querySelector('.desktop-toolbar [role="alert"]')?.textContent;
+
+  act(() => title().click());
+  type("Team invites");
+  await act(async () => key("Enter"));
+  assert.equal(note(), "The plan could not be renamed. Try again.");
+
+  act(() => title().click());
+  assert.equal(note(), undefined);
+  assert.deepEqual(asked.renamed, [[PLAN.id, "Team invites"]]);
+});
+
+test("the refusal of a rename a newer edit replaced leaves no note beside the newer name", async () => {
+  const settles: ((renamed: boolean) => void)[] = [];
+  const pending = () =>
+    new Promise<boolean>((resolve) => {
+      settles.push(resolve);
+    });
+  const { plans } = openTab({}, undefined, pending);
+  const container = mount(createElement(DesktopPlans, { plans }));
+  const title = () =>
+    container.querySelector<HTMLButtonElement>(".desktop-toolbar-title button") ??
+    assert.fail("the title stands");
+  const rename = (name: string) => {
+    act(() => title().click());
+    type(name);
+    key("Enter");
+  };
+
+  rename("First");
+  rename("Second");
+  const [first, second] = settles;
+  assert.ok(first && second);
+  await act(async () => second(true));
+  await act(async () => first(false));
+
+  assert.equal(container.querySelector('.desktop-toolbar [role="alert"]')?.textContent, undefined);
 });
 
 test("Delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
@@ -428,11 +573,11 @@ test("the menu answers the keyboard, and Escape closes it alone with focus back 
   window.addEventListener("keydown", listen);
 
   act(() => more.click());
-  const [copy, folder, remove] = menuItems();
-  assert.ok(copy && folder && remove);
+  const [copy, rename, , remove] = menuItems();
+  assert.ok(copy && rename && remove);
   assert.equal(document.activeElement, copy);
   key("ArrowDown");
-  assert.equal(document.activeElement, folder);
+  assert.equal(document.activeElement, rename);
   key("End");
   assert.equal(document.activeElement, remove);
   key("ArrowDown");

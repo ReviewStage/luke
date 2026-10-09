@@ -639,8 +639,8 @@ change, the model updates the same document, and Copy copies the new one.
   appear in the panel's caption strip, as for any call ("the microphone is not
   allowed yet", "Voice is temporarily unavailable"). The microphone button
   retries.
-- **Save.** A notetaker run that fails, or that the allowance refuses, saves
-  nothing and says nothing; the next run after the developer speaks again is
+- **Save.** A notetaker run that fails saves nothing and says nothing; the
+  next run after the developer speaks again is
   handed the same lines. The tab keeps showing the last saved document.
 - **Repository.** A failed or incomplete read is reported to the model as
   such. Luke says it could not read the file and never describes unread code

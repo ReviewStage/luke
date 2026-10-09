@@ -84,6 +84,44 @@ it.effect("deleting a plan answers whether the service deleted it", () =>
   }),
 );
 
+it.effect("renaming a plan sends the trimmed name and answers the plan as renamed", () =>
+  Effect.gen(function* () {
+    const renamed = { ...PLAN, name: "Team invites" };
+    const api = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: { answer: () => ({ plan: renamed }) },
+    });
+    const gone = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: {
+        answer: () => ({ error: "not-found" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const answered = yield* Effect.provide(
+      client().rename(PLAN_ID, { name: " Team invites  " }),
+      api.layer,
+    );
+
+    assert.deepEqual(answered, renamed);
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { name: "Team invites" });
+    assert.equal(
+      yield* Effect.provide(client().rename(PLAN_ID, { name: "Team invites" }), gone.layer),
+      undefined,
+    );
+  }),
+);
+
+it.effect("a blank rename never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+
+    const answered = yield* Effect.provide(client().rename(PLAN_ID, { name: "  " }), api.layer);
+
+    assert.equal(answered, undefined);
+    assert.deepEqual(api.requests(), []);
+  }),
+);
+
 it.effect("starting a plan names its folder", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({

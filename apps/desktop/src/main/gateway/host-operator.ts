@@ -18,6 +18,7 @@ import {
 import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
+  type PlanningRenameParams,
   type PlanningSetFolderParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
@@ -117,6 +118,8 @@ export interface HostOperator {
   planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
   /** One plan deleted; answers whether the service deleted it. */
   planningDelete(planId: string): Effect.Effect<boolean>;
+  /** One plan renamed; answers whether the service renamed it. */
+  planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
   /** The folder of this Mac a plan reads, chosen again. */
   planningSetFolder(params: PlanningSetFolderParams): Effect.Effect<void>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
@@ -289,6 +292,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_DELETE, { planId }),
         (answer) => record(answer)?.deleted === true,
+      ),
+    planningRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_RENAME, { planId: params.planId, name: params.name }),
+        (answer) => record(answer)?.renamed === true,
       ),
     planningSetFolder: (params) =>
       fire(

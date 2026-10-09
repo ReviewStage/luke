@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
+  EMPTY_PLAN_FIELDS,
   NOTE_KIND,
   PLAN_FIELD,
   type PlanField,
   type PlanNote,
+  planBody,
 } from "@sidecar/hosted/plan-template";
-import type { PlanDocument } from "@sidecar/hosted/plan-wire";
+import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
@@ -29,6 +31,8 @@ import {
   listPlans,
   type NewPlan,
   readPlan,
+  renamePlan,
+  savePlanDocument,
 } from "../server/hosted/plan-store";
 import { noDatabase } from "./support/no-database";
 import {
@@ -84,9 +88,9 @@ const openConversation = (userId: string) =>
     (rows) => rows[0]?.id ?? assert.fail("the conversation insert returned no row"),
   );
 
-/** The binding the service builds for a plan: its account, its id, and the header it loaded. */
-function bound(userId: string, planId: string, started: NewPlan = RELAY_PLAN): PlanDocumentBinding {
-  return { userId, planId, header: started };
+/** The binding the service builds for a plan: its account and its id. */
+function bound(userId: string, planId: string): PlanDocumentBinding {
+  return { userId, planId };
 }
 
 /** A note correcting a phrase of a field. */
@@ -156,7 +160,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       const ledger = yield* createPlan(userId, LEDGER_PLAN);
 
       yield* saveNotes(bound(userId, relay.id), notesFor(INVITATIONS_DRAFT));
-      yield* saveNotes(bound(userId, ledger.id, LEDGER_PLAN), notesFor(SMALL_FEATURE));
+      yield* saveNotes(bound(userId, ledger.id), notesFor(SMALL_FEATURE));
 
       const relayBody = (yield* resumedDocument(userId, relay.id)).body;
       const ledgerBody = (yield* resumedDocument(userId, ledger.id)).body;
@@ -528,6 +532,90 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
       assert.equal(yield* deletePlan(intruder, planId), false);
       assert.deepEqual(yield* listPlans(intruder), []);
       assert.deepEqual(yield* resumedDocument(owner, planId), saved);
+    }),
+  );
+
+  it.effect(
+    "a renamed plan lists and opens under its new name, its document's heading with it",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const relay = yield* createPlan(userId, RELAY_PLAN);
+        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        yield* saveNotes(bound(userId, relay.id), notesFor(INVITATIONS_DRAFT));
+        const saved = yield* resumedDocument(userId, relay.id);
+
+        const renamed = yield* renamePlan(userId, relay.id, "Team invites");
+        const untouched = yield* renamePlan(userId, ledger.id, "Billing exports");
+
+        const plan = Option.getOrThrow(renamed);
+        assert.equal(plan.name, "Team invites");
+        assert.equal(
+          plan.document.body,
+          saved.body.replace(/^# Teammate invitations\n/u, "# Team invites\n"),
+        );
+        assert.deepEqual(yield* resumedDocument(userId, relay.id), plan.document);
+        assert.ok(Option.getOrThrow(untouched).document.body.startsWith("# Billing exports\n"));
+        assert.deepEqual(
+          new Map((yield* listPlans(userId)).map(({ id, name }) => [id, name])),
+          new Map([
+            [ledger.id, "Billing exports"],
+            [relay.id, "Team invites"],
+          ]),
+        );
+      }),
+  );
+
+  it.effect(
+    "notes saved after a rename keep the new name's heading, whatever name the call began under",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        yield* saveNotes(bound(userId, planId), notesFor(INVITATIONS_DRAFT));
+
+        yield* renamePlan(userId, planId, "Team invites");
+        const saved = savedDocument(
+          yield* saveNotes(bound(userId, planId), notesFor(SMALL_FEATURE)),
+        );
+
+        assert.ok(saved.body.startsWith("# Team invites\n"));
+        assert.ok(!saved.body.includes("Teammate invitations"));
+      }),
+  );
+
+  it.effect(
+    "a rename whose heading would carry a full body past its bound keeps the body as saved, and the plan still reads",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const withProblem = (problem: string) => ({
+          ...EMPTY_PLAN_FIELDS,
+          goal: { ...EMPTY_PLAN_FIELDS.goal, problem },
+        });
+        const room = PLAN_BOUNDS.MAX_BODY_CHARS - planBody(RELAY_PLAN, withProblem("x")).length;
+        const fields = withProblem("x".repeat(room - 9));
+        const body = planBody(RELAY_PLAN, fields);
+        yield* savePlanDocument(userId, planId, { body, assumptions: [] }, fields);
+
+        const renamed = yield* renamePlan(userId, planId, "y".repeat(PLAN_BOUNDS.MAX_NAME_CHARS));
+
+        assert.equal(Option.getOrThrow(renamed).document.body, body);
+        assert.equal((yield* resumedDocument(userId, planId)).body, body);
+      }),
+  );
+
+  it.effect("a second account cannot rename another's plan", () =>
+    Effect.gen(function* () {
+      const owner = yield* openUser;
+      const intruder = yield* openUser;
+      const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+      const before = yield* readPlan(owner, planId);
+
+      assert.equal(Option.isNone(yield* renamePlan(intruder, planId, "Mine now")), true);
+      assert.equal(Option.isNone(yield* renamePlan(owner, randomUUID(), "Nothing")), true);
+      assert.deepEqual(yield* readPlan(owner, planId), before);
     }),
   );
 

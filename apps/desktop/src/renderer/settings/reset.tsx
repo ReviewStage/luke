@@ -4,69 +4,53 @@ import type { AppSettingsView, SettingsResetScope } from "@sidecar/settings/wire
 import { SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
-import { Tooltip } from "../tooltip";
 import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
 
 /**
- * The one control that returns a whole group to its defaults, drawn only
- * while the group holds something to return — until then it could only offer
+ * The one control that returns a whole page to its defaults, drawn only
+ * while the page holds something to return — until then it could only offer
  * to change nothing, the same reason a shortcut's own reset waits for a
- * chord. One press is one ask of the store; the control rests until the
- * store answers, and a refusal is worded where the press was.
+ * chord. It stands in the window's toolbar beside the page's title, which is
+ * what names the group it resets. One press is one ask of the store; the
+ * control rests until the store answers, and a refusal is worded beside it.
  */
-function ResetGroupButton({
+function ResetPageButton({
   scope,
-  label,
   onReset,
 }: {
   scope: SettingsResetScope;
-  /** The group as the button names it aloud: "the Voice page's settings". */
-  label: string;
   onReset: (scope: SettingsResetScope) => Promise<ActionResult>;
 }): React.JSX.Element {
   const { busy, rejection, run } = useSettingWrite(onReset);
   return (
     <>
-      <Tooltip label="Back to the defaults">
-        <button
-          type="button"
-          className="icon-button settings-reset"
-          disabled={busy}
-          aria-label={`Reset ${label} to the defaults`}
-          onClick={() => run(scope)}
-        >
-          <ResetIcon />
-        </button>
-      </Tooltip>
       {rejection ? (
-        <p className="error-message settings-reset-refusal" role="alert">
+        <p className="desktop-toolbar-note" role="alert">
           {rejection}
         </p>
       ) : null}
+      <button type="button" className="toolbar-button" disabled={busy} onClick={() => run(scope)}>
+        <ResetIcon />
+        Reset to defaults
+      </button>
     </>
   );
 }
 
 /**
- * Which page carries which group's reset, and what that group is called aloud.
+ * Which page carries which group's reset.
  * Connections is absent rather than empty: the page holds keys and rows that
  * are not settings, and its one resettable group, Workspaces, carries its own
  * control on its own heading instead.
  */
 const PAGE_RESET = {
-  [SETTINGS_VIEW.VOICE]: { scope: SETTINGS_RESET_SCOPE.VOICE, label: "the Voice settings" },
-  [SETTINGS_VIEW.APPEARANCE]: {
-    scope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    label: "the Appearance settings",
-  },
-  [SETTINGS_VIEW.SHORTCUTS]: {
-    scope: SETTINGS_RESET_SCOPE.SHORTCUTS,
-    label: "the keyboard shortcuts",
-  },
-} satisfies Partial<Record<SettingsView, { scope: SettingsResetScope; label: string }>>;
+  [SETTINGS_VIEW.VOICE]: SETTINGS_RESET_SCOPE.VOICE,
+  [SETTINGS_VIEW.APPEARANCE]: SETTINGS_RESET_SCOPE.APPEARANCE,
+  [SETTINGS_VIEW.SHORTCUTS]: SETTINGS_RESET_SCOPE.SHORTCUTS,
+} satisfies Partial<Record<SettingsView, SettingsResetScope>>;
 
-/** The reset a page's header carries, absent while the page stands at its defaults. */
+/** The reset the toolbar carries for a page, absent while the page stands at its defaults. */
 export function pageResetControl(
   view: SettingsView,
   settings: AppSettingsView | undefined,
@@ -74,7 +58,8 @@ export function pageResetControl(
 ): React.JSX.Element | undefined {
   if (!(view in PAGE_RESET)) return undefined;
   // SAFETY: `in` narrows the view to the pages the table names.
-  const group = PAGE_RESET[view as keyof typeof PAGE_RESET];
-  if (!settings || !settingsScopeChanged(settings, group.scope)) return undefined;
-  return <ResetGroupButton scope={group.scope} label={group.label} onReset={writes.reset} />;
+  const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
+  if (!settings || !settingsScopeChanged(settings, scope)) return undefined;
+  // Keyed to the page, so a refusal said on one page is not carried to the next.
+  return <ResetPageButton key={scope} scope={scope} onReset={writes.reset} />;
 }

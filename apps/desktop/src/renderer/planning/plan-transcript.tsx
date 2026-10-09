@@ -1,4 +1,5 @@
 import type { UIMessage } from "ai";
+import type { Components } from "streamdown";
 import {
   Conversation,
   ConversationContent,
@@ -28,6 +29,13 @@ import {
  * second line behind the recording's text masking.
  */
 
+/**
+ * How spoken words are drawn: as markdown, but never as an image, because
+ * an image is a request to wherever its address points the moment the tab
+ * opens, and nothing anyone said on a call should make one.
+ */
+const SPOKEN_COMPONENTS: Components = { img: () => null };
+
 /** One line: who said it, and the words. */
 function TranscriptMessage({ message }: { message: UIMessage }): React.JSX.Element {
   return (
@@ -36,7 +44,9 @@ function TranscriptMessage({ message }: { message: UIMessage }): React.JSX.Eleme
         {speakerLabel(message.role)}
       </span>
       <MessageContent>
-        <MessageResponse mode="static">{messageText(message)}</MessageResponse>
+        <MessageResponse mode="static" components={SPOKEN_COMPONENTS}>
+          {messageText(message)}
+        </MessageResponse>
       </MessageContent>
     </Message>
   );

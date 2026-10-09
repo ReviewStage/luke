@@ -66,11 +66,10 @@ export interface Admission {
   bearer: string;
 }
 
-/** The account a device's handshake resolved to, its plan admitted and a session spent, or the reason it is refused. */
+/** The account a device's handshake resolved to, its plan admitted and a session counted, or the reason it is refused. */
 type AdmittedAccount =
   | {
       accountId: string;
-      quota: SessionCreatedFrame["quota"];
       /** The plan the call is about, read as the account holds it. */
       plan: Plan;
     }
@@ -314,9 +313,9 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
   /**
    * A handshake as an account, in the order the refusals are cheapest: the
    * bearer resolved, the plan it named read from the plans the account
-   * holds, and only then a session spent. A plan the account does not hold
-   * is refused before the spend, so a claim on someone else's plan costs the
-   * claimant nothing and creates nothing.
+   * holds, and only then a session counted. A plan the account does not hold
+   * is refused before the count, so a claim on someone else's plan counts
+   * nothing and creates nothing.
    */
   const admitAccount = (
     admission: Admission,
@@ -328,9 +327,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const accountId = account.value;
       const plan = yield* record.heldPlan({ userId: accountId, planId });
       if (plan === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
-      const spend = yield* accounts.spend(accountId);
-      if (!spend.allowed) return refused(HOSTED_API_ERROR.QUOTA_EXHAUSTED);
-      return { accountId, quota: spend.quota, plan };
+      yield* accounts.spend(accountId);
+      return { accountId, plan };
     });
 
   /**
@@ -346,7 +344,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
   ): Effect.Effect<WebSocket | undefined, never, Scope.Scope> =>
     Effect.catch(upstream.attach(sessionId), () => Effect.succeed(undefined));
 
-  /** A new WebRTC session: authorized and spent, created at OpenAI, registered to its account, and attached. */
+  /** A new WebRTC session: authorized and counted, created at OpenAI, registered to its account, and attached. */
   const openCreated = (
     upstream: LiveUpstream,
     admission: Admission,
@@ -392,7 +390,6 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
         sessionId,
         sdpAnswer: created.answer.transport.sdp,
         ...(voiceSessionId === undefined ? undefined : { voiceSessionId }),
-        ...(account.quota === undefined ? undefined : { quota: account.quota }),
       };
       return {
         sessionId,

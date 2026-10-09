@@ -83,6 +83,40 @@ test("each line is drawn under its speaker, the developer's and Luke's told apar
   assert.match(drawn, /is-user.*is-assistant/su);
 });
 
+test("a spoken line that reads as a markdown image draws no image, so the tab asks nothing of its address", () => {
+  const drawn = renderToStaticMarkup(
+    createElement(PlanTranscript, {
+      region: {
+        kind: TRANSCRIPT_REGION.READY,
+        earlierOmitted: false,
+        calls: [
+          {
+            key: "call-1",
+            startedAt: 1_000,
+            live: false,
+            messages: [
+              {
+                id: "0",
+                role: TRANSCRIPT_SPEAKER.USER,
+                parts: [
+                  {
+                    type: TRANSCRIPT_PART_TYPE.TEXT,
+                    text: "Look at ![the chart](https://example.test/chart.png) first.",
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      onRetry: () => undefined,
+    }),
+  );
+  assert.doesNotMatch(drawn, /<img/u);
+  assert.doesNotMatch(drawn, /example\.test/u);
+  assert.match(drawn, /Look at/u);
+});
+
 test("the empty, reading, and failed states each say where the transcript stands, and a failure offers Try again", () => {
   const empty = renderToStaticMarkup(
     createElement(PlanTranscript, {

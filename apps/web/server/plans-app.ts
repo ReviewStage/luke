@@ -7,6 +7,7 @@ import {
   PLAN_COMMAND_OUTPUT_MAX_CHARS,
   planCommandResultSchema,
   planCreateRequestSchema,
+  planRenameRequestSchema,
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
@@ -22,13 +23,13 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { createPlan, deletePlan, listPlans, readPlan } from "./hosted/plan-store.js";
+import { createPlan, deletePlan, listPlans, readPlan, renamePlan } from "./hosted/plan-store.js";
 import { claimPlanCommand, settlePlanCommand } from "./hosted/repository-shell.js";
 import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, and delete, and the Mac's side of the planning model's folder reads.
+ * plans-app.ts -- the Mac Plans tab's named plans: list, start, open, rename, and delete, and the Mac's side of the planning model's folder reads.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan id another account
@@ -53,7 +54,7 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 const PLANS_PATH = {
   /** GET lists, POST starts. */
   COLLECTION: "/api/plans",
-  /** GET opens, DELETE deletes; the rewrite moves the path's id into the `id` query. */
+  /** GET opens, PATCH renames, DELETE deletes; the rewrite moves the path's id into the `id` query. */
   ONE: "/api/plans/plan",
   /** GET reads the plan's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
   BOARD: "/api/plans/board",
@@ -71,13 +72,14 @@ const HTTP_METHOD = {
   GET: "GET",
   POST: "POST",
   PUT: "PUT",
+  PATCH: "PATCH",
   DELETE: "DELETE",
 } as const;
 
 const PLAN_ID_QUERY = "id";
 
-/** A start request is a name and a folder path, so a body past this is not one. */
-const MAXIMUM_CREATE_BODY_BYTES = 8_192;
+/** A start or a rename is a name, so a body past this is not one. */
+const MAXIMUM_NAME_BODY_BYTES = 8_192;
 
 /** A save is a scene at its byte bound, with room for the drawing's number around it. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + 1_024;
@@ -137,19 +139,38 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
     const plans = yield* hostedStoreOrUnavailable(listPlans(userId));
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans });
   }
-  const body = yield* readJsonBodyEffect(MAXIMUM_CREATE_BODY_BYTES);
+  const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
   const started = readEither(planCreateRequestSchema)(body);
   if (Result.isFailure(started)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const plan = yield* hostedStoreOrUnavailable(createPlan(userId, started.success));
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, { plan });
 });
 
-/** GET opens one plan with its saved document; DELETE deletes it. */
+/** PATCH: the plan renamed under the start's name rules, answered with its document. */
+const renameEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  planId: string,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
+  const renamed = readEither(planRenameRequestSchema)(body);
+  if (Result.isFailure(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const plan = yield* hostedStoreOrUnavailable(renamePlan(userId, planId, renamed.success.name));
+  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: plan.value });
+});
+
+const ONE_PLAN_METHODS: ReadonlySet<string> = new Set([
+  HTTP_METHOD.GET,
+  HTTP_METHOD.PATCH,
+  HTTP_METHOD.DELETE,
+]);
+
+/** GET opens one plan with its saved document; PATCH renames it; DELETE deletes it. */
 const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
   seams: PlansAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.DELETE) {
+  if (!ONE_PLAN_METHODS.has(incoming.method)) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
@@ -160,6 +181,7 @@ const oneEndpoint = /* @__PURE__ */ Effect.fn("web/planEndpoint")(function* (
     if (Option.isNone(opened)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: opened.value.plan });
   }
+  if (incoming.method === HTTP_METHOD.PATCH) return yield* renameEndpoint(userId, planId);
   const deleted = yield* hostedStoreOrUnavailable(deletePlan(userId, planId));
   if (!deleted) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { deleted: true });

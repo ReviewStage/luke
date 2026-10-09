@@ -220,7 +220,7 @@ export function AccountScreen({
             </div>
 
             <SectionHeading>Volume</SectionHeading>
-            <div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3">
               <StatCard
                 label={`Hosted calls · ${detail.windowDays} days`}
                 value={formatNumber(activity.callsWindow)}
@@ -229,11 +229,6 @@ export function AccountScreen({
               <StatCard
                 label="Active days · all time"
                 value={formatNumber(activity.allTime.activeDays)}
-              />
-              <StatCard
-                label={`Throttled days · ${detail.windowDays} days`}
-                value={formatNumber(activity.quotaLimitedDaysWindow)}
-                hint="days a daily ceiling was reached"
               />
             </div>
             <AccountActivityNote />

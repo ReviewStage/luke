@@ -37,6 +37,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_DELETE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
   },
+  [ACT_KIND.PLANNING_RENAME]: {
+    kind: ACT_KIND.PLANNING_RENAME,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", name: "Team invites" },
+  },
   [ACT_KIND.PLANNING_CHOOSE_FOLDER]: { kind: ACT_KIND.PLANNING_CHOOSE_FOLDER },
   [ACT_KIND.PLANNING_SET_FOLDER]: {
     kind: ACT_KIND.PLANNING_SET_FOLDER,

@@ -51,7 +51,11 @@ export function MessageContent({ children, className, ...props }: MessageContent
 
 export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
-/** A reply's markdown, drawn as it streams; redrawn only when its words change. */
+/**
+ * A reply's markdown, drawn as it streams. Note that it is memoised on every
+ * prop rather than on the words alone, as the registry has it, because a
+ * mode or a class changed under the same words has to be drawn too.
+ */
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps): ReactNode => (
     <Streamdown
@@ -62,7 +66,6 @@ export const MessageResponse = memo(
       {...props}
     />
   ),
-  (previous, next) => previous.children === next.children,
 );
 
 MessageResponse.displayName = "MessageResponse";

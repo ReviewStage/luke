@@ -81,13 +81,10 @@ export function SettingsPageHeader({
   view,
   onBack,
   backControl,
-  reset,
 }: {
   view: SettingsSubview;
   onBack: () => void;
   backControl: React.RefObject<HTMLButtonElement | null>;
-  /** The page's reset control, absent while the page stands at its defaults. */
-  reset?: React.JSX.Element;
 }): React.JSX.Element {
   return (
     <div className="settings-header" style={cssCustomProperties({ "--row-index": 0 })}>
@@ -102,7 +99,6 @@ export function SettingsPageHeader({
         <BackIcon />
       </button>
       <strong>{SETTINGS_PAGE[view].title}</strong>
-      {reset}
     </div>
   );
 }

@@ -35,11 +35,7 @@ const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const started = yield* createPlan(userId, { name: "Teammate invitations" });
-  const binding = {
-    userId,
-    planId: started.id,
-    header: { name: started.name },
-  };
+  const binding = { userId, planId: started.id };
   return { userId, planId: started.id, binding };
 });
 

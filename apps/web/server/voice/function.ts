@@ -41,7 +41,8 @@ const VOICE_FUNCTION_ENVIRONMENT = {
 
 const deploymentAccounts: VoiceAccounts = {
   resolveUserId: (authorization) => userIdForAuthorization(authorization, hostedUserInfo),
-  spend: (userId) => Effect.suspend(() => spendHostedMeter({ userId, now: Date.now() })),
+  spend: (userId) =>
+    Effect.asVoid(Effect.suspend(() => spendHostedMeter({ userId, now: Date.now() }))),
   recordSeconds: (input) => Effect.suspend(() => recordVoiceSeconds({ ...input, now: Date.now() })),
 };
 
