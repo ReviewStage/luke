@@ -1,6 +1,7 @@
 import { type Cause, Effect } from "effect";
 import type { AdminSeams } from "../admin-app.js";
 import { auth } from "../auth.js";
+import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "../hosted/openai.js";
 import { POSTHOG_ENVIRONMENT, posthogProjectConsoleUrl } from "../hosted/posthog.js";
 import type { AdminViewer } from "./admin-access.js";
@@ -58,7 +59,9 @@ export function hostedAdminSeams(): AdminSeams {
       configured(POSTHOG_ENVIRONMENT.PERSONAL_API_KEY) &&
       configured(POSTHOG_ENVIRONMENT.PROJECT_ID),
     googleSignIn: configured("GOOGLE_CLIENT_ID") && configured("GOOGLE_CLIENT_SECRET"),
-    githubSignIn: configured("GITHUB_CLIENT_ID") && configured("GITHUB_CLIENT_SECRET"),
+    githubSignIn:
+      configured(GITHUB_APP_ENVIRONMENT.CLIENT_ID) &&
+      configured(GITHUB_APP_ENVIRONMENT.CLIENT_SECRET),
   });
 
   // The project id names which console to open, never a secret; the key

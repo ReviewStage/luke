@@ -55,8 +55,9 @@ changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, and
-`GITHUB_CLIENT_SECRET`.
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
+`GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
+under "The Luke GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
 `/api/auth/(.*)` because Vercel's zero-config `api/` detection treats
@@ -98,8 +99,85 @@ during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.
 
 Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
-`${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests
-`user:email`, because Luke requires an email address for its account snapshot.
+`${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests no
+OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
+user authorization, and a GitHub App has permissions rather than scopes, the
+App's "Email addresses: read" among them, which is what answers the email
+read Luke requires for its account snapshot.
+
+## The Luke GitHub App
+
+"Sign in with GitHub" is the Luke GitHub App's user authorization: the
+provider's client is the App's (`GITHUB_APP_CLIENT_ID`,
+`GITHUB_APP_CLIENT_SECRET`, read by `authSecrets` in `server/auth-deployment.ts`),
+so the token a sign-in leaves on the `account` row is a GitHub App user token,
+which reaches only the repositories where the App is installed and the user
+has access, under the App's registered permissions (metadata read, contents
+and pull requests read and write, email addresses read). An account that
+signed in through the OAuth App before this is the same GitHub user id, so
+Better Auth signs it in to the user it already has and
+(`updateAccountOnSignIn`) replaces the row's tokens with the App's;
+`tests/auth-github-sign-in.test.ts` holds that. The App's user tokens expire
+after eight hours and come with a refresh token good for six months; Better
+Auth stores both sealed under `BETTER_AUTH_SECRET` (`encryptOAuthTokens`), with
+their expiries beside them. Better Auth's own `/get-access-token` and
+`/refresh-token` endpoints are not served (`DISABLED_AUTH_PATHS`): nothing
+hands a browser the GitHub token, and the one reader of it is the server.
+
+That reader is `server/github/github-app.ts`, the `GitHubApp` service the web
+runtime builds beside `HostedEnvironment` from `GITHUB_APP_ID`,
+`GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`,
+`GITHUB_APP_PRIVATE_KEY` (the PEM; newlines flattened to `\n` by a dashboard
+paste are restored), and `BETTER_AUTH_SECRET`. A deployment missing any of
+them still builds the service, and every read of it answers
+`GitHubAppNotConfigured` naming what was missing, so a bundle loads with
+nothing configured. The service holds no client: its GitHub reads run on the
+ambient `HttpClient` and the account row on the ambient `SqlClient`, so
+`tests/github-app.test.ts` stands a fake at the GitHub boundary and PGlite
+beneath it. It answers three things. `appJwt` is the App speaking as itself,
+RS256 under the private key, issued a minute back and good for eight; it is
+what `installation(id)` reads `GET /app/installations/{id}` with, so an id
+GitHub hands the Setup URL is confirmed as this App's own or answered as none.
+`userToken(userId)` is the signed-in user's token off the row, unsealed; a
+token within a minute of its expiry is refreshed first at GitHub's token
+endpoint on the App's client, and the fresh pair is re-sealed in place. The
+read and the refresh run inside one transaction under `FOR UPDATE` on the
+row, because GitHub retires a refresh token the moment it is used and two
+requests refreshing at once would leave the second holding one GitHub no
+longer knows. GitHub answers a refused refresh with status 200 and an `error`
+body, which is read as `GitHubSignInRequired`, the same failure a row with no
+GitHub account, a row from before the App (no refresh token), an expired
+refresh token, or a token that will not open under this deployment's secret
+answers: in every case the user mends it by signing in with GitHub again.
+`userInstallations(userId)` is `GET /user/installations` on that token, read
+a hundred at a time until a page comes back short; a 401 there is a token
+GitHub refused before its stored expiry, which is the user having revoked
+the App's authorization, and is answered as `GitHubSignInRequired` too. A
+failure carries a status or a kind and never the request, since the request
+carried the bearer.
+
+Installing the App is two browser navigations in `server/github-install-app.ts`,
+neither carrying an account bearer. `GET /api/github/install` sends the
+browser to `https://github.com/apps/<slug>/installations/new`, where the
+developer installs the App on an account or organization and chooses its
+repositories. The App's registered Setup URL, with "Redirect on update", is
+`https://tryluke.dev/api/github/installed`: GitHub lands the browser there
+with `installation_id` and `setup_action`, the route confirms the
+installation through `installation(id)`, and sends the browser on to
+`/github-installed.html?status=…` with one word from `GITHUB_INSTALL_STATUS`
+(`@sidecar/hosted`): `installed`, `updated`, `requested` (a member asked an
+organization's owner, so there is no installation yet), `not-found`, or
+`unavailable`. The page draws a fixed card per status and interpolates
+nothing the address brought it; the desktop will later pick the landing up.
+Nothing is stored at install time: which installations a user can reach is
+read from GitHub on the user's own token when a repository is chosen.
+
+A Preview's GitHub sign-in still goes through production's OAuth proxy, and
+production is the end that exchanges the code, under its own provider
+client: a Preview carrying the App's client id can complete a sign-in only
+while production's `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` hold the
+App's client id and secret, a Vercel project setting rather than anything in
+this repository. Nothing on the branch is Preview-specific.
 
 Every function Vercel deploys is plain ESM. The route sources live under
 `server/routes/`, and `scripts/bundle-functions.ts` bundles them into

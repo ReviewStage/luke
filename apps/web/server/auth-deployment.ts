@@ -40,13 +40,30 @@ const AUTH_DEPLOYMENT_ENVIRONMENT = {
   PROXY_TRUSTED_ORIGINS: "BETTER_AUTH_PROXY_TRUSTED_ORIGINS",
 } as const;
 
+/**
+ * The variables the Luke GitHub App is read from. Dean registered the App
+ * under the ReviewStage org, and Vercel holds these five for every
+ * environment. "Sign in with GitHub" is the App's own user authorization,
+ * so its client id and secret are the sign-in's social client below, and
+ * the App id, slug, and private key are what `github/github-app.ts` speaks
+ * to GitHub as the App itself with.
+ */
+export const GITHUB_APP_ENVIRONMENT = {
+  APP_ID: "GITHUB_APP_ID",
+  SLUG: "GITHUB_APP_SLUG",
+  CLIENT_ID: "GITHUB_APP_CLIENT_ID",
+  CLIENT_SECRET: "GITHUB_APP_CLIENT_SECRET",
+  /** The App's private key, PEM; a value whose newlines arrived as `\\n` is read all the same. */
+  PRIVATE_KEY: "GITHUB_APP_PRIVATE_KEY",
+} as const;
+
 /** The variables the auth service's own secrets are read from; a blank value is absent. */
-const AUTH_SECRET_ENVIRONMENT = {
+export const AUTH_SECRET_ENVIRONMENT = {
   SESSION_SECRET: "BETTER_AUTH_SECRET",
   GOOGLE_CLIENT_ID: "GOOGLE_CLIENT_ID",
   GOOGLE_CLIENT_SECRET: "GOOGLE_CLIENT_SECRET",
-  GITHUB_CLIENT_ID: "GITHUB_CLIENT_ID",
-  GITHUB_CLIENT_SECRET: "GITHUB_CLIENT_SECRET",
+  GITHUB_CLIENT_ID: GITHUB_APP_ENVIRONMENT.CLIENT_ID,
+  GITHUB_CLIENT_SECRET: GITHUB_APP_ENVIRONMENT.CLIENT_SECRET,
 } as const;
 
 /** Where the site answers when nothing names a deployment: the Vite dev server. */
@@ -91,6 +108,7 @@ export interface AuthSecrets {
   /** The secret that signs this deployment's sessions; absent, Better Auth refuses to sign any, and `auth.ts` says so as it loads. */
   sessionSecret: Redacted.Redacted | undefined;
   google: SocialClient;
+  /** The Luke GitHub App's client, since a GitHub sign-in is that App's user authorization. */
   github: SocialClient;
 }
 

@@ -65,6 +65,14 @@
           "dest": "/api/default.js?route=events"
         },
         {
+          "src": "/api/github/install",
+          "dest": "/api/default.js?route=github/install"
+        },
+        {
+          "src": "/api/github/installed",
+          "dest": "/api/default.js?route=github/installed"
+        },
+        {
           "src": "/api/models",
           "dest": "/api/default.js?route=models"
         },
