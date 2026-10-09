@@ -3,10 +3,8 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
-  awaitedDeliveryOf,
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
-  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
@@ -19,7 +17,7 @@ import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import type { UIMessage } from "ai";
+import { isTextUIPart, type UIMessage } from "ai";
 import {
   Cause,
   Clock,
@@ -43,6 +41,8 @@ import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  isRecord,
+  isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
   sessionKey,
@@ -59,6 +59,7 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
+import { sentLineId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
@@ -73,6 +74,7 @@ import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
 import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
+import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
   type FakeGitHub,
   githubReaching,
@@ -955,13 +957,16 @@ function messageAs(bearer: string | undefined, agentId: string, body: WireBounda
   return request(AGENT_MESSAGES, bearer, { method: "POST", id: agentId, body });
 }
 
-/** The user rows of a transcript page, each with the delivery it still awaits, if any. */
-function userLines(page: {
+/** The words of each user row of a transcript page, in order. */
+function userTexts(page: {
   readonly messages: readonly CodingAgentMessage[];
 }): readonly (string | undefined)[] {
   return page.messages
     .filter((message) => message.role === MESSAGE_ROLE.USER)
-    .map((message) => awaitedDeliveryOf(message));
+    .map((message) => {
+      const part = message.parts.find((each) => isRecord(each) && each.type === "text");
+      return isRecord(part) && isWireString(part.text) ? part.text : undefined;
+    });
 }
 
 it.layer(testSqlClient)("messaging a coding agent", (it) => {
@@ -1022,25 +1027,39 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           });
         }
       }
-      return { ...opened, agent, target, sessionId, writer, turnId };
+      /** The transcript as the owner reads it now: the developer's lines, and the status. */
+      const transcript = () =>
+        Effect.map(
+          opened.ask(request(AGENT_MESSAGES, opened.owner, { id: agent.id })),
+          (answered) => {
+            const page = readAnswer(
+              codingAgentMessagesAnswerSchema,
+              HOSTED_HTTP_STATUS.OK,
+              answered,
+            );
+            return { lines: userTexts(page), status: page.status };
+          },
+        );
+      /** A message of the owner's under the key given, or one minted, answered as the wire declares a message taken. */
+      const sent = (text: string, clientKey = randomUUID()) =>
+        Effect.map(opened.ask(messageAs(opened.owner, agent.id, { text, clientKey })), (answered) =>
+          readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, answered),
+        );
+      return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
 
   it.effect(
-    "a message while a turn runs reaches eve under the developer's bearer with the delivery named, shows in the transcript at once as a user line awaiting that delivery, and leaves the agent running",
+    "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, agent, ask, sessionId } = yield* startedAgent(eve, { running: true });
-        for (const delivery of [CODING_AGENT_DELIVERY.STEER, CODING_AGENT_DELIVERY.QUEUE]) {
-          const answered = readAnswer(
-            codingAgentAnswerSchema,
-            HOSTED_HTTP_STATUS.ACCEPTED,
-            yield* ask(messageAs(owner, agent.id, { text: `  Use ${delivery} here.  `, delivery })),
-          );
-          assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
-        }
+        const { owner, sessionId, sent, transcript } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const answered = yield* sent("  Use the helper.  ");
+        assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
         assert.deepEqual(
-          eve.sent.map((sent) => [sent.authorization, sent.sessionId, sent.message]),
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message]),
           [
             [
               `Bearer ${owner}`,
@@ -1048,45 +1067,25 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
               {
                 conversationId: eve.opened[0]?.message.conversationId,
                 turn: BRAIN_HOST_TURN.TYPED,
-                message: "Use steer here.",
-                delivery: CODING_AGENT_DELIVERY.STEER,
-              },
-            ],
-            [
-              `Bearer ${owner}`,
-              sessionId,
-              {
-                conversationId: eve.opened[0]?.message.conversationId,
-                turn: BRAIN_HOST_TURN.TYPED,
-                message: "Use queue here.",
-                delivery: CODING_AGENT_DELIVERY.QUEUE,
+                message: "Use the helper.",
               },
             ],
           ],
         );
-        const page = readAnswer(
-          codingAgentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-        );
-        // The plan the turn opened with, which awaits nothing, then the two lines in the order sent.
-        assert.deepEqual(userLines(page), [
-          undefined,
-          CODING_AGENT_DELIVERY.STEER,
-          CODING_AGENT_DELIVERY.QUEUE,
-        ]);
-        assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
+        assert.deepEqual(yield* transcript(), {
+          lines: [planMarkdown(SAVED), "Use the helper."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
       }),
   );
 
   it.effect(
-    "a message to an idle agent opens a turn whatever the delivery says, and the agent reads as running in the list and in the transcript until the turn takes the line",
+    "a message to an idle agent opens a turn, and the agent reads as running in the list and in the transcript until the turn takes the line",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, plan, agent, ask, target, writer, turnId } = yield* startedAgent(eve, {
-          running: false,
-        });
+        const { owner, plan, agent, ask, target, writer, turnId, sent, transcript } =
+          yield* startedAgent(eve, { running: false });
         const before = readAnswer(
           codingAgentListAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1094,16 +1093,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
         assert.equal(before.agents[0]?.status, CODING_AGENT_STATUS.COMPLETED);
 
-        const answered = readAnswer(
-          codingAgentAnswerSchema,
-          HOSTED_HTTP_STATUS.ACCEPTED,
-          yield* ask(
-            messageAs(owner, agent.id, {
-              text: "Now add the tests.",
-              delivery: CODING_AGENT_DELIVERY.QUEUE,
-            }),
-          ),
-        );
+        const answered = yield* sent("Now add the tests.");
         assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
         // The turn named is still the ended one until eve opens the next on the line.
         assert.equal(answered.agent.turnId, turnId);
@@ -1115,16 +1105,18 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
         assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
         assert.equal(listed.agents[0]?.turnId, turnId);
+        assert.deepEqual(yield* transcript(), {
+          lines: [planMarkdown(SAVED), "Now add the tests."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
+
+        // The next turn receives the line: the row is read again in place past the cursor the
+        // page left, and nothing awaits, so the agent reads from its turns again.
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
         );
-        assert.deepEqual(userLines(page), [undefined, CODING_AGENT_DELIVERY.QUEUE]);
-        assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
-
-        // The next turn receives the line: the marker clears in place, the row is read again past
-        // the cursor the page left, and nothing awaits, so the agent reads from its turns again.
         const nextTurn = randomUUID();
         yield* TestClock.adjust(Duration.minutes(1));
         yield* writer.enqueueTurn(target, {
@@ -1134,7 +1126,6 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         });
         const taken = yield* writer.takeAwaitingLine(target, {
           text: "Now add the tests.",
-          deliveryIds: ["delivery-1"],
           turnId: nextTurn,
         });
         assert.ok(Result.isSuccess(taken) && Option.isSome(taken.success));
@@ -1143,7 +1134,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id, after: page.cursor })),
         );
-        assert.deepEqual(userLines(again), [undefined]);
+        assert.deepEqual(userTexts(again), ["Now add the tests."]);
         assert.equal(again.status, CODING_AGENT_STATUS.RUNNING);
         yield* writer.consume(target, {
           kind: BRAIN_RUN_EVENT.TURN_STARTED,
@@ -1174,12 +1165,40 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a message is the owner's alone and bounded: another account and no bearer are refused by name, as are words past the bound, no words, and a delivery outside the two, and eve hears none of them",
+    "a send repeated under its key answers what the first did and sends nothing again, once to eve and once in the transcript, and the same words under another key are a second message",
     () =>
       Effect.gen(function* () {
         const eve = fakeEve();
-        const { owner, other, agent, ask } = yield* startedAgent(eve, { running: true });
-        const line = { text: "Rename the helper.", delivery: CODING_AGENT_DELIVERY.QUEUE };
+        const { owner, target, sent, transcript } = yield* startedAgent(eve, { running: true });
+        const key = randomUUID();
+        const first = yield* sent("Use the helper.", key);
+        const again = yield* sent("Use the helper.", key);
+        assert.equal(first.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.deepEqual(again, first);
+        assert.equal(eve.sent.length, 1);
+        assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED), "Use the helper."]);
+        // The row stands under the key, which is how the repeat found it.
+        assert.equal(yield* sentLineStands(owner, target.conversationId, sentLineId(key)), true);
+
+        yield* sent("Use the helper.", randomUUID());
+        assert.equal(eve.sent.length, 2);
+        assert.deepEqual((yield* transcript()).lines, [
+          planMarkdown(SAVED),
+          "Use the helper.",
+          "Use the helper.",
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a message is the owner's alone and bounded: another account and no bearer are refused by name, as are words past the bound, no words, and a key missing or past its bound, and eve hears none of them",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, agent, ask, transcript } = yield* startedAgent(eve, {
+          running: true,
+        });
+        const line = { text: "Rename the helper.", clientKey: randomUUID() };
         assert.deepEqual(
           yield* ask(messageAs(other, agent.id, line)),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
@@ -1199,26 +1218,30 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
         const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
         assert.deepEqual(yield* ask(messageAs(owner, agent.id, { ...line, text: "   " })), invalid);
+        assert.deepEqual(yield* ask(messageAs(owner, agent.id, { text: "Hi" })), invalid);
         assert.deepEqual(
-          yield* ask(messageAs(owner, agent.id, { ...line, delivery: "later" })),
+          yield* ask(messageAs(owner, agent.id, { ...line, delivery: "queue" })),
           invalid,
         );
-        assert.deepEqual(yield* ask(messageAs(owner, agent.id, { text: "Hi" })), invalid);
-        assert.deepEqual(eve.sent, []);
-        const page = readAnswer(
-          codingAgentMessagesAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        assert.deepEqual(
+          yield* ask(
+            messageAs(owner, agent.id, {
+              ...line,
+              clientKey: "k".repeat(CODING_AGENT_BOUNDS.MAX_KEY_CHARS + 1),
+            }),
+          ),
+          invalid,
         );
-        assert.deepEqual(userLines(page), [undefined]);
-        // The bound itself is taken.
+        assert.deepEqual(eve.sent, []);
+        assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED)]);
+        // The bounds themselves are taken.
         readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.ACCEPTED,
           yield* ask(
             messageAs(owner, agent.id, {
-              ...line,
               text: "y".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+              clientKey: "k".repeat(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
             }),
           ),
         );
@@ -1227,10 +1250,10 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "eve's refusals are the route's words, and none of them leaves a line behind: a session still coming up or never claimed is a conflict to try again, one eve no longer runs is retired, and any other answer is unavailable",
+    "eve's refusals are the route's words, and none of them leaves a line behind, so the same key sends again: a session still coming up or never claimed is a conflict to try again, one eve no longer runs is retired, and any other answer is unavailable",
     () =>
       Effect.gen(function* () {
-        const line = { text: "Push what you have.", delivery: CODING_AGENT_DELIVERY.STEER };
+        const line = { text: "Push what you have.", clientKey: randomUUID() };
         const answers = [
           [
             EVE_SEND_OUTCOME.NOT_READY,
@@ -1246,15 +1269,12 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         ] as const;
         for (const [sends, error, status] of answers) {
           const eve = fakeEve({ sends });
-          const { owner, agent, ask } = yield* startedAgent(eve, { running: true });
+          const { owner, agent, ask, transcript } = yield* startedAgent(eve, { running: true });
           assert.deepEqual(yield* ask(messageAs(owner, agent.id, line)), refusal(status, error));
           assert.equal(eve.sent.length, 1);
-          const page = readAnswer(
-            codingAgentMessagesAnswerSchema,
-            HOSTED_HTTP_STATUS.OK,
-            yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
-          );
-          assert.deepEqual(userLines(page), [undefined]);
+          assert.deepEqual((yield* transcript()).lines, [planMarkdown(SAVED)]);
+          assert.deepEqual(yield* ask(messageAs(owner, agent.id, line)), refusal(status, error));
+          assert.equal(eve.sent.length, 2);
         }
 
         // An agent whose session has not claimed the conversation yet has nowhere to take the line.
@@ -1279,19 +1299,19 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
       Effect.gen(function* () {
         const eve = fakeEve();
         const { target, writer } = yield* startedAgent(eve, { running: true });
-        const line = { text: "Keep going.", delivery: CODING_AGENT_DELIVERY.QUEUE };
+        const line = { text: "Keep going.", clientKey: randomUUID() };
         // eve takes the message only once the test lets it, which is when the request is interrupted.
-        const accepting = yield* Deferred.make<string>();
+        const accepting = yield* Deferred.make<boolean>();
         const asked = yield* Deferred.make<void>();
         const dispatch = Effect.andThen(
           Deferred.succeed(asked, undefined),
-          Effect.map(Deferred.await(accepting), Option.some),
+          Deferred.await(accepting),
         );
         const writing = yield* Effect.forkChild(writer.writeAwaitingLine(target, line, dispatch));
         yield* Deferred.await(asked);
         const interrupting = yield* Effect.forkChild(Fiber.interrupt(writing));
         yield* Effect.yieldNow;
-        yield* Deferred.succeed(accepting, "delivery-9");
+        yield* Deferred.succeed(accepting, true);
         yield* Fiber.join(interrupting);
         // The interrupt is honoured once the write is through, so the fiber ends interrupted with
         // the row standing; without the fence the transaction would roll the accepted line back.
@@ -1308,7 +1328,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         const never = yield* Effect.forkChild(
           writer.writeAwaitingLine(
             target,
-            { text: "Still there?", delivery: CODING_AGENT_DELIVERY.STEER },
+            { text: "Still there?", clientKey: randomUUID() },
             Effect.andThen(Deferred.succeed(hung, undefined), Effect.never),
           ),
         );
@@ -1328,8 +1348,8 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.deepEqual(
           page.read.value
             .filter((record) => record.message.role === MESSAGE_ROLE.USER)
-            .map((record) => awaitedDeliveryOf(record.message)),
-          [undefined, CODING_AGENT_DELIVERY.QUEUE],
+            .map((record) => record.message.parts.find(isTextUIPart)?.text),
+          [planMarkdown(SAVED), "Keep going."],
         );
       }),
   );
@@ -1354,9 +1374,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         const target = { userId: owner, conversationId: agent.conversationId };
         yield* claimRuntimeSession(target, "wrun_01M0000000000000000000099", new Date());
         assert.deepEqual(
-          yield* ask(
-            messageAs(owner, agent.id, { text: "Go on.", delivery: CODING_AGENT_DELIVERY.QUEUE }),
-          ),
+          yield* ask(messageAs(owner, agent.id, { text: "Go on.", clientKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
         assert.deepEqual(eve.sent, []);

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { MESSAGE_DELIVERY } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -175,18 +174,8 @@ it.effect(
       assert.equal(accepted.seen[0]?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
       assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
-      // A follow-up naming no delivery leaves the policy to the channel; one naming it posts eve's own word for it.
+      // A follow-up names no policy of its own: how it reaches a turn under way is the channel's.
       assert.deepEqual(accepted.seen[0]?.body, { message: "hello" });
-      const steering = answeringEach([ACCEPTED_FOLLOW_UP]);
-      yield* Effect.flatMap(steering.sessions, (eve) =>
-        eve.send(SESSION, { ...MESSAGE, delivery: MESSAGE_DELIVERY.STEER }),
-      );
-      assert.deepEqual(steering.seen[0]?.body, { message: "hello", turnPolicy: "steer" });
-      const queueing = answeringEach([ACCEPTED_FOLLOW_UP]);
-      yield* Effect.flatMap(queueing.sessions, (eve) =>
-        eve.send(SESSION, { ...MESSAGE, delivery: MESSAGE_DELIVERY.QUEUE }),
-      );
-      assert.deepEqual(queueing.seen[0]?.body, { message: "hello", turnPolicy: "queue" });
 
       const refused = answering(403, { ok: false, code: "forbidden" });
       assert.deepEqual(

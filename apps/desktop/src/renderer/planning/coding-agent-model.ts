@@ -3,12 +3,9 @@ import {
   type CodingAgentCallFailure,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  awaitedDeliveryOf,
   CHECK_SUMMARY,
   type CheckSummary,
-  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
-  type CodingAgentDelivery,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
@@ -113,9 +110,9 @@ export function messageFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
     case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
       return "The message could not be sent. Try again.";
-    // No answer is not a refusal: the words may have reached the agent, and a message carries no key a second send could repeat under.
+    // No answer is not a refusal: the words may have reached the agent, and Retry carries the same key, so they reach it once.
     case CODING_AGENT_CALL_FAILURE.UNANSWERED:
-      return "Luke didn't hear back. Check the transcript before sending it again.";
+      return "Luke didn't hear back. Retry sends it again, once.";
     case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
@@ -415,11 +412,6 @@ export function messageWords(message: CodingAgentMessage): string {
     .join("\n\n");
 }
 
-/** Whether a row waits for the turn under way to end, which the composer stacks above the box rather than the transcript drawing it. */
-function awaitsQueue(message: CodingAgentMessage): boolean {
-  return awaitedDeliveryOf(message) === CODING_AGENT_DELIVERY.QUEUE;
-}
-
 /**
  * A line the developer sent that the transcript has not read back yet:
  * drawn as theirs the moment it goes, and let go once the service's own
@@ -430,7 +422,6 @@ export interface SentLine {
   readonly id: string;
   /** The words as they went: trimmed, as the service keeps them. */
   readonly text: string;
-  readonly delivery: CodingAgentDelivery;
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
 }
@@ -479,36 +470,21 @@ export function unreadSentLines(
   return { lines, taken: claimed };
 }
 
-/** A sent line as the tab draws it before the service's row lands: the developer's row, awaiting its delivery. */
+/** A sent line as the tab draws it before the service's row lands: the developer's row. */
 function sentLineMessage(line: SentLine): CodingAgentMessage {
   return {
     id: line.id,
     role: MESSAGE_ROLE.USER,
     parts: [{ type: AGENT_PART.TEXT, text: line.text }],
-    metadata: { delivery: line.delivery },
   };
 }
 
-/** What the tab draws where: the transcript's rows, and the lines waiting for the turn under way to end. */
-export interface AgentLines {
-  readonly transcript: readonly CodingAgentMessage[];
-  readonly queued: readonly CodingAgentMessage[];
-}
-
-/**
- * The transcript's rows, with the lines sent and not yet read back at its
- * end; and the lines waiting for the turn under way to end, which stand
- * above the composer in order instead.
- */
+/** The transcript's rows, with the lines sent and not yet read back at its end, in the order they went. */
 export function agentLines(
   messages: readonly CodingAgentMessage[],
   sent: readonly SentLine[],
-): AgentLines {
-  const all = [...messages, ...sent.map(sentLineMessage)];
-  return {
-    transcript: all.filter((message) => !awaitsQueue(message)),
-    queued: all.filter(awaitsQueue),
-  };
+): readonly CodingAgentMessage[] {
+  return [...messages, ...sent.map(sentLineMessage)];
 }
 
 /** Where a pull request lives: GitHub's own pages, which are the one address the tab opens in the browser. */

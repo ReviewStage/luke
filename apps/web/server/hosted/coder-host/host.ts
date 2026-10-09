@@ -42,7 +42,7 @@ import type { CoderHostSeams } from "./production.js";
  * step's model. The relay into the store is the shared one, composed here
  * with no ask record: a message to a coding agent is written as a line
  * awaiting its turn by the message route, and the relay takes that line
- * into the turn that receives it, so no delivery needs binding here.
+ * into the turn that receives it, so nothing needs binding here.
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */

@@ -19,6 +19,7 @@ import {
 } from "../../core.js";
 import { db } from "../../db/query.js";
 import { conversations, messages, turns } from "../../db/storage-schema.js";
+import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
 
 /**
@@ -457,19 +458,18 @@ export function latestTurnsOf(
   );
 }
 
-/** The `jsonb` field a developer's line awaits its turn under, which the builder has no operator for; one fragment, named once. */
-const AWAITED_DELIVERY = sql`${messages.metadata} ->> 'delivery'`;
-
 const AwaitingLinesRowSchema = Schema.Struct({
   conversationId: Schema.String,
   lines: Schema.Number,
 });
 
 /**
- * How many of the developer's lines stand in each conversation named with no
- * turn yet and their delivery still on them: each is a message the session
- * took and the next turn will receive, which is what reads an idle agent as
- * running again until that turn opens.
+ * How many of the developer's lines stand in each coding-agent conversation
+ * named with no turn yet: each is a message the session took and the next
+ * turn will receive, which is what reads an idle agent as running again
+ * until that turn opens. The kind is held here as the writer holds it when
+ * it takes such a line, since a planning conversation's turnless user rows
+ * are its spoken asks and wait for no turn of eve's.
  */
 const countAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
@@ -481,17 +481,48 @@ const countAwaitingLines = SqlSchema.findAll({
         lines: sql<number>`count(*)::int`,
       })
       .from(messages)
+      .innerJoin(conversations, eq(conversations.id, messages.conversationId))
       .where(
         and(
           eq(messages.userId, userId),
           inArray(messages.conversationId, [...conversationIds]),
+          eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
           isNull(messages.turnId),
-          sql`${AWAITED_DELIVERY} is not null`,
         ),
       )
       .groupBy(messages.conversationId),
 });
+
+const findSentLine = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    clientId: Schema.String,
+  }),
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: ({ userId, conversationId, clientId }) =>
+    db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.conversationId, conversationId),
+          eq(messages.userId, userId),
+          eq(messages.clientId, clientId),
+        ),
+      )
+      .limit(1),
+});
+
+/** Whether a row of the account's conversation stands under the client id: the line a send repeated after a lost answer already wrote, read before anything is sent again. */
+export function sentLineStands(
+  userId: string,
+  conversationId: string,
+  clientId: string,
+): Effect.Effect<boolean, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.map(findSentLine({ userId, conversationId, clientId }), Option.isSome);
+}
 
 /** The conversations among those named in which a developer's line awaits its turn; one with none is absent. */
 export function awaitingLinesOf(

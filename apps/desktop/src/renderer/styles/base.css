@@ -273,6 +273,18 @@ button:disabled {
   cursor: default;
 }
 
+/* A field is typed into in the panel's own font, on no border and no
+   surface of the browser's: Tailwind's preflight, which would reset these,
+   is left out (styles/tailwind.css), so the reset is this sheet's, and the
+   box around the words is its owner's to draw. Without it a textarea is the
+   browser's monospace well behind a hard rectangle. */
+textarea {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
 /* The black surface is the whole animation: one leaf element with no children
    and no text, so growing it costs a rounded-rect fill rather than a relayout
    of the panel. It also ends where the content does, so a session arriving or

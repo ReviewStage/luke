@@ -10,18 +10,16 @@
       "minLength": 1,
       "maxLength": 16000
     },
-    "delivery": {
+    "clientKey": {
       "type": "string",
-      "enum": [
-        "steer",
-        "queue"
-      ]
+      "minLength": 1,
+      "maxLength": 128
     }
   },
   "required": [
     "agentId",
     "text",
-    "delivery"
+    "clientKey"
   ],
   "additionalProperties": false
 }

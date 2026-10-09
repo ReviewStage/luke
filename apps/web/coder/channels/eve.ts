@@ -14,5 +14,5 @@ import { seams } from "../host.js";
 const resolveUserId = (request: Request): Promise<string | undefined> =>
   runWeb(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
 
-/** The one door into the coding-agent service: eve's own HTTP API under the host's auth and queue policy. */
+/** The one door into the coding-agent service: eve's own HTTP API under the host's auth and steer policy. */
 export default eveChannel(coderChannelInput(resolveUserId, seams.ownership));

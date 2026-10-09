@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
-  CODING_AGENT_DELIVERY,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
@@ -166,18 +165,9 @@ test("a message's refusals each say what to do, the agent ended for good closes 
   assert.equal(closesComposer(CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY), false);
 });
 
-/** A row of the developer's, awaiting its delivery or taken. */
-function developer(
-  id: string,
-  text: string,
-  awaiting?: typeof CODING_AGENT_DELIVERY.STEER | typeof CODING_AGENT_DELIVERY.QUEUE,
-): CodingAgentMessage {
-  return {
-    id,
-    role: "user",
-    parts: [{ type: "text", text }],
-    ...(awaiting === undefined ? undefined : { metadata: { delivery: awaiting } }),
-  };
+/** A row of the developer's, as the service writes one. */
+function developer(id: string, text: string): CodingAgentMessage {
+  return { id, role: "user", parts: [{ type: "text", text }] };
 }
 
 test("a sent line is read back by a developer's row it did not know holding its words, one row answering one line in order", () => {
@@ -185,7 +175,6 @@ test("a sent line is read back by a developer's row it did not know holding its 
   const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
     id,
     text,
-    delivery: CODING_AGENT_DELIVERY.STEER,
     known: knownDeveloperRows(known),
   });
   // The plan already says the same words: the line is not read back by it.
@@ -193,7 +182,7 @@ test("a sent line is read back by a developer's row it did not know holding its 
   assert.deepEqual(unreadSentLines([first], [plan]).lines, [first]);
   // Two lines of the same words are read back one row at a time, in order.
   const second = sent("sent-2", "Go on.", [plan]);
-  const one = [plan, developer("m-1", "Go on.", CODING_AGENT_DELIVERY.STEER)];
+  const one = [plan, developer("m-1", "Go on.")];
   const read = unreadSentLines([first, second], one);
   assert.deepEqual(read.lines, [second]);
   assert.deepEqual([...read.taken], ["m-1"]);
@@ -207,30 +196,23 @@ test("a sent line is read back by a developer's row it did not know holding its 
   assert.equal(messageWords(two[2] ?? plan), "Go on.");
 });
 
-test("the rows awaiting the end of the turn stand in the queue and every other row in the transcript, the lines sent and not read back among them", () => {
+test("the lines sent and not read back follow the transcript's rows, as the developer's own, in the order they went", () => {
   const plan = developer("m-plan", "Go on.");
-  const steered = developer("m-1", "Now.", CODING_AGENT_DELIVERY.STEER);
-  const queued = developer("m-2", "Later.", CODING_AGENT_DELIVERY.QUEUE);
-  const taken = developer("m-3", "Taken.");
-  const line: SentLine = {
-    id: "sent-1",
-    text: "Soon.",
-    delivery: CODING_AGENT_DELIVERY.QUEUE,
-    known: new Set(),
-  };
-  const lines = agentLines([plan, steered, queued, taken], [line]);
+  const taken = developer("m-1", "Taken.");
+  const lines: SentLine[] = [
+    { id: "sent-1", text: "Soon.", known: new Set() },
+    { id: "sent-2", text: "Later.", known: new Set() },
+  ];
+  const drawn = agentLines([plan, taken], lines);
   assert.deepEqual(
-    lines.transcript.map((each) => each.id),
-    ["m-plan", "m-1", "m-3"],
-  );
-  assert.deepEqual(
-    lines.queued.map((each) => [each.id, messageWords(each)]),
+    drawn.map((each) => [each.id, each.role, messageWords(each)]),
     [
-      ["m-2", "Later."],
-      ["sent-1", "Soon."],
+      ["m-plan", "user", "Go on."],
+      ["m-1", "user", "Taken."],
+      ["sent-1", "user", "Soon."],
+      ["sent-2", "user", "Later."],
     ],
   );
-  assert.equal(lines.queued[1]?.role, "user");
 });
 
 test("the menus list the models by provider, Anthropic first, and newest first within each, the catalog's order kept between one version's models", () => {

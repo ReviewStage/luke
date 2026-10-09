@@ -80,9 +80,8 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  * Under the transcript stands the composer (`agent-composer.tsx`): a line
  * the developer sends joins the transcript at once as theirs and is read
- * back from the service's own row, a line queued for after the turn stands
- * above the box until its turn opens, and the Stop is the composer's, the
- * one the tab has.
+ * back from the service's own row, and the Stop is the composer's, the one
+ * the tab has.
  */
 
 /** What the tab says before the agent's first message lands. */
@@ -368,8 +367,7 @@ export function AgentTranscriptView({
 
 /**
  * The tab as drawn from what it holds: the head, the transcript with the
- * lines sent and not yet read back at its end, and the composer under it
- * with the lines queued above its box.
+ * lines sent and not yet read back at its end, and the composer under it.
  */
 export function AgentTabView({
   agent,
@@ -393,12 +391,11 @@ export function AgentTabView({
   openGitHub: (url: string) => void;
   copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
-  const lines = agentLines(transcript.messages, composer.sent);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <AgentHeader agent={agent} models={models} published={published} doors={doors} />
       <AgentTranscriptView
-        messages={lines.transcript}
+        messages={agentLines(transcript.messages, composer.sent)}
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(agent.status)}
@@ -412,12 +409,7 @@ export function AgentTabView({
         }
       />
       <footer className="agent-tab-foot">
-        <AgentComposer
-          status={agent.status}
-          composer={composer}
-          queued={lines.queued}
-          onStop={onStop}
-        />
+        <AgentComposer status={agent.status} composer={composer} onStop={onStop} />
       </footer>
     </section>
   );

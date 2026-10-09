@@ -2,7 +2,6 @@
  * eve-sessions.ts -- the host's three calls into eve's session routes, as effects on the edge's HttpClient.
  */
 
-import { MESSAGE_DELIVERY, type MessageDelivery } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
@@ -10,7 +9,6 @@ import * as HttpClient from "effect/unstable/http/HttpClient";
 import type * as HttpClientError from "effect/unstable/http/HttpClientError";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
-import type { TurnPolicy } from "eve/channels";
 import { EXCESS_KEYS, type UnparsedWireValue, unparsedWire } from "../../core.js";
 import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
 
@@ -39,9 +37,9 @@ import { BRAIN_HOST_HEADER, type BrainHostTurn } from "./bounds.js";
  * is the conversation row's forward-only claim: an inbox slower than the
  * last wait costs a session opened for nothing, which the claim lets the
  * older one lose, and never two sessions writing one conversation. Reopening
- * is never eve's: the host decides it, under that claim. A follow-up may
- * name how it reaches a turn under way, in eve's own two words for it
- * (`turnPolicy`): a message naming none takes the channel's policy.
+ * is never eve's: the host decides it, under that claim. How a follow-up
+ * reaches a turn under way is the channel's policy, which both of Luke's
+ * channels set to steer; no call here names one of its own.
  *
  * Every call is an effect on the `HttpClient` the web runtime builds once
  * per instance, read here once at composition rather than on each call, so
@@ -201,18 +199,10 @@ type EveCancelled =
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.NO_ACTIVE_TURN }
   | { readonly outcome: typeof EVE_CANCEL_OUTCOME.FAILED; readonly status: number };
 
-/** eve's own word for each way a follow-up reaches a turn under way; the two vocabularies are held to one another here. */
-const TURN_POLICY_OF_DELIVERY = {
-  [MESSAGE_DELIVERY.STEER]: "steer",
-  [MESSAGE_DELIVERY.QUEUE]: "queue",
-} as const satisfies Record<MessageDelivery, TurnPolicy>;
-
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
   readonly message: string;
-  /** How the message reaches a turn under way, where the caller names it; the channel's own policy otherwise. A first message opens a turn and names none. */
-  readonly delivery?: MessageDelivery;
 }
 
 export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
@@ -232,10 +222,9 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
 
-/** What the host posts to eve: the message a turn opens with and how it reaches a turn under way, or the turn a cancel is scoped to. */
+/** What the host posts to eve: the message a turn opens with, or the turn a cancel is scoped to. */
 interface EvePostBody {
   readonly message?: string;
-  readonly turnPolicy?: TurnPolicy;
   readonly turnId?: string;
 }
 
@@ -378,12 +367,7 @@ function sessionsOver<Turn extends BrainHostTurn>(
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
     // its last wait is the not-ready the caller reads; an unreachable eve is retried nowhere.
     send: (sessionId, message) =>
-      post(sessionPath(mount, sessionId), turnHeaders(message), {
-        message: message.message,
-        ...(message.delivery !== undefined
-          ? { turnPolicy: TURN_POLICY_OF_DELIVERY[message.delivery] }
-          : undefined),
-      }).pipe(
+      post(sessionPath(mount, sessionId), turnHeaders(message), { message: message.message }).pipe(
         Effect.flatMap(readSent),
         Effect.retry({
           schedule: SESSION_NOT_READY_RETRY,

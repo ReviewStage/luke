@@ -245,9 +245,10 @@ export class HostedCodingAgentClient {
   }
 
   /**
-   * Sends one agent a message, naming how it reaches a turn under way, and
-   * answers the agent as it then stands, which is running; a message the
-   * service would refuse by shape is refused here without traveling.
+   * Sends one agent a message under the key the window made for the send,
+   * which a retry carries again, and answers the agent as it then stands,
+   * which is running; a message the service would refuse by shape is
+   * refused here without traveling.
    */
   message(
     agentId: string,

@@ -41,12 +41,12 @@ test("the tools authored for the agent are exactly the writer's tool set, with e
   assert.deepEqual(authored, Object.values(CODER_TOOL).sort());
 });
 
-test("a follow-up queues behind the turn under way, and the walk is the account's bearer with no deployment actor", () => {
+test("a follow-up steers the turn under way, and the walk is the account's bearer with no deployment actor", () => {
   const channel = coderChannelInput(async () => undefined, {
     sessionOwner: async () => undefined,
     ownsConversation: async () => false,
   });
-  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.QUEUE);
+  assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   assert.equal(Array.isArray(channel.auth), false);
 });
 

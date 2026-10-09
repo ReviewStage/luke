@@ -82,7 +82,7 @@ export const ONE_ACT_OF_EACH_KIND = {
     payload: {
       agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
       text: "Also expire them after a week.",
-      delivery: "queue",
+      clientKey: "7f9e2c1d-4b3a-4c5d-9e8f-0a1b2c3d4e5f",
     },
   },
   [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: {
