@@ -88,18 +88,35 @@ const nonNegativeInteger = EffectSchema.Finite.check(
 const spanInstant = nonNegativeInteger;
 
 /**
+ * How a typed ask sent to a session with a turn under way reaches the
+ * model: it joins that turn at its next step, or it waits for the turn to
+ * end and opens the next. A coding agent's message names one of the two.
+ */
+export const MESSAGE_DELIVERY = {
+  STEER: "steer",
+  QUEUE: "queue",
+} as const;
+
+export type MessageDelivery = (typeof MESSAGE_DELIVERY)[keyof typeof MESSAGE_DELIVERY];
+
+/**
  * A user row is one of three things, and the shape says which: the
  * developer's typed ask, a spoken ask cut from a voice session, or an
  * observation the brain wrote down for itself. Three structs rather than one
  * with every field optional, so an observation carrying a channel or a typed
- * ask carrying a voice session has no shape to arrive in.
+ * ask carrying a voice session has no shape to arrive in. A typed ask
+ * carries its delivery for as long as it awaits its turn: the row is written
+ * the moment the session takes the message, ahead of the turn that will run
+ * it, and the field is dropped once that turn receives the line, so a reader
+ * tells a line still waiting from one the model has.
  */
 const TYPED_ASK_METADATA = EffectSchema.Struct({
   author: EffectSchema.Literal(MESSAGE_AUTHOR.DEVELOPER),
   channel: EffectSchema.Literal(MESSAGE_CHANNEL.TYPED),
+  delivery: EffectSchema.optional(EffectSchema.Literals(Object.values(MESSAGE_DELIVERY))),
 });
 
-type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
+export type TypedAskMetadata = EffectSchema.Schema.Type<typeof TYPED_ASK_METADATA>;
 
 /**
  * A spoken ask is the developer's own words, or the voice model's delegation

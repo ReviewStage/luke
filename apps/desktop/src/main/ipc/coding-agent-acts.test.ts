@@ -28,6 +28,7 @@ const STARTED: CodingAgentAgentAnswer = {
     effort: "high",
     createdAt: 1_800_000_000_000,
     status: CODING_AGENT_STATUS.STARTING,
+    turnId: null,
   },
 };
 

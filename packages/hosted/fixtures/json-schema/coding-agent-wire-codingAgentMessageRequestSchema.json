@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16000
+    },
+    "delivery": {
+      "type": "string",
+      "enum": [
+        "steer",
+        "queue"
+      ]
+    }
+  },
+  "required": [
+    "text",
+    "delivery"
+  ],
+  "additionalProperties": false
+}

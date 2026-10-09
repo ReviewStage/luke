@@ -1,7 +1,9 @@
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   type CodingAgentSummary,
   codingAgentCursorSchema,
+  codingAgentMessageRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -15,7 +17,13 @@ import {
   type HttpServerResponse,
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
-import { unparsedWire, wireUuidSchema } from "./core.js";
+import {
+  isRecord,
+  isWireString,
+  type UnparsedWireValue,
+  unparsedWire,
+  wireUuidSchema,
+} from "./core.js";
 import { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
 import { readAccountPreferences, writeAccountPreferences } from "./hosted/account-store.js";
@@ -29,10 +37,11 @@ import {
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
-import { codingAgentSummary } from "./hosted/coder-host/status.js";
+import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import { cursorOfWire, cursorToWire, transcriptPast } from "./hosted/coder-host/transcript.js";
 import {
+  awaitingLinesOf,
   type CodingAgent,
   type CodingAgentLatestTurn,
   createCodingAgent,
@@ -60,10 +69,11 @@ import {
 } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
+import { STORE_WRITE_REFUSAL } from "./hosted/store/writer.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript, and stop one.
+ * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript, message one, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan or an agent another
@@ -81,16 +91,30 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * status from its newest turn. The transcript
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
  * cursor, held open while the agent runs (`hosted/coder-host/transcript.ts`).
- * A Stop (`POST /api/agents/{id}/stop`) is eve's cancel of the turn under
- * way, named by eve's own id for it, and the row's stamp; the service's hook
- * stops the sandbox as the cancelled turn ends, and anything the agent
- * pushed stays.
+ * A message (`POST /api/agents/{id}/messages`) is the developer's words
+ * handed to the session the agent runs in, under the developer's own bearer,
+ * naming how they reach a turn under way: a steer joins it and a queue
+ * waits for it to end, and an idle agent opens a new turn on either. The
+ * words are written as a user row awaiting its turn, under the
+ * conversation's lock around eve's acceptance, so the transcript shows the
+ * line at once with its delivery on it and the agent reads as running until
+ * the turn that receives the line takes it (`brain-host/relay.ts`). The
+ * route confirms the developer still reaches the repository first, so a
+ * sign-in that lapsed is refused here rather than failing the turn's
+ * checkout; the session's own step hook renews the credential at the
+ * firewall where the standing one is old. eve answering that the session is
+ * still coming up is a conflict the desktop tries again; eve no longer
+ * running the session is one it does not, since the agent's sandbox lives
+ * with the session. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
+ * of the turn under way, named by eve's own id for it, and the row's stamp;
+ * the service's hook stops the sandbox as the cancelled turn ends, and
+ * anything the agent pushed stays.
  */
 
 const AGENTS_PATH = {
   /** GET lists the plan's agents, POST starts one; the rewrite moves the path's plan id into the `id` query. */
   OF_PLAN: "/api/plans/agents",
-  /** GET reads the agent's transcript past `after`; the rewrite moves the path's agent id into the `id` query. */
+  /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -102,6 +126,9 @@ const QUERY = { ID: "id", AFTER: "after" } as const;
 
 /** A Start names a key and a choice at most, so a body past this is no Start. */
 const MAXIMUM_START_BODY_BYTES = 4_096;
+
+/** A message is its words and a delivery: the bound's characters at JSON's widest escape, and room for the keys around them. */
+const MAXIMUM_MESSAGE_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1_024;
 
 export interface CodingAgentsAppSeams {
   resolveUserId: UserIdResolver;
@@ -156,13 +183,30 @@ const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   return yield* eveSessions({ origin, caller: { authorization }, mount: EVE_MOUNT.CODER });
 });
 
+/** Where each of the account's conversations named stands now: its newest turn, and whether a line of the developer's awaits one. */
+const standingsOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  userId: string,
+  conversationIds: readonly string[],
+): Effect.fn.Return<
+  (conversationId: string) => AgentTurnStanding,
+  HostedRefusal,
+  SqlClient.SqlClient
+> {
+  const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, conversationIds));
+  const awaiting = yield* hostedStoreOrUnavailable(awaitingLinesOf(userId, conversationIds));
+  return (conversationId) => ({
+    turn: turns.get(conversationId),
+    lineAwaits: awaiting.has(conversationId),
+  });
+});
+
 /** The agent's summary with its status read now. */
 const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentSummary, HostedRefusal, SqlClient.SqlClient> {
-  const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, [agent.conversationId]));
-  return codingAgentSummary(agent, turns.get(agent.conversationId), yield* Clock.currentTimeMillis);
+  const standing = yield* standingsOf(userId, [agent.conversationId]);
+  return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
 });
 
 /**
@@ -255,7 +299,11 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
-    agent: codingAgentSummary(agent, undefined, yield* Clock.currentTimeMillis),
+    agent: codingAgentSummary(
+      agent,
+      { turn: undefined, lineAwaits: false },
+      yield* Clock.currentTimeMillis,
+    ),
   });
 });
 
@@ -276,15 +324,13 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, planId));
-  const turns = yield* hostedStoreOrUnavailable(
-    latestTurnsOf(
-      userId,
-      agents.map((agent) => agent.conversationId),
-    ),
+  const standing = yield* standingsOf(
+    userId,
+    agents.map((agent) => agent.conversationId),
   );
   const now = yield* Clock.currentTimeMillis;
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agents: agents.map((agent) => codingAgentSummary(agent, turns.get(agent.conversationId), now)),
+    agents: agents.map((agent) => codingAgentSummary(agent, standing(agent.conversationId), now)),
   });
 });
 
@@ -308,15 +354,109 @@ const ownedAgent = /* @__PURE__ */ Effect.fnUntraced(function* (
   };
 });
 
-/** GET reads the agent's transcript past the cursor, held open while the agent is starting or runs, with the agent's status as the page was read. */
+/** Why a message body was not read as one: its words run past the bound, or it is not a message at all. */
+function messageRefusal(body: UnparsedWireValue): HostedRefusal {
+  if (isRecord(body) && isWireString(body.text)) {
+    if (body.text.trim().length > CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS) {
+      return HOSTED_REFUSAL.MESSAGE_TOO_LONG;
+    }
+  }
+  return HOSTED_REFUSAL.INVALID_REQUEST;
+}
+
+/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, one eve no longer runs is gone for good, and anything else is an outage. */
+const REFUSAL_OF_SEND_OUTCOME = {
+  [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
+  [EVE_SEND_OUTCOME.RETIRED]: HOSTED_REFUSAL.AGENT_RETIRED,
+  [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
+} as const;
+
+/**
+ * POST sends the agent a message: the developer's words handed to the
+ * session the agent runs in with the delivery named, written as a line
+ * awaiting its turn once eve has taken them. The hand-over runs inside the
+ * conversation's lock, so the turn eve opens on the line finds the row
+ * standing when its own first write takes the lock, and an eve that did not
+ * take the message leaves no row behind; the writer fences the write
+ * against the request going away between the two. A row the store failed
+ * to write after eve took the message is the one gap left, and the relay
+ * still writes the line when the turn receives it, without its marker.
+ */
+const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+  request: Request,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
+  const asked = readEither(codingAgentMessageRequestSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
+  const { text, delivery } = asked.success;
+  // The turn's checkout and its credential renewals run on the developer's standing with GitHub,
+  // so a sign-in that lapsed is the route's refusal rather than a turn failed at its first step.
+  const app = yield* GitHubApp;
+  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
+  if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+  const eve = yield* eveFor(seams, request);
+  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
+  let refused: HostedRefusal | undefined;
+  const dispatch = eve
+    .send(sessionId, {
+      conversationId: agent.conversationId,
+      turn: BRAIN_HOST_TURN.TYPED,
+      message: text,
+      delivery,
+    })
+    .pipe(
+      Effect.catchTag("EveUnreachable", (failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
+          ),
+          { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+        ),
+      ),
+      Effect.map((sent) => {
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return Option.some(sent.deliveryId);
+        refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
+        return Option.none();
+      }),
+    );
+  const written = yield* hostedStoreOrUnavailable(
+    Effect.flatMap(writer, (write) =>
+      write.writeAwaitingLine(target, { text, delivery }, dispatch),
+    ),
+  );
+  if (Result.isFailure(written)) {
+    return yield* Effect.fail(
+      written.failure.refusal === STORE_WRITE_REFUSAL.NO_CONVERSATION
+        ? HOSTED_REFUSAL.NOT_FOUND
+        : HOSTED_REFUSAL.INVALID_REQUEST,
+    );
+  }
+  if (Option.isNone(written.success)) {
+    return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
+    agent: yield* summaryOf(userId, agent),
+  });
+});
+
+/** GET reads the agent's transcript past the cursor, held open while the agent is starting or runs, with the agent's status as the page was read; POST sends the agent a message. */
 const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(function* (
   seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.GET) {
+  if (incoming.method !== HTTP_METHOD.GET && incoming.method !== HTTP_METHOD.POST) {
     return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  if (incoming.method === HTTP_METHOD.POST) {
+    return yield* sendMessageEndpoint(seams, writer, request);
+  }
   const after = readEither(codingAgentCursorSchema)(
     unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? CODING_AGENT_CURSOR_START),
   );
@@ -355,18 +495,18 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   }
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent, target } = yield* ownedAgent(seams, request);
-  const turns = yield* hostedStoreOrUnavailable(latestTurnsOf(userId, [agent.conversationId]));
-  const turn = turns.get(agent.conversationId);
+  const standing = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId);
+  const turn = standing.turn;
   const now = yield* Clock.currentTimeMillis;
   if (!stoppable(turn)) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: codingAgentSummary(agent, turn, now),
+      agent: codingAgentSummary(agent, standing, now),
     });
   }
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
   if (sessionId === undefined) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: codingAgentSummary(agent, turn, now),
+      agent: codingAgentSummary(agent, standing, now),
     });
   }
   // The cancel names the turn the row was written for, never the session's turn under way, so a
@@ -402,7 +542,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.mergeAll(
     HttpRouter.add(ANY_METHOD, AGENTS_PATH.OF_PLAN, hostedRefusing(planAgentsEndpoint(seams))),
-    HttpRouter.add(ANY_METHOD, AGENTS_PATH.MESSAGES, hostedRefusing(messagesEndpoint(seams))),
+    HttpRouter.add(
+      ANY_METHOD,
+      AGENTS_PATH.MESSAGES,
+      hostedRefusing(messagesEndpoint(seams, writer)),
+    ),
     HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
     hostedNotFoundRoute,
   );

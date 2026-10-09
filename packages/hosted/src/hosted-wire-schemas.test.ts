@@ -40,6 +40,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "coding-agent-wire": {
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
+    codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,

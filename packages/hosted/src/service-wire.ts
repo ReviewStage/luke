@@ -60,6 +60,12 @@ export const HOSTED_API_ERROR = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The plan names no repository yet, so there is nothing for a coding agent to check out; the developer picks one first. */
   NO_REPOSITORY: "no-repository",
+  /** The message spells more characters than one message to a coding agent may; shortened, it is taken. */
+  MESSAGE_TOO_LONG: "message-too-long",
+  /** The agent's session is still coming up and could not take the message yet; the same message a moment later is taken. */
+  AGENT_NOT_READY: "agent-not-ready",
+  /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
+  AGENT_RETIRED: "agent-retired",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];

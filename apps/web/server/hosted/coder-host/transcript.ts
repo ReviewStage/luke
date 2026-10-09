@@ -8,7 +8,7 @@ import { Clock, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { StoredUIMessage } from "../../core.js";
-import { latestTurnsOf } from "../coding-agent-store.js";
+import { awaitingLinesOf, latestTurnsOf } from "../coding-agent-store.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
 import { type AgentStanding, codingAgentStatusOf } from "./status.js";
@@ -27,7 +27,8 @@ import { type AgentStanding, codingAgentStatusOf } from "./status.js";
  * `MESSAGES_HOLD`, so a tab hears each message as it lands without asking
  * every half second and a tab on an agent whose first turn has not landed
  * costs one held read per hold rather than a spin; an agent that has ended
- * answers at once. Every page carries the agent's status as it stood when
+ * answers at once, unless a message of the developer's awaits the turn it
+ * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
  * the page was read, so the reader learns the agent ended from the page
  * that ends the hold and asks nothing else. The wire spells the cursor as
  * the two numbers joined by a colon.
@@ -64,12 +65,17 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** The agent's status now, read from its newest turn. */
+/** The agent's status now, read from its newest turn and whether a line awaits one. */
 const statusNow = (target: ConversationTarget, createdAt: Date) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+    const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
-    return codingAgentStatusOf(turns.get(target.conversationId), { createdAt, now });
+    return codingAgentStatusOf(turns.get(target.conversationId), {
+      createdAt,
+      now,
+      lineAwaits: awaiting.has(target.conversationId),
+    });
   });
 
 /** One read of the page past the cursor with the status beside it; a page the vocabulary refuses answers no messages, since nothing readable stands past the cursor. */

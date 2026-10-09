@@ -22,6 +22,7 @@ const AGENT: CodingAgentSummary = {
   effort: "high",
   createdAt: 1_800_000_000_000,
   status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
 
 const MODELS = [

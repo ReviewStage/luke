@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { MESSAGE_DELIVERY } from "@sidecar/wire";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
 import { Effect, Fiber, Redacted } from "effect";
 import { TestClock } from "effect/testing";
@@ -174,6 +175,18 @@ it.effect(
       assert.equal(accepted.seen[0]?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
       assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(accepted.seen[0]?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
+      // A follow-up naming no delivery leaves the policy to the channel; one naming it posts eve's own word for it.
+      assert.deepEqual(accepted.seen[0]?.body, { message: "hello" });
+      const steering = answeringEach([ACCEPTED_FOLLOW_UP]);
+      yield* Effect.flatMap(steering.sessions, (eve) =>
+        eve.send(SESSION, { ...MESSAGE, delivery: MESSAGE_DELIVERY.STEER }),
+      );
+      assert.deepEqual(steering.seen[0]?.body, { message: "hello", turnPolicy: "steer" });
+      const queueing = answeringEach([ACCEPTED_FOLLOW_UP]);
+      yield* Effect.flatMap(queueing.sessions, (eve) =>
+        eve.send(SESSION, { ...MESSAGE, delivery: MESSAGE_DELIVERY.QUEUE }),
+      );
+      assert.deepEqual(queueing.seen[0]?.body, { message: "hello", turnPolicy: "queue" });
 
       const refused = answering(403, { ok: false, code: "forbidden" });
       assert.deepEqual(
@@ -193,7 +206,7 @@ it.effect(
 );
 
 it.effect(
-  "a not-ready follow-up is tried again on the SDK's own loop, reads as accepted the moment the session's inbox is up, and as retired only once the loop's twenty seconds are spent; a not-active one is retired at once",
+  "a not-ready follow-up is tried again on the SDK's own loop, reads as accepted the moment the session's inbox is up, and as not ready only once the loop's twenty seconds are spent; a not-active one is retired at once",
   () =>
     Effect.gen(function* () {
       const starting = answeringEach([NOT_READY, NOT_READY, ACCEPTED_FOLLOW_UP]);
@@ -227,7 +240,7 @@ it.effect(
       yield* TestClock.adjust("2 seconds");
       assert.equal(never.seen.length, 6);
       yield* TestClock.adjust("30 seconds");
-      assert.deepEqual(yield* Fiber.join(retiring), { outcome: EVE_SEND_OUTCOME.RETIRED });
+      assert.deepEqual(yield* Fiber.join(retiring), { outcome: EVE_SEND_OUTCOME.NOT_READY });
       const tried = never.seen.length;
       yield* TestClock.adjust("10 seconds");
       assert.equal(never.seen.length, tried);

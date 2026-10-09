@@ -6,11 +6,14 @@ import { HttpServerResponse } from "effect/unstable/http";
 import { test } from "vitest";
 import { errorResponse, HOSTED_HTTP_STATUS } from "../server/hosted/http.js";
 import {
+  AgentNotReadyRefusal,
+  AgentRetiredRefusal,
   GitHubSignInRequiredRefusal,
   HOSTED_REFUSAL,
   hostedRefusalResponse,
   InvalidRequestRefusal,
   InvalidTokenRefusal,
+  MessageTooLongRefusal,
   MethodNotAllowedRefusal,
   NoRepositoryRefusal,
   NotFoundRefusal,
@@ -118,6 +121,21 @@ const REFUSALS = [
   {
     refusal: HOSTED_REFUSAL.NO_REPOSITORY,
     schema: NoRepositoryRefusal,
+    status: HOSTED_HTTP_STATUS.CONFLICT,
+  },
+  {
+    refusal: HOSTED_REFUSAL.MESSAGE_TOO_LONG,
+    schema: MessageTooLongRefusal,
+    status: HOSTED_HTTP_STATUS.BAD_REQUEST,
+  },
+  {
+    refusal: HOSTED_REFUSAL.AGENT_NOT_READY,
+    schema: AgentNotReadyRefusal,
+    status: HOSTED_HTTP_STATUS.CONFLICT,
+  },
+  {
+    refusal: HOSTED_REFUSAL.AGENT_RETIRED,
+    schema: AgentRetiredRefusal,
     status: HOSTED_HTTP_STATUS.CONFLICT,
   },
 ] as const;

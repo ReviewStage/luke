@@ -32,6 +32,7 @@ function agent(
     effort: "high",
     createdAt: 1_800_000_000_000,
     status,
+    turnId: null,
     ...patch,
   };
 }

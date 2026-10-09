@@ -47,9 +47,10 @@ import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from 
  * consumes, so the writer stays the sole consumer and the only thing that
  * writes a message row. The planning host composes it with the ask record,
  * whose deliveries a turn's start binds and whose Stop it carries; the
- * coding-agent host composes it without, since nothing asks a coding agent
- * mid-turn, and everything below from a turn's start to its answer is the
- * same for both. eve numbers a turn
+ * coding-agent host composes it without, since a message to a coding agent
+ * is written ahead of its turn as a line awaiting one and taken into the
+ * turn that receives it, and everything below from a turn's start to its
+ * answer is the same for both. eve numbers a turn
  * inside its session and names a call by id; the relay mints the store's
  * uuid for the turn and its messages as the same function of those
  * coordinates every time, so a step eve retries lands on the rows the first
@@ -204,8 +205,11 @@ interface RelayAskSeams {
 }
 
 interface StreamRelaySeams {
-  /** The three writes the relay makes. */
-  readonly writer: Pick<StoreWriter, "consume" | "enqueueTurn" | "attachAskLines">;
+  /** The four writes the relay makes. */
+  readonly writer: Pick<
+    StoreWriter,
+    "consume" | "enqueueTurn" | "attachAskLines" | "takeAwaitingLine"
+  >;
   /** The ask record, where the conversation takes asks; nothing for a coding agent, whose turns are opened by a Start alone. */
   readonly asks?: RelayAskSeams;
   readonly now: () => number;
@@ -432,7 +436,13 @@ export class StreamRelay {
       case "message.received":
         return Effect.andThen(
           this.#joined(event.data.turnId, event.meta.deliveryIds ?? [], standing),
-          this.#received(event.data.turnId, event.data.message, event.meta.id, standing),
+          this.#received(
+            event.data.turnId,
+            event.data.message,
+            event.meta.id,
+            event.meta.deliveryIds ?? [],
+            standing,
+          ),
         );
       case "step.started":
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
@@ -684,6 +694,7 @@ export class StreamRelay {
     eveTurnId: string,
     text: string,
     eventId: string | undefined,
+    deliveryIds: readonly string[],
     standing: RelayStanding,
   ): RelayEffect<void> {
     return Effect.gen({ self: this }, function* () {
@@ -715,6 +726,15 @@ export class StreamRelay {
         }
         return;
       }
+      // A line the developer sent to a running coding agent already stands in the conversation,
+      // awaiting this turn: the receipt takes it into the turn rather than writing it again, and
+      // the turn's own received-line count still moves, so a later line's row keeps its id.
+      const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
+        text,
+        deliveryIds,
+        turnId: hostTurnId(standing.sessionId, eveTurnId),
+      });
+      if (Result.isSuccess(taken) && Option.isSome(taken.success)) return;
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         message: userMessage(

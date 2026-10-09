@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  awaitedDeliveryOf,
+  CODING_AGENT_DELIVERY,
+  CODING_AGENT_STATUS,
+} from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
@@ -29,7 +33,7 @@ import {
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { awaitingLineId, hostTurnId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
@@ -44,10 +48,19 @@ import {
   type TranscriptPage,
   transcriptPast,
 } from "../server/hosted/coder-host/transcript";
-import { createCodingAgent, latestTurnsOf } from "../server/hosted/coding-agent-store";
+import {
+  awaitingLinesOf,
+  createCodingAgent,
+  latestTurnsOf,
+} from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
-import { type ConversationTarget, type MessageCursor, storeWriter } from "../server/hosted/store";
+import {
+  type ConversationTarget,
+  listMessagesPast,
+  type MessageCursor,
+  storeWriter,
+} from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
@@ -236,6 +249,40 @@ function codingTurn(
 }
 
 const STEP_START = "step-start";
+
+/** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it under the delivery given. */
+const awaitingLine = (
+  target: ConversationTarget,
+  text: string,
+  delivery: (typeof CODING_AGENT_DELIVERY)[keyof typeof CODING_AGENT_DELIVERY],
+  deliveryId: string,
+) =>
+  Effect.gen(function* () {
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const written = yield* writer.writeAwaitingLine(
+      target,
+      { text, delivery },
+      Effect.succeed(Option.some(deliveryId)),
+    );
+    assert.ok(Result.isSuccess(written) && Option.isSome(written.success));
+    return written.success.value.id;
+  });
+
+/** Each user line of the transcript by eve's delivery for it, with the turn that owns it; a line no delivery named is absent. */
+const linesByDelivery = (target: ConversationTarget, deliveryIds: readonly string[]) =>
+  Effect.map(
+    listMessagesPast(target.userId, target.conversationId, CODER_TOOL_SET, CURSOR_START),
+    (page) => {
+      assert.ok(page.read.ok);
+      const rows = page.read.value;
+      return deliveryIds.map((deliveryId) => {
+        const row = rows.find((record) => record.clientId === awaitingLineId(deliveryId));
+        return row === undefined
+          ? undefined
+          : { turnId: row.turnId, awaits: awaitedDeliveryOf(row.message) };
+      });
+    },
+  );
 
 /** The id of the provider's model a step was told, read off the SDK's handle; none for a bare id. */
 const readModelId = (model: CoderModelSelection["model"]) =>
@@ -515,6 +562,177 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
 
         assert.deepEqual(page.messages, []);
         assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
+      }),
+  );
+
+  it.effect(
+    "a line the developer sent ahead of its turn is taken by the turn that receives it, in place: its delivery clears, no second row is written, and the agent reads as running from the send until the turn opens on it",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const play = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+          );
+        const statusNow = () =>
+          Effect.gen(function* () {
+            const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+            const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
+            return codingAgentStatusOf(turns.get(target.conversationId), {
+              createdAt: agent.createdAt,
+              now: yield* Clock.currentTimeMillis,
+              lineAwaits: awaiting.has(target.conversationId),
+            });
+          });
+        const lines = () =>
+          Effect.map(transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent), (page) =>
+            page.messages
+              .filter((message) => message.role === MESSAGE_ROLE.USER)
+              .map((message) => ({
+                text: message.parts.find(isTextUIPart)?.text,
+                awaits: awaitedDeliveryOf(message),
+              })),
+          );
+        const first = codingTurn("turn_0", "turn.completed");
+        const [started, received, ...rest] = first;
+        assert.ok(started && received);
+
+        // The turn opens on the plan; a steer sent while it runs stands at once, awaiting it.
+        yield* play([started, received]);
+        yield* awaitingLine(
+          target,
+          "Use the shared helper.",
+          CODING_AGENT_DELIVERY.STEER,
+          "d-steer",
+        );
+        assert.deepEqual(yield* lines(), [
+          { text: PLAN_TEXT, awaits: undefined },
+          { text: "Use the shared helper.", awaits: CODING_AGENT_DELIVERY.STEER },
+        ]);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        // The turn receives the steer: the line is its now, in place, and no row is written beside it.
+        yield* play([
+          stampedEveEvent(
+            {
+              type: "message.received",
+              data: { turnId: "turn_0", sequence: 0, message: "Use the shared helper." },
+            },
+            NOW,
+            ["d-plan", "d-steer"],
+          ),
+        ]);
+        assert.deepEqual(yield* lines(), [
+          { text: PLAN_TEXT, awaits: undefined },
+          { text: "Use the shared helper.", awaits: undefined },
+        ]);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+        assert.equal(
+          page.messages.filter((message) => message.role === MESSAGE_ROLE.USER).length,
+          2,
+        );
+
+        // A queued line sent while the turn still runs waits for it: the turn ends, and the
+        // agent reads as running on the line's account alone until the next turn opens on it.
+        yield* awaitingLine(target, "Now add the tests.", CODING_AGENT_DELIVERY.QUEUE, "d-queue");
+        yield* play(rest);
+        const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
+        assert.equal(turns.get(target.conversationId)?.status, TURN_STATUS.SETTLED);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stampedEveEvent({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }, NOW, [
+            "d-queue",
+          ]),
+          stampedEveEvent(
+            {
+              type: "message.received",
+              data: { turnId: "turn_1", sequence: 1, message: "Now add the tests." },
+            },
+            NOW,
+            ["d-queue"],
+          ),
+        ]);
+        const taken = yield* lines();
+        assert.deepEqual(taken.at(-1), { text: "Now add the tests.", awaits: undefined });
+        assert.equal(taken.length, 3);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.RUNNING);
+        yield* play([stamped({ type: "turn.completed", data: { turnId: "turn_1", sequence: 1 } })]);
+        assert.equal(yield* statusNow(), CODING_AGENT_STATUS.COMPLETED);
+      }),
+  );
+
+  it.effect(
+    "two awaiting lines with the same words are told apart by eve's delivery: a steer sent after a queue is received first and takes its own row, and the queue's turn takes the queue's; a stream naming no delivery falls back to the words",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const play = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+          );
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        yield* play([started, received]);
+        yield* awaitingLine(target, "Run checks", CODING_AGENT_DELIVERY.QUEUE, "d-queue");
+        yield* awaitingLine(target, "Run checks", CODING_AGENT_DELIVERY.STEER, "d-steer");
+
+        // The steer is received in the turn under way, named by its own delivery beside the start's.
+        yield* play([
+          stampedEveEvent(
+            {
+              type: "message.received",
+              data: { turnId: "turn_0", sequence: 0, message: "Run checks" },
+            },
+            NOW,
+            ["d-plan", "d-steer"],
+          ),
+        ]);
+        assert.deepEqual(yield* linesByDelivery(target, ["d-queue", "d-steer"]), [
+          { turnId: undefined, awaits: CODING_AGENT_DELIVERY.QUEUE },
+          { turnId: hostTurnId(sessionId, "turn_0"), awaits: undefined },
+        ]);
+
+        // The next turn opens on the queued line, named by its delivery.
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stampedEveEvent({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }, NOW, [
+            "d-queue",
+          ]),
+          stampedEveEvent(
+            {
+              type: "message.received",
+              data: { turnId: "turn_1", sequence: 1, message: "Run checks" },
+            },
+            NOW,
+            ["d-queue"],
+          ),
+        ]);
+        assert.deepEqual(yield* linesByDelivery(target, ["d-queue", "d-steer"]), [
+          { turnId: hostTurnId(sessionId, "turn_1"), awaits: undefined },
+          { turnId: hostTurnId(sessionId, "turn_0"), awaits: undefined },
+        ]);
+
+        // A stream that names no delivery still takes the oldest line with the words received.
+        yield* awaitingLine(target, "And lint", CODING_AGENT_DELIVERY.QUEUE, "d-lint");
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stamped({ type: "turn.started", data: { turnId: "turn_2", sequence: 2 } }),
+          stamped({
+            type: "message.received",
+            data: { turnId: "turn_2", sequence: 2, message: "And lint" },
+          }),
+        ]);
+        assert.deepEqual(yield* linesByDelivery(target, ["d-lint"]), [
+          { turnId: hostTurnId(sessionId, "turn_2"), awaits: undefined },
+        ]);
       }),
   );
 
