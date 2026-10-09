@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import { NodeFileSystem, NodePath } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import {
   GATEWAY_CLIENT_ROLE,
@@ -8,10 +7,14 @@ import {
   GATEWAY_METHOD,
   type GatewayMethod,
 } from "@sidecar/gateway";
-import { type PlanCallResult, VOICE_SERVICE_FRAME } from "@sidecar/hosted";
+import {
+  type GitHubRepositoriesAnswer,
+  type PlanCallResult,
+  VOICE_SERVICE_FRAME,
+} from "@sidecar/hosted";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanSummary, ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -19,15 +22,14 @@ import {
   type PlanCallFailure,
   type PlanningView,
   planningViewSchema,
+  type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
-import { temporaryDirectoryScoped } from "@sidecar/runtime/testing";
 import type { WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Deferred, Duration, Effect, Fiber, FileSystem, Layer, Result } from "effect";
+import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
-import { composePlanning, type PlanFolders, type PlanningClient } from "./compose-planning.js";
-import type { JsonStateFile } from "./json-state-file.js";
+import { composePlanning, type PlanningClient } from "./compose-planning.js";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -58,7 +60,11 @@ interface FakeService extends PlanningClient {
   deleteFails: boolean;
   /** Where a list read waits after reading the table and before answering, so a test can hold one on the wire. */
   listGate: Effect.Effect<void>;
-  createAnswer: PlanCallResult<Plan, typeof PLAN_CALL_FAILURE.UNANSWERED>;
+  createAnswer: PlanCallResult<Plan, RepositoryCallFailure>;
+  /** The repositories the account reaches, as the service answers them; a failure is the service refusing the read. */
+  repositoriesAnswer: PlanCallResult<GitHubRepositoriesAnswer, typeof PLAN_CALL_FAILURE.UNANSWERED>;
+  /** Whether a repository is refused as one the App does not reach. */
+  repositoryUnreachable: boolean;
   /** Every read the service answered, in order, so a test can see that nothing reads on a clock. */
   readonly reads: string[];
   /** Each plan's board, by plan id; a plan with none answers no board, as a service that did not answer. */
@@ -74,6 +80,8 @@ function fakeService(plans: Plan[]): FakeService {
     deleteFails: false,
     listGate: Effect.void,
     createAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
+    repositoriesAnswer: { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED },
+    repositoryUnreachable: false,
     reads: [],
     boards: {},
     transcripts: {},
@@ -104,6 +112,25 @@ function fakeService(plans: Plan[]): FakeService {
           : { ok: true, answer: found };
       }),
     create: () => Effect.sync(() => service.createAnswer),
+    repositories: () =>
+      Effect.sync(() => {
+        service.reads.push("repositories");
+        return service.repositoriesAnswer;
+      }),
+    // The service keeps the repository on the plan and answers the plan whole.
+    setRepository: (planId, repository) =>
+      Effect.sync((): PlanCallResult<Plan, RepositoryCallFailure> => {
+        if (service.repositoryUnreachable) {
+          return { ok: false, failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
+        }
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED };
+        const changed = { ...found, repository };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? changed : candidate,
+        );
+        return { ok: true, answer: changed };
+      }),
     // The service re-titles the document with the name, as the store does.
     rename: (planId, { name }) =>
       Effect.sync(() => {
@@ -127,18 +154,6 @@ function fakeService(plans: Plan[]): FakeService {
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
 
-/** This Mac's record of each plan's folder, held in memory as the file holds it on disk. */
-function folderRecord(): JsonStateFile<PlanFolders> {
-  let stored: PlanFolders | undefined;
-  return {
-    read: () => stored,
-    update: (mutate) => {
-      stored = mutate(stored);
-      return stored;
-    },
-  };
-}
-
 /** The one voice call as the live composer holds it: about a plan, about the desk, or none. */
 interface StandingCall {
   about: { readonly planId: string | undefined } | undefined;
@@ -154,7 +169,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       seen: Deferred.Deferred<PlanningView>;
     }[] = [];
     const standing = options.call ?? { about: undefined };
-    const recordedFolders = folderRecord();
     const planning = yield* composePlanning({
       kernel: {
         runMode: { sendsNetwork: true },
@@ -171,7 +185,6 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
       },
       account: { capabilitiesActive: () => options.signedIn ?? true },
       client: service,
-      folders: recordedFolders,
       endPlanCall: (keep) =>
         Effect.gen(function* () {
           const planId = standing.about?.planId;
@@ -398,32 +411,25 @@ it.effect("a plan deleted elsewhere is drawn as missing, never as its last copy"
   }),
 );
 
-it.effect(
-  "deleting the open plan ends its call, drops it and its folder, and leaves no plan active",
-  () =>
-    Effect.gen(function* () {
-      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
-      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
-      const service = fakeService([billing, invites]);
-      const standing: StandingCall = { about: { planId: INVITES } };
-      const { call, last, planning } = yield* subject(service, { call: standing });
-      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-      yield* call(GATEWAY_METHOD.PLANNING_SET_FOLDER, {
-        planId: INVITES,
-        folderPath: "/Users/dev/relay",
-      });
+it.effect("deleting the open plan ends its call, drops it, and leaves no plan active", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+    const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+    const service = fakeService([billing, invites]);
+    const standing: StandingCall = { about: { planId: INVITES } };
+    const { call, last, planning } = yield* subject(service, { call: standing });
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES }), {
-        deleted: true,
-      });
+    assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_DELETE, { planId: INVITES }), {
+      deleted: true,
+    });
 
-      assert.equal(standing.about, undefined);
-      assert.equal(planning.activePlanId(), undefined);
-      assert.deepEqual(last()?.plans, [summary(billing)]);
-      assert.deepEqual(last()?.folders, {});
-      assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
-    }),
+    assert.equal(standing.about, undefined);
+    assert.equal(planning.activePlanId(), undefined);
+    assert.deepEqual(last()?.plans, [summary(billing)]);
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.IDLE });
+  }),
 );
 
 it.effect("a delete the service refused keeps the plan open and listed", () =>
@@ -541,17 +547,20 @@ it.effect("opening a plan that is gone draws it missing", () =>
 );
 
 it.effect(
-  "starting a plan makes it the active one and keeps its folder on this Mac; a refusal starts nothing and says why",
+  "starting a plan on a repository makes it the active one; a refusal starts nothing and says why",
   () =>
     Effect.gen(function* () {
-      const started = plan(INVITES, "Teammate invitations", "", 10);
+      const started = {
+        ...plan(INVITES, "Teammate invitations", "", 10),
+        repository: "acme/relay",
+      };
       const service = fakeService([]);
       const { call, last } = yield* subject(service);
-      const request = { name: "Teammate invitations", folderPath: "/Users/dev/relay" };
+      const request = { name: "Teammate invitations", repository: "acme/relay" };
 
-      service.createAnswer = { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED };
+      service.createAnswer = { ok: false, failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE };
       assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), {
-        failure: PLAN_CALL_FAILURE.UNANSWERED,
+        failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
       });
       assert.equal(last()?.activePlanId, undefined);
 
@@ -559,9 +568,79 @@ it.effect(
       service.plans = [started];
       assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_START, request), { planId: INVITES });
       assert.equal(last()?.activePlanId, INVITES);
-      assert.deepEqual(last()?.folders, { [INVITES]: "/Users/dev/relay" });
       assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: started });
       assert.deepEqual(last()?.plans, [summary(started)]);
+    }),
+);
+
+it.effect(
+  "the repositories the account reaches are read from the service on each ask, and a refusal is answered as such",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      const { call } = yield* subject(service);
+      const listed: GitHubRepositoriesAnswer = {
+        installed: true,
+        repositories: [
+          {
+            owner: "acme",
+            name: "relay",
+            fullName: "acme/relay",
+            defaultBranch: "main",
+            private: true,
+            updatedAt: 1_000,
+          },
+        ],
+        installationUrl: "https://github.com/apps/luke/installations/new",
+      };
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), {
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
+      });
+      service.repositoriesAnswer = { ok: true, answer: listed };
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REPOSITORIES), { repositories: listed });
+      assert.deepEqual(service.reads, ["repositories", "repositories"]);
+    }),
+);
+
+it.effect(
+  "giving a plan its repository draws it on the list's row and the open document as the service answered, and a refusal changes nothing",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      service.repositoryUnreachable = true;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
+          planId: INVITES,
+          repository: "acme/relay",
+        }),
+        { failure: PLAN_CALL_FAILURE.REPOSITORY_NOT_REACHABLE },
+      );
+      assert.equal(last()?.plans[0]?.repository, null);
+
+      service.repositoryUnreachable = false;
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
+          planId: INVITES,
+          repository: "acme/relay",
+        }),
+        { repository: "acme/relay" },
+      );
+      const onRelay = { ...invites, repository: "acme/relay" };
+      assert.deepEqual(last()?.plans, [summary(onRelay)]);
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: onRelay });
+
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, { planId: INVITES, repository: null }),
+        { repository: null },
+      );
+      assert.equal(last()?.plans[0]?.repository, null);
+      assert.deepEqual(service.reads, ["list", `open:${INVITES}`], "nothing is read again");
     }),
 );
 
@@ -586,10 +665,7 @@ it.effect("behind a closed account gate nothing is read and nothing starts", () 
     const { call, told } = yield* subject(service, { signedIn: false });
 
     yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-    const started = yield* call(GATEWAY_METHOD.PLANNING_START, {
-      name: "Teammate invitations",
-      folderPath: "/Users/dev/relay",
-    });
+    const started = yield* call(GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" });
 
     assert.deepEqual(started, { failure: PLAN_CALL_FAILURE.UNANSWERED });
     assert.deepEqual(told, []);
@@ -610,7 +686,6 @@ it.effect("a sign-out drops the view the window drew", () =>
       plans: [],
       listStatus: PLANNING_READ.IDLE,
       document: { status: PLANNING_READ.IDLE },
-      folders: {},
     });
   }),
 );
@@ -631,10 +706,7 @@ it.effect("a list read that left before a plan started never marks the new plan 
     service.plans = [started];
     service.createAnswer = { ok: true, answer: started };
     const starting = yield* Effect.forkChild(
-      call(GATEWAY_METHOD.PLANNING_START, {
-        name: "Teammate invitations",
-        folderPath: "/Users/dev/relay",
-      }),
+      call(GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" }),
     );
     for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
     yield* Deferred.succeed(held, undefined);
@@ -665,10 +737,7 @@ it.effect(
       call.about = { planId: BILLING };
       const started = plan(INVITES, "Teammate invitations", "", 30);
       service.createAnswer = { ok: true, answer: started };
-      yield* ask(GATEWAY_METHOD.PLANNING_START, {
-        name: "Teammate invitations",
-        folderPath: "/Users/dev/relay",
-      });
+      yield* ask(GATEWAY_METHOD.PLANNING_START, { name: "Teammate invitations" });
       assert.equal(call.about, undefined);
 
       call.about = { planId: INVITES };
@@ -712,8 +781,6 @@ it.effect(
       assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: billing });
     }),
 );
-
-const nodeFiles = Layer.merge(NodeFileSystem.layer, NodePath.layer);
 
 /** A box as the canvas holds one. */
 function box(id: string): BoardElement {
@@ -816,81 +883,80 @@ it.effect("leaving the open plan drops the board drawn for it", () =>
   }),
 );
 
-const INVITE_SOURCE = "export function acceptInvite(token: string) {\n  return token;\n}\n";
+/** Code as the service sends it on the call about the open plan. */
+function shownCode(ref: ShownCode["ref"]): ShownCode {
+  return {
+    ref,
+    repository: "acme/relay",
+    firstLine: 1,
+    lineCount: 3,
+    lines: ["export function acceptInvite(token: string) {", "  return token;", "}"],
+  };
+}
 
-/** The open plan on a folder holding one source file, with its code loop running. */
-function planOnFolder(service: FakeService) {
+/** The open plan with its code loop running. */
+function openPlan(service: FakeService) {
   return Effect.gen(function* () {
-    const folder = yield* temporaryDirectoryScoped("luke-plan-code-");
-    const fs = yield* FileSystem.FileSystem;
-    yield* Effect.orDie(fs.writeFileString(`${folder}/invite.ts`, INVITE_SOURCE));
     const opened = yield* subject(service);
     yield* opened.call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-    yield* opened.call(GATEWAY_METHOD.PLANNING_SET_FOLDER, { planId: INVITES, folderPath: folder });
     yield* opened.planning.lifetime;
     return opened;
   });
 }
 
-it.effect("code Luke names on the open plan's call is read from its folder and drawn", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { planning, viewWhere } = yield* planOnFolder(service);
-      const drawn = viewWhere((view) => view.code !== undefined);
+it.effect("code Luke names on the open plan's call is drawn as it arrived, coloured", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { planning, last } = yield* openPlan(service);
 
-      planning.showCode(INVITES, { path: "invite.ts", startLine: 1, endLine: 2 });
+    planning.showCode(INVITES, shownCode({ path: "invite.ts", startLine: 1, endLine: 2 }));
 
-      const { code } = yield* drawn;
-      assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 1, endLine: 2 });
-      assert.equal(
-        code?.lines?.[0]?.map((token) => token.text).join(""),
-        "export function acceptInvite(token: string) {",
-      );
-    }),
-  ).pipe(Effect.provide(nodeFiles)),
+    const { code } = last() ?? {};
+    assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 1, endLine: 2 });
+    assert.equal(code?.repository, "acme/relay");
+    assert.equal(code?.lineCount, 3);
+    assert.equal(
+      code?.lines[0]?.map((token) => token.text).join(""),
+      "export function acceptInvite(token: string) {",
+    );
+    assert.ok(
+      code?.lines[0]?.some((token) => token.color !== undefined),
+      "the line is coloured",
+    );
+  }),
 );
 
 it.effect("the call's end clears the code it put on screen, and so does leaving the plan", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { call, planning, viewWhere, last } = yield* planOnFolder(service);
-      const ref = { path: "invite.ts" };
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { call, planning, last } = yield* openPlan(service);
+    const code = shownCode({ path: "invite.ts" });
 
-      const first = viewWhere((view) => view.code !== undefined);
-      planning.showCode(INVITES, ref);
-      yield* first;
-      planning.callEnded(INVITES);
-      assert.equal(last()?.code, undefined);
+    planning.showCode(INVITES, code);
+    assert.notEqual(last()?.code, undefined);
+    planning.callEnded(INVITES);
+    assert.equal(last()?.code, undefined);
 
-      const second = viewWhere((view) => view.code !== undefined);
-      planning.showCode(INVITES, ref);
-      yield* second;
-      yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
-      assert.equal(last()?.code, undefined);
-    }),
-  ).pipe(Effect.provide(nodeFiles)),
+    planning.showCode(INVITES, code);
+    assert.notEqual(last()?.code, undefined);
+    yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
+    assert.equal(last()?.code, undefined);
+  }),
 );
 
 it.effect("code named about a plan that is not open is not drawn", () =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-      const { planning, told, viewWhere } = yield* planOnFolder(service);
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    const { planning, told } = yield* openPlan(service);
 
-      planning.showCode(BILLING, { path: "invite.ts" });
-      // Note that the plan's own code, named after, is drawn, so the other was dropped rather than still out.
-      const drawn = viewWhere((view) => view.code !== undefined);
-      planning.showCode(INVITES, { path: "invite.ts", startLine: 3, endLine: 3 });
-      yield* drawn;
+    planning.showCode(BILLING, shownCode({ path: "invite.ts" }));
+    planning.showCode(INVITES, shownCode({ path: "invite.ts", startLine: 3, endLine: 3 }));
 
-      assert.deepEqual(
-        told.flatMap((view) => (view.code === undefined ? [] : [view.code.ref])),
-        [{ path: "invite.ts", startLine: 3, endLine: 3 }],
-      );
-    }),
-  ).pipe(Effect.provide(nodeFiles)),
+    assert.deepEqual(
+      told.flatMap((view) => (view.code === undefined ? [] : [view.code.ref])),
+      [{ path: "invite.ts", startLine: 3, endLine: 3 }],
+    );
+  }),
 );
 
 /** A plan's transcript of one call on which the developer said `words`. */
@@ -978,10 +1044,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
       assert.equal(last()?.transcript, undefined);
 
-      yield* call(GATEWAY_METHOD.PLANNING_START, {
-        name: "Billing export",
-        folderPath: "/tmp/billing",
-      });
+      yield* call(GATEWAY_METHOD.PLANNING_START, { name: "Billing export" });
       assert.deepEqual(last()?.transcript, {
         status: PLANNING_READ.READY,
         transcript: { calls: [], earlierOmitted: false },

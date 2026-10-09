@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { LIVE_TRANSPORT_STATE } from "@sidecar/gateway";
-import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import { VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import {
   LIVE_CLIENT_EVENT,
@@ -328,8 +328,8 @@ interface Fixture {
   reports: string[];
   /** Every status `onStatus` was told, in order. */
   statuses: LiveSessionStatus[];
-  /** Every place `onCode` put on screen, in order. */
-  codes: CodeRef[];
+  /** Every code `onCode` put on screen, in order. */
+  codes: ShownCode[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -341,14 +341,14 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const sidebands: FakeSideband[] = [];
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
-    const codes: CodeRef[] = [];
+    const codes: ShownCode[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
         createId: () => `id-${++ids}`,
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
-        onCode: (ref) => codes.push(ref),
+        onCode: (code) => codes.push(code),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -755,9 +755,15 @@ it.effect(
       sideband.input("Where does the invite get checked?", 0, 800);
       sideband.delegation("item_1", 900);
       yield* settle();
-      const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+      const code: ShownCode = {
+        ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
+        repository: "acme/relay",
+        firstLine: 1,
+        lineCount: 6,
+        lines: ["import { db } from './db.js';", "", "export function acceptInvite() {"],
+      };
 
-      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN, runId: "run-1", ref });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN, runId: "run-1", code });
       f.brain.fire({
         kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
         runId: "run-1",
@@ -776,14 +782,14 @@ it.effect(
       sideband.output("Look at", 1000, 1100);
       yield* settle();
 
-      assert.deepEqual(f.codes, [ref]);
+      assert.deepEqual(f.codes, [code]);
       const notes = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
         "content" in event ? event.content : "",
       );
       assert.ok(notes.some((note) => note.includes("src/invite.ts, lines 3 to 5")));
       sideband.output(" lines three to five.", 1100, 1300);
       yield* settle();
-      assert.deepEqual(f.codes, [ref], "the code goes on screen once");
+      assert.deepEqual(f.codes, [code], "the code goes on screen once");
     }),
 );
 

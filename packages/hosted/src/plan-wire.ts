@@ -152,10 +152,9 @@ function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boo
 }
 
 /**
- * Code on screen during a planning call, by place and never by content: a
- * file of the plan's folder, named relative to it, and the lines pointed at,
- * or the file whole with none. Luke names one through the planning model's
- * `show_code`, and the Mac reads the lines from its own folder.
+ * A place in the plan's repository: a file, named relative to the checkout
+ * root, and the lines pointed at, or the file whole with none. Luke names one
+ * through the planning model's `show_code`.
  */
 export const codeRefSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
@@ -167,3 +166,56 @@ export const codeRefSchema = EffectSchema.Struct({
 }).check(EffectSchema.makeFilter(codeRangeIsReadable));
 
 export type CodeRef = typeof codeRefSchema.Type;
+
+export const SHOWN_CODE_BOUNDS = {
+  /** The most lines one showing carries: the lines pointed at, with the file around them. */
+  WINDOW_LINES: 200,
+  /** The most characters of one line that travel; a longer line is cut there. */
+  MAX_LINE_CHARS: 400,
+} as const;
+
+/**
+ * Code on screen during a planning call, with its lines: the place named,
+ * the repository the service read it from, and the window of the file it
+ * holds around the lines pointed at. The service reads the lines from the
+ * planning session's checkout of the repository as `show_code` runs, and
+ * they travel in the call's own journal and on the `plan.code` frame; the Mac
+ * reads nothing of its own.
+ */
+export const shownCodeSchema = EffectSchema.Struct({
+  ref: codeRefSchema,
+  /** The repository the lines were read from, `owner/name`. */
+  repository: githubRepositoryFullNameSchema,
+  /** The file's line the first carried line is. */
+  firstLine: codeLineSchema,
+  /** How many lines the whole file has. */
+  lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  lines: EffectSchema.Array(
+    EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
+  ).check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.WINDOW_LINES)),
+});
+
+export type ShownCode = typeof shownCodeSchema.Type;
+
+/** One window of a file: its first and last line, both counted from one. */
+export interface CodeWindow {
+  readonly first: number;
+  readonly last: number;
+}
+
+/**
+ * The window of a file of `lineCount` lines the screen holds for `ref`: the
+ * lines pointed at centred where the file allows, and the file's head for a
+ * reference with none.
+ */
+export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
+  const { WINDOW_LINES } = SHOWN_CODE_BOUNDS;
+  const latest = Math.max(1, lineCount - WINDOW_LINES + 1);
+  if (ref.startLine === undefined || ref.endLine === undefined) {
+    return { first: 1, last: Math.min(lineCount, WINDOW_LINES) };
+  }
+  const pointed = ref.endLine - ref.startLine + 1;
+  const margin = Math.max(0, Math.floor((WINDOW_LINES - pointed) / 2));
+  const first = Math.min(Math.max(1, ref.startLine - margin), latest);
+  return { first, last: Math.min(lineCount, first + WINDOW_LINES - 1) };
+}

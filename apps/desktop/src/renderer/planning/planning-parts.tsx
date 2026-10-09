@@ -18,7 +18,6 @@ import {
   type CopyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
-  folderLine,
 } from "./planning-model";
 
 /**
@@ -46,7 +45,6 @@ const STOP_CALL_LABEL = "End the call";
 /** The list page: every plan the account owns, newest started first, under New plan. */
 export function PlanList({
   plans,
-  folders,
   activePlanId,
   failed,
   onSelect,
@@ -54,8 +52,6 @@ export function PlanList({
   onNewPlan,
 }: {
   plans: readonly PlanSummary[];
-  /** The folder of this Mac each plan reads, by plan id. */
-  folders: Readonly<Record<string, string>>;
   activePlanId: string | undefined;
   /** The last list read failed; the plans drawn are the ones it read before. */
   failed: boolean;
@@ -88,7 +84,7 @@ export function PlanList({
               onClick={() => onSelect(plan.id)}
             >
               <span className="plan-list-name">{plan.name}</span>
-              <FolderLine folderPath={folders[plan.id]} />
+              <RepositoryLine repository={plan.repository} />
             </button>
           </li>
         ))}
@@ -130,30 +126,21 @@ function CopyControl({
   );
 }
 
-/** The folder line of a plan, or nothing where this Mac holds no folder for it. */
-function folderOf(folders: Readonly<Record<string, string>>, planId: string): string | undefined {
-  const folderPath = folders[planId];
-  return folderPath === undefined ? undefined : folderLine(folderPath);
+/** A plan's repository, `owner/name`, or nothing where it has none yet. */
+function RepositoryLine({ repository }: { repository: string | null }): React.JSX.Element | null {
+  if (repository === null) return null;
+  return <span className="plan-list-repository">{repository}</span>;
 }
 
-/** A plan's folder on this Mac, or nothing where this Mac holds none for it. */
-function FolderLine({ folderPath }: { folderPath: string | undefined }): React.JSX.Element | null {
-  if (folderPath === undefined) return null;
-  return <span className="plan-list-repository">{folderLine(folderPath)}</span>;
-}
-
-/** The document page's header: the way back to the list, the plan's name and folder line, and Copy. */
+/** The document page's header: the way back to the list, the plan's name and repository line, and Copy. */
 function PlanHeader({
   title,
   repository,
-  onChooseFolder,
   copy,
   onBack,
 }: {
   title: string;
   repository?: string | undefined;
-  /** Offered in place of the folder line where this Mac holds no folder for the plan. */
-  onChooseFolder?: (() => void) | undefined;
   copy?: { shown: CopyShown; onPress: () => void } | undefined;
   onBack: () => void;
 }): React.JSX.Element {
@@ -171,11 +158,6 @@ function PlanHeader({
       <div className="plan-heading">
         <h1 className="plan-title">{title}</h1>
         {repository !== undefined ? <p className="plan-repository">{repository}</p> : null}
-        {repository === undefined && onChooseFolder !== undefined ? (
-          <button type="button" className="link-button" onClick={onChooseFolder}>
-            Choose folder…
-          </button>
-        ) : null}
       </div>
       {copy !== undefined ? <CopyControl shown={copy.shown} onPress={copy.onPress} /> : null}
     </header>
@@ -194,15 +176,10 @@ export function PlanDocumentView({
   onBack,
   copy,
   live,
-  folders,
-  onChooseFolder,
 }: {
   region: DocumentRegion;
   onRetry: () => void;
   onBack: () => void;
-  /** The folder of this Mac each plan reads, by plan id. */
-  folders: Readonly<Record<string, string>>;
-  onChooseFolder: () => void;
   /** What Copy shows for the drawn document, and its press. */
   copy: { shown: CopyShown; onPress: () => void };
   /** Whether the open plan's call is in progress, so the plan is still being written. */
@@ -247,8 +224,7 @@ export function PlanDocumentView({
           <PlanHeader
             key={plan.id}
             title={plan.name}
-            repository={folderOf(folders, plan.id)}
-            onChooseFolder={onChooseFolder}
+            repository={plan.repository ?? undefined}
             copy={copy}
             onBack={onBack}
           />

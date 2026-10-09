@@ -129,10 +129,8 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
         question: event.question,
         recommendation: event.recommendation,
       };
-    case TURN_EVENT_KIND.CODE_SHOWN: {
-      const { kind, turnId: _turnId, seq: _seq, ...ref } = event;
-      return { kind: RUN_EVENT_OF_TURN_EVENT[kind], runId, ref };
-    }
+    case TURN_EVENT_KIND.CODE_SHOWN:
+      return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, code: event.code };
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
     case TURN_EVENT_KIND.REPLY_SENTENCE:

@@ -1,4 +1,4 @@
-import type { CodeRef } from "./plan-wire.js";
+import type { ShownCode } from "./plan-wire.js";
 
 /**
  * A turn's events: what the voice hears of a turn it asked while the turn
@@ -17,7 +17,7 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
-  /** A planning turn put code of the plan's folder on screen, by place; told as the call is journaled, before the turn ends. */
+  /** A planning turn put code of the plan's repository on screen, with its lines; told once its call has read them, before the turn ends. */
   CODE_SHOWN: "code_shown",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
@@ -64,7 +64,7 @@ export type TurnEventBody =
       readonly question: string;
       readonly recommendation: string;
     }
-  | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)
+  | { readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN; readonly code: ShownCode }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

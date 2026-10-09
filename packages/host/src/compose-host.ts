@@ -16,7 +16,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
 import { composeLive } from "./compose-live.js";
-import { composePlanning, planFoldersFile } from "./compose-planning.js";
+import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
 import type { Composer, DuplicateGatewayMethod } from "./composer.js";
 import { mergedMethods } from "./effect/composer.js";
@@ -103,7 +103,6 @@ export const hostAssemblyLayer: Layer.Layer<
     const planning = yield* composePlanning({
       kernel,
       account,
-      folders: planFoldersFile(() => kernel.stateRoot, report),
       endPlanCall: (keep) => live.service.endPlanCall(keep),
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
@@ -114,7 +113,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
-    showPlanCode = (code) => planning.showCode(code.planId, code.ref);
+    showPlanCode = (frame) => planning.showCode(frame.planId, frame.code);
 
     /**
      * The account gate opening, which is what a sign-in runs and what a launch

@@ -1,3 +1,4 @@
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
@@ -13,7 +14,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     shown: true,
     signedIn: true,
     plans: [],
-    folders: {},
     activePlanId: undefined,
     listFailed: false,
     region: { kind: DOCUMENT_REGION.NONE },
@@ -37,15 +37,20 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     code: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     onSelect: ignore,
-    onChooseFolder: ignore,
-    onRevealFolder: ignore,
+    repositories: {
+      recent: [],
+      read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+      openGitHub: ignore,
+    },
+    repositoryMenu: undefined,
+    onChangeRepository: ignore,
+    onSetRepository: () => Promise.resolve(undefined),
+    onOpenOnGitHub: ignore,
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewPlan: ignore,
     newPlan: {
       presses: 0,
-      recentFolders: [],
-      pickFolder: () => Promise.resolve(null),
       start: () => Promise.resolve(undefined),
     },
     onLeavePlan: ignore,

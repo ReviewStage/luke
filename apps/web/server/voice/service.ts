@@ -538,14 +538,14 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
-        // Code Luke is about to talk about, by place, sent the same way, so
-        // the Plans tab's code pane draws it from the Mac's own folder as he
-        // says it.
-        onCode: (ref) => {
+        // Code Luke is about to talk about, with its lines as the planning
+        // model read them from the plan's repository, sent the same way, so
+        // the Plans tab's code pane draws it as he says it.
+        onCode: (code) => {
           const frame: PlanCodeFrame = {
             type: VOICE_SERVICE_FRAME.PLAN_CODE,
             planId: opened.planId,
-            ref,
+            code,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

@@ -72,16 +72,18 @@ thirty days after its last use. Nothing written in the sandbox reaches your
 repository.
 
 **Code on screen during a planning call.** During a planning call, Luke shows
-code from the plan's folder in a small pane in the Plans tab. When the planning
-model wants to show you code, it names a file in the folder and a range of
-lines. That file path and those line numbers are stored with the plan's
-planning conversation, and our service passes them to your Mac. Luke on your
-Mac reads the lines from the folder itself, so the code you see never goes
-through our service to reach the screen. Luke refuses a path outside the
-folder and never reads a file named `.env` or starting with `.env`. Our service
-tells the voice model the file path and line numbers on screen, so Luke can
-refer to them. The pane and its code are cleared when the call ends. They are
-never part of the plan's document.
+code from the plan's GitHub repository in a small pane in the Plans tab. When
+the planning model wants to show you code, it names a file and a range of
+lines, and our service reads those lines from its own checkout of the
+repository, in the same sandbox the planning model reads the repository in.
+The file path, the line numbers, and the lines themselves (at most 200 lines,
+each cut to 400 characters) are stored with the plan's planning conversation,
+and our service sends them to your Mac, which draws them. Nothing is read
+from your Mac's disk. The service refuses a path outside the checkout and
+never reads a file named `.env` or starting with `.env`. Our service tells the
+voice model the file path and line numbers on screen, so Luke can refer to
+them. The pane and its code are cleared when the call ends. They are never
+part of the plan's document.
 
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
