@@ -75,7 +75,35 @@ function status(state, extra = {}) {
   return { state, created_at: "2026-09-18T10:00:00Z", ...extra };
 }
 
-function run({ records, statuses, redirect }) {
+// A repository whose first-parent history makes one commit per entry, each
+// touching the one file it names, so a walk reads real trees; answers the
+// commits' hashes, oldest first.
+function commitHistory(directory, files) {
+  const git = (...args) => {
+    const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    return result.stdout.trim();
+  };
+  git("init", "--quiet");
+  return files.map((file, index) => {
+    fs.mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+    fs.writeFileSync(path.join(directory, file), String(index));
+    git("add", "--all");
+    git(
+      "-c",
+      "user.name=Luke",
+      "-c",
+      "user.email=luke@example.com",
+      "commit",
+      "--quiet",
+      "-m",
+      file,
+    );
+    return git("rev-parse", "HEAD");
+  });
+}
+
+function run({ records, statuses, redirect, history = [] }) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), "preview-address-"));
   const bin = path.join(directory, "bin");
   fs.mkdirSync(bin);
@@ -84,7 +112,11 @@ function run({ records, statuses, redirect }) {
   fs.writeFileSync(path.join(directory, RECORDS_FILE), JSON.stringify(records));
   fs.writeFileSync(path.join(directory, STATUSES_FILE), JSON.stringify(statuses));
   if (redirect !== undefined) fs.writeFileSync(path.join(directory, REDIRECT_FILE), redirect);
-  const result = spawnSync("bash", [scriptPath, "--sha", SHA, "--repo", REPO], {
+  const repository = path.join(directory, "repository");
+  fs.mkdirSync(repository);
+  const head = commitHistory(repository, history).at(-1) ?? SHA;
+  const result = spawnSync("bash", [scriptPath, "--sha", head, "--repo", REPO], {
+    cwd: repository,
     encoding: "utf8",
     env: {
       ...process.env,
@@ -129,12 +161,44 @@ test("waits through no record, a pending status, and a cancelled inactive one", 
   );
 });
 
-test("a build Vercel skipped is NOT_AFFECTED, not waited on", () => {
+test("a skipped head is served by its parent's preview", () => {
   const result = run({
-    records: [[record(2, "2026-09-18T09:05:00Z")]],
-    statuses: [[status("inactive", { description: "Skipped - Not affected" })]],
+    history: ["apps/web/server.ts", "apps/desktop/main.ts"],
+    records: [[record(2, "2026-09-18T09:05:00Z")], [record(1, "2026-09-18T09:00:00Z")]],
+    statuses: [
+      [status("inactive", { description: "Skipped - Not affected" })],
+      [status("success", { environment_url: ADDRESS })],
+    ],
   });
-  assert.equal(result.status, EXIT.NOT_AFFECTED);
+  assert.equal(result.status, EXIT.ADDRESS, result.stderr);
+  assert.equal(result.stdout, `${ADDRESS}\n`);
+});
+
+test("the walk passes over an ancestor pushed without a record of its own", () => {
+  const result = run({
+    history: ["apps/web/server.ts", "apps/desktop/main.ts", "apps/desktop/panel.ts"],
+    records: [[record(3, "2026-09-18T09:10:00Z")], [], [record(1, "2026-09-18T09:00:00Z")]],
+    statuses: [
+      [status("inactive", { description: "Skipped - Not affected" })],
+      [],
+      [status("success", { environment_url: ADDRESS })],
+    ],
+  });
+  assert.equal(result.status, EXIT.ADDRESS, result.stderr);
+  assert.equal(result.stdout, `${ADDRESS}\n`);
+});
+
+test("a skipped head whose deployed tree no preview was built from is NOT_AFFECTED", () => {
+  const result = run({
+    history: ["apps/web/server.ts", "apps/web/routes.ts", "apps/desktop/main.ts"],
+    records: [[record(3, "2026-09-18T09:10:00Z")], [], [record(1, "2026-09-18T09:00:00Z")]],
+    statuses: [
+      [status("inactive", { description: "Skipped - Not affected" })],
+      [],
+      [status("success", { environment_url: ADDRESS })],
+    ],
+  });
+  assert.equal(result.status, EXIT.NOT_AFFECTED, result.stderr);
   assert.equal(result.stdout, "");
 });
 
