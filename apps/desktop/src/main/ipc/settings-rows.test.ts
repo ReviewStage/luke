@@ -7,7 +7,7 @@ import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
-import { appSettingsWire } from "../../testing/spoken-setting-bridge";
+import { appSettingsWire } from "../../testing/settings-wire";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";

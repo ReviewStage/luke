@@ -49,9 +49,8 @@ export interface HotkeyHost {
    * One key's registration moved, so what the renderers are teaching is
    * written again. The raw accelerator is what travels, as in bootstrap: the
    * renderer draws the chord as its separate keys and says it as one word,
-   * and only the accelerator produces both. An absence travels too, for the
-   * guide's sake: a chord that answers nothing must not be one Luke claims
-   * to have. Announced per rank rather than as the two together, because
+   * and only the accelerator produces both. An absence travels too: a chord
+   * that answers nothing must not be one a renderer still draws. Announced per rank rather than as the two together, because
    * the talk key's own reapply leaves it unregistered while its helper
    * starts: a whole-set announcement would tell every panel the chord had
    * gone and tell it back a moment later.

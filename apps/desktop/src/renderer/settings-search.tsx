@@ -2,9 +2,9 @@ import { PRODUCT_SEARCH_SURFACE, PRODUCT_SURFACE_EVENT } from "@sidecar/analytic
 import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import {
   APP_SETTING_SCHEMA,
+  describedSettings,
   type SettingsRowsInput,
-  settingFieldForGuideId,
-  settingGuideEntries,
+  settingFieldForId,
   settingIdVisible,
 } from "@sidecar/settings";
 import { useRef } from "react";
@@ -25,11 +25,11 @@ import { commandKeyshortcuts, ShortcutGlyphs } from "./tooltip";
  * macOS System Settings and an editor's settings do: typing turns the list
  * into the rows the query found, and clearing it turns the list back. The
  * search reads across every page wherever it is made from. The corpus is
- * everything the pages currently offer: the stored settings come from the same guide entries the voice conversation is handed
- * — one description of each setting, so the search and Luke's own account of
- * himself cannot drift apart — and each says for itself whether its row is
- * drawn, so nothing here restates a condition a page branches on. The rows
- * that are not settings (a permission, a shortcut, the ways out) are
+ * everything the pages currently offer: the stored settings come from the same
+ * descriptions their rows are drawn from — one description of each setting, so
+ * the search and the row cannot drift apart — and each says for itself whether
+ * its row is drawn, so nothing here restates a condition a page branches on.
+ * The rows that are not settings (a permission, a shortcut, the ways out) are
  * declared here, gated by the same conditions that draw them. A row the pages
  * are not drawing right now is not offered, because a result that leads to a
  * page without its row is a promise the page cannot keep.
@@ -92,7 +92,7 @@ const WINDOW_SHORTCUT_WORDS = "keyboard shortcut key chord";
 /**
  * The rows that are not stored settings, each gated by the condition that
  * draws it. Declared as one table so a row added to a page has one place to
- * become findable — the same rule the guide states for its facts.
+ * become findable.
  */
 function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
   const entries: (SettingsSearchEntry | undefined)[] = [
@@ -198,8 +198,8 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
  * haystack, so a page's name finds everything the page holds.
  */
 export function settingsSearchEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[] {
-  const guided = settingGuideEntries(input.settings).flatMap((setting): SettingsSearchEntry[] => {
-    const field = settingFieldForGuideId(setting.id);
+  const described = describedSettings(input.settings).flatMap((setting): SettingsSearchEntry[] => {
+    const field = settingFieldForId(setting.id);
     if (!field) return [];
     if (!settingIdVisible(setting.id, input)) return [];
     return [
@@ -213,7 +213,7 @@ export function settingsSearchEntries(input: SettingsSearchInput): readonly Sett
   });
   const fixed = fixedEntries(input);
   return PAGE_ORDER.flatMap((page) => [
-    ...guided.filter((entry) => entry.page === page),
+    ...described.filter((entry) => entry.page === page),
     ...fixed.filter((entry) => entry.page === page),
   ]).map((entry) => ({
     ...entry,

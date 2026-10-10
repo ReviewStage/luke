@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { APP_SETTING_SCHEMA, settingFieldForGuideId, settingGuideEntries } from "@sidecar/settings";
+import { APP_SETTING_SCHEMA, describedSettings, settingFieldForId } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { test } from "vitest";
@@ -40,15 +40,14 @@ function found(outcome: SettingsSearchOutcome | undefined): readonly SettingsSea
   return outcome.groups.flatMap((group) => group.items);
 }
 
-test("every setting the guide lists is findable on the page its schema names", () => {
-  // The corpus is built from the same guide entries the voice conversation is
-  // handed, so a setting Luke can describe is a setting the search can find —
-  // under its guide label, on its schema page, carrying its own id as the
-  // landing anchor.
+test("every described setting is findable on the page its schema names", () => {
+  // The corpus is built from the same descriptions the rows are drawn from,
+  // so a setting with a row is a setting the search can find — under its
+  // label, on its schema page, carrying its own id as the landing anchor.
   const input = everythingDrawn();
   const entries = settingsSearchEntries(input);
-  for (const setting of settingGuideEntries(input.settings)) {
-    const field = settingFieldForGuideId(setting.id);
+  for (const setting of describedSettings(input.settings)) {
+    const field = settingFieldForId(setting.id);
     assert.ok(field, `${setting.id} belongs to a schema field`);
     const entry = entries.find((candidate) => candidate.id === setting.id);
     assert.ok(entry, `the corpus offers ${setting.label}`);

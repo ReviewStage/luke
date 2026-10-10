@@ -1,14 +1,9 @@
 import { PRODUCT_SETTING_VALUE, type ProductSettingValue } from "@sidecar/analytics";
-import {
-  APP_SETTING_KIND,
-  APP_TOGGLE_VALUE,
-  type AppSettingId,
-  appToggleText,
-} from "@sidecar/guide";
+import { APP_SETTING_KIND, type AppSettingId, appToggleText } from "@sidecar/guide";
 import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Result, Schema } from "effect";
 import {
-  type AppSettingGuideSettings,
+  type AppSettingReader,
   type AppSettingSchemaEntry,
   SETTING_ROWS,
   SETTING_SECTION,
@@ -79,10 +74,9 @@ const hotkeyAnalytics = (value: StoredSettingValue): ProductSettingValue =>
   value === VOICE_HOTKEY_NONE ? PRODUCT_SETTING_VALUE.OFF : choiceAnalytics(value);
 
 /**
- * A stored on/off. That it is a toggle is what fixes its guard, its guide
- * entry's kind and words for its two states, the shape a change is counted in,
- * and how a spoken `on` or `off` reads back, so a toggle declares only what is
- * its own.
+ * A stored on/off. That it is a toggle is what fixes its guard, its
+ * description's kind and words for its two states, and the shape a change is
+ * counted in, so a toggle declares only what is its own.
  */
 export function toggleSetting<Field extends string, Id extends AppSettingId>(spec: {
   field: Field;
@@ -93,12 +87,8 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
   page: SettingsPage;
   section?: SettingSection;
   order: number;
-  /** Where the same change is made by hand. */
-  manual: string;
   sideEffect: SettingSideEffectId;
   resetScope?: SettingsResetScope;
-  /** False for a switch a spoken ask may not flip; the refusal is the guidance. */
-  adjustable: boolean;
   visible?: (view: SettingsVisibility) => boolean;
 }): AppSettingSchemaEntry<Field, boolean, Id, boolean> {
   return {
@@ -112,28 +102,24 @@ export function toggleSetting<Field extends string, Id extends AppSettingId>(spe
     sideEffect: spec.sideEffect,
     rows: SETTING_ROWS.SCHEMA,
     ids: [spec.id],
-    guide: (settings) => ({
+    describe: (settings) => ({
       id: spec.id,
       label: spec.label,
       description: spec.description,
       kind: APP_SETTING_KIND.TOGGLE,
       value: appToggleText(settings(spec.field) === true),
-      defaultValue: appToggleText(spec.default),
-      adjustable: spec.adjustable,
-      manual: spec.manual,
     }),
     visible: spec.visible,
-    spokenValue: (value: string) => value === APP_TOGGLE_VALUE.ON,
     analytics: { value: toggleAnalytics },
   };
 }
 
 /**
- * A stored one-of. `values` is the stored vocabulary and `say` is how each is
- * said — aloud and on the control alike, unless `optionLabel` words the control
- * differently, which is the difference between "normal" in a sentence and
- * "1× (default)" on a pop-up. `absent` is the word for no choice at all, for a
- * setting whose default is nothing.
+ * A stored one-of. `values` is the stored vocabulary and `token` is the word
+ * the control stores each by — also what it shows, unless `optionLabel` words
+ * it differently, which is the difference between "marin" as a token and
+ * "Marin (default)" on a pop-up. `absent` is the word for no choice at all,
+ * for a setting whose default is nothing.
  */
 export function choiceSetting<
   Field extends string,
@@ -145,26 +131,20 @@ export function choiceSetting<
   id: Id;
   label: string;
   description: string;
-  /** Every value the setting stores, in the order the guide and control offer them. */
+  /** Every value the setting stores, in the order the control offers them. */
   values: readonly Value[];
-  /** How a value is said in the guide and understood from a spoken ask. */
-  say: (value: Value) => string;
-  /** How a value is worded on the control, when that differs from `say`. */
+  /** The control's token for a value, and the value its description reads. */
+  token: (value: Value) => string;
+  /** How a value is worded on the control, when that differs from `token`. */
   optionLabel?: (value: Value) => string;
-  /** Extra spellings a spoken ask may use, each meaning one value. */
-  alias?: Readonly<Record<string, Value>>;
-  /** The words the guide offers, when they are not simply every value said. */
-  choices?: readonly string[];
   default: Default;
   /** The word for no choice at all, required where the default is nothing. */
   absent?: string;
   page: SettingsPage;
   section?: SettingSection;
   order: number;
-  manual: string;
   sideEffect: SettingSideEffectId;
   resetScope?: SettingsResetScope;
-  adjustable: boolean;
   /**
    * The vocabulary's own guard for its own values. Passed rather than built
    * from `values`, because the package that names a value set is the package
@@ -176,12 +156,11 @@ export function choiceSetting<
   /** A control whose options are observed, or whose empty token is its own. */
   control?: SettingControl<Value | undefined>;
 }): AppSettingSchemaEntry<Field, Value | undefined, Id, Default> {
-  const optionLabel = spec.optionLabel ?? spec.say;
-  const spoken: Map<string, Value> = new Map([
-    ...spec.values.map((value) => [spec.say(value), value] as const),
-    ...Object.entries(spec.alias ?? {}),
-  ]);
-  const storedValue = (read: AppSettingGuideSettings): Value | undefined => {
+  const optionLabel = spec.optionLabel ?? spec.token;
+  const byToken: Map<string, Value> = new Map(
+    spec.values.map((value) => [spec.token(value), value] as const),
+  );
+  const storedValue = (read: AppSettingReader): Value | undefined => {
     const value = read(spec.field);
     if (value === undefined) return undefined;
     // SAFETY: The field's own guard is what put this value in the store.
@@ -190,16 +169,16 @@ export function choiceSetting<
   // A choice with a default says the default where nothing is stored; one with
   // no default needs a word for nothing, and `schema.test.ts` refuses an entry
   // that would read as blank rather than letting it draw one.
-  const said = (value: Value | undefined): string => {
-    if (value !== undefined) return spec.say(value);
+  const tokenOf = (value: Value | undefined): string => {
+    if (value !== undefined) return spec.token(value);
     if (spec.absent !== undefined) return spec.absent;
-    return spec.default === undefined ? "" : spec.say(spec.default);
+    return spec.default === undefined ? "" : spec.token(spec.default);
   };
   const control: SettingControl<Value | undefined> = spec.control ?? {
-    value: (stored) => said(stored),
+    value: (stored) => tokenOf(stored),
     options: (): readonly SettingOption[] =>
-      spec.values.map((value) => ({ value: spec.say(value), label: optionLabel(value) })),
-    stored: (token) => spoken.get(token),
+      spec.values.map((value) => ({ value: spec.token(value), label: optionLabel(value) })),
+    stored: (token) => byToken.get(token),
   };
   return {
     field: spec.field,
@@ -212,33 +191,25 @@ export function choiceSetting<
     sideEffect: spec.sideEffect,
     rows: SETTING_ROWS.SCHEMA,
     ids: [spec.id],
-    guide: (settings) => ({
+    describe: (settings) => ({
       id: spec.id,
       label: spec.label,
       description: spec.description,
       kind: APP_SETTING_KIND.CHOICE,
-      value: said(storedValue(settings)),
-      defaultValue: said(spec.default),
-      choices: spec.choices ?? spec.values.map(spec.say),
-      adjustable: spec.adjustable,
-      manual: spec.manual,
+      value: tokenOf(storedValue(settings)),
     }),
     visible: spec.visible,
     control,
-    // A choice no spoken ask may change needs no word to read back: the
-    // refusal Luke voices is the whole of what it offers.
-    spokenValue: spec.adjustable ? (value: string) => spoken.get(value) : undefined,
     analytics: { value: choiceAnalytics },
   };
 }
 
 /**
  * A stored chord. Every hotkey is the same setting three times: the same
- * guard, the same reading for a count — a deleted key counts as off — and the
- * same empty guide entry, because the key's own fact reports the registered
- * chord and its manual path rather than the stored choice. The id is listed
- * all the same, so the chord's page is named and a change to it can be
- * counted. A chord is never spoken, so none of them parses one.
+ * guard, the same reading for a count — a deleted key counts as off — and no
+ * description, because the Shortcuts page draws the registered chord by hand
+ * rather than as a schema row. The id is listed all the same, so the chord's
+ * page is named and a change to it can be counted.
  */
 export function hotkeySetting<Field extends string, Id extends AppSettingId>(spec: {
   field: Field;
@@ -257,7 +228,7 @@ export function hotkeySetting<Field extends string, Id extends AppSettingId>(spe
     sideEffect: spec.sideEffect,
     rows: SETTING_ROWS.BESPOKE,
     ids: [spec.id],
-    guide: () => undefined,
+    describe: () => undefined,
     analytics: { value: hotkeyAnalytics },
   };
 }
