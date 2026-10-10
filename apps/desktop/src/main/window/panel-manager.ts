@@ -155,7 +155,7 @@ export class PanelManager {
   }
 
   /** Brings the window forward, shown again if it was closed. */
-  focusExpanded(_preferredDisplayId?: number): void {
+  focusExpanded(): void {
     this.#focusWindow(this.primaryPanel());
   }
 
