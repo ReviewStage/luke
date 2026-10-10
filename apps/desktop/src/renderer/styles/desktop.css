@@ -7,7 +7,7 @@
   --desktop-ground: #0c0c0e;
   --desktop-sidebar: #111114;
   --desktop-well: #0f0f12;
-  /* What floats over the window, a menu, a dialog, or the composer's card:
+  /* What floats over the window, a menu or a dialog:
      the sidebar's step above the ground in the dark, where lighter is nearer,
      and white in the light, where a shadow says it instead. */
   --surface-popover: var(--desktop-sidebar);
