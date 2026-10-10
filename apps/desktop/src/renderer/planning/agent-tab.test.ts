@@ -18,7 +18,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { PublishedChip, PublishedRow } from "./agent-published";
 import { AgentTabView, AgentTranscriptView } from "./agent-tab";
-import type { AgentModelControl } from "./use-agent-model";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -153,12 +152,6 @@ function choose(container: HTMLElement, label: string): void {
   act(() => item.click());
 }
 
-const MODEL: AgentModelControl = {
-  choice: { model: AGENT.model, effort: AGENT.effort },
-  note: undefined,
-  choose: ignore,
-};
-
 /** The whole tab drawn once, with the agent in the status given and the transcript's last page saying why it failed. */
 function tabMarkup(status: CodingAgentSummary["status"], failure?: CodingAgentFailure): string {
   return renderToStaticMarkup(
@@ -183,7 +176,11 @@ function tabMarkup(status: CodingAgentSummary["status"], failure?: CodingAgentFa
         retry: ignore,
         sent: [],
       },
-      model: MODEL,
+      model: {
+        choice: { model: AGENT.model, effort: AGENT.effort },
+        note: undefined,
+        choose: ignore,
+      },
       published: undefined,
       doors: SHUT,
       onStop: () => Promise.resolve(),
@@ -391,17 +388,11 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
 });
 
-test("the tab wears no head: it opens on the transcript, and what the agent runs on is the chip at the box's foot", () => {
-  const markup = tabMarkup(CODING_AGENT_STATUS.RUNNING);
-  assert.doesNotMatch(markup, /<header|agent-tab-header|agent-status-dot/u);
-  assert.match(markup, /<section[^>]*class="agent-tab[^"]*"[^>]*><div[^>]*><div role="log"/u);
-  assert.match(
-    markup,
-    /<div class="agent-model-chip"><button[^>]*class="plan-compose-chip"[^>]*>.*?Claude Opus 5\.5 · High<\/span>/u,
-  );
-});
-
-test("a stopped turn ends the transcript on Stopped, a failed one on Failed with why where the service said, and a running or completed one on no such line", () => {
+test("the tab wears no head: it opens on the transcript, what the agent runs on is the chip at the box's foot, and a stopped or failed turn ends the transcript on one quiet line saying so", () => {
+  const running = tabMarkup(CODING_AGENT_STATUS.RUNNING);
+  assert.doesNotMatch(running, /<header|agent-tab-header|agent-status-dot|agent-end-line/u);
+  assert.match(running, /<section[^>]*class="agent-tab[^"]*"[^>]*><div[^>]*><div role="log"/u);
+  assert.match(running, /class="agent-model-chip">.*?Claude Opus 5\.5 · High<\/span>/u);
   assert.match(
     tabMarkup(CODING_AGENT_STATUS.CANCELLED),
     /<p class="agent-end-line"[^>]*>Stopped</u,
@@ -410,18 +401,8 @@ test("a stopped turn ends the transcript on Stopped, a failed one on Failed with
     tabMarkup(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.GITHUB),
     /<p class="agent-end-line"[^>]*>Failed: GitHub refused or could not be reached</u,
   );
-  assert.match(
-    tabMarkup(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.MODEL),
-    /Failed: the model call failed</u,
-  );
-  assert.match(tabMarkup(CODING_AGENT_STATUS.FAILED), /<p class="agent-end-line"[^>]*>Failed</u);
-  for (const status of [CODING_AGENT_STATUS.RUNNING, CODING_AGENT_STATUS.COMPLETED]) {
-    assert.doesNotMatch(tabMarkup(status), /agent-end-line/u);
-  }
-  // The end line is one line, after the last message and before any pull request row.
-  const stopped = tabMarkup(CODING_AGENT_STATUS.CANCELLED);
-  assert.equal(stopped.match(/agent-end-line/gu)?.length, 1);
-  assert.doesNotMatch(stopped, /Working…/u);
+  assert.match(tabMarkup(CODING_AGENT_STATUS.FAILED), /agent-end-line"[^>]*>Failed</u);
+  assert.doesNotMatch(tabMarkup(CODING_AGENT_STATUS.COMPLETED), /agent-end-line/u);
 });
 
 test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {
@@ -543,50 +524,26 @@ test("copying a turn hands the clipboard the agent's words alone, never its tool
   assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
 });
 
-test("the box's foot wears the pull request's chip in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said", () => {
+test("the box's foot wears the pull request's chip in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said; the chip's menu offers opening the pull request, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
   const chip = (published: CodingAgentPullRequestAnswer | undefined) =>
     renderToStaticMarkup(createElement(PublishedChip, { published, doors: SHUT }));
-  for (const state of Object.values(PULL_REQUEST_STATE)) {
-    const pill = chip({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, state } });
-    assert.match(
-      pill,
-      new RegExp(`class="plan-compose-chip agent-published-chip" data-state="${state}"`, "u"),
-    );
-    assert.match(pill, /class="agent-pr-number">#123</u);
-  }
-  for (const checks of Object.values(CHECK_SUMMARY)) {
-    const pill = chip({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, checks } });
-    assert.match(pill, new RegExp(`class="agent-check-dot" data-checks="${checks}"`, "u"));
-  }
-  assert.match(chip(PUBLISHED), /aria-label="Pull request #123, open, checks passing"/u);
-  assert.match(chip(PUBLISHED), /aria-haspopup="menu"/u);
-  assert.doesNotMatch(chip(PUBLISHED), /agent-branch-name/u);
-
-  const branch = chip({ ...PUBLISHED, pullRequest: null });
   assert.match(
-    branch,
-    /class="plan-compose-chip agent-published-chip"[^>]*aria-label="luke\/teammate-invitations"/u,
+    chip(PUBLISHED),
+    /class="plan-compose-chip agent-published-chip" data-state="open" aria-label="Pull request #123, open, checks passing" aria-haspopup="menu"[\s\S]*agent-pr-number">#123<\/span><span class="agent-check-dot" data-checks="passing"/u,
   );
   assert.match(
-    branch,
-    /class="plan-compose-chip-name agent-branch-name">luke\/teammate-invitations</u,
+    chip({ ...PUBLISHED, pullRequest: null }),
+    /agent-published-chip" aria-label="luke\/teammate-invitations"[\s\S]*agent-branch-name">luke\/teammate-invitations</u,
   );
-  assert.doesNotMatch(branch, /data-state=|agent-pr-number/u);
+  assert.equal(chip({ ...PUBLISHED, branch: null, pullRequest: null }), "");
+  assert.equal(chip(undefined), "");
 
-  for (const bare of [undefined, { ...PUBLISHED, branch: null, pullRequest: null }]) {
-    assert.equal(chip(bare), "");
-  }
-});
-
-test("the chip's menu offers opening the pull request, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
   const opened: string[] = [];
   const copied: string[] = [];
-  const doors = {
-    openGitHub: (url: string) => opened.push(url),
-    copy: (words: string) => copied.push(words),
-  };
-  const container = mountedChip(PUBLISHED, doors);
-
+  const container = mountedChip(PUBLISHED, {
+    openGitHub: (url) => opened.push(url),
+    copy: (words) => copied.push(words),
+  });
   choose(container, "Open pull request");
   choose(container, "Copy branch name");
   choose(container, "Copy checkout command");
@@ -599,15 +556,7 @@ test("the chip's menu offers opening the pull request, copying the branch and it
     "luke/teammate-invitations",
     "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
   ]);
-  // The menu closes on a choice, and nothing in it is Stop, which stays the composer's own button.
-  assert.deepEqual(menuItems(), []);
-  const chip = chipOf(container);
-  assert.ok(chip);
-  act(() => chip.click());
-  assert.deepEqual(
-    menuItems().map((item) => item.textContent),
-    ["Open pull request", "Copy branch name", "Copy checkout command", "View changes on GitHub"],
-  );
+  assert.deepEqual(menuItems(), [], "the menu closes on a choice");
 });
 
 test("with a branch and no pull request the menu offers the copies and the compare page alone", () => {

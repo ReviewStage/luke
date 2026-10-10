@@ -11,19 +11,24 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, beforeEach, test } from "vitest";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
+import { useAgentModel } from "./use-agent-model";
 
 /**
  * The message box under an agent's transcript: one card that reads the
  * same whatever the agent is doing, one button that is Send or Stop, Enter
  * to send, a send that stands in the transcript at once and is reconciled
  * with the service's row, and Retry under the card carrying the failed
- * send's key again. The card's look is the shared composer's, held in
- * ../ai-elements/prompt-input.test.ts.
+ * send's key again; and at the card's foot the model chip, whose menu is
+ * the Start button's (../desktop/start-agent-button.test.ts), drawing a
+ * pick at once and taking a refused one off again. The card's look is the
+ * shared composer's, held in ../ai-elements/prompt-input.test.ts.
  */
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -46,6 +51,28 @@ const PLAN: CodingAgentMessage = {
 
 const RUNNING_AGENT = { agent: { ...AGENT, status: CODING_AGENT_STATUS.RUNNING } } as const;
 
+/** The agent's model with its fast version, and one other, as the catalog lists them. */
+const MODELS: readonly CatalogModel[] = [
+  {
+    id: AGENT.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+  },
+  {
+    id: `${AGENT.model}-fast`,
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "high"],
+  },
+  {
+    id: "openai/gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low"],
+  },
+];
+
 const PLACEHOLDER = "Message the agent…";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
@@ -58,6 +85,7 @@ function row(id: string, text: string): CodingAgentMessage {
 interface Standing {
   status: CodingAgentStatus;
   messages: readonly CodingAgentMessage[];
+  choice: ModelChoice;
 }
 
 /** One message sent, held until the test answers it. */
@@ -67,7 +95,15 @@ interface Sent {
   answer: (answer: CodingAgentAgentAnswer) => void;
 }
 
+/** One change of model sent, held until the test answers it. */
+interface Chosen {
+  choice: ModelChoice;
+  answer: (answer: CodingAgentAgentAnswer) => void;
+}
+
 const roots: Root[] = [];
+
+beforeEach(installScrollIntoView);
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -83,18 +119,30 @@ async function settle(): Promise<void> {
 const ignore = () => undefined;
 
 /**
- * The tab mounted over a scripted service: every message sent is held
- * until the test answers it, every status the answer moved is written
- * down, and the transcript is whatever the test says the service holds.
+ * The tab mounted over a scripted service: every message and every change
+ * of model sent is held until the test answers it, every status the answer
+ * moved is written down, and the transcript and the agent's choice are
+ * whatever the test says the service holds.
  */
-function mount(initial: Standing) {
+function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
   const sends: Sent[] = [];
+  const chooses: Chosen[] = [];
   const statuses: CodingAgentStatus[] = [];
   let stops = 0;
   let restand: ((next: (was: Standing) => Standing) => void) | undefined;
   function Probe() {
-    const [held, setHeld] = useState(initial);
+    const [held, setHeld] = useState<Standing>({
+      choice: { model: AGENT.model, effort: AGENT.effort },
+      ...initial,
+    });
     restand = setHeld;
+    const model = useAgentModel({
+      agent: { id: AGENT_ID, ...held.choice },
+      choose: (_agentId, choice) =>
+        new Promise((answer) => {
+          chooses.push({ choice, answer });
+        }),
+    });
     const composer = useAgentComposer({
       agentId: AGENT_ID,
       messages: held.messages,
@@ -108,8 +156,8 @@ function mount(initial: Standing) {
       },
     });
     return createElement(AgentTabView, {
-      agent: { ...AGENT, status: held.status },
-      models: undefined,
+      agent: { ...AGENT, ...held.choice, status: held.status },
+      models: MODELS,
       readModels: ignore,
       transcript: {
         messages: held.messages,
@@ -119,11 +167,7 @@ function mount(initial: Standing) {
         onRetry: ignore,
       },
       composer,
-      model: {
-        choice: { model: AGENT.model, effort: AGENT.effort },
-        note: undefined,
-        choose: ignore,
-      },
+      model,
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => {
@@ -147,6 +191,7 @@ function mount(initial: Standing) {
   return {
     container,
     sends,
+    chooses,
     statuses,
     stops: () => stops,
     field,
@@ -173,6 +218,25 @@ function mount(initial: Standing) {
       assert.ok(sent, `message ${index} was sent`);
       await act(async () => {
         sent.answer(answer);
+        await Promise.resolve();
+      });
+      await settle();
+    },
+    /** The model chip's words. */
+    chip: () => container.querySelector(".agent-model-chip .plan-compose-chip-name")?.textContent,
+    /** Opens the chip's menu and picks the row at the index. */
+    pick: async (index: number) => {
+      act(() => container.querySelector<HTMLButtonElement>(".agent-model-chip button")?.click());
+      await settle();
+      const row = container.querySelectorAll<HTMLElement>('[role="option"]')[index];
+      assert.ok(row, `the menu lists row ${index}`);
+      act(() => row.click());
+    },
+    chose: async (index: number, answer: CodingAgentAgentAnswer) => {
+      const chosen = chooses[index];
+      assert.ok(chosen, `change ${index} was sent`);
+      await act(async () => {
+        chosen.answer(answer);
         await Promise.resolve();
       });
       await settle();
@@ -393,4 +457,29 @@ test("the box takes focus as the tab opens unless the developer is typing elsewh
   const other = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   assert.equal(document.activeElement, editor);
   assert.notEqual(document.activeElement, other.field());
+});
+
+test("the model chip names the agent's model and effort, with Fast where it runs the fast version; a pick is drawn at once and sent for this agent, the service's answer is what it then reads, and a refusal takes the pick off with why under the box and no Retry", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  assert.equal(tab.chip(), "Claude Opus 5.5 · High");
+  await tab.stand({ choice: { model: `${AGENT.model}-fast`, effort: "low" } });
+  assert.equal(tab.chip(), "Claude Opus 5.5 · Low · Fast");
+
+  await tab.pick(1);
+  assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "drawn before the service answers");
+  assert.deepEqual(
+    tab.chooses.map(({ choice }) => choice),
+    [{ model: "openai/gpt-6.1-sol", effort: "low" }],
+  );
+  const chosen = { model: "openai/gpt-6.1-sol", effort: "low" };
+  await tab.chose(0, { agent: { ...AGENT, ...chosen } });
+  await tab.stand({ choice: chosen });
+  assert.equal(tab.chip(), "GPT-6.1 Sol · Low");
+
+  await tab.pick(0);
+  assert.equal(tab.chip(), "Claude Opus 5.5 · High");
+  await tab.chose(1, { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE });
+  assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "rolled back to what the agent runs on");
+  assert.match(tab.note() ?? "", /isn't offered any more/u);
+  assert.equal(tab.retry(), null, "the chip is the retry");
 });

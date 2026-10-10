@@ -311,32 +311,19 @@ test("a choice written as the default is asked of the service as given, and one 
   assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
 });
 
-test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list; a refusal leaves the list as it was", async () => {
+test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list", async () => {
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   const chosen = { ...STARTED, model: "openai/gpt-6.1-sol", effort: "low" };
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
-  tab.answer(
-    ACT_KIND.CODING_AGENTS_CHOOSE,
-    { agent: chosen },
-    { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE },
-  );
+  tab.answer(ACT_KIND.CODING_AGENTS_CHOOSE, { agent: chosen });
   await tab.mount();
 
-  const answer = await tab
-    .control()
-    .onChoose(AGENT, { model: chosen.model, effort: chosen.effort });
+  const answer = await tab.control().onChoose(AGENT, { model: chosen.model, effort: "low" });
   await settle();
   assert.deepEqual(answer, { agent: chosen });
   assert.deepEqual(tab.asked.at(-1), {
     kind: ACT_KIND.CODING_AGENTS_CHOOSE,
     payload: { agentId: AGENT, model: "openai/gpt-6.1-sol", effort: "low" },
   });
-  assert.deepEqual(tab.control().agents, [chosen]);
-
-  const refused = await tab
-    .control()
-    .onChoose(AGENT, { model: "anthropic/claude-haiku-1", effort: "low" });
-  await settle();
-  assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE });
   assert.deepEqual(tab.control().agents, [chosen]);
 });

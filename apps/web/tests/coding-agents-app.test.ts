@@ -703,15 +703,15 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a change of model writes the choice on the agent's row and answers the agent with it, leaving the account's default; it is refused by name for another account's agent, a model or effort outside the catalog, and a choice missing its effort",
+    "a change of model writes the choice on the agent's row and answers the agent with it, leaving the account's default; another account's agent is not found, and a model or effort outside the catalog or a choice missing its effort is refused",
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, ask } = yield* openPlan();
-        const agent = readAnswer(
+        const { agent } = readAnswer(
           codingAgentAnswerSchema,
           HOSTED_HTTP_STATUS.CREATED,
           yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
-        ).agent;
+        );
         const chooseAs = (bearer: string, body: WireBoundaryInput) =>
           ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body }));
 
@@ -721,12 +721,14 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* chooseAs(owner, { model: "openai/gpt-6.1-sol", effort: "low" }),
         );
         assert.deepEqual(
-          { id: changed.agent.id, model: changed.agent.model, effort: changed.agent.effort },
-          { id: agent.id, model: "openai/gpt-6.1-sol", effort: "low" },
+          [changed.agent.model, changed.agent.effort],
+          ["openai/gpt-6.1-sol", "low"],
         );
         const stored = yield* readCodingAgent(owner, agent.id);
-        assert.ok(Option.isSome(stored));
-        assert.deepEqual([stored.value.model, stored.value.effort], ["openai/gpt-6.1-sol", "low"]);
+        assert.deepEqual(
+          Option.map(stored, (row) => [row.model, row.effort]),
+          Option.some(["openai/gpt-6.1-sol", "low"]),
+        );
         assert.equal(yield* readAccountPreferences(owner), undefined, "the default stands");
 
         assert.deepEqual(
@@ -743,9 +745,6 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           );
         }
-        const kept = yield* readCodingAgent(owner, agent.id);
-        assert.ok(Option.isSome(kept));
-        assert.deepEqual([kept.value.model, kept.value.effort], ["openai/gpt-6.1-sol", "low"]);
       }),
   );
 

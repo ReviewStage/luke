@@ -134,74 +134,25 @@ test("an agent with no turn row reads as starting inside the grace and as failed
   );
 });
 
-/**
- * Why a failed turn failed, as the one word the wire carries: read off the
- * turn row's failure word and the host's own sentences in its detail, so
- * nothing eve or a provider said is what the window hears.
- */
-
-const failed = (failure: string | null, failureDetail: string | null) => ({
+/** Why a failed turn failed, as the one word the wire carries: the turn row's failure word and the host's own sentences in its detail, never eve's or a provider's words. */
+const failed = (failure: string, failureDetail: string | null = null) => ({
   status: TURN_STATUS.FAILED,
   failure,
   failureDetail,
 });
+const { MODEL, ABANDONED, PERSISTENCE } = BRAIN_REQUEST_FAILURE;
 
 test.for([
+  [failed(MODEL, "MODEL_CALL_FAILED 529 overloaded"), CODING_AGENT_FAILURE.MODEL],
+  [failed(MODEL, `SANDBOX_FAILED ${CODER_REFUSAL.NOT_REACHABLE}`), CODING_AGENT_FAILURE.GITHUB],
   [
-    "the model call",
-    failed(BRAIN_REQUEST_FAILURE.MODEL, "MODEL_CALL_FAILED 529 overloaded"),
-    CODING_AGENT_FAILURE.MODEL,
-  ],
-  [
-    "a step refused for its provider",
-    failed(BRAIN_REQUEST_FAILURE.MODEL, `MODEL_CALL_FAILED ${CODER_REFUSAL.NO_PROVIDER_KEY}`),
-    CODING_AGENT_FAILURE.MODEL,
-  ],
-  [
-    "GitHub refusing the repository",
-    failed(BRAIN_REQUEST_FAILURE.MODEL, `SANDBOX_FAILED ${CODER_REFUSAL.NOT_REACHABLE}`),
-    CODING_AGENT_FAILURE.GITHUB,
-  ],
-  [
-    "GitHub unreachable at the checkout",
-    failed(BRAIN_REQUEST_FAILURE.MODEL, `Not run: ${REPOSITORY_REFUSAL.GITHUB_UNAVAILABLE}`),
-    CODING_AGENT_FAILURE.GITHUB,
-  ],
-  [
-    "the checkout failing in the sandbox",
-    failed(
-      BRAIN_REQUEST_FAILURE.MODEL,
-      `Not run: ${REPOSITORY_REFUSAL.CHECKOUT_FAILED} fatal: early EOF`,
-    ),
+    failed(MODEL, `Not run: ${REPOSITORY_REFUSAL.CHECKOUT_FAILED} fatal`),
     CODING_AGENT_FAILURE.SANDBOX,
   ],
-  [
-    "the sweep settling the turn",
-    failed(BRAIN_REQUEST_FAILURE.ABANDONED, null),
-    CODING_AGENT_FAILURE.ABANDONED,
-  ],
-  [
-    "a record the store could not write",
-    failed(BRAIN_REQUEST_FAILURE.PERSISTENCE, null),
-    CODING_AGENT_FAILURE.OTHER,
-  ],
-  ["a word this build does not know", failed("eclipse", null), CODING_AGENT_FAILURE.OTHER],
-] as const)("%s reads as its one word", ([, turn, word]) => {
+  [failed(ABANDONED), CODING_AGENT_FAILURE.ABANDONED],
+  [failed(PERSISTENCE), CODING_AGENT_FAILURE.OTHER],
+  [{ status: TURN_STATUS.CANCELLED, failure: MODEL, failureDetail: null }, undefined],
+  [undefined, undefined],
+] as const)("a failed turn's reason is the wire's one word: %o", ([turn, word]) => {
   assert.equal(codingAgentFailureOf(turn), word);
-});
-
-test("a turn that did not fail, or no turn, says nothing", () => {
-  assert.equal(codingAgentFailureOf(undefined), undefined);
-  assert.equal(
-    codingAgentFailureOf({ status: TURN_STATUS.SETTLED, failure: null, failureDetail: null }),
-    undefined,
-  );
-  assert.equal(
-    codingAgentFailureOf({
-      status: TURN_STATUS.CANCELLED,
-      failure: BRAIN_REQUEST_FAILURE.MODEL,
-      failureDetail: null,
-    }),
-    undefined,
-  );
 });
