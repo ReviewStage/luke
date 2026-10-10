@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
+  agentPath,
   agentPullRequestPath,
   HOSTED_SERVICE_PATH,
   planPath,
@@ -21,5 +22,6 @@ test("a plan stands under the plans read, with its id inside the path as one seg
 });
 
 test("an agent's pull request stands under the agent's own address, with its id as one segment", () => {
+  assert.equal(agentPath("a/b"), "/api/agents/a%2Fb");
   assert.equal(agentPullRequestPath("a/b"), "/api/agents/a%2Fb/pull-request");
 });

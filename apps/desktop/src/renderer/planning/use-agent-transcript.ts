@@ -4,6 +4,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_CURSOR_START,
+  type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -18,7 +19,8 @@ import { agentStillWriting, applyMessagesPage, followsAgent } from "./coding-age
  * the loop here is one read after another with no clock of its own: each
  * answer's cursor is where the next read starts, each page joins the
  * messages held by id, and each page's status is the agent's as the page
- * was read. The loop runs while the tab is on screen and the agent may
+ * was read, with why where its turn failed, which the tab's end line says.
+ * The loop runs while the tab is on screen and the agent may
  * still write, and ends on its own when a page says the agent ended; an
  * agent that has ended is read once through, page by page, and then left
  * alone. A read that did not answer ends the loop and says so, with Try
@@ -34,6 +36,8 @@ export type TranscriptReader = (
 /** What the tab draws of the transcript. */
 export interface AgentTranscriptControl {
   messages: readonly CodingAgentMessage[];
+  /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
+  failure: CodingAgentFailure | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -45,11 +49,18 @@ interface Held {
   agentId: string;
   messages: readonly CodingAgentMessage[];
   cursor: string;
+  failure: CodingAgentFailure | undefined;
   failed: boolean;
 }
 
 function fresh(agentId: string): Held {
-  return { agentId, messages: [], cursor: CODING_AGENT_CURSOR_START, failed: false };
+  return {
+    agentId,
+    messages: [],
+    cursor: CODING_AGENT_CURSOR_START,
+    failure: undefined,
+    failed: false,
+  };
 }
 
 export function useAgentTranscript(input: {
@@ -99,6 +110,7 @@ export function useAgentTranscript(input: {
           ...was,
           messages: applyMessagesPage(was.messages, answer.messages),
           cursor: answer.cursor,
+          failure: answer.failureReason,
         }));
         latest.current.onStatus(agentId, answer.status);
         // A page with nothing on it from an agent that may still write is
@@ -123,6 +135,7 @@ export function useAgentTranscript(input: {
 
   return {
     messages: held.messages,
+    failure: held.failure,
     reading: active && held.messages.length === 0,
     failed: held.failed,
     onRetry,

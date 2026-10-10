@@ -285,6 +285,30 @@ it.effect(
 );
 
 it.effect(
+  "changes an agent's model and effort at the agent's own address as the choice alone, and reads a refused choice as invalid",
+  () =>
+    Effect.gen(function* () {
+      const chosen = { ...AGENT, ...CHOICE };
+      const api = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: chosen }) },
+      });
+      const refusing = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+      });
+
+      const answer = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), api.layer);
+      const refused = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), refusing.layer);
+
+      assert.deepEqual(answer, { agent: chosen });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), CHOICE);
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE });
+    }),
+);
+
+it.effect(
   "reads what an agent published at its pull-request address, and an agent the service does not find reads as not found",
   () =>
     Effect.gen(function* () {

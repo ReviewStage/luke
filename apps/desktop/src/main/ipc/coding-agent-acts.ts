@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
+  type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -40,6 +41,7 @@ export interface CodingAgentActsDependencies {
       params: CodingAgentMessagesParams,
     ): Effect.Effect<CodingAgentMessagesAnswerView>;
     codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
+    codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
@@ -65,6 +67,7 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_START
   | typeof ACT_KIND.CODING_AGENTS_MESSAGES
   | typeof ACT_KIND.CODING_AGENTS_MESSAGE
+  | typeof ACT_KIND.CODING_AGENTS_CHOOSE
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST;
@@ -129,6 +132,10 @@ export function codingAgentActRows(
       return noted(host.codingAgentMessage(params), (answer) => {
         if ("agent" in answer) notices.observeMessaged(answer.agent);
       });
+    },
+    [ACT_KIND.CODING_AGENTS_CHOOSE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_CHOOSE, sender);
+      return notedAgent(host.codingAgentChoose(params));
     },
     [ACT_KIND.CODING_AGENTS_STOP]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);

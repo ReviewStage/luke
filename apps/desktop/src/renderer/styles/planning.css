@@ -419,34 +419,11 @@
   margin: 4px;
 }
 
-/* The agent's tab's head, above the transcript. */
-.agent-tab-header {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-8);
-  min-height: 36px;
-  padding: var(--space-6) var(--space-12) var(--space-6) var(--space-16);
-  border-bottom: 1px solid var(--hairline);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.agent-tab-title {
-  overflow: hidden;
-  flex: 1;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.agent-tab-title strong {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.agent-tab-separator {
+/* The quiet line a transcript ends on once its turn was stopped or failed. */
+.agent-end-line {
+  margin: 0;
   color: var(--text-tertiary);
+  font-size: 12.5px;
 }
 
 .agent-note {
@@ -491,49 +468,56 @@
   text-underline-offset: 2px;
 }
 
-/* What the agent published, in its head: the pull request's pill, coloured
-   by where it stands and dotted by its checks, or the chip naming the
-   branch pushed with no pull request yet; the ⋯ beside either. The pill is
-   a status that opens its pull request rather than one of the window's two
-   buttons: it wears the state's colour and GitHub's own round shape. */
-.agent-pr-pill {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-6);
-  height: 22px;
-  padding: 0 var(--space-8) 0 var(--space-6);
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
-  border-radius: 999px;
+/* The chips along the box's foot: the model chip, which hangs its menu
+   above itself since the box stands at the panel's foot, and after it
+   what the agent published, in the same chip style, the pull request's
+   wearing its state's colour with a dot for its checks, the branch's its
+   name in the code face. */
+.agent-model-chip {
+  position: relative;
+  min-width: 0;
+}
+
+.agent-model-chip .agent-model-menu {
+  top: auto;
+  bottom: calc(100% + var(--space-4));
+}
+
+.agent-published-chip {
+  flex: 0 1 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-published-chip[data-state] {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   color: var(--accent);
-  font-size: 11.5px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  transition: background-color var(--duration-hover) ease;
 }
 
-.agent-pr-pill:hover {
+.agent-published-chip[data-state]:hover,
+.agent-published-chip[data-state][aria-expanded="true"] {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
 }
 
-.agent-pr-pill[data-state="open"] {
+.agent-published-chip[data-state="open"] {
   --accent: var(--state-complete);
 }
 
-.agent-pr-pill[data-state="draft"] {
+.agent-published-chip[data-state="draft"] {
   --accent: var(--text-tertiary);
 }
 
-.agent-pr-pill[data-state="merged"] {
+.agent-published-chip[data-state="merged"] {
   --accent: var(--state-merged);
 }
 
-.agent-pr-pill[data-state="closed"] {
+.agent-published-chip[data-state="closed"] {
   --accent: var(--danger);
 }
 
-.agent-pr-pill .account-mark,
+.agent-published-chip .account-mark,
 .agent-published-row .account-mark {
   width: 13px;
   height: 13px;
@@ -562,27 +546,10 @@
   background: var(--danger);
 }
 
-.agent-branch-chip {
-  display: inline-flex;
-  max-width: 220px;
-  flex: 0 1 auto;
-  align-items: center;
-  gap: 5px;
-  height: 22px;
-  padding: 0 8px 0 7px;
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--raised);
-  color: var(--text-secondary);
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
-  font-size: 11px;
-}
-
 .agent-branch-name {
-  overflow: hidden;
-  min-width: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 180px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
 }
 
 /* The row summing a finished turn up, at the transcript's end. */

@@ -86,6 +86,11 @@ export function agentMessagesPath(agentId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
+/** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
+export function agentPath(agentId: string): string {
+  return `/api/agents/${encodeURIComponent(agentId)}`;
+}
+
 /** Stops one agent (POST): its turn is cancelled and its sandbox stopped; anything it pushed stays. */
 export function agentStopPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}/stop`;

@@ -22,7 +22,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the agent is idle; it shows in the transcript at once as the developer's
  * own row. Every send carries a key the client made, so a send repeated
  * after a lost answer finds the message it already sent and sends nothing
- * again.
+ * again. An agent's model and effort can be changed while it stands: the
+ * change is read at its next step, and the answer is the agent as it then
+ * stands.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -51,6 +53,25 @@ export const CODING_AGENT_STATUS = {
 } as const;
 
 export type CodingAgentStatus = (typeof CODING_AGENT_STATUS)[keyof typeof CODING_AGENT_STATUS];
+
+/**
+ * Why a turn ended failed, as one fixed word: the service maps the turn's
+ * own record to these, so nothing a provider or the runtime said travels
+ * to the window.
+ */
+export const CODING_AGENT_FAILURE = {
+  /** The model call failed. */
+  MODEL: "model",
+  /** The sandbox or the checkout failed. */
+  SANDBOX: "sandbox",
+  /** GitHub refused the agent's repository or could not be reached. */
+  GITHUB: "github",
+  /** The turn ran past its bound and the sweep settled it. */
+  ABANDONED: "abandoned",
+  OTHER: "other",
+} as const;
+
+export type CodingAgentFailure = (typeof CODING_AGENT_FAILURE)[keyof typeof CODING_AGENT_FAILURE];
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -110,7 +131,7 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;
 
-/** A started or stopped agent (POST). */
+/** A started, stopped, or changed agent (POST, PATCH). */
 export const codingAgentAnswerSchema = EffectSchema.Struct({ agent: codingAgentSummarySchema });
 
 /** The plan's agents (GET), in the order they were started. */
@@ -213,10 +234,13 @@ export const CODING_AGENT_CURSOR_START = "0:0";
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
  * learns from the page that ends the hold that there is nothing more to
- * wait for.
+ * wait for, and why, as one fixed word, where the newest turn failed.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  failureReason: EffectSchema.optionalKey(
+    EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
+  ),
 });

@@ -40,10 +40,12 @@ import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
   type ModelChoice,
+  modelChoiceSchema,
   modelsAnswerSchema,
 } from "./models-wire.js";
 import {
   agentMessagesPath,
+  agentPath,
   agentPullRequestPath,
   agentStopPath,
   HOSTED_SERVICE_PATH,
@@ -108,6 +110,12 @@ const DEFAULT_REFUSALS = {
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
 } satisfies NamedRefusals;
 
+/** The refusals changing an agent's choice can answer with: the agent gone, or a choice the catalog does not offer. */
+const CHOOSE_REFUSALS = {
+  ...ROW_REFUSALS,
+  ...DEFAULT_REFUSALS,
+} satisfies NamedRefusals;
+
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
@@ -143,8 +151,8 @@ function readAnswer<Answer, Encoded>(
 /**
  * The window's reads and writes of a plan's coding agents: the models the
  * service offers and the account's default among them, a plan's agents,
- * one started, one's transcript past a cursor, one messaged, one stopped,
- * and what one published.
+ * one started, one's transcript past a cursor, one messaged, one's model
+ * and effort changed, one stopped, and what one published.
  */
 export class HostedCodingAgentClient {
   readonly #call: AccountCallEffects;
@@ -263,6 +271,23 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, MESSAGE_REFUSALS),
+    );
+  }
+
+  /** Changes one agent's model and effort for its next step, answering it as it then stands; a choice the service would refuse by shape is refused here without traveling. */
+  choose(
+    agentId: string,
+    choice: ModelChoice,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(modelChoiceSchema)(choice));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, CHOOSE_REFUSALS),
     );
   }
 

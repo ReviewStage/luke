@@ -8,6 +8,7 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
+  codingAgentChooseParamsSchema,
   codingAgentDefaultWriteParamsSchema,
   codingAgentListParamsSchema,
   codingAgentMessageParamsSchema,
@@ -26,7 +27,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one stopped, what one published.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -49,6 +50,7 @@ export type CodingAgentClient = Pick<
   | "start"
   | "messages"
   | "message"
+  | "choose"
   | "stop"
   | "pullRequest"
 >;
@@ -145,6 +147,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "messaging an agent names the agent, its words, and the send's key",
         );
         const answer = yield* asked(client.message(agentId, request));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_CHOOSE]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...choice } = yield* read(
+          codingAgentChooseParamsSchema,
+          params,
+          "changing an agent's model names the agent, a model, and its effort",
+        );
+        const answer = yield* asked(client.choose(agentId, choice));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

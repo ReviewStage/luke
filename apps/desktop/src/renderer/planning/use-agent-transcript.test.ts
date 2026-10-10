@@ -7,7 +7,9 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -27,8 +29,14 @@ function page(
   messages: readonly CodingAgentMessage[],
   cursor: string,
   status: CodingAgentStatus,
+  failure?: CodingAgentFailure,
 ): CodingAgentMessagesAnswerView {
-  return { messages, cursor, status };
+  return {
+    messages,
+    cursor,
+    status,
+    ...(failure === undefined ? undefined : { failureReason: failure }),
+  };
 }
 
 interface Standing {
@@ -127,22 +135,29 @@ test("a running agent's tab reads from the start, reads on from each page's curs
   await tab.answer(page([], "1:1", CODING_AGENT_STATUS.RUNNING));
   assert.equal(tab.reads.length, 3);
 
-  // A message heard again is redrawn in place, and a page saying the agent ended ends the loop.
+  // A message heard again is redrawn in place, and a page saying the agent ended ends the loop, with why where it failed.
+  assert.equal(tab.control().failure, undefined);
   await tab.answer(
-    page([message("a", "Reading the repository. Done.")], "1:2", CODING_AGENT_STATUS.COMPLETED),
+    page(
+      [message("a", "Reading the repository. Done.")],
+      "1:2",
+      CODING_AGENT_STATUS.FAILED,
+      CODING_AGENT_FAILURE.MODEL,
+    ),
   );
   assert.deepEqual(
     tab.control().messages.map((each) => each.parts),
     [[{ type: "text", text: "Reading the repository. Done." }]],
   );
+  assert.equal(tab.control().failure, CODING_AGENT_FAILURE.MODEL);
   assert.deepEqual(tab.statuses, [
     CODING_AGENT_STATUS.RUNNING,
     CODING_AGENT_STATUS.RUNNING,
-    CODING_AGENT_STATUS.COMPLETED,
+    CODING_AGENT_STATUS.FAILED,
   ]);
   // The ended agent is read through: one more page, empty, and then nothing.
   assert.equal(tab.reads.length, 4);
-  await tab.answer(page([], "1:2", CODING_AGENT_STATUS.COMPLETED));
+  await tab.answer(page([], "1:2", CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.MODEL));
   await settle();
   assert.equal(tab.reads.length, 4);
 });

@@ -20,15 +20,15 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { AgentComposer } from "./agent-composer";
-import { type PublishedDoors, PublishedHead, PublishedRow } from "./agent-published";
+import { type PublishedDoors, PublishedRow } from "./agent-published";
 import {
   AGENT_PART,
-  AGENT_STATUS_LABEL,
   type AgentPart,
   agentLines,
   agentRows,
   agentStillWriting,
   agentTabLabel,
+  endLine,
   messageWords,
   opensOnGitHub,
   showsPublishedRow,
@@ -43,12 +43,13 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
+import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, what it published, its transcript live, and the message box under it.
+ * agent-tab.tsx -- one coding agent's tab in the side panel: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Transcript and Work tabs alike, from the
@@ -62,19 +63,22 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
- * gone the moment it ends so a finished turn ends on its own last line. The list
+ * gone the moment it ends so a finished turn ends on its own last line; a
+ * turn that was stopped or failed ends on one quiet line saying so, with
+ * why where the service said. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
- * drawn and goes nowhere. The head wears the pull request or the branch
- * the agent published (`agent-published.tsx`), and a finished transcript
- * ends on a row summing the pull request up. Every word here is the
- * agent's or the plan's, so the root is left out of the screen recording
- * (`ph-no-capture`) as a second line behind the recording's text masking.
- * Under the transcript stands the composer (`agent-composer.tsx`): a line
- * the developer sends joins the transcript at once as theirs and is read
- * back from the service's own row, and the Stop is the composer's, the one
- * the tab has.
+ * drawn and goes nowhere. A finished transcript ends on a row summing the
+ * pull request up. Every word here is the agent's or the plan's, so the
+ * root is left out of the screen recording (`ph-no-capture`) as a second
+ * line behind the recording's text masking. Under the transcript stands
+ * the composer (`agent-composer.tsx`), with no head above either: where
+ * the agent stands is its tab's dot and the transcript's own lines, what
+ * it runs on is the model chip at the box's foot, and what it published
+ * is the chip after it. A line the developer sends joins the transcript at
+ * once as theirs and is read back from the service's own row, and the
+ * Stop is the composer's, the one the tab has.
  */
 
 /** What the tab says before the agent's first message lands. */
@@ -223,40 +227,13 @@ export function AgentStatusDot({ status }: { status: CodingAgentSummary["status"
   );
 }
 
-/** The tab's head: model · effort · status, and what the agent published. The Stop is the composer's, under the transcript. */
-export function AgentHeader({
-  agent,
-  models,
-  published,
-  doors,
-}: {
-  agent: CodingAgentSummary;
-  models: readonly CatalogModel[] | undefined;
-  /** What the agent published, once the service has said; nothing before. */
-  published: CodingAgentPullRequestAnswer | undefined;
-  doors: PublishedDoors;
-}): React.JSX.Element {
-  return (
-    <header className="agent-tab-header">
-      <AgentStatusDot status={agent.status} />
-      <span className="agent-tab-title">
-        <strong>{agentTabLabel(agent, models)}</strong>
-        <span className="agent-tab-separator"> · </span>
-        {agent.effort}
-        <span className="agent-tab-separator"> · </span>
-        <span data-status={agent.status}>{AGENT_STATUS_LABEL[agent.status]}</span>
-      </span>
-      <PublishedHead published={published} doors={doors} />
-    </header>
-  );
-}
-
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 export function AgentTranscriptView({
   messages,
   reading,
   failed,
   working,
+  ended,
   onRetry,
   openGitHub,
   copyText,
@@ -267,6 +244,8 @@ export function AgentTranscriptView({
   failed: boolean;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
   working: boolean;
+  /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
+  ended?: string | undefined;
   onRetry: () => void;
   /** Opens a page of GitHub's in the browser, which is where the agent's pull request lives. */
   openGitHub: (url: string) => void;
@@ -295,6 +274,11 @@ export function AgentTranscriptView({
           {working ? (
             <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
               <Shimmer>{WORKING_LINE}</Shimmer>
+            </p>
+          ) : null}
+          {ended !== undefined ? (
+            <p className="agent-end-line" data-ended="" aria-live="polite">
+              {ended}
             </p>
           ) : null}
           {footer}
@@ -330,14 +314,16 @@ export function AgentTranscriptView({
 }
 
 /**
- * The tab as drawn from what it holds: the head, the transcript with the
- * lines sent and not yet read back at its end, and the composer under it.
+ * The tab as drawn from what it holds: the transcript with the lines sent
+ * and not yet read back at its end, and the composer under it.
  */
 export function AgentTabView({
   agent,
   models,
+  readModels,
   transcript,
   composer,
+  model,
   published,
   doors,
   onStop,
@@ -346,8 +332,10 @@ export function AgentTabView({
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
+  readModels: () => void;
   transcript: AgentTranscriptControl;
   composer: AgentComposerControl;
+  model: AgentModelControl;
   /** What the agent published, once the service has said; nothing before. */
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
@@ -357,12 +345,12 @@ export function AgentTabView({
 }): React.JSX.Element {
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
-      <AgentHeader agent={agent} models={models} published={published} doors={doors} />
       <AgentTranscriptView
         messages={agentLines(transcript.messages, composer.sent)}
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(agent.status)}
+        ended={endLine(agent.status, transcript.failure)}
         onRetry={transcript.onRetry}
         openGitHub={openGitHub}
         copyText={copyText}
@@ -373,7 +361,16 @@ export function AgentTabView({
         }
       />
       <footer className="agent-tab-foot">
-        <AgentComposer status={agent.status} composer={composer} onStop={onStop} />
+        <AgentComposer
+          status={agent.status}
+          composer={composer}
+          model={model}
+          models={models}
+          readModels={readModels}
+          published={published}
+          doors={doors}
+          onStop={onStop}
+        />
       </footer>
     </section>
   );
@@ -403,6 +400,7 @@ export function AgentTab({
     send: control.onMessage,
     onStatus: control.onStatus,
   });
+  const model = useAgentModel({ agent, choose: control.onChoose });
   const published = useAgentPullRequest({
     agentId: agent.id,
     status: agent.status,
@@ -415,8 +413,10 @@ export function AgentTab({
     <AgentTabView
       agent={agent}
       models={control.models}
+      readModels={control.readModels}
       transcript={transcript}
       composer={composer}
+      model={model}
       published={published}
       doors={{ openGitHub, copy: (words) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words }) }}
       onStop={() => control.onStop(agent.id)}

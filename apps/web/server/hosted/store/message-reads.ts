@@ -458,6 +458,9 @@ export interface LatestTurn {
   readonly status: string;
   /** eve's own id for the turn, which a Stop names to eve; null for a row eve has not started. */
   readonly eveTurnId: string | null;
+  /** The word for how a failed turn failed, and the detail behind it; null on a turn that did not. */
+  readonly failure: string | null;
+  readonly failureDetail: string | null;
   readonly cancelRequestedAt: Date | null;
 }
 
@@ -466,6 +469,8 @@ const LatestTurnRowSchema = Schema.Struct({
   id: Schema.String,
   status: Schema.String,
   eveTurnId: Schema.NullOr(Schema.String),
+  failure: Schema.NullOr(Schema.String),
+  failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
 });
 
@@ -480,6 +485,8 @@ const findLatestTurns = SqlSchema.findAll({
         id: turns.id,
         status: turns.status,
         eveTurnId: turns.eveTurnId,
+        failure: turns.failure,
+        failureDetail: turns.failureDetail,
         cancelRequestedAt: turns.cancelRequestedAt,
       })
       .from(turns)

@@ -13,14 +13,16 @@ import {
   MODEL_CHANGE_FAILED,
   START_NEEDS_REPOSITORY,
   startFailureNote,
+  withAgent,
   withAgentStatus,
 } from "./coding-agent-model";
 import type { MessageSender } from "./use-agent-composer";
+import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
 
 /**
- * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, the Stop, a message to one, and the models the menu offers.
+ * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
  * The agents are read when a plan opens and again after a Start or a Stop,
  * and never on a clock; an agent's status moves between those reads only
@@ -32,8 +34,10 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * another request with a key of its own. The models the menu offers and
  * the account's default are read when the menu asks, so the menu shows the
  * catalog as it stands and the default the last change wrote; a model or
- * effort picked in the menu is written as the account's default, which is
- * what the next Start runs on.
+ * effort picked in the Start menu is written as the account's default, which
+ * is what the next Start runs on; one picked on an agent's chip is written
+ * on that agent alone, for its next step, and the agent the service answers
+ * takes its place in the list.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
@@ -69,6 +73,8 @@ export interface CodingAgentsControl {
   onStop: (agentId: string) => Promise<void>;
   /** Sends one agent a message under the key the composer made, and takes the agent's status from the answer. */
   onMessage: MessageSender;
+  /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
+  onChoose: ChoiceWriter;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
@@ -256,6 +262,23 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const onChoose = useCallback<ChoiceWriter>(
+    async (agentId, choice) => {
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
+        agentId,
+        model: choice.model,
+        effort: choice.effort,
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      if (!("failure" in answer)) {
+        setList((was) =>
+          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+        );
+      }
+      return answer;
+    },
+    [act],
+  );
+
   const onStatus = useCallback((agentId: string, status: CodingAgentStatus) => {
     setList((was) =>
       was.agents === undefined
@@ -292,6 +315,7 @@ export function useCodingAgents(input: {
     },
     onStop,
     onMessage,
+    onChoose,
     onStatus,
     readTranscript,
     readPullRequest,

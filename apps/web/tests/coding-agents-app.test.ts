@@ -5,6 +5,7 @@ import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
   codingAgentAnswerSchema,
@@ -37,6 +38,7 @@ import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { codingAgentsApp } from "../server/coding-agents-app";
 import {
+  BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
@@ -61,7 +63,7 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { sentLineId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
-import { CODER } from "../server/hosted/coder-host/bounds";
+import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { cursorOfWire } from "../server/hosted/coder-host/transcript";
 import {
@@ -98,6 +100,7 @@ import { testSqlClient } from "./support/sql-client";
 const ORIGIN = "https://luke.test";
 const PLAN_AGENTS = "/api/plans/agents";
 const AGENT_MESSAGES = "/api/agents/messages";
+const AGENT = "/api/agents/agent";
 const AGENT_STOP = "/api/agents/stop";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
 
@@ -700,6 +703,53 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a change of model writes the choice on the agent's row and answers the agent with it, leaving the account's default; it is refused by name for another account's agent, a model or effort outside the catalog, and a choice missing its effort",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const chooseAs = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body }));
+
+        const changed = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* chooseAs(owner, { model: "openai/gpt-6.1-sol", effort: "low" }),
+        );
+        assert.deepEqual(
+          { id: changed.agent.id, model: changed.agent.model, effort: changed.agent.effort },
+          { id: agent.id, model: "openai/gpt-6.1-sol", effort: "low" },
+        );
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        assert.deepEqual([stored.value.model, stored.value.effort], ["openai/gpt-6.1-sol", "low"]);
+        assert.equal(yield* readAccountPreferences(owner), undefined, "the default stands");
+
+        assert.deepEqual(
+          yield* chooseAs(other, { model: "openai/gpt-6.1-sol", effort: "high" }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        for (const body of [
+          { model: "anthropic/claude-haiku-1", effort: "high" },
+          { model: "openai/gpt-6.1-sol", effort: "max" },
+          { model: "openai/gpt-6.1-sol" },
+        ]) {
+          assert.deepEqual(
+            yield* chooseAs(owner, body),
+            refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+          );
+        }
+        const kept = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(kept));
+        assert.deepEqual([kept.value.model, kept.value.effort], ["openai/gpt-6.1-sol", "low"]);
+      }),
+  );
+
+  it.effect(
     "what an agent published is the pull request its rows address, read from GitHub with its sizes and its head's checks, and kept for the TTL: a second ask inside it reads GitHub no more, one past it sees the pull request drafted, merged, or closed and its checks moved",
     () =>
       Effect.gen(function* () {
@@ -1047,6 +1097,34 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
+
+  it.effect(
+    "a page read after the turn failed says why as the wire's word, read off the turn's failure and the host's words in its detail",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, target, writer, turnId, ask } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 3,
+          status: BRAIN_REQUEST_STATUS.FAILED,
+          failure: BRAIN_REQUEST_FAILURE.MODEL,
+          failureDetail: `MODEL_CALL_FAILED ${CODER_REFUSAL.NOT_REACHABLE}`,
+          responseIds: [],
+          at: 0,
+        });
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
+        assert.equal(page.failureReason, CODING_AGENT_FAILURE.GITHUB);
+      }),
+  );
 
   it.effect(
     "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",

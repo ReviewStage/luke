@@ -5,7 +5,9 @@ import {
 import {
   CHECK_SUMMARY,
   type CheckSummary,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
@@ -14,7 +16,12 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -24,7 +31,8 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
- * what its status dot says, whether its transcript is still followed, how
+ * what its status dot says, what line ends a transcript whose turn failed
+ * or was stopped, whether its transcript is still followed, how
  * a page of its messages joins the ones held, how a stored message's parts
  * are read for drawing, which of its rows wait above the composer rather
  * than in the transcript, when a line the developer sent has been read
@@ -33,14 +41,33 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * finished turn up say. Nothing here asks anything.
  */
 
-/** What each status says beside its dot. */
-export const AGENT_STATUS_LABEL = {
-  [CODING_AGENT_STATUS.STARTING]: "Starting",
-  [CODING_AGENT_STATUS.RUNNING]: "Running",
-  [CODING_AGENT_STATUS.COMPLETED]: "Completed",
-  [CODING_AGENT_STATUS.FAILED]: "Failed",
-  [CODING_AGENT_STATUS.CANCELLED]: "Cancelled",
-} as const satisfies Record<CodingAgentStatus, string>;
+/** What a failed turn's end line says after "Failed", by the service's one word for why; nothing for a reason it has no words for. */
+const AGENT_FAILURE_WORDS = {
+  [CODING_AGENT_FAILURE.MODEL]: "the model call failed",
+  [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
+  [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
+  [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
+  [CODING_AGENT_FAILURE.OTHER]: undefined,
+} as const satisfies Record<CodingAgentFailure, string | undefined>;
+
+/** The quiet line a transcript ends on once its turn failed or was stopped; nothing for an agent still writing or one that completed. */
+export function endLine(
+  status: CodingAgentStatus,
+  failure: CodingAgentFailure | undefined,
+): string | undefined {
+  switch (status) {
+    case CODING_AGENT_STATUS.CANCELLED:
+      return "Stopped";
+    case CODING_AGENT_STATUS.FAILED: {
+      const words = failure === undefined ? undefined : AGENT_FAILURE_WORDS[failure];
+      return words === undefined ? "Failed" : `Failed: ${words}`;
+    }
+    case CODING_AGENT_STATUS.STARTING:
+    case CODING_AGENT_STATUS.RUNNING:
+    case CODING_AGENT_STATUS.COMPLETED:
+      return undefined;
+  }
+}
 
 /** The statuses an agent may still write under, which is when its transcript is followed and it can be stopped. */
 const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -78,6 +105,24 @@ const SHARED_FAILURE_NOTE = {
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
 export const MODEL_CHANGE_FAILED = "The model could not be changed. Try again.";
+
+/** What a change of an agent's model that did not take says under its box. */
+export function chooseFailureNote(failure: CodingAgentCallFailure): string {
+  switch (failure) {
+    case CODING_AGENT_CALL_FAILURE.NOT_FOUND:
+      return "This agent no longer exists.";
+    case CODING_AGENT_CALL_FAILURE.INVALID_CHOICE:
+      return "That model isn't offered any more. Choose another.";
+    case CODING_AGENT_CALL_FAILURE.UNANSWERED:
+    case CODING_AGENT_CALL_FAILURE.NO_REPOSITORY:
+    case CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED:
+    case CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE:
+    case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
+    case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
+    case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+      return MODEL_CHANGE_FAILED;
+  }
+}
 
 /** What a Start that did not start says beside the button. */
 export function startFailureNote(failure: CodingAgentCallFailure): string {
@@ -160,6 +205,20 @@ function compareVersions(a: readonly number[], b: readonly number[]): number {
 
 /** The providers in the order the menu groups them. */
 const PROVIDER_ORDER: readonly string[] = Object.values(MODEL_PROVIDER);
+
+const PROVIDER_WORDS: ReadonlySet<string> = new Set(PROVIDER_ORDER);
+
+/** The provider whose mark a model wears: the catalog's word where the model is listed, else the one its id is prefixed with, else none. */
+export function providerOfModel(
+  models: readonly CatalogModel[] | undefined,
+  modelId: string,
+): ModelProvider | undefined {
+  const listed = models?.find((model) => model.id === modelId)?.provider;
+  if (listed !== undefined) return listed;
+  const prefix = modelId.slice(0, modelId.indexOf(CATALOG_ID_SEPARATOR));
+  // SAFETY: membership in the set built from MODEL_PROVIDER's values is what the union names.
+  return PROVIDER_WORDS.has(prefix) ? (prefix as ModelProvider) : undefined;
+}
 
 /**
  * The models as the menus list them: grouped by provider, Anthropic's first,
@@ -321,6 +380,14 @@ export function applyMessagesPage(
   const known = new Set(held.map((message) => message.id));
   const appended = page.filter((message) => !known.has(message.id));
   return [...joined, ...appended];
+}
+
+/** The agents with one agent as the service just answered it, in its place. */
+export function withAgent(
+  agents: readonly CodingAgentSummary[],
+  answered: CodingAgentSummary,
+): readonly CodingAgentSummary[] {
+  return agents.map((agent) => (agent.id === answered.id ? answered : agent));
 }
 
 /** The agents with one agent's status read from its own transcript page, where the page knows better than the list. */

@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentFailure,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
@@ -11,7 +12,7 @@ import type { StoredUIMessage } from "../../core.js";
 import { awaitingLinesOf, latestTurnsOf } from "../coding-agent-store.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
-import { type AgentStanding, codingAgentStatusOf } from "./status.js";
+import { type AgentStanding, codingAgentFailureOf, codingAgentStatusOf } from "./status.js";
 
 /**
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
@@ -29,9 +30,9 @@ import { type AgentStanding, codingAgentStatusOf } from "./status.js";
  * costs one held read per hold rather than a spin; an agent that has ended
  * answers at once, unless a message of the developer's awaits the turn it
  * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
- * the page was read, so the reader learns the agent ended from the page
- * that ends the hold and asks nothing else. The wire spells the cursor as
- * the two numbers joined by a colon.
+ * the page was read, and why where the newest turn failed, so the reader
+ * learns the agent ended from the page that ends the hold and asks nothing
+ * else. The wire spells the cursor as the two numbers joined by a colon.
  */
 
 const CURSOR_SEPARATOR = ":";
@@ -50,11 +51,12 @@ export function cursorToWire(cursor: MessageCursor): string {
 /** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
 
-/** A page of the transcript as the route answers it: each row's message as the store holds it, which is the wire's `CodingAgentMessage` once serialized, and the agent's status as it stood. */
+/** A page of the transcript as the route answers it: each row's message as the store holds it, which is the wire's `CodingAgentMessage` once serialized, the agent's status as it stood, and why where its newest turn failed. */
 export interface TranscriptPage {
   readonly messages: readonly StoredUIMessage[];
   readonly cursor: MessageCursor;
   readonly status: CodingAgentStatus;
+  readonly failureReason?: CodingAgentFailure;
 }
 
 type TranscriptEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
@@ -65,17 +67,21 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** The agent's status now, read from its newest turn and whether a line awaits one. */
+/** The agent's status now, read from its newest turn and whether a line awaits one, and why where that turn failed. */
 const statusNow = (target: ConversationTarget, createdAt: Date) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
-    return codingAgentStatusOf(turns.get(target.conversationId), {
+    const turn = turns.get(target.conversationId);
+    const status = codingAgentStatusOf(turn, {
       createdAt,
       now,
       lineAwaits: awaiting.has(target.conversationId),
     });
+    const failureReason =
+      status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
+    return { status, failureReason };
   });
 
 /** One read of the page past the cursor with the status beside it; a page the vocabulary refuses answers no messages, since nothing readable stands past the cursor. */
@@ -92,8 +98,13 @@ function pagePast(
       tools,
       after,
     );
-    const status = yield* statusNow(target, createdAt);
-    return { messages: read.ok ? read.value.map((record) => record.message) : [], cursor, status };
+    const { status, failureReason } = yield* statusNow(target, createdAt);
+    return {
+      messages: read.ok ? read.value.map((record) => record.message) : [],
+      cursor,
+      status,
+      ...(failureReason === undefined ? undefined : { failureReason }),
+    };
   });
 }
 

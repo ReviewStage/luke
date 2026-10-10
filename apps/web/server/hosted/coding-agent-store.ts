@@ -26,7 +26,8 @@ import { awaitingLinesOf, type LatestTurn, latestTurnsOf } from "./store/message
  * relay's to write, and the newest turn is what the agent's status is read
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
- * rather than finding an agent nothing runs. Every function is an effect
+ * rather than finding an agent nothing runs. The model and effort on the
+ * row are read at every step, so a change to them is the next step's. Every function is an effect
  * over the ambient `SqlClient` and names no database of its own.
  */
 
@@ -162,6 +163,22 @@ const insertAgent = SqlSchema.findOne({
       .returning(CODING_AGENT_COLUMNS),
 });
 
+const updateAgentChoice = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    model: Schema.String,
+    effort: Schema.String,
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId, model, effort }) =>
+    db
+      .update(codingAgent)
+      .set({ model, effort })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .returning(CODING_AGENT_COLUMNS),
+});
+
 const findAgentsOfPlan = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -293,6 +310,15 @@ export function readCodingAgent(
   agentId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgent({ userId, agentId });
+}
+
+/** The account's agent given another model and effort, which its next step runs on; nothing for an agent the account does not own. */
+export function updateCodingAgentChoice(
+  userId: string,
+  agentId: string,
+  choice: { readonly model: string; readonly effort: string },
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return updateAgentChoice({ userId, agentId, model: choice.model, effort: choice.effort });
 }
 
 /** The account's agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for another account's or no agent's. */

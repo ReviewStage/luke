@@ -110,8 +110,20 @@ function mount(initial: Standing) {
     return createElement(AgentTabView, {
       agent: { ...AGENT, status: held.status },
       models: undefined,
-      transcript: { messages: held.messages, reading: false, failed: false, onRetry: ignore },
+      readModels: ignore,
+      transcript: {
+        messages: held.messages,
+        failure: undefined,
+        reading: false,
+        failed: false,
+        onRetry: ignore,
+      },
       composer,
+      model: {
+        choice: { model: AGENT.model, effort: AGENT.effort },
+        note: undefined,
+        choose: ignore,
+      },
       published: undefined,
       doors: { openGitHub: ignore, copy: ignore },
       onStop: () => {
@@ -172,9 +184,11 @@ function mount(initial: Standing) {
     /** The developer's bubbles in the transcript, by their words. */
     bubbles: () =>
       [...container.querySelectorAll('[role="log"] .is-user')].map((each) => each.textContent),
-    /** The one button at the card's right: its name and whether it takes a press; none drawn reads as none. */
+    /** The one button at the card's right: its name and whether it takes a press; none drawn reads as none. The chips at the foot's left are not it. */
     control: () => {
-      const buttons = [...container.querySelectorAll<HTMLButtonElement>(".agent-composer button")];
+      const buttons = [
+        ...container.querySelectorAll<HTMLButtonElement>(".agent-composer button"),
+      ].filter((each) => !each.classList.contains("plan-compose-chip"));
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
       assert.equal(buttons.filter((each) => each.textContent !== "Retry").length, 1);
       if (one === undefined) return undefined;
@@ -195,7 +209,7 @@ test("the box reads the same running or idle: one placeholder, no hint, no queue
     assert.equal(tab.field().placeholder, PLACEHOLDER);
     assert.equal(tab.container.querySelector(".agent-composer-hint"), null);
     assert.equal(tab.container.querySelector("[data-queued-id]"), null);
-    assert.equal(tab.container.querySelector('[role="menu"], [aria-haspopup="menu"]'), null);
+    assert.equal(tab.container.querySelector('[role="menu"], [role="listbox"]'), null);
     assert.equal(tab.container.querySelectorAll(".agent-composer textarea").length, 1);
   };
   same();
@@ -248,7 +262,7 @@ test("the one button is Send with words, disabled with none while the agent is i
     await Promise.resolve();
   });
   assert.equal(tab.stops(), 1);
-  assert.equal(tab.container.querySelector("header button"), null);
+  assert.equal(tab.container.querySelector("header"), null);
 
   // A starting agent has no turn the service could cancel yet, so Stop waits for one.
   await tab.stand({ status: CODING_AGENT_STATUS.STARTING });

@@ -1724,7 +1724,7 @@ runs a turn under the scripted model with no tool call, so no sandbox opens.
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, messages, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+reads, messages, re-models, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -1755,7 +1755,12 @@ and an agent with a message of the developer's still awaiting its turn
 (`awaitingLinesOf`) reading as running whatever its newest turn says.
 `GET /api/agents/{id}/messages?after=<seq>:<revision>` answers the
 conversation's rows past the cursor as `UIMessage`s, the cursor to read on
-from, and the agent's status as the page was read
+from, the agent's status as the page was read, and, where that status is
+`failed`, `failureReason` as one of the wire's fixed words (`model`,
+`sandbox`, `github`, `abandoned`, `other`), mapped by
+`coder-host/status.ts`'s `codingAgentFailureOf` from the turn row's failure
+word and the host's own refusal sentences in its detail, so nothing eve or
+a provider said reaches the desktop
 (`coder-host/transcript.ts`): a row is new past a cursor when its sequence
 is higher or it was amended in place at a later journal revision, which is
 how a turn's journal is heard again as it grows; a read with nothing new is
@@ -1792,6 +1797,15 @@ client's twenty-second loop, is `agent-not-ready` (409, tried again); a
 session eve no longer runs is `agent-retired` (409), since the agent's
 sandbox lives with its session; any other answer is `unavailable`, and none
 of them leaves a row behind.
+`PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
+catalog exactly as a Start checks its own, and writes the choice on the
+agent's row (`updateCodingAgentChoice`), answering the agent's summary with
+it; the coder agent reads the row at every step (`coder/agent.ts`'s
+`defineDynamic`, through `coder-host/host.ts`'s `model`), so a change
+mid-turn is the next step's and an idle agent's next turn takes it. It
+refuses another account's agent as not found and a model or effort the
+catalog does not offer as `invalid-request`, and leaves the account's
+default as it was.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by
 eve's own id on the row, then the row's stamp; the service's hook stops the
 sandbox as the cancelled turn ends, and anything the agent pushed stays.

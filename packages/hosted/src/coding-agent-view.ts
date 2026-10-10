@@ -17,7 +17,7 @@ import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
  * are the few a window can act on: the service never answered, the plan or
  * the agent is gone, the plan names no repository yet, the App does not
  * reach it, the account must sign in with GitHub again, the choice named is
- * not one the service offers, or — for a message — the words run past the
+ * not one the service offers now, or — for a message — the words run past the
  * bound, the agent's session is still coming up, or it has ended for good.
  */
 
@@ -124,6 +124,14 @@ export const codingAgentMessageParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentMessageParams = typeof codingAgentMessageParamsSchema.Type;
+
+/** One agent's model and effort changed for its next step, as the window asks it: the agent and the choice. */
+export const codingAgentChooseParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...modelChoiceSchema.fields,
+});
+
+export type CodingAgentChooseParams = typeof codingAgentChooseParamsSchema.Type;
 
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({
