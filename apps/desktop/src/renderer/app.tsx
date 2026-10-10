@@ -89,8 +89,8 @@ export function App(): React.JSX.Element {
       // settings rather than the settings. A flow that needs a deeper page
       // sets it right after this reset.
       setSettingsView(SETTINGS_VIEW.ROOT);
-      // `PanelTab` and the counted tab are the same union: both are the
-      // guide's own set, which `PanelTab` aliases.
+      // `PanelTab` and the counted tab are the same union: both are
+      // `APP_PANEL_TAB`'s own set, which `PanelTab` aliases.
       window.sidecar.recordSurfaceEvent(PRODUCT_SURFACE_EVENT.PANEL_TAB_CHANGE, {
         panel_tab: next,
       });

@@ -6,7 +6,7 @@ import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettings } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS, type WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
-import { appSettingsWire } from "../../testing/spoken-setting-bridge";
+import { appSettingsWire } from "../../testing/settings-wire";
 import { createHostOperator } from "./host-operator";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());

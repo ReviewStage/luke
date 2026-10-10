@@ -75,10 +75,9 @@ import { isWireValue, type WireGuard, type WireGuardValue, wireResult } from "./
 
 /**
  * Every effect a window may ask this build's main process for, named once.
- * There is no second way in: a press, a spoken setting change, and a row's
- * own control all mint one of these kinds and hand it to `app:act`, whose
- * router parses the kind's payload, runs that kind's trust checks, and
- * dispatches. Adding an effect is adding an entry here, its payload schema
+ * There is no second way in: a press and a row's own control both mint one
+ * of these kinds and hand it to `app:act`, whose router parses the kind's
+ * payload, runs that kind's trust checks, and dispatches. Adding an effect is adding an entry here, its payload schema
  * below, its answer's guard beside it, and its one row in the router — a
  * command with no kind reaches nothing.
  *

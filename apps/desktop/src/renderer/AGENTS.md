@@ -101,22 +101,15 @@ Every motion begins and ends at the resting pose, or it snaps there on the way i
 and out; every layer of a gesture shares a period, because the app hands the face
 back after the longest of them.
 
-## Luke's knowledge of himself
+## Settings rows
 
-The guide is the one place Luke's self-knowledge is described, so it is what
-Luke can say about himself.
+`APP_SETTING_SCHEMA` is the one description of a stored setting: its row and the
+settings search both read it, so a setting added there is drawn and findable in
+the same change.
 
-**When you add a feature or a setting, teach the guide about it in the same
-change.** A capability the guide does not describe is one Luke will deny having,
-and a stale entry is one he will misdescribe. The settings half is generated from
-`APP_SETTING_SCHEMA` and cannot go stale; the facts half is hand-written, and its
-only test asserts a fact *exists* for every label — never that one is true.
-
-- A setting only a hand may change stays `adjustable: false` with a `manual` path,
-  because the refusal Luke voices is itself the guidance.
-- Credentials are never adjustable, never spoken, and never described beyond
-  whether a provider is connected. The guide leaves the machine, so nothing in it
-  may carry a key, a key's shape, or an environment variable's value.
 - A setting's page, section, order, and whether its row is drawn are the schema
   entry's answers and nobody else's. `SchemaSettingRows` is the only renderer of a
   schema row; a control that cannot be one is `rows: SETTING_ROWS.BESPOKE`.
+- A credential is never described beyond whether a provider is connected, so no
+  setting's description may carry a key, a key's shape, or an environment
+  variable's value.

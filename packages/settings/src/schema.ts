@@ -9,7 +9,6 @@ import {
   SETTINGS_RESET_SCOPE,
   type SettingsVisibility,
 } from "./schema-types.js";
-import { APPEARANCE_PAGE, VOICE_PAGE } from "./settings-paths.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
 
 export {
@@ -39,7 +38,7 @@ function voiceOptionLabel(voice: LiveVoice): string {
   return voice === LIVE_DEFAULTS.VOICE ? `${name} (default)` : name;
 }
 
-/* A theme is said in lowercase, as it is stored; on a control it reads as a name. */
+/* A theme is stored in lowercase; on a control it reads as a name. */
 function themeOptionLabel(theme: Theme): string {
   return theme.charAt(0).toUpperCase() + theme.slice(1);
 }
@@ -54,18 +53,16 @@ export const APP_SETTING_SCHEMA = {
     label: "Theme",
     description: "Whether Luke's windows are light or dark, or follow the Mac's own appearance.",
     values: THEME_LIST,
-    say: (theme) => theme,
+    token: (theme) => theme,
     optionLabel: themeOptionLabel,
     guard: (value: UnparsedWireValue) => optional(value, isTheme),
     default: THEME.DARK,
     page: SETTINGS_PAGE.APPEARANCE,
     order: 5,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    manual: APPEARANCE_PAGE,
     // Nothing to run per write: main steers the app from every settings
     // snapshot it publishes, so a write that failed steers nothing.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    adjustable: true,
   }),
   openAtLogin: toggleSetting({
     field: "openAtLogin",
@@ -76,9 +73,7 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 10,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    manual: APPEARANCE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
-    adjustable: true,
   }),
   showInDock: toggleSetting({
     field: "showInDock",
@@ -89,9 +84,7 @@ export const APP_SETTING_SCHEMA = {
     page: SETTINGS_PAGE.APPEARANCE,
     order: 20,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    manual: APPEARANCE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.DOCK,
-    adjustable: true,
   }),
   voice: choiceSetting({
     field: "voice",
@@ -100,7 +93,7 @@ export const APP_SETTING_SCHEMA = {
     description:
       "Which voice Luke speaks with. A conversation keeps the voice it opened with, so choosing one ends the conversation standing, and the next opens in the new voice.",
     values: OFFERED_VOICE_LIST,
-    say: (voice) => voice,
+    token: (voice) => voice,
     optionLabel: voiceOptionLabel,
     guard: (value: UnparsedWireValue) => optional(value, isLiveVoice),
     default: LIVE_DEFAULTS.VOICE,
@@ -108,9 +101,7 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.CONTROLS,
     order: 30,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.VOICE,
-    adjustable: true,
     visible: voiceControlDrawn,
   }),
   voiceCaptions: toggleSetting({
@@ -125,9 +116,7 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.CONTROLS,
     order: 50,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    adjustable: true,
     visible: voiceControlDrawn,
   }),
   voiceHotkey: hotkeySetting({
@@ -153,9 +142,7 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.CONTROLS,
     order: 90,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.MEDIA_DUCK,
-    adjustable: true,
     visible: voiceControlDrawn,
   }),
   preferBuiltInMicrophone: toggleSetting({
@@ -171,9 +158,7 @@ export const APP_SETTING_SCHEMA = {
     section: SETTING_SECTION.CONTROLS,
     order: 110,
     resetScope: SETTINGS_RESET_SCOPE.VOICE,
-    manual: VOICE_PAGE,
     sideEffect: SETTING_SIDE_EFFECT.NONE,
-    adjustable: true,
     visible: voiceControlDrawn,
   }),
 } as const;

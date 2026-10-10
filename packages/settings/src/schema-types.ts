@@ -1,5 +1,5 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
-import type { AppGuideSetting, AppSettingId } from "@sidecar/guide";
+import type { AppSettingId, DescribedSetting } from "@sidecar/guide";
 import type { UnparsedWireValue } from "@sidecar/wire";
 import type { RuntimeStatus } from "./status.js";
 
@@ -67,8 +67,8 @@ type SettingRows = (typeof SETTING_ROWS)[keyof typeof SETTING_ROWS];
 /** The concrete runtime families a stored setting may use after its schema guard. */
 export type StoredSettingValue = string | number | boolean | undefined;
 
-/** How a guide builder reads the settings as they stand, field by field. */
-export type AppSettingGuideSettings = (field: string) => StoredSettingValue;
+/** How a description reads the settings as they stand, field by field. */
+export type AppSettingReader = (field: string) => StoredSettingValue;
 
 export interface SettingGuardResult<Value> {
   valid: boolean;
@@ -94,15 +94,15 @@ export interface SettingsVisibility {
   accountDrawn: boolean;
 }
 
-/** One option a row's control draws, which is not always what the guide says aloud. */
+/** One option a row's control draws: the token it stores by, and the words it shows. */
 export interface SettingOption {
   value: string;
   label: string;
 }
 
 /**
- * What a choice row's control offers, for a choice the guide's own vocabulary
- * cannot stand in for: options observed rather than fixed by the build, or a
+ * What a choice row's control offers, for a choice its own values cannot
+ * stand in for: options observed rather than fixed by the build, or a
  * token for no choice at all that no stored value could collide with. The three
  * halves are one declaration because they are one statement about one row — a
  * token the options offered is a token the parse has to answer for.
@@ -118,11 +118,11 @@ export interface SettingControl<Value> {
 /**
  * One stored setting, declared once. Everything about it that any consumer
  * needs is here: the store reads `default` and `guard`, the panel reads `page`,
- * `section`, `order`, `rows`, `visible`, and `control`, the guide and the
- * settings search read `ids` and `guide`, the host's and the client's
- * side-effect tables are keyed by `sideEffect`, the counter reads `analytics`,
- * and a spoken change reads `spokenValue`. There is no second record of any of
- * it, and no `switch` anywhere over which setting this is.
+ * `section`, `order`, `rows`, `visible`, `control`, and `describe`, the
+ * settings search reads `ids` and `describe`, the host's and the client's
+ * side-effect tables are keyed by `sideEffect`, and the counter reads
+ * `analytics`. There is no second record of any of it, and no `switch`
+ * anywhere over which setting this is.
  */
 export interface AppSettingSchemaEntry<
   Field extends string = string,
@@ -144,17 +144,15 @@ export interface AppSettingSchemaEntry<
   readonly resetScope?: SettingsResetScope | undefined;
   readonly sideEffect: SettingSideEffectId;
   readonly rows: SettingRows;
-  /** The guide ids this one field speaks under. */
+  /** The setting ids this one field is named by. */
   readonly ids: readonly Id[];
-  /** The guide entries it builds, or none for a field the guide covers elsewhere. */
-  readonly guide: (
-    settings: AppSettingGuideSettings,
-  ) => AppGuideSetting | readonly AppGuideSetting[] | undefined;
+  /** The descriptions it builds, or none for a field whose row is drawn by hand. */
+  readonly describe: (
+    settings: AppSettingReader,
+  ) => DescribedSetting | readonly DescribedSetting[] | undefined;
   /** Whether its row is drawn right now. Absent means always drawn. */
   readonly visible?: ((view: SettingsVisibility) => boolean) | undefined;
   readonly control?: SettingControl<Value> | undefined;
-  /** The value a spoken change's word means, for an adjustable setting. */
-  readonly spokenValue?: ((value: string) => Value | undefined) | undefined;
   /**
    * How a change to it is counted. The id is derived: a change rides one
    * stored write, and `ids[0]` is the id that write is counted under.

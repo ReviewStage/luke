@@ -26,8 +26,9 @@ the host, and a web function alike.
   here and nowhere else; each line is one labelled policy stating one behavior,
   the template's own shape, with no sample line.
 
-No full persona stands here: `@sidecar/guide`'s is the brain's, and shapes
-what the brain hands the voice.
+No full persona stands here: the brain's planning instructions
+(`apps/web/server/hosted/brain-host/planning.ts`) hold it, and shape what the
+brain hands the voice.
 
 ## Tests
 

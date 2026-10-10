@@ -15,11 +15,11 @@ import {
   APP_SETTING_DEFAULTS,
   APP_SETTING_FIELDS,
   type AppSettingField,
+  describedSettings,
   isAppSettingField,
   isSettingsResetScope,
   settingAnalytics,
-  settingFieldForGuideId,
-  settingGuideEntries,
+  settingFieldForId,
   settingIdVisible,
   settingRowsForPage,
   settingsScopeChanged,
@@ -27,12 +27,12 @@ import {
 import type { StoredSettingValue } from "./schema-types.js";
 import { settingsView, settingsVisibility } from "./testing.js";
 
-/** Every guide entry one field builds, over the defaults. */
+/** Every description one field builds, over the defaults. */
 function entriesFor(field: AppSettingField) {
   const read = (name: string): StoredSettingValue =>
     // SAFETY: The guard narrows the name to a field the defaults are keyed by.
     isAppSettingField(name) ? APP_SETTING_DEFAULTS[name] : undefined;
-  const built = APP_SETTING_SCHEMA[field].guide(read);
+  const built = APP_SETTING_SCHEMA[field].describe(read);
   if (built === undefined) return [];
   return Array.isArray(built) ? built : [built];
 }
@@ -79,37 +79,21 @@ test("every field's own declaration answers for everything read of it", () => {
     assert.ok(entry.resetScope === undefined || isSettingsResetScope(entry.resetScope), field);
     for (const id of entry.ids) assert.ok(isAppSettingId(id), `${field} names ${id}`);
 
-    // A row `SchemaSettingRows` draws is one the guide describes, since the
-    // guide entry is what it draws from.
+    // A row `SchemaSettingRows` draws is one with an id, since the row wears
+    // it as the anchor the settings search lands on.
     if (entry.rows === SETTING_ROWS.SCHEMA) assert.ok(entry.ids.length > 0, field);
 
     // Nothing is counted that has no id to count under.
     assert.ok(entry.analytics === undefined || entry.ids.length > 0, field);
 
     const built = entriesFor(field);
-    for (const guideEntry of built) {
-      // A row has to say what it is set to and what its default is; a choice
-      // with no default and no word for nothing would read as blank.
-      assert.notEqual(guideEntry.value, "", guideEntry.id);
-      assert.notEqual(guideEntry.defaultValue, "", guideEntry.id);
+    for (const described of built) {
+      // A row has to say what it is set to; a choice with no default and no
+      // word for nothing would read as blank.
+      assert.notEqual(described.value, "", described.id);
 
       // SAFETY: The built entry's id is checked against the field's own list.
-      assert.ok(entry.ids.includes(guideEntry.id as never), `${field} builds ${guideEntry.id}`);
-
-      // The by-hand path names the page the schema puts the row on, so the
-      // sentence and the page cannot say different things.
-      const page = SETTINGS_PAGE_WORD[entry.page];
-      assert.ok(guideEntry.manual.includes(page), `${guideEntry.id} points at ${page}`);
-
-      // "Back to the default" is an ask the guide can always ground: a
-      // toggle's default is one of its two words, a choice's one it offers.
-      const offered =
-        guideEntry.kind === APP_SETTING_KIND.TOGGLE ? ["on", "off"] : (guideEntry.choices ?? []);
-      assert.ok(guideEntry.defaultValue, `${guideEntry.id} states its default`);
-      assert.ok(
-        offered.includes(guideEntry.defaultValue),
-        `${guideEntry.id}'s default is a value a spoken change can set`,
-      );
+      assert.ok(entry.ids.includes(described.id as never), `${field} builds ${described.id}`);
     }
 
     // `SchemaSettingRows` draws a switch or a pop-up and nothing else, and
@@ -134,31 +118,22 @@ test("every field's own declaration answers for everything read of it", () => {
   }
 });
 
-/** How each page's own name reads in a by-hand path. */
-const SETTINGS_PAGE_WORD = {
-  [SETTINGS_PAGE.ROOT]: "Settings tab",
-  [SETTINGS_PAGE.VOICE]: "Voice page",
-  [SETTINGS_PAGE.APPEARANCE]: "Appearance page",
-  [SETTINGS_PAGE.SHORTCUTS]: "Settings tab",
-  [SETTINGS_PAGE.CODING_AGENTS]: "Coding agents page",
-} satisfies Record<string, string>;
-
 test("every settings id a field describes is described by that field alone", () => {
-  // The ids the guide, the counts, and a spoken change all name are one set,
-  // and every member a field claims belongs to that one field — an id
-  // described twice would be two rows claiming the same change.
+  // The ids the rows, the search, and the counts all name are one set, and
+  // every member a field claims belongs to that one field — an id described
+  // twice would be two rows claiming the same change.
   const claimed = new Map<string, AppSettingField>();
   for (const field of APP_SETTING_FIELDS) {
     for (const id of APP_SETTING_SCHEMA[field].ids) {
       assert.equal(claimed.get(id), undefined, `${id} is claimed twice`);
       claimed.set(id, field);
-      assert.equal(settingFieldForGuideId(id), field, id);
+      assert.equal(settingFieldForId(id), field, id);
     }
   }
 });
 
 test("a change is counted under the field's first id, and never carries a value", () => {
-  // Several guide entries can ride one stored write, so the field's first id
+  // Several descriptions can ride one stored write, so the field's first id
   // is what a count is filed under; the reading is the shape of the value and
   // never the value.
   for (const field of APP_SETTING_FIELDS) {
@@ -238,19 +213,12 @@ test("a choice row's control offers what its own values say, worded for a contro
   assert.equal(resting?.changed, false);
 });
 
-test("nothing the guide says about a setting names a credential or its shape", () => {
-  // The guide leaves the machine, so no settings entry may carry a key, a
-  // key's shape, or an environment variable's name.
+test("nothing a setting says about itself names a credential or its shape", () => {
+  // No settings description may carry a key, a key's shape, or an
+  // environment variable's name.
   const forbidden = [/sk-/i, /_API_KEY/, /secret/i, /token/i, /password/i];
-  for (const entry of settingGuideEntries(settingsView())) {
-    const lines = [
-      entry.label,
-      entry.description,
-      entry.value,
-      entry.defaultValue ?? "",
-      entry.manual,
-      ...(entry.choices ?? []),
-    ];
+  for (const entry of describedSettings(settingsView())) {
+    const lines = [entry.label, entry.description, entry.value];
     for (const line of lines) {
       for (const pattern of forbidden) {
         assert.ok(!pattern.test(line), `${entry.id} says "${line}"`);

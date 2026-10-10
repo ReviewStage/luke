@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { APP_SETTING_ID, APP_SETTING_KIND } from "@sidecar/guide";
 import { test } from "vitest";
 import {
   APP_SETTING_SCHEMA,
@@ -8,7 +7,6 @@ import {
   SETTINGS_PAGE,
   SETTINGS_RESET_SCOPE,
   settingFromOption,
-  settingGuideEntries,
   settingRowsForPage,
   settingsScopeChanged,
   THEME,
@@ -63,19 +61,6 @@ test("the theme heads the Appearance page as a Light, Dark, System pop-up", () =
   const view = settingsVisibility();
   assert.equal(settingFromOption("theme", "system", view), THEME.SYSTEM);
   assert.equal(settingFromOption("theme", "sepia", view), undefined);
-});
-
-test("Luke's guide offers the theme as a change he may make, defaulting to dark", () => {
-  const theme = settingGuideEntries(settingsView({ theme: THEME.SYSTEM })).find(
-    (entry) => entry.id === APP_SETTING_ID.THEME,
-  );
-  assert.ok(theme);
-  assert.equal(theme.kind, APP_SETTING_KIND.CHOICE);
-  assert.equal(theme.value, "system");
-  assert.equal(theme.defaultValue, "dark");
-  assert.deepEqual(theme.choices, ["light", "dark", "system"]);
-  assert.equal(theme.adjustable, true);
-  assert.equal(APP_SETTING_SCHEMA.theme.spokenValue?.("light"), THEME.LIGHT);
 });
 
 test("a theme away from Dark is what the Appearance reset is offered for", () => {

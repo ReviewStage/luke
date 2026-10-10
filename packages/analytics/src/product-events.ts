@@ -164,12 +164,11 @@ export type ProductAccountAction =
 export const ProductAccountActionSchema = Schema.Literals(Object.values(PRODUCT_ACCOUNT_ACTION));
 
 /**
- * The things the Updates section's buttons ever do. It repeats the guide's
- * own action set rather than importing it, because the guide names the action a
- * spoken ask may reach and this names the action that happened: the row offers a
- * browser trip where the guide says `download`, and a restart the count sees
- * as the install it schedules. `changelog_open` is the Changelog row's own
- * browser trip, to the fixed changelog page rather than the releases one.
+ * The things the Updates section's buttons ever do, named as what happened: a
+ * restart is counted as the install it schedules, `release_open` is the
+ * browser trip to the latest release, and `changelog_open` is the Changelog
+ * row's own browser trip, to the fixed changelog page rather than the
+ * releases one.
  */
 export const PRODUCT_UPDATE_ACTION = {
   CHECK: "check",
@@ -180,7 +179,7 @@ export const PRODUCT_UPDATE_ACTION = {
 
 type ProductUpdateAction = (typeof PRODUCT_UPDATE_ACTION)[keyof typeof PRODUCT_UPDATE_ACTION];
 
-/** Which half of the panel is drawn, said exactly as the guide says it. */
+/** Which half of the panel is drawn, said exactly as `APP_PANEL_TAB` says it. */
 const PRODUCT_PANEL_TAB = {
   PLANS: APP_PANEL_TAB.PLANS,
   SETTINGS: APP_PANEL_TAB.SETTINGS,

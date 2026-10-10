@@ -1,10 +1,10 @@
 import type { ProductSettingValue } from "@sidecar/analytics";
-import type { AppGuideSetting, AppSettingId } from "@sidecar/guide";
+import type { AppSettingId, DescribedSetting } from "@sidecar/guide";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { Schema } from "effect";
 import { APP_SETTING_SCHEMA } from "./schema.js";
 import type {
-  AppSettingGuideSettings,
+  AppSettingReader,
   SettingControl,
   SettingGuardResult,
   SettingOption,
@@ -40,8 +40,8 @@ export type StoredAppSettings = {
 /**
  * Every stored field, in the order its schema entry claims. The order is the
  * entries' own `order` rather than the object literal's, because a formatter or
- * a merge can reorder a literal and neither the guide's list nor a page's rows
- * may move with it.
+ * a merge can reorder a literal and neither the search's list nor a page's
+ * rows may move with it.
  */
 export const APP_SETTING_FIELDS = Object.keys(APP_SETTING_SCHEMA)
   .filter((field): field is AppSettingField => field in APP_SETTING_SCHEMA)
@@ -118,28 +118,28 @@ export function isSettingsResetScope(value: UnparsedWireValue): value is Setting
   return readsSettingsResetScope(value);
 }
 
-export function settingFieldForGuideId(id: string): AppSettingField | undefined {
+export function settingFieldForId(id: string): AppSettingField | undefined {
   return APP_SETTING_FIELDS.find((field) =>
     APP_SETTING_SCHEMA[field].ids.some((candidate) => candidate === id),
   );
 }
 
-function isGuideSettingList(
-  value: AppGuideSetting | readonly AppGuideSetting[],
-): value is readonly AppGuideSetting[] {
+function isDescribedSettingList(
+  value: DescribedSetting | readonly DescribedSetting[],
+): value is readonly DescribedSetting[] {
   return Array.isArray(value);
 }
 
-function guideEntriesFor(
+function descriptionsFor(
   field: AppSettingField,
-  read: AppSettingGuideSettings,
-): readonly AppGuideSetting[] {
-  const built = APP_SETTING_SCHEMA[field].guide(read);
+  read: AppSettingReader,
+): readonly DescribedSetting[] {
+  const built = APP_SETTING_SCHEMA[field].describe(read);
   if (built === undefined) return [];
-  return isGuideSettingList(built) ? built : [built];
+  return isDescribedSettingList(built) ? built : [built];
 }
 
-function guideReader(settings: Pick<StoredAppSettings, AppSettingField>): AppSettingGuideSettings {
+function settingReader(settings: Pick<StoredAppSettings, AppSettingField>): AppSettingReader {
   return (field) => {
     if (!isAppSettingField(field)) return undefined;
     // SAFETY: Every stored value is one of the runtime families a guard answers in.
@@ -147,11 +147,12 @@ function guideReader(settings: Pick<StoredAppSettings, AppSettingField>): AppSet
   };
 }
 
-export function settingGuideEntries(
+/** Every setting's description as the settings stand, in schema order: the settings search's corpus. */
+export function describedSettings(
   settings: Pick<StoredAppSettings, AppSettingField>,
-): AppGuideSetting[] {
-  const read = guideReader(settings);
-  return APP_SETTING_FIELDS.flatMap((field) => [...guideEntriesFor(field, read)]);
+): DescribedSetting[] {
+  const read = settingReader(settings);
+  return APP_SETTING_FIELDS.flatMap((field) => [...descriptionsFor(field, read)]);
 }
 
 /** Whether a field's row is drawn right now. A field that declares no condition is always drawn. */
@@ -159,9 +160,9 @@ function settingVisible(field: AppSettingField, view: SettingsVisibility): boole
   return APP_SETTING_SCHEMA[field].visible?.(view) ?? true;
 }
 
-/** Whether the row one guide id names is drawn right now. */
+/** Whether the row one setting id names is drawn right now. */
 export function settingIdVisible(id: string, view: SettingsVisibility): boolean {
-  const field = settingFieldForGuideId(id);
+  const field = settingFieldForId(id);
   return field !== undefined && settingVisible(field, view);
 }
 
@@ -177,8 +178,8 @@ export interface SettingsRowsInput extends SettingsVisibility {
 /** One row of a settings page, as the panel's own schema renderer draws it. */
 interface SchemaSettingRow {
   field: AppSettingField;
-  /** The setting as the guide describes it now: its words, its value, its choices. */
-  entry: AppGuideSetting;
+  /** The setting as it describes itself now: its words and its value. */
+  entry: DescribedSetting;
   /** Whether the stored value differs from the default, which earns the mark. */
   changed: boolean;
   /** The pop-up's own current token and options, for a choice row. */
@@ -205,7 +206,7 @@ export function settingRowsForPage(
   section: SettingSection,
   view: SettingsRowsInput,
 ): readonly SchemaSettingRow[] {
-  const read = guideReader(view.settings);
+  const read = settingReader(view.settings);
   return APP_SETTING_FIELDS.flatMap((field): SchemaSettingRow[] => {
     const definition = APP_SETTING_SCHEMA[field];
     if (definition.rows !== SETTING_ROWS.SCHEMA) return [];
@@ -213,7 +214,7 @@ export function settingRowsForPage(
     if (!settingVisible(field, view)) return [];
     const control = settingControl(field);
     const stored = view.settings[field];
-    return guideEntriesFor(field, read).map((entry) => ({
+    return descriptionsFor(field, read).map((entry) => ({
       field,
       entry,
       changed: stored !== definition.default,
@@ -249,8 +250,8 @@ interface SettingAnalytics {
  * How a change to this field is counted, or nothing for a field the schema
  * does not count. The value itself never travels — only whether a switch went
  * on or off, or whether a choice was made or returned to nothing. The id is the
- * field's first, because a change rides one stored write however many entries
- * the guide builds from it.
+ * field's first, because a change rides one stored write however many
+ * descriptions it builds.
  */
 export function settingAnalytics(
   field: AppSettingField,
