@@ -51,7 +51,7 @@ export function MessageContent({ children, className, ...props }: MessageContent
   return (
     <div
       className={cn(
-        "min-w-0 max-w-full space-y-2 overflow-hidden text-[13px] leading-normal text-foreground",
+        "min-w-0 max-w-full space-y-2 overflow-hidden text-[13px] leading-relaxed text-foreground",
         "group-[.is-user]:w-fit group-[.is-user]:rounded-xl group-[.is-user]:bg-secondary group-[.is-user]:px-[11px] group-[.is-user]:py-[7px]",
         className,
       )}

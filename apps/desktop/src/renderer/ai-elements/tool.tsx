@@ -71,7 +71,7 @@ const PATCH_LINE = {
 type PatchLineKind = (typeof PATCH_LINE)[keyof typeof PATCH_LINE];
 
 /** The prompt a command is drawn behind. */
-export const COMMAND_PROMPT = "$ ";
+const COMMAND_PROMPT = "$ ";
 
 /** How many lines of an answer a body shows before the rest waits behind Show more. */
 const OUTPUT_PREVIEW_LINES = 40;

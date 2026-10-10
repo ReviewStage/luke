@@ -1,6 +1,5 @@
 import { WingFace } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import type { Components } from "streamdown";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -8,13 +7,9 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-  PANEL_MARKDOWN_COMPONENTS,
-} from "../ai-elements/message";
+import { Message, MessageContent } from "../ai-elements/message";
 import { CopyMessageAction } from "./copy-message";
+import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
   callHeading,
   messageText,
@@ -31,27 +26,20 @@ import {
 /**
  * plan-transcript.tsx -- the open plan's Transcript tab: what was said on its calls with Luke, one call after another, the call standing now growing at the bottom.
  *
- * The calls are drawn with the AI Elements components (`../ai-elements/`)
- * as a coding agent's tab draws its transcript, on the same spacing: each
- * call begins at a Checkpoint saying its day and time, and whether it
+ * The calls are drawn as every transcript is (`transcript-blocks.tsx`
+ * over `../ai-elements/`), the Work tab and a coding agent's tab alike:
+ * each call begins at a Checkpoint saying its day and time, and whether it
  * stands now; each run of lines from one speaker is one Message, the
  * developer's at the right in a bubble and Luke's at the left under his
  * mark, running the column's width; and a copy of the turn's words waits
- * under it. The list keeps to its newest line while it is scrolled there,
- * so a live call reads like a chat, and scrolling up to read an earlier
- * line leaves it where it is until the developer scrolls back down. Every
- * word here is the developer's or Luke's, so the root is left out of the
- * screen recording (`ph-no-capture`) as a second line behind the
- * recording's text masking.
+ * under it. What is spoken is words alone: what Luke read and ran on the
+ * call is the Work tab's. The list keeps to its newest line while it is
+ * scrolled there, so a live call reads like a chat, and scrolling up to
+ * read an earlier line leaves it where it is until the developer scrolls
+ * back down. Every word here is the developer's or Luke's, so the root is
+ * left out of the screen recording (`ph-no-capture`) as a second line
+ * behind the recording's text masking.
  */
-
-/**
- * How spoken words are drawn: as markdown at the panel's scale, but never
- * as an image, because an image is a request to wherever its address
- * points the moment the tab opens, and nothing anyone said on a call
- * should make one.
- */
-const SPOKEN_COMPONENTS: Components = { ...PANEL_MARKDOWN_COMPONENTS, img: () => null };
 
 /** What a call's checkpoint says while the call stands. */
 const LIVE_LABEL = "Live";
@@ -84,9 +72,7 @@ function TranscriptTurn({
       <Speaker role={turn.role} />
       <MessageContent>
         {turn.messages.map((message) => (
-          <MessageResponse key={message.id} mode="static" components={SPOKEN_COMPONENTS}>
-            {messageText(message)}
-          </MessageResponse>
+          <TranscriptWords key={message.id} text={messageText(message)} />
         ))}
       </MessageContent>
       <CopyMessageAction words={turnText(turn.messages)} copyText={copyText} />
@@ -106,14 +92,17 @@ function TranscriptCall({
 }): React.JSX.Element {
   return (
     <>
-      <Checkpoint>
-        <span>{callHeading(call.startedAt, now)}</span>
-        {call.live ? (
-          <span className="flex items-center gap-1.5 text-developer">
-            <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-            {LIVE_LABEL}
-          </span>
-        ) : null}
+      <Checkpoint
+        trailing={
+          call.live ? (
+            <span className="flex items-center gap-1.5 text-developer">
+              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              {LIVE_LABEL}
+            </span>
+          ) : null
+        }
+      >
+        {callHeading(call.startedAt, now)}
       </Checkpoint>
       {speakerTurns(call.messages).map((turn) => (
         <TranscriptTurn key={turn.key} turn={turn} copyText={copyText} />
@@ -131,15 +120,12 @@ function TranscriptCalls({
   copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   const now = Date.now();
-  // Note that the scroll box has no top padding, because a sticky call
-  // header sticks below it and would leave the lines scrolled under it
-  // showing in that band; the list carries the room instead. Its sides keep
-  // the window's content inset, so the words start under the panel's first tab.
   return (
     <Conversation>
-      <ConversationContent className="px-(--content-inset) pt-0">
+      {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
+      <ConversationContent className="pt-0">
         {region.earlierOmitted ? (
-          <p className="plan-transcript-note">Earlier lines are not shown.</p>
+          <TranscriptNote>Earlier lines are not shown.</TranscriptNote>
         ) : null}
         {region.calls.map((call) => (
           <TranscriptCall key={call.key} call={call} now={now} copyText={copyText} />

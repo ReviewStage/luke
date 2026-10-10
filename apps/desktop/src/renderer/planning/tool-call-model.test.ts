@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { patchPaths, planCardTitle, stripAnsi, TOOL_GLYPH, toolCallView } from "./tool-call-model";
+import { patchPaths, planCardTitle, stripAnsi, toolCallView } from "./tool-call-model";
+import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
 
-test("a command's row is the command behind a prompt, and its answer reads as a terminal showed it", () => {
+test("a command's row is the command it ran, and its answer reads as a terminal showed it", () => {
   const view = toolCallView({
     tool: "bash",
     input: { command: "pnpm check" },
@@ -17,8 +18,8 @@ test("a command's row is the command behind a prompt, and its answer reads as a 
       truncated: true,
     },
   });
-  assert.equal(view.glyph, TOOL_GLYPH.TERMINAL);
-  assert.deepEqual(view.summary, { label: undefined, code: "$ pnpm check" });
+  assert.equal(view.kind, CALL_KIND.COMMAND);
+  assert.equal(view.subject, "pnpm check");
   assert.deepEqual(view.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm check" });
   assert.deepEqual(view.output, {
     kind: TOOL_BLOCK.TEXT,
@@ -28,7 +29,7 @@ test("a command's row is the command behind a prompt, and its answer reads as a 
 
 test("a command still running has its row and its command, and no answer yet", () => {
   const view = toolCallView({ tool: "bash", input: { command: "sleep 1" }, output: undefined });
-  assert.equal(view.summary.code, "$ sleep 1");
+  assert.equal(view.subject, "sleep 1");
   assert.equal(view.output, undefined);
 });
 
@@ -38,8 +39,8 @@ test("a file read and a search say the path and the pattern, and answer with the
     input: { filePath: "/workspace/repository/README.md", limit: 20 },
     output: { content: "# Luke\n" },
   });
-  assert.equal(read.glyph, TOOL_GLYPH.FILE);
-  assert.deepEqual(read.summary, { label: "Read", code: "/workspace/repository/README.md" });
+  assert.equal(read.kind, CALL_KIND.READ_FILE);
+  assert.equal(read.subject, "/workspace/repository/README.md");
   assert.deepEqual(read.output, { kind: TOOL_BLOCK.TEXT, text: "# Luke\n" });
 
   const grep = toolCallView({
@@ -52,8 +53,8 @@ test("a file read and a search say the path and the pattern, and answer with the
       truncated: false,
     },
   });
-  assert.equal(grep.glyph, TOOL_GLYPH.SEARCH);
-  assert.deepEqual(grep.summary, { label: "Searched", code: "invit" });
+  assert.equal(grep.kind, CALL_KIND.SEARCH);
+  assert.equal(grep.subject, "invit");
   assert.deepEqual(grep.output, { kind: TOOL_BLOCK.TEXT, text: "a.ts:1: invite" });
 
   // A search the tool cut short says so after its matches, so they are not read as all of them.
@@ -90,8 +91,8 @@ test("a patch names the first file it touches and how many more, carries the pat
       ],
     },
   });
-  assert.equal(view.glyph, TOOL_GLYPH.EDIT);
-  assert.deepEqual(view.summary, { label: "Edited", code: "apps/web/a.ts +1" });
+  assert.equal(view.kind, CALL_KIND.EDIT);
+  assert.equal(view.subject, "apps/web/a.ts +1");
   assert.deepEqual(view.input, { kind: TOOL_BLOCK.PATCH, text: patchText });
   assert.deepEqual(view.output, {
     kind: TOOL_BLOCK.TEXT,
@@ -120,8 +121,8 @@ test("a tool this build does not know is named as it is, with its input and answ
     input: { args: ["pr", "create"] },
     output: { url: "https://github.com/acme/relay/pull/7" },
   });
-  assert.equal(view.glyph, TOOL_GLYPH.GENERIC);
-  assert.deepEqual(view.summary, { label: "gh", code: '{"args":["pr","create"]}' });
+  assert.equal(view.kind, CALL_KIND.OTHER);
+  assert.equal(view.subject, "gh");
   assert.deepEqual(view.input, {
     kind: TOOL_BLOCK.JSON,
     text: '{\n  "args": [\n    "pr",\n    "create"\n  ]\n}',

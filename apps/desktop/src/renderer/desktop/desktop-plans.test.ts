@@ -409,8 +409,9 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   assert.equal(work.textContent?.includes("invite.ts"), false);
 
   act(() => line.click());
+  // The command behind its prompt, as an agent's tab draws one, then its answer.
   const output = [...work.querySelectorAll("pre")].map((pre) => pre.textContent);
-  assert.deepEqual(output, ['{ "command": "ls src" }', "invite.ts"]);
+  assert.deepEqual(output, ["$ ls src", "invite.ts"]);
 });
 
 test("a worker in the Work tab opens its own session in the tab's place, and the way back returns to every turn", () => {

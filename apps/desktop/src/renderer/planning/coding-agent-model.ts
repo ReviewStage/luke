@@ -18,6 +18,7 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/ho
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
@@ -403,6 +404,37 @@ function agentPart(part: WireValue): AgentPart {
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   return message.parts.map(agentPart);
+}
+
+/** How the fold reads a part: its words, its reasoning as a note, and each call grouped with the calls beside it. */
+const AGENT_READING: RowReading<AgentPart> = {
+  key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
+  part: (part) =>
+    part.kind === AGENT_PART.TEXT
+      ? ROW_PART.WORDS
+      : part.kind === AGENT_PART.TOOL
+        ? ROW_PART.CALL
+        : ROW_PART.NOTE,
+  running: (part) =>
+    part.kind === AGENT_PART.TOOL &&
+    (part.state === TOOL_STATE.INPUT_STREAMING || part.state === TOOL_STATE.INPUT_AVAILABLE),
+};
+
+/**
+ * One of the agent's turns as the rows every transcript draws, folded as
+ * the Work tab folds Luke's (`turn-rows.ts`). A step boundary and a part
+ * this build does not draw are left out, because the parts keep one rhythm
+ * across them. The turn moves while the agent may still write to it, which
+ * is its last message; any other has ended.
+ */
+export function agentRows(
+  message: CodingAgentMessage,
+  moving: boolean,
+): readonly TurnRow<AgentPart>[] {
+  const parts = agentParts(message).filter(
+    (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
+  );
+  return turnRows(parts, AGENT_READING, { key: message.id, moving, done: !moving, grouped: true });
 }
 
 /** A message's words: its text parts, one paragraph each, which is what a copy of a turn carries and what the developer's line reads as. */

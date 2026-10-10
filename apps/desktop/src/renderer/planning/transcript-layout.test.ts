@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
 import type { UIMessage } from "ai";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -9,6 +10,7 @@ import { afterEach, test } from "vitest";
 import { compiledTailwind, cssRules, ownDeclarations } from "#testing/css-rules";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanTranscript } from "./plan-transcript";
+import { PlanWork } from "./plan-work";
 import { TRANSCRIPT_REGION } from "./transcript-model";
 
 /**
@@ -53,8 +55,11 @@ function mountedOpen(element: ReactElement): HTMLElement {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(element));
-  for (const summary of container.querySelectorAll("summary")) act(() => summary.click());
-  return container;
+  for (;;) {
+    const fold = container.querySelector<HTMLDetailsElement>("details:not([open])");
+    if (fold === null) return container;
+    act(() => fold.querySelector("summary")?.click());
+  }
 }
 
 const PLAN: CodingAgentMessage = {
@@ -127,6 +132,31 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       },
       onRetry: () => undefined,
       copyText: () => Promise.resolve(),
+    }),
+    createElement(PlanWork, {
+      callLive: true,
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            { type: PLAN_WORK_PART.TEXT, text: "Reading the guide.\n\n- one\n- two" },
+            { type: PLAN_WORK_PART.REASONING, text: "Read AGENTS.md first." },
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-1",
+              tool: PLAN_WORK_TOOL.REPOSITORY,
+              name: "run_in_repository",
+              state: PLAN_WORK_STATE.DONE,
+              subject: "cat AGENTS.md",
+              input: '{ "command": "cat AGENTS.md" }',
+              output: "# Agent guide\n",
+            },
+          ],
+        },
+      ],
     }),
   ];
   for (const surface of surfaces) {
