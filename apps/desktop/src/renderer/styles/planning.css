@@ -593,9 +593,9 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's call: a boxed line that opens its session. Note that its edge
-   is written here, because base.css takes every button's border away outside
-   the utilities' layer. */
+/* A subagent's call: a boxed line that opens its session, and at its end
+   the button that opens it in a tab of its own, shown while the pointer or
+   focus is on the line. */
 .work-worker-line {
   padding: 8px 10px;
   border: 1px solid var(--hairline);
@@ -604,6 +604,21 @@ svg.lucide {
 
 .work-worker-line:hover {
   background: var(--raised);
+}
+
+.work-worker-tab {
+  width: 22px;
+  height: 22px;
+  margin: -4px -4px -4px 0;
+  opacity: 0;
+  transition:
+    opacity var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.work-worker-line:hover .work-worker-tab,
+.work-worker-line:focus-within .work-worker-tab {
+  opacity: 1;
 }
 
 /* An opened subagent's session: the way back, and its job and state, above its blocks. */

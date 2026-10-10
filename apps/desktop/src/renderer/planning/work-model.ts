@@ -11,6 +11,7 @@ import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import {
   CALL_KIND,
+  CALL_WORDS,
   type CallKind,
   pageName,
   ROW_PART,
@@ -120,6 +121,24 @@ const WORK_READING: RowReading<WorkBlock> = {
   running: (block) =>
     (block.kind === WORK_BLOCK.CALL || block.kind === WORK_BLOCK.WORKER) && block.call.running,
 };
+
+/** What a subagent is named by, on its line and on its tab: its job, or what was asked of it where no job was said. */
+export function workerJob(call: WorkCallRow): string {
+  return call.subject ?? CALL_WORDS[call.kind].verb;
+}
+
+/**
+ * The subagents the open plan's work holds, by the call that started each;
+ * none where the plan has had no turn or its work is unread. A subagent's
+ * tab is held to them, as an agent's is to the plan's agents.
+ */
+export function workerCallIds(turns: readonly PlanWorkTurn[] | undefined): readonly string[] {
+  return (turns ?? []).flatMap((turn) =>
+    turn.parts.flatMap((part) =>
+      part.type === PLAN_WORK_PART.TOOL && part.tool === PLAN_WORK_TOOL.WORKER ? [part.id] : [],
+    ),
+  );
+}
 
 /** The command a repository call's input carries, which its body draws behind a prompt; nothing where the text is not that JSON. */
 function commandOf(input: string): string | undefined {

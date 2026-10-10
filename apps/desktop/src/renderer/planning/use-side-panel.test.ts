@@ -17,6 +17,8 @@ import {
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+const CALL = "call-worker-1";
+const OTHER_CALL = "call-worker-2";
 
 const roots: Root[] = [];
 
@@ -26,28 +28,31 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** Mounts the panel alone over the agents the plan has now, answering the control as it stands. */
-function mount(agents: readonly string[] | undefined) {
+/** The agents the plan has, and the subagents its work holds, each nothing while unread. */
+type Stood = readonly (readonly string[] | undefined)[];
+
+/** Mounts the panel alone over the agents and subagents the plan has now, answering the control as it stands. */
+function mount(agents: readonly string[] | undefined, subagents?: readonly string[]) {
   let control: SidePanelControl | undefined;
-  let restand: ((next: readonly string[] | undefined) => void) | undefined;
-  function Probe({ held }: { held: readonly string[] | undefined }) {
-    control = useSidePanel(undefined, held);
+  let restand: ((next: Stood) => void) | undefined;
+  function Probe({ held }: { held: Stood }) {
+    control = useSidePanel(undefined, held[0], held[1]);
     return null;
   }
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const render = (held: readonly string[] | undefined) =>
-    act(() => root.render(createElement(Probe, { held })));
+  const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
   restand = render;
-  render(agents);
+  render([agents, subagents]);
   return {
     control: () => {
       assert.ok(control);
       return control;
     },
-    stand: (next: readonly string[] | undefined) => restand?.(next),
+    stand: (next: readonly string[] | undefined, nextSubagents?: readonly string[]) =>
+      restand?.([next, nextSubagents]),
   };
 }
 
@@ -89,4 +94,54 @@ test("choosing an agent's tab opens the panel on it and keeps it across a launch
   assert.deepEqual(second.control().tab, { agent: AGENT });
   second.stand([]);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
+test("a subagent's tab opens from its call once and is chosen, closes to its neighbour, is held to the plan's work, and is kept across no launch", () => {
+  const first = mount([AGENT], [CALL, OTHER_CALL]);
+  act(() => first.control().onChoose({ subagent: CALL }));
+  assert.equal(first.control().open, true);
+  assert.deepEqual(first.control().tab, { subagent: CALL });
+
+  // Opened again, the one open is chosen rather than a second added.
+  act(() => first.control().onChoose({ subagent: OTHER_CALL }));
+  act(() => first.control().onChoose({ subagent: CALL }));
+  assert.deepEqual(first.control().subagents, [CALL, OTHER_CALL]);
+  assert.deepEqual(first.control().tab, { subagent: CALL });
+
+  // Closing the chosen one chooses the subagent after it; closing the last, the plan's last agent.
+  act(() => first.control().onClose({ subagent: CALL }));
+  assert.deepEqual(first.control().subagents, [OTHER_CALL]);
+  assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
+
+  // Another plan, with no work read or no turn, shows the board; the call back shows the tab again.
+  first.stand([AGENT]);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  first.stand([AGENT], [OTHER_CALL]);
+  assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
+  act(() => first.control().onClose({ subagent: OTHER_CALL }));
+  assert.deepEqual(first.control().subagents, []);
+  assert.deepEqual(first.control().tab, { agent: AGENT });
+
+  // A launch after a subagent's tab was chosen opens none, on the first tab.
+  act(() => first.control().onChoose({ subagent: CALL }));
+  const second = mount(undefined);
+  assert.deepEqual(second.control().subagents, []);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
+test("with no agent, closing the last fixed tab chooses a subagent tab the plan draws, and a closed subagent's neighbour is one the plan's work holds, never another plan's", () => {
+  const panel = mount([], [CALL]);
+  act(() => panel.control().onChoose({ subagent: CALL }));
+  // On another plan, its own subagent closed has the first plan's, not in the strip, for no neighbour.
+  panel.stand([], [OTHER_CALL]);
+  act(() => panel.control().onChoose({ subagent: OTHER_CALL }));
+  act(() => panel.control().onClose({ subagent: OTHER_CALL }));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.WORK);
+
+  panel.stand([], [CALL]);
+  for (const tab of SIDE_PANEL_TABS) act(() => panel.control().onClose(tab));
+  assert.deepEqual(panel.control().tab, { subagent: CALL });
+  act(() => panel.control().onClose({ subagent: CALL }));
+  assert.equal(panel.control().tab, undefined);
+  assert.deepEqual(panel.control().subagents, []);
 });

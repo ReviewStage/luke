@@ -6,7 +6,7 @@ import {
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
@@ -56,6 +56,7 @@ import {
   type SidePanelTab,
   useSidePanel,
 } from "./use-side-panel";
+import { workerCallIds } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -215,7 +216,9 @@ export function usePlansTab(input: {
       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
   });
-  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds);
+  // A subagent's tab is held to the plan's work as an agent's is to its agents.
+  const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
+  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds, workers);
   panelRef.current = sidePanel;
   // Main hears which agent's tab is on screen, and none while the tab is
   // away or the panel shows something else; a fixture's staged agents are
