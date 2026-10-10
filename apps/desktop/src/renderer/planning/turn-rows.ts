@@ -70,7 +70,7 @@ export const ROW_PART = {
   NOTE: "note",
 } as const;
 
-export type RowPart = (typeof ROW_PART)[keyof typeof ROW_PART];
+type RowPart = (typeof ROW_PART)[keyof typeof ROW_PART];
 
 /** How a fold reads a tab's own blocks. */
 export interface RowReading<B> {
