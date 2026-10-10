@@ -11,6 +11,7 @@ import {
   type LiveBrainRecovery,
   type LiveBrainRunEnd,
   type LiveBrainRunEvent,
+  type LiveBrainSubmission,
 } from "@sidecar/voice/live-session";
 import { Cause, Clock, Duration, Effect, Result, Schedule, Schema, type Scope } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -40,7 +41,7 @@ import {
   stopAsk,
 } from "../hosted/brain-ask.js";
 import { childConversationId } from "../hosted/brain-host/ids.js";
-import { EVE_DELEGATION_TOOL } from "../hosted/brain-host/planning.js";
+import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -610,41 +611,66 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     return Effect.asVoid(Effect.forkIn(following, socket));
   }
 
-  return {
-    submitAsk(ask) {
-      const input: AskInput = {
-        userId: options.userId,
-        question: ask.question,
-        origin: ASK_ORIGIN.SPOKEN,
-        clientId: ask.submissionId,
-        conversationId: options.conversationId,
-        voice: { sessionId: ask.sessionId, revision: ask.revision },
-      };
-      return Effect.gen(function* () {
-        const outcome = yield* acceptAsk(options.asks, input);
-        if (Result.isFailure(outcome)) {
+  /** Accepts one ask through the door and follows it under the revision given. */
+  function submit(input: AskInput, revision: number): Effect.Effect<LiveBrainSubmission> {
+    return Effect.gen(function* () {
+      const outcome = yield* acceptAsk(options.asks, input);
+      if (Result.isFailure(outcome)) {
+        return {
+          outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
+          refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.failure.refusal],
+        } as const;
+      }
+      yield* follow(outcome.success.id, revision);
+      return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id } as const;
+    }).pipe(
+      Effect.provideService(SqlClient.SqlClient, sql),
+      // The ask's rows could not be read or written: the refusal is the
+      // store's own standing sentence, the failure is written down where
+      // its cause is known, and the session goes on.
+      Effect.tapError(logStoreFailure),
+      Effect.catch(() =>
+        Effect.sync(() => {
+          options.report("A spoken ask could not be written down; it is refused");
           return {
             outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-            refusal: HOSTED_ASK_REFUSAL_NOTE[outcome.failure.refusal],
-          };
-        }
-        yield* follow(outcome.success.id, ask.revision);
-        return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: outcome.success.id };
-      }).pipe(
-        Effect.provideService(SqlClient.SqlClient, sql),
-        // The ask's rows could not be read or written: the refusal is the
-        // store's own standing sentence, the failure is written down where
-        // its cause is known, and the session goes on.
-        Effect.tapError(logStoreFailure),
-        Effect.catch(() =>
-          Effect.sync(() => {
-            options.report("A spoken ask could not be written down; it is refused");
-            return {
-              outcome: LIVE_BRAIN_SUBMISSION.REFUSED,
-              refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.STORE],
-            };
-          }),
-        ),
+            refusal: HOSTED_ASK_REFUSAL_NOTE[ASK_REFUSAL.STORE],
+          } as const;
+        }),
+      ),
+    );
+  }
+
+  return {
+    submitAsk(ask) {
+      return submit(
+        {
+          userId: options.userId,
+          question: ask.question,
+          origin: ASK_ORIGIN.SPOKEN,
+          clientId: ask.submissionId,
+          conversationId: options.conversationId,
+          voice: { sessionId: ask.sessionId, revision: ask.revision },
+        },
+        ask.revision,
+      );
+    },
+    // Note that the session's id is the ask's client id, because one
+    // session starts once, so a second start explores nothing twice; and
+    // that the ask names no voice session, because it answers no delegation
+    // a re-attached connection could take up. It is followed under revision
+    // zero, below every spoken ask's, so the developer's first ask tells a
+    // turn the two share.
+    explore(sessionId) {
+      return submit(
+        {
+          userId: options.userId,
+          question: PLANNING_EXPLORE_ASK,
+          origin: ASK_ORIGIN.SPOKEN,
+          clientId: sessionId,
+          conversationId: options.conversationId,
+        },
+        0,
       );
     },
     cancelRun(runId) {

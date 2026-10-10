@@ -161,6 +161,22 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 Return the relevant facts, the task's current status, and any queued question an answer has made moot, so Luke drops it. Don't repeat the questions you queued: Luke already holds them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
 `;
 
+/**
+ * The message a fresh call opens the planning model's turn with, sent as the
+ * session starts rather than at the developer's first words. It is general
+ * on purpose, because nothing of the task has been said yet: the plan's name
+ * and saved document reach the model as standing context beside it. Note
+ * that it asks for no question, because a question queued now would be
+ * asked before the developer has said what they want.
+ */
+export const PLANNING_EXPLORE_ASK =
+  "The call has just started, and the developer has not said what they want yet. " +
+  "Start exploring the plan's folder now, so you already know the code when they do: " +
+  "what the project is, how it is laid out, how it is built and tested, and anything the " +
+  "plan's name or saved document points to. Hand anything broader to the worker. " +
+  "Queue no question until the developer has spoken. " +
+  "Return one short sentence on what the project is.";
+
 /** Each field a note may be taken under, and what it holds, one line apiece for the notetaker. */
 const SCRIBE_FIELDS = Object.values(PLAN_FIELD)
   .map((field) => `- ${field}: ${PLAN_FIELD_PURPOSE[field]}`)

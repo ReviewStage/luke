@@ -143,6 +143,11 @@ class FakeBrain implements LiveBrain {
     });
   }
 
+  /** The backend is not set exploring here: what is recorded is the developer's asks alone. */
+  explore(): Effect.Effect<LiveBrainSubmission> {
+    return Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" });
+  }
+
   cancelRun(): Effect.Effect<LiveBrainCancel> {
     return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
   }

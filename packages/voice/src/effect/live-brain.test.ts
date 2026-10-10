@@ -10,6 +10,7 @@ import { LiveBrainTag, liveBrainLayer } from "./live-brain.js";
 
 const fakeBrain: LiveBrain = {
   submitAsk: () => Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-1" }),
+  explore: () => Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: "run-0" }),
   cancelRun: () => Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING),
   recoverRuns: () => Effect.succeed({ revision: 0, runs: [], follow: Effect.void }),
   onRunEvent: () => () => undefined,

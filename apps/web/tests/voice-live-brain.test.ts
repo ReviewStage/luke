@@ -33,6 +33,7 @@ import {
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { childConversationId } from "../server/hosted/brain-host/ids";
+import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   memoryRelayState,
@@ -312,6 +313,30 @@ it.live(
       const again = yield* Effect.promise(() => database.run(f.brain.submitAsk(ask)));
       assert.deepEqual(again, accepted);
       assert.equal(f.eve.opened.length, 1);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "a fresh session sets eve exploring in the plan's conversation before any ask, once per session however often it is asked, and a re-attach takes nothing up, since the run answers no delegation",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target));
+      const voiceSession = `voice_${randomUUID()}`;
+
+      const explored = yield* Effect.promise(() => database.run(f.brain.explore(voiceSession)));
+      assert.equal(explored.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      assert.deepEqual(
+        f.eve.opened.map((message) => [message.conversationId, message.turn, message.message]),
+        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN, PLANNING_EXPLORE_ASK]],
+      );
+      const again = yield* Effect.promise(() => database.run(f.brain.explore(voiceSession)));
+      assert.deepEqual(again, explored);
+      assert.equal(f.eve.opened.length, 1);
+
+      const recovery = yield* Effect.promise(() => database.run(f.brain.recoverRuns(voiceSession)));
+      assert.deepEqual([recovery.revision, recovery.runs], [0, []]);
       yield* Effect.promise(() => f.stop());
     }),
 );

@@ -620,6 +620,26 @@ export class LiveSessionService {
   }
 
   /**
+   * Sets the backend exploring the moment a fresh session starts, rather
+   * than at the developer's first words, which is when the first delegation
+   * could be composed. Note that the run stands as one the brain opened of
+   * its own, because it answers no delegation: its reply waits for any
+   * asked run and is silenced by the developer's next ask. A refusal is
+   * never spoken, since the developer asked for nothing; their first ask
+   * reaches the backend as it would have without one.
+   */
+  #explore(session: StandingSession): void {
+    this.#start(
+      Effect.flatMap(this.#brain.explore(session.sessionId), (submission) =>
+        Effect.sync(() => {
+          if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) return;
+          if (this.#standing === session) this.#registerWoken(submission.runId);
+        }),
+      ),
+    );
+  }
+
+  /**
    * A session already started may be one an earlier connection held and
    * lost, with runs the brain accepted for it still under way or ended and
    * not yet told. Each comes back as the exchange it was, under its own
@@ -946,6 +966,7 @@ export class LiveSessionService {
     switch (event.type) {
       case LIVE_SERVER_EVENT.SESSION_STARTED:
         this.#started(session);
+        this.#explore(session);
         return Effect.void;
       case LIVE_SERVER_EVENT.SESSION_CLOSED:
         return this.#over(session);
