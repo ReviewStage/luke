@@ -36,6 +36,64 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.10.0 — 2026-10-10
+
+### Coding agents
+
+Start a coding agent from a plan. Start in the plan toolbar hands the plan to
+an agent working in a cloud sandbox on the plan's repository, on your default
+model, and its chevron picks the model, its effort, and Fast for this run from
+the Anthropic and OpenAI models on offer. Each agent gets a tab in the side
+panel beside Board, Code, and Transcript, with a live transcript of what it
+thought, ran, and wrote, a message box under it that steers the agent
+mid-run, and Stop. The tab's head wears the agent's branch, then its pull
+request with its state and checks, and offers Open pull request, Copy branch
+name, Copy checkout command, and View changes on GitHub. A macOS notification
+says when an agent finishes and names the pull request it opened, and its tab
+wears a dot until you look. Settings › Coding agents holds the default model
+and effort.
+
+### Planning on a GitHub repository
+
+Each plan is about a GitHub repository, reached through the Luke GitHub App.
+The new-plan composer's chip picks it, with your recent repositories, a search
+over every repository the App reaches, and a link to install the App; the
+plan menu offers Change repository… and Open on GitHub. Luke reads the
+repository and shows its code from a checkout in the cloud, so planning no
+longer runs commands on your Mac. The local-folder path is gone: a plan from
+an earlier release opens on the repository picker. Sign in with GitHub now
+goes through the Luke GitHub App too.
+
+### Improvements
+
+- Back and forward through plans and Settings, with ⌘[ and ⌘], title-bar
+  buttons, a Go menu, and the mouse's back and forward buttons
+- A Theme setting under Settings › Appearance: Light, Dark, or System
+- A light palette for the window, the code, and the whiteboard
+- Drag the side panel's tabs into a new order, or move one with ⇧⌘← and ⇧⌘→
+- The side panel drags out until the document's floor, and full screen asks a
+  longer pull
+- A sleeker sign-in that waits in place while the browser answers, with Cancel
+- Send feedback and Suggest a feature open a standard dialog, with screenshots
+  attached, pasted, or dropped
+- Escape leaves Settings
+- Every Settings pop-up is the app's own searchable menu, and the effort is a
+  segmented control
+- The voice transcript reads as a conversation, each call from a divider with
+  its day and time
+- New plan and the agent's message box share one composer
+- Copy plan moved into the plan's ⋯ menu and keeps ⇧⌘C
+
+### Fixes
+
+- Fixed Settings' toolbar ending Reset to defaults short of the edge
+- Fixed glyph and labelled buttons drawing in several styles across the window
+
+### Misc
+
+- Removed the last of the notch-era window: its modes, hover machinery, and
+  presentation
+
 ## 0.9.0 — 2026-10-09
 
 ### A Work tab for what Luke thought and ran
