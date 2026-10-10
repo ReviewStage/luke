@@ -19,6 +19,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
+import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
@@ -55,8 +56,10 @@ import {
  * runs of calls and a finished turn's lead folded as an agent's are. What
  * is this tab's own is the worker, a boxed line that opens its session in
  * the tab's place, or, from the button at its end, in a tab of the panel's
- * own (`SubagentTab`), which draws the session the same way and follows it
- * while the subagent runs. Everything here is
+ * own (`SubagentTab`), which draws the session as an agent's tab draws its
+ * transcript: the task a card at the top, a shimmering line at the end
+ * while the subagent runs, a quiet one where it was stopped, and follows
+ * it while the subagent runs. Everything here is
  * the planning model's or the developer's repository's, a command's output
  * included, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind its text masking.
@@ -212,22 +215,54 @@ function SubagentSession({
   );
 }
 
+/** The word before a subagent's task card's title. */
+const TASK_CARD_LABEL = "Task";
+
+/** What stands at the end of a subagent's session while it runs, and where it was stopped. */
+const SUBAGENT_END_LINE = {
+  [PLAN_WORK_STATE.RUNNING]: "Working…",
+  [PLAN_WORK_STATE.DONE]: undefined,
+  [PLAN_WORK_STATE.FAILED]: "Stopped",
+} as const satisfies Record<PlanWorkState, string | undefined>;
+
 /**
- * A subagent's session in a tab of the panel's own: its job and state at
- * the head, and its blocks drawn as the Work tab draws them. The worker is
- * read from the plan's work on every frame, so the tab follows the session
- * while the subagent runs, and the log keeps to its newest line as every
- * transcript does.
+ * A subagent's session in a tab of the panel's own, drawn as an agent's
+ * tab draws its transcript: the task it was handed as a card at the top,
+ * scrolling with the rest; its blocks as the Work tab draws them; and at
+ * the end a shimmering line while it runs, or a quiet one where it was
+ * stopped. The tab's own label names the task, so no head repeats it. The
+ * worker is read from the plan's work on every frame, so the tab follows
+ * the session while the subagent runs, and the log keeps to its newest
+ * line as every transcript does.
  */
 export function SubagentTab({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
+  const { call } = worker;
+  const job = workerJob(call);
+  const ended = call.running ? undefined : SUBAGENT_END_LINE[call.state];
   return (
     <div className="plan-work ph-no-capture">
       <Conversation>
-        <ConversationContent className="pt-0">
-          <header className="work-session-header">
-            <WorkerHead call={worker.call} />
-          </header>
+        <ConversationContent>
+          <Plan data-task-card="" aria-label={TASK_CARD_LABEL}>
+            <PlanHeader>
+              <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <PlanTitle label={TASK_CARD_LABEL}>{job}</PlanTitle>
+            </PlanHeader>
+            <PlanContent>
+              <TranscriptWords text={job} />
+            </PlanContent>
+          </Plan>
           <SubagentRows worker={worker} />
+          {call.running ? (
+            <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
+              <Shimmer>{SUBAGENT_END_LINE[PLAN_WORK_STATE.RUNNING]}</Shimmer>
+            </p>
+          ) : null}
+          {ended === undefined ? null : (
+            <p className="agent-end-line" data-ended="" aria-live="polite">
+              {ended}
+            </p>
+          )}
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>

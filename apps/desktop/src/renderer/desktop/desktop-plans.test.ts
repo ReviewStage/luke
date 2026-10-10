@@ -536,6 +536,9 @@ test("a worker's line offers Open in tab, which opens the subagent's session in 
   assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
+  // As an agent's tab: the task a card at the top, and a working line at the end while the subagent runs.
+  assert.ok(content?.querySelector("[data-task-card]")?.textContent?.includes(job));
+  assert.ok(content?.querySelector("[data-working]"));
   // The session's rows as the Work tab draws them: the call a row that opens onto its output, the words after it.
   const call = [...(content?.querySelectorAll("summary") ?? [])].find((summary) =>
     summary.textContent?.includes("ls src"),
