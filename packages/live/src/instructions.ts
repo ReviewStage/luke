@@ -7,7 +7,9 @@
  * whether one call is needed, and a tool it cannot name is a capability it
  * will not reach for. Note that the backend keeps the question queue, so
  * every answer is a reason to delegate: it is what keeps the queue the voice
- * asks from current.
+ * asks from current. Note that the call's start is no reason here, because
+ * the service sets the backend exploring as the session starts, and a
+ * delegation before the developer's first words waits for them anyway.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -16,7 +18,6 @@ Backend tools:
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 
 Delegate to the backend when:
-- The call has just started: ask the backend to start exploring the repository, and keep talking with the developer meanwhile.
 - The request needs a backend capability or careful reasoning.
 - A correction changes the work already requested.
 - The developer answers a question, or says they are unsure: pass the answer to the backend so it can queue what the answer unblocked.

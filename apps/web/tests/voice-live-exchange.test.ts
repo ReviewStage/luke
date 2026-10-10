@@ -16,12 +16,14 @@ import {
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import {
   memoryRelayState,
   type RelayStanding,
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   createPlan,
   deletePlan,
@@ -130,6 +132,10 @@ function mintEveSession(): string {
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
+  /** Every exploring a fresh session asked for, which eve declines unless `explores` is set. */
+  readonly explored: EveMessage[];
+  /** Whether eve takes a fresh session's exploring; off, so a test of the developer's asks finds their first ask opens the session. */
+  explores: boolean;
   /** The session each open was answered with, in order: eve's own record of what it took. */
   readonly sessions: string[];
   /** While set, an open has taken the message and answers only once this settles, as eve across the network does. */
@@ -139,10 +145,18 @@ interface FakeEve extends EveSessions {
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
+    explored: [],
+    explores: false,
     sessions: [],
     answerWhen: undefined,
     open(message) {
       return Effect.gen(function* () {
+        if (message.message === PLANNING_EXPLORE_ASK) {
+          eve.explored.push(message);
+          if (!eve.explores) {
+            return { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY };
+          }
+        }
         const sessionId = mintEveSession();
         eve.opened.push(message);
         eve.sessions.push(sessionId);
@@ -201,6 +215,8 @@ async function stand(
     };
     /** A session an earlier exchange stood on, attached to again as a device's re-attach finds it: already started. */
     readonly reattach?: string;
+    /** Whether eve takes the session's exploring as it starts. */
+    readonly explores?: boolean;
   } = {},
 ) {
   const liveSessionId = options.reattach ?? `sess_${randomUUID()}`;
@@ -239,6 +255,7 @@ async function stand(
     });
   });
   const eve = fakeEve();
+  eve.explores = options.explores ?? false;
   const reports: string[] = [];
   // The socket's own scope, as the attachment opens one: the exchange is built in it and the test's own stop closes it.
   const scope = await database.run(Scope.make());
@@ -389,11 +406,50 @@ it.live(
 );
 
 it.live(
-  "a call nobody has spoken on reaches no brain and appends nothing of the exchange's own",
+  "a fresh call sets eve exploring in the plan's conversation before anyone speaks, and the turn's reply is said session-wide",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* Effect.promise(() => stand(target, { explores: true }));
+      yield* settled(() => f.eve.opened.length === 1, "the exploring to reach eve");
+      assert.deepEqual(
+        f.eve.opened.map((message) => [message.conversationId, message.turn, message.message]),
+        [[target.conversationId, BRAIN_HOST_TURN.SPOKEN, PLANNING_EXPLORE_ASK]],
+      );
+      const [sessionId] = f.eve.sessions;
+      assert.ok(sessionId);
+      yield* Effect.promise(() =>
+        play(spokenTurn(FIRST_EVE_TURN, NOW), {
+          sessionId,
+          target,
+          turn: BRAIN_HOST_TURN.SPOKEN,
+          model: "scripted-model",
+          state: memoryRelayState(),
+        }),
+      );
+      yield* settled(
+        () => f.commentary().length >= 2,
+        "the exploring's reply to be spoken",
+        async () => `reports ${JSON.stringify(f.reports)}; sent ${socketSent(f)}`,
+      );
+      assert.deepEqual(
+        f.commentary().map((event) => [event.delegation_id, event.content]),
+        [
+          [null, "One agent finished."],
+          [null, "Another is waiting on you."],
+        ],
+      );
+      yield* Effect.promise(() => f.exchange.stop());
+    }),
+);
+
+it.live(
+  "a call nobody has spoken on, whose exploring eve declines, appends nothing of the exchange's own",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
       const f = yield* Effect.promise(() => stand(target));
+      yield* settled(() => f.eve.explored.length === 1, "the exploring to reach eve");
       yield* Effect.sleep(QUIET_MS);
       assert.deepEqual(f.eve.opened, []);
       assert.deepEqual(f.commentary(), []);

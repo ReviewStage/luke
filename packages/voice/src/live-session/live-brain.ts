@@ -174,6 +174,13 @@ export interface LiveBrain {
    */
   submitAsk(ask: LiveBrainAsk): Effect.Effect<LiveBrainSubmission>;
   /**
+   * Asks the backend to start exploring as a fresh call starts, before the
+   * developer has asked anything, so what it finds is already in hand when
+   * they do. The run answers no delegation: the service stands it as a run
+   * the brain opened of its own, which the developer's first ask supersedes.
+   */
+  explore(sessionId: string): Effect.Effect<LiveBrainSubmission>;
+  /**
    * Asks the backend to cancel one run, answering only once the backend has
    * said whether it took the cancel, so nothing is told of a cancel that did
    * not happen. The run still ends through its own seam.

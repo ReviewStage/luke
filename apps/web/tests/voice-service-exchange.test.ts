@@ -17,8 +17,10 @@ import {
   type EveMessage,
   type EveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   createPlan,
   openPlanConversation,
@@ -159,12 +161,22 @@ const sessionRecord = voiceSessionRecord(() => NOW);
 
 interface FakeEve extends EveSessions {
   readonly opened: EveMessage[];
+  /** Every exploring a fresh session asked for, which eve declines, so a test of the developer's asks finds their first ask opens the session. */
+  readonly explored: EveMessage[];
 }
 
 function fakeEve(): FakeEve {
   const eve: FakeEve = {
     opened: [],
+    explored: [],
     open(message) {
+      if (message.message === PLANNING_EXPLORE_ASK) {
+        eve.explored.push(message);
+        return Effect.succeed({
+          outcome: EVE_SEND_OUTCOME.FAILED,
+          status: HOSTED_HTTP_STATUS.BAD_GATEWAY,
+        });
+      }
       eve.opened.push(message);
       return Effect.succeed({
         outcome: EVE_SEND_OUTCOME.ACCEPTED,

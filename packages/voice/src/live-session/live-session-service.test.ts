@@ -182,6 +182,8 @@ class FakeBrain implements LiveBrain {
     runs: [],
     told: [],
   };
+  /** The run each fresh session's exploring is taken as, by the session; none refuses it, as a backend out of reach would. */
+  exploring: ((sessionId: string) => string) | undefined;
   readonly #listeners = new Set<(event: LiveBrainRunEvent) => void>();
   #runs = 0;
 
@@ -195,6 +197,14 @@ class FakeBrain implements LiveBrain {
       this.#runs += 1;
       return { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: `run-${this.#runs}` };
     });
+  }
+
+  explore(sessionId: string): Effect.Effect<LiveBrainSubmission> {
+    return Effect.sync(() =>
+      this.exploring === undefined
+        ? { outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" }
+        : { outcome: LIVE_BRAIN_SUBMISSION.ACCEPTED, runId: this.exploring(sessionId) },
+    );
   }
 
   cancelRun(runId: string): Effect.Effect<LiveBrainCancel> {
@@ -402,6 +412,60 @@ it.effect(
       sideband.delegation("item_1", 2500);
       yield* settle();
       assert.equal(f.brain.asks.length, 1);
+    }),
+);
+
+it.effect(
+  "a fresh session sets the backend exploring as it starts, before the developer has said a word, and the run's reply is said session-wide",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.exploring = (sessionId) => `explore-${sessionId}`;
+      const sideband = yield* f.open();
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "explore-sess-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "explore-sess-1",
+        sentence: "It's a pnpm monorepo with an Electron app.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "explore-sess-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(f.brain.asks, []);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((append) =>
+          "content" in append ? [append.content, append.delegation_id] : [],
+        ),
+        [["It's a pnpm monorepo with an Electron app.", null]],
+      );
+    }),
+);
+
+it.effect(
+  "a session adopted as already started sets nothing exploring: it explored when it first started",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.exploring = (sessionId) => `explore-${sessionId}`;
+      const sideband = new FakeSideband();
+      yield* f.service.adoptSession({
+        sessionId: "sess-running",
+        attach: () => Effect.succeed(sideband),
+        started: true,
+      });
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "explore-sess-running" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "explore-sess-running",
+        sentence: "It's a pnpm monorepo.",
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
     }),
 );
 
