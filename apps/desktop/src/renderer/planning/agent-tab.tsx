@@ -81,7 +81,7 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * Stop is the composer's, the one the tab has.
  */
 
-/** What the tab says before the agent's first message lands. */
+/** What the tab says before the agent's first message lands; an agent that ended before one says how instead. */
 const NOTHING_YET_LINE = "The agent is starting. Its transcript appears here.";
 
 /** How the agent's markdown is drawn: as every transcript's, with a link only to GitHub. */
@@ -307,7 +307,9 @@ export function AgentTranscriptView({
           </button>
         </>
       ) : (
-        <p className="m-0">{reading ? "Reading the transcript…" : NOTHING_YET_LINE}</p>
+        <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
+          {ended ?? (reading ? "Reading the transcript…" : NOTHING_YET_LINE)}
+        </p>
       )}
     </ConversationEmptyState>
   );

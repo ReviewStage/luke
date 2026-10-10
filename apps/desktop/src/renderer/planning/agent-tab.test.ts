@@ -405,20 +405,23 @@ test("the tab wears no head: it opens on the transcript, what the agent runs on 
   assert.doesNotMatch(tabMarkup(CODING_AGENT_STATUS.COMPLETED), /agent-end-line/u);
 });
 
-test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {
-  const empty = (reading: boolean, failed: boolean) =>
+test("with nothing held the tab says the agent is starting, or how it ended before its first message, a read out says it is reading, and a failed read offers Try again", () => {
+  const empty = (reading: boolean, failed: boolean, ended?: string) =>
     renderToStaticMarkup(
       createElement(AgentTranscriptView, {
         messages: [],
         reading,
         failed,
         working: false,
+        ended,
         onRetry: ignore,
         openGitHub: ignore,
         copyText: copyNothing,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
+  assert.match(empty(false, false, "Failed"), /data-ended="">Failed</u);
+  assert.doesNotMatch(empty(false, false, "Failed"), /starting/u);
   assert.match(empty(true, false), /Reading the transcript…/u);
   assert.match(empty(false, true), /could not be read[\s\S]*Try again/u);
 });

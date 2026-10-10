@@ -262,14 +262,20 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  // Note that only the newest change of each agent's model is taken into the
+  // list, because two changes may answer out of order and the older answer
+  // would otherwise stand over the choice the developer made last.
+  const chooses = useRef(new Map<string, number>());
   const onChoose = useCallback<ChoiceWriter>(
     async (agentId, choice) => {
+      const change = (chooses.current.get(agentId) ?? 0) + 1;
+      chooses.current.set(agentId, change);
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
         agentId,
         model: choice.model,
         effort: choice.effort,
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
-      if (!("failure" in answer)) {
+      if (!("failure" in answer) && chooses.current.get(agentId) === change) {
         setList((was) =>
           was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
         );

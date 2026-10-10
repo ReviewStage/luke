@@ -442,6 +442,7 @@
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the card. */
 .agent-composer {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -474,13 +475,17 @@
    wearing its state's colour with a dot for its checks, the branch's its
    name in the code face. */
 .agent-model-chip {
-  position: relative;
   min-width: 0;
 }
 
+/* The menu hangs above the card from the card's own left edge, no wider
+   than the card, so a panel at its narrowest never clips it at the
+   window's edge; the composer's room is its containing block. */
 .agent-model-chip .agent-model-menu {
   top: auto;
-  bottom: calc(100% + var(--space-4));
+  bottom: calc(100% - var(--space-6));
+  left: 16px;
+  width: min(340px, calc(100% - 32px));
 }
 
 .agent-published-chip {
