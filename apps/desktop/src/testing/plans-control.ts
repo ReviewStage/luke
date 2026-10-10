@@ -60,6 +60,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       open: false,
       fullScreen: false,
       tabs: SIDE_PANEL_TABS,
+      subagents: [],
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,

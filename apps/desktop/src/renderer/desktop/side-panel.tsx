@@ -10,6 +10,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
+import { BotIcon } from "lucide-react";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
@@ -20,12 +21,13 @@ import { CodePane } from "../planning/code-pane";
 import { agentTabLabel } from "../planning/coding-agent-model";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
-import { PlanWork } from "../planning/plan-work";
+import { PlanWork, SubagentTab } from "../planning/plan-work";
 import type { TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type FixedSidePanelTab,
   isAgentTab,
+  isSubagentTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
@@ -35,6 +37,13 @@ import {
   sameTab,
   tabAddable,
 } from "../planning/use-side-panel";
+import {
+  openedWorker,
+  type WorkTurnRow,
+  type WorkWorkerBlock,
+  workerJob,
+  workRowsOf,
+} from "../planning/work-model";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import {
   ActionMenu,
@@ -61,9 +70,10 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * is the window's rather than the panel's (desktop-shell.tsx), so the
  * panel's coming and going never moves it. The fixed tabs come first and
  * the plan's coding agents follow, one tab each, named by model with a dot
- * for where the agent stands; a fixed tab closes, an agent's never does.
- * The plan's own actions stay in the plan's toolbar and never come into
- * the panel.
+ * for where the agent stands; after them stand the subagents opened from
+ * the Work tab, one tab each, named by job. A fixed tab and a subagent's
+ * close, an agent's never does. The plan's own actions stay in the plan's
+ * toolbar and never come into the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -208,18 +218,23 @@ function AddTabButton({
  * something arrived on while another was shown, and an agent's whose end no
  * one was looking at, wear the note at their corner until shown. The fixed
  * tabs are dragged or stepped into the order the panel keeps; the agent
- * tabs stand after them in the order the agents started, so a drop among
- * them, or of one of them, changes nothing, and the "+" stands after all of
- * them, apart from the strip, so it is never dragged nor dropped before.
+ * tabs stand after them in the order the agents started, and the subagent
+ * tabs after those in the order opened, each wearing the worker's glyph,
+ * lit while it runs, so a drop among them, or of one of them, changes
+ * nothing, and the "+" stands after all of them, apart from the strip, so
+ * it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
   unread,
   agents,
+  subagents,
 }: {
   panel: SidePanelControl;
   unread: readonly SidePanelTab[];
   agents: CodingAgentsControl;
+  /** The open subagent tabs the plan's work holds, in the strip's order. */
+  subagents: readonly WorkWorkerBlock[];
 }): React.JSX.Element {
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
@@ -253,6 +268,16 @@ function PanelTabs({
             selected={chosen({ agent: agent.id })}
             unread={noted({ agent: agent.id })}
             onSelect={() => panel.onChoose({ agent: agent.id })}
+          />
+        ))}
+        {subagents.map(({ call }) => (
+          <Tab
+            key={call.id}
+            icon={<BotIcon className={call.running ? "text-luke" : undefined} />}
+            label={workerJob(call)}
+            selected={chosen({ subagent: call.id })}
+            onSelect={() => panel.onChoose({ subagent: call.id })}
+            onClose={() => panel.onClose({ subagent: call.id })}
           />
         ))}
         {/* The first read of the plan's agents did not land: nothing is known
@@ -301,8 +326,10 @@ function TabContent({
   code,
   transcript,
   work,
+  workRows,
   agents,
   shown,
+  onOpenSubagent,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -310,9 +337,13 @@ function TabContent({
   code: PlanCode | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
+  /** The plan's work as rows, which a subagent's tab reads its session from. */
+  workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
   /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
+  /** Opens a subagent's session in a tab of its own, by the call that started it. */
+  onOpenSubagent: (callId: string) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isAgentTab(tab)) {
@@ -323,6 +354,16 @@ function TabContent({
       <p className="side-panel-empty">Reading the agent…</p>
     ) : (
       <AgentTab key={agent.id} agent={agent} control={agents} shown={shown} />
+    );
+  }
+  if (isSubagentTab(tab)) {
+    const worker = openedWorker(workRows, [tab.subagent]);
+    // As an agent's: the tab stands for a subagent the work no longer holds
+    // only until the panel moves back to the board, a render away.
+    return worker === undefined ? (
+      <p className="side-panel-empty">Reading the subagent…</p>
+    ) : (
+      <SubagentTab key={tab.subagent} worker={worker} />
     );
   }
   switch (tab) {
@@ -343,7 +384,7 @@ function TabContent({
         />
       );
     case SIDE_PANEL_TAB.WORK:
-      return <PlanWork turns={work.turns} callLive={work.callLive} />;
+      return <PlanWork turns={work.turns} callLive={work.callLive} onOpenInTab={onOpenSubagent} />;
   }
 }
 
@@ -589,9 +630,19 @@ export function SidePanel({
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const { tab } = panel;
+  // The subagent tabs the plan's work still holds, each with its session, in the strip's order.
+  const workRows = workRowsOf(work.turns, work.callLive);
+  const subagents = panel.subagents.flatMap((callId) => {
+    const worker = openedWorker(workRows, [callId]);
+    return worker === undefined ? [] : [worker];
+  });
   const shownAgent =
     tab !== undefined && isAgentTab(tab)
       ? agents.agents?.find((agent) => agent.id === tab.agent)
+      : undefined;
+  const shownSubagent =
+    tab !== undefined && isSubagentTab(tab)
+      ? subagents.find((worker) => worker.call.id === tab.subagent)
       : undefined;
   const label =
     tab === undefined
@@ -600,7 +651,15 @@ export function SidePanel({
         ? shownAgent === undefined
           ? undefined
           : agentTabLabel(shownAgent, agents.models)
-        : SIDE_PANEL_TAB_KIND[tab].label;
+        : isSubagentTab(tab)
+          ? shownSubagent === undefined
+            ? undefined
+            : workerJob(shownSubagent.call)
+          : SIDE_PANEL_TAB_KIND[tab].label;
+  const openSubagent = useCallback(
+    (callId: string) => panel.onChoose({ subagent: callId }),
+    [panel.onChoose],
+  );
 
   useLayoutEffect(() => {
     if (leaving === PANEL_LEAVING.NONE || aside.current === null) return;
@@ -625,7 +684,7 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <PanelTabs panel={panel} unread={unread} agents={agents} />
+          <PanelTabs panel={panel} unread={unread} agents={agents} subagents={subagents} />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}
@@ -645,8 +704,10 @@ export function SidePanel({
               code={code}
               transcript={transcript}
               work={work}
+              workRows={workRows}
               agents={agents}
               shown={shown && leaving === PANEL_LEAVING.NONE}
+              onOpenSubagent={openSubagent}
             />
           </div>
         )}

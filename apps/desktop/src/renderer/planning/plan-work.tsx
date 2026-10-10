@@ -4,8 +4,13 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import { BotIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { createContext, useCallback, useContext, useState } from "react";
+import {
+  BotIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  SquareArrowOutUpRightIcon,
+} from "lucide-react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -17,6 +22,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
+import { Tooltip } from "../tooltip";
 import {
   TranscriptNote,
   TranscriptReasoning,
@@ -25,7 +31,7 @@ import {
   TranscriptWords,
 } from "./transcript-blocks";
 import { callHeading } from "./transcript-model";
-import { CALL_WORDS, type TurnRow } from "./turn-rows";
+import type { TurnRow } from "./turn-rows";
 import {
   openedWorker,
   WORK_BLOCK,
@@ -34,6 +40,7 @@ import {
   type WorkCallRow,
   type WorkTurnRow,
   type WorkWorkerBlock,
+  workerJob,
   workRowsOf,
 } from "./work-model";
 
@@ -47,7 +54,9 @@ import {
  * wearing its kind's icon that opens onto its input and output, and the
  * runs of calls and a finished turn's lead folded as an agent's are. What
  * is this tab's own is the worker, a boxed line that opens its session in
- * the tab's place. Everything here is
+ * the tab's place, or, from the button at its end, in a tab of the panel's
+ * own (`SubagentTab`), which draws the session the same way and follows it
+ * while the subagent runs. Everything here is
  * the planning model's or the developer's repository's, a command's output
  * included, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind its text masking.
@@ -87,13 +96,17 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   );
 }
 
-/** Opens a subagent's session in the tab's place; a row deep in the tree reaches it through this rather than through every row above it. */
-const OpenSubagent = createContext<(callId: string) => void>(() => undefined);
-
-/** What a subagent's line names it by: its job, or what was asked of it where no job was said. */
-function jobOf(call: WorkCallRow): string {
-  return call.subject ?? CALL_WORDS[call.kind].verb;
+/** The doors a subagent's line opens its session through: in the tab's place, or in a tab of the panel's own where the panel offers one. */
+interface WorkerDoors {
+  open: (callId: string) => void;
+  openInTab: ((callId: string) => void) | undefined;
 }
+
+/** A row deep in the tree reaches the doors through this rather than through every row above it. */
+const WorkerDoorsContext = createContext<WorkerDoors>({
+  open: () => undefined,
+  openInTab: undefined,
+});
 
 /** What a subagent's line says of how far it got, a light sweeping it while it works. */
 function WorkerState({ call }: { call: WorkCallRow }): React.JSX.Element {
@@ -101,26 +114,79 @@ function WorkerState({ call }: { call: WorkCallRow }): React.JSX.Element {
   return <span>{call.state === PLAN_WORK_STATE.FAILED ? "Stopped" : "Done"}</span>;
 }
 
-/** A subagent's call as one boxed line that opens its session: its job, and how far it got. */
-function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
-  const open = useContext(OpenSubagent);
+/** The button at a subagent's line that opens its session in a tab of the panel's own, shown while the pointer or focus is on the line. */
+function OpenInTabButton({ onPress }: { onPress: () => void }): React.JSX.Element {
   return (
-    <button
-      type="button"
-      className="ai-trigger work-worker-line flex w-full min-w-0 items-center gap-2"
-      onClick={() => open(call.id)}
-    >
-      <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
-      <span className="min-w-0 truncate text-foreground">{jobOf(call)}</span>
-      <span className="ml-auto flex shrink-0 items-center gap-1.5">
-        <WorkerState call={call} />
-        <ChevronRightIcon className="size-3" />
-      </span>
-    </button>
+    <Tooltip label="Open in tab">
+      <button
+        type="button"
+        className="icon-button work-worker-tab"
+        aria-label="Open in tab"
+        onClick={onPress}
+      >
+        <SquareArrowOutUpRightIcon aria-hidden="true" />
+      </button>
+    </Tooltip>
   );
 }
 
-/** A subagent's session in the tab's place: the way back, its job and state, and its blocks, drawn as a turn's are. */
+/** A subagent's call as one boxed line that opens its session: its job, how far it got, and the way into a tab of its own. */
+function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
+  const doors = useContext(WorkerDoorsContext);
+  return (
+    <div className="work-worker-line flex min-w-0 items-center gap-2">
+      <button
+        type="button"
+        className="ai-trigger flex min-w-0 flex-1 items-center gap-2"
+        onClick={() => doors.open(call.id)}
+      >
+        <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
+        <span className="min-w-0 truncate text-foreground">{workerJob(call)}</span>
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
+          <WorkerState call={call} />
+          <ChevronRightIcon className="size-3" />
+        </span>
+      </button>
+      {doors.openInTab === undefined ? null : (
+        <OpenInTabButton onPress={() => doors.openInTab?.(call.id)} />
+      )}
+    </div>
+  );
+}
+
+/** A subagent's job and state, at the head of its session. */
+function WorkerHead({ call }: { call: WorkCallRow }): React.JSX.Element {
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
+      <p className="m-0 min-w-0 flex-1 font-semibold text-[12.5px] text-foreground">
+        {workerJob(call)}
+      </p>
+      <span className="shrink-0 text-muted-foreground text-xs">
+        <WorkerState call={call} />
+      </span>
+    </div>
+  );
+}
+
+/** A subagent's session's rows, drawn as a turn's are, or the note standing in their place. */
+function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
+  const { call, session } = worker;
+  return (
+    <>
+      {session?.earlierOmitted ? (
+        <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+      ) : null}
+      {session === undefined || session.rows.length === 0 ? (
+        <TranscriptNote>{call.running ? "Starting…" : "Nothing recorded."}</TranscriptNote>
+      ) : (
+        <WorkTurnRows rows={session.rows} />
+      )}
+    </>
+  );
+}
+
+/** A subagent's session in the tab's place: the way back, its job and state, and its blocks. */
 function SubagentSession({
   worker,
   onBack,
@@ -128,7 +194,6 @@ function SubagentSession({
   worker: WorkWorkerBlock;
   onBack: () => void;
 }): React.JSX.Element {
-  const { call, session } = worker;
   return (
     <Conversation>
       {/* No top padding, so the sticky header covers everything scrolled above it. */}
@@ -138,27 +203,35 @@ function SubagentSession({
             <ChevronLeftIcon className="size-3.5" />
             All work
           </button>
-          <div className="flex min-w-0 items-center gap-2">
-            <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
-            <p className="m-0 min-w-0 flex-1 font-semibold text-[12.5px] text-foreground">
-              {jobOf(call)}
-            </p>
-            <span className="shrink-0 text-muted-foreground text-xs">
-              <WorkerState call={call} />
-            </span>
-          </div>
+          <WorkerHead call={worker.call} />
         </header>
-        {session?.earlierOmitted ? (
-          <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
-        ) : null}
-        {session === undefined || session.rows.length === 0 ? (
-          <TranscriptNote>{call.running ? "Starting…" : "Nothing recorded."}</TranscriptNote>
-        ) : (
-          <WorkTurnRows rows={session.rows} />
-        )}
+        <SubagentRows worker={worker} />
       </ConversationContent>
       <ConversationScrollButton />
     </Conversation>
+  );
+}
+
+/**
+ * A subagent's session in a tab of the panel's own: its job and state at
+ * the head, and its blocks drawn as the Work tab draws them. The worker is
+ * read from the plan's work on every frame, so the tab follows the session
+ * while the subagent runs, and the log keeps to its newest line as every
+ * transcript does.
+ */
+export function SubagentTab({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
+  return (
+    <div className="plan-work ph-no-capture">
+      <Conversation>
+        <ConversationContent className="pt-0">
+          <header className="work-session-header">
+            <WorkerHead call={worker.call} />
+          </header>
+          <SubagentRows worker={worker} />
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+    </div>
   );
 }
 
@@ -216,28 +289,37 @@ function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.
 export function PlanWork({
   turns,
   callLive,
+  onOpenInTab,
 }: {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
+  /** Opens a subagent's session in a tab of the panel's own, by the call that started it; none where the panel offers no tab. */
+  onOpenInTab?: ((callId: string) => void) | undefined;
 }): React.JSX.Element {
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
   // The subagents opened, outermost first: one opened inside another's session stacks on it.
   const [opened, setOpened] = useState<readonly string[]>([]);
   const worker = openedWorker(rows, opened);
-  const open = useCallback((callId: string) => setOpened((held) => [...held, callId]), []);
+  const doors = useMemo(
+    (): WorkerDoors => ({
+      open: (callId) => setOpened((held) => [...held, callId]),
+      openInTab: onOpenInTab,
+    }),
+    [onOpenInTab],
+  );
   if (worker !== undefined) {
     return (
       <section className="plan-work ph-no-capture" aria-label="Work">
-        <OpenSubagent.Provider value={open}>
+        <WorkerDoorsContext.Provider value={doors}>
           <SubagentSession worker={worker} onBack={() => setOpened((held) => held.slice(0, -1))} />
-        </OpenSubagent.Provider>
+        </WorkerDoorsContext.Provider>
       </section>
     );
   }
   return (
     <section className="plan-work ph-no-capture" aria-label="Work">
-      <OpenSubagent.Provider value={open}>
+      <WorkerDoorsContext.Provider value={doors}>
         {rows.length === 0 ? (
           <ConversationEmptyState>
             <p className="m-0">{WORK_EMPTY_LINE}</p>
@@ -253,7 +335,7 @@ export function PlanWork({
             <ConversationScrollButton />
           </Conversation>
         )}
-      </OpenSubagent.Provider>
+      </WorkerDoorsContext.Provider>
     </section>
   );
 }

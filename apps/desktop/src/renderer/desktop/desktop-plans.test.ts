@@ -24,6 +24,7 @@ import {
   type SidePanelTab,
   useSidePanel,
 } from "../planning/use-side-panel";
+import { workerCallIds } from "../planning/work-model";
 import { DesktopPlans } from "./desktop-plans";
 import { SidePanelToggle } from "./side-panel";
 
@@ -63,8 +64,14 @@ let copies = 0;
  * would stage it, with the window's keymap and the panel's toggle the window
  * stands beside the page (desktop-shell.tsx).
  */
-function Page({ staged }: { staged: SidePanelState | undefined }) {
-  const sidePanel = useSidePanel(staged);
+function Page({
+  staged,
+  work,
+}: {
+  staged: SidePanelState | undefined;
+  work?: PlansControl["work"] | undefined;
+}) {
+  const sidePanel = useSidePanel(staged, undefined, workerCallIds(work?.turns));
   useAppKeymap(true);
   useMenuCommands(true);
   const page = createElement(DesktopPlans, {
@@ -79,6 +86,7 @@ function Page({ staged }: { staged: SidePanelState | undefined }) {
           copies += 1;
         },
       },
+      ...(work === undefined ? undefined : { work }),
     }),
   });
   return createElement(
@@ -98,12 +106,14 @@ function keydown(init: KeyboardEventInit): boolean {
   return event.defaultPrevented;
 }
 
-function mountOpenPlan(options: { staged?: SidePanelState } = {}): HTMLElement {
+function mountOpenPlan(
+  options: { staged?: SidePanelState; work?: PlansControl["work"] } = {},
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { staged: options.staged })));
+  act(() => root.render(createElement(Page, { staged: options.staged, work: options.work })));
   return container;
 }
 
@@ -474,6 +484,75 @@ test("a worker in the Work tab opens its own session in the tab's place, and the
   assert.ok(back);
   act(() => back.click());
   assert.ok(work.textContent?.includes("While that runs"));
+});
+
+test("a worker's line offers Open in tab, which opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Work tab draws it; opened again it is chosen rather than doubled, and its × closes it", () => {
+  const job = "Compare the two queue libraries.";
+  const page = mountOpenPlan({
+    work: {
+      callLive: true,
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1_000,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-worker",
+              tool: PLAN_WORK_TOOL.WORKER,
+              name: "worker",
+              state: PLAN_WORK_STATE.RUNNING,
+              subject: job,
+              input: "{}",
+              session: {
+                earlierOmitted: false,
+                parts: [
+                  {
+                    type: PLAN_WORK_PART.TOOL,
+                    id: "worker-call",
+                    tool: PLAN_WORK_TOOL.REPOSITORY,
+                    name: "run_in_repository",
+                    state: PLAN_WORK_STATE.DONE,
+                    subject: "ls src",
+                    input: '{ "command": "ls src" }',
+                    output: "queue.ts",
+                  },
+                  { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, '.work-worker-line [aria-label="Open in tab"]');
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.equal(chosenTab(page), job);
+  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
+  const content = page.querySelector('.side-panel-content[role="tabpanel"]');
+  assert.equal(content?.getAttribute("aria-label"), job);
+  // The session's rows as the Work tab draws them: the call a row that opens onto its output, the words after it.
+  const call = [...(content?.querySelectorAll("summary") ?? [])].find((summary) =>
+    summary.textContent?.includes("ls src"),
+  );
+  assert.ok(call, "no row for the subagent's call");
+  act(() => call.click());
+  assert.ok(content?.textContent?.includes("queue.ts"));
+  assert.ok(content?.textContent?.includes("Queue A lets an admin revoke."));
+
+  act(() => tabNamed(page, "Work").click());
+  press(page, '.work-worker-line [aria-label="Open in tab"]');
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
+  assert.equal(chosenTab(page), job);
+
+  press(page, `[aria-label="Close ${job}"]`);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Work");
 });
 
 test("the Work tab with no turn says what will appear there", () => {
