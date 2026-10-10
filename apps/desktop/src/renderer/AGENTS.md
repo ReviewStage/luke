@@ -51,15 +51,30 @@ bundle's own and are easy to undo:
 
 ## Panel motion
 
-`docs/DESIGN.md` is the binding contract and states the spring vocabulary, the
-transform-and-opacity rule, and how content joins and leaves a resizing shape.
+`docs/DESIGN.md` is the binding contract and states the motion tokens, the
+transform-and-opacity rule, and how the window's panes open, close, and fill it.
 Read it first. What it does not cover is the Electron window under the surface:
 
-- **The window never animates its own frame.** An animated `setBounds` re-lays out
-  the whole renderer every frame, because the panel is anchored to the viewport's
-  centre.
-- `backdrop-filter` is not an option: a transparent window has no backdrop to
-  sample, so it buys a render surface and returns nothing.
+- **The window never animates its own frame.** Main sets its bounds once, at
+  creation, and moves it no further; a pane makes its room inside the window,
+  because an animated `setBounds` re-lays out the whole renderer every frame.
+- **A pane never animates a width.** It lands in the layout at once, and
+  `pane-motion.tsx` replays what it displaced, FLIP-style, on `transform` and
+  `clip-path` from a snapshot taken in `getSnapshotBeforeUpdate`. Content a pane
+  change moves joins its `GLIDERS`, or it jumps while the rest glides.
+- **The shell never scrolls sideways.** Whatever slides past its edges is clipped
+  with `overflow: clip`, never `hidden`: `hidden` makes a scroll container, and
+  `scrollIntoView` or a focus then scrolls the whole window into the room a
+  sliding pane stands in, and leaves it there. Inside a pane that may still be
+  sliding in, scroll its own scroller rather than call `scrollIntoView`, which
+  scrolls every box around the element (`code-pane.tsx`'s `centreWithin`).
+- **Title-bar controls stand still while the panes slide beneath them.** They come
+  after the drag strips in DOM order, because a later drag region wins, and draw
+  their fills over an opaque `--title-bar-ground`, because a translucent fill
+  shows the pane passing under it.
+- Reduced motion and a capture run hold motion still at the tokens (`base.css`),
+  and `pane-motion.tsx` reads its timing from those same tokens, so a pane
+  answers both without a check of its own.
 
 ## Confirms
 
