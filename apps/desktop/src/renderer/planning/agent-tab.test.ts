@@ -3,18 +3,21 @@
 import assert from "node:assert/strict";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
+  type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
-import { PublishedRow } from "./agent-published";
-import { AgentHeader, AgentTranscriptView } from "./agent-tab";
+import { PublishedChip, PublishedRow } from "./agent-published";
+import { AgentTabView, AgentTranscriptView } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -117,8 +120,8 @@ const AGENT = {
   turnId: null,
 } as const;
 
-/** The head mounted live, so its ⋯ can be opened and its items pressed. */
-function mountedHead(
+/** The published chip mounted live, so its menu can be opened and its items pressed. */
+function mountedChip(
   published: CodingAgentPullRequestAnswer | undefined,
   doors: { openGitHub: (url: string) => void; copy: (words: string) => void },
 ): HTMLElement {
@@ -127,14 +130,7 @@ function mountedHead(
   const root = createRoot(container);
   roots.push(root);
   act(() => {
-    root.render(
-      createElement(AgentHeader, {
-        agent: AGENT,
-        models: undefined,
-        published,
-        doors,
-      }),
-    );
+    root.render(createElement(PublishedChip, { published, doors }));
   });
   return container;
 }
@@ -143,14 +139,55 @@ function menuItems(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
 }
 
-/** Opens the head's ⋯ and presses the item named. */
+const chipOf = (container: HTMLElement) =>
+  container.querySelector<HTMLButtonElement>(".agent-published-chip");
+
+/** Opens the chip's menu and presses the item named. */
 function choose(container: HTMLElement, label: string): void {
-  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
-  assert.ok(more, "the ⋯ stands");
-  act(() => more.click());
+  const chip = chipOf(container);
+  assert.ok(chip, "the chip stands");
+  act(() => chip.click());
   const item = menuItems().find((candidate) => candidate.textContent === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
+}
+
+/** The whole tab drawn once, with the agent in the status given and the transcript's last page saying why it failed. */
+function tabMarkup(status: CodingAgentSummary["status"], failure?: CodingAgentFailure): string {
+  return renderToStaticMarkup(
+    createElement(AgentTabView, {
+      agent: { ...AGENT, status },
+      models: undefined,
+      readModels: ignore,
+      transcript: {
+        messages: [PLAN, TURN],
+        failure,
+        reading: false,
+        failed: false,
+        onRetry: ignore,
+      },
+      composer: {
+        draft: "",
+        setDraft: ignore,
+        sending: false,
+        note: undefined,
+        closed: undefined,
+        send: ignore,
+        retry: ignore,
+        sent: [],
+      },
+      model: {
+        choice: { model: AGENT.model, effort: AGENT.effort },
+        note: undefined,
+        choose: ignore,
+      },
+      published: undefined,
+      doors: SHUT,
+      onStop: () => Promise.resolve(),
+      openGitHub: ignore,
+      copyText: copyNothing,
+    }),
+  );
 }
 
 function drawn(messages: readonly CodingAgentMessage[], working = false): string {
@@ -351,44 +388,40 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/7"]);
 });
 
-test("the head says model · effort · status with the dot, and holds no Stop of its own: the composer's is the one", () => {
-  const agent = AGENT;
-  const running = renderToStaticMarkup(
-    createElement(AgentHeader, { agent, models: undefined, published: undefined, doors: SHUT }),
-  );
-  assert.match(running, /class="agent-status-dot" data-status="running" data-live="true"/u);
+test("the tab wears no head: it opens on the transcript, what the agent runs on is the chip at the box's foot, and a stopped or failed turn ends the transcript on one quiet line saying so", () => {
+  const running = tabMarkup(CODING_AGENT_STATUS.RUNNING);
+  assert.doesNotMatch(running, /<header|agent-tab-header|agent-status-dot|agent-end-line/u);
+  assert.match(running, /<section[^>]*class="agent-tab[^"]*"[^>]*><div[^>]*><div role="log"/u);
+  assert.match(running, /class="agent-model-chip">.*?Claude Opus 5\.5 · High<\/span>/u);
   assert.match(
-    running,
-    /Claude Opus 5\.5<\/strong><span[^>]*> · <\/span>high<span[^>]*> · <\/span><span data-status="running">Running/u,
+    tabMarkup(CODING_AGENT_STATUS.CANCELLED),
+    /<p class="agent-end-line"[^>]*>Stopped</u,
   );
-  assert.doesNotMatch(running, /<button/u);
-
-  const ended = renderToStaticMarkup(
-    createElement(AgentHeader, {
-      agent: { ...agent, status: CODING_AGENT_STATUS.COMPLETED },
-      models: undefined,
-      published: undefined,
-      doors: SHUT,
-    }),
+  assert.match(
+    tabMarkup(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.GITHUB),
+    /<p class="agent-end-line"[^>]*>Failed: GitHub refused or could not be reached</u,
   );
-  assert.match(ended, /data-status="completed" data-live="false"/u);
-  assert.match(ended, /data-status="completed">Completed/u);
+  assert.match(tabMarkup(CODING_AGENT_STATUS.FAILED), /agent-end-line"[^>]*>Failed</u);
+  assert.doesNotMatch(tabMarkup(CODING_AGENT_STATUS.COMPLETED), /agent-end-line/u);
 });
 
-test("with nothing held the tab says the agent is starting, a read out says it is reading, and a failed read offers Try again", () => {
-  const empty = (reading: boolean, failed: boolean) =>
+test("with nothing held the tab says the agent is starting, or how it ended before its first message, a read out says it is reading, and a failed read offers Try again", () => {
+  const empty = (reading: boolean, failed: boolean, ended?: string) =>
     renderToStaticMarkup(
       createElement(AgentTranscriptView, {
         messages: [],
         reading,
         failed,
         working: false,
+        ended,
         onRetry: ignore,
         openGitHub: ignore,
         copyText: copyNothing,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
+  assert.match(empty(false, false, "Failed"), /data-ended="">Failed</u);
+  assert.doesNotMatch(empty(false, false, "Failed"), /starting/u);
   assert.match(empty(true, false), /Reading the transcript…/u);
   assert.match(empty(false, true), /could not be read[\s\S]*Try again/u);
 });
@@ -494,60 +527,31 @@ test("copying a turn hands the clipboard the agent's words alone, never its tool
   assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
 });
 
-test("the head wears the pull request's pill in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said", () => {
-  const head = (published: CodingAgentPullRequestAnswer | undefined) =>
-    renderToStaticMarkup(
-      createElement(AgentHeader, {
-        agent: AGENT,
-        models: undefined,
-        published,
-        doors: SHUT,
-      }),
-    );
-  for (const state of Object.values(PULL_REQUEST_STATE)) {
-    const pill = head({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, state } });
-    assert.match(pill, new RegExp(`class="agent-pr-pill" data-state="${state}"`, "u"));
-    assert.match(pill, /class="agent-pr-number">#123</u);
-  }
-  for (const checks of Object.values(CHECK_SUMMARY)) {
-    const pill = head({ ...PUBLISHED, pullRequest: { ...PULL_REQUEST, checks } });
-    assert.match(pill, new RegExp(`class="agent-check-dot" data-checks="${checks}"`, "u"));
-  }
-  assert.match(head(PUBLISHED), /aria-label="Pull request #123, open, checks passing"/u);
-  assert.match(head(PUBLISHED), /aria-label="Pull request actions"/u);
-  assert.doesNotMatch(head(PUBLISHED), /agent-branch-chip/u);
+test("the box's foot wears the pull request's chip in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said; the chip's menu offers opening the pull request, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
+  const chip = (published: CodingAgentPullRequestAnswer | undefined) =>
+    renderToStaticMarkup(createElement(PublishedChip, { published, doors: SHUT }));
+  assert.match(
+    chip(PUBLISHED),
+    /class="plan-compose-chip agent-published-chip" data-state="open" aria-label="Pull request #123, open, checks passing" aria-haspopup="menu"[\s\S]*agent-pr-number">#123<\/span><span class="agent-check-dot" data-checks="passing"/u,
+  );
+  assert.match(
+    chip({ ...PUBLISHED, pullRequest: null }),
+    /agent-published-chip" aria-label="luke\/teammate-invitations"[\s\S]*agent-branch-name">luke\/teammate-invitations</u,
+  );
+  assert.equal(chip({ ...PUBLISHED, branch: null, pullRequest: null }), "");
+  assert.equal(chip(undefined), "");
 
-  const chip = head({ ...PUBLISHED, pullRequest: null });
-  assert.match(chip, /class="agent-branch-chip"[^>]*>[\s\S]*luke\/teammate-invitations</u);
-  assert.doesNotMatch(chip, /agent-pr-pill/u);
-  assert.match(chip, /aria-label="Pull request actions"/u);
-
-  for (const bare of [undefined, { ...PUBLISHED, branch: null, pullRequest: null }]) {
-    const nothing = head(bare);
-    assert.doesNotMatch(nothing, /agent-pr-pill|agent-branch-chip|Pull request actions/u);
-  }
-});
-
-test("the pill opens the pull request, and the ⋯ offers opening it, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
   const opened: string[] = [];
   const copied: string[] = [];
-  const doors = {
-    openGitHub: (url: string) => opened.push(url),
-    copy: (words: string) => copied.push(words),
-  };
-  const container = mountedHead(PUBLISHED, doors);
-
-  const pill = container.querySelector<HTMLButtonElement>(".agent-pr-pill");
-  assert.ok(pill);
-  act(() => pill.click());
-  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
-
+  const container = mountedChip(PUBLISHED, {
+    openGitHub: (url) => opened.push(url),
+    copy: (words) => copied.push(words),
+  });
   choose(container, "Open pull request");
   choose(container, "Copy branch name");
   choose(container, "Copy checkout command");
   choose(container, "View changes on GitHub");
   assert.deepEqual(opened, [
-    "https://github.com/acme/relay/pull/123",
     "https://github.com/acme/relay/pull/123",
     "https://github.com/acme/relay/pull/123/files",
   ]);
@@ -555,24 +559,16 @@ test("the pill opens the pull request, and the ⋯ offers opening it, copying th
     "luke/teammate-invitations",
     "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
   ]);
-  // The menu closes on a choice, and nothing in it is Stop, which stays the head's own button.
-  assert.deepEqual(menuItems(), []);
-  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
-  assert.ok(more);
-  act(() => more.click());
-  assert.deepEqual(
-    menuItems().map((item) => item.textContent),
-    ["Open pull request", "Copy branch name", "Copy checkout command", "View changes on GitHub"],
-  );
+  assert.deepEqual(menuItems(), [], "the menu closes on a choice");
 });
 
-test("with a branch and no pull request the ⋯ offers the copies and the compare page alone", () => {
+test("with a branch and no pull request the menu offers the copies and the compare page alone", () => {
   const opened: string[] = [];
-  const container = mountedHead(
+  const container = mountedChip(
     { ...PUBLISHED, pullRequest: null },
     { openGitHub: (url) => opened.push(url), copy: ignore },
   );
-  const more = container.querySelector<HTMLButtonElement>('[aria-label="Pull request actions"]');
+  const more = chipOf(container);
   assert.ok(more);
   act(() => more.click());
   assert.deepEqual(

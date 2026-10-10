@@ -48,6 +48,7 @@ import {
   awaitingLinesOf,
   createCodingAgent,
   latestTurnsOf,
+  updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
@@ -362,6 +363,26 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           providerOptions: { openai: { reasoningEffort: "low" } },
         });
       }),
+  );
+
+  it.effect("a change of the agent's model and effort is what the next step is told", () =>
+    Effect.gen(function* () {
+      const host = yield* hostOverStore;
+      const { userId, agent, admitted } = yield* openAgent(host);
+      const changed = yield* updateCodingAgentChoice(userId, agent.id, {
+        model: "openai/gpt-6.1-sol",
+        effort: "low",
+      });
+      assert.ok(Option.isSome(changed));
+      const selected = yield* host
+        .model(admitted, undefined)
+        .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+      assert.ok(Result.isSuccess(selected));
+      assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "gpt-6.1-sol");
+      assert.deepEqual(selected.success.modelOptions, {
+        providerOptions: { openai: { reasoningEffort: "low" } },
+      });
+    }),
   );
 
   it.effect(

@@ -285,6 +285,22 @@ it.effect(
 );
 
 it.effect(
+  "changes an agent's model and effort at the agent's own address, as the choice alone",
+  () =>
+    Effect.gen(function* () {
+      const chosen = { ...AGENT, ...CHOICE };
+      const api = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: chosen }) },
+      });
+
+      const answer = yield* Effect.provide(client().choose(AGENT_ID, CHOICE), api.layer);
+
+      assert.deepEqual(answer, { agent: chosen });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), CHOICE);
+    }),
+);
+
+it.effect(
   "reads what an agent published at its pull-request address, and an agent the service does not find reads as not found",
   () =>
     Effect.gen(function* () {

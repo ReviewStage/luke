@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import {
+  CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAgentAnswer,
+} from "@sidecar/hosted/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -309,4 +312,35 @@ test("a choice written as the default is asked of the service as given, and one 
   await settle();
   assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
+});
+
+test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  const chosen = { ...STARTED, model: "openai/gpt-6.1-sol", effort: "low" };
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHOOSE, { agent: chosen });
+  await tab.mount();
+
+  const answer = await tab.control().onChoose(AGENT, { model: chosen.model, effort: "low" });
+  await settle();
+  assert.deepEqual(answer, { agent: chosen });
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_CHOOSE,
+    payload: { agentId: AGENT, model: "openai/gpt-6.1-sol", effort: "low" },
+  });
+  assert.deepEqual(tab.control().agents, [chosen]);
+
+  // Two changes answered out of order: the one made last is what stands, whichever answers first.
+  let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
+  const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
+    answerFirst = resolve;
+  });
+  const last = { ...chosen, effort: "high" };
+  tab.answer(ACT_KIND.CODING_AGENTS_CHOOSE, first, { agent: last });
+  const older = tab.control().onChoose(AGENT, { model: chosen.model, effort: "medium" });
+  await tab.control().onChoose(AGENT, { model: chosen.model, effort: "high" });
+  answerFirst?.({ agent: { ...chosen, effort: "medium" } });
+  await older;
+  await settle();
+  assert.deepEqual(tab.control().agents, [last]);
 });

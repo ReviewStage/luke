@@ -49,6 +49,16 @@
         "failed",
         "cancelled"
       ]
+    },
+    "failureReason": {
+      "type": "string",
+      "enum": [
+        "model",
+        "sandbox",
+        "github",
+        "abandoned",
+        "other"
+      ]
     }
   },
   "required": [

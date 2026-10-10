@@ -39,6 +39,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/messages", route: "agents/messages", query: "id=$1" },
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
+  { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */

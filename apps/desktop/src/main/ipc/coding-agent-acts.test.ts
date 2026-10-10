@@ -93,6 +93,11 @@ function fixture() {
           asked.push(`message:${agentId}:${clientKey}:${text}`);
           return STARTED;
         }),
+      codingAgentChoose: ({ agentId, model, effort }) =>
+        Effect.sync(() => {
+          asked.push(`choose:${agentId}:${model}:${effort}`);
+          return STARTED;
+        }),
       codingAgentStop: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`stop:${agentId}`);

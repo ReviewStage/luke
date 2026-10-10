@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { Duration, Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
-import { TURN_STATUS } from "../server/core";
+import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../server/core";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import {
   type CoderModelSelection,
   coderModel,
   type ProviderKeys,
 } from "../server/hosted/coder-host/model";
-import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
+import { codingAgentFailureOf, codingAgentStatusOf } from "../server/hosted/coder-host/status";
+import { REPOSITORY_REFUSAL } from "../server/hosted/repository-shell";
 
 /**
  * The model one step of a coding agent runs on, as the host selects it from
@@ -87,7 +88,15 @@ test("a provider Luke does not run, or a key the deployment does not hold, refus
 
 /** A newest turn as the store answers it, in the status given. */
 function turn(status: string, cancelRequestedAt: Date | null = null) {
-  return { conversationId: "c", id: "t", status, eveTurnId: "turn_0", cancelRequestedAt };
+  return {
+    conversationId: "c",
+    id: "t",
+    status,
+    eveTurnId: "turn_0",
+    failure: null,
+    failureDetail: null,
+    cancelRequestedAt,
+  };
 }
 
 /** An agent started at the epoch, read this long after. */
@@ -123,4 +132,27 @@ test("an agent with no turn row reads as starting inside the grace and as failed
     codingAgentStatusOf(turn(TURN_STATUS.RUNNING), started(grace + 1)),
     CODING_AGENT_STATUS.RUNNING,
   );
+});
+
+/** Why a failed turn failed, as the one word the wire carries: the turn row's failure word and the host's own sentences in its detail, never eve's or a provider's words. */
+const failed = (failure: string, failureDetail: string | null = null) => ({
+  status: TURN_STATUS.FAILED,
+  failure,
+  failureDetail,
+});
+const { MODEL, ABANDONED, PERSISTENCE } = BRAIN_REQUEST_FAILURE;
+
+test.for([
+  [failed(MODEL, "MODEL_CALL_FAILED 529 overloaded"), CODING_AGENT_FAILURE.MODEL],
+  [failed(MODEL, `SANDBOX_FAILED ${CODER_REFUSAL.NOT_REACHABLE}`), CODING_AGENT_FAILURE.GITHUB],
+  [
+    failed(MODEL, `Not run: ${REPOSITORY_REFUSAL.CHECKOUT_FAILED} fatal`),
+    CODING_AGENT_FAILURE.SANDBOX,
+  ],
+  [failed(ABANDONED), CODING_AGENT_FAILURE.ABANDONED],
+  [failed(PERSISTENCE), CODING_AGENT_FAILURE.OTHER],
+  [{ status: TURN_STATUS.CANCELLED, failure: MODEL, failureDetail: null }, undefined],
+  [undefined, undefined],
+] as const)("a failed turn's reason is the wire's one word: %o", ([turn, word]) => {
+  assert.equal(codingAgentFailureOf(turn), word);
 });

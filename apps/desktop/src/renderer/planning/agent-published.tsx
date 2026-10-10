@@ -2,7 +2,7 @@ import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
 } from "@sidecar/hosted/coding-agent-wire";
-import { CopyIcon, EllipsisIcon, ExternalIcon } from "@sidecar/panel";
+import { CopyIcon, ExternalIcon } from "@sidecar/panel";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
@@ -24,17 +24,17 @@ import {
 } from "./coding-agent-model";
 
 /**
- * agent-published.tsx -- what an agent published, on its tab: the pull request pill or the branch chip in the head, their ⋯ menu, and the row that sums a finished turn up.
+ * agent-published.tsx -- what an agent published, on its tab: the pull request or branch chip at the box's foot with its menu, and the row that sums a finished turn up.
  *
- * The head wears one of two things once the agent has pushed: a pill for
- * its pull request, the GitHub mark and the number coloured by where the
- * pull request stands with a dot for its checks, which opens the pull
- * request in the browser; or, with a branch and no pull request yet, a
- * chip naming the branch. Beside either, a ⋯ offers the rest: opening
- * the pull request, copying the branch's name or the command that checks
- * it out, and reading the changes on GitHub. Nothing here is drawn before
- * the service has said what stands, so a tab on an agent still reading
- * the repository wears nothing yet.
+ * The box's foot wears one of two chips once the agent has pushed, after
+ * the model chip and in its style: one for its pull request, the GitHub
+ * mark and the number coloured by where the pull request stands with a
+ * dot for its checks; or, with a branch and no pull request yet, one
+ * naming the branch. A press of either drops a small menu: opening the
+ * pull request, copying the branch's name or the command that checks it
+ * out, and reading the changes on GitHub, each where it has something to
+ * act on. Nothing here is drawn before the service has said what stands,
+ * so a tab on an agent still reading the repository wears nothing yet.
  */
 
 /** The doors the menu and the row open: a page of GitHub's in the browser, and the clipboard. */
@@ -57,42 +57,7 @@ function CheckDot({ checks }: { checks: CodingAgentPullRequest["checks"] }): Rea
   );
 }
 
-/** The pull request's pill: the mark, the number in its state's colour, and the check dot; a press opens it. */
-function PullRequestPill({
-  pullRequest,
-  openGitHub,
-}: {
-  pullRequest: CodingAgentPullRequest;
-  openGitHub: (url: string) => void;
-}): ReactNode {
-  return (
-    <Tooltip label={pullRequest.title}>
-      <button
-        type="button"
-        className="agent-pr-pill"
-        data-state={pullRequest.state}
-        aria-label={pullRequestPillLabel(pullRequest)}
-        onClick={() => openGitHub(pullRequest.url)}
-      >
-        <GitHubMark />
-        <span className="agent-pr-number">{pullRequestNumberLabel(pullRequest)}</span>
-        <CheckDot checks={pullRequest.checks} />
-      </button>
-    </Tooltip>
-  );
-}
-
-/** The branch's chip, for a branch pushed with no pull request from it yet. */
-function BranchChip({ branch }: { branch: string }): ReactNode {
-  return (
-    <span className="agent-branch-chip" title={branch}>
-      <GitBranchIcon className="size-3.5 shrink-0" aria-hidden="true" />
-      <span className="agent-branch-name">{branch}</span>
-    </span>
-  );
-}
-
-/** What the ⋯ offers for what stands: each action only where it has something to act on. */
+/** What the menu offers for what stands: each action only where it has something to act on. */
 function publishedActions(
   published: CodingAgentPullRequestAnswer,
   doors: PublishedDoors,
@@ -132,12 +97,31 @@ function publishedActions(
   return groups.filter((group) => group.length > 0);
 }
 
-/** The ⋯ beside the pill or the chip, and the menu it drops. */
-function PublishedMenuButton({
+/** The chip's face: the pull request's mark, number, and check dot, or the branch's icon and name. */
+function PublishedFace({ published }: { published: CodingAgentPullRequestAnswer }): ReactNode {
+  if (published.pullRequest !== null) {
+    return (
+      <>
+        <GitHubMark />
+        <span className="agent-pr-number">{pullRequestNumberLabel(published.pullRequest)}</span>
+        <CheckDot checks={published.pullRequest.checks} />
+      </>
+    );
+  }
+  return (
+    <>
+      <GitBranchIcon className="size-3.5 shrink-0" aria-hidden="true" />
+      <span className="plan-compose-chip-name agent-branch-name">{published.branch}</span>
+    </>
+  );
+}
+
+/** What the box's foot wears for what stands: the pull request's chip, else the branch's, else nothing; a press drops the menu. */
+export function PublishedChip({
   published,
   doors,
 }: {
-  published: CodingAgentPullRequestAnswer;
+  published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
 }): ReactNode {
   const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
@@ -146,14 +130,21 @@ function PublishedMenuButton({
     setOpen(undefined);
     if (returnFocus) opener.current?.focus();
   }, []);
+  if (published === undefined || (published.pullRequest === null && published.branch === null)) {
+    return null;
+  }
+  const { pullRequest, branch } = published;
+  const label = pullRequest !== null ? pullRequestPillLabel(pullRequest) : (branch ?? "");
+  const hint = pullRequest !== null ? pullRequest.title : (branch ?? "");
   return (
     <>
-      <Tooltip label={MENU_LABEL}>
+      <Tooltip label={hint}>
         <button
           ref={opener}
           type="button"
-          className="icon-button agent-published-more"
-          aria-label={MENU_LABEL}
+          className="plan-compose-chip agent-published-chip"
+          data-state={pullRequest?.state}
+          aria-label={label}
           aria-haspopup="menu"
           aria-expanded={open !== undefined}
           onClick={(event) => {
@@ -163,12 +154,12 @@ function PublishedMenuButton({
             }
             const bounds = event.currentTarget.getBoundingClientRect();
             setOpen({
-              placement: { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
+              placement: { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START },
               opener: event.currentTarget,
             });
           }}
         >
-          <EllipsisIcon />
+          <PublishedFace published={published} />
         </button>
       </Tooltip>
       {open === undefined ? null : (
@@ -179,29 +170,6 @@ function PublishedMenuButton({
           onClose={close}
         />
       )}
-    </>
-  );
-}
-
-/** What the head wears for what stands: the pill, else the chip, else nothing; and the ⋯ beside either. */
-export function PublishedHead({
-  published,
-  doors,
-}: {
-  published: CodingAgentPullRequestAnswer | undefined;
-  doors: PublishedDoors;
-}): ReactNode {
-  if (published === undefined || (published.pullRequest === null && published.branch === null)) {
-    return null;
-  }
-  return (
-    <>
-      {published.pullRequest !== null ? (
-        <PullRequestPill pullRequest={published.pullRequest} openGitHub={doors.openGitHub} />
-      ) : published.branch !== null ? (
-        <BranchChip branch={published.branch} />
-      ) : null}
-      <PublishedMenuButton published={published} doors={doors} />
     </>
   );
 }

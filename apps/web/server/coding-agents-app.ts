@@ -7,7 +7,7 @@ import {
   codingAgentMessageRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
@@ -57,6 +57,7 @@ import {
   listCodingAgents,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
+  updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
@@ -81,7 +82,7 @@ import { STORE_WRITE_REFUSAL } from "./hosted/store/writer.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript, message one, and stop one.
+ * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript, message one, change one's model, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan or an agent another
@@ -114,7 +115,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * firewall where the standing one is old. eve answering that the session is
  * still coming up is a conflict the desktop tries again; eve no longer
  * running the session is one it does not, since the agent's sandbox lives
- * with the session. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
+ * with the session. A change of model (`PATCH /api/agents/{id}`) writes the
+ * choice on the agent's row, checked against the catalog as a Start checks
+ * its own; the row is read at every step, so the change is the next step's
+ * whether a turn runs or the next one is yet to open, and the account's
+ * default stands as it was. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
  * anything the agent pushed stays.
@@ -129,18 +134,23 @@ const AGENTS_PATH = {
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
+  /** PATCH changes the agent's model and effort; the rewrite moves the path's agent id into the `id` query. */
+  AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
   /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST: "/api/agents/pull-request",
 } as const;
 
-const HTTP_METHOD = { GET: "GET", POST: "POST" } as const;
+const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
 const QUERY = { ID: "id", AFTER: "after" } as const;
 
 /** A Start names a key and a choice at most, so a body past this is no Start. */
 const MAXIMUM_START_BODY_BYTES = 4_096;
+
+/** A change of model names a model and an effort at most, so a body past this is no change. */
+const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 /** A message is its words and a key: the bound's characters at JSON's widest escape, and room for the keys around them. */
 const MAXIMUM_MESSAGE_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1_024;
@@ -495,6 +505,30 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
     messages: page.messages,
     cursor: cursorToWire(page.cursor),
     status: page.status,
+    ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
+  });
+});
+
+/** PATCH changes the agent's model and effort for its next step: the choice checked against the catalog as a Start checks its own, written on the row the steps read, and the agent answered as it then stands; the account's default is untouched. */
+const chooseEndpoint = /* @__PURE__ */ Effect.fn("web/agentChooseEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.PATCH) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent } = yield* ownedAgent(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
+  const asked = readEither(modelChoiceSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const choice = yield* acceptedChoice(userId, asked.success);
+  const changed = yield* hostedStoreOrUnavailable(
+    updateCodingAgentChoice(userId, agent.id, choice),
+  );
+  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    agent: yield* summaryOf(userId, changed.value),
   });
 });
 
@@ -599,7 +633,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** The group: the four paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -611,6 +645,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.MESSAGES,
           hostedRefusing(messagesEndpoint(seams, writer)),
         ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(chooseEndpoint(seams))),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
           ANY_METHOD,

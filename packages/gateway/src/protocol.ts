@@ -45,6 +45,8 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   /** One agent sent a message, naming how it reaches a turn under way; the agent as it then stands, or why it was not. */
   CODING_AGENTS_MESSAGE: "codingAgents.message",
+  /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
+  CODING_AGENTS_CHOOSE: "codingAgents.choose",
   /** One agent stopped; the agent as it then stands, or why it was not. */
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */

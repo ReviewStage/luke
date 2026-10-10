@@ -1,8 +1,10 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { useEffect, useRef, useState } from "react";
 import {
   PROMPT_INPUT_STATUS,
@@ -13,27 +15,35 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { Tooltip } from "../tooltip";
+import { AgentModelChip } from "./agent-model-chip";
+import { PublishedChip, type PublishedDoors } from "./agent-published";
 import type { AgentComposerControl } from "./use-agent-composer";
+import type { AgentModelControl } from "./use-agent-model";
 
 /**
- * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, one button, and a note under it when a message did not go.
+ * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
  *
  * The box is the shared composer card (../ai-elements/prompt-input.tsx),
- * the one the New Plan page draws, at its default type, with nothing at
- * its foot's left. The box takes a message to the agent:
+ * the one the New Plan page draws, at its default type. Along its foot's
+ * left stand the chips: the model chip naming what the agent runs on,
+ * which opens the menu that changes it for the next step
+ * (`agent-model-chip.tsx`), and after it, once the agent has pushed, the
+ * pull request's or the branch's chip with its menu
+ * (`agent-published.tsx`). The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
- * whatever the agent is doing: one placeholder, one size, no hint under it,
- * because the header and the transcript's "Working…" line already say
- * where the agent stands. The one thing that follows the agent's state is
+ * whatever the agent is doing: one placeholder, one size, the same chips,
+ * no hint under it, because the tab's dot and the transcript's "Working…"
+ * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words, disabled while there are none and the agent is idle, and
  * Stop while there are none and a turn runs, which is the one Stop the tab
  * has. A message that did not go stays in the box with why under the card
  * and Retry, which sends it again under the same key, so a send whose
  * answer was lost reaches the agent once; an agent that takes no message
- * any more keeps the box, disabled, with the reason under it. The box takes
+ * any more keeps the box, disabled, with the reason under it; a change of
+ * model that did not take says why in the same place. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan.
  */
@@ -58,10 +68,22 @@ function typingElsewhere(): boolean {
 export function AgentComposer({
   status,
   composer,
+  model,
+  models,
+  readModels,
+  published,
+  doors,
   onStop,
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
+  model: AgentModelControl;
+  /** The catalog as last read; nothing before the first read lands. */
+  models: readonly CatalogModel[] | undefined;
+  readModels: () => void;
+  /** What the agent published, once the service has said; nothing before. */
+  published: CodingAgentPullRequestAnswer | undefined;
+  doors: PublishedDoors;
   /** Stops the agent; the promise settles once the service has answered. */
   onStop: () => Promise<void>;
 }): React.JSX.Element {
@@ -74,7 +96,9 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = composer.draft.trim() === "";
   const showsStop = empty && stoppable && !composer.sending;
-  const note = composer.closed ?? composer.note;
+  const note = composer.closed ?? composer.note ?? model.note;
+  // Retry is the composer's own: a change of model that did not take is made again from the chip.
+  const retries = composer.closed === undefined && composer.note !== undefined;
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
   useEffect(() => {
@@ -108,7 +132,10 @@ export function AgentComposer({
           onKeyDown={onFieldKey}
         />
         <PromptInputFooter>
-          <PromptInputTools />
+          <PromptInputTools>
+            <AgentModelChip model={model} models={models} readModels={readModels} />
+            <PublishedChip published={published} doors={doors} />
+          </PromptInputTools>
           {showsStop ? (
             <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
               <PromptInputSubmit
@@ -135,11 +162,11 @@ export function AgentComposer({
       {note !== undefined ? (
         <p className="agent-note agent-composer-note" role="alert">
           <span>{note}</span>
-          {closed ? null : (
+          {retries ? (
             <button type="button" className="toolbar-button" onClick={composer.retry}>
               Retry
             </button>
-          )}
+          ) : null}
         </p>
       ) : null}
     </div>

@@ -99,6 +99,11 @@ function fakeService() {
         asked.push(`message:${agentId}:${request.clientKey}:${request.text}`);
         return { agent: AGENT };
       }),
+    choose: (agentId, choice) =>
+      Effect.sync(() => {
+        asked.push(`choose:${agentId}:${choice.model}:${choice.effort}`);
+        return { agent: { ...AGENT, ...choice } };
+      }),
     stop: (agentId) =>
       Effect.sync(() => {
         asked.push(`stop:${agentId}`);
@@ -174,6 +179,14 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { agent: AGENT },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_CHOOSE, {
+        agentId: AGENT_ID,
+        model: "openai/gpt-6.1-sol",
+        effort: "low",
+      }),
+      { agent: { ...AGENT, model: "openai/gpt-6.1-sol", effort: "low" } },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
@@ -190,6 +203,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
+      `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
     ]);
