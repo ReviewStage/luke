@@ -21,7 +21,7 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AgentPlace } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
-import { DockPresence } from "../window/dock-presence";
+import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
@@ -54,7 +54,6 @@ export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
   readonly voiceWindow: VoiceWindow;
   readonly hotkeys: HotkeyRegistrar;
-  readonly dock: DockPresence;
   /**
    * One `app:state` per window, each composed with that window's own facts.
    * The one place the document becomes a push, so what a window is told and
@@ -261,11 +260,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       },
     },
   });
-  const dock = new DockPresence({
-    focusExpanded: (displayId) => panels.focusExpanded(displayId),
-    iconDirectory: path.join(config.resourceDirectory, "icon"),
-  });
-
   function applyLoginItem(openAtLogin: boolean): void {
     if (config.packaged) app.setLoginItemSettings({ openAtLogin });
   }
@@ -323,7 +317,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels,
     voiceWindow,
     hotkeys,
-    dock,
     publishAppState,
     applyTheme,
     windowFactsFor,
@@ -343,8 +336,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       raiseVoiceWindow();
     },
     start: async () => {
-      dock.applyIcon();
-      dock.watchTheme();
+      followDockIcon(path.join(config.resourceDirectory, "icon"));
       const settings = await run(operator.ensureSettings());
       // A Quit landing inside one of the launch's own waits is already tearing
       // this process down; nothing is opened or armed over it. This check sits
@@ -359,7 +351,6 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           withNativeTheme,
         ),
       );
-      if (settings?.stored.showInDock) dock.apply(true);
       applyLoginItem(settings?.stored.openAtLogin ?? APP_SETTING_SCHEMA.openAtLogin.default);
       if (runMode.observesProviders) {
         native.setMediaDuckEnabled(

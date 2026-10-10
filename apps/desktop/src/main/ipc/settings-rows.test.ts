@@ -11,9 +11,7 @@ import { appSettingsWire } from "../../testing/settings-wire";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
-import type { DockPresence } from "../window/dock-presence";
 import type { HotkeyRegistrar } from "../window/hotkey-registrar";
-import type { PanelManager } from "../window/panel-manager";
 import { settingsActRows } from "./settings-rows";
 
 /**
@@ -26,7 +24,7 @@ import { settingsActRows } from "./settings-rows";
 
 const SETTINGS: AppSettings = appSettingsWire(settingsView());
 
-// SAFETY: the rows read the sender only to name a reporter and a display; one inert object is one window.
+// SAFETY: the rows read the sender only to name a reporter; one inert object is one window.
 const PANEL: ActSender = {
   sender: {} as WebContents,
   panel: true,
@@ -49,13 +47,9 @@ function rows(overrides: {
     // SAFETY: the only key this row reads is the chord reservation, which the
     // field under test never asks for.
     hotkeys: { reserve: () => undefined } as unknown as HotkeyRegistrar,
-    // SAFETY: `openAtLogin`'s side effect is the login item alone, so no row
-    // under test reaches the Dock, the panels, or the duck.
-    dock: {} as DockPresence,
     applyLoginItem: overrides.applyLoginItem ?? (() => undefined),
-    // SAFETY: as above, the panels.
-    panels: {} as PanelManager,
-    // SAFETY: as above, the duck.
+    // SAFETY: `openAtLogin`'s side effect is the login item alone, so no row
+    // under test reaches the duck.
     mediaDuck: {} as MediaDuckController,
   });
   // SAFETY: only the settings rows are under test; the router dispatches on the

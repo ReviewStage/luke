@@ -41,7 +41,7 @@ it.effect(
 
       ran.length = 0;
       yield* effects[SETTING_SIDE_EFFECT.NONE]({ settings: SETTINGS });
-      yield* effects[SETTING_SIDE_EFFECT.DOCK]({ settings: SETTINGS });
+      yield* effects[SETTING_SIDE_EFFECT.LOGIN_ITEM]({ settings: SETTINGS });
       assert.deepEqual(ran, [], "an effect the client owns does nothing here");
     }),
 );

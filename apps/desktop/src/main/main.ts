@@ -85,10 +85,10 @@ if (app.requestSingleInstanceLock()) {
 
 async function main(): Promise<void> {
   await app.whenReady();
-  // Luke is an ordinary app with a window of its own: a Dock tile, a place
-  // in Command-Tab, and the menus that give its fields Copy and Paste, its
-  // window Close, Minimize, and Quit, and its own commands their shortcuts.
-  if (process.platform === "darwin") app.setActivationPolicy("regular");
+  // Luke is an ordinary app with a window of its own: the bundle gives him a
+  // Dock tile and a place in Command-Tab, and these menus give its fields Copy
+  // and Paste, its window Close, Minimize, and Quit, and its own commands
+  // their shortcuts.
   Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate(app.name)));
 
   const runtime = ManagedRuntime.make(composeDesktop(config, quit));

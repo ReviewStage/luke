@@ -102,7 +102,6 @@ export function createElectronBuilderConfig(env = process.env) {
         CFBundleName: productName,
         CFBundleDisplayName: productName,
         LSMinimumSystemVersion: MACOS_DEPLOYMENT_TARGET,
-        LSUIElement: true,
         NSAppleEventsUsageDescription: APPLE_EVENTS_USAGE_DESCRIPTION,
         NSMicrophoneUsageDescription: MICROPHONE_USAGE_DESCRIPTION,
         NSPrefersDisplaySafeAreaCompatibilityMode: false,

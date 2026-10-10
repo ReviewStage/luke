@@ -75,17 +75,6 @@ export const APP_SETTING_SCHEMA = {
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
   }),
-  showInDock: toggleSetting({
-    field: "showInDock",
-    id: APP_SETTING_ID.SHOW_IN_DOCK,
-    label: "Show Luke in the Dock",
-    description: "Whether Luke also stands in the Dock as an app icon.",
-    default: false,
-    page: SETTINGS_PAGE.APPEARANCE,
-    order: 20,
-    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
-    sideEffect: SETTING_SIDE_EFFECT.DOCK,
-  }),
   voice: choiceSetting({
     field: "voice",
     id: APP_SETTING_ID.VOICE,

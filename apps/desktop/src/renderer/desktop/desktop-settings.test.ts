@@ -194,7 +194,7 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.equal(result(container, "Stop Luke").getAttribute("aria-current"), null);
 
   // Return opens the first result, so a sure query needs no pointer.
-  type(field(container), "dock");
+  type(field(container), "login");
   const [first] = results(container);
   assert.ok(first);
   press(field(container), "Enter");
@@ -291,7 +291,7 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
       },
     },
   });
-  const container = mount(settingsView({ voiceAvailable: true, showInDock: true }));
+  const container = mount(settingsView({ voiceAvailable: true, openAtLogin: false }));
   act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
   const reset = toolbarButton(container, "Reset to defaults");
   assert.ok(reset, "the toolbar offers the page's reset");

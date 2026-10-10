@@ -37,13 +37,12 @@ export interface HostSettingSideEffectDependencies {
 
 /**
  * The side effects a setting has in the host. The client applies its own — the
- * login item, the Dock, the keys, the duck —
+ * login item, the keys, the duck —
  * from the same answered snapshot; nothing here reaches a window.
  */
 export function hostSettingSideEffects(dependencies: HostSettingSideEffectDependencies) {
   return {
     [SETTING_SIDE_EFFECT.NONE]: noHostSettingSideEffect,
-    [SETTING_SIDE_EFFECT.DOCK]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: noHostSettingSideEffect,
     [SETTING_SIDE_EFFECT.STOP_HOTKEY]: noHostSettingSideEffect,
