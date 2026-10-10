@@ -17,7 +17,7 @@ export const APPLE_EVENTS_USAGE_DESCRIPTION =
   "Luke turns Music and Spotify down while you talk, and back up afterwards";
 // The bundle carries one icon for every mode, so the icns is cut from the dark
 // tile — space black reads on either desktop. The running app swaps the Dock
-// image between the light and dark tiles itself; see applyDockIcon in main.ts.
+// image between the light and dark tiles itself; see src/main/window/dock-icon.ts.
 export const ICONSET_SOURCES = Object.freeze({
   "icon_16x16.png": "luke-icon-dark-16.png",
   "icon_16x16@2x.png": "luke-icon-dark-32.png",

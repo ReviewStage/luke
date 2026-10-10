@@ -92,10 +92,10 @@ describe("writeSettingsFileAtomic", () => {
 describe("parsePersistedSettingsEither", () => {
   it("answers the parsed record for a well-formed settings file", () => {
     const parsed = parsePersistedSettingsEither(
-      JSON.stringify({ version: 2, apiKeys: {}, showInDock: true }),
+      JSON.stringify({ version: 2, apiKeys: {}, openAtLogin: false }),
     );
     assert.equal(Result.isSuccess(parsed), true);
-    assert.equal(Result.getOrThrow(parsed).showInDock, true);
+    assert.equal(Result.getOrThrow(parsed).openAtLogin, false);
   });
 
   it("refuses a file whose top level is not an object, with the legacy reason", () => {

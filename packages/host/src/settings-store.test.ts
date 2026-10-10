@@ -252,7 +252,7 @@ test("a failed first load is retried before a later write", async (t) => {
   await writeSettingsFile(directory, {
     version: 2,
     account: persistedAccount(),
-    showInDock: true,
+    openAtLogin: false,
   });
   let directoryReads = 0;
   const store = awaitedStoreOf(
@@ -272,12 +272,12 @@ test("a failed first load is retried before a later write", async (t) => {
     SERVICES,
   );
 
-  await assert.rejects(store.get(APP_SETTING_SCHEMA.showInDock.field), /permission denied/);
+  await assert.rejects(store.get(APP_SETTING_SCHEMA.openAtLogin.field), /permission denied/);
   await store.set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   const reopened = storeIn(directory);
   assert.deepEqual(await reopened.readAccount(), TEST_ACCOUNT);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.duckOtherMedia.field), false);
 });
 
@@ -292,7 +292,6 @@ const SAMPLE_VALUE = {
   // so it is the choice that has to survive a reopen.
   theme: THEME.SYSTEM,
   openAtLogin: false,
-  showInDock: true,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
   voiceHotkey: "Shift+Command+L",
@@ -515,20 +514,20 @@ test("ignores a stored account that can no longer be decrypted", async (t) => {
   assert.equal(appSettingsView(await store.snapshot()).voiceAvailable, false);
 });
 
-test("decides the Dock icon from the file alone, never the keychain", async (t) => {
-  // The icon is drawn at launch from this answer, so a locked or slow
-  // Keychain — which decrypting a stored account can wait on — must not be
-  // able to delay it.
+test("decides the launch's settings from the file alone, never the keychain", async (t) => {
+  // The launch steers the login item and the first window from this answer,
+  // so a locked or slow Keychain — which decrypting a stored account can wait
+  // on — must not be able to delay it.
   const directory = await temporaryDirectory(t, "luke-settings-");
   await writeSettingsFile(directory, {
     version: 2,
     account: persistedAccount(),
-    showInDock: true,
+    openAtLogin: false,
   });
   const cipher = countingCipher();
   const store = storeIn(directory, { cipher });
 
-  assert.equal(await store.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await store.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.deepEqual(cipher.calls, { isAvailable: 0, encrypt: 0, decrypt: 0 });
 });
 
@@ -546,9 +545,24 @@ const EARLIER_BUILD_FIELDS = {
   announceSessions: false,
   quietDuringMeetings: false,
   showOnAllDisplays: true,
+  showInDock: true,
   formFactor: "bubble",
   sessionFilters: ["waiting"],
 } as const satisfies WireRecord;
+
+test("a file an earlier build wrote reads as the same settings as one without those fields", async (t) => {
+  // Luke always stands in the Dock now, so a stored `showInDock` from a build
+  // that offered the switch, among the rest, must load without steering anything.
+  const earlier = await temporaryDirectory(t, "luke-settings-");
+  const current = await temporaryDirectory(t, "luke-settings-");
+  await writeSettingsFile(earlier, { version: 2, ...EARLIER_BUILD_FIELDS, openAtLogin: false });
+  await writeSettingsFile(current, { version: 2, openAtLogin: false });
+
+  assert.deepEqual(
+    (await storeIn(earlier).snapshot()).stored,
+    (await storeIn(current).snapshot()).stored,
+  );
+});
 
 test("a write carries every field this build does not read as the file held it", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
@@ -558,7 +572,7 @@ test("a write carries every field this build does not read as the file held it",
     account: persistedAccount(),
     voiceCaptions: true,
   });
-  await storeIn(directory).set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await storeIn(directory).set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await storeIn(directory).set(APP_SETTING_SCHEMA.duckOtherMedia.field, false);
 
   assert.deepEqual(
@@ -567,7 +581,7 @@ test("a write carries every field this build does not read as the file held it",
       ...EARLIER_BUILD_FIELDS,
       account: persistedAccount(),
       voiceCaptions: true,
-      showInDock: true,
+      openAtLogin: false,
       duckOtherMedia: false,
     }),
   );
@@ -649,7 +663,7 @@ test("account preferences extraction excludes resolved defaults and local-only p
     environment: { LUKE_LIVE_VOICE: LIVE_VOICE.SAGE },
   });
 
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.CEDAR);
 
@@ -661,7 +675,7 @@ test("account preferences extraction excludes resolved defaults and local-only p
 test("applies account preferences to disk and restores them from a new store", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.voiceHotkey.field, VOICE_HOTKEY_NONE);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.SAGE);
 
@@ -669,7 +683,7 @@ test("applies account preferences to disk and restores them from a new store", a
 
   assert.deepEqual(result.changed, [APP_SETTING_SCHEMA.voice.field]);
   const reopened = storeIn(directory);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voiceHotkey.field), VOICE_HOTKEY_NONE);
   assert.equal(await reopened.get(APP_SETTING_SCHEMA.voice.field), LIVE_VOICE.MARIN);
 });
@@ -785,13 +799,13 @@ test("recovers from a corrupt settings file", async (t) => {
   await fs.writeFile(path.join(directory, SETTINGS_FILE_NAME), "{ not json");
   const store = storeIn(directory);
 
-  const { status, settings } = await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+  const { status, settings } = await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.setAccount(TEST_ACCOUNT);
 
   assert.equal(status, ACTION_RESULT_STATUS.ACCEPTED);
-  assert.equal(appSettingsView(settings).showInDock, true);
+  assert.equal(appSettingsView(settings).openAtLogin, false);
   const reopened = storeIn(directory);
-  assert.equal(await reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+  assert.equal(await reopened.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
   assert.deepEqual(await reopened.readAccount(), TEST_ACCOUNT);
 });
 
@@ -831,7 +845,6 @@ test("a voice reset returns to the environment's voice where one stands behind t
 test("an appearance reset returns Luke's stances without touching the voice page", async (t) => {
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
-  await store.set(APP_SETTING_SCHEMA.showInDock.field, true);
   await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.theme.field, THEME.LIGHT);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
@@ -839,7 +852,6 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
   assert.equal(reason, undefined);
-  assert.equal(appSettingsView(settings).showInDock, false);
   assert.equal(appSettingsView(settings).openAtLogin, true);
   assert.equal(appSettingsView(settings).theme, THEME.DARK);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
@@ -896,7 +908,6 @@ test("a reset leaves a stored account standing", async (t) => {
     voiceCaptions: true,
     duckOtherMedia: true,
     preferBuiltInMicrophone: true,
-    showInDock: false,
   });
   const store = storeIn(directory);
 
@@ -931,12 +942,12 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
       });
 
       assert.equal(
-        yield* store.get(APP_SETTING_SCHEMA.showInDock.field),
-        APP_SETTING_SCHEMA.showInDock.guard(undefined).value,
+        yield* store.get(APP_SETTING_SCHEMA.openAtLogin.field),
+        APP_SETTING_SCHEMA.openAtLogin.guard(undefined).value,
       );
-      const saved = yield* store.set(APP_SETTING_SCHEMA.showInDock.field, true);
+      const saved = yield* store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
       assert.equal(saved.status, ACTION_RESULT_STATUS.ACCEPTED);
-      assert.equal(yield* store.get(APP_SETTING_SCHEMA.showInDock.field), true);
+      assert.equal(yield* store.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
 
       const reopened = new SettingsStore({
         directory: () => directory,
@@ -945,7 +956,7 @@ it.effect("the store's own methods are effects a caller sequences itself", () =>
         fileSystem: FILE_SYSTEM,
         path: PATH,
       });
-      assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.showInDock.field), true);
+      assert.equal(yield* reopened.get(APP_SETTING_SCHEMA.openAtLogin.field), false);
     }),
   ).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),
 );
@@ -969,7 +980,7 @@ it.effect("concurrent reads of an unread store read the file once", () =>
 
       yield* Effect.all(
         [
-          store.get(APP_SETTING_SCHEMA.showInDock.field),
+          store.get(APP_SETTING_SCHEMA.openAtLogin.field),
           store.get(APP_SETTING_SCHEMA.duckOtherMedia.field),
           store.get(APP_SETTING_SCHEMA.voice.field),
         ],

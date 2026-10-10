@@ -200,6 +200,14 @@ test("packaging is pinned to Apple Silicon and the builder output directory", ()
   );
 });
 
+test("the packaged app launches as a regular app, with a Dock tile and an app menu", () => {
+  // An agent app (LSUIElement) or a background-only one launches with no Dock
+  // tile, no Command-Tab entry, and no menu bar of its own.
+  const info = builderConfig().mac.extendInfo;
+  assert.equal(info.LSUIElement, undefined);
+  assert.equal(info.LSBackgroundOnly, undefined);
+});
+
 test("packaging declares the macOS deployment target", () => {
   const config = builderConfig();
   const compilerArguments = swiftCompilerArguments("source.swift", "helper");

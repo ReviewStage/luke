@@ -23,7 +23,6 @@ export function settingsView(overrides: SettingsViewOverrides = {}): AppSettings
   return Object.assign<AppSettingsView, SettingsViewOverrides>(
     {
       ...APP_SETTING_DEFAULTS,
-      showInDock: false,
       voice: LIVE_VOICE.CEDAR,
       voiceCaptions: false,
       duckOtherMedia: true,

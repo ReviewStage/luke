@@ -1,15 +1,11 @@
 import { SETTING_SIDE_EFFECT, type SettingSideEffectId } from "@sidecar/settings";
 import type { AppSettings } from "@sidecar/settings/wire";
-import type { WebContents } from "electron";
 import type { MediaDuckController } from "../native/media-duck";
-import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
-import type { PanelManager } from "../window/panel-manager";
 
-/** What one client-side effect is handed: the snapshot, and who asked for it. */
+/** What one client-side effect is handed: the snapshot, and whether to wait. */
 interface ClientSettingSideEffectContext {
   readonly settings: AppSettings;
-  readonly sender: WebContents;
   /**
    * Whether an effect that may be deferred must be waited on. A reset applies
    * every field in its scope and must not answer before the keys are back.
@@ -33,9 +29,7 @@ const noClientSettingSideEffect: ClientSettingSideEffect = () => {};
 /** What the client's own side effects have hands on. */
 export interface ClientSettingSideEffectDependencies {
   hotkeys: HotkeyRegistrar;
-  dock: DockPresence;
   applyLoginItem: (openAtLogin: boolean) => void;
-  panels: PanelManager;
   mediaDuck: MediaDuckController;
 }
 
@@ -45,7 +39,7 @@ export interface ClientSettingSideEffectDependencies {
  * reapply, and a reset does.
  */
 export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDependencies) {
-  const { hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
+  const { hotkeys, applyLoginItem, mediaDuck } = dependencies;
   const reapply = async (
     rank: typeof HOTKEY_RANK.STOP,
     chosen: string | undefined,
@@ -59,8 +53,6 @@ export function clientSettingSideEffects(dependencies: ClientSettingSideEffectDe
     [SETTING_SIDE_EFFECT.NONE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.VOICE]: noClientSettingSideEffect,
     [SETTING_SIDE_EFFECT.LOGIN_ITEM]: ({ settings }) => applyLoginItem(settings.stored.openAtLogin),
-    [SETTING_SIDE_EFFECT.DOCK]: ({ settings, sender }) =>
-      dock.apply(settings.stored.showInDock, panels.displayIdFor(sender)),
     [SETTING_SIDE_EFFECT.TALK_HOTKEY]: async ({ settings }) => {
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings.stored.voiceHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);

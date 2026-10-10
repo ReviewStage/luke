@@ -44,7 +44,6 @@ export type SettingsResetScope = (typeof SETTINGS_RESET_SCOPE)[keyof typeof SETT
  */
 export const SETTING_SIDE_EFFECT = {
   NONE: "none",
-  DOCK: "dock",
   LOGIN_ITEM: "login-item",
   VOICE: "voice",
   TALK_HOTKEY: "talk-hotkey",

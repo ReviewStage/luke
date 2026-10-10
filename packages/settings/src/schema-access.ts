@@ -53,7 +53,7 @@ export function isAppSettingField(value: UnparsedWireValue): value is AppSetting
 
 /**
  * Account preferences are the settings an account carries across its Macs.
- * Machine-local controls — the theme, launch at login, Dock, display layout, hotkeys,
+ * Machine-local controls — the theme, launch at login, display layout, hotkeys,
  * microphone routing, and credentials —
  * stay in each device's own store.
  */

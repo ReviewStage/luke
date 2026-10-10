@@ -3,9 +3,8 @@ import { SchemaSettingRows } from "./schema-rows";
 import type { SettingsWrites } from "./writes";
 
 /**
- * How Luke looks and where he stands: his theme, whether he opens at login,
- * and whether he also stands in the Dock. A pop-up and switches, because
- * nothing rides on any answer here.
+ * How Luke looks and when he starts: his theme and whether he opens at login.
+ * A pop-up and a switch, because nothing rides on any answer here.
  */
 export function AppearanceSection({
   view,

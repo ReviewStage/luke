@@ -92,10 +92,10 @@ test("a query narrows by every word, case-blind, and a blank query is no search"
   assert.equal(searchSettings(entries, ""), undefined);
   assert.equal(searchSettings(entries, "   "), undefined);
 
-  const dock = searchSettings(entries, "DOCK");
-  assert.ok(dock);
-  assert.deepEqual(labels(found(dock)), ["Show Luke in the Dock"]);
-  assert.equal(dock.matched, 1);
+  const login = searchSettings(entries, "LOGIN");
+  assert.ok(login);
+  assert.deepEqual(labels(found(login)), ["Open Luke at login"]);
+  assert.equal(login.matched, 1);
 
   // Both words must land: "microphone" alone finds several rows, "microphone
   // bluetooth" one.

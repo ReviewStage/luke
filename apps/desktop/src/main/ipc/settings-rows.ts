@@ -7,9 +7,7 @@ import { ACT, ACT_KIND, type SettingUpdatePayload } from "#shared/messages/acts"
 import { ActRefused, type ActRows } from "../act-router";
 import type { HostOperator } from "../gateway/host-operator";
 import type { MediaDuckController } from "../native/media-duck";
-import type { DockPresence } from "../window/dock-presence";
 import { HOTKEY_RANK, type HotkeyRegistrar } from "../window/hotkey-registrar";
-import type { PanelManager } from "../window/panel-manager";
 import { clientSettingSideEffects } from "./settings-side-effects";
 
 /**
@@ -17,8 +15,8 @@ import { clientSettingSideEffects } from "./settings-side-effects";
  * validated here where the client alone can — the chord reservations the keys
  * hold — carried to the host, which stores it, applies its own side effects,
  * counts it, and tells every other window; and then applied here for the side
- * effects only this process has hands on: the login item, the Dock, the
- * keys, the duck.
+ * effects only this process has hands on: the login item, the keys, the
+ * duck.
  */
 export interface SettingsRowsDependencies {
   host: HostOperator;
@@ -27,9 +25,7 @@ export interface SettingsRowsDependencies {
   /** The settings snapshot as this client last saw it, for the refusals worded here. */
   lastSettings: () => AppSettings | undefined;
   hotkeys: HotkeyRegistrar;
-  dock: DockPresence;
   applyLoginItem: (openAtLogin: boolean) => void;
-  panels: PanelManager;
   mediaDuck: MediaDuckController;
 }
 
@@ -92,22 +88,15 @@ function settingsWriter(
 export function settingsActRows(
   dependencies: SettingsRowsDependencies,
 ): Pick<ActRows, SettingsActKind> {
-  const { host, reporterOf, hotkeys, dock, applyLoginItem, panels, mediaDuck } = dependencies;
+  const { host, reporterOf, hotkeys, applyLoginItem, mediaDuck } = dependencies;
   const { write, refuse } = settingsWriter(dependencies);
 
-  const sideEffects = clientSettingSideEffects({
-    hotkeys,
-    dock,
-    applyLoginItem,
-    panels,
-    mediaDuck,
-  });
+  const sideEffects = clientSettingSideEffects({ hotkeys, applyLoginItem, mediaDuck });
 
   /** The side effects this process has hands on; the host applied its own before answering. A row of the table answers a value or a promise, settled by one door. */
   function applyClientSettingSideEffect(
     field: AppSettingField,
     settings: AppSettings,
-    sender: WebContents,
     waitForDeferredEffects = false,
   ): Effect.Effect<void, unknown> {
     return Effect.tryPromise({
@@ -115,7 +104,6 @@ export function settingsActRows(
         Promise.resolve(
           sideEffects[APP_SETTING_SCHEMA[field].sideEffect]({
             settings,
-            sender,
             waitForDeferredEffects,
           }),
         ),
@@ -147,7 +135,7 @@ export function settingsActRows(
         (result) =>
           result.reason
             ? Effect.void
-            : applyClientSettingSideEffect(payload.field, result.settings, sender),
+            : applyClientSettingSideEffect(payload.field, result.settings),
       );
     },
     [ACT_KIND.SETTINGS_RESET]: ({ scope }, { sender }) =>
@@ -159,7 +147,7 @@ export function settingsActRows(
                 const definition = APP_SETTING_SCHEMA[field];
                 return "resetScope" in definition && definition.resetScope === scope;
               }),
-              (field) => applyClientSettingSideEffect(field, result.settings, sender, true),
+              (field) => applyClientSettingSideEffect(field, result.settings, true),
               { discard: true },
             ),
       ),

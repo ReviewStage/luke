@@ -28,7 +28,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
   const { launch } = config;
-  const { panels, voiceWindow, hotkeys, dock } = windows;
+  const { panels, voiceWindow, hotkeys } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -61,9 +61,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       reporterOf: windows.reporterOf,
       lastSettings: () => operator.settings(),
       hotkeys,
-      dock,
       applyLoginItem: windows.applyLoginItem,
-      panels,
       mediaDuck: native.mediaDuck,
     }),
     ...windowSurfaceActRows({
