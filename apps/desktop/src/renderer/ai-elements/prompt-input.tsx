@@ -14,10 +14,11 @@ import { cn } from "./utils";
  * prompt-input.tsx -- AI Elements' PromptInput as Luke's one composer: the card a message is written in, and the row of controls under it.
  *
  * Copied from the AI Elements registry (https://elements.ai-sdk.dev) and
- * restyled to the card the New Plan page established, on the corner, the
- * hairline, and the shadow the window's menus and cards share: one card on
- * the sidebar's ground, its edge brightening to the selected one while the
- * card holds focus, the textarea
+ * restyled to the card the New Plan page established, on the corner and the
+ * hairline the window's menus and cards share: one card on the sidebar's
+ * ground, its edge brightening to the selected one while the card holds
+ * focus, and nothing drawn behind it, so no shadow darkens the page or the
+ * transcript around the card. The textarea
  * sizing itself to its words from one line to about eight and scrolling
  * past that, and under it a footer with whatever the owner puts at its
  * left and the round submit at its right. The New Plan page and the agent
@@ -87,7 +88,7 @@ export function PromptInput({
     <form
       className={cn(
         COMPOSER_TYPE.DEFAULT,
-        "flex w-full flex-col rounded-xl border border-border bg-card shadow-[0_16px_40px_rgba(0,0,0,0.5)] transition-colors focus-within:border-selected-edge",
+        "flex w-full flex-col rounded-xl border border-border bg-card transition-colors focus-within:border-selected-edge",
         className,
       )}
       onSubmit={handleSubmit}
