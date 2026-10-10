@@ -24,16 +24,9 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import {
-  Message,
-  MessageContent,
-  MessageResponse,
-  PANEL_MARKDOWN_COMPONENTS,
-} from "../ai-elements/message";
+import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "../ai-elements/tool";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedHead, PublishedRow } from "./agent-published";
 import {
@@ -50,6 +43,12 @@ import {
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
 import { planCardTitle, TOOL_GLYPH, type ToolGlyph, toolCallView } from "./tool-call-model";
+import {
+  TRANSCRIPT_COMPONENTS,
+  TranscriptReasoning,
+  TranscriptTool,
+  TranscriptWords,
+} from "./transcript-blocks";
 import { type AgentComposerControl, useAgentComposer } from "./use-agent-composer";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
@@ -58,18 +57,18 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 /**
  * agent-tab.tsx -- one coding agent's tab in the side panel: what it runs on and where it stands, what it published, its transcript live, and the message box under it.
  *
- * The transcript is drawn with the AI Elements components, as the
- * Transcript tab's is and on the same spacing, from the agent's stored
- * `UIMessage`s as they are, and reads as a devtool's agent pane: the plan
- * it was handed is a card at the top, folded under its title; each of its
- * own turns runs the column's width with its text as markdown, its
- * reasoning folded under one quiet line, and each tool call one compact
- * row saying what it did (`tool-call-model.ts`), with the input and the
- * answer under the row once opened and a call that ended in an error
- * marked in red; a message the developer sent it after the plan is the
- * developer's bubble, as the Transcript tab draws one; and while the agent
- * may still write, a shimmering "Working…" stands at the end, gone the
- * moment it ends so a finished turn ends on its own last line. The list
+ * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
+ * over `../ai-elements/`), the Transcript and Work tabs alike, from the
+ * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
+ * pane: the plan it was handed is a card at the top, folded under its
+ * title; each of its own turns runs the column's width with its text as
+ * markdown, its reasoning folded under one quiet line, and each tool call
+ * one collapsible row saying what it did (`tool-call-model.ts`), with the
+ * input and the answer under the row once opened and a call that ended in
+ * an error marked in red; a message the developer sent it after the plan
+ * is the developer's bubble, as the Transcript tab draws one; and while
+ * the agent may still write, a shimmering "Working…" stands at the end,
+ * gone the moment it ends so a finished turn ends on its own last line. The list
  * keeps to its newest line while it is scrolled there. A link in the
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
@@ -87,11 +86,10 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 /** What the tab says before the agent's first message lands. */
 const NOTHING_YET_LINE = "The agent is starting. Its transcript appears here.";
 
-/** How the agent's markdown is drawn: at the panel's scale, never as an image, which would be a request the moment the tab opens, and a link only to GitHub. */
+/** How the agent's markdown is drawn: as every transcript's, with a link only to GitHub. */
 function transcriptComponents(openGitHub: (url: string) => void): Components {
   return {
-    ...PANEL_MARKDOWN_COMPONENTS,
-    img: () => null,
+    ...TRANSCRIPT_COMPONENTS,
     a: ({ href, children }) =>
       href !== undefined && opensOnGitHub(href) ? (
         <a
@@ -137,18 +135,16 @@ function ToolCallView({
   const view = toolCallView(part);
   const Icon = TOOL_ICON[view.glyph];
   return (
-    <Tool data-call-id={part.callId}>
-      <ToolHeader
-        state={part.state}
-        icon={<Icon aria-hidden="true" />}
-        label={view.summary.label}
-        subject={view.summary.code}
-      />
-      <ToolContent>
-        <ToolInput block={view.input} />
-        <ToolOutput block={view.output} errorText={part.errorText} />
-      </ToolContent>
-    </Tool>
+    <TranscriptTool
+      data-call-id={part.callId}
+      state={part.state}
+      icon={<Icon aria-hidden="true" />}
+      label={view.summary.label}
+      subject={view.summary.code}
+      input={view.input}
+      output={view.output}
+      errorText={part.errorText}
+    />
   );
 }
 
@@ -162,22 +158,9 @@ function AgentPartView({
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
-      return (
-        <MessageResponse mode="static" components={components}>
-          {part.text}
-        </MessageResponse>
-      );
+      return <TranscriptWords text={part.text} components={components} />;
     case AGENT_PART.REASONING:
-      return (
-        <Reasoning>
-          <ReasoningTrigger />
-          <ReasoningContent>
-            <MessageResponse mode="static" components={components}>
-              {part.text}
-            </MessageResponse>
-          </ReasoningContent>
-        </Reasoning>
-      );
+      return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL:
       return <ToolCallView part={part} />;
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
@@ -196,9 +179,7 @@ function PlanCard({ text, components }: { text: string; components: Components }
         <PlanTitle label={PLAN_CARD_LABEL}>{planCardTitle(text)}</PlanTitle>
       </PlanHeader>
       <PlanContent>
-        <MessageResponse mode="static" components={components}>
-          {text}
-        </MessageResponse>
+        <TranscriptWords text={text} components={components} />
       </PlanContent>
     </Plan>
   );
@@ -228,9 +209,7 @@ function AgentMessage({
     return (
       <Message from={message.role}>
         <MessageContent>
-          <MessageResponse mode="static" components={components}>
-            {words}
-          </MessageResponse>
+          <TranscriptWords text={words} components={components} />
         </MessageContent>
         <CopyMessageAction words={words} copyText={copyText} />
       </Message>

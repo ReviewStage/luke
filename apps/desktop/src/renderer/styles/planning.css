@@ -347,22 +347,19 @@
   }
 }
 
-/* The open plan's transcript: the AI Elements components draw the calls
-   (../planning/plan-transcript.tsx); these are the tab's own frame, its
-   note, and Luke's mark above his turns, drawn at the row's 16px in his
-   voice's colour. */
-.plan-transcript {
+/* The three transcripts: the Transcript tab, the Work tab, and an agent's
+   tab, each a frame the log fills, their rows drawn by the one set of
+   blocks (../planning/transcript-blocks.tsx over ../ai-elements/). What
+   follows is each tab's own: Luke's mark above his spoken turns, drawn at
+   the row's 16px in his voice's colour; the agent's head and composer;
+   the Work tab's worker line and session head. */
+.plan-transcript,
+.plan-work,
+.agent-tab {
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
-}
-
-.plan-transcript-note {
-  margin: var(--space-12) 0 0;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  text-align: center;
 }
 
 .transcript-luke-mark {
@@ -422,14 +419,7 @@
   margin: 4px;
 }
 
-/* The agent's tab: its head, then the transcript filling the rest. */
-.agent-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
+/* The agent's tab's head, above the transcript. */
 .agent-tab-header {
   display: flex;
   flex: 0 0 auto;
@@ -604,64 +594,10 @@
   color: var(--state-merged);
 }
 
-/* The open plan's Work tab: each planning turn under the time it began, its
-   words as a reply reads, and its calls drawn by the AI Elements components
-   (../ai-elements/tool.tsx, reasoning.tsx, fold.tsx), as the agent tabs draw
-   a coding agent's turns. */
-.plan-work {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
+/* The Work tab's own ----------------------------------------------------- */
 
-.work-turns {
-  margin: 0;
-  padding: 4px 0 0;
-  list-style: none;
-}
-
-.work-turn-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 0 8px;
-  background: var(--desktop-well);
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-weight: 600;
-}
-
-.work-turn-header::after {
-  height: 1px;
-  flex: 1;
-  background: var(--hairline);
-  content: "";
-  order: 1;
-}
-
-.work-turn-state {
-  order: 2;
-}
-
-.work-note {
-  margin: 0 0 6px;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-}
-
-.work-blocks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 4px 0 10px;
-}
-
-/* A quiet button-shaped line of the Work tab: a fold's summary, a worker's
-   line, the way back from a worker's session. Note that it is written here
+/* A quiet button-shaped line of the Work tab: a worker's line, the way
+   back from a worker's session. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
    colour outside the utilities' layer, and that rule wins over any utility. */
 .ai-trigger {

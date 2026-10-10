@@ -7,19 +7,30 @@ import { cn } from "./utils";
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to Luke's tokens. The registry's checkpoint is a bookmark with a button
  * that restores the conversation to that point; here it is the divider
- * alone, its words at the left and a hairline running to the column's
- * edge, because what it marks in Luke is the start of one call, which
- * nothing restores to. The words are the caller's: the call's day and
- * time, and whether it stands now.
+ * alone, its words at the left, a hairline running on from them, and
+ * whatever the caller puts at the right, because what it marks in Luke is
+ * the start of one call or one turn, which nothing restores to. The words
+ * are the caller's: the call's day and time, and whether it stands now or
+ * how far it got. It sticks to the top of the log as the lines under it
+ * scroll, on the well's own ground so nothing shows through, which is why
+ * a log that holds one has no top padding of its own.
  */
 
-export type CheckpointProps = ComponentProps<"div">;
+export type CheckpointProps = ComponentProps<"div"> & {
+  /** What stands at the right, past the hairline. */
+  trailing?: ReactNode;
+};
 
-export function Checkpoint({ className, children, ...props }: CheckpointProps): ReactNode {
+export function Checkpoint({
+  className,
+  children,
+  trailing,
+  ...props
+}: CheckpointProps): ReactNode {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 py-1 text-[11.5px] font-semibold text-muted-foreground",
+        "sticky top-0 z-[1] flex items-center gap-2 bg-well pt-3 pb-2 text-[11.5px] font-semibold text-muted-foreground",
         className,
       )}
       data-checkpoint=""
@@ -27,6 +38,7 @@ export function Checkpoint({ className, children, ...props }: CheckpointProps): 
     >
       {children}
       <span className="h-px min-w-0 flex-1 bg-border" aria-hidden="true" />
+      {trailing}
     </div>
   );
 }

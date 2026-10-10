@@ -5,6 +5,7 @@ import {
   type PlanWorkTool,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import {
   BotIcon,
   ChevronLeftIcon,
@@ -22,7 +23,7 @@ import {
   WrenchIcon,
 } from "lucide-react";
 import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
-import type { Components } from "streamdown";
+import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
@@ -30,20 +31,16 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
-import { MessageResponse } from "../ai-elements/message";
-import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
+import { Message, MessageContent } from "../ai-elements/message";
 import { Shimmer } from "../ai-elements/shimmer";
-import {
-  TOOL_BLOCK,
-  TOOL_STATE,
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-  type ToolState,
-} from "../ai-elements/tool";
+import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
+import {
+  TranscriptNote,
+  TranscriptReasoning,
+  TranscriptTool,
+  TranscriptWords,
+} from "./transcript-blocks";
 import { callHeading } from "./transcript-model";
 import {
   openedWorker,
@@ -58,19 +55,18 @@ import {
 /**
  * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
  *
- * Each turn opens under the time it began, and its rows are
- * `work-model.ts`'s, drawn with the AI Elements components the agent tabs
- * draw a coding agent's turns with: the model's words as a reply, its
- * reasoning folded behind one line, each call a Tool row wearing its tool's
- * icon that opens onto its input and output, and the worker a boxed line
- * that opens its session. Everything here is the planning model's or the
- * developer's repository's, a command's output included, so the root is
- * left out of the screen recording (`ph-no-capture`) as a second line
- * behind its text masking.
+ * Each turn opens at a Checkpoint saying when it began and how far it got,
+ * and its rows are `work-model.ts`'s, drawn as one of Luke's turns by the
+ * blocks every transcript shares (`transcript-blocks.tsx`): the model's
+ * words as a reply, its reasoning folded behind one line, each call a row
+ * wearing its tool's icon that opens onto its input and output. What is
+ * this tab's own is a run of calls folded under one line saying how many,
+ * a finished turn's lead folded under what it holds, and the worker, a
+ * boxed line that opens its session in the tab's place. Everything here is
+ * the planning model's or the developer's repository's, a command's output
+ * included, so the root is left out of the screen recording
+ * (`ph-no-capture`) as a second line behind its text masking.
  */
-
-/** How the model's words are drawn: as markdown, but never as an image, which would be a request to wherever it points. */
-const WORDS_COMPONENTS: Components = { img: () => null };
 
 /** What a turn's state says beside its time. */
 const TURN_STATE_WORD = {
@@ -106,26 +102,20 @@ function toolStateOf(call: WorkCallRow): ToolState {
 function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   const failed = call.state === PLAN_WORK_STATE.FAILED;
   return (
-    <Tool>
-      <ToolHeader
-        icon={TOOL_ICON[call.tool]}
-        label={call.verb}
-        subject={call.subject}
-        subjectIsCode={call.subjectIsCode}
-        state={toolStateOf(call)}
-      />
-      <ToolContent>
-        <ToolInput block={{ kind: TOOL_BLOCK.TEXT, text: call.input }} />
-        <ToolOutput
-          block={
-            call.output === undefined || failed
-              ? undefined
-              : { kind: TOOL_BLOCK.TEXT, text: call.output }
-          }
-          errorText={failed ? call.output : undefined}
-        />
-      </ToolContent>
-    </Tool>
+    <TranscriptTool
+      icon={TOOL_ICON[call.tool]}
+      label={call.verb}
+      subject={call.subject}
+      subjectIsCode={call.subjectIsCode}
+      state={toolStateOf(call)}
+      input={{ kind: TOOL_BLOCK.TEXT, text: call.input }}
+      output={
+        call.output === undefined || failed
+          ? undefined
+          : { kind: TOOL_BLOCK.TEXT, text: call.output }
+      }
+      errorText={failed ? call.output : undefined}
+    />
   );
 }
 
@@ -221,15 +211,13 @@ function SubagentSession({
             </span>
           </div>
         </header>
-        {session?.earlierOmitted ? <p className="work-note">Earlier steps are not shown.</p> : null}
+        {session?.earlierOmitted ? (
+          <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
+        ) : null}
         {session === undefined || session.blocks.length === 0 ? (
-          <p className="work-note">{call.running ? "Starting…" : "Nothing recorded."}</p>
+          <TranscriptNote>{call.running ? "Starting…" : "Nothing recorded."}</TranscriptNote>
         ) : (
-          <div className="work-blocks">
-            {session.blocks.map((block) => (
-              <WorkBlockView key={block.key} block={block} />
-            ))}
-          </div>
+          <WorkTurnBlocks blocks={session.blocks} />
         )}
       </ConversationContent>
       <ConversationScrollButton />
@@ -241,24 +229,9 @@ function SubagentSession({
 function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
   switch (block.kind) {
     case WORK_BLOCK.TEXT:
-      return (
-        <MessageResponse
-          mode="static"
-          components={WORDS_COMPONENTS}
-          className="text-[13px] text-foreground leading-relaxed"
-        >
-          {block.text}
-        </MessageResponse>
-      );
+      return <TranscriptWords text={block.text} />;
     case WORK_BLOCK.REASONING:
-      return (
-        <Reasoning>
-          <ReasoningTrigger />
-          <ReasoningContent>
-            <p className="m-0 whitespace-pre-wrap">{block.text}</p>
-          </ReasoningContent>
-        </Reasoning>
-      );
+      return <TranscriptReasoning text={block.text} />;
     case WORK_BLOCK.CALL:
       return <WorkCall call={block.call} />;
     case WORK_BLOCK.WORKER:
@@ -290,10 +263,23 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
   }
 }
 
-/** A turn's state beside its time, a light sweeping it while the turn works. */
+/** A turn's blocks as one of Luke's turns, drawn as the Transcript tab draws his words. */
+function WorkTurnBlocks({ blocks }: { blocks: readonly WorkBlock[] }): React.JSX.Element {
+  return (
+    <Message from={MESSAGE_ROLE.ASSISTANT}>
+      <MessageContent>
+        {blocks.map((block) => (
+          <WorkBlockView key={block.key} block={block} />
+        ))}
+      </MessageContent>
+    </Message>
+  );
+}
+
+/** A turn's state at the right of its checkpoint, a light sweeping it while the turn works. */
 function TurnState({ state }: { state: PlanWorkState }): React.JSX.Element {
   return (
-    <span className="work-turn-state" data-state={state}>
+    <span data-state={state}>
       {state === PLAN_WORK_STATE.RUNNING ? (
         <Shimmer>{TURN_STATE_WORD[state]}</Shimmer>
       ) : (
@@ -303,21 +289,16 @@ function TurnState({ state }: { state: PlanWorkState }): React.JSX.Element {
   );
 }
 
-/** One turn: when it began and how far it got, then its blocks. */
+/** One turn: the checkpoint saying when it began and how far it got, then its blocks. */
 function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.Element {
   return (
-    <li className="work-turn">
-      <header className="work-turn-header">
-        <span>{callHeading(turn.startedAt, now)}</span>
-        <TurnState state={turn.state} />
-      </header>
-      {turn.earlierOmitted ? <p className="work-note">Earlier steps are not shown.</p> : null}
-      <div className="work-blocks">
-        {turn.blocks.map((block) => (
-          <WorkBlockView key={block.key} block={block} />
-        ))}
-      </div>
-    </li>
+    <>
+      <Checkpoint trailing={<TurnState state={turn.state} />}>
+        {callHeading(turn.startedAt, now)}
+      </Checkpoint>
+      {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
+      <WorkTurnBlocks blocks={turn.blocks} />
+    </>
   );
 }
 
@@ -352,15 +333,11 @@ export function PlanWork({
           </ConversationEmptyState>
         ) : (
           <Conversation>
-            {/* Note that the scroll box has no top padding, because a sticky turn header
-                sticks below it and would leave what scrolled under it showing in that band;
-                the list carries the room instead, as the Transcript's does. */}
+            {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
             <ConversationContent className="pt-0">
-              <ol className="work-turns">
-                {rows.map((turn) => (
-                  <WorkTurn key={turn.key} turn={turn} now={now} />
-                ))}
-              </ol>
+              {rows.map((turn) => (
+                <WorkTurn key={turn.key} turn={turn} now={now} />
+              ))}
             </ConversationContent>
             <ConversationScrollButton />
           </Conversation>
