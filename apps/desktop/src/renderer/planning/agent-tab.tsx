@@ -5,15 +5,7 @@ import type {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import {
-  FilePenIcon,
-  FileTextIcon,
-  GlobeIcon,
-  type LucideIcon,
-  SearchIcon,
-  TerminalIcon,
-  WrenchIcon,
-} from "lucide-react";
+import { FileTextIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -34,7 +26,7 @@ import {
   AGENT_STATUS_LABEL,
   type AgentPart,
   agentLines,
-  agentParts,
+  agentRows,
   agentStillWriting,
   agentTabLabel,
   messageWords,
@@ -42,10 +34,11 @@ import {
   showsPublishedRow,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
-import { planCardTitle, TOOL_GLYPH, type ToolGlyph, toolCallView } from "./tool-call-model";
+import { planCardTitle, toolCallView } from "./tool-call-model";
 import {
   TRANSCRIPT_COMPONENTS,
   TranscriptReasoning,
+  TranscriptRows,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
@@ -62,10 +55,11 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * agent's stored `UIMessage`s as they are, and reads as a devtool's agent
  * pane: the plan it was handed is a card at the top, folded under its
  * title; each of its own turns runs the column's width with its text as
- * markdown, its reasoning folded under one quiet line, and each tool call
- * one collapsible row saying what it did (`tool-call-model.ts`), with the
+ * markdown, its reasoning folded under one quiet line, each tool call one
+ * collapsible row saying what it did (`tool-call-model.ts`), with the
  * input and the answer under the row once opened and a call that ended in
- * an error marked in red; a message the developer sent it after the plan
+ * an error marked in red, and its runs of calls and its finished lead
+ * folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
  * gone the moment it ends so a finished turn ends on its own last line. The list
@@ -110,16 +104,6 @@ function transcriptComponents(openGitHub: (url: string) => void): Components {
   };
 }
 
-/** Each row's icon, by what its glyph stands for. */
-const TOOL_ICON = {
-  [TOOL_GLYPH.TERMINAL]: TerminalIcon,
-  [TOOL_GLYPH.FILE]: FileTextIcon,
-  [TOOL_GLYPH.EDIT]: FilePenIcon,
-  [TOOL_GLYPH.SEARCH]: SearchIcon,
-  [TOOL_GLYPH.WEB]: GlobeIcon,
-  [TOOL_GLYPH.GENERIC]: WrenchIcon,
-} as const satisfies Record<ToolGlyph, LucideIcon>;
-
 /** The word before a plan card's title. */
 const PLAN_CARD_LABEL = "Plan";
 
@@ -133,14 +117,12 @@ function ToolCallView({
   part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
 }): ReactNode {
   const view = toolCallView(part);
-  const Icon = TOOL_ICON[view.glyph];
   return (
     <TranscriptTool
       data-call-id={part.callId}
       state={part.state}
-      icon={<Icon aria-hidden="true" />}
-      label={view.summary.label}
-      subject={view.summary.code}
+      kind={view.kind}
+      subject={view.subject}
       input={view.input}
       output={view.output}
       errorText={part.errorText}
@@ -193,16 +175,18 @@ function PlanCard({ text, components }: { text: string; components: Components }
 function AgentMessage({
   message,
   plan,
+  moving,
   components,
   copyText,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
   plan: boolean;
+  /** Whether the agent may still write to this message: it is the last, and the agent still works. */
+  moving: boolean;
   components: Components;
   copyText: (words: string) => Promise<void>;
 }): ReactNode {
-  const parts = agentParts(message);
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} components={components} />;
   if (message.role === MESSAGE_ROLE.USER) {
@@ -218,9 +202,9 @@ function AgentMessage({
   return (
     <Message from={message.role}>
       <MessageContent>
-        {parts.map((part, index) => (
-          <AgentPartView key={index} part={part} components={components} />
-        ))}
+        <TranscriptRows rows={agentRows(message, moving)}>
+          {(part) => <AgentPartView part={part} components={components} />}
+        </TranscriptRows>
       </MessageContent>
       {words === "" ? null : <CopyMessageAction words={words} copyText={copyText} />}
     </Message>
@@ -298,11 +282,12 @@ export function AgentTranscriptView({
     return (
       <Conversation>
         <ConversationContent>
-          {messages.map((message) => (
+          {messages.map((message, index) => (
             <AgentMessage
               key={message.id}
               message={message}
               plan={message === plan}
+              moving={working && index === messages.length - 1}
               components={components}
               copyText={copyText}
             />

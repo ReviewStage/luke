@@ -1,15 +1,17 @@
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
-import { COMMAND_PROMPT, TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
+import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
+import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
 
 /**
  * tool-call-model.ts -- what a coding agent's tool call says on its one row, and what its body shows, decided from the part's own input and output.
  *
- * Pure decisions over the tool part the SDK stored: the row's words are
- * read from the call's input alone, so a row drawn while the call runs
- * does not change shape when its answer lands; the body's two blocks are
- * read from the input and the output in the tool's own terms (a command,
- * a patch, a file's words) where the tool is one eve gives the agent,
- * and as their JSON where it is not. Nothing here draws.
+ * Pure decisions over the tool part the SDK stored: the row's kind and
+ * subject are read from the call's input alone, so a row drawn while the
+ * call runs does not change shape when its answer lands, and the kind's
+ * verb is `turn-rows.ts`'s, the same the Work tab says; the body's two
+ * blocks are read from the input and the output in the tool's own terms
+ * (a command, a patch, a file's words) where the tool is one eve gives the
+ * agent, and as their JSON where it is not. Nothing here draws.
  */
 
 /** The tools eve gives a coding agent, by the names its parts carry. */
@@ -24,28 +26,10 @@ const AGENT_TOOL = {
   WEB_SEARCH: "web_search",
 } as const;
 
-/** What a row's icon stands for. */
-export const TOOL_GLYPH = {
-  TERMINAL: "terminal",
-  FILE: "file",
-  EDIT: "edit",
-  SEARCH: "search",
-  WEB: "web",
-  GENERIC: "generic",
-} as const;
-
-export type ToolGlyph = (typeof TOOL_GLYPH)[keyof typeof TOOL_GLYPH];
-
-/** One row's words: a verb, and the thing it was done to, drawn in mono. */
-interface ToolSummary {
-  /** The verb before the subject; none for a command, which is its own line. */
-  readonly label: string | undefined;
-  readonly code: string;
-}
-
 export interface ToolCallView {
-  readonly glyph: ToolGlyph;
-  readonly summary: ToolSummary;
+  readonly kind: CallKind;
+  /** The thing the call was done to, after its kind's verb. */
+  readonly subject: string;
   readonly input: ToolBlock;
   /** Nothing while the call has not answered. */
   readonly output: ToolBlock | undefined;
@@ -154,31 +138,31 @@ function knownToolView(
     case AGENT_TOOL.BASH: {
       const command = stringAt(input, "command") ?? "";
       return {
-        glyph: TOOL_GLYPH.TERMINAL,
-        summary: { label: undefined, code: `${COMMAND_PROMPT}${command}` },
+        kind: CALL_KIND.COMMAND,
+        subject: command,
         input: { kind: TOOL_BLOCK.COMMAND, text: command },
         output: output === undefined ? undefined : commandOutput(output),
       };
     }
     case AGENT_TOOL.READ_FILE:
       return {
-        glyph: TOOL_GLYPH.FILE,
-        summary: { label: "Read", code: stringAt(input, "filePath") ?? "" },
+        kind: CALL_KIND.READ_FILE,
+        subject: stringAt(input, "filePath") ?? "",
         input: textBlock(stringAt(input, "filePath") ?? ""),
         output: output === undefined ? undefined : wordsOutput(output, "content"),
       };
     case AGENT_TOOL.WRITE_FILE:
       return {
-        glyph: TOOL_GLYPH.EDIT,
-        summary: { label: "Wrote", code: stringAt(input, "filePath") ?? "" },
+        kind: CALL_KIND.WRITE_FILE,
+        subject: stringAt(input, "filePath") ?? "",
         input: textBlock(stringAt(input, "content") ?? ""),
         output: output === undefined ? undefined : wordsOutput(output, "path"),
       };
     case AGENT_TOOL.APPLY_PATCH: {
       const patchText = stringAt(input, "patchText") ?? "";
       return {
-        glyph: TOOL_GLYPH.EDIT,
-        summary: { label: "Edited", code: pathsSubject(patchPaths(patchText)) },
+        kind: CALL_KIND.EDIT,
+        subject: pathsSubject(patchPaths(patchText)),
         input: { kind: TOOL_BLOCK.PATCH, text: patchText },
         output: output === undefined ? undefined : patchOutput(output),
       };
@@ -186,33 +170,28 @@ function knownToolView(
     case AGENT_TOOL.GREP:
     case AGENT_TOOL.GLOB:
       return {
-        glyph: TOOL_GLYPH.SEARCH,
-        summary: { label: "Searched", code: stringAt(input, "pattern") ?? "" },
+        kind: CALL_KIND.SEARCH,
+        subject: stringAt(input, "pattern") ?? "",
         input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : wordsOutput(output, "content"),
       };
     case AGENT_TOOL.WEB_FETCH:
       return {
-        glyph: TOOL_GLYPH.WEB,
-        summary: { label: "Fetched", code: stringAt(input, "url") ?? "" },
+        kind: CALL_KIND.WEB_PAGE,
+        subject: pageName(stringAt(input, "url") ?? ""),
         input: textBlock(stringAt(input, "url") ?? ""),
         output: output === undefined ? undefined : wordsOutput(output, "content"),
       };
     case AGENT_TOOL.WEB_SEARCH:
       return {
-        glyph: TOOL_GLYPH.WEB,
-        summary: { label: "Searched the web for", code: stringAt(input, "query") ?? "" },
+        kind: CALL_KIND.WEB_SEARCH,
+        subject: stringAt(input, "query") ?? "",
         input: textBlock(stringAt(input, "query") ?? ""),
         output: output === undefined ? undefined : jsonBlock(output),
       };
     default:
       return undefined;
   }
-}
-
-/** The one line of JSON a generic call's row shows for its input. */
-function compactJson(input: WireValue | undefined): string {
-  return input === undefined ? "" : JSON.stringify(input);
 }
 
 /** How one tool call is drawn: its row and its body, from the part's input and output. */
@@ -223,8 +202,8 @@ export function toolCallView(input: {
 }): ToolCallView {
   return (
     knownToolView(input.tool, input.input, input.output) ?? {
-      glyph: TOOL_GLYPH.GENERIC,
-      summary: { label: input.tool, code: compactJson(input.input) },
+      kind: CALL_KIND.OTHER,
+      subject: input.tool,
       input: input.input === undefined ? textBlock("") : jsonBlock(input.input),
       output: input.output === undefined ? undefined : jsonBlock(input.output),
     }

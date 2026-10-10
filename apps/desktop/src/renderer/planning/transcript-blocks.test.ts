@@ -41,90 +41,134 @@ function foldSaying(container: HTMLElement, words: string): HTMLDetailsElement {
   return fold;
 }
 
-const AGENT_TURN: CodingAgentMessage = {
-  id: "m-turn",
-  role: "assistant",
-  parts: [
-    { type: "reasoning", text: "List the sources first." },
-    {
-      type: "tool-bash",
-      toolCallId: "call_1",
-      state: "output-available",
-      input: { command: "ls src" },
-      output: {
-        status: "completed",
-        exitCode: 0,
-        stdout: "invite.ts\n",
-        stderr: "",
-        truncated: false,
-      },
+const REASONING = "List the sources first.";
+const COMMAND = "ls src";
+const OUTPUT = "invite.ts";
+
+/** A repository call on the Work tab's wire. */
+function workCall(id: string, command: string) {
+  return {
+    type: PLAN_WORK_PART.TOOL,
+    id,
+    tool: PLAN_WORK_TOOL.REPOSITORY,
+    name: "run_in_repository",
+    state: PLAN_WORK_STATE.DONE,
+    subject: command,
+    input: JSON.stringify({ command }),
+    output: OUTPUT,
+  } as const;
+}
+
+/** The same call on an agent's wire. */
+function agentCall(id: string, command: string): CodingAgentMessage["parts"][number] {
+  return {
+    type: "tool-bash",
+    toolCallId: id,
+    state: "output-available",
+    input: { command },
+    output: {
+      status: "completed",
+      exitCode: 0,
+      stdout: `${OUTPUT}\n`,
+      stderr: "",
+      truncated: false,
     },
-    { type: "text", text: "One file." },
-  ],
-};
+  };
+}
 
-const SURFACES: readonly (readonly [string, ReactElement])[] = [
-  [
-    "the Work tab",
-    createElement(PlanWork, {
-      callLive: false,
-      turns: [
-        {
-          turnId: "turn-1",
-          startedAt: 1_000,
-          state: PLAN_WORK_STATE.DONE,
-          earlierOmitted: false,
-          parts: [
-            { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
-            { type: PLAN_WORK_PART.REASONING, text: "List the sources first." },
-            {
-              type: PLAN_WORK_PART.TOOL,
-              id: "call-1",
-              tool: PLAN_WORK_TOOL.REPOSITORY,
-              name: "run_in_repository",
-              state: PLAN_WORK_STATE.DONE,
-              subject: "ls src",
-              input: '{ "command": "ls src" }',
-              output: "invite.ts",
-            },
-          ],
-        },
-      ],
-    }),
-  ],
-  [
-    "an agent's tab",
-    createElement(AgentTranscriptView, {
-      messages: [AGENT_TURN],
-      reading: false,
-      failed: false,
-      working: false,
-      onRetry: () => undefined,
-      openGitHub: () => undefined,
-      copyText: () => Promise.resolve(),
-    }),
-  ],
-];
+/** One finished turn drawn on each tab: the words, the reasoning, then one call; or two calls ahead of the words. */
+function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement])[] {
+  const work = createElement(PlanWork, {
+    callLive: false,
+    turns: [
+      {
+        turnId: "turn-1",
+        startedAt: 1_000,
+        state: PLAN_WORK_STATE.DONE,
+        earlierOmitted: false,
+        parts: callsFirst
+          ? [
+              { type: PLAN_WORK_PART.REASONING, text: REASONING },
+              workCall("call-1", COMMAND),
+              workCall("call-2", "cat src/invite.ts"),
+              { type: PLAN_WORK_PART.TEXT, text: "One file." },
+            ]
+          : [
+              { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
+              { type: PLAN_WORK_PART.REASONING, text: REASONING },
+              workCall("call-1", COMMAND),
+            ],
+      },
+    ],
+  });
+  const agent = createElement(AgentTranscriptView, {
+    messages: [
+      {
+        id: "m-turn",
+        role: "assistant",
+        parts: callsFirst
+          ? [
+              { type: "reasoning", text: REASONING },
+              agentCall("call-1", COMMAND),
+              agentCall("call-2", "cat src/invite.ts"),
+              { type: "text", text: "One file." },
+            ]
+          : [
+              { type: "text", text: "Looking at the sources." },
+              { type: "reasoning", text: REASONING },
+              agentCall("call-1", COMMAND),
+            ],
+      },
+    ],
+    reading: false,
+    failed: false,
+    working: false,
+    onRetry: () => undefined,
+    openGitHub: () => undefined,
+    copyText: () => Promise.resolve(),
+  });
+  return [
+    ["the Work tab", work],
+    ["an agent's tab", agent],
+  ];
+}
 
-test.each(SURFACES)(
-  "on %s a tool call is one row, closed until clicked, and the reasoning folds the same way",
+test.each(surfaces(false))(
+  "on %s a tool call is one row saying what it ran, closed until clicked, and the reasoning folds the same way",
   (_surface, element) => {
     const container = mounted(element);
     const said = () => container.textContent ?? "";
 
-    const call = foldSaying(container, "ls src");
+    const call = foldSaying(container, COMMAND);
+    assert.equal(call.querySelector("summary")?.textContent, `Ran ${COMMAND}`);
     assert.equal(call.open, false);
     assert.equal(call.querySelector("[data-tool-output]"), null);
-    assert.equal(said().includes("invite.ts"), false);
+    assert.equal(said().includes(OUTPUT), false);
     act(() => call.querySelector("summary")?.click());
     assert.equal(call.open, true);
-    assert.ok(call.querySelector("[data-tool-input]")?.textContent?.includes("ls src"));
-    assert.equal(call.querySelector("[data-tool-output]")?.textContent, "invite.ts");
+    assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
+    assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
 
     const thought = foldSaying(container, "Thought");
     assert.equal(thought.open, false);
-    assert.equal(said().includes("List the sources first."), false);
+    assert.equal(said().includes(REASONING), false);
     act(() => thought.querySelector("summary")?.click());
-    assert.ok(said().includes("List the sources first."));
+    assert.ok(said().includes(REASONING));
+  },
+);
+
+test.each(surfaces(true))(
+  "on %s a finished turn folds what came before its last words under one line, its calls grouped under another",
+  (_surface, element) => {
+    const container = mounted(element);
+    const lead = foldSaying(container, "2 tool calls");
+    assert.equal(lead.open, false);
+    assert.equal(container.querySelector("details[data-turn-fold] details"), null);
+    act(() => lead.querySelector("summary")?.click());
+    const group = foldSaying(container, "2 tools called");
+    assert.equal(group.open, false);
+    act(() => group.querySelector("summary")?.click());
+    assert.ok(foldSaying(container, COMMAND));
+    assert.ok(foldSaying(container, "cat src/invite.ts"));
   },
 );

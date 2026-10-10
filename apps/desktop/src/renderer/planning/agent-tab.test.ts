@@ -204,15 +204,42 @@ function open(container: HTMLElement, selector: string): HTMLDetailsElement {
   return fold;
 }
 
-test("a bash call's row reads as its command behind a prompt, never as the input's JSON", () => {
-  const markup = drawn([TURN]);
-  assert.match(markup, /\$ cat AGENTS\.md<\/span>/u);
+/** The transcript mounted with every run of calls and folded lead opened, as a reader opens them to reach the rows. */
+function unfolded(
+  messages: readonly CodingAgentMessage[],
+  openGitHub: (url: string) => void = ignore,
+  copyText: (words: string) => Promise<void> = copyNothing,
+): HTMLElement {
+  const container = mounted(messages, openGitHub, copyText);
+  for (;;) {
+    const fold = container.querySelector<HTMLDetailsElement>("[data-turn-fold]:not([open])");
+    if (fold === null) return container;
+    act(() => fold.querySelector("summary")?.click());
+  }
+}
+
+test("a bash call's row reads as the command it ran, never as the input's JSON", () => {
+  const markup = unfolded([TURN]).innerHTML;
+  assert.match(markup, /Ran <\/span><span[^>]*>cat AGENTS\.md<\/span>/u);
   assert.doesNotMatch(markup, /"command"/u);
   assert.doesNotMatch(markup, /\{&quot;command&quot;/u);
 });
 
-test("each row says what the call did and where it stands, and the chevron, icon, and mark are 16px", () => {
+test("a finished turn folds its calls under one line saying how many, as the Work tab folds Luke's, and nothing opens on its own", () => {
   const markup = drawn([TURN]);
+  assert.match(markup, /<details[^>]*data-turn-fold=""[^>]*><summary[^>]*>.*?4 tool calls</u);
+  assert.doesNotMatch(markup, /data-call-id/u);
+  assert.doesNotMatch(markup, /<details[^>]*\sopen/u);
+  const container = unfolded([TURN]);
+  const group = [...container.querySelectorAll("[data-turn-fold] summary")].find((line) =>
+    line.textContent?.includes("4 tools called"),
+  );
+  assert.ok(group, "the four calls are one group inside the lead");
+  assert.equal(container.querySelectorAll("details[data-call-id]").length, 4);
+});
+
+test("each row says what the call did and where it stands, and the chevron, icon, and mark are 16px", () => {
+  const markup = unfolded([TURN]).innerHTML;
   assert.match(
     markup,
     /Read <\/span><span[^>]*>\/workspace\/repository\/apps\/web\/server\/routes\/invite\.ts</u,
@@ -225,13 +252,13 @@ test("each row says what the call did and where it stands, and the chevron, icon
   const icons = markup.match(/<svg[^>]*class="[^"]*"/gu) ?? [];
   assert.ok(icons.length >= 8);
   for (const icon of icons) assert.match(icon, /\bsize-4\b|lucide/u);
-  // Nothing opens on its own, and a closed row draws no body.
-  assert.doesNotMatch(markup, /<details[^>]*\sopen/u);
+  // No row opens on its own, and a closed row draws no body.
+  assert.doesNotMatch(markup, /<details[^>]*data-call-id[^>]*\sopen/u);
   assert.doesNotMatch(markup, /data-tool-output/u);
 });
 
 test("opening a row shows the command's answer with the terminal's escapes taken out, and an error in a live row", () => {
-  const container = mounted([TURN]);
+  const container = unfolded([TURN]);
   assert.equal(container.textContent?.includes("# Agent guide"), false);
 
   const bash = open(container, '[data-call-id="call_1"]');
@@ -246,7 +273,7 @@ test("opening a row shows the command's answer with the terminal's escapes taken
 
 test("a long answer is cut to its first lines, and Show more shows the rest", () => {
   const lines = Array.from({ length: 45 }, (_, index) => `line ${index + 1}`);
-  const container = mounted([
+  const container = unfolded([
     {
       id: "m",
       role: "assistant",
@@ -280,14 +307,13 @@ test("a long answer is cut to its first lines, and Show more shows the rest", ()
 });
 
 test("the reasoning folds under one quiet line and opens on a click", () => {
-  const container = mounted([TURN]);
-  const reasoning = container.querySelector<HTMLDetailsElement>(
-    "details:not([data-call-id]):not([data-plan-card])",
-  );
+  const container = unfolded([TURN]);
+  const selector = "details:not([data-call-id]):not([data-plan-card]):not([data-turn-fold])";
+  const reasoning = container.querySelector<HTMLDetailsElement>(selector);
   assert.ok(reasoning);
   assert.equal(reasoning.querySelector("summary")?.textContent, "Thought");
   assert.equal(container.textContent?.includes("Read AGENTS.md before anything else."), false);
-  open(container, "details:not([data-call-id]):not([data-plan-card])");
+  open(container, selector);
   assert.ok(container.textContent?.includes("Read AGENTS.md before anything else."));
 });
 
@@ -314,7 +340,7 @@ test("the words are markdown, with the pull request's link opening on GitHub in 
   assert.match(markup, /class="agent-link-inert"[^>]*>the docs</u);
 
   const opened: string[] = [];
-  const container = mounted([TURN], (url) => opened.push(url));
+  const container = unfolded([TURN], (url) => opened.push(url));
   const link = container.querySelector<HTMLAnchorElement>("a.agent-link");
   assert.ok(link);
   const click = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -375,7 +401,7 @@ const FOLLOW_UP: CodingAgentMessage = {
 };
 
 test("each kind of part is drawn by its AI Elements component: the plan a card, a tool a row, the thinking folded, the words a response, an error in red", () => {
-  const container = mounted([PLAN, TURN]);
+  const container = unfolded([PLAN, TURN]);
   const log = container.querySelector('[role="log"]');
   assert.ok(log);
   // The plan card is the registry's Plan: a details first in the log, holding its content once opened.
@@ -433,7 +459,7 @@ test("a message the developer sent after the plan is the developer's bubble, and
 
 test("copying a turn hands the clipboard the agent's words alone, never its tool calls, and a turn of calls alone offers no copy", async () => {
   const copied: string[] = [];
-  const container = mounted([PLAN, TURN], ignore, (words) => {
+  const container = unfolded([PLAN, TURN], ignore, (words) => {
     copied.push(words);
     return Promise.resolve();
   });

@@ -1,28 +1,11 @@
 import {
   PLAN_WORK_STATE,
-  PLAN_WORK_TOOL,
   type PlanWorkState,
-  type PlanWorkTool,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { MESSAGE_ROLE } from "@sidecar/wire";
-import {
-  BotIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  CircleStopIcon,
-  EyeIcon,
-  FileCodeIcon,
-  GlobeIcon,
-  HourglassIcon,
-  ListIcon,
-  MessageCircleQuestionIcon,
-  PencilLineIcon,
-  SearchIcon,
-  TerminalIcon,
-  WrenchIcon,
-} from "lucide-react";
-import { createContext, type ReactNode, useCallback, useContext, useState } from "react";
+import { BotIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
+import { createContext, useCallback, useContext, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -30,7 +13,6 @@ import {
   ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -38,10 +20,12 @@ import { cn } from "../ai-elements/utils";
 import {
   TranscriptNote,
   TranscriptReasoning,
+  TranscriptRows,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
 import { callHeading } from "./transcript-model";
+import { CALL_WORDS, type TurnRow } from "./turn-rows";
 import {
   openedWorker,
   WORK_BLOCK,
@@ -49,6 +33,7 @@ import {
   type WorkBlock,
   type WorkCallRow,
   type WorkTurnRow,
+  type WorkWorkerBlock,
   workRowsOf,
 } from "./work-model";
 
@@ -59,10 +44,10 @@ import {
  * and its rows are `work-model.ts`'s, drawn as one of Luke's turns by the
  * blocks every transcript shares (`transcript-blocks.tsx`): the model's
  * words as a reply, its reasoning folded behind one line, each call a row
- * wearing its tool's icon that opens onto its input and output. What is
- * this tab's own is a run of calls folded under one line saying how many,
- * a finished turn's lead folded under what it holds, and the worker, a
- * boxed line that opens its session in the tab's place. Everything here is
+ * wearing its kind's icon that opens onto its input and output, and the
+ * runs of calls and a finished turn's lead folded as an agent's are. What
+ * is this tab's own is the worker, a boxed line that opens its session in
+ * the tab's place. Everything here is
  * the planning model's or the developer's repository's, a command's output
  * included, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind its text masking.
@@ -74,21 +59,6 @@ const TURN_STATE_WORD = {
   [PLAN_WORK_STATE.DONE]: "Done",
   [PLAN_WORK_STATE.FAILED]: "Stopped",
 } as const;
-
-/** Each tool's icon. */
-const TOOL_ICON = {
-  [PLAN_WORK_TOOL.REPOSITORY]: <TerminalIcon />,
-  [PLAN_WORK_TOOL.SEARCH_WEB]: <SearchIcon />,
-  [PLAN_WORK_TOOL.READ_WEB_PAGE]: <GlobeIcon />,
-  [PLAN_WORK_TOOL.SHOW_CODE]: <FileCodeIcon />,
-  [PLAN_WORK_TOOL.DRAW_ON_BOARD]: <PencilLineIcon />,
-  [PLAN_WORK_TOOL.LOOK_AT_BOARD]: <EyeIcon />,
-  [PLAN_WORK_TOOL.QUEUE_QUESTION]: <MessageCircleQuestionIcon />,
-  [PLAN_WORK_TOOL.WORKER]: <BotIcon />,
-  [PLAN_WORK_TOOL.WORKER_WAIT]: <HourglassIcon />,
-  [PLAN_WORK_TOOL.WORKER_CANCEL]: <CircleStopIcon />,
-  [PLAN_WORK_TOOL.OTHER]: <WrenchIcon />,
-} as const satisfies Record<PlanWorkTool, ReactNode>;
 
 /** A call's state as the Tool row marks it, in the AI SDK's words: running only while it still moves. */
 function toolStateOf(call: WorkCallRow): ToolState {
@@ -103,12 +73,10 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   const failed = call.state === PLAN_WORK_STATE.FAILED;
   return (
     <TranscriptTool
-      icon={TOOL_ICON[call.tool]}
-      label={call.verb}
+      kind={call.kind}
       subject={call.subject}
-      subjectIsCode={call.subjectIsCode}
       state={toolStateOf(call)}
-      input={{ kind: TOOL_BLOCK.TEXT, text: call.input }}
+      input={call.input}
       output={
         call.output === undefined || failed
           ? undefined
@@ -119,44 +87,13 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
   );
 }
 
-/**
- * A line that folds what is beneath it: a group of calls, or a finished
- * turn's lead. Note that the group is keyed by whether it opens, by its
- * caller, because the fold reads `defaultOpen` once, and a group that stops
- * being the turn's latest work has to fold.
- */
-function WorkFold({
-  icon,
-  summary,
-  running,
-  open = false,
-  children,
-}: {
-  icon: ReactNode;
-  summary: string;
-  running: boolean;
-  open?: boolean;
-  children: ReactNode;
-}): React.JSX.Element {
-  return (
-    <Fold className="text-[12.5px]" defaultOpen={open}>
-      <FoldSummary className="flex h-7 items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground">
-        <FoldChevron />
-        <span
-          className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
-          aria-hidden="true"
-        >
-          {icon}
-        </span>
-        {running ? <Shimmer>{summary}</Shimmer> : <span>{summary}</span>}
-      </FoldSummary>
-      <FoldBody className="ml-6 flex flex-col gap-1 pt-1">{children}</FoldBody>
-    </Fold>
-  );
-}
-
 /** Opens a subagent's session in the tab's place; a row deep in the tree reaches it through this rather than through every row above it. */
 const OpenSubagent = createContext<(callId: string) => void>(() => undefined);
+
+/** What a subagent's line names it by: its job, or what was asked of it where no job was said. */
+function jobOf(call: WorkCallRow): string {
+  return call.subject ?? CALL_WORDS[call.kind].verb;
+}
 
 /** What a subagent's line says of how far it got, a light sweeping it while it works. */
 function WorkerState({ call }: { call: WorkCallRow }): React.JSX.Element {
@@ -174,7 +111,7 @@ function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
       onClick={() => open(call.id)}
     >
       <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
-      <span className="min-w-0 truncate text-foreground">{call.subject ?? call.verb}</span>
+      <span className="min-w-0 truncate text-foreground">{jobOf(call)}</span>
       <span className="ml-auto flex shrink-0 items-center gap-1.5">
         <WorkerState call={call} />
         <ChevronRightIcon className="size-3" />
@@ -188,7 +125,7 @@ function SubagentSession({
   worker,
   onBack,
 }: {
-  worker: Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
+  worker: WorkWorkerBlock;
   onBack: () => void;
 }): React.JSX.Element {
   const { call, session } = worker;
@@ -204,7 +141,7 @@ function SubagentSession({
           <div className="flex min-w-0 items-center gap-2">
             <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
             <p className="m-0 min-w-0 flex-1 font-semibold text-[12.5px] text-foreground">
-              {call.subject ?? call.verb}
+              {jobOf(call)}
             </p>
             <span className="shrink-0 text-muted-foreground text-xs">
               <WorkerState call={call} />
@@ -214,10 +151,10 @@ function SubagentSession({
         {session?.earlierOmitted ? (
           <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
         ) : null}
-        {session === undefined || session.blocks.length === 0 ? (
+        {session === undefined || session.rows.length === 0 ? (
           <TranscriptNote>{call.running ? "Starting…" : "Nothing recorded."}</TranscriptNote>
         ) : (
-          <WorkTurnBlocks blocks={session.blocks} />
+          <WorkTurnRows rows={session.rows} />
         )}
       </ConversationContent>
       <ConversationScrollButton />
@@ -236,41 +173,15 @@ function WorkBlockView({ block }: { block: WorkBlock }): React.JSX.Element {
       return <WorkCall call={block.call} />;
     case WORK_BLOCK.WORKER:
       return <WorkerLine call={block.call} />;
-    case WORK_BLOCK.GROUP:
-      return (
-        <WorkFold
-          key={String(block.open)}
-          icon={<WrenchIcon />}
-          summary={
-            block.calls.length === 1 ? "1 tool called" : `${block.calls.length} tools called`
-          }
-          running={block.running}
-          open={block.open}
-        >
-          {block.calls.map((call) => (
-            <WorkCall key={call.id} call={call} />
-          ))}
-        </WorkFold>
-      );
-    case WORK_BLOCK.FOLDED:
-      return (
-        <WorkFold icon={<ListIcon />} summary={block.summary} running={false}>
-          {block.blocks.map((inner) => (
-            <WorkBlockView key={inner.key} block={inner} />
-          ))}
-        </WorkFold>
-      );
   }
 }
 
-/** A turn's blocks as one of Luke's turns, drawn as the Transcript tab draws his words. */
-function WorkTurnBlocks({ blocks }: { blocks: readonly WorkBlock[] }): React.JSX.Element {
+/** A turn's rows as one of Luke's turns, drawn as the Transcript tab draws his words. */
+function WorkTurnRows({ rows }: { rows: readonly TurnRow<WorkBlock>[] }): React.JSX.Element {
   return (
     <Message from={MESSAGE_ROLE.ASSISTANT}>
       <MessageContent>
-        {blocks.map((block) => (
-          <WorkBlockView key={block.key} block={block} />
-        ))}
+        <TranscriptRows rows={rows}>{(block) => <WorkBlockView block={block} />}</TranscriptRows>
       </MessageContent>
     </Message>
   );
@@ -297,7 +208,7 @@ function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.
         {callHeading(turn.startedAt, now)}
       </Checkpoint>
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
-      <WorkTurnBlocks blocks={turn.blocks} />
+      <WorkTurnRows rows={turn.rows} />
     </>
   );
 }

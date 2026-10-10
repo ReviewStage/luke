@@ -55,8 +55,11 @@ function mountedOpen(element: ReactElement): HTMLElement {
   const root = createRoot(container);
   roots.push(root);
   act(() => root.render(element));
-  for (const summary of container.querySelectorAll("summary")) act(() => summary.click());
-  return container;
+  for (;;) {
+    const fold = container.querySelector<HTMLDetailsElement>("details:not([open])");
+    if (fold === null) return container;
+    act(() => fold.querySelector("summary")?.click());
+  }
 }
 
 const PLAN: CodingAgentMessage = {
