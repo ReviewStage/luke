@@ -240,42 +240,55 @@ function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState
     : { ...held, tabs, subagents, tab: chosen };
 }
 
+/** The tabs the plan draws beside the fixed ones: its agents, and the open subagent tabs its work holds, in the strip's order. */
+interface DrawnTabs {
+  agents: readonly string[] | undefined;
+  subagents: readonly string[];
+}
+
+/** The open subagent tabs the plan's work holds, in the order opened. */
+function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly string[] {
+  return held.subagents.filter((each) => drawn.subagents.includes(each));
+}
+
 /**
  * The state with the fixed tab closed, its neighbour chosen in its place
- * if it was the chosen one: the fixed tab after it, or the plan's first
- * agent where no fixed tab is left.
+ * if it was the chosen one: the fixed tab after it, or where no fixed tab
+ * is left, the plan's first agent, or the first subagent tab it draws.
  */
-function withoutFixedTab(
-  held: HeldState,
-  tab: FixedSidePanelTab,
-  agents: readonly string[] | undefined,
-): HeldState {
+function withoutFixedTab(held: HeldState, tab: FixedSidePanelTab, drawn: DrawnTabs): HeldState {
   const at = held.tabs.indexOf(tab);
   if (at < 0) return held;
   const tabs = held.tabs.filter((each) => each !== tab);
   if (held.tab !== tab) return { ...held, tabs };
-  const first = agents?.[0];
-  const next =
-    tabs[Math.min(at, tabs.length - 1)] ?? (first === undefined ? undefined : { agent: first });
+  const agent = drawn.agents?.[0];
+  const subagent = drawnSubagents(held, drawn)[0];
+  const next: SidePanelTab | undefined =
+    tabs[Math.min(at, tabs.length - 1)] ??
+    (agent !== undefined ? { agent } : subagent !== undefined ? { subagent } : undefined);
   return { ...held, tabs, tab: next };
 }
 
 /**
  * The state with the subagent's tab closed, its neighbour chosen in its
- * place if it was the chosen one: the subagent tab after it, or the tab
- * before it where none is left, the plan's last agent or the last fixed tab.
+ * place if it was the chosen one: among the subagent tabs the plan draws,
+ * the one after it, or the tab before it where none is left, the plan's
+ * last agent or the last fixed tab. A tab another plan's work holds is not
+ * a neighbour, since it is not in the strip.
  */
 function withoutSubagentTab(
   held: HeldState,
   tab: SubagentSidePanelTab,
-  agents: readonly string[] | undefined,
+  drawn: DrawnTabs,
 ): HeldState {
-  const at = held.subagents.indexOf(tab.subagent);
-  if (at < 0) return held;
+  const shown = drawnSubagents(held, drawn);
+  const at = shown.indexOf(tab.subagent);
+  if (!held.subagents.includes(tab.subagent)) return held;
   const subagents = held.subagents.filter((each) => each !== tab.subagent);
   if (held.tab === undefined || !sameTab(held.tab, tab)) return { ...held, subagents };
-  const neighbour = subagents[Math.min(at, subagents.length - 1)];
-  const last = agents?.at(-1);
+  const beside = shown.filter((each) => each !== tab.subagent);
+  const neighbour = beside[Math.min(Math.max(at, 0), beside.length - 1)];
+  const last = drawn.agents?.at(-1);
   const next: SidePanelTab | undefined =
     neighbour !== undefined
       ? { subagent: neighbour }
@@ -286,14 +299,8 @@ function withoutSubagentTab(
 }
 
 /** The state with the tab closed, its neighbour chosen in its place if it was the chosen one. */
-function withoutTab(
-  held: HeldState,
-  tab: ClosableSidePanelTab,
-  agents: readonly string[] | undefined,
-): HeldState {
-  return isFixedTab(tab)
-    ? withoutFixedTab(held, tab, agents)
-    : withoutSubagentTab(held, tab, agents);
+function withoutTab(held: HeldState, tab: ClosableSidePanelTab, drawn: DrawnTabs): HeldState {
+  return isFixedTab(tab) ? withoutFixedTab(held, tab, drawn) : withoutSubagentTab(held, tab, drawn);
 }
 
 /** The state with the open tab taken out and put back at `to` in the strip's order. */
@@ -353,35 +360,37 @@ function readStored(): HeldState {
  * The tab the panel shows for the one kept: an agent tab whose agent the
  * open plan has none of, or a subagent tab whose call the open plan's work
  * does not hold, reads as the first open fixed tab, or as none where every
- * fixed tab is closed. With the plan's agents or work not yet read, the
- * kept tab stands, so a tab kept across a launch is not swapped for
- * another and back while the list is on its way.
+ * fixed tab is closed. With the plan's agents not yet read, the kept
+ * agent tab stands, so a tab kept across a launch is not swapped for
+ * another and back while the list is on its way; a subagent's tab is kept
+ * across no launch, and a plan whose work is unread or has no turn holds
+ * no subagent, so nothing is waited for on its account.
  */
 export function shownTab(
   kept: SidePanelTab | undefined,
   tabs: readonly FixedSidePanelTab[],
   agents: readonly string[] | undefined,
-  subagents?: readonly string[] | undefined,
+  subagents: readonly string[] = [],
 ): SidePanelTab | undefined {
   if (kept === undefined || isFixedTab(kept)) return kept;
   if (isAgentTab(kept)) {
     return agents === undefined || agents.includes(kept.agent) ? kept : tabs[0];
   }
-  return subagents === undefined || subagents.includes(kept.subagent) ? kept : tabs[0];
+  return subagents.includes(kept.subagent) ? kept : tabs[0];
 }
 
 /**
  * The side panel's state: the kept preference, kept again on every change,
  * or where a fixture run stages one, that staged state and the presses on
  * it, which are kept nowhere. `agents` are the open plan's agent tabs, by
- * agent id, and `subagents` the subagents its work holds, by the call that
- * started each, either nothing while it has not been read; the tab shown
- * is held to them.
+ * agent id, or nothing while they have not been read, and `subagents` the
+ * subagents its work holds, by the call that started each, none where the
+ * work has none or is unread; the tab shown is held to them.
  */
 export function useSidePanel(
   staged: SidePanelState | undefined,
   agents?: readonly string[] | undefined,
-  subagents?: readonly string[] | undefined,
+  subagents: readonly string[] = [],
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -423,8 +432,8 @@ export function useSidePanel(
     [update],
   );
   const onClose = useCallback(
-    (tab: ClosableSidePanelTab) => update((held) => withoutTab(held, tab, agents)),
-    [update, agents],
+    (tab: ClosableSidePanelTab) => update((held) => withoutTab(held, tab, { agents, subagents })),
+    [update, agents, subagents],
   );
   const onMove = useCallback(
     (tab: FixedSidePanelTab, to: number) => update((held) => withTabAt(held, tab, to)),

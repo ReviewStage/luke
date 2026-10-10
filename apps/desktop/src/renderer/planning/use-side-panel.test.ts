@@ -113,8 +113,8 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   assert.deepEqual(first.control().subagents, [OTHER_CALL]);
   assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
 
-  // Work without the call, another plan's, shows the board; the call back shows the tab again.
-  first.stand([AGENT], []);
+  // Another plan, with no work read or no turn, shows the board; the call back shows the tab again.
+  first.stand([AGENT]);
   assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
   first.stand([AGENT], [OTHER_CALL]);
   assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
@@ -127,4 +127,21 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   const second = mount(undefined);
   assert.deepEqual(second.control().subagents, []);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
+test("with no agent, closing the last fixed tab chooses a subagent tab the plan draws, and a closed subagent's neighbour is one the plan's work holds, never another plan's", () => {
+  const panel = mount([], [CALL]);
+  act(() => panel.control().onChoose({ subagent: CALL }));
+  // On another plan, its own subagent closed has the first plan's, not in the strip, for no neighbour.
+  panel.stand([], [OTHER_CALL]);
+  act(() => panel.control().onChoose({ subagent: OTHER_CALL }));
+  act(() => panel.control().onClose({ subagent: OTHER_CALL }));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.WORK);
+
+  panel.stand([], [CALL]);
+  for (const tab of SIDE_PANEL_TABS) act(() => panel.control().onClose(tab));
+  assert.deepEqual(panel.control().tab, { subagent: CALL });
+  act(() => panel.control().onClose({ subagent: CALL }));
+  assert.equal(panel.control().tab, undefined);
+  assert.deepEqual(panel.control().subagents, []);
 });

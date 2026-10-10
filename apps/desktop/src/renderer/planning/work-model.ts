@@ -128,14 +128,12 @@ export function workerJob(call: WorkCallRow): string {
 }
 
 /**
- * The subagents the open plan's work holds, by the call that started each,
- * or nothing while the work has not been read. A subagent's tab is held to
- * them, as an agent's is to the plan's agents.
+ * The subagents the open plan's work holds, by the call that started each;
+ * none where the plan has had no turn or its work is unread. A subagent's
+ * tab is held to them, as an agent's is to the plan's agents.
  */
-export function workerCallIds(
-  turns: readonly PlanWorkTurn[] | undefined,
-): readonly string[] | undefined {
-  return turns?.flatMap((turn) =>
+export function workerCallIds(turns: readonly PlanWorkTurn[] | undefined): readonly string[] {
+  return (turns ?? []).flatMap((turn) =>
     turn.parts.flatMap((part) =>
       part.type === PLAN_WORK_PART.TOOL && part.tool === PLAN_WORK_TOOL.WORKER ? [part.id] : [],
     ),
