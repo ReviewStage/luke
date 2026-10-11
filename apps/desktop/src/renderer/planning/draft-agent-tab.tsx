@@ -1,8 +1,6 @@
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { useEffect, useRef, useState } from "react";
-import { ACT_KIND } from "#shared/messages/acts";
-import { useAct } from "../act";
 import { ConversationEmptyState } from "../ai-elements/conversation";
 import { AgentComposer } from "./agent-composer";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -33,8 +31,9 @@ const DRAFT_LINE = "Describe a task. The agent starts when you send it.";
 /** What the box says it takes. */
 const DRAFT_PLACEHOLDER = "Describe a task for the agent…";
 
-/** A send that starts nothing has no Stop to answer. */
+/** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve();
+const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
 export function DraftAgentTab({
   draftId,
@@ -43,7 +42,6 @@ export function DraftAgentTab({
   draftId: string;
   control: CodingAgentsControl;
 }): React.JSX.Element {
-  const { tell } = useAct();
   const [words, setWords] = useState("");
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
@@ -86,7 +84,6 @@ export function DraftAgentTab({
     sent: [],
   };
   const choice = picked ?? fallback;
-  const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
@@ -102,10 +99,7 @@ export function DraftAgentTab({
           readModels={control.readModels}
           published={undefined}
           usage={undefined}
-          doors={{
-            openGitHub,
-            copy: (copied) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words: copied }),
-          }}
+          doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
           placeholder={DRAFT_PLACEHOLDER}
         />

@@ -300,108 +300,53 @@ function drawnAgents(
 }
 
 /**
- * The state with the fixed tab closed, its neighbour chosen in its place
- * if it was the chosen one: the fixed tab after it, or where no fixed tab
- * is left, the plan's first open agent, its draft, or the first subagent
- * tab it draws.
+ * The tab chosen in place of the closed one: the next of its own run (the
+ * fixed tabs, the open agents, the draft, the subagent tabs the plan
+ * draws), or the one before it in the run, or where it was the run's last,
+ * the tab before it in the strip, or the one after. A tab another plan's
+ * work holds is not a neighbour, since it is not in the strip.
  */
-function withoutFixedTab(held: HeldState, tab: FixedSidePanelTab, drawn: DrawnTabs): HeldState {
-  const at = held.tabs.indexOf(tab);
-  if (at < 0) return held;
-  const tabs = held.tabs.filter((each) => each !== tab);
-  if (held.tab !== tab) return { ...held, tabs };
-  const agent = drawnAgents(drawn.agents, held.closedAgents)?.[0];
-  const subagent = drawnSubagents(held, drawn)[0];
-  const next: SidePanelTab | undefined =
-    tabs[Math.min(at, tabs.length - 1)] ??
-    (agent !== undefined
-      ? { agent }
-      : drawn.draft !== undefined
-        ? { draft: drawn.draft }
-        : subagent !== undefined
-          ? { subagent }
-          : undefined);
-  return { ...held, tabs, tab: next };
-}
-
-/**
- * The state with the subagent's tab closed, its neighbour chosen in its
- * place if it was the chosen one: among the subagent tabs the plan draws,
- * the one after it, or the tab before it where none is left: the plan's
- * draft, its last open agent, or the last fixed tab. A tab another plan's work holds is not
- * a neighbour, since it is not in the strip.
- */
-function withoutSubagentTab(
+function neighbourOf(
   held: HeldState,
-  tab: SubagentSidePanelTab,
+  tab: SidePanelTab,
   drawn: DrawnTabs,
-): HeldState {
-  const shown = drawnSubagents(held, drawn);
-  const at = shown.indexOf(tab.subagent);
-  if (!held.subagents.includes(tab.subagent)) return held;
-  const subagents = held.subagents.filter((each) => each !== tab.subagent);
-  if (held.tab === undefined || !sameTab(held.tab, tab)) return { ...held, subagents };
-  const beside = shown.filter((each) => each !== tab.subagent);
-  const neighbour = beside[Math.min(Math.max(at, 0), beside.length - 1)];
-  const last = drawnAgents(drawn.agents, held.closedAgents)?.at(-1);
-  const next: SidePanelTab | undefined =
-    neighbour !== undefined
-      ? { subagent: neighbour }
-      : drawn.draft !== undefined
-        ? { draft: drawn.draft }
-        : last !== undefined
-          ? { agent: last }
-          : held.tabs.at(-1);
-  return { ...held, subagents, tab: next };
+): SidePanelTab | undefined {
+  const agents = drawnAgents(drawn.agents, held.closedAgents) ?? [];
+  const runs: readonly (readonly SidePanelTab[])[] = [
+    held.tabs,
+    agents.map((agent) => ({ agent })),
+    drawn.draft === undefined ? [] : [{ draft: drawn.draft }],
+    drawnSubagents(held, drawn).map((subagent) => ({ subagent })),
+  ];
+  const run = runs.find((each) => each.some((other) => sameTab(other, tab))) ?? [];
+  const strip = runs.flat();
+  const at = run.findIndex((other) => sameTab(other, tab));
+  const place = strip.findIndex((other) => sameTab(other, tab));
+  return run[at + 1] ?? run[at - 1] ?? strip[place - 1] ?? strip[place + 1];
 }
 
 /**
- * The state with the agent's tab closed, which closes nothing of the
- * agent's own, its neighbour chosen in its place if it was the chosen one:
- * among the plan's open agents, the one after it, or the one before it
- * where none is after, or with no other agent open, the plan's draft after
- * it, the last fixed tab, or the first subagent tab the plan draws.
+ * The state with the tab closed, its neighbour chosen in its place if it
+ * was the chosen one. Closing an agent's tab closes nothing of the agent's
+ * own, and closing a draft's leaves the draft its owner's to let go.
  */
-function withoutAgentTab(held: HeldState, tab: AgentSidePanelTab, drawn: DrawnTabs): HeldState {
-  if (held.closedAgents.includes(tab.agent)) return held;
-  const shown = drawnAgents(drawn.agents, held.closedAgents) ?? [];
-  const at = shown.indexOf(tab.agent);
-  const closedAgents = [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT);
-  if (held.tab === undefined || !sameTab(held.tab, tab)) return { ...held, closedAgents };
-  const beside = shown.filter((each) => each !== tab.agent);
-  const neighbour = beside[Math.min(Math.max(at, 0), beside.length - 1)];
-  const subagent = drawnSubagents(held, drawn)[0];
-  const next: SidePanelTab | undefined =
-    neighbour !== undefined
-      ? { agent: neighbour }
-      : drawn.draft !== undefined
-        ? { draft: drawn.draft }
-        : (held.tabs.at(-1) ?? (subagent !== undefined ? { subagent } : undefined));
-  return { ...held, closedAgents, tab: next };
-}
-
-/**
- * The state with the draft's tab closed, if it was the chosen one, the tab
- * before it chosen in its place: the plan's last open agent, or the last
- * fixed tab, or where neither stands, the first subagent tab it draws. The
- * draft itself is its owner's to let go.
- */
-function withoutDraftTab(held: HeldState, tab: DraftSidePanelTab, drawn: DrawnTabs): HeldState {
-  if (held.tab === undefined || !sameTab(held.tab, tab)) return held;
-  const last = drawnAgents(drawn.agents, held.closedAgents)?.at(-1);
-  const subagent = drawnSubagents(held, drawn)[0];
-  const next: SidePanelTab | undefined =
-    last !== undefined
-      ? { agent: last }
-      : (held.tabs.at(-1) ?? (subagent !== undefined ? { subagent } : undefined));
-  return { ...held, tab: next };
-}
-
-/** The state with the tab closed, its neighbour chosen in its place if it was the chosen one. */
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
-  if (isFixedTab(tab)) return withoutFixedTab(held, tab, drawn);
-  if (isAgentTab(tab)) return withoutAgentTab(held, tab, drawn);
-  return isDraftTab(tab) ? withoutDraftTab(held, tab, drawn) : withoutSubagentTab(held, tab, drawn);
+  const closed: HeldState | undefined = isFixedTab(tab)
+    ? held.tabs.includes(tab)
+      ? { ...held, tabs: held.tabs.filter((each) => each !== tab) }
+      : undefined
+    : isAgentTab(tab)
+      ? held.closedAgents.includes(tab.agent)
+        ? undefined
+        : { ...held, closedAgents: [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT) }
+      : isSubagentTab(tab)
+        ? held.subagents.includes(tab.subagent)
+          ? { ...held, subagents: held.subagents.filter((each) => each !== tab.subagent) }
+          : undefined
+        : held;
+  if (closed === undefined) return held;
+  const chosen = held.tab !== undefined && sameTab(held.tab, tab);
+  return chosen ? { ...closed, tab: neighbourOf(held, tab, drawn) } : closed;
 }
 
 /** The state with the open tab taken out and put back at `to` in the strip's order. */

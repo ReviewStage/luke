@@ -211,11 +211,13 @@ test("a draft agent's tab shows while the plan holds the draft, closes to the op
 
   act(() => first.control().onClose({ draft: DRAFT }));
   assert.deepEqual(first.control().tab, { agent: AGENT }, "the open agent before it");
-  act(() => first.control().onChoose({ draft: DRAFT }));
   act(() => first.control().onClose({ agent: AGENT }));
-  assert.deepEqual(
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "with no agent open, the tab before it");
+  act(() => first.control().onChoose({ draft: DRAFT }));
+  act(() => first.control().onClose({ draft: DRAFT }));
+  assert.equal(
     first.control().tab,
-    { draft: DRAFT },
-    "an agent's tab closes to the draft after it",
+    SIDE_PANEL_TAB.WORK,
+    "a draft's tab closes to the tab before it",
   );
 });

@@ -12,7 +12,6 @@ import type { ActHandle } from "../act";
 import {
   MODEL_CHANGE_FAILED,
   START_NEEDS_REPOSITORY,
-  START_UNDER_WAY,
   startFailureNote,
   withAgent,
   withAgentStatus,
@@ -292,7 +291,6 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
   ): Promise<string | undefined> => {
     if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
-    if (starting) return START_UNDER_WAY;
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,

@@ -1480,7 +1480,7 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
     ["Code", "⌥⌘2", true],
     ["Transcript", "Open", false],
     ["Work", "Open", false],
-    ["New coding agent", "Unavailable", false],
+    ["New coding agent", "", true],
   ]);
   assert.equal(
     document.activeElement?.getAttribute("placeholder"),
@@ -1491,6 +1491,8 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
 
   // The arrows pass over the open kinds, and a press on one does nothing.
   key(focused(), "ArrowDown");
+  assert.equal(addHighlighted(), "New coding agent");
+  key(focused(), "ArrowUp");
   assert.equal(addHighlighted(), "Code");
   const board = document.querySelector<HTMLElement>('.tab-add-menu [role="option"]');
   act(() => board?.click());
@@ -2144,7 +2146,7 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
     ["Subagents", [job]],
   ]);
   assert.deepEqual(addRows().slice(4), [
-    ["New coding agent", "Unavailable", false],
+    ["New coding agent", "", true],
     ["Claude Opus 5.5", "Open", true],
     ["GPT 5.6 Sol", "Open", true],
     [job, "", true],

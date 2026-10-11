@@ -16,7 +16,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { BotIcon, SquarePenIcon } from "lucide-react";
+import { BotIcon } from "lucide-react";
 import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
@@ -155,11 +155,8 @@ const ADD_SECTION = {
 /** The "+" menu's row that opens a draft agent, which no tab's key spells. */
 const NEW_AGENT_ROW = "new-coding-agent";
 
-/** What the row that opens a draft says while a Start is out, and while none can run for no reason given. */
-const NEW_AGENT_WORD = {
-  STARTING: "Starting…",
-  UNAVAILABLE: "Unavailable",
-} as const;
+/** What the row that opens a draft says while a Start is out. */
+const NEW_AGENT_STARTING = "Starting…";
 
 /** Where a coding agent stands, as its row in the "+" menu says it. */
 const AGENT_STATUS_WORD = {
@@ -245,14 +242,14 @@ function addEntries(input: {
     row: kindRow(kind, panel.tabs),
     onPick: () => panel.onChoose(kind),
   }));
-  const startWord = start.available ? undefined : (start.reason ?? NEW_AGENT_WORD.UNAVAILABLE);
   const newAgent: AddEntry = {
     row: {
       id: NEW_AGENT_ROW,
       label: "New coding agent",
-      icon: <SquarePenIcon />,
+      icon: <PlusIcon />,
       section: ADD_SECTION.AGENTS,
-      disabled: start.busy ? NEW_AGENT_WORD.STARTING : startWord,
+      // Start's reason stands exactly while Start could not run on the open plan.
+      disabled: start.busy ? NEW_AGENT_STARTING : start.reason,
     },
     onPick: () => panel.onChoose({ draft: agents.onNewDraft() }),
   };
@@ -446,7 +443,7 @@ function PanelTabs({
         {draft === undefined ? null : (
           <Tab
             key={draft}
-            icon={<SquarePenIcon />}
+            icon={<PlusIcon />}
             label={DRAFT_TAB_LABEL}
             selected={chosen({ draft })}
             onSelect={() => panel.onChoose({ draft })}
