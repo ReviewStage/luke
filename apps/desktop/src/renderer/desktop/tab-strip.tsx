@@ -1,5 +1,5 @@
 import { CloseIcon } from "@sidecar/panel";
-import { createContext, useContext, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -22,17 +22,26 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * ⇧⌘← and ⇧⌘→, as VS Code moves an editor, with focus kept on it. Either
  * way the strip says where the tab now stands to whoever reads it aloud.
  *
- * Squeezed past holding its tabs whole, the strip stands compact: the
- * unchosen tabs stand as their glyphs alone, each naming itself in its hint,
- * and the chosen tab keeps its glyph, label, and ×, its label truncated.
+ * Every tab stands whole, its glyph and its label, a long label cut short
+ * with an ellipsis and said whole in its hint. Past holding them all, the
+ * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
+ * sideways, and the tab chosen, or the one the keyboard reaches, is brought
+ * into the room it shows, and kept there as the strip is narrowed.
  *
  * Its words are text, which the session recording masks with the rest.
  */
 
 const TAB = '[role="tab"]';
 
-/** Whether the strip stands compact, every tab but the chosen one its glyph alone. */
-const Compact = createContext(false);
+/** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
+const WHEEL_DELTA = {
+  PIXEL: 0,
+  LINE: 1,
+  PAGE: 2,
+} as const;
+
+/** The CSS pixels a wheel's line stands for, the tabs' own line of text. */
+const WHEEL_LINE = 16;
 
 /**
  * The tab a navigation key moves to from the focused one, or nothing for any
@@ -59,16 +68,35 @@ function closesTab(key: string): boolean {
   return key === "Delete" || key === "Backspace";
 }
 
+/** Scrolls the strip `by` along, gliding as its stylesheet says or at once. */
+function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
+  if (!glide) strip.style.scrollBehavior = "auto";
+  strip.scrollLeft += by;
+  strip.style.scrollBehavior = "";
+}
+
 /**
- * Whether the strip's tabs overflow it drawn whole, marked on the strip for
- * the stylesheet. Note that the mark is taken down to measure and set again in
- * the same task, so the full layout it is read from is never painted.
+ * Scrolls the strip, and nothing around it, the least that shows the whole
+ * of `tab`'s pill clear of the faded edges. Note that the strip's own scroll
+ * padding is that clearance, and its scroll behaviour whether it glides, so
+ * the stylesheet holds both, and a pane sliding in is never scrolled with it.
+ * A strip just drawn is put there at once, as a page opens already scrolled.
  */
-function fitTabs(strip: HTMLElement): boolean {
-  strip.dataset.compact = "false";
-  const compact = strip.scrollWidth > strip.clientWidth;
-  strip.dataset.compact = String(compact);
-  return compact;
+function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
+  const pill = tab.closest(".tab") ?? tab;
+  const shown = strip.getBoundingClientRect();
+  const own = pill.getBoundingClientRect();
+  const style = getComputedStyle(strip);
+  const before = shown.left + (Number.parseFloat(style.scrollPaddingLeft) || 0) - own.left;
+  const after = own.right - shown.right + (Number.parseFloat(style.scrollPaddingRight) || 0);
+  if (before > 0) scrollStrip(strip, -before, glide);
+  else if (after > 0) scrollStrip(strip, after, glide);
+}
+
+/** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
+function focusTab(strip: HTMLElement | null, tab: HTMLElement | undefined | null): void {
+  tab?.focus({ preventScroll: true });
+  if (strip !== null && tab !== undefined && tab !== null) reveal(strip, tab);
 }
 
 /** What the strip says aloud of a tab moved: its label and the place it now stands. */
@@ -100,28 +128,38 @@ export function TabStrip({
   const [movedSaid, setMovedSaid] = useState("");
   // Where a tab was closed from the keyboard, until focus has moved on from it.
   const closedAt = useRef<number | undefined>(undefined);
-  const [compact, setCompact] = useState(false);
+  // The chosen tab last brought into view, so a tab newly chosen, opened
+  // chosen among them, is brought in once rather than on every render.
+  const revealed = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     const at = closedAt.current;
     if (at === undefined || strip.current === null) return;
     closedAt.current = undefined;
     const tabs = [...strip.current.querySelectorAll<HTMLElement>(TAB)];
     const after = strip.current.nextElementSibling;
-    const next =
-      tabs[Math.min(at, tabs.length - 1)] ?? (after instanceof HTMLElement ? after : null);
-    next?.focus();
+    const next = tabs[Math.min(at, tabs.length - 1)];
+    if (next === undefined && after instanceof HTMLElement) after.focus();
+    else focusTab(strip.current, next);
   });
-  // Fitted again on every render, for a tab opened, closed, chosen, or
-  // renamed, and whenever the row it stands in is resized.
   useLayoutEffect(() => {
-    if (strip.current !== null) setCompact(fitTabs(strip.current));
+    const chosen = strip.current?.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
+    if (strip.current === null || chosen === null || chosen === undefined) return;
+    if (chosen === revealed.current) return;
+    const drawn = revealed.current !== null;
+    revealed.current = chosen;
+    reveal(strip.current, chosen, drawn);
   });
+  // A strip narrowed, its panel dragged or the window resized, keeps the
+  // chosen tab in view as an editor keeps its active tab, at once rather
+  // than gliding behind the edge being dragged.
   useLayoutEffect(() => {
     const node = strip.current;
-    const row = node?.parentElement;
-    if (node === null || row === null || row === undefined) return;
-    const observer = new ResizeObserver(() => setCompact(fitTabs(node)));
-    observer.observe(row);
+    if (node === null) return;
+    const observer = new ResizeObserver(() => {
+      const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
+      if (chosen !== null) reveal(node, chosen, false);
+    });
+    observer.observe(node);
     return () => observer.disconnect();
   }, []);
 
@@ -142,7 +180,7 @@ export function TabStrip({
     const at = tab === undefined ? -1 : tabs.indexOf(tab);
     if (tab === undefined || move === undefined || at + by < 0 || at + by >= tabs.length) return;
     flushSync(() => move(at, at + by));
-    tab.focus();
+    focusTab(strip.current, tab);
   };
   const stepping = move !== undefined && focused;
   useAppCommand(APP_COMMAND.MOVE_TAB_LEFT, stepping ? () => step(-1) : undefined);
@@ -159,7 +197,24 @@ export function TabStrip({
     const next = tabAfter(event, at, tabs.length);
     if (next === undefined) return;
     event.preventDefault();
-    tabs[next]?.focus();
+    focusTab(strip.current, tabs[next]);
+  };
+
+  // A wheel turned up and down runs the strip along, as a browser's tab strip
+  // takes it; a trackpad's sideways swipe already scrolls it natively. Note
+  // that it scrolls at once rather than gliding, because a glide would be
+  // restarted, and cut short, by every step of a turning wheel.
+  const wheel = (event: React.WheelEvent<HTMLDivElement>) => {
+    const node = event.currentTarget;
+    if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+    if (node.scrollWidth <= node.clientWidth) return;
+    const unit =
+      event.deltaMode === WHEEL_DELTA.LINE
+        ? WHEEL_LINE
+        : event.deltaMode === WHEEL_DELTA.PAGE
+          ? node.clientWidth
+          : 1;
+    scrollStrip(node, event.deltaY * unit, false);
   };
 
   // The line a move says stands before the strip, so the control after the
@@ -178,12 +233,13 @@ export function TabStrip({
         className={className ? `tab-strip ${className}` : "tab-strip"}
         onKeyDown={keyDown}
         onPointerDown={onPointerDown}
+        onWheel={wheel}
         onFocus={() => setFocused(true)}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
         }}
       >
-        <Compact.Provider value={compact}>{children}</Compact.Provider>
+        {children}
       </div>
     </>
   );
@@ -193,7 +249,7 @@ export function TabStrip({
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
  * one that always stands. `editor`, while given, is drawn in the label's place
  * as a field of its own, outside the tab's role, so a reader reaches it.
- * Unchosen in a compact strip, the tab's hint is its label.
+ * A label cut short is said whole in the tab's hint, before what `tooltip` adds.
  */
 export function Tab({
   icon,
@@ -220,8 +276,16 @@ export function Tab({
   onSelect: () => void;
   onClose?: (() => void) | undefined;
 }): React.JSX.Element {
-  const compact = useContext(Compact);
-  const hint = compact && !selected ? label : tooltip;
+  // Whether the label is cut short, measured whenever its box resizes: a
+  // label renamed, or the plan's one tab giving way to its toolbar.
+  const [clipped, setClipped] = useState(false);
+  const words = useCallback((node: HTMLSpanElement | null) => {
+    if (node === null) return;
+    const observer = new ResizeObserver(() => setClipped(node.scrollWidth > node.clientWidth));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const hint = !clipped ? tooltip : tooltip === undefined ? label : `${label} · ${tooltip}`;
   const glyph = (
     <span className="tab-icon">
       {icon}
@@ -245,7 +309,9 @@ export function Tab({
       }}
     >
       {glyph}
-      <span className="tab-label">{label}</span>
+      <span ref={words} className="tab-label">
+        {label}
+      </span>
     </button>
   );
   return (

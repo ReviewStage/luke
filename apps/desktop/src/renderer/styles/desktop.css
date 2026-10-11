@@ -1701,8 +1701,9 @@ body,
 }
 
 /* The tabs and their "+" take what the row leaves beside the full-screen
-   button, whatever they hold, so the strip has that room to fit its tabs to
-   and gives way beneath the button rather than pushing it out. */
+   button, whatever they hold, so the strip scrolls its tabs within that room
+   and the "+" stands pinned after it, never scrolled away, and neither
+   pushes the button out. */
 .side-panel-tabs {
   display: flex;
   min-width: 0;
@@ -1788,22 +1789,73 @@ body,
    editor draws its tabs: each a glyph and a label in a pill a toolbar
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
-   it. No tab gives way while the strip holds them whole; past that the strip
-   is compact (`data-compact`, tab-strip.tsx): the unchosen tabs stand as
-   their glyphs alone, never as a letter and an ellipsis, and the chosen tab
-   keeps its glyph, label, and ×, its label truncated to a few characters at
-   the least. */
+   it. Every tab stands whole at its own width, up to a most past which its
+   label ends in an ellipsis; past holding them all, the strip scrolls along
+   with no bar drawn, as a browser's does, and the end it has hidden tabs
+   beyond dissolves over `--scroll-fade`. The fades ride a scroll timeline,
+   as the panel's lists' do, so a strip with nothing to scroll is left
+   whole without asking JavaScript whether it overflows. The tab the strip
+   brings into view (tab-strip.tsx) stops clear of the fade, at its scroll
+   padding, and glides there unless motion is held still. */
 .tab-strip {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: var(--list-gap);
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-behavior: var(--scroll-glide);
+  scroll-padding-inline: var(--scroll-fade);
   scrollbar-width: none;
   /* Room above and below the tabs, given back to the row, for the shadow
      under a tab being dragged, which the strip's scrolling would clip. */
   margin-block: calc(-1 * var(--space-8));
   padding-block: var(--space-8);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 var(--tab-strip-fade-start),
+    #000 calc(100% - var(--tab-strip-fade-end)),
+    transparent
+  );
+  animation: tab-strip-edge-fade linear both;
+  animation-timeline: scroll(self inline);
+}
+
+/* Registered so the fades interpolate as lengths, and stand at none while
+   the strip has nothing to scroll and its timeline is inactive. */
+@property --tab-strip-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --tab-strip-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* A fade comes up within the first stretch of scrolling away from its end
+   and goes within the last stretch of scrolling back to it. */
+@keyframes tab-strip-edge-fade {
+  0% {
+    --tab-strip-fade-start: 0px;
+    --tab-strip-fade-end: var(--scroll-fade);
+  }
+
+  5% {
+    --tab-strip-fade-start: var(--scroll-fade);
+  }
+
+  95% {
+    --tab-strip-fade-end: var(--scroll-fade);
+  }
+
+  100% {
+    --tab-strip-fade-start: var(--scroll-fade);
+    --tab-strip-fade-end: 0px;
+  }
 }
 
 .tab {
@@ -1816,6 +1868,7 @@ body,
   --tab-close-inset: var(--space-4);
   position: relative;
   display: flex;
+  max-width: 200px;
   flex: none;
   align-items: center;
   border-radius: var(--control-radius);
@@ -1855,7 +1908,7 @@ body,
 }
 
 /* Only the chosen tab keeps room for its ×, so the strip holds more before
-   it gives way; another tab's × comes over the end of its label, which fades
+   it scrolls; another tab's × comes over the end of its label, which fades
    beneath it. */
 .tab[data-closable="true"][data-selected="true"] {
   --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
@@ -1959,8 +2012,7 @@ body,
 
 /* Something arrived on a tab while another was chosen: a dot on its glyph's
    corner until the tab is chosen, as the gear carries the update's. It rides
-   the glyph, so a compact tab wears it too, and an unchosen tab's × stands
-   at the pill's other end. */
+   the glyph, so an unchosen tab's × stands at the pill's other end. */
 .tab .tab-note {
   top: -2px;
   right: -2px;
@@ -1969,10 +2021,11 @@ body,
   margin: 0;
 }
 
-/* Compact, every tab but the chosen one is its glyph in a toolbar button's
-   square, its label left to its hint and its × to the keyboard's Delete, and
-   the chosen tab takes the room left, down to a few of its characters. */
-.tab-strip[data-compact="true"] .tab[data-selected="true"] {
+/* The plan's column holds its one tab, so the tab takes the room the
+   heading has rather than a most of its own, and gives way to the toolbar's
+   buttons by truncating its label, down to a few of its characters, rather
+   than by scrolling. */
+.desktop-toolbar-heading .tab {
   min-width: calc(
     var(--tab-start) +
     var(--control-glyph) +
@@ -1980,25 +2033,8 @@ body,
     3.5ch +
     var(--tab-end)
   );
+  max-width: none;
   flex: 0 1 auto;
-}
-
-.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-button {
-  width: var(--control-height);
-  justify-content: center;
-  padding: 0;
-  mask-image: none;
-}
-
-.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  clip-path: inset(50%);
-}
-
-.tab-strip[data-compact="true"] .tab[data-selected="false"] .tab-close {
-  display: none;
 }
 
 /* Confirm dialog -------------------------------------------------------------- */
