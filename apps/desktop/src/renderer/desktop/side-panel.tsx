@@ -110,7 +110,9 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * agents until its first message starts it. Every tab closes, and closing
  * an agent's or a subagent's closes only the view: the agent goes on as it
  * was, and the "+" opens its tab again; closing a draft's lets the draft
- * go, nothing of it having been started. The plan's own actions stay in
+ * go, nothing of it having been started. Every tab's right-click offers
+ * Close, Close others, and Pin, and a transcript's tab its two copies; a
+ * tab pinned on the plan stands first in the strip. The plan's own actions stay in
  * the plan's toolbar and never come into the panel. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
@@ -676,16 +678,20 @@ function stripTabs(input: {
   return [...fixed, ...agentTabs, ...draftTabs, ...subagentTabs, ...fileTabs];
 }
 
+/** The strip's tabs in their order, how many of them, from the first, are pinned, and the runs among which they move. */
+interface StripOrder {
+  strip: readonly StripTab[];
+  pins: number;
+  runs: readonly number[];
+}
+
 /**
  * The strip's tabs in their order: the tabs pinned on the plan first, in
  * the order pinned, then the rest in their kinds' order (`stripTabs`); how
  * many are pinned; and the runs among which they move: the pinned tabs,
  * and the fixed tabs not pinned.
  */
-function pinnedFirst(
-  drawn: readonly StripTab[],
-  pinned: readonly SidePanelTab[],
-): { strip: readonly StripTab[]; pins: number; runs: readonly number[] } {
+function pinnedFirst(drawn: readonly StripTab[], pinned: readonly SidePanelTab[]): StripOrder {
   const pins = pinned.flatMap((pin) => drawn.filter((each) => sameTab(each.tab, pin)));
   const rest = drawn.filter((each) => !pins.includes(each));
   const fixed = rest.filter((each) => SIDE_PANEL_TABS.some((kind) => kind === each.tab)).length;

@@ -76,7 +76,7 @@ const transcript = agentTranscript({
 test("the concise copy is the plan, the developer's lines, and each turn's calls one line each and its last words, with no reasoning and no tool output", () => {
   assert.equal(
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.CONCISE),
-    [
+    `${[
       "# Invite flow",
       "## Plan",
       "# Invite flow\n\nSend invites by email.",
@@ -92,14 +92,14 @@ test("the concise copy is the plan, the developer's lines, and each turn's calls
       "Also add docs.",
       "## Agent",
       "Added `docs/invites.md`.",
-    ].join("\n\n") + "\n",
+    ].join("\n\n")}\n`,
   );
 });
 
 test("the full copy is every block in order: words, reasoning quoted, and each call with its input and its answer or its error", () => {
   assert.equal(
     transcriptMarkdown(transcript, TRANSCRIPT_COPY.FULL),
-    [
+    `${[
       "# Invite flow",
       "## Plan",
       "# Invite flow\n\nSend invites by email.",
@@ -123,7 +123,7 @@ test("the full copy is every block in order: words, reasoning quoted, and each c
       "Also add docs.",
       "## Agent",
       "Added `docs/invites.md`.",
-    ].join("\n\n") + "\n",
+    ].join("\n\n")}\n`,
   );
 });
 
