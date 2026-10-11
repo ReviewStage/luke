@@ -352,6 +352,12 @@ body,
   scrollbar-width: thin;
 }
 
+/* The plans under their heading; the rest stand a section's gap below the
+   pinned ones while any are pinned. */
+.sidebar-group + .sidebar-group {
+  margin-top: var(--section-gap);
+}
+
 .sidebar-heading {
   margin: 0 0 var(--space-4);
   padding: 0 var(--row-inset);
@@ -426,6 +432,43 @@ body,
   font-size: 13px;
   font-weight: 600;
   outline: none;
+}
+
+/* Archived plans fold away behind one quiet row at the foot of the list,
+   drawn in the heading's voice so it reads as a way in rather than a plan. */
+.sidebar-archived {
+  margin-top: var(--list-gap);
+}
+
+.sidebar-archived-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-archived-row:hover {
+  background: var(--raised);
+}
+
+.sidebar-archived-row svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  transition: transform var(--duration-hover) ease;
+}
+
+.sidebar-archived-row[aria-expanded="true"] svg {
+  transform: rotate(90deg);
 }
 
 .sidebar-plan-repository {
@@ -878,6 +921,18 @@ body,
 }
 
 /* The document ------------------------------------------------------------- */
+
+/* An archived plan's quiet line over its document: a hairline strip in the
+   secondary voice, with the press that brings the plan back. */
+.desktop-archived-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--page-inset);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
 
 .desktop-document {
   display: flex;

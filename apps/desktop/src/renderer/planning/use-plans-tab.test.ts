@@ -32,7 +32,7 @@ import {
   type VoiceCommand,
   type VoiceView,
 } from "#shared/messages/voice-view";
-import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
+import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS } from "./use-side-panel";
@@ -392,6 +392,104 @@ test("a rename draws the new name at once, keeps it until the view carries it, a
     tab.told.filter((kind) => kind === ACT_KIND.PLANNING_RENAME),
     [ACT_KIND.PLANNING_RENAME, ACT_KIND.PLANNING_RENAME],
   );
+});
+
+/** A plan's row of the list, started at `createdAt`, with whatever pin or archive it is given. */
+function row(
+  id: string,
+  createdAt: number,
+  marks: { pinnedAt?: number; archivedAt?: number } = {},
+) {
+  return { id, name: id, createdAt, updatedAt: createdAt, repository: null, ...marks };
+}
+
+test("the sidebar lists the pinned plans first, newest pinned first, then the rest as the service lists them, and the archived apart, newest archived first", () => {
+  const tab = mount({
+    shown: true,
+    planning: {
+      ...OPEN,
+      plans: [
+        row("e", 5),
+        row("d", 4, { pinnedAt: 10 }),
+        row("c", 3, { archivedAt: 20 }),
+        row("b", 2, { pinnedAt: 30, archivedAt: 15 }),
+        row("a", 1, { pinnedAt: 40 }),
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["a", "d", "e"],
+  );
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    ["c", "b"],
+  );
+});
+
+test("a pin draws at once, stands until the view carries it, and goes back with a note on its plan when refused", async () => {
+  const answers: boolean[] = [false, true];
+  const plans = [row("b", 2), row("a", 1)];
+  const tab = mount(
+    { shown: true, planning: { ...OPEN, plans } },
+    { [ACT_KIND.PLANNING_PIN]: () => Promise.resolve(answers.shift() ?? false) },
+  );
+  const order = () => tab.control().plans.map((plan) => [plan.id, plan.pinnedAt !== undefined]);
+
+  await act(async () => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
+  assert.deepEqual(order(), [
+    ["b", false],
+    ["a", false],
+  ]);
+  assert.equal(tab.control().markNotes.get("a"), "The plan could not be pinned. Try again.");
+
+  act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
+  assert.deepEqual(order(), [
+    ["a", true],
+    ["b", false],
+  ]);
+  assert.equal(tab.control().markNotes.get("a"), undefined, "a new press lets the note go");
+  await act(async () => undefined);
+  tab.stand({ planning: { ...OPEN, plans: [row("b", 2), row("a", 1, { pinnedAt: 3 })] } });
+  // Carried by the view, the pin is the view's again: an unpin drawn there is drawn here.
+  tab.stand({ planning: { ...OPEN, plans } });
+  assert.deepEqual(order(), [
+    ["b", false],
+    ["a", false],
+  ]);
+});
+
+test("archiving the open plan leaves it for the new-plan page before the service answers, and archiving another leaves the open one", async () => {
+  const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1), row("other", 2)] };
+  const tab = mount(
+    { shown: true, planning: listed },
+    {
+      [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+      [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(true),
+    },
+  );
+
+  await act(async () => tab.control().onMarkPlan("other", PLAN_MARK.ARCHIVE));
+  assert.equal(tab.control().boundFor, PLAN.id);
+  await act(async () => tab.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+
+  assert.equal(tab.control().boundFor, undefined);
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    [PLAN.id, "other"],
+  );
+  assert.deepEqual(tab.told.slice(-3), [
+    ACT_KIND.PLANNING_ARCHIVE,
+    ACT_KIND.PLANNING_CLOSE,
+    ACT_KIND.PLANNING_ARCHIVE,
+  ]);
+});
+
+test("a fixture's plan is pinned and archived nowhere", () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
+  act(() => fixture.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+  assert.deepEqual(fixture.told, []);
 });
 
 test("a fixture's plan is renamed nowhere", async () => {

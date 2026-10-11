@@ -57,6 +57,16 @@ function fixture() {
           asked.push(`rename:${params.planId}:${params.name}`);
           return true;
         }),
+      planningPin: (params) =>
+        Effect.sync(() => {
+          asked.push(`pin:${params.planId}:${params.pinned}`);
+          return true;
+        }),
+      planningArchive: (params) =>
+        Effect.sync(() => {
+          asked.push(`archive:${params.planId}:${params.archived}`);
+          return false;
+        }),
       planningStart: (request) =>
         Effect.sync(() => {
           asked.push(`start:${request.repository}`);
@@ -114,12 +124,22 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       { kind: ACT_KIND.PLANNING_RENAME, payload: { planId: PLAN_ID, name: " Team invites " } },
       PANEL,
     );
+    const pinned = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_PIN, payload: { planId: PLAN_ID, pinned: true } },
+      PANEL,
+    );
+    const archived = yield* f.router.performAct(
+      { kind: ACT_KIND.PLANNING_ARCHIVE, payload: { planId: PLAN_ID, archived: false } },
+      PANEL,
+    );
     const deleted = yield* f.router.performAct(
       { kind: ACT_KIND.PLANNING_DELETE, payload: { planId: PLAN_ID } },
       PANEL,
     );
 
     assert.deepEqual(renamed, { status: ACT_OUTCOME_STATUS.DONE, value: true });
+    assert.deepEqual(pinned, { status: ACT_OUTCOME_STATUS.DONE, value: true });
+    assert.deepEqual(archived, { status: ACT_OUTCOME_STATUS.DONE, value: false });
     assert.deepEqual(deleted, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(selected, { status: ACT_OUTCOME_STATUS.DONE, value: true });
     assert.deepEqual(started, {
@@ -132,6 +152,8 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       "start:acme/relay",
       "close",
       `rename:${PLAN_ID}:Team invites`,
+      `pin:${PLAN_ID}:true`,
+      `archive:${PLAN_ID}:false`,
       `delete:${PLAN_ID}`,
     ]);
   }),

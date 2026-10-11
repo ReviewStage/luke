@@ -1,7 +1,9 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
+import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  ChevronRightIcon,
   ComposeIcon,
   GearIcon,
   UpdateIcon,
@@ -211,10 +213,76 @@ function AccountButton({
   );
 }
 
+/** One section's plans, each a row of the sidebar. */
+function PlanRows({
+  plans,
+  rows,
+  current,
+  onOpen,
+}: {
+  plans: PlansControl;
+  rows: readonly PlanSummary[];
+  current: (planId: string) => boolean;
+  onOpen: (planId: string) => void;
+}): React.JSX.Element {
+  return (
+    <ul className="sidebar-plans">
+      {rows.map((plan) => (
+        <SidebarPlan
+          key={plan.id}
+          plans={plans}
+          plan={plan}
+          current={current(plan.id)}
+          onOpen={() => onOpen(plan.id)}
+        />
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The plans under Archived, folded away behind one quiet row that counts
+ * them, the way Codex and ChatGPT keep theirs: a press on the row unfolds
+ * the list beneath it, and each archived plan opens and offers its actions
+ * like any other. It draws nothing while no plan is archived, and it starts
+ * folded, because an archived plan is one the developer put out of the way.
+ */
+function ArchivedPlans({
+  plans,
+  current,
+  onOpen,
+}: {
+  plans: PlansControl;
+  current: (planId: string) => boolean;
+  onOpen: (planId: string) => void;
+}): React.JSX.Element | null {
+  const [unfolded, setUnfolded] = useState(false);
+  if (plans.archived.length === 0) return null;
+  return (
+    <div className="sidebar-archived">
+      <button
+        type="button"
+        className="sidebar-archived-row"
+        aria-expanded={unfolded}
+        onClick={() => setUnfolded((was) => !was)}
+      >
+        <ChevronRightIcon />
+        Archived ({plans.archived.length})
+      </button>
+      {unfolded ? (
+        <PlanRows plans={plans} rows={plans.archived} current={current} onOpen={onOpen} />
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * The window's left column: Luke, the way to a new plan, every plan the
- * account owns, and the account's row that leads to Settings. It is where the
- * developer moves between things; what they work on is the column beside it.
+ * account owns, and the account's row that leads to Settings. The pinned
+ * plans stand in a section of their own above the rest while any are pinned,
+ * newest pinned first, and the archived ones are folded away under the rest.
+ * It is where the developer moves between things; what they work on is the
+ * column beside it.
  * A plan's actions are a right-click on it away, whether or not it is open.
  * The strip above Luke is the window's drag handle and the traffic lights'
  * room, with back and forward at its right. Its right edge resizes it, and a drag well past its least width
@@ -264,6 +332,9 @@ export function DesktopSidebar({
     if (plan !== undefined) openPlan(plan.id);
   };
   const listed = plans.signedIn && plans.plans.length > 0;
+  const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
+  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  const rest = plans.plans.filter((plan) => plan.pinnedAt === undefined);
   // Note that the gear's dot wears the update row's own words, so its hover
   // and the row it leads to tell one story, and that it stands down while the
   // release has its own control above it, so the news is said once.
@@ -295,32 +366,38 @@ export function DesktopSidebar({
         <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
       </button>
 
-      <nav className="sidebar-section" aria-label="Plans">
-        <h2 className="sidebar-heading">Plans</h2>
-        {plans.listFailed ? (
-          <p className="sidebar-note" role="alert">
-            Your plans could not be read.{" "}
-            <button type="button" className="link-button" onClick={plans.onRetryList}>
-              Try again
-            </button>
-          </p>
+      {/* One scroller for both sections, so the pinned plans scroll away
+          with the rest rather than holding half the column. */}
+      <div className="sidebar-section">
+        {plans.signedIn && pinned.length > 0 ? (
+          <nav className="sidebar-group" aria-label="Pinned">
+            <h2 className="sidebar-heading">Pinned</h2>
+            <PlanRows plans={plans} rows={pinned} current={current} onOpen={openPlan} />
+          </nav>
         ) : null}
-        {plans.signedIn && plans.plans.length === 0 && !plans.listFailed ? (
-          <p className="sidebar-note">No plans yet.</p>
-        ) : null}
-        {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
-        <ul className="sidebar-plans">
-          {plans.plans.map((plan) => (
-            <SidebarPlan
-              key={plan.id}
-              plans={plans}
-              plan={plan}
-              current={onPlans && !composing && plan.id === plans.activePlanId}
-              onOpen={() => openPlan(plan.id)}
-            />
-          ))}
-        </ul>
-      </nav>
+        <nav className="sidebar-group" aria-label="Plans">
+          <h2 className="sidebar-heading">Plans</h2>
+          {plans.listFailed ? (
+            <p className="sidebar-note" role="alert">
+              Your plans could not be read.{" "}
+              <button type="button" className="link-button" onClick={plans.onRetryList}>
+                Try again
+              </button>
+            </p>
+          ) : null}
+          {plans.signedIn &&
+          plans.plans.length === 0 &&
+          plans.archived.length === 0 &&
+          !plans.listFailed ? (
+            <p className="sidebar-note">No plans yet.</p>
+          ) : null}
+          {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
+          <PlanRows plans={plans} rows={rest} current={current} onOpen={openPlan} />
+          {plans.signedIn ? (
+            <ArchivedPlans plans={plans} current={current} onOpen={openPlan} />
+          ) : null}
+        </nav>
+      </div>
 
       <div className="sidebar-foot">
         <SidebarUpdate updates={updates} />

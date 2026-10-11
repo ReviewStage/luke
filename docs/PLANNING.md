@@ -120,7 +120,16 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 - `New plan` at the head of the list leaves any open plan for the new-plan
   page and focuses its name field. It is drawn as a row of the list, and is
   the selected row whenever the new-plan page shows.
-- There is no archive or search in this journey.
+- A pinned plan stands under **Pinned**, a section above the rest drawn only
+  while any plan is pinned, newest pinned first.
+- An archived plan leaves the list for **Archived (n)**, a quiet row at the
+  list's foot that unfolds the archived plans, newest archived first.
+  Archiving the open plan leaves it for the new-plan page, as deleting it
+  does, and back and forward pass archived plans over. Pins and archives are
+  the account's (`PATCH /api/plans/{id}`), so they follow it to every Mac,
+  and a Pin, an Archive, or the way back from either is drawn at once and
+  put back, with a quiet note under the plan's row, when the service refuses.
+- There is no search in this journey.
 
 ### New plan
 
@@ -171,11 +180,16 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   `PATCH /api/plans/{id}`, and a refusal is said beside it. A plan can be
   used without a repository; the planning model then says it has none.
 - **The plan's menu**, from the toolbar's ⋯ and from a right-click on the
-  plan in the sidebar alike: Copy plan (the open plan alone), Rename, Change
+  plan in the sidebar alike: Copy plan (the open plan alone), Rename, Pin or
+  Unpin and Archive (an archived plan offers Unarchive alone), Change
   repository… (opens the repository picker, hung from the toolbar, opening
   the plan first where it is not the open one), Open on GitHub
   (`https://github.com/owner/repository`, for a plan with a repository), and
-  Delete plan, last and red.
+  Permanently delete, last and red, which asks first in a dialog that points
+  a plan not yet archived at Archive instead. ⇧⌘A archives the open plan and
+  ⌘⌫ asks to delete it.
+- An archived plan opened from under Archived reads and works as any other,
+  under a quiet line, "This plan is archived", with Unarchive beside it.
 - **Start**, a split button (`desktop/start-agent-button.tsx`). Its main
   part starts a coding agent on the plan with the account's default model and
   effort; its chevron drops the searchable picker over the models the service

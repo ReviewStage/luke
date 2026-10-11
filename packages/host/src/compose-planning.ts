@@ -6,7 +6,12 @@ import {
   type GatewayMethodTable,
   invalid,
 } from "@sidecar/gateway";
-import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
+import type {
+  HostedPlanClient,
+  PlanActivityFrame,
+  PlanDraftFrame,
+  PlanMarks,
+} from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
@@ -23,8 +28,10 @@ import {
   type PlanningView,
   type PlanShownCode,
   type PlanWorkTurn,
+  planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
   planningFileParamsSchema,
+  planningPinParamsSchema,
   planningRenameParamsSchema,
   planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
@@ -66,7 +73,9 @@ import type { RunMode } from "./run-mode.js";
  * a plan opened after a restart or a switch shows them; its older work is
  * read a page at a time as the Work tab asks, and each turn a call tells and
  * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a plan's repository
- * given or taken away, are the service's too, asked through here.
+ * given or taken away, are the service's too, asked through here, as are a
+ * plan pinned or archived: the list holds the archived plans beside the
+ * rest, each flagged, and which the window draws where is the window's.
  */
 
 /**
@@ -77,6 +86,9 @@ import type { RunMode } from "./run-mode.js";
  * land; this is that wait's margin.
  */
 const TRANSCRIPT_SETTLE = Duration.seconds(5);
+
+/** A plan's pin and archive as the list carries them, each only where it stands. */
+type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
 
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
@@ -89,6 +101,7 @@ export type PlanningClient = Pick<
   | "create"
   | "delete"
   | "rename"
+  | "mark"
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
@@ -445,6 +458,46 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     );
   }
 
+  /** The pin and the archive a plan answered carries, each only where it stands. */
+  function marksOf(plan: Plan): PlanMarkStamps {
+    return {
+      ...(plan.pinnedAt === undefined ? undefined : { pinnedAt: plan.pinnedAt }),
+      ...(plan.archivedAt === undefined ? undefined : { archivedAt: plan.archivedAt }),
+    };
+  }
+
+  /**
+   * Draws the pin and the archive `plan` was answered with on its row of the
+   * list, and on the open document where it is the one held. Note that the
+   * held document keeps everything else it holds, because a draft drawn
+   * during a call may be ahead of the copy the service answered.
+   */
+  function takeMarks(plan: Plan): void {
+    const plans = view.plans.map((row) => (row.id === plan.id ? summaryOf(plan) : row));
+    const held = heldPlanOf(plan.id);
+    if (held === undefined) {
+      write({ plans });
+      return;
+    }
+    const { pinnedAt: _pinned, archivedAt: _archived, ...kept } = held;
+    write({
+      plans,
+      document: { status: PLANNING_READ.READY, plan: { ...kept, ...marksOf(plan) } },
+    });
+  }
+
+  /** Pins or archives one plan on the service, or undoes either, and draws what it answered. */
+  function markPlan(planId: string, marks: PlanMarks) {
+    return serial(
+      Effect.gen(function* () {
+        const marked = yield* Effect.provide(client.mark(planId, marks), FetchHttpClient.layer);
+        if (marked === undefined) return { changed: false };
+        takeMarks(marked);
+        return { changed: true };
+      }),
+    );
+  }
+
   const methods: GatewayMethodTable = {
     [GATEWAY_METHOD.PLANNING_REFRESH]: () =>
       Effect.gen(function* () {
@@ -616,6 +669,26 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             return { renamed: true };
           }),
         );
+      }),
+    [GATEWAY_METHOD.PLANNING_PIN]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPinParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("pinning a plan names it and whether it is pinned");
+        }
+        if (!gate()) return { changed: false };
+        return yield* markPlan(read.success.planId, { pinned: read.success.pinned });
+      }),
+    // Note that an archived plan stays open where it is the open one: leaving
+    // it is the window's to ask, as it is for any plan.
+    [GATEWAY_METHOD.PLANNING_ARCHIVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningArchiveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("archiving a plan names it and whether it is archived");
+        }
+        if (!gate()) return { changed: false };
+        return yield* markPlan(read.success.planId, { archived: read.success.archived });
       }),
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile

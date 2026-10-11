@@ -51,6 +51,14 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_RENAME,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", name: "Team invites" },
   },
+  [ACT_KIND.PLANNING_PIN]: {
+    kind: ACT_KIND.PLANNING_PIN,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", pinned: true },
+  },
+  [ACT_KIND.PLANNING_ARCHIVE]: {
+    kind: ACT_KIND.PLANNING_ARCHIVE,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: true },
+  },
   [ACT_KIND.PLANNING_REPOSITORIES]: { kind: ACT_KIND.PLANNING_REPOSITORIES },
   [ACT_KIND.PLANNING_SET_REPOSITORY]: {
     kind: ACT_KIND.PLANNING_SET_REPOSITORY,

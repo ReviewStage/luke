@@ -9,6 +9,7 @@ import {
   COPY_FAILED_NOTE,
   COPY_SHOWN,
   DOCUMENT_REGION,
+  PLAN_MARK,
   PLANS_PAGE,
 } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
@@ -139,6 +140,33 @@ function PlanTab({
   );
 }
 
+/**
+ * The quiet line over an archived plan's document, saying it is archived
+ * with the press that brings it back, the way Codex marks an archived task:
+ * the plan reads and works as any other, and only the sidebar keeps it away.
+ */
+function ArchivedBanner({
+  plans,
+  plan,
+}: {
+  plans: PlansControl;
+  plan: PlanSummary;
+}): React.JSX.Element | null {
+  if (plan.archivedAt === undefined) return null;
+  return (
+    <div className="desktop-archived-banner" role="status">
+      <span>This plan is archived</span>
+      <button
+        type="button"
+        className="link-button"
+        onClick={() => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE)}
+      >
+        Unarchive
+      </button>
+    </div>
+  );
+}
+
 /** The open plan's region: its document, or the state standing in its place. */
 function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { region } = plans;
@@ -190,6 +218,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { plan } = region;
   const { sidePanel } = plans;
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
+  const markNote = plans.markNotes.get(plan.id);
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;
     setRefusal(undefined);
@@ -219,6 +248,11 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               {repositoryNote}
             </p>
           ) : null}
+          {markNote !== undefined ? (
+            <p className="desktop-toolbar-note" role="alert">
+              {markNote}
+            </p>
+          ) : null}
           <CopyNote copy={plans.copy} />
           {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
@@ -234,6 +268,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
         </Toolbar>
+        <ArchivedBanner plans={plans} plan={plan} />
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
         </section>

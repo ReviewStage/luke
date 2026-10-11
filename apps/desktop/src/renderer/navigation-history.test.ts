@@ -56,10 +56,12 @@ let menuListener: ((command: AppCommand) => void) | undefined;
 function Window({
   start,
   listed,
+  archived,
   restored,
 }: {
   start: PanelTab;
   listed: readonly PlanSummary[];
+  archived: readonly PlanSummary[];
   /** The plan the host has open at launch, before any list has landed. */
   restored: string | undefined;
 }): React.JSX.Element {
@@ -80,10 +82,12 @@ function Window({
   }, []);
   // A deleted plan the host had open is closed with it; a list still on its
   // way leaves the open plan as it is.
-  const shown = listed.length === 0 || listed.some((plan) => plan.id === open) ? open : undefined;
+  const held = [...listed, ...archived];
+  const shown = held.length === 0 || held.some((plan) => plan.id === open) ? open : undefined;
   const plans = plansControl({
     page: shown === undefined ? PLANS_PAGE.NEW : PLANS_PAGE.DOCUMENT,
     plans: listed,
+    archived,
     activePlanId: shown,
     onSelect: setOpen,
     onLeavePlan: () => setOpen(undefined),
@@ -131,10 +135,11 @@ function show(
   listed: readonly PlanSummary[] = EVERY_PLAN,
   start: PanelTab = PANEL_TAB.PLANS,
   restored: string | undefined = undefined,
+  archived: readonly PlanSummary[] = [],
 ) {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Window, { start, listed, restored }));
+    root.render(createElement(Window, { start, listed, archived, restored }));
   });
 }
 
@@ -294,6 +299,20 @@ test("a deleted plan is passed over both ways", () => {
   command("]");
   assert.equal(where(), NEW_PLAN_PAGE, "forward skips Exports to where the delete left");
   assert.equal(historyButton("Forward").disabled, true);
+});
+
+test("an archived plan opened from under Archived is passed over both ways", () => {
+  show([INVITATIONS, EXPORTS], PANEL_TAB.PLANS, undefined, [BILLING]);
+  openPlan(INVITATIONS);
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-archived-row"));
+  openPlan(BILLING);
+  assert.equal(where(), BILLING.name);
+  openPlan(EXPORTS);
+
+  command("[");
+  assert.equal(where(), INVITATIONS.name, "back skips the archived plan");
+  command("]");
+  assert.equal(where(), EXPORTS.name, "and so does forward");
 });
 
 test("a plan open before the account's list has landed is still a place to go back to", () => {

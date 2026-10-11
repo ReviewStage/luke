@@ -104,6 +104,8 @@ export const planUpdateRequestSchema = EffectSchema.Struct({
   archived: EffectSchema.optionalKey(EffectSchema.Boolean),
 }).check(EffectSchema.makeFilter(updateNamesAChange));
 
+export type PlanUpdateRequest = typeof planUpdateRequestSchema.Type;
+
 /**
  * The plan list's query (GET): `archived=include` lists the archived plans
  * among the rest, each carrying its `archivedAt`. Without it they are left

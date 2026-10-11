@@ -75,6 +75,7 @@ export {
   HostedPlanClient,
   type HostedPlanClientOptions,
   type PlanCallResult,
+  type PlanMarks,
 } from "./plan-client.js";
 export {
   agentMessagesPath,

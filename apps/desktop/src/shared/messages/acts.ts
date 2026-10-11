@@ -42,9 +42,11 @@ import {
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
+  planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
+  planningPinParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
   planningSetRepositoryAnswerSchema,
@@ -106,7 +108,7 @@ export const ACT_KIND = {
    * The panel's Plans tab asking the host: the plan list and the active
    * document read as the tab shows, one plan made the active one, the open
    * plan left, a plan started on a repository, and a plan renamed, given its
-   * repository, or deleted. The view arrives on the document rather than as
+   * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
    * an answer; nothing here writes a plan's document, which the plan's
    * notetaker alone saves.
    */
@@ -116,6 +118,8 @@ export const ACT_KIND = {
   PLANNING_START: "planning.start",
   PLANNING_DELETE: "planning.delete",
   PLANNING_RENAME: "planning.rename",
+  PLANNING_PIN: "planning.pin",
+  PLANNING_ARCHIVE: "planning.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   PLANNING_REPOSITORIES: "planning.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
@@ -427,6 +431,16 @@ export const ACT = {
     payload: actSchema(planningRenameParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not rename that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_PIN]: {
+    payload: actSchema(planningPinParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not pin that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_ARCHIVE]: {
+    payload: actSchema(planningArchiveParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not archive that plan on this system.",
   },
   [ACT_KIND.PLANNING_REPOSITORIES]: {
     payload: noPayload,

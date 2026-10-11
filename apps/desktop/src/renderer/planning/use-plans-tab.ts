@@ -24,17 +24,25 @@ import {
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
+  MARK_FAILED_NOTES,
   MICROPHONE_PRESS,
+  markedView,
   microphoneButton,
+  type PendingMarks,
   type PendingRenames,
+  PLAN_MARK,
   PLANS_PAGE,
+  type PlanMark,
   type PlansPage,
+  pendingMark,
   planningCallInProgress,
   plansPage,
   recentRepositories,
   renamedView,
   repositoryFailureNote,
   repositoryPageUrl,
+  sidebarPlans,
+  unsettledMarks,
   unsettledRenames,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
@@ -63,12 +71,13 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * The tab draws the planning view main holds and the voice window's report,
  * and every press is an act. It saves nothing and decides nothing about a
  * plan: the plan's notetaker writes the document, and the tab redraws it in
- * place as the host brings its drafts and its reads. A rename is the one
- * press drawn before the host answers it: the new name shows at once, and
- * goes back to the old one if the service refuses it. The plan the host has open is the
+ * place as the host brings its drafts and its reads. A rename, a pin, and an
+ * archive are the presses drawn before the host answers them: each shows at
+ * once, and goes back if the service refuses it, a pin or an archive with a
+ * quiet note on the plan's row. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
- * collapse; only Escape, another plan, New plan, a delete, or a sign-out
- * leaves it. With none open, the tab is the new-plan page. The open plan's
+ * collapse; only Escape, another plan, New plan, archiving it, a delete, or a
+ * sign-out leaves it. With none open, the tab is the new-plan page. The open plan's
  * coding agents are the tab's too (`use-coding-agents.ts`): read when the
  * plan opens, started from the toolbar, and each drawn on a tab of the side
  * panel. Main is told which agent's tab is shown, so the notification it
@@ -84,7 +93,12 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
+  /** The plans the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
   plans: PlanningView["plans"];
+  /** The archived plans, newest archived first, which the sidebar keeps under Archived. */
+  archived: PlanningView["plans"];
+  /** The note a refused pin or archive leaves on a plan, by plan id, until the plan is next pinned or archived. */
+  markNotes: ReadonlyMap<string, string>;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -159,6 +173,12 @@ export interface PlansControl {
    * whether it was renamed.
    */
   onRenamePlan: (planId: string, name: string) => Promise<boolean>;
+  /**
+   * Pins or unpins a plan, archives it or brings it back, drawn at once and
+   * put back with a note if the service refuses. Archiving the open plan
+   * leaves it for the new-plan page, as deleting it does.
+   */
+  onMarkPlan: (planId: string, mark: PlanMark) => void;
   /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
@@ -322,7 +342,12 @@ export function usePlansTab(input: {
   // landed never flickers back while main's copy of the view catches up.
   const [renames, setRenames] = useState<PendingRenames>(new Map());
   useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
-  const planning = renamedView(viewed, renames);
+  // A pin or an archive given here stands until main's view carries it, as a name does.
+  const [marks, setMarks] = useState<PendingMarks>(new Map());
+  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  const [markNotes, setMarkNotes] = useState<ReadonlyMap<string, string>>(new Map());
+  const planning = markedView(renamedView(viewed, renames), marks);
+  const sidebar = sidebarPlans(planning.plans);
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
   const region = documentRegion(planning);
@@ -382,6 +407,31 @@ export function usePlansTab(input: {
       );
     }
     return renamed;
+  };
+
+  // A fixture's plans are marked nowhere, as they are read from nowhere. A
+  // refusal puts back the mark it drew only while no later press replaced it.
+  const markPlan = (planId: string, mark: PlanMark) => {
+    if (fixture !== undefined) return;
+    const next = { ...marks.get(planId), ...pendingMark(mark, Date.now()) };
+    setMarks((held) => new Map(held).set(planId, next));
+    setMarkNotes((held) => new Map([...held].filter(([noted]) => noted !== planId)));
+    if (mark === PLAN_MARK.ARCHIVE && planId === openPlanId) leavePlan();
+    const pinning = mark === PLAN_MARK.PIN || mark === PLAN_MARK.UNPIN;
+    const asked = pinning
+      ? act(ACT_KIND.PLANNING_PIN, { planId, pinned: mark === PLAN_MARK.PIN })
+      : act(ACT_KIND.PLANNING_ARCHIVE, { planId, archived: mark === PLAN_MARK.ARCHIVE });
+    asked
+      .catch(() => false)
+      .then((changed) => {
+        if (changed) return;
+        setMarks((held) =>
+          held.get(planId) === next
+            ? new Map([...held].filter(([pending]) => pending !== planId))
+            : held,
+        );
+        setMarkNotes((held) => new Map(held).set(planId, MARK_FAILED_NOTES[mark]));
+      });
   };
 
   // Copy formats the document drawn now and hands it to main's clipboard;
@@ -486,7 +536,9 @@ export function usePlansTab(input: {
     page,
     shown,
     signedIn,
-    plans: planning.plans,
+    plans: [...sidebar.pinned, ...sidebar.rest],
+    archived: sidebar.archived,
+    markNotes,
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -568,6 +620,7 @@ export function usePlansTab(input: {
     },
     onLeavePlan: leavePlan,
     onRenamePlan: renamePlan,
+    onMarkPlan: markPlan,
     onDeletePlan: deletePlan,
     back,
   };

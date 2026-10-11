@@ -87,6 +87,54 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
+/** A push pin: keeps a plan at the head of the sidebar. */
+export function PinIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 16.8V21" />
+      <path d="M9 4h6" />
+      <path d="M10 4v6.2l-3.4 3.4a1.3 1.3 0 0 0-.4.9v.9a1.3 1.3 0 0 0 1.3 1.3h9a1.3 1.3 0 0 0 1.3-1.3v-.9a1.3 1.3 0 0 0-.4-.9L14 10.2V4" />
+    </Glyph>
+  );
+}
+
+/** A push pin struck through: lets a pinned plan back among the rest. */
+export function UnpinIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M12 16.8V21" />
+      <path d="M9 4h6" />
+      <path d="M14 4v6.2l3.4 3.4" />
+      <path d="M10 7.6v2.6l-3.4 3.4a1.3 1.3 0 0 0-.4.9v.9a1.3 1.3 0 0 0 1.3 1.3h8.7" />
+      <path d="M3.8 3.8l16.4 16.4" />
+    </Glyph>
+  );
+}
+
+/** A box under its lid: puts a plan away under Archived. */
+export function ArchiveIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3" y="4" width="18" height="4.4" rx="1.1" />
+      <path d="M4.8 8.4v9.8a1.8 1.8 0 0 0 1.8 1.8h10.8a1.8 1.8 0 0 0 1.8-1.8V8.4" />
+      <path d="M10 12.4h4" />
+    </Glyph>
+  );
+}
+
+/** A box with an arrow rising out of it: brings an archived plan back. */
+export function UnarchiveIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <rect x="3" y="4" width="18" height="4.4" rx="1.1" />
+      <path d="M4.8 8.4v9.8a1.8 1.8 0 0 0 1.8 1.8h1.8" />
+      <path d="M19.2 8.4v9.8a1.8 1.8 0 0 1-1.8 1.8h-1.8" />
+      <path d="M12 20v-7.6" />
+      <path d="m9.2 15 2.8-2.8 2.8 2.8" />
+    </Glyph>
+  );
+}
+
 /** An arrow turning back on itself: returns a setting to its default. */
 export function ResetIcon(): React.JSX.Element {
   return (

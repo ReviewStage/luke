@@ -67,6 +67,9 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
   };
 }
 
+/** The instant the fake service stamps every pin and archive with. */
+const MARKED_AT = 5_000;
+
 function summary({ document: _document, ...rest }: Plan): PlanSummary {
   return rest;
 }
@@ -182,6 +185,24 @@ function fakeService(plans: Plan[]): FakeService {
           candidate.id === planId ? renamed : candidate,
         );
         return renamed;
+      }),
+    // The service stamps a pin or an archive at its own clock, and a false takes it away.
+    mark: (planId, { pinned, archived }) =>
+      Effect.sync(() => {
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return undefined;
+        const { pinnedAt, archivedAt, ...rest } = found;
+        const pin = pinned === undefined ? pinnedAt : pinned ? MARKED_AT : undefined;
+        const archive = archived === undefined ? archivedAt : archived ? MARKED_AT : undefined;
+        const marked = {
+          ...rest,
+          ...(pin === undefined ? undefined : { pinnedAt: pin }),
+          ...(archive === undefined ? undefined : { archivedAt: archive }),
+        };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? marked : candidate,
+        );
+        return marked;
       }),
     delete: (planId) =>
       Effect.sync(() => {
@@ -639,6 +660,64 @@ it.effect("a rename the service refused leaves the plan as it was named", () =>
     assert.deepEqual(
       yield* call(GATEWAY_METHOD.PLANNING_RENAME, { planId: INVITES, name: "Team invites" }),
       { renamed: false },
+    );
+    assert.deepEqual(last()?.plans, [summary(invites)]);
+    assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
+  }),
+);
+
+it.effect(
+  "a pin and an archive redraw the list's row and the open document in place, and the archived plan stays open",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      const reads = service.reads.length;
+
+      const answers = [
+        yield* call(GATEWAY_METHOD.PLANNING_PIN, { planId: BILLING, pinned: true }),
+        yield* call(GATEWAY_METHOD.PLANNING_ARCHIVE, { planId: INVITES, archived: true }),
+      ];
+      const marked = last();
+      yield* call(GATEWAY_METHOD.PLANNING_PIN, { planId: BILLING, pinned: false });
+
+      assert.deepEqual(answers, [{ changed: true }, { changed: true }]);
+      assert.deepEqual(
+        marked?.plans.map(({ id, pinnedAt, archivedAt }) => [id, pinnedAt, archivedAt]),
+        [
+          [BILLING, MARKED_AT, undefined],
+          [INVITES, undefined, MARKED_AT],
+        ],
+      );
+      assert.equal(marked?.activePlanId, INVITES);
+      assert.deepEqual(marked?.document, {
+        status: PLANNING_READ.READY,
+        plan: { ...invites, archivedAt: MARKED_AT },
+      });
+      assert.deepEqual(last()?.plans[0], summary(billing));
+      assert.equal(service.reads.length, reads);
+    }),
+);
+
+it.effect("a pin or an archive the service refused leaves the plan as it was", () =>
+  Effect.gen(function* () {
+    const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+    const service = fakeService([invites]);
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+    service.plans = [];
+
+    assert.deepEqual(
+      [
+        yield* call(GATEWAY_METHOD.PLANNING_PIN, { planId: INVITES, pinned: true }),
+        yield* call(GATEWAY_METHOD.PLANNING_ARCHIVE, { planId: INVITES, archived: true }),
+      ],
+      [{ changed: false }, { changed: false }],
     );
     assert.deepEqual(last()?.plans, [summary(invites)]);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });

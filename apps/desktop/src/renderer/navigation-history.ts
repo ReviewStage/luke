@@ -150,7 +150,8 @@ function useHistory(input: {
  * The window's history: Plans on the plan it is bound for — the one asked
  * for, so a move waiting on the host's answer is already where it is going —
  * or Settings on its page. A plan the account's list once held and holds no
- * more is passed over, unless the list itself could not be read. Note that a
+ * more is passed over, unless the list itself could not be read, and so is
+ * an archived plan, which the developer put out of the way. Note that a
  * plan no list has held yet is still a place, because the list may not have
  * landed or may not yet carry a plan just started; a plan that cannot be read
  * is a place too, and says so when it is gone back to. Going to a place
@@ -163,7 +164,10 @@ export function useWindowHistory(input: {
   onTabChange: (tab: PanelTab) => void;
   settingsView: SettingsView;
   onSettingsViewChange: (view: SettingsView) => void;
-  plans: Pick<PlansControl, "boundFor" | "plans" | "listFailed" | "onSelect" | "onLeavePlan">;
+  plans: Pick<
+    PlansControl,
+    "boundFor" | "plans" | "archived" | "listFailed" | "onSelect" | "onLeavePlan"
+  >;
 }): NavigationHistory {
   const { known, tab, settingsView, plans } = input;
   const { boundFor } = plans;
@@ -177,11 +181,15 @@ export function useWindowHistory(input: {
       ? { kind: PLACE_KIND.NEW_PLAN }
       : { kind: PLACE_KIND.PLAN, planId: boundFor };
   }, [known, tab, settingsView, boundFor]);
-  const reachable = (to: Place) =>
-    to.kind !== PLACE_KIND.PLAN ||
-    plans.listFailed ||
-    !everListed.has(to.planId) ||
-    plans.plans.some((plan) => plan.id === to.planId);
+  const reachable = (to: Place) => {
+    if (to.kind !== PLACE_KIND.PLAN) return true;
+    if (plans.archived.some((plan) => plan.id === to.planId)) return false;
+    return (
+      plans.listFailed ||
+      !everListed.has(to.planId) ||
+      plans.plans.some((plan) => plan.id === to.planId)
+    );
+  };
   const go = (to: Place) => {
     if (to.kind === PLACE_KIND.SETTINGS) {
       if (tab !== PANEL_TAB.SETTINGS) input.onTabChange(PANEL_TAB.SETTINGS);

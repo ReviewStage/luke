@@ -18,6 +18,7 @@ import { isWireString, type UnparsedWireValue } from "@sidecar/wire";
 export const APP_COMMAND = {
   NEW_PLAN: "new-plan",
   COPY_PLAN: "copy-plan",
+  ARCHIVE_PLAN: "archive-plan",
   DELETE_PLAN: "delete-plan",
   PREVIOUS_PLAN: "previous-plan",
   NEXT_PLAN: "next-plan",
@@ -76,6 +77,7 @@ interface ShortcutKey {
 
 const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
+  A: { accelerator: "A", glyph: "A", key: "a", code: "KeyA" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
   R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
@@ -142,7 +144,14 @@ export interface AppShortcut {
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
   [APP_COMMAND.COPY_PLAN]: { label: "Copy plan", chord: { key: SHORTCUT_KEY.C, shift: true } },
-  [APP_COMMAND.DELETE_PLAN]: { label: "Delete plan", chord: { key: SHORTCUT_KEY.BACKSPACE } },
+  [APP_COMMAND.ARCHIVE_PLAN]: {
+    label: "Archive plan",
+    chord: { key: SHORTCUT_KEY.A, shift: true },
+  },
+  [APP_COMMAND.DELETE_PLAN]: {
+    label: "Permanently delete plan",
+    chord: { key: SHORTCUT_KEY.BACKSPACE },
+  },
   [APP_COMMAND.PREVIOUS_PLAN]: {
     label: "Previous plan",
     chord: { key: SHORTCUT_KEY.UP, option: true },
@@ -207,6 +216,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.PREVIOUS_PLAN,
       APP_COMMAND.NEXT_PLAN,
       APP_COMMAND.COPY_PLAN,
+      APP_COMMAND.ARCHIVE_PLAN,
       APP_COMMAND.DELETE_PLAN,
     ],
   },
