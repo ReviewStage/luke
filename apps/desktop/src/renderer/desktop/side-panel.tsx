@@ -34,6 +34,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { useCopyToast } from "../copy-feedback";
 import { AgentStatusDot, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
@@ -128,6 +129,9 @@ const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
 
 /** What the panel says on a plan that has used none of its tabs, each of which adds itself once it holds something. */
 const NOTHING_YET_LINE = "Luke's board, code, transcript, and work appear here as you plan.";
+
+/** What the toast says once a tab's transcript, concise or full, is on the clipboard. */
+const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -724,8 +728,9 @@ function pinnedFirst(drawn: readonly StripTab[], pinned: readonly SidePanelTab[]
  * Close, Close others, which closes every tab but it and the pinned ones and
  * chooses it, and Pin or Unpin; an agent's and a subagent's add the two
  * copies of their transcript, built from the rows the tab draws
- * (`transcript-copy.ts`), and an agent's Rename. The "+" stands after all of
- * them, apart from the strip, so it is never dragged nor dropped before.
+ * (`transcript-copy.ts`) and answered with the window's toast, and an
+ * agent's Rename. The "+" stands after all of them, apart from the strip, so
+ * it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
@@ -751,9 +756,8 @@ function PanelTabs({
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly CodeRef[];
 }): React.JSX.Element {
-  const { tell } = useAct();
-  // TODO(copy-feedback): announce the copy with the shared toast, "Transcript copied", once it lands.
-  const copyText = (words: string) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words });
+  const copyWithToast = useCopyToast();
+  const copyText = (words: string) => copyWithToast(words, TRANSCRIPT_COPIED_NOTE);
   const drawn = stripTabs({ panel, unread, agents, subagents, files, copyText });
   const { strip, pins, runs } = pinnedFirst(drawn, panel.pinned);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
