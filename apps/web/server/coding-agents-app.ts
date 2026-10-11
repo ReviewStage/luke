@@ -3,6 +3,7 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
+  codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
   codingAgentStartRequestSchema,
@@ -37,7 +38,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
-import { sentLineId } from "./hosted/brain-host/ids.js";
+import { childConversationId, sentLineId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import {
   type PublishedCache,
@@ -46,7 +47,12 @@ import {
 } from "./hosted/coder-host/published.js";
 import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
-import { cursorOfWire, cursorToWire, transcriptPast } from "./hosted/coder-host/transcript.js";
+import {
+  cursorOfWire,
+  cursorToWire,
+  type TranscriptPage,
+  transcriptPast,
+} from "./hosted/coder-host/transcript.js";
 import {
   awaitingLinesOf,
   type CodingAgent,
@@ -57,6 +63,7 @@ import {
   listCodingAgents,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
+  readDelegation,
   updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -82,7 +89,7 @@ import { STORE_WRITE_REFUSAL } from "./hosted/store/writer.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
- * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript, message one, change one's model, and stop one.
+ * coding-agents-app.ts -- a plan's coding agents: start one, list them, read one's transcript and its workers', message one, change one's model, and stop one.
  *
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan or an agent another
@@ -127,6 +134,13 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * branch and pull request its own transcript names, as GitHub holds them
  * now (`hosted/coder-host/published.ts`), kept per agent for a short while
  * so a tab asking beside every held page does not ask GitHub as often.
+ * A worker's transcript (`GET /api/agents/{id}/subagents/{callId}/messages`)
+ * is read as the agent's own is, under the agent and eve's id for the
+ * delegation call that started the worker, which its tool part in the
+ * agent's transcript carries: the child conversation is a function of the
+ * two (`brain-host/ids.ts`), and only a delegation recorded under the
+ * account's agent answers, so a call of another account's agent reads as
+ * none.
  */
 
 const AGENTS_PATH = {
@@ -140,11 +154,13 @@ const AGENTS_PATH = {
   STOP: "/api/agents/stop",
   /** GET reads what the agent published; the rewrite moves the path's agent id into the `id` query. */
   PULL_REQUEST: "/api/agents/pull-request",
+  /** GET reads a worker's transcript past `after`; the rewrite moves the path's agent id into the `id` query and the delegation call's id into `call`. */
+  SUBAGENT_MESSAGES: "/api/agents/subagent-messages",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
-const QUERY = { ID: "id", AFTER: "after" } as const;
+const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
 
 /** A Start names a key and a choice at most, so a body past this is no Start. */
 const MAXIMUM_START_BODY_BYTES = 4_096;
@@ -195,6 +211,37 @@ const idOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
   return read.success;
 });
+
+/** The delegation call the path named under `query`, or not found for one that is no call id. */
+const callIdOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<string, HostedRefusal> {
+  const call = new URL(request.url).searchParams.get(QUERY.CALL) ?? "";
+  const read = readEither(codingAgentCallIdSchema)(unparsedWire(call));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return read.success;
+});
+
+/** The cursor the request reads past, or the start where it names none; refused where it names something else. */
+const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<string, HostedRefusal> {
+  const after = readEither(codingAgentCursorSchema)(
+    unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? CODING_AGENT_CURSOR_START),
+  );
+  if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return after.success;
+});
+
+/** A page of a transcript as the wire answers it. */
+function transcriptResponse(page: TranscriptPage): HttpServerResponse.HttpServerResponse {
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    messages: page.messages,
+    cursor: cursorToWire(page.cursor),
+    status: page.status,
+    ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
+  });
+}
 
 /** eve as the developer reaches it, or unavailable where the deployment names no origin for eve. */
 const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
@@ -493,21 +540,38 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   if (incoming.method === HTTP_METHOD.POST) {
     return yield* sendMessageEndpoint(seams, writer, request);
   }
-  const after = readEither(codingAgentCursorSchema)(
-    unparsedWire(new URL(request.url).searchParams.get(QUERY.AFTER) ?? CODING_AGENT_CURSOR_START),
-  );
-  if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const after = yield* cursorOf(request);
   const { agent, target } = yield* ownedAgent(seams, request);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after.success), agent),
+    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent),
   );
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    messages: page.messages,
-    cursor: cursorToWire(page.cursor),
-    status: page.status,
-    ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
-  });
+  return transcriptResponse(page);
 });
+
+/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. */
+const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
+  function* (
+    seams: CodingAgentsAppSeams,
+  ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+    const incoming = yield* HttpServerRequest.HttpServerRequest;
+    if (incoming.method !== HTTP_METHOD.GET) {
+      return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+    }
+    const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+    const after = yield* cursorOf(request);
+    const callId = yield* callIdOf(request);
+    const { userId, agent, target } = yield* ownedAgent(seams, request);
+    const conversationId = childConversationId(agent.conversationId, callId);
+    const delegation = yield* hostedStoreOrUnavailable(readDelegation(target, conversationId));
+    if (Option.isNone(delegation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const page = yield* hostedStoreOrUnavailable(
+      transcriptPast({ userId, conversationId }, CODER_TOOL_SET, cursorOfWire(after), {
+        createdAt: delegation.value.createdAt,
+      }),
+    );
+    return transcriptResponse(page);
+  },
+);
 
 /** PATCH changes the agent's model and effort for its next step: the choice checked against the catalog as a Start checks its own, written on the row the steps read, and the agent answered as it then stands; the account's default is untouched. */
 const chooseEndpoint = /* @__PURE__ */ Effect.fn("web/agentChooseEndpoint")(function* (
@@ -633,7 +697,7 @@ const pullRequestEndpoint = /* @__PURE__ */ Effect.fn("web/agentPullRequestEndpo
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, answer);
 });
 
-/** The group: the five paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the six paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -651,6 +715,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           ANY_METHOD,
           AGENTS_PATH.PULL_REQUEST,
           hostedRefusing(pullRequestEndpoint(seams, published)),
+        ),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.SUBAGENT_MESSAGES,
+          hostedRefusing(subagentMessagesEndpoint(seams)),
         ),
         hostedNotFoundRoute,
       ),

@@ -1,14 +1,16 @@
-import { and, asc, eq } from "drizzle-orm";
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
-import { codingAgent } from "../db/coding-agent-schema.js";
+import { codingAgent, codingAgentDelegation } from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./store/database.js";
+import type { ConversationTarget } from "./store/index.js";
 import { awaitingLinesOf, type LatestTurn, latestTurnsOf } from "./store/message-reads.js";
 
 /**
@@ -27,7 +29,14 @@ import { awaitingLinesOf, type LatestTurn, latestTurnsOf } from "./store/message
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
  * rather than finding an agent nothing runs. The model and effort on the
- * row are read at every step, so a change to them is the next step's. Every function is an effect
+ * row are read at every step, so a change to them is the next step's. A
+ * delegation is a child conversation under the agent's, opened ahead of the
+ * worker's session (`coder-host/delegation.ts`) with the model and effort
+ * the agent chose for it written beside it here, so the worker's steps read
+ * the pair under the child and the tabs read the worker's transcript under
+ * the agent's. Note that nothing here reaches the brain host's modules,
+ * because the routes bundle this module and the brain host's modules reach
+ * eve, which runs in a service of its own (`function-bundles.ts`). Every function is an effect
  * over the ambient `SqlClient` and names no database of its own.
  */
 
@@ -327,6 +336,74 @@ export function readCodingAgentOfConversation(
   conversationId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgentOfConversation({ userId, conversationId });
+}
+
+/** What an agent chose for one worker, and when the delegation was recorded. */
+export interface CodingAgentDelegation extends ModelChoice {
+  readonly createdAt: Date;
+}
+
+const insertDelegation = SqlSchema.void({
+  Request: Schema.Struct({
+    childConversationId: Schema.String,
+    model: Schema.String,
+    effort: Schema.String,
+  }),
+  execute: ({ childConversationId, model, effort }) =>
+    db
+      .insert(codingAgentDelegation)
+      .values({ childConversationId, model, effort })
+      .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
+});
+
+const findDelegation = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    childConversationId: Schema.String,
+  }),
+  Result: Schema.Struct({
+    model: Schema.String,
+    effort: Schema.String,
+    createdAt: InstantColumnSchema,
+  }),
+  execute: ({ userId, parentConversationId, childConversationId }) =>
+    db
+      .select({
+        model: codingAgentDelegation.model,
+        effort: codingAgentDelegation.effort,
+        createdAt: conversations.createdAt,
+      })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(codingAgentDelegation.childConversationId, childConversationId),
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/** Writes the pair a worker runs on under its child conversation, which must already stand; a pair written twice under one child stands as first written, since the worker may already be reading it. */
+export function writeDelegation(
+  childConversationId: string,
+  choice: ModelChoice,
+): CodingAgentStoreEffect<void> {
+  return insertDelegation({ childConversationId, model: choice.model, effort: choice.effort });
+}
+
+/** The delegation recorded under this child of the account's conversation, or nothing where none stands: another account's, another agent's, or no delegation at all. */
+export function readDelegation(
+  parent: ConversationTarget,
+  childConversationId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentDelegation>> {
+  return findDelegation({
+    userId: parent.userId,
+    parentConversationId: parent.conversationId,
+    childConversationId,
+  });
 }
 
 /** The turn statuses under which an agent is still at work, which is when a Stop has something to stop. */

@@ -1,0 +1,18 @@
+{
+  "type": "object",
+  "properties": {
+    "task": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "effort": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "task"
+  ],
+  "additionalProperties": false
+}

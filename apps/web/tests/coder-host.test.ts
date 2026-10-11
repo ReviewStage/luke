@@ -17,7 +17,7 @@ import {
 } from "effect";
 import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
-import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { SessionAuth, SessionAuthContext, SessionContext } from "eve/context";
 import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
@@ -29,7 +29,7 @@ import {
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
+import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
@@ -71,7 +71,10 @@ import { testSqlClient } from "./support/sql-client";
  * coding turn's words, reasoning, and tool calls into the store with no ask
  * record beside it, the status the turn row then reads as, and the
  * transcript read held open while the turn runs and let go when it is
- * idle or the hold is out. Synthetic accounts, plans, keys, and words
+ * idle or the hold is out; and a delegation, recorded under the child
+ * conversation its call names on the pair the agent chose, which is what
+ * the worker's steps are told and what its turn, relayed into that
+ * conversation, records. Synthetic accounts, plans, keys, and words
  * throughout.
  */
 
@@ -246,6 +249,40 @@ function codingTurn(
   ];
 }
 
+/** A worker's session as eve hands it to the worker's hook: the agent's own seat, opened by the call named in the agent's session. */
+function childSession(
+  auth: SessionAuth,
+  rootSessionId: string,
+  callId: string,
+): SessionContext["session"] {
+  const turn = { id: "turn_0", sequence: 0 };
+  return {
+    id: mintSession(),
+    auth,
+    turn,
+    parent: { callId, rootSessionId, sessionId: rootSessionId, turn },
+  };
+}
+
+/** One worker turn as eve emits it: the task received, and the answer. */
+function workerTurn(turnId: string, task: string, answer: string): MessageStreamEvent[] {
+  const sequence = 0;
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: task } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: answer },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
 const STEP_START = "step-start";
 
 /** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it, under the key given. */
@@ -362,6 +399,92 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(unlisted.success.modelOptions, {
           providerOptions: { openai: { reasoningEffort: "low" } },
         });
+      }),
+  );
+
+  it.effect(
+    "a delegation that names nothing records the agent's own pair, which the worker's step is told; a worker no delegation stands for is refused by name",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { auth, sessionId, admitted } = yield* openAgent(host);
+        const made = yield* host
+          .delegate(admitted, "call-1", {})
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.deepEqual(
+          made,
+          Result.succeed({ model: "anthropic/claude-opus-5.5", effort: "high" }),
+        );
+
+        const child = childSession(auth, sessionId, "call-1");
+        const delegated = yield* host.admitDelegated(child.auth, child.id);
+        assert.ok(Result.isSuccess(delegated));
+        const selected = yield* host
+          .delegatedModel(delegated.success, "call-1", undefined)
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.ok(Result.isSuccess(selected));
+        assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "claude-opus-5-5");
+        assert.deepEqual(selected.success.modelOptions, {
+          providerOptions: { anthropic: { effort: "high" } },
+        });
+        assert.deepEqual(
+          yield* host
+            .delegatedModel(delegated.success, "call-nobody-made", undefined)
+            .pipe(Effect.provide(modelCatalogOf(CATALOG))),
+          Result.fail(CODER_REFUSAL.NO_DELEGATION),
+        );
+      }),
+  );
+
+  it.effect(
+    "a delegation on a pair of the agent's choosing runs the worker on that pair, and the worker's turn lands in the child conversation the call names, recording it",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { auth, sessionId, target, admitted } = yield* openAgent(host);
+        const made = yield* host
+          .delegate(admitted, "call-2", { model: "openai/gpt-6.1-sol", effort: "low" })
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.ok(Result.isSuccess(made));
+
+        const child = childSession(auth, sessionId, "call-2");
+        const delegated = yield* host.admitDelegated(child.auth, child.id);
+        assert.ok(Result.isSuccess(delegated));
+        const selected = yield* host
+          .delegatedModel(delegated.success, "call-2", undefined)
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.ok(Result.isSuccess(selected));
+        assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "gpt-6.1-sol");
+        assert.deepEqual(selected.success.modelOptions, {
+          providerOptions: { openai: { reasoningEffort: "low" } },
+        });
+
+        const state = memoryRelayState();
+        for (const event of workerTurn("turn_0", "Count the routes.", "Three routes.")) {
+          yield* host.relayChild(event, child, state);
+        }
+        const conversationId = childConversationId(target.conversationId, "call-2");
+        const row = yield* turnRow(hostTurnId(child.id, "turn_0"));
+        assert.equal(row?.origin, TURN_ORIGIN.CHILD);
+        assert.equal(row?.status, TURN_STATUS.SETTLED);
+        assert.equal(row?.model, "openai/gpt-6.1-sol");
+        assert.equal(row?.reasoningEffort, "low");
+        const page = yield* transcriptPast(
+          { userId: target.userId, conversationId },
+          CODER_TOOL_SET,
+          CURSOR_START,
+          { createdAt: new Date(NOW) },
+        );
+        assert.deepEqual(
+          page.messages.map((message) => [message.role, message.parts.find(isTextUIPart)?.text]),
+          [
+            [MESSAGE_ROLE.USER, "Count the routes."],
+            [MESSAGE_ROLE.ASSISTANT, "Three routes."],
+          ],
+        );
+        assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+        // The agent's session still stands for its conversation, so its own calls still run.
+        assert.ok(Result.isSuccess(yield* host.admit(auth, sessionId)));
       }),
   );
 

@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "model": {
+      "type": "string"
+    },
+    "effort": {
+      "type": "string"
+    },
+    "result": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "model",
+    "effort",
+    "result"
+  ],
+  "additionalProperties": false
+}

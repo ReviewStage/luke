@@ -67,6 +67,7 @@ const DECLARED_TABLES = [
   "admin_favorite",
   "asks",
   "coding_agent",
+  "coding_agent_delegation",
   "conversations",
   "devices",
   "events",

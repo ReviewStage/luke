@@ -1,3 +1,4 @@
+import { CODING_AGENT_DELEGATE_TOOL } from "@sidecar/hosted/coding-agent-wire";
 import { WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -9,7 +10,10 @@ import { wireValidatedTool } from "../../core.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `coder/tools/` so the set is exactly this list and eve adds nothing
  * beside it: its shell and its file tools, the code extension's patch and
- * search, and the provider-run web reads. The writer holds every tool part
+ * search, the provider-run web reads, and the delegation of a slice of its
+ * work to a worker (`coder/tools/delegate.ts`). The worker's own rows name
+ * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
+ * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
  * its part spells; eve declares each tool's input itself, so what is held
  * is that the input is an object and not its fields, which eve's own
@@ -26,9 +30,26 @@ export const CODER_TOOL = {
   APPLY_PATCH: "apply_patch",
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  DELEGATE: CODING_AGENT_DELEGATE_TOOL,
 } as const;
 
-/** The tools whose every call runs in the agent's sandbox, which is what tells the host a sandbox was opened. */
+/**
+ * The tools a worker is offered, authored one file each under
+ * `coder/subagents/worker/tools/`: every read of the agent's, and nothing
+ * that writes the checkout or publishes, so workers run in parallel without
+ * colliding and the agent alone edits. The shell is among them, told to
+ * change nothing; what holds it to that is the worker's instructions.
+ */
+export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
+  CODER_TOOL.BASH,
+  CODER_TOOL.READ_FILE,
+  CODER_TOOL.GLOB,
+  CODER_TOOL.GREP,
+  CODER_TOOL.WEB_FETCH,
+  CODER_TOOL.WEB_SEARCH,
+]);
+
+/** The tools whose every call runs in the agent's sandbox, which is what tells the host a sandbox was opened; a delegation is among them because the worker reads the checkout in the agent's own sandbox. */
 export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BASH,
   CODER_TOOL.READ_FILE,
@@ -36,6 +57,7 @@ export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GLOB,
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
+  CODER_TOOL.DELEGATE,
 ]);
 
 /** A call's input as the row keeps it: one JSON object, whose fields are eve's own tool's to read. */

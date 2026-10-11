@@ -51,3 +51,21 @@ export const codingAgent = pgTable(
     index("coding_agent_plan_created").on(table.planId, table.createdAt),
   ],
 );
+
+/**
+ * One delegation of a coding agent's: the model and effort the agent chose
+ * for the worker, keyed by the child conversation the worker's session is
+ * recorded in, which is a function of the agent's conversation and the call
+ * that started the worker (`brain-host/ids.ts`). The worker's own steps
+ * read the pair here, since eve hands a child's resolvers no lineage and the
+ * pair is per call rather than per agent. The row goes with its
+ * conversation, which goes with the agent's.
+ */
+export const codingAgentDelegation = pgTable("coding_agent_delegation", {
+  childConversationId: uuid("child_conversation_id")
+    .primaryKey()
+    .references(() => conversations.id, { onDelete: "cascade" }),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: text("model").notNull(),
+  effort: text("effort").notNull(),
+});

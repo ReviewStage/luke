@@ -20,6 +20,10 @@
     "dest": "/api/default.js?route=plans/plan&id=$1"
   },
   {
+    "src": "/api/agents/([^/]+)/subagents/([^/]+)/messages",
+    "dest": "/api/default.js?route=agents/subagent-messages&id=$1&call=$2"
+  },
+  {
     "src": "/api/agents/([^/]+)/messages",
     "dest": "/api/default.js?route=agents/messages&id=$1"
   },
