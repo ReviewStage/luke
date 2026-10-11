@@ -1683,7 +1683,7 @@ function addButton(page: HTMLElement): HTMLElement {
   return button;
 }
 
-test("the + drops the searchable menu over every kind with its shortcut, those open dimmed, and opens a closed one at the strip's end", () => {
+test("the + drops the searchable menu over every kind, an open one saying so and chosen by a pick, and a closed one opened at the strip's end", () => {
   installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1691,10 +1691,10 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
   press(page, '[aria-label="Close Code"]');
   act(() => addButton(page).click());
   assert.deepEqual(addRows(), [
-    ["Board", "Open", false],
+    ["Board", "Open", true],
     ["Code", "⌥⌘2", true],
-    ["Transcript", "Open", false],
-    ["Work", "Open", false],
+    ["Transcript", "Open", true],
+    ["Work", "Open", true],
     ["New coding agent", "", true],
   ]);
   assert.equal(
@@ -1702,22 +1702,26 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
     "Search tabs and agents",
     "the search takes focus as the menu opens",
   );
-  assert.equal(addHighlighted(), "Code", "the highlight starts on the one kind to open");
 
-  // The arrows pass over the open kinds, and a press on one does nothing.
-  key(focused(), "ArrowDown");
-  assert.equal(addHighlighted(), "New coding agent");
-  key(focused(), "ArrowUp");
-  assert.equal(addHighlighted(), "Code");
-  const board = document.querySelector<HTMLElement>('.tab-add-menu [role="option"]');
-  act(() => board?.click());
-  assert.ok(document.querySelector(".tab-add-menu"), "an open kind is not picked");
+  // A kind already open is chosen where it stands, not opened again.
+  act(() => addRow("Transcript").click());
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Transcript");
 
+  act(() => addButton(page).click());
+  typeSearch("code");
   key(focused(), "Enter");
   assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Code");
   assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
+
+  act(() => addButton(page).click());
+  typeSearch("board");
+  key(focused(), "Enter");
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.equal(chosenTab(page), "Board");
 });
 
 test("the + menu's search narrows the kinds as it is typed, and Escape closes the menu and nothing behind it", () => {
