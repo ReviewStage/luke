@@ -66,6 +66,7 @@
     "@types/react-dom": "19.2.4",
     "ai": "catalog:",
     "clsx": "2.1.1",
+    "cmdk": "1.1.1",
     "diff": "9.0.0",
     "effect": "catalog:",
     "electron": "43.3.0",

@@ -14,6 +14,7 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
@@ -443,6 +444,9 @@ export function App(): React.JSX.Element {
       {/* The window's passing notice: the thank-you after a note lands, and
           what came of a copy made from a menu. */}
       <ToastHost />
+      {/* Every command the window can run now and every plan, behind ⌘K,
+          past the sign-in alone. */}
+      <CommandPalette available={!accountGated} tab={tab} onTabChange={changeTab} plans={plans} />
     </div>
   );
 }

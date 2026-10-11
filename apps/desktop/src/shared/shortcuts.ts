@@ -44,6 +44,7 @@ export const APP_COMMAND = {
   FORWARD: "forward",
   SEND_FEEDBACK: "send-feedback",
   SUGGEST_FEATURE: "suggest-feature",
+  COMMAND_PALETTE: "command-palette",
 } as const;
 
 export type AppCommand = (typeof APP_COMMAND)[keyof typeof APP_COMMAND];
@@ -87,6 +88,7 @@ const SHORTCUT_KEY = {
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
+  K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
   TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
   THREE: { accelerator: "3", glyph: "3", key: "3", code: "Digit3" },
@@ -142,9 +144,10 @@ export interface AppShortcut {
  * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
  * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
  * keys VS Code's Move Editor Left and Right end in, ⌘W to close the tab
- * chosen and ⇧⌘W to close the window as Chrome and VS Code have them, and
+ * chosen and ⇧⌘W to close the window as Chrome and VS Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
- * speaker beside it.
+ * speaker beside it, and ⌘K for the command palette as Linear, Slack, and
+ * Raycast have it.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -215,6 +218,7 @@ export const APP_SHORTCUTS = {
   },
   [APP_COMMAND.BACK]: { label: "Back", chord: { key: SHORTCUT_KEY.OPEN_BRACKET } },
   [APP_COMMAND.FORWARD]: { label: "Forward", chord: { key: SHORTCUT_KEY.CLOSE_BRACKET } },
+  [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
 /** The shortcuts as the Keyboard shortcuts page lists them: in groups, under the group's name. */
@@ -236,7 +240,7 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Navigation",
-    commands: [APP_COMMAND.BACK, APP_COMMAND.FORWARD],
+    commands: [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
   },
   {
     title: "Window",
@@ -269,12 +273,18 @@ export const APP_SHORTCUT_GROUPS = [
 /** Every command, in the order the table declares them. */
 const APP_COMMANDS: readonly AppCommand[] = Object.values(APP_COMMAND);
 
-function keyed(command: AppCommand): command is KeyedCommand {
+/** Whether a chord reaches the command, rather than the menu bar alone. */
+export function isKeyedCommand(command: AppCommand): command is KeyedCommand {
   return !Object.hasOwn(MENU_COMMAND_LABELS, command);
 }
 
 /** Every command a chord reaches, in the order the table declares them. */
-export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(keyed);
+export const KEYED_COMMANDS: readonly KeyedCommand[] = APP_COMMANDS.filter(isKeyedCommand);
+
+/** A command's name as the window says it, keyed or the menu bar's own. */
+export function appCommandLabel(command: AppCommand): string {
+  return isKeyedCommand(command) ? APP_SHORTCUTS[command].label : MENU_COMMAND_LABELS[command];
+}
 
 /** Whether a value that crossed a process boundary names a command this build knows. */
 export function isAppCommand(value: UnparsedWireValue): value is AppCommand {
