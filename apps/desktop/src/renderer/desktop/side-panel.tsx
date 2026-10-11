@@ -87,8 +87,9 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * full-screen button at its right, which leaves room past itself for the
  * toggle; the tabs narrow, then scroll, rather than push either. The toggle
  * is the window's rather than the panel's (desktop-shell.tsx), so the
- * panel's coming and going never moves it. The fixed tabs come first and
- * the plan's coding agents follow, one tab each, named by model with a dot
+ * panel's coming and going never moves it. The fixed tabs the plan has
+ * used come first, and a plan that has used none, and has no agent, says
+ * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model with a dot
  * for where the agent stands; after them stand the subagents opened from
  * the Work tab, the "+", or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
@@ -108,6 +109,9 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
 
 /** What the Code tab says while Luke has shown no code on the plan. */
 const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
+
+/** What the panel says on a plan that has used none of its tabs, each of which adds itself once it holds something. */
+const NOTHING_YET_LINE = "Luke's board, code, transcript, and work appear here as you plan.";
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -1170,9 +1174,16 @@ export function SidePanel({
             onToggle={panel.onToggleFullScreen}
           />
         </div>
+        {/* A plan that has used no tab says what will stand here, the "+"
+            above offering any meanwhile; one whose tabs were closed offers
+            them again in place. */}
         {tab === undefined ? (
           <div className="side-panel-content">
-            <NoTabs onChoose={panel.onChoose} />
+            {panel.closedTabs.length === 0 ? (
+              <p className="side-panel-empty">{NOTHING_YET_LINE}</p>
+            ) : (
+              <NoTabs onChoose={panel.onChoose} />
+            )}
           </div>
         ) : (
           <div className="side-panel-content" role="tabpanel" aria-label={label}>
