@@ -30,6 +30,10 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import {
+  MESSAGE_CODING_AGENT_TOOL,
+  READ_CODING_AGENT_TOOL,
+} from "../server/hosted/coding-agent-tools";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
@@ -193,6 +197,8 @@ async function worked(target: ConversationTarget, standing: RelayStanding): Prom
 }
 
 /** An input each tool's own schema takes, so the writer journals every call of a step that names them all. */
+const AGENT_ID = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
+
 const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>([
   [RUN_IN_REPOSITORY_TOOL.name, { command: "ls" }],
   [SEARCH_WEB_TOOL.name, { query: "queue library comparison" }],
@@ -205,6 +211,8 @@ const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>
   ],
   [EVE_DELEGATION_TOOL.WORKER, { message: "Compare the two queue libraries." }],
   [EVE_DELEGATION_TOOL.TASK_CANCEL, { taskId: "task-1" }],
+  [READ_CODING_AGENT_TOOL.name, { agentId: AGENT_ID }],
+  [MESSAGE_CODING_AGENT_TOOL.name, { agentId: AGENT_ID, text: "Also add tests." }],
 ]);
 
 /** A part as a reader of the tab takes it in: its kind, and its words or its call's kind, subject, state, and output. */

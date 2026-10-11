@@ -7,6 +7,7 @@ import { afterAll, test } from "vitest";
 import {
   actedForAccount,
   conversationIdOf,
+  DEPLOYMENT_PRESENCE,
   deploymentActor,
   requestAttributes,
   sessionAuthFor,
@@ -379,7 +380,11 @@ test("a conversation runs in one session: the recorded one is admitted, another 
 /** The deployment acting for an account: admitted for its turns on a message and refused, under its own secret, for everything else. */
 
 const CRON_SECRET = "cron-secret-1";
-const DEPLOYMENT = { secret: Redacted.make(CRON_SECRET), admits: DEPLOYMENT_TURNS };
+const DEPLOYMENT = {
+  secret: Redacted.make(CRON_SECRET),
+  admits: DEPLOYMENT_TURNS,
+  presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+};
 
 /** A request under the deployment's secret naming the account, on the message route, for the kind of turn given. */
 function scheduled(

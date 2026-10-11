@@ -39,7 +39,7 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
-import { childConversationId, sentLineId } from "./hosted/brain-host/ids.js";
+import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import {
   type PublishedCache,
@@ -47,6 +47,7 @@ import {
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
 import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
+import { steerCodingAgent } from "./hosted/coder-host/steer.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   cursorOfWire,
@@ -86,8 +87,6 @@ import {
 } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
-import { sentLineStands } from "./hosted/store/message-reads.js";
-import { STORE_WRITE_REFUSAL } from "./hosted/store/writer.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
 /**
@@ -111,20 +110,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * cursor, held open while the agent runs (`hosted/coder-host/transcript.ts`).
  * A message (`POST /api/agents/{id}/messages`) is the developer's words
  * handed to the session the agent runs in, under the developer's own
- * bearer, with the client's own key for the send: the words steer the turn
- * under way, or open a turn where none runs, and are written as a user row
- * awaiting its turn, under the conversation's lock around eve's acceptance,
- * so the transcript shows the line at once and the agent reads as running
- * until the turn that receives the line takes it (`brain-host/relay.ts`).
- * A send repeated under its key, after its answer was lost, finds the line
- * it already wrote and hands eve nothing again. The
- * route confirms the developer still reaches the repository first, so a
- * sign-in that lapsed is refused here rather than failing the turn's
- * checkout; the session's own step hook renews the credential at the
- * firewall where the standing one is old. eve answering that the session is
- * still coming up is a conflict the desktop tries again; eve no longer
- * running the session is one it does not, since the agent's sandbox lives
- * with the session. A change of model (`PATCH /api/agents/{id}`) writes the
+ * bearer, with the client's own key for the send, through the one steer
+ * path the voice brain's tool shares (`hosted/coder-host/steer.ts`): the
+ * words steer the turn under way, or open a turn where none runs, and are
+ * written as a user row awaiting its turn, so the transcript shows the
+ * line at once and the agent reads as running until the turn that receives
+ * the line takes it (`brain-host/relay.ts`). eve answering that the
+ * session is still coming up is a conflict the desktop tries again; eve no
+ * longer running the session is one it does not, since the agent's sandbox
+ * lives with the session. A change of model (`PATCH /api/agents/{id}`) writes the
  * choice on the agent's row, checked against the catalog as a Start checks
  * its own; the row is read at every step, so the change is the next step's
  * whether a turn runs or the next one is yet to open, and the account's
@@ -456,92 +450,23 @@ function messageRefusal(body: UnparsedWireValue): HostedRefusal {
   return HOSTED_REFUSAL.INVALID_REQUEST;
 }
 
-/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, one eve no longer runs is gone for good, and anything else is an outage. */
-const REFUSAL_OF_SEND_OUTCOME = {
-  [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
-  [EVE_SEND_OUTCOME.RETIRED]: HOSTED_REFUSAL.AGENT_RETIRED,
-  [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
-} as const;
-
 /**
  * POST sends the agent a message: the developer's words handed to the
- * session the agent runs in, where they steer the turn under way or open
- * one, written as a line awaiting its turn once eve has taken them. The
- * hand-over runs inside the conversation's lock, so the turn eve opens on
- * the line finds the row standing when its own first write takes the lock,
- * and an eve that did not take the message leaves no row behind; the
- * writer fences the write against the request going away between the two.
- * A send repeated under its key finds the line it already wrote and hands
- * eve nothing again: read once here, before GitHub is asked, and once more
- * by the writer under the lock, so two sends racing under one key still
- * send once. A row the store failed to write after eve took the message is
- * the one gap left, and the relay still writes the line when the turn
- * receives it.
+ * session the agent runs in under the developer's own bearer, through the
+ * one steer path the voice brain's tool shares (`coder-host/steer.ts`),
+ * with the client's own key for the send.
  */
 const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   writer: Effect.Effect<StoreWriter>,
   request: Request,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  const { userId, agent } = yield* ownedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const { text, clientKey } = asked.success;
-  const repeated = yield* hostedStoreOrUnavailable(
-    sentLineStands(userId, agent.conversationId, sentLineId(clientKey)),
-  );
-  if (repeated) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
-      agent: yield* summaryOf(userId, agent),
-    });
-  }
-  // The turn's checkout and its credential renewals run on the developer's standing with GitHub,
-  // so a sign-in that lapsed is the route's refusal rather than a turn failed at its first step.
-  const app = yield* GitHubApp;
-  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
-  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
   const eve = yield* eveFor(seams, request);
-  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
-  let refused: HostedRefusal | undefined;
-  const dispatch = eve
-    .send(sessionId, {
-      conversationId: agent.conversationId,
-      turn: BRAIN_HOST_TURN.TYPED,
-      message: text,
-    })
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
-        ),
-      ),
-      Effect.map((sent) => {
-        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
-        refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
-        return false;
-      }),
-    );
-  const written = yield* hostedStoreOrUnavailable(
-    Effect.flatMap(writer, (write) =>
-      write.writeAwaitingLine(target, { text, clientKey }, dispatch),
-    ),
-  );
-  if (Result.isFailure(written)) {
-    return yield* Effect.fail(
-      written.failure.refusal === STORE_WRITE_REFUSAL.NO_CONVERSATION
-        ? HOSTED_REFUSAL.NOT_FOUND
-        : HOSTED_REFUSAL.INVALID_REQUEST,
-    );
-  }
-  if (Option.isNone(written.success)) {
-    return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
-  }
+  yield* steerCodingAgent(eve, writer, userId, agent, asked.success);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
     agent: yield* summaryOf(userId, agent),
   });

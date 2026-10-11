@@ -56,6 +56,11 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import {
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  READ_CODING_AGENT_TOOL,
+} from "../server/hosted/coding-agent-tools";
 import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
@@ -527,7 +532,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the code it shows, and the repository and research reads, and no write to the plan",
+    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, and the plan's coding agents, and no write to the plan",
     () =>
       Effect.gen(function* () {
         const { host } = yield* savedPlanWithConversation();
@@ -544,6 +549,9 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             READ_WEB_PAGE_TOOL.name,
             DRAW_ON_BOARD_TOOL.name,
             LOOK_AT_BOARD_TOOL.name,
+            LIST_CODING_AGENTS_TOOL.name,
+            READ_CODING_AGENT_TOOL.name,
+            MESSAGE_CODING_AGENT_TOOL.name,
           ],
         );
       }),

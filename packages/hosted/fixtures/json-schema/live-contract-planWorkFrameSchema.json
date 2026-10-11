@@ -101,6 +101,9 @@
                       "worker",
                       "worker-wait",
                       "worker-cancel",
+                      "list-agents",
+                      "read-agent",
+                      "message-agent",
                       "other"
                     ]
                   },
@@ -203,6 +206,9 @@
                                     "worker",
                                     "worker-wait",
                                     "worker-cancel",
+                                    "list-agents",
+                                    "read-agent",
+                                    "message-agent",
                                     "other"
                                   ]
                                 },

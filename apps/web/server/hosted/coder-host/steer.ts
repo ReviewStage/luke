@@ -1,0 +1,124 @@
+import { Effect, Option, Result } from "effect";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
+import type { SqlClient } from "effect/unstable/sql";
+import { GitHubApp } from "../../github/github-app.js";
+import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
+import {
+  describeUnreachable,
+  EVE_SEND_OUTCOME,
+  type EveSessions,
+} from "../brain-host/eve-sessions.js";
+import { sentLineId } from "../brain-host/ids.js";
+import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
+import type { CodingAgent } from "../coding-agent-store.js";
+import { HOSTED_HTTP_STATUS } from "../http.js";
+import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import type { StoreWriter } from "../store/index.js";
+import { sentLineStands } from "../store/message-reads.js";
+import { STORE_WRITE_REFUSAL } from "../store/writer.js";
+
+/**
+ * steer.ts -- the developer's words handed to a coding agent: the one path a message takes, from the message box or from Luke's voice.
+ *
+ * The words are handed to the session the agent runs in, where they steer
+ * the turn under way or open one, and written as a line awaiting its turn
+ * once eve has taken them. The hand-over runs inside the conversation's
+ * lock, so the turn eve opens on the line finds the row standing when its
+ * own first write takes the lock, and an eve that did not take the message
+ * leaves no row behind; the writer fences the write against the caller
+ * going away between the two. A send repeated under its key finds the line
+ * it already wrote and hands eve nothing again: read once here, before
+ * GitHub is asked, and once more by the writer under the lock, so two
+ * sends racing under one key still send once. A row the store failed to
+ * write after eve took the message is the one gap left, and the relay
+ * still writes the line when the turn receives it. The turn's checkout and
+ * its credential renewals run on the developer's standing with GitHub, so
+ * a sign-in that lapsed is refused here rather than failing the turn's
+ * first step. Who reaches eve is the caller's: the route holds the
+ * developer's own bearer, and the voice brain's tool acts as the
+ * deployment for the account, which the coder channel's table admits for
+ * exactly this message (`coder-host/channel.ts`).
+ */
+
+/** The developer's words and the key the send is made under, which a repeat carries again. */
+export interface SteerLine {
+  readonly text: string;
+  readonly clientKey: string;
+}
+
+/** What a steer came to: the line sent and written, or found already sent under its key. */
+export const STEER_OUTCOME = {
+  SENT: "sent",
+  REPEATED: "repeated",
+} as const;
+
+export type SteerOutcome = (typeof STEER_OUTCOME)[keyof typeof STEER_OUTCOME];
+
+/** eve's answer to a message it did not take, in the route's words: a session still coming up is tried again, one eve no longer runs is gone for good, and anything else is an outage. */
+const REFUSAL_OF_SEND_OUTCOME = {
+  [EVE_SEND_OUTCOME.NOT_READY]: HOSTED_REFUSAL.AGENT_NOT_READY,
+  [EVE_SEND_OUTCOME.RETIRED]: HOSTED_REFUSAL.AGENT_RETIRED,
+  [EVE_SEND_OUTCOME.FAILED]: HOSTED_REFUSAL.UNAVAILABLE,
+} as const;
+
+/** Hands the line to the account's agent, as above; every refusal is the hosted vocabulary's, which the route answers as it is and the voice tool says in words. */
+export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent")(function* (
+  eve: EveSessions,
+  writer: Effect.Effect<StoreWriter>,
+  userId: string,
+  agent: CodingAgent,
+  line: SteerLine,
+): Effect.fn.Return<
+  SteerOutcome,
+  HostedRefusal,
+  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+> {
+  const target = { userId, conversationId: agent.conversationId };
+  const repeated = yield* hostedStoreOrUnavailable(
+    sentLineStands(userId, agent.conversationId, sentLineId(line.clientKey)),
+  );
+  if (repeated) return STEER_OUTCOME.REPEATED;
+  const app = yield* GitHubApp;
+  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
+  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
+  const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
+  if (sessionId === undefined) return yield* Effect.fail(HOSTED_REFUSAL.AGENT_NOT_READY);
+  // eve's refusal is kept beside the dispatch, since the write answers only whether a row landed.
+  let refused: HostedRefusal | undefined;
+  const dispatch = eve
+    .send(sessionId, {
+      conversationId: agent.conversationId,
+      turn: BRAIN_HOST_TURN.TYPED,
+      message: line.text,
+    })
+    .pipe(
+      Effect.catchTag("EveUnreachable", (failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `eve could not be reached to message a coding agent: ${describeUnreachable(failure)}`,
+          ),
+          { outcome: EVE_SEND_OUTCOME.FAILED, status: HOSTED_HTTP_STATUS.BAD_GATEWAY } as const,
+        ),
+      ),
+      Effect.map((sent) => {
+        if (sent.outcome === EVE_SEND_OUTCOME.ACCEPTED) return true;
+        refused = REFUSAL_OF_SEND_OUTCOME[sent.outcome];
+        return false;
+      }),
+    );
+  const written = yield* hostedStoreOrUnavailable(
+    Effect.flatMap(writer, (write) => write.writeAwaitingLine(target, line, dispatch)),
+  );
+  if (Result.isFailure(written)) {
+    return yield* Effect.fail(
+      written.failure.refusal === STORE_WRITE_REFUSAL.NO_CONVERSATION
+        ? HOSTED_REFUSAL.NOT_FOUND
+        : HOSTED_REFUSAL.INVALID_REQUEST,
+    );
+  }
+  if (Option.isNone(written.success)) {
+    return yield* Effect.fail(refused ?? HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return STEER_OUTCOME.SENT;
+});

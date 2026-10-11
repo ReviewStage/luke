@@ -12,6 +12,7 @@ import {
   MessageCircleQuestionIcon,
   PencilLineIcon,
   SearchIcon,
+  SendIcon,
   TerminalIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -108,6 +109,9 @@ const CALL_ICON = {
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,
+  [CALL_KIND.LIST_AGENTS]: BotIcon,
+  [CALL_KIND.READ_AGENT]: BotIcon,
+  [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 

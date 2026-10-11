@@ -69,7 +69,8 @@ export function brainHostChannelInput(
  * resolved at its own handshake and holds no bearer for by the time a
  * delegation arrives. A typed ask is only ever a developer's own request
  * under their own bearer, so the deployment opens none. A caller of another
- * role adds its row here and nowhere else.
+ * role adds its row here and nowhere else; the coder channel keeps a table
+ * of its own (`coder-host/channel.ts`).
  */
 export const DEPLOYMENT_TURNS = {
   [BRAIN_HOST_TURN.TYPED]: false,

@@ -748,9 +748,15 @@ authored planning instructions, the standing context each turn opens with is
 the plan's name and saved document read again from the row,
 and the tools are the planning list alone: `run_in_repository` bound to the
 plan the conversation belongs to (`readPlanOfConversation`), the two public
-research reads beside it, and `queue_question`
+research reads beside it, `queue_question`
 (`server/hosted/queue-question.ts`), which runs nothing: its journaled call is
-how a question reaches the voice while the turn still runs. A resumed session
+how a question reaches the voice while the turn still runs, and the three
+tools about the plan's coding agents (`server/hosted/coding-agent-tools.ts`):
+a list with each agent's status and what it published, one agent's recent
+progress as a bounded tail, and a message to one, which takes the message
+box's own steer path (`server/hosted/coder-host/steer.ts`) as the deployment
+acting for the account, the one row the coder channel's deployment table
+admits. A resumed session
 is seeded with the conversation so far. The writer holds rows to
 `HOSTED_TOOL_SET`, which is the planning tools and nothing else, so a turn's
 calls are written and read back under the same list it was offered.

@@ -41,7 +41,10 @@ import {
  * a person, the attribute for the deployment. Ownership is checked on that
  * answer, so the deployment can open a turn only on a conversation the named
  * account owns, and the deployment's secret can open only the turns the
- * table admits: a spoken ask for the voice function, never a stream.
+ * table admits: a spoken ask for the voice function on the planning
+ * channel, a typed line the voice brain sends a coding agent on the coder
+ * channel (`coder-host/channel.ts`), where it presents the account's own
+ * principal so the line steers the agent's running turn, never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
  * table's, decided before any principal exists. The one other thing the
  * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as
@@ -89,12 +92,35 @@ export function lukeAccount(resolveUserId: BearerAccount): AuthFn<Request> {
   }, BEARER_CHALLENGE);
 }
 
-/** The deployment acting for an account: which secret admits it, and which kinds of turn a message under it may open. */
+/**
+ * Whose identity the deployment's principal presents once admitted. eve
+ * steers a running turn only with a message whose principal is the turn's
+ * own, read as the tuple of authenticator, type, and id, so a principal of
+ * the deployment's own type can open a turn or follow one up but never
+ * join one under way. The planning channel's deployment presents itself: a
+ * spoken ask opens its own turn, and nothing of the voice's joins a typed
+ * one. The coder channel's presents the account: a coding agent's turn runs
+ * under the developer's bearer, and the one message the deployment carries
+ * there is the voice brain's steer of that very turn, so it is minted as
+ * the developer's own tuple, with the deployment named as its carrier in an
+ * attribute, which eve's identity does not read and the record keeps.
+ */
+export const DEPLOYMENT_PRESENCE = {
+  /** A principal of the deployment's own type, the account as its attribute. */
+  DEPLOYMENT: "deployment",
+  /** The account's own principal, the deployment as its carrier attribute. */
+  ACCOUNT: "account",
+} as const;
+
+type DeploymentPresence = (typeof DEPLOYMENT_PRESENCE)[keyof typeof DEPLOYMENT_PRESENCE];
+
+/** The deployment acting for an account: which secret admits it, which kinds of turn a message under it may open, and whose identity it presents. */
 export interface DeploymentActor {
   /** The deployment's own secret, sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
   /** Every kind of turn, and whether a message under the secret may open it; a kind admitted nowhere is refused outright. */
   readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
+  readonly presents: DeploymentPresence;
 }
 
 /** The routes a deployment actor may reach: a message opening a session or following one up, and a cancel of a turn in a session; no other. */
@@ -110,7 +136,9 @@ const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
  * a request with this secret that names no account, reaches any route but a
  * message or a cancel, or is a message naming a kind of turn the table does
  * not admit is refused here, before any later authenticator could admit it
- * as something else.
+ * as something else. An actor that presents the account mints the account's
+ * own principal instead, the deployment named as its carrier, so the
+ * ownership check reads the same account either way.
  */
 export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
   return withAuthChallenges((request) => {
@@ -132,6 +160,17 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
     const cancel = posted && CANCEL_ROUTE.test(pathname);
     if (!message && !cancel) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });
+    }
+    if (actor.presents === DEPLOYMENT_PRESENCE.ACCOUNT) {
+      return {
+        principalId: account,
+        principalType: BRAIN_HOST_PRINCIPAL_TYPE.ACCOUNT,
+        authenticator: BRAIN_HOST_AUTHENTICATOR.ACCOUNT,
+        attributes: {
+          ...attributes,
+          [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+        },
+      };
     }
     return {
       principalId: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,

@@ -1,7 +1,13 @@
 import type { TurnPolicy } from "eve/channels";
 import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
-import { type BearerAccount, lukeAccount } from "../brain-host/auth.js";
+import {
+  type BearerAccount,
+  type DeploymentActor,
+  deploymentActor,
+  lukeAccount,
+} from "../brain-host/auth.js";
+import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/door.js";
 
@@ -11,13 +17,17 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * The same door as the planning brain's (`brain-host/door.ts`): whoever the
  * inner walk admits is refused for a session or a conversation that is not
  * theirs before any route runs, and every message carries the request's
- * conversation and turn kind into the session's auth. What differs is who
- * walks in. A coding agent is started, messaged, and stopped by routes
- * still holding the developer's own bearer, which reach eve as that
- * developer, so the walk is the account's bearer and, where eve is a
- * development server, the development principal; the deployment acts for
- * nobody here, since no service of Luke's opens a coding turn without the
- * developer's request in hand. The channel's policy for a message that
+ * conversation and turn kind into the session's auth. Who walks in is the
+ * same walk too, in the same order: the deployment acting for an account
+ * first, over the one-row table below, then the account's bearer, then,
+ * where eve is a development server, the development principal. A coding
+ * agent is started, messaged, and stopped by routes still holding the
+ * developer's own bearer, which reach eve as that developer; the one thing
+ * the deployment does here is carry a message the voice brain sends an
+ * agent on the developer's behalf (`hosted/coding-agent-tools.ts`), since
+ * the planning session holds no bearer of the account's, and it is admitted
+ * only on a session the named account's agent recorded, as every other
+ * caller is. The channel's policy for a message that
  * arrives while a turn is under way is `steer`: the message joins the turn
  * at its next step, and a model call still generating is cut short and run
  * again with it, because a message to a coding agent is the developer's
@@ -28,12 +38,38 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  */
 const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
 
+/**
+ * The kinds of turn the deployment may open for an account here: the typed
+ * line alone, because a message the voice brain sends an agent is delivered
+ * exactly as one the developer typed in the message box. A coding agent has
+ * no spoken turn, so the deployment opens none. Nothing of the deployment's
+ * starts an agent: a Start is a developer's own request under their own
+ * bearer, and what the row admits is a message on a session or a
+ * conversation the named account owns, which the door's ownership check
+ * bounds as it bounds every caller. On this channel, and this one alone,
+ * the deployment presents the account's own identity
+ * (`DEPLOYMENT_PRESENCE.ACCOUNT`): eve steers a running turn only with a
+ * message whose principal is the turn's own, and an agent's turn runs under
+ * the developer's bearer, so the voice steer is minted as the developer's
+ * own tuple, authenticator, type, and id, and the record says the
+ * deployment carried it in the `luke:carrier` attribute rather than in the
+ * principal. A caller of another role adds its row here and nowhere else.
+ */
+export const CODER_DEPLOYMENT_TURNS = {
+  [BRAIN_HOST_TURN.TYPED]: true,
+  [BRAIN_HOST_TURN.SPOKEN]: false,
+} as const satisfies Record<BrainHostTurn, boolean>;
+
 export function coderChannelInput(
   resolveUserId: BearerAccount,
   ownership: SessionOwnership,
+  deployment: DeploymentActor,
 ): EveChannelInput {
   return {
-    auth: ownedAuth([lukeAccount(resolveUserId), localDev()], ownership),
+    auth: ownedAuth(
+      [deploymentActor(deployment), lukeAccount(resolveUserId), localDev()],
+      ownership,
+    ),
     turnPolicy: TURN_POLICY,
     onMessage: (ctx) => ({ auth: messageAuth(ctx) }),
   };

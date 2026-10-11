@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import agent from "../eve/agent";
+import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_TURN_POLICY,
   brainHostChannelInput,
@@ -31,7 +32,7 @@ test("a follow-up steers the turn under way rather than queueing behind it, and 
       sessionOwner: async () => undefined,
       ownsConversation: async () => false,
     },
-    { secret: undefined, admits: DEPLOYMENT_TURNS },
+    { secret: undefined, admits: DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.DEPLOYMENT },
   );
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
   assert.equal(Array.isArray(channel.auth), false);

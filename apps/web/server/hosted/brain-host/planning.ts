@@ -17,6 +17,15 @@ import { ACTION_RESULT_STATUS, wireValidatedTool } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
+import {
+  type CodingAgentCall,
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  READ_CODING_AGENT_TOOL,
+  runListCodingAgents,
+  runMessageCodingAgent,
+  runReadCodingAgent,
+} from "../coding-agent-tools.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
@@ -152,6 +161,16 @@ Each call starts a worker that knows nothing of this conversation, so say everyt
 
 When findings arrive, tell Luke what they change in your return, and draw them on the board when a picture helps.
 
+### The plan's coding agents
+
+Coding agents may already be building this plan, each in a cloud session of its own. When the developer asks how an agent is doing, or tells an agent to do something ("how's the agent doing", "tell it to also add tests"), use the agent tools: list_coding_agents to see which agents there are and which one they mean, read_coding_agent to read one's recent progress, and message_coding_agent to tell one what to do.
+
+On a status question, read the agent and summarise its progress in a sentence or two in your return: what it is doing now, what it has published, and whether it is stuck. Never read its transcript out.
+
+On an instruction, send it when it is clear which agent is meant and what to say: message_coding_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When there is one agent, it is the one they mean.
+
+Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
+
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
@@ -162,6 +181,9 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
+- list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
+- read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
+- message_coding_agent sends one agent a message, as the developer would type it to the agent.
 
 ## Return the result
 
@@ -305,11 +327,12 @@ export interface HostedToolDeclaration {
   readonly inputSchema: ToolDefinition["inputSchema"];
 }
 
-/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, and the turn's research bounds. */
+/** What one planning call runs under: the plan the conversation belongs to, its repository in the session's sandbox, the turn's research bounds, and the plan's coding agents. */
 export interface PlanningCall {
   readonly plan: PlanDocumentBinding;
   readonly repository: RepositoryCall;
   readonly research: ResearchCall;
+  readonly agents: CodingAgentCall;
 }
 
 /** One tool a planning turn is offered: its declaration, and the call it carries under the plan the conversation belongs to. */
@@ -336,8 +359,10 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`). Every read's
- * result goes back to the model as data, a look's as an image.
+ * hands back the board as the Mac draws it (`board-look.ts`); the three
+ * agent tools read and message the plan's coding agents
+ * (`coding-agent-tools.ts`). Every read's result goes back to the model as
+ * data, a look's as an image.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
@@ -372,6 +397,18 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...LOOK_AT_BOARD_TOOL,
     run: (call, input) => Effect.map(runLookAtBoard(call.plan, input), (result) => ({ ...result })),
+  },
+  {
+    ...LIST_CODING_AGENTS_TOOL,
+    run: (call) => runListCodingAgents(call.agents),
+  },
+  {
+    ...READ_CODING_AGENT_TOOL,
+    run: (call, input) => runReadCodingAgent(call.agents, input),
+  },
+  {
+    ...MESSAGE_CODING_AGENT_TOOL,
+    run: (call, input) => runMessageCodingAgent(call.agents, input),
   },
 ];
 
