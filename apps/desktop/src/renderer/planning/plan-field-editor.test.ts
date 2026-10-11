@@ -53,7 +53,7 @@ function mount(plan: Plan, answers: readonly PlanningEditAnswer[] = [{ saved: tr
     return Promise.resolve(answers[sent.length - 1] ?? saved);
   };
   act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit })));
-  return { container, sent };
+  return { container, sent, root, onEdit };
 }
 
 function pencil(container: HTMLElement, heading: string): HTMLButtonElement {
@@ -185,4 +185,57 @@ test("a save that failed says why and keeps the words; Try again saves them", as
 
   assert.equal(sent.length, 2);
   assert.equal(container.querySelector(".plan-field-editor"), null);
+});
+
+test("words typed and not yet saved are sent when the developer leaves the plan", async () => {
+  const { container, sent, root } = mount(PLAN);
+  act(() => pencil(container, "Problem").click());
+  typeInto(box(container), "- Only an owner can add a member.");
+
+  act(() => root.unmount());
+  await settle();
+
+  assert.deepEqual(sent, [
+    { field: PLAN_FIELD.PROBLEM, base: PROBLEM, value: "- Only an owner can add a member." },
+  ]);
+});
+
+test("words typed in one plan are saved to that plan when another opens", async () => {
+  const { container, sent, root } = mount(PLAN);
+  const doors: string[] = [];
+  const door = (planId: string) => (request: PlanEditRequest) => {
+    doors.push(planId);
+    sent.push(request);
+    return Promise.resolve<PlanningEditAnswer>({ saved: true });
+  };
+  act(() =>
+    root.render(createElement(PlanBody, { plan: PLAN, live: false, onEdit: door(PLAN.id) })),
+  );
+  act(() => pencil(container, "Problem").click());
+  typeInto(box(container), "- Only an owner can add a member.");
+
+  const other = { ...PLAN, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  act(() =>
+    root.render(createElement(PlanBody, { plan: other, live: false, onEdit: door(other.id) })),
+  );
+  await settle();
+
+  assert.deepEqual(doors, [PLAN.id]);
+  assert.equal(container.querySelector(".plan-field-editor"), null);
+});
+
+test("Esc and the box losing focus at once save the words once", async () => {
+  const { container, sent } = mount(PLAN);
+  act(() => pencil(container, "Problem").click());
+  typeInto(box(container), "- Only an owner can add a member.");
+
+  act(() => {
+    box(container).dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    box(container).dispatchEvent(
+      new FocusEvent("focusout", { bubbles: true, relatedTarget: null }),
+    );
+  });
+  await settle();
+
+  assert.equal(sent.length, 1);
 });

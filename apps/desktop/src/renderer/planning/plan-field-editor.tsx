@@ -84,15 +84,24 @@ export function useFieldEditing(
   const latest = useRef(editor);
   latest.current = editor;
   const stamp = useRef(0);
+  // The door of the plan last drawn, moved on after each commit, so a
+  // cleanup as another plan opens still holds the door of the one it leaves.
+  const door = useRef(edit);
+  useEffect(() => {
+    door.current = edit;
+  });
 
+  // Note that the save out is reserved on the ref before anything renders,
+  // so a pause and a close landing in one flush start one save, not two.
   const send = () => {
     const held = latest.current;
     if (held === undefined) return;
     const answer = pendingAnswer(held);
     if (answer === undefined) return;
     const { field } = held;
-    setEditor(editorSent(held, answer));
-    edit({ field, base: held.base, value: answer }).then(
+    latest.current = editorSent(held, answer);
+    setEditor(latest.current);
+    door.current({ field, base: held.base, value: answer }).then(
       (answered) =>
         setEditor((now) => (now?.field === field ? editorAnswered(now, answered) : now)),
       (refused: Error) =>
@@ -112,9 +121,20 @@ export function useFieldEditing(
     else send();
   });
 
-  // Another plan opened takes the editor with it; its save still out lands on nothing.
+  // Another plan opened, or the document gone, takes the editor with it, and
+  // words not yet saved are sent through the door of the plan they were
+  // typed in. Note that the cleanup is what sends them, because it still
+  // holds that plan's door and runs before the document can go.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the plan changing is what closes it.
-  useEffect(() => setEditor(undefined), [planId]);
+  useEffect(() => {
+    setEditor(undefined);
+    return () => {
+      const held = latest.current;
+      const answer = held === undefined ? undefined : pendingAnswer(held);
+      if (held === undefined || answer === undefined) return;
+      door.current({ field: held.field, base: held.base, value: answer }).catch(() => undefined);
+    };
+  }, [planId]);
 
   return {
     editor,
@@ -128,7 +148,14 @@ export function useFieldEditing(
       stamp.current += 1;
       restartPause(stamp.current);
     },
-    close: () => setEditor((now) => (now === undefined ? now : editorCloseAsked(now))),
+    // The save starts with the close, not a render later, since the close may
+    // be focus leaving for another plan that takes the document with it.
+    close: () => {
+      if (latest.current === undefined) return;
+      latest.current = editorCloseAsked(latest.current);
+      setEditor(latest.current);
+      send();
+    },
     keepMine: () => {
       setEditor((now) => (now === undefined ? now : editorKeptMine(now)));
       stamp.current += 1;
