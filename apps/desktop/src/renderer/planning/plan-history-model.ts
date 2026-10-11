@@ -105,10 +105,19 @@ export function versionHeading(line: PlanRevisionLine, now: number): string {
   return `Viewing version from ${agoText(line.lastEdit.at, now)} · ${revisionAuthor(line.lastEdit)}`;
 }
 
-/** A unit's key: its first line, which is its heading, or the plan's title for the first. */
+/** A rule's heading, whose number moves when a rule before it comes or goes. */
+const RULE_HEADING = /^### Rule \d+: /u;
+
+/**
+ * A unit's key: its first line, which is its heading, or the plan's title
+ * for the first. A rule is known by its statement rather than its number,
+ * so a rule struck before others strikes that rule, and the rules after it
+ * read as renumbered rather than rewritten.
+ */
 function unitKey(words: string): string {
   const end = words.indexOf("\n");
-  return end === -1 ? words : words.slice(0, end);
+  const heading = end === -1 ? words : words.slice(0, end);
+  return heading.replace(RULE_HEADING, "### Rule: ");
 }
 
 /** A space between two words that changed, which a reader takes as part of the change around it. */

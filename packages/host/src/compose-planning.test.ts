@@ -1702,3 +1702,36 @@ it.effect(
       assert.equal(last()?.document.plan?.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
     }),
 );
+
+it.effect(
+  "after a restore, a draft or a save from before it landing late is not drawn over the restored plan, and the notetaker's next save is",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Earlier draft", assumptions: [] },
+        previous: null,
+      };
+      const { call, last, planning } = yield* openPlan(service);
+      yield* call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: INVITES, seq: 1 });
+      const restored = last()?.document.plan;
+      assert.equal(restored?.document.body, "# Earlier draft");
+      const draft = (body: string, savedAt?: number) =>
+        planning.showDraft({
+          type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+          planId: INVITES,
+          document: { body, assumptions: [] },
+          ...(savedAt === undefined ? undefined : { savedAt }),
+        });
+
+      draft("# Draft, still being written");
+      draft("# Draft, saved before the restore", 10);
+      assert.equal(last()?.document.plan?.document.body, "# Earlier draft");
+
+      draft("# Earlier draft, and a new point", (restored?.updatedAt ?? 0) + 1);
+      assert.equal(last()?.document.plan?.document.body, "# Earlier draft, and a new point");
+      draft("# Earlier draft, and another point");
+      assert.equal(last()?.document.plan?.document.body, "# Earlier draft, and another point");
+    }),
+);

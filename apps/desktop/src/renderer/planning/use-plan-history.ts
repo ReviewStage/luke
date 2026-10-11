@@ -19,7 +19,9 @@ import { VERSION_COMPARE, type VersionCompare } from "./plan-history-model";
  * (`VERSION_COMPARE`) until the developer goes back to the plan as it
  * stands, leaves the tab, or opens another plan. Restoring the version is
  * the service's write; the plan it answers arrives in the document through
- * main's view like any other save, and the history reads again on it.
+ * main's view like any other save, and the history reads again on it. A
+ * restore is undone by restoring the version that stood before it, which
+ * the caller is handed to offer.
  */
 
 /** Where a read of the history or of one version stands. */

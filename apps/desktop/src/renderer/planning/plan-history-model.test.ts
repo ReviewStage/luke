@@ -113,7 +113,7 @@ test("a section only one side holds is drawn whole, added or struck, and a rewor
     [
       ["# Teammate invitations", VERSION_CHANGE.SAME],
       ["## Rules", VERSION_CHANGE.SAME],
-      ["### Rule 1: Any member invites.", VERSION_CHANGE.CHANGED],
+      ["### Rule: Any member invites.", VERSION_CHANGE.CHANGED],
       ["## Decisions", VERSION_CHANGE.CHANGED],
     ],
   );
@@ -167,4 +167,33 @@ test("the first version is drawn as it is against nothing, and a version like it
     [VERSION_CHANGE.SAME],
   );
   assert.equal(same.changed, false);
+});
+
+test("a rule struck before others strikes that rule, and the rules after it read as renumbered rather than rewritten", () => {
+  const before = documentOf([
+    "## Rules",
+    "### Rule 1: Admins invite.",
+    "### Rule 2: Invites expire.",
+    "### Rule 3: Invites resend.",
+  ]);
+  const after = documentOf([
+    "## Rules",
+    "### Rule 1: Invites expire.",
+    "### Rule 2: Invites resend.",
+  ]);
+
+  const diff = versionDiff(before, after);
+
+  assert.deepEqual(
+    diff.units.map((unit) => [unit.key, unit.change]),
+    [
+      ["# Teammate invitations", VERSION_CHANGE.SAME],
+      ["## Rules", VERSION_CHANGE.SAME],
+      ["### Rule: Admins invite.", VERSION_CHANGE.REMOVED],
+      ["### Rule: Invites expire.", VERSION_CHANGE.CHANGED],
+      ["### Rule: Invites resend.", VERSION_CHANGE.CHANGED],
+    ],
+  );
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), ["2", "3"]);
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), ["1", "2"]);
 });

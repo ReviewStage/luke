@@ -266,7 +266,7 @@ function revisionLine(seq: number) {
 const FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
 
 it.effect(
-  "the History tab reads the plan's versions; one chosen stands in the document's place until Escape or another tab, and a restore goes back to the plan and says so",
+  "the History tab reads the plan's versions; one chosen stands in the document's place until Escape or another tab, and a restore goes back to the plan and offers its Undo",
   () =>
     Effect.gen(function* () {
       const restoredAnswer = { value: false };
@@ -352,7 +352,15 @@ it.effect(
       yield* landed;
       assert.equal(restored?.status, ACTION_RESULT_STATUS.ACCEPTED);
       assert.equal(tab.control().history.viewing, undefined);
-      assert.equal(toast(), "Version restored");
+      const undo = document.querySelector<HTMLButtonElement>(".toast button");
+      assert.equal(undo?.textContent, "Undo");
+      assert.equal(toast()?.replace("Undo", ""), "Version restored");
+
+      // The Undo is itself a restore, and one the service refuses says so.
+      restoredAnswer.value = false;
+      act(() => undo?.click());
+      yield* landed;
+      assert.equal(toast(), "The restore could not be undone. Try again.");
     }),
 );
 

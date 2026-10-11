@@ -326,9 +326,23 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     });
   }
 
+  /**
+   * The plan a restore just replaced the content of, and the restore's save,
+   * until the notetaker saves after it. Note that the drafts of its turn in
+   * flight were written over the content the restore replaced, so a draft,
+   * or a save from before the restore landing late, would draw that content
+   * back over the restored one; the notetaker's next save is taken over the
+   * restored content on the service, and is the first draw to trust again.
+   */
+  let restoredFence: { readonly planId: string; readonly at: number } | undefined;
+
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
+    if (restoredFence?.planId === draft.planId) {
+      if (draft.savedAt === undefined || draft.savedAt <= restoredFence.at) return;
+      restoredFence = undefined;
+    }
     // A saved draft carries its save's instant, so the copy held is the save's,
     // written by the notetaker on this call.
     const plan = {
@@ -656,6 +670,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
               FetchHttpClient.layer,
             );
             if (restored === undefined) return { restored: false };
+            restoredFence = { planId, at: restored.updatedAt };
             takeAnswered(restored);
             return { restored: true };
           }),

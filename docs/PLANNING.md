@@ -553,8 +553,11 @@ restoring the revision before it, and it is allowed during a call. It takes
 no base: a save that landed after the version was chosen is the revision
 before the restore, and restoring it brings it back. The plan the service
 answers replaces the open document at once, and the window's toast says
-"Version restored". The newest revision is the plan as it stands, so it
-offers no restore.
+"Version restored" with an Undo, which restores the version that stood
+before it. Until the notetaker's next save lands, the host draws no draft
+of the open plan's call, since a turn in flight was written over the
+content the restore replaced. The newest revision is the plan as it
+stands, so it offers no restore.
 
 The notes type in while they are written. The call streams its answer, and
 the notes so far are taken over the saved fields and formatted exactly as a

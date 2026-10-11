@@ -72,28 +72,35 @@ function fakeService(now = NOW) {
       changes: 4,
     },
   ];
+  const unreachable = (): Promise<never> => Promise.reject(new Error("Main refused the act."));
+  /** The Undo each restore offered, in order. */
+  const undos: (() => Promise<boolean>)[] = [];
   const service = {
     current: LATEST,
     refusing: false,
-    source: {
-      readPage: () => Promise.resolve({ revisions: lines }),
-      readRevision: (_planId, seq) => {
-        const document = VERSIONS[seq - 1];
-        return Promise.resolve(
-          document === undefined
-            ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
-            : { revision: { seq, document, previous: VERSIONS[seq - 2] ?? null } },
-        );
-      },
-      restore: (_planId, seq) => {
-        const document = VERSIONS[seq - 1];
-        if (service.refusing || document === undefined) return Promise.resolve(false);
-        service.current = document;
-        return Promise.resolve(true);
-      },
-    } satisfies PlanHistorySource,
+    /** Whether main refuses every read, as an act it could not carry. */
+    unreachable: false,
+    undos,
   };
-  return service;
+  const source: PlanHistorySource = {
+    readPage: () => (service.unreachable ? unreachable() : Promise.resolve({ revisions: lines })),
+    readRevision: (_planId, seq) => {
+      if (service.unreachable) return unreachable();
+      const document = VERSIONS[seq - 1];
+      return Promise.resolve(
+        document === undefined
+          ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+          : { revision: { seq, document, previous: VERSIONS[seq - 2] ?? null } },
+      );
+    },
+    restore: (_planId, seq) => {
+      const document = VERSIONS[seq - 1];
+      if (service.refusing || document === undefined) return Promise.resolve(false);
+      service.current = document;
+      return Promise.resolve(true);
+    },
+  };
+  return Object.assign(service, { source });
 }
 
 let root: Root | undefined;
@@ -113,7 +120,9 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry) 
       editedAt: undefined,
       name: "Teammate invitations",
       shown: true,
-      onRestored: () => undefined,
+      onRestored: (undo) => {
+        if (undo !== undefined) service.undos.push(undo);
+      },
     });
     return createElement(
       Fragment,
@@ -256,5 +265,53 @@ it.effect("the newest version is the plan as it stands, so it offers no restore"
     );
     assert.equal(restore?.disabled, true);
     assert.match(page.querySelector(".version-bar-title")?.textContent ?? "", /Current version$/u);
+  }),
+);
+
+it.effect(
+  "a read main refused offers to read again rather than reading forever, and a version whose read failed is read again when chosen again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      service.unreachable = true;
+      const page = yield* mount(service, yield* registryOnTestClock);
+      assert.equal(
+        page.querySelector(".side-panel-empty p")?.textContent,
+        "The history could not be read.",
+      );
+
+      service.unreachable = false;
+      yield* press(page, "Try again");
+      assert.equal(rows(page).length, 3);
+
+      service.unreachable = true;
+      yield* press(page, "Luke1d4 changes");
+      assert.equal(
+        page.querySelector(".version-note")?.textContent,
+        "The version could not be read.",
+      );
+      service.unreachable = false;
+      yield* press(page, "Luke1d4 changes");
+      assert.deepEqual(marked(page, "del"), []);
+      assert.equal(
+        page.querySelector(".version-note")?.textContent,
+        "The first version: there is nothing before it to compare.",
+      );
+    }),
+);
+
+it.effect("a restore offers to undo it, which puts back the version that stood before it", () =>
+  Effect.gen(function* () {
+    const service = fakeService();
+    const page = yield* mount(service, yield* registryOnTestClock);
+    yield* press(page, "Luke1d4 changes");
+    yield* press(page, "Restore this version");
+    yield* press(document, "Restore");
+    assert.equal(service.current, FIRST);
+
+    const undone = yield* Effect.promise(() => service.undos.at(-1)?.() ?? Promise.resolve(false));
+
+    assert.ok(undone);
+    assert.equal(service.current, LATEST);
   }),
 );
