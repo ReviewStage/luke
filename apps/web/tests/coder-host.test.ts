@@ -130,6 +130,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         sessionOwner: () => Promise.resolve(undefined),
         ownsConversation: () => Promise.resolve(false),
       },
+      deploymentSecret: () => undefined,
       keys: () => KEYS,
       titleModel: () => titleModel,
       scriptedModel: () => false,
