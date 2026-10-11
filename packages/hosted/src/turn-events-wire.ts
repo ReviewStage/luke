@@ -64,7 +64,12 @@ export type TurnEventBody =
       readonly question: string;
       readonly recommendation: string;
     }
-  | { readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN; readonly code: ShownCode }
+  | {
+      readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN;
+      /** The `show_code` call that showed it, as the turn's journal names the call. */
+      readonly callId: string;
+      readonly code: ShownCode;
+    }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

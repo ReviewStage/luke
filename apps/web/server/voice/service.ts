@@ -542,11 +542,11 @@ export class VoiceService {
         // Code Luke is about to talk about, with its lines as the planning
         // model read them from the plan's repository, sent the same way, so
         // the Plans tab's code pane draws it as he says it.
-        onCode: (code) => {
+        onCode: (shown) => {
           const frame: PlanCodeFrame = {
             type: VOICE_SERVICE_FRAME.PLAN_CODE,
             planId: opened.planId,
-            code,
+            ...shown,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

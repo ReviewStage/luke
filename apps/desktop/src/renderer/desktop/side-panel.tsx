@@ -7,7 +7,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_STATE,
-  type PlanCode,
+  type PlanCodeShowing,
   type PlanWorkState,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
@@ -36,7 +36,7 @@ import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
-import type { TranscriptRegion } from "../planning/transcript-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type FixedSidePanelTab,
@@ -94,7 +94,7 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * exit has played (`useSidePanelDrawing`); its arrivals are pane-motion.tsx's.
  */
 
-/** What the Code tab says while Luke has no code on screen. */
+/** What the Code tab says while Luke has shown no code on the plan. */
 const NO_CODE_LINE = "When Luke shows you code during a call, it appears here.";
 
 /**
@@ -595,7 +595,7 @@ function TabContent({
   tab,
   planId,
   board,
-  code,
+  shownCode,
   transcript,
   work,
   workRows,
@@ -606,7 +606,7 @@ function TabContent({
   tab: SidePanelTab;
   planId: string;
   board: Board | undefined;
-  code: PlanCode | undefined;
+  shownCode: readonly PlanCodeShowing[] | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   /** The plan's work as rows, which a subagent's tab reads its session from. */
@@ -651,10 +651,14 @@ function TabContent({
     case SIDE_PANEL_TAB.BOARD:
       return <PlanBoard planId={planId} board={board} />;
     case SIDE_PANEL_TAB.CODE:
-      return code === undefined ? (
+      return shownCode === undefined || shownCode.length === 0 ? (
         <p className="side-panel-empty">{NO_CODE_LINE}</p>
       ) : (
-        <CodePane code={code} />
+        <CodePane
+          shown={shownCode}
+          calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
+          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+        />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
       return (
@@ -898,7 +902,7 @@ export function SidePanel({
   unread,
   planId,
   board,
-  code,
+  shownCode,
   transcript,
   work,
   agents,
@@ -909,7 +913,8 @@ export function SidePanel({
   unread: readonly SidePanelTab[];
   planId: string;
   board: Board | undefined;
-  code: PlanCode | undefined;
+  /** Every code Luke showed on the plan, oldest first. */
+  shownCode: readonly PlanCodeShowing[] | undefined;
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   agents: CodingAgentsControl;
@@ -1001,7 +1006,7 @@ export function SidePanel({
               tab={tab}
               planId={planId}
               board={board}
-              code={code}
+              shownCode={shownCode}
               transcript={transcript}
               work={work}
               workRows={workRows}

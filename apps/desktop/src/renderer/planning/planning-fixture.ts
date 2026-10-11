@@ -9,6 +9,7 @@ import {
   PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanCode,
+  type PlanCodeShowing,
   type PlanningRepositoriesAnswer,
   type PlanningView,
   type PlanWorkTurn,
@@ -273,6 +274,25 @@ const FIXTURE_CODE: PlanCode = {
   ],
 };
 
+/**
+ * Every code Luke showed in the fixture's call: the import at the file's
+ * top, then the invite check he is asking about, two snippets of one file.
+ */
+const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
+  {
+    callId: "fixture-show-1",
+    turnId: "fixture-turn-1",
+    shownAt: Date.parse("2026-10-07T16:21:00Z"),
+    code: { ...FIXTURE_CODE, ref: { path: FIXTURE_CODE.ref.path, startLine: 1, endLine: 1 } },
+  },
+  {
+    callId: "fixture-show-2",
+    turnId: "fixture-turn-1",
+    shownAt: Date.parse("2026-10-07T16:21:00Z"),
+    code: FIXTURE_CODE,
+  },
+];
+
 const { USER, ASSISTANT } = TRANSCRIPT_SPEAKER;
 
 /** What was said on the fixture plan's one earlier call, as the record answers it: each line a message named by its place. */
@@ -314,7 +334,7 @@ const FIXTURE_OPEN_PLAN: PlanningView = {
   document: { status: PLANNING_READ.READY, plan: FIXTURE_PLAN },
   activity: { planner: { action: "grep -rn pending src/members" }, notes: true },
   transcript: { status: PLANNING_READ.READY, transcript: FIXTURE_TRANSCRIPT },
-  code: FIXTURE_CODE,
+  shownCode: FIXTURE_SHOWN_CODE,
 };
 
 /**

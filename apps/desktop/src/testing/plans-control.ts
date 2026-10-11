@@ -81,7 +81,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     },
     unreadTabs: [],
     board: undefined,
-    code: undefined,
+    shownCode: undefined,
     transcript: { region: { kind: TRANSCRIPT_REGION.READING }, onRetry: ignore },
     work: {
       turns: undefined,

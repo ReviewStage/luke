@@ -10,6 +10,7 @@ import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
   type PlanCode,
+  type PlanCodeShowing,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
@@ -502,6 +503,15 @@ const CODE: PlanCode = {
   lines: [[{ text: "export function accept() {}" }]],
 };
 
+/** The code shown on the open plan: one snippet, then a second of the same file. */
+const SHOWN: readonly PlanCodeShowing[] = [
+  { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+];
+const SHOWN_AGAIN: readonly PlanCodeShowing[] = [
+  ...SHOWN,
+  { callId: "show-2", turnId: "turn-1", shownAt: 1, code: CODE },
+];
+
 /** A call in progress about the open plan, which is what puts code on screen. */
 const ON_CALL: VoiceView = {
   ...IDLE_VOICE_VIEW,
@@ -536,24 +546,30 @@ test("the first code Luke shows on the open plan's call opens the panel on the c
   tab.stand({ voice: ON_CALL });
   assert.equal(tab.control().sidePanel.open, false);
 
-  tab.stand({ planning: { ...OPEN, code: CODE } });
+  tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
 
   act(() => tab.control().sidePanel.onToggle());
+  tab.stand({ planning: { ...OPEN, shownCode: SHOWN_AGAIN } });
+  assert.equal(
+    tab.control().sidePanel.open,
+    false,
+    "a later snippet on the call does not reopen it",
+  );
   tab.stand({ voice: IDLE_VOICE_VIEW, planning: OPEN });
   tab.stand({ voice: ON_CALL });
-  tab.stand({ planning: { ...OPEN, code: CODE } });
+  tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
   assert.equal(tab.control().sidePanel.open, false);
 });
 
-test("the code last shown on the open plan is drawn with no call standing, as after a restart, and a call that starts with it opens no panel", () => {
+test("the code shown on the open plan is drawn with no call standing, as after a restart, and a call that starts with it opens no panel", () => {
   const tab = mount({ shown: true, planning: OPEN });
-  tab.stand({ planning: { ...OPEN, code: CODE } });
-  assert.deepEqual(tab.control().code, CODE);
+  tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
+  assert.deepEqual(tab.control().shownCode, SHOWN);
   assert.equal(tab.control().sidePanel.open, false);
 
   tab.stand({ voice: ON_CALL });
-  assert.deepEqual(tab.control().code, CODE);
+  assert.deepEqual(tab.control().shownCode, SHOWN);
   assert.equal(tab.control().sidePanel.open, false);
 });
 
@@ -642,7 +658,7 @@ test("Luke's first code opens a shut panel on a Code tab the developer had close
   act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
   tab.stand({ voice: ON_CALL });
 
-  tab.stand({ planning: { ...OPEN, code: CODE } });
+  tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
   assert.deepEqual(tab.control().sidePanel.tabs, [
     SIDE_PANEL_TAB.BOARD,
@@ -672,7 +688,7 @@ test("the board and the code arriving on one read of an open panel with every ta
     act(() => tab.control().sidePanel.onClose(closed));
   }
 
-  tab.stand({ planning: { ...OPEN, board: drawnBoard(1), code: CODE } });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1), shownCode: SHOWN } });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE]);
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);

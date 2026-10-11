@@ -142,8 +142,12 @@ const RUN_END_OF_TURN_END = {
   [TURN_END.FAILED]: LIVE_BRAIN_RUN_END.FAILED,
 } as const satisfies Record<TurnEnd, LiveBrainRunEnd>;
 
-/** The stream's event as the service hears it, under the ask's id rather than the turn's. */
-function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
+/**
+ * The stream's event as the service hears it, under the ask's id rather than
+ * the turn's; code is told with its call, its turn, and `shownAt`, when the
+ * turn began, as the plan's work reads them back.
+ */
+function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveBrainRunEvent {
   switch (event.kind) {
     case TURN_EVENT_KIND.SLOW_STEP:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, step: event.step };
@@ -155,7 +159,14 @@ function runEventOf(event: TurnEvent, runId: string): LiveBrainRunEvent {
         recommendation: event.recommendation,
       };
     case TURN_EVENT_KIND.CODE_SHOWN:
-      return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, code: event.code };
+      return {
+        kind: RUN_EVENT_OF_TURN_EVENT[event.kind],
+        runId,
+        callId: event.callId,
+        turnId: event.turnId,
+        shownAt,
+        code: event.code,
+      };
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
     case TURN_EVENT_KIND.REPLY_SENTENCE:
@@ -503,7 +514,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       endFailed(askId);
       return FOLLOW_LOOK.ENDED;
     }
-    const message = journal.value[0]?.message;
+    const record = journal.value[0];
+    const message = record?.message;
+    // Note that the time a call's code is told under is its journal's, which is what the plan's work reads back.
+    const shownAt = (record?.createdAt ?? turn.startedAt ?? turn.queuedAt).getTime();
     told.delegated ||= delegatedOf(message);
     const events = projectTurnEvents(turn, message);
     const turnTold = yield* tellerOf(askId, turn.id, events);
@@ -535,7 +549,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       });
     }
     if (!telling) {
-      if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId)]);
+      if (ended) yield* tell(askId, { seq: 0, ended }, [runEventOf(last, askId, shownAt)]);
       return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
     }
     const fresh = events.filter((event) => event.seq > turnTold.seq);
@@ -552,7 +566,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     yield* tell(
       askId,
       { seq: stored, ended },
-      toTell.map((event) => runEventOf(event, askId)),
+      toTell.map((event) => runEventOf(event, askId, shownAt)),
     );
     return ended ? FOLLOW_LOOK.ENDED : yield* standingLook(told, since);
   });

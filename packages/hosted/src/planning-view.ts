@@ -245,12 +245,10 @@ const codeTokenSchema = EffectSchema.Struct({
 export type CodeToken = typeof codeTokenSchema.Type;
 
 /**
- * The code Luke last showed on the active plan: what he named, the
- * repository the service read it from, and the file's lines as they arrived
- * and this Mac coloured them, the window's first line first. During a call
- * it is what the call puts on screen; otherwise it is the newest the plan's
- * work holds (`planWorkAnswerSchema`). Nothing of it enters the plan's
- * document.
+ * One code Luke showed on the active plan: what he named, the repository
+ * the service read it from, and the file's lines as they arrived and this
+ * Mac coloured them, the window's first line first. Nothing of it enters
+ * the plan's document.
  */
 const planCodeSchema = EffectSchema.Struct({
   ref: codeRefSchema,
@@ -270,15 +268,30 @@ export type PlanCode = typeof planCodeSchema.Type;
  * turn it ran in and when that turn began writing, and the place and lines
  * as the call answered them.
  */
-const planShownCodeSchema = EffectSchema.Struct({
+const planShownCodeFields = {
   callId: EffectSchema.String,
   turnId: EffectSchema.String,
-  /** Epoch milliseconds the turn that showed it began writing. */
+  /** Epoch milliseconds the turn that showed it began. */
   shownAt: EffectSchema.Finite,
+};
+
+export const planShownCodeSchema = EffectSchema.Struct({
+  ...planShownCodeFields,
   code: shownCodeSchema,
 });
 
 export type PlanShownCode = typeof planShownCodeSchema.Type;
+
+/**
+ * One code shown on the active plan as the Code tab draws it: the call that
+ * showed it, its turn and when that began, and the lines coloured.
+ */
+const planCodeShowingSchema = EffectSchema.Struct({
+  ...planShownCodeFields,
+  code: planCodeSchema,
+});
+
+export type PlanCodeShowing = typeof planCodeShowingSchema.Type;
 
 /**
  * A plan's work as the service keeps it (GET `/api/plans/{id}/work`, with
@@ -315,11 +328,13 @@ export const planningViewSchema = EffectSchema.Struct({
   /** What was said on the active plan's calls as last read; absent with no plan open. */
   transcript: EffectSchema.optionalKey(planningTranscriptSchema),
   /**
-   * The code Luke last showed on the active plan: a call's as it shows it,
-   * else the newest the plan's work holds; absent with none, and cleared
-   * with the activity. A call's end keeps it.
+   * Every code Luke showed on the active plan, oldest first, several of one
+   * file included: what the plan's work holds, read with the newest page,
+   * and each code a call shows since, by its call, so a call's code and
+   * the record's copy of it stand once; absent with none, and cleared with
+   * the activity. A call's end keeps them.
    */
-  code: EffectSchema.optionalKey(planCodeSchema),
+  shownCode: EffectSchema.optionalKey(EffectSchema.Array(planCodeShowingSchema)),
   /**
    * The planning turns of the active plan's calls, oldest first: the newest
    * page read from the service when the plan opens, each older page read as

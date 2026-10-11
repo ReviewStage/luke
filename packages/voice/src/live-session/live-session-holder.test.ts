@@ -693,6 +693,9 @@ it.effect(
       const shown: PlanCodeFrame = {
         type: VOICE_SERVICE_FRAME.PLAN_CODE,
         planId: INVITES_PLAN,
+        callId: "call-show-1",
+        turnId: "turn-1",
+        shownAt: 1_000,
         code: {
           ref: { path: "src/invite.ts", startLine: 3, endLine: 5 },
           repository: "acme/relay",

@@ -8,17 +8,19 @@ import {
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { Plan, ShownCode } from "@sidecar/hosted/plan-wire";
+import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
   PLAN_WORK_STATE,
   PLANNING_READ,
+  type PlanCodeShowing,
   type PlanningDocument,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   type PlanningView,
+  type PlanShownCode,
   type PlanWorkTurn,
   planningBoardSaveParamsSchema,
   planningRenameParamsSchema,
@@ -33,7 +35,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { highlightCode } from "./plan-code.js";
+import { codeExcerpt, highlightCode } from "./plan-code.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -58,9 +60,9 @@ import type { RunMode } from "./run-mode.js";
  * by the service from the plan's repository, and is coloured here
  * (`plan-code.ts`) and drawn in place; nothing of the repository is read on
  * this Mac. What the planning model wrote and ran on the plan's calls, and
- * the code last shown, are read from the service with the document, so a
- * plan opened after a restart or a switch shows them; its older work is read
- * a page at a time as the Work tab asks, and each turn a call tells and
+ * every code shown on them, are read from the service with the document, so
+ * a plan opened after a restart or a switch shows them; its older work is
+ * read a page at a time as the Work tab asks, and each turn a call tells and
  * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a plan's repository
  * given or taken away, are the service's too, asked through here.
  */
@@ -127,10 +129,10 @@ export interface PlanningComposer extends Composer {
   /**
    * Puts code on screen as Luke named it on the open plan's call, with the
    * lines the service read from the plan's repository: coloured here and
-   * drawn in place of whatever was on screen, where it stays past the
-   * call's end. Code about any other plan is dropped.
+   * drawn after every code shown before it, where it stays past the call's
+   * end. Code about any other plan, or of a call already held, is dropped.
    */
-  showCode: (planId: string, code: ShownCode) => void;
+  showCode: (planId: string, shown: PlanShownCode) => void;
   /**
    * Shows a planning turn's work on the call about the open plan, in place
    * of the same turn as last told, the newest turns kept; work about any
@@ -187,16 +189,13 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     activity: _activity,
     board: _board,
     transcript: _transcript,
-    code: _code,
+    shownCode: _shownCode,
     work: _work,
     workEarlier: _workEarlier,
     ...rest
   }: PlanningView): PlanningView {
     return rest;
   }
-
-  /** How many codes a call has put on screen, so a work read tells a showing made while it was out. */
-  let codeShowings = 0;
 
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
@@ -306,7 +305,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   /** Takes the active plan's work as it now stands, and where its next older page is read from, none where no older turn stands. */
-  function writeWork(next: Pick<PlanningView, "work" | "workEarlier" | "code">): void {
+  function writeWork(next: Pick<PlanningView, "work" | "workEarlier" | "shownCode">): void {
     const { workEarlier: _was, ...rest } = view;
     view = { ...rest, ...next };
     publish();
@@ -329,18 +328,34 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     return [...recorded, ...unread].sort((a, b) => a.startedAt - b.startedAt);
   }
 
+  /** A code shown as the Code tab's card draws it: the lines around those pointed at, coloured. */
+  function showingOf({ code, ...shown }: PlanShownCode): PlanCodeShowing {
+    return { ...shown, code: highlightCode(codeExcerpt(code)) };
+  }
+
   /**
-   * Reads the newest page of the active plan's work, and the code last shown
+   * The code the record holds, oldest first, then each a call showed that
+   * the record does not hold yet. Note that a showing already held is kept
+   * rather than coloured again, because the plan's work is read again on
+   * every refresh and colouring the windows is what costs.
+   */
+  function withShownCode(recorded: readonly PlanShownCode[]): PlanCodeShowing[] {
+    const held = view.shownCode ?? [];
+    const byCall = new Map(held.map((showing) => [showing.callId, showing]));
+    const read = recorded.map((shown) => byCall.get(shown.callId) ?? showingOf(shown));
+    const recordedCalls = new Set(recorded.map((shown) => shown.callId));
+    return [...read, ...held.filter((showing) => !recordedCalls.has(showing.callId))];
+  }
+
+  /**
+   * Reads the newest page of the active plan's work, and every code shown
    * on it, as the service keeps them. Older pages already read stay, with
    * the place the next one is read from; a plan read for the first time
-   * takes the service's. The record's newest code replaces what is on
-   * screen, so a refresh shows code another session showed, except where a
-   * call showed code while the read was out, since the read left before it.
-   * A failed read keeps whatever is held.
+   * takes the service's. Code a call put on screen that the record does not
+   * hold yet stays after the record's. A failed read keeps whatever is held.
    */
   function readWork(planId: string) {
     return Effect.gen(function* () {
-      const showingsBefore = codeShowings;
       const stored = yield* Effect.provide(client.readWork(planId), FetchHttpClient.layer);
       if (stored === undefined || view.activePlanId !== planId) return;
       const work = withPage(stored.turns);
@@ -348,13 +363,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       const olderHeld =
         oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
       const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
-      const shown = stored.code?.at(-1)?.code;
-      const code =
-        codeShowings !== showingsBefore || shown === undefined ? view.code : highlightCode(shown);
+      const shownCode = withShownCode(stored.code ?? []);
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
-        ...(code === undefined ? undefined : { code }),
+        ...(shownCode.length === 0 ? undefined : { shownCode }),
       });
     });
   }
@@ -393,10 +406,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
   }
 
-  function showCode(planId: string, code: ShownCode): void {
+  function showCode(planId: string, shown: PlanShownCode): void {
     if (view.activePlanId !== planId) return;
-    codeShowings += 1;
-    write({ code: highlightCode(code) });
+    const held = view.shownCode ?? [];
+    // A call's code told again is the showing already drawn.
+    if (held.some((showing) => showing.callId === shown.callId)) return;
+    write({ shownCode: [...held, showingOf(shown)] });
   }
 
   function showWork(planId: string, turn: PlanWorkTurn): void {

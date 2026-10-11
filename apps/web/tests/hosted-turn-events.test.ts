@@ -454,7 +454,7 @@ test("the projection: code a planning call shows is told with its lines, in orde
       ]),
     ),
     [
-      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, code: shown },
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, callId: "c1", code: shown },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
     ],
   );

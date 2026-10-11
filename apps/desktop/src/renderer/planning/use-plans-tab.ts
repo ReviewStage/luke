@@ -1,10 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import {
-  PLAN_CALL_FAILURE,
-  PLANNING_READ,
-  type PlanCode,
-  type PlanningView,
-} from "@sidecar/hosted/planning-view";
+import { PLAN_CALL_FAILURE, PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -109,8 +104,8 @@ export interface PlansControl {
   unreadTabs: readonly SidePanelTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
-  /** The code Luke last showed on the open plan: a call's as it shows it, and after the call, and after a restart, as the service keeps it. */
-  code: PlanCode | undefined;
+  /** Every code Luke showed on the open plan, oldest first: what the service keeps, and each a call shows as it shows it. */
+  shownCode: PlanningView["shownCode"];
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
   /**
@@ -352,7 +347,7 @@ export function usePlansTab(input: {
   const arrivedTabs = usePanelArrivals({
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
-    code: live ? planning.code !== undefined : undefined,
+    code: live ? (planning.shownCode?.length ?? 0) > 0 : undefined,
     panel: sidePanel,
   });
   // An agent that ended unseen dots its tab the way an arrival does; main
@@ -463,7 +458,7 @@ export function usePlansTab(input: {
     sidePanel,
     unreadTabs,
     board: planning.board,
-    code: planning.code,
+    shownCode: planning.shownCode,
     transcript: {
       region: transcriptRegion({ transcript: planning.transcript, heard }),
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
