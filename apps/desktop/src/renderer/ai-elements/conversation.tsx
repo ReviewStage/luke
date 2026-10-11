@@ -6,6 +6,7 @@ import {
   type RefObject,
   type UIEvent,
   useContext,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
@@ -69,23 +70,28 @@ export function Conversation({ className, children, ...props }: ConversationProp
   const list = useRef<HTMLDivElement>(null);
   const following = useRef(true);
   const [isAtBottom, setAtBottom] = useState(true);
+  // A line can shrink without the list scrolling or this rendering, a card
+  // or a group closed, so one observer watches the log and its lines, and
+  // puts the log back at its bottom once nothing is left below to scroll to.
+  const [resized] = useState(
+    () =>
+      new ResizeObserver(() => {
+        const element = list.current;
+        if (element === null || following.current || !followsNewest(element)) return;
+        following.current = true;
+        setAtBottom(true);
+      }),
+  );
+  useEffect(() => () => resized.disconnect(), [resized]);
   // Note that this runs after every render, because a line growing a word
-  // changes the height as much as a new line does. A line can also shrink
-  // without the list scrolling or this rendering, a card or a group closed,
-  // so the log watches its own size and its lines' too, and is back at its
-  // bottom once nothing is left below to scroll to.
+  // changes the height as much as a new line does. Observing a box already
+  // observed leaves it as it was, so a render adds only its new lines.
   useLayoutEffect(() => {
     const element = list.current;
     if (element === null) return;
     if (following.current) element.scrollTop = element.scrollHeight;
-    const resized = new ResizeObserver(() => {
-      if (following.current || !followsNewest(element)) return;
-      following.current = true;
-      setAtBottom(true);
-    });
     resized.observe(element);
     for (const line of element.children) resized.observe(line);
-    return () => resized.disconnect();
   });
   const scroll: ConversationScroll = {
     isAtBottom,
