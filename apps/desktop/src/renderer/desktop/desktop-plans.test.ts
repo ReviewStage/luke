@@ -1752,7 +1752,7 @@ test("the + drops the searchable menu over every kind, an open one saying so and
   act(() => addButton(page).click());
   typeSearch("board");
   key(focused(), "Enter");
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Board");
 });
 
