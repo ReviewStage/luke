@@ -1,4 +1,5 @@
 import type { ModelProvider } from "@sidecar/hosted/models-wire";
+import { SidePanelIcon } from "@sidecar/panel";
 import {
   BotIcon,
   CircleStopIcon,
@@ -11,7 +12,6 @@ import {
   ListIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
-  PanelRightOpenIcon,
   PencilLineIcon,
   SearchIcon,
   TerminalIcon,
@@ -164,11 +164,8 @@ interface SubagentPair {
   readonly provider: ModelProvider | undefined;
 }
 
-/** What a subagent's row says in its body before the worker has answered. */
-const SUBAGENT_BODY_LINE = {
-  WORKING: "Working…",
-  NOTHING: "No answer was recorded.",
-} as const;
+/** What a subagent's row says in its body while the worker is still at work; one that ended without an answer says nothing. */
+const SUBAGENT_WORKING_LINE = "Working…";
 
 /** The word on the button that opens a subagent's tab, and its label for a reader who cannot see it. */
 const OPEN_IN_TAB_LABEL = "Open in tab";
@@ -237,7 +234,7 @@ export function TranscriptSubagent({
                 onOpen();
               }}
             >
-              <PanelRightOpenIcon aria-hidden="true" />
+              <SidePanelIcon />
             </button>
           </Tooltip>
         )}
@@ -249,11 +246,9 @@ export function TranscriptSubagent({
           </p>
         ) : result !== undefined ? (
           <TranscriptWords text={result} />
-        ) : (
-          <TranscriptNote>
-            {running ? SUBAGENT_BODY_LINE.WORKING : SUBAGENT_BODY_LINE.NOTHING}
-          </TranscriptNote>
-        )}
+        ) : running ? (
+          <TranscriptNote>{SUBAGENT_WORKING_LINE}</TranscriptNote>
+        ) : null}
       </FoldBody>
     </Tool>
   );

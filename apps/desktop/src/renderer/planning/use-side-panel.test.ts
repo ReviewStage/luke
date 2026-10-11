@@ -145,9 +145,10 @@ test("a delegated worker's tab is held to the plan's agents: it stands while the
   const panel = mount([AGENT]);
   act(() => panel.control().onChoose(delegated));
   assert.deepEqual(panel.control().tab, delegated);
-  // The same call chosen again, by whichever path, is the one tab open.
-  act(() => panel.control().onChoose({ subagent: CALL }));
+  // Chosen again it is the one tab open; the planning worker's call of the same name is another tab, as the service names the two apart.
+  act(() => panel.control().onChoose({ ...delegated }));
   assert.deepEqual(panel.control().subagents, [delegated]);
+  assert.equal(sameTab(delegated, { subagent: CALL }), false);
 
   panel.stand([OTHER]);
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);

@@ -731,6 +731,13 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           userId: owner,
           conversationId: childConversationId(parent.conversationId, callId),
         };
+        // Asked a step ahead of the record, as a tab opened the moment the call was requested
+        // asks, the read holds and answers the transcript once the record lands.
+        const early = yield* Effect.forkChild(
+          ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: callId })),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        assert.equal(early.pollUnsafe(), undefined);
         yield* recordDelegation(
           parent,
           child.conversationId,
@@ -768,7 +775,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: callId })),
+          yield* driven(early, CODER.MESSAGES_POLL),
         );
         assert.equal(page.messages.length, 1);
         assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
@@ -778,10 +785,18 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(request(AGENT_SUBAGENT_MESSAGES, other, { id: agent.id, call: callId })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
-        assert.deepEqual(
-          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-9" })),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        // A call recorded nowhere while the agent still runs is held for, then read as a worker starting.
+        const unrecorded = yield* Effect.forkChild(
+          ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-9" })),
         );
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        const starting = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(unrecorded, CODER.MESSAGES_POLL),
+        );
+        assert.deepEqual(starting.messages, []);
+        assert.equal(starting.status, CODING_AGENT_STATUS.STARTING);
       }),
   );
 

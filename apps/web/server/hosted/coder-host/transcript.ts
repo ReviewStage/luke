@@ -10,7 +10,13 @@ import { Clock, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { StoredUIMessage } from "../../core.js";
-import { awaitingLinesOf, latestTurnsOf, turnUsagesOf } from "../coding-agent-store.js";
+import {
+  awaitingLinesOf,
+  type CodingAgentDelegation,
+  latestTurnsOf,
+  readDelegation,
+  turnUsagesOf,
+} from "../coding-agent-store.js";
 import { ModelCatalog } from "../model-catalog.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
@@ -150,6 +156,44 @@ function pagePast(
       turn,
     };
   });
+}
+
+/** What a wait for a delegation's record answers: the record, or none, with whether the agent it was asked of still runs. */
+export type DelegationPast =
+  | { readonly delegation: CodingAgentDelegation }
+  | { readonly delegation: undefined; readonly agentRuns: boolean };
+
+/**
+ * The delegation a call recorded, waited for. A worker's tab opens from
+ * the moment its call is requested, which is a step ahead of the record the
+ * call's own step writes, so a read that finds none while the agent still
+ * runs holds as a transcript read does, on the same poll and bound, and
+ * answers the record once it lands; none past the hold says the agent still
+ * runs, and none once the agent has ended is none for good.
+ */
+export function delegationPast(
+  parent: ConversationTarget,
+  childConversationId: string,
+  agent: Pick<AgentStanding, "createdAt">,
+): TranscriptEffect<DelegationPast> {
+  const once: TranscriptEffect<Option.Option<DelegationPast>> = Effect.gen(function* () {
+    const found = yield* readDelegation(parent, childConversationId);
+    if (Option.isSome(found)) return Option.some({ delegation: found.value });
+    const { status } = yield* statusNow(parent, agent.createdAt);
+    return WAITING_STATUSES.has(status)
+      ? Option.none()
+      : Option.some({ delegation: undefined, agentRuns: false });
+  });
+  return once.pipe(
+    Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
+    Effect.timeoutOption(CODER.MESSAGES_HOLD),
+    Effect.map((held) =>
+      Option.getOrElse(
+        Option.flatten(held),
+        (): DelegationPast => ({ delegation: undefined, agentRuns: true }),
+      ),
+    ),
+  );
 }
 
 /**

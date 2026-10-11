@@ -273,16 +273,16 @@ export function delegationView(
   part: { readonly input: WireValue | undefined; readonly output: WireValue | undefined },
   own: ModelChoice | undefined,
 ): DelegationView {
-  const settledModel = stringAt(part.output, DELEGATION_FIELD.MODEL);
-  const settledEffort = stringAt(part.output, DELEGATION_FIELD.EFFORT);
-  const model =
-    settledModel !== undefined && settledEffort !== undefined
-      ? settledModel
-      : (stringAt(part.input, DELEGATION_FIELD.MODEL) ?? own?.model);
-  const effort =
-    settledModel !== undefined && settledEffort !== undefined
-      ? settledEffort
-      : (stringAt(part.input, DELEGATION_FIELD.EFFORT) ?? own?.effort);
+  // Note that the output is read whole or not at all, because a half pair names no run.
+  const settled =
+    stringAt(part.output, DELEGATION_FIELD.MODEL) !== undefined &&
+    stringAt(part.output, DELEGATION_FIELD.EFFORT) !== undefined;
+  const model = settled
+    ? stringAt(part.output, DELEGATION_FIELD.MODEL)
+    : (stringAt(part.input, DELEGATION_FIELD.MODEL) ?? own?.model);
+  const effort = settled
+    ? stringAt(part.output, DELEGATION_FIELD.EFFORT)
+    : (stringAt(part.input, DELEGATION_FIELD.EFFORT) ?? own?.effort);
   return {
     task: stringAt(part.input, DELEGATION_FIELD.TASK) ?? "",
     choice: model !== undefined && effort !== undefined ? { model, effort } : undefined,

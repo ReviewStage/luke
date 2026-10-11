@@ -557,8 +557,8 @@ const AGENT_READING: RowReading<AgentPart> = {
  * this build does not draw are left out, because the parts keep one rhythm
  * across them. The turn moves while the agent may still write to it, which
  * is its last message; any other has ended. A worker's session is read for
- * its detail, so its calls stand each on a line of its own, as the Work
- * tab's worker's do.
+ * its detail, so its calls stand each on a line of its own and its lead
+ * never folds, as the Work tab's worker's do.
  */
 export function agentRows(
   message: CodingAgentMessage,
@@ -568,20 +568,20 @@ export function agentRows(
   const parts = agentParts(message).filter(
     (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
   );
-  return turnRows(parts, AGENT_READING, { key: message.id, moving, done: !moving, grouped });
+  return turnRows(parts, AGENT_READING, {
+    key: message.id,
+    moving,
+    done: grouped && !moving,
+    grouped,
+  });
 }
 
 /** Where a worker stands, read from its delegation's part: running until the call answers, then completed, or failed where the call ended in an error. */
 export function workerStatusOf(state: ToolState): CodingAgentStatus {
-  switch (state) {
-    case TOOL_STATE.INPUT_STREAMING:
-    case TOOL_STATE.INPUT_AVAILABLE:
-      return CODING_AGENT_STATUS.RUNNING;
-    case TOOL_STATE.OUTPUT_AVAILABLE:
-      return CODING_AGENT_STATUS.COMPLETED;
-    case TOOL_STATE.OUTPUT_ERROR:
-      return CODING_AGENT_STATUS.FAILED;
-  }
+  if (state === TOOL_STATE.OUTPUT_AVAILABLE) return CODING_AGENT_STATUS.COMPLETED;
+  return state === TOOL_STATE.OUTPUT_ERROR
+    ? CODING_AGENT_STATUS.FAILED
+    : CODING_AGENT_STATUS.RUNNING;
 }
 
 /** The id of the row a worker's tab draws its task on, which no row of the service's spells. */
