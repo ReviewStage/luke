@@ -668,24 +668,42 @@ function withTabAt(held: HeldState, tab: SidePanelTab, to: number, drawn: DrawnT
 
 /**
  * A kept or staged state made whole: every kind in the order once, those it
- * did not hold last, the width no narrower than its least, and open only the
- * subagent and file tabs some plan pinned, each once.
+ * did not hold last, the width no narrower than its least, and no subagent
+ * or file tab open; a plan's pinned ones open as it is drawn (`withPinsOpen`).
  */
 function settled(state: SidePanelState): HeldState {
-  const plans = state.plans ?? {};
-  const pins = Object.values(plans).flatMap((plan): readonly SidePanelTab[] => plan.pinned ?? []);
-  const subagents = pins
-    .filter(isSubagentTab)
-    .filter((tab, at, all) => all.findIndex((other) => sameTab(other, tab)) === at);
-  const paths = new Set(pins.filter(isFileTab).map((tab) => tab.file));
   return {
     ...state,
     tabs: [...new Set([...state.tabs, ...SIDE_PANEL_TABS])],
     width: clampWidth(state.width),
-    subagents,
-    files: [...paths].map((path) => ({ path, range: undefined, opened: 0 })),
+    subagents: [],
+    files: [],
     closedAgents: state.closedAgents ?? [],
-    plans,
+    plans: state.plans ?? {},
+  };
+}
+
+/**
+ * The state with the subagent and file tabs pinned on the plan open, at the
+ * end of their runs where they were not, as a launch leaves them, and the
+ * state as it is where they all were. Note that only the open plan's pins
+ * are opened, because the subagent and file tabs open are the window's, and
+ * another plan's pins opened here would stand on any plan that shows them.
+ */
+function withPinsOpen(held: HeldState, planId: string | undefined): HeldState {
+  const pins = pinnedOn(held, planId);
+  const subagents = pins
+    .filter(isSubagentTab)
+    .filter((pin) => !held.subagents.some((each) => sameTab(each, pin)));
+  const files = pins
+    .filter(isFileTab)
+    .filter((pin) => !held.files.some((each) => each.path === pin.file))
+    .map((pin): OpenFile => ({ path: pin.file, range: undefined, opened: 0 }));
+  if (subagents.length === 0 && files.length === 0) return held;
+  return {
+    ...held,
+    subagents: [...held.subagents, ...subagents],
+    files: [...held.files, ...files],
   };
 }
 
@@ -817,15 +835,17 @@ export function useSidePanel(
   const [fullScreen, setFullScreen] = useState(false);
   const [seen, setSeen] = useState<OpenPlan>(plan);
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
-  const state = stage === undefined ? kept : (moved ?? stage);
+  const planId = plan.id;
+  const held = stage === undefined ? kept : (moved ?? stage);
+  const state = useMemo(() => withPinsOpen(held, planId), [held, planId]);
   const update = useCallback(
     (change: (held: HeldState) => HeldState) => {
-      if (stage === undefined) setKept(change);
-      else setMoved((held) => change(held ?? stage));
+      const opened = (was: HeldState) => change(withPinsOpen(was, planId));
+      if (stage === undefined) setKept(opened);
+      else setMoved((was) => opened(was ?? stage));
     },
-    [stage],
+    [stage, planId],
   );
-  const planId = plan.id;
   const openAgents = drawnAgents(agents, state.closedAgents);
   // Note that the first open agent's tab is made once per agent, because the
   // window redraws on a change of the tab shown, and a new one each render
@@ -862,6 +882,9 @@ export function useSidePanel(
   // only where the plan or what it holds changed, so the strip drawn from
   // it is the same array until something it is drawn from changes.
   const tabs = useMemo(() => drawnFixed(state, seen), [state, seen]);
+  // A plan whose only tabs are pinned ones of no fixed kind shows its first,
+  // which is the pin as held, so the same tab from one render to the next.
+  const [firstPin] = stripRuns(state, { plan: seen, agents, subagents, draft, files })[0] ?? [];
 
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -917,7 +940,7 @@ export function useSidePanel(
     subagents: state.subagents,
     closedAgents: state.closedAgents,
     files: state.files,
-    tab: shownTab(state.tab, tabs, openAgents, subagents, draft, files) ?? agentTab,
+    tab: shownTab(state.tab, tabs, openAgents, subagents, draft, files) ?? agentTab ?? firstPin,
     width: state.width,
     fullScreen: state.open && fullScreen,
     onToggle,

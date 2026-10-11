@@ -2960,6 +2960,10 @@ test("Pin tab moves the tab first with its glyph and label and a pin in its ×'s
 
   key(tabNamed(page, "Work"), "Delete");
   assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+  // Nothing closed, so nothing hands focus on: a later render leaves it where it went.
+  act(() => addButton(page).focus());
+  act(() => tabNamed(page, "Board").click());
+  assert.equal(document.activeElement, addButton(page));
 
   chooseFromTab(tabNamed(page, "Code"), "Pin tab");
   assert.deepEqual(panelTabs(page), ["Work", "Code", "Board", "Transcript"], "last of the pinned");

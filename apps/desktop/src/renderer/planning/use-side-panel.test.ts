@@ -422,4 +422,23 @@ test("a subagent's and a file's tab pinned on a plan are open on it at the next 
   assert.deepEqual(second.control().pinned, [delegated]);
   assert.deepEqual(second.control().files, []);
   assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.WORK), "unpinned, it stays open");
+
+  act(() => second.control().onOpenFile({ path: ROLES }));
+  act(() => second.control().onPin({ file: ROLES }));
+  act(() => second.control().onClose(SIDE_PANEL_TAB.WORK));
+  // Another plan showing the same file has no tab of it, and the plan whose only tab is now a pinned file shows it.
+  const other = mountStood({
+    plan: { id: "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f", holds: {} },
+    agents: [],
+    subagents: [],
+    files: [ROLES],
+  });
+  assert.deepEqual(other.control().files, []);
+  const alone = mountStood({
+    plan: { id: PLAN, holds: {} },
+    agents: [],
+    subagents: [],
+    files: [ROLES],
+  });
+  assert.deepEqual(alone.control().tab, { file: ROLES });
 });

@@ -253,7 +253,9 @@ export function TabStrip({
     const at = event.target instanceof HTMLElement ? tabs.indexOf(event.target) : -1;
     if (at < 0) return;
     if (closesTab(event.key)) {
-      closedAt.current = at;
+      // Only a tab that closes hands focus on; a pinned one, or one that always stands, stays.
+      const pill = event.target instanceof HTMLElement ? event.target.closest(".tab") : null;
+      if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
     }
     const next = tabAfter(event, at, tabs.length);
