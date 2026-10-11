@@ -1623,15 +1623,13 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
   });
   const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
   assert.ok(menu, "the tab's menu opened");
-  assert.deepEqual(
-    [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
-    ["Rename"],
-  );
   assert.equal(menu.style.left, "40px");
   assert.equal(menu.style.top, "12px");
 
-  const rename = menu.querySelector<HTMLButtonElement>('[role="menuitem"]');
-  assert.ok(rename);
+  const rename = [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (item) => item.textContent === "Rename",
+  );
+  assert.ok(rename, "the menu offers Rename");
   act(() => rename.click());
   const field = container.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
   assert.ok(field, "the tab is its name's field");
@@ -2339,11 +2337,24 @@ let stops: string[] = [];
 /** The agents the service answers a read of the list with on the page below, which it opens on. */
 let listed: readonly CodingAgentSummary[] = [];
 
+/** Each agent's transcript as the service answers a read of it on the page below, by agent, one page whole. */
+let transcripts: ReadonlyMap<string, readonly CodingAgentMessage[]> = new Map();
+
+/** A read of a transcript on the page below: the agent's messages whole, or the delegated worker's under its call, as the service would answer. */
+const readListed: TranscriptReader = (params) =>
+  Promise.resolve({
+    messages: transcripts.get(params.callId ?? params.agentId) ?? [],
+    cursor: "1:1",
+    status: CODING_AGENT_STATUS.COMPLETED,
+    title: null,
+  });
+
 /**
  * The open plan's page over the real side panel with the plan's coding
  * agents, read again as the service lists them, and every Stop recorded.
  */
 function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
+  useAppKeymap(true);
   const [agents, setAgents] = useState(listed);
   const agentIds = agents.map((agent) => agent.id);
   const sidePanel = useSidePanel(
@@ -2366,6 +2377,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
           return Promise.resolve();
         },
         onRetryList: () => setAgents(listed),
+        readTranscript: readListed,
       }),
       ...(work === undefined ? undefined : { work }),
     }),
@@ -2383,6 +2395,7 @@ function mountAgents(work?: PlansControl["work"]): HTMLElement {
   installScrollIntoView();
   stops = [];
   listed = [RUNNING_AGENT, DONE_AGENT];
+  transcripts = new Map();
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -2820,4 +2833,304 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   act(() => invite?.click());
   assert.equal(tabNamed(page, "invite.ts").getAttribute("aria-selected"), "true");
   assert.equal(tabNamed(page, "roles.ts").getAttribute("aria-selected"), "false");
+});
+
+/** Opens a panel tab's menu with a right-click, answering each item's label and whether it may be chosen. */
+function tabMenu(tab: HTMLElement): [string, boolean][] {
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }));
+  });
+  const menus = document.body.querySelectorAll<HTMLElement>('[role="menu"]');
+  const [menu] = menus;
+  assert.ok(menu, "the tab's menu opened");
+  assert.equal(menus.length, 1, "one menu stands at a time");
+  return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map((item) => [
+    item.querySelector(".plan-menu-label")?.textContent ?? "",
+    !item.disabled,
+  ]);
+}
+
+/** Closes the open menu with Escape, as the keyboard on it would. */
+function closeMenu(): void {
+  const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+  assert.ok(menu, "a menu stands to close");
+  key(menu, "Escape");
+  assert.equal(document.body.querySelector('[role="menu"]'), null);
+}
+
+/** Chooses the item of the tab's menu named so, opening the menu first. */
+function chooseFromTab(tab: HTMLElement, label: string): void {
+  tabMenu(tab);
+  const item = [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
+    (each) => each.querySelector(".plan-menu-label")?.textContent === label,
+  );
+  assert.ok(item, `no ${label} in the tab's menu`);
+  act(() => item.click());
+}
+
+/** Whether the tab wears the pin in its ×'s place, and so no ×. */
+function pinned(page: HTMLElement, label: string): boolean {
+  const pin = page.querySelector(`.side-panel [aria-label="Unpin ${label}"]`) !== null;
+  const close = page.querySelector(`.side-panel [aria-label="Close ${label}"]`) !== null;
+  assert.notEqual(pin, close, "a tab wears its pin or its ×, never both");
+  return pin;
+}
+
+test("a right-click on any of the panel's tabs offers Close, Close others, and Pin tab, an agent's and a subagent's add both copies of its transcript, and the menu keys open it under the focused tab", () => {
+  const job = "Compare the two queue libraries.";
+  const page = mountAgents(workerWork(job));
+  act(() => tabNamed(page, "Work").click());
+  press(page, ".work-worker-line");
+
+  const everyTab: [string, boolean][] = [
+    ["Close", true],
+    ["Close others", true],
+    ["Pin tab", true],
+  ];
+  const copies: [string, boolean][] = [
+    ["Copy concise transcript", true],
+    ["Copy full transcript", true],
+  ];
+  assert.deepEqual(tabMenu(tabNamed(page, "Board")), everyTab);
+  closeMenu();
+  assert.deepEqual(tabMenu(tabNamed(page, "Claude Opus 5.5")), [
+    ...everyTab,
+    ["Rename", true],
+    ...copies,
+  ]);
+  closeMenu();
+  assert.deepEqual(tabMenu(tabNamed(page, job)), [...everyTab, ...copies]);
+  closeMenu();
+
+  const code = tabNamed(page, "Code");
+  act(() => code.focus());
+  key(code, "F10");
+  assert.equal(document.body.querySelector('[role="menu"]'), null, "F10 alone opens nothing");
+  act(() =>
+    code.dispatchEvent(new KeyboardEvent("keydown", { key: "F10", shiftKey: true, bubbles: true })),
+  );
+  const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+  assert.ok(menu, "Shift-F10 opens the focused tab's menu");
+  assert.equal(menu.getAttribute("aria-label"), "Code actions");
+  assert.equal(focused().textContent, "Close", "on its first item");
+});
+
+test("Close in a tab's menu closes it as its × does, and Close others closes every other tab but the pinned ones and chooses the tab, stopping no agent; with nothing else to close it is dimmed", () => {
+  const page = mountAgents();
+  chooseFromTab(tabNamed(page, "Transcript"), "Pin tab");
+  assert.deepEqual(panelTabs(page), [
+    "Transcript",
+    "Board",
+    "Code",
+    "Work",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+
+  chooseFromTab(tabNamed(page, "Work"), "Close");
+  assert.deepEqual(panelTabs(page), [
+    "Transcript",
+    "Board",
+    "Code",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+
+  chooseFromTab(tabNamed(page, "Code"), "Close others");
+  assert.deepEqual(panelTabs(page), ["Transcript", "Code"]);
+  assert.equal(chosenTab(page), "Code");
+  assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
+  assert.ok(pinned(page, "Transcript"));
+
+  assert.deepEqual(tabMenu(tabNamed(page, "Code")).slice(0, 2), [
+    ["Close", true],
+    ["Close others", false],
+  ]);
+});
+
+test("Pin tab moves the tab first with its glyph and label and a pin in its ×'s place; neither Delete nor anything but Unpin closes it, the pin unpins it back into its place, and Close in its menu unpins and closes it", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+  assert.ok(pinned(page, "Work"));
+  assert.ok(tabNamed(page, "Work").querySelector(".tab-icon svg"), "it keeps its glyph");
+  assert.equal(page.querySelector('.side-panel .tab[data-pinned="true"]')?.textContent, "Work");
+  assert.deepEqual(tabMenu(tabNamed(page, "Work"))[2], ["Unpin tab", true]);
+  closeMenu();
+
+  key(tabNamed(page, "Work"), "Delete");
+  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+  // Nothing closed, so nothing hands focus on: a later render leaves it where it went.
+  act(() => addButton(page).focus());
+  act(() => tabNamed(page, "Board").click());
+  assert.equal(document.activeElement, addButton(page));
+
+  chooseFromTab(tabNamed(page, "Code"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Work", "Code", "Board", "Transcript"], "last of the pinned");
+
+  press(page, '[aria-label="Unpin Work"]');
+  assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
+  assert.equal(pinned(page, "Work"), false);
+
+  chooseFromTab(tabNamed(page, "Code"), "Close");
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
+  act(() => addButton(page).click());
+  act(() => addRow("Code").click());
+  assert.deepEqual(
+    panelTabs(page),
+    ["Board", "Code", "Transcript", "Work"],
+    "opened again unpinned",
+  );
+});
+
+test("a tab pinned on a plan is pinned on it at the next launch, though its kind holds nothing there, and on no other plan", () => {
+  const other: Plan = { ...PLAN, id: "4c8d2e1f-6a7b-4c9d-8e0f-1a2b3c4d5e6f", name: "Billing" };
+  const page = mountOpenPlan({ holds: { [SIDE_PANEL_TAB.BOARD]: true } });
+  press(page, '[aria-label="Show panel"]');
+  act(() => addButton(page).click());
+  act(() => addRow("Code").click());
+  chooseFromTab(tabNamed(page, "Code"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Code", "Board"]);
+  unmountAll();
+
+  const next = mountOpenPlan({ holds: { [SIDE_PANEL_TAB.BOARD]: true } });
+  assert.deepEqual(panelTabs(next), ["Code", "Board"]);
+  assert.ok(pinned(next, "Code"));
+  act(() => roots.at(-1)?.render(createElement(Page, { staged: undefined, plan: other })));
+  assert.deepEqual(panelTabs(next), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(pinned(next, "Code"), false);
+});
+
+test("a pinned tab is dragged among the pinned tabs, and an unpinned one among the unpinned, never across", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  chooseFromTab(tabNamed(page, "Transcript"), "Pin tab");
+  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
+  assert.deepEqual(panelTabs(page), ["Transcript", "Work", "Board", "Code"]);
+  layOutTabs();
+
+  dragTab(tabNamed(page, "Work"), 145, [100, 40, -400], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Work", "Transcript", "Board", "Code"]);
+
+  dragTab(tabNamed(page, "Transcript"), 145, [300, 800], DRAG_END.DROP);
+  assert.deepEqual(
+    panelTabs(page),
+    ["Work", "Transcript", "Board", "Code"],
+    "no further than the last pin",
+  );
+
+  dragTab(tabNamed(page, "Code"), 345, [200, -400], DRAG_END.DROP);
+  assert.deepEqual(
+    panelTabs(page),
+    ["Work", "Transcript", "Code", "Board"],
+    "no further than the first unpinned",
+  );
+  unmountAll();
+
+  assert.deepEqual(panelTabs(mountOpenPlan()), ["Work", "Transcript", "Code", "Board"]);
+});
+
+test("Copy concise and Copy full transcript put an agent's transcript, read whole from the service, and a subagent's session on the clipboard as markdown, its calls one line each or whole", async () => {
+  const words: unknown[] = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      act: (request: { kind: ActKind; payload?: { words?: unknown } }) => {
+        if (request.kind === ACT_KIND.WINDOW_COPY_TEXT) words.push(request.payload?.words);
+        return Promise.resolve({ status: ACT_OUTCOME_STATUS.DONE, value: undefined });
+      },
+    },
+  });
+  const job = "Compare the two queue libraries.";
+  const page = mountAgents(workerWork(job, "Compare queue A and queue B."));
+  transcripts = new Map([
+    [
+      RUNNING_AGENT.id,
+      [
+        { id: "m1", role: "user", parts: [{ type: "text", text: "# Teammate invitations" }] },
+        {
+          id: "m2",
+          role: "assistant",
+          parts: [
+            { type: "reasoning", text: "Tests first." },
+            { type: "text", text: "Running the tests." },
+            {
+              type: "tool-bash",
+              toolCallId: "call_1",
+              state: "output-available",
+              input: { command: "pnpm test" },
+              output: { exitCode: 0, stdout: "12 passed", stderr: "" },
+            },
+            { type: "text", text: "All green." },
+          ],
+        },
+      ],
+    ],
+  ]);
+  chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+  await settle();
+  chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy full transcript");
+  await settle();
+  act(() => tabNamed(page, "Work").click());
+  press(page, ".work-worker-line");
+  chooseFromTab(tabNamed(page, job), "Copy concise transcript");
+  await settle();
+
+  assert.deepEqual(words, [
+    "# Claude Opus 5.5\n\n## Plan\n\n# Teammate invitations\n\n## Agent\n\n- Ran `pnpm test`\n\nAll green.\n",
+    [
+      "# Claude Opus 5.5",
+      "## Plan",
+      "# Teammate invitations",
+      "## Agent",
+      "**Reasoning**\n\n> Tests first.",
+      "Running the tests.",
+      "**Ran** `pnpm test`",
+      "```sh\npnpm test\n```",
+      "Output:\n\n```\n12 passed\n```",
+      "All green.\n",
+    ].join("\n\n"),
+    `# ${job}\n\n## Task\n\nCompare queue A and queue B.\n\n## Subagent\n\n- Ran \`ls src\`\n\nQueue A lets an admin revoke.\n`,
+  ]);
+  assert.equal(chosenTab(page), job, "copying chooses no tab");
+});
+
+test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the next tab is chosen", () => {
+  const page = mountAgents();
+  act(() => tabNamed(page, "Code").click());
+  assert.equal(keydown({ key: "w", metaKey: true }), true);
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+  assert.equal(chosenTab(page), "Transcript");
+
+  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
+  act(() => tabNamed(page, "Work").click());
+  tabMenu(tabNamed(page, "Work"));
+  assert.equal(document.body.querySelector('[role="menuitem"] .plan-menu-end')?.textContent, "⌘W");
+  closeMenu();
+  keydown({ key: "w", metaKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+  assert.equal(page.querySelector('.side-panel .tab[data-pinned="true"]'), null);
+
+  act(() => tabNamed(page, "GPT 5.6 Sol").click());
+  keydown({ key: "w", metaKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5"]);
+  assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
+});
+
+test("with nothing to close, Command-W is left unclaimed: the panel hidden, or open with no tab", () => {
+  const page = mountOpenPlan({ holds: {} });
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "the panel hidden");
+  press(page, '[aria-label="Show panel"]');
+  assert.deepEqual(panelTabs(page), []);
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "no tab open");
+  assert.ok(panelShown(page));
+  assert.equal(page.querySelector('.desktop-toolbar [role="tab"]')?.textContent, PLAN.name);
 });

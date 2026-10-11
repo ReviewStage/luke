@@ -4,15 +4,16 @@ import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs } from "../tooltip";
 
 /**
- * action-menu.tsx -- the window's own drop-down menu: a plan's actions, and an agent's actions.
+ * action-menu.tsx -- the window's own drop-down menu: a plan's actions, and a side panel tab's.
  *
- * The one menu the plan's ⋯ and right-click and an agent's ⋯ draw, whose
+ * The one menu the plan's ⋯ and right-click and a tab's right-click draw, whose
  * items the empty side panel also lists as buttons of their own. It is
  * drawn here rather than asked of the system so that every door draws it
  * the same way and an action can be drawn red. It behaves as a system menu
  * does: focus on its first item, the arrow keys
  * between items, and Escape, Tab, a press elsewhere, or the window losing
- * the keyboard closing it with focus back where it was.
+ * the keyboard closing it with focus back where it was. An item that does
+ * not apply now is drawn dimmed and passed over, as a system menu's is.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -27,7 +28,8 @@ type MenuAlign = (typeof MENU_ALIGN)[keyof typeof MENU_ALIGN];
 const MENU_MARGIN = 8;
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-const MENU_ITEM = '[role="menuitem"]';
+/** The items the menu's keys move between: every one that applies now. */
+const MENU_ITEM = '[role="menuitem"]:not(:disabled)';
 
 /** Where a menu hangs: a point in the window, and which way from it the menu grows. */
 export interface MenuPlacement {
@@ -45,6 +47,8 @@ export interface MenuAction {
   danger?: boolean;
   /** The shortcut that takes the same action, printed muted at the item's end. */
   command?: KeyedCommand;
+  /** Drawn dimmed and not chosen: the action does not apply now. */
+  disabled?: boolean;
 }
 
 /** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
@@ -97,6 +101,7 @@ export function MenuItem({
       tabIndex={inMenu ? -1 : undefined}
       className="plan-menu-item"
       data-danger={action.danger ? "true" : undefined}
+      disabled={action.disabled}
       onClick={onChoose}
     >
       <span className="plan-menu-icon">{action.icon}</span>

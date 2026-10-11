@@ -34,6 +34,8 @@ export const APP_COMMAND = {
   TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
+  CLOSE_TAB: "close-tab",
+  CLOSE_WINDOW: "close-window",
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
   FIND: "find",
@@ -84,6 +86,7 @@ const SHORTCUT_KEY = {
   S: { accelerator: "S", glyph: "S", key: "s", code: "KeyS" },
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
+  W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
   TWO: { accelerator: "2", glyph: "2", key: "2", code: "Digit2" },
   THREE: { accelerator: "3", glyph: "3", key: "3", code: "Digit3" },
@@ -138,8 +141,10 @@ export interface AppShortcut {
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
  * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
  * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
- * keys VS Code's Move Editor Left and Right end in, and ⇧⌘M to toggle the
- * call's microphone as Teams has it, with ⇧⌘S for its speaker beside it.
+ * keys VS Code's Move Editor Left and Right end in, ⌘W to close the tab
+ * chosen and ⇧⌘W to close the window as Chrome and VS Code have them, and
+ * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
+ * speaker beside it.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -193,6 +198,11 @@ export const APP_SHORTCUTS = {
     label: "Move tab right",
     chord: { key: SHORTCUT_KEY.RIGHT, shift: true },
   },
+  [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
+  [APP_COMMAND.CLOSE_WINDOW]: {
+    label: "Close window",
+    chord: { key: SHORTCUT_KEY.W, shift: true },
+  },
   [APP_COMMAND.SETTINGS]: { label: "Settings", chord: { key: SHORTCUT_KEY.COMMA } },
   [APP_COMMAND.KEYBOARD_SHORTCUTS]: {
     label: "Keyboard shortcuts",
@@ -241,6 +251,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SHOW_WORK,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.CLOSE_WINDOW,
     ],
   },
   {
