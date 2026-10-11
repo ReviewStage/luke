@@ -351,10 +351,11 @@ function attachedFrame(sessionId = SESSION_ID) {
 }
 
 /**
- * Wall time, whatever clock the test keeps: what the recovering socket does
- * off the test's own fiber happens in real milliseconds, and the one test
- * that asserts nothing more opens after the `TestClock` ran the delays out
- * waits this pause for it, since no fake announces an attempt not made.
+ * Wall time, whatever clock the test keeps, for the one kind of wait nothing
+ * can announce: that something did not happen, such as an attempt not made
+ * or an outcome not overwritten. A wait for something that does happen
+ * waits on its announcement instead, because this pause loses that race on
+ * a loaded machine.
  */
 const pause = Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 5)));
 
@@ -366,6 +367,18 @@ function openedSockets(script: ScriptedSocketSeam, count: number): Effect.Effect
       assert.equal(script.sockets.length, count);
     }),
   );
+}
+
+/**
+ * Waits for a lost connection's gap to stand, or fails. Note that the fresh
+ * socket's opening is the announcement, because the recovering socket starts
+ * holding sends before it opens one, and the gap lasts until the attach
+ * answer, which the script delivers a microtask after the attach frame. A send
+ * made after this is held, where a fixed pause after the close could end
+ * before the close was read, and the send went to the dead connection instead.
+ */
+function inTheGap(script: ScriptedSocketSeam): Effect.Effect<void> {
+  return openedSockets(script, 2);
 }
 
 /** Waits for the socket's close to have reached its listeners, or fails. */
@@ -450,11 +463,9 @@ it.live("sends made during the gap are held and sent on the re-attached connecti
     assert.ok(opened);
     const sideband = yield* opened.attach();
     script.sockets[0]?.closeFromServer({ code: 1001 });
-    // The gap begins where the socket's own reader takes that close, which is the turn after it.
-    yield* pause;
+    yield* inTheGap(script);
     yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_MUTE, event_id: "c_1" });
     yield* sideband.send({ type: LIVE_CLIENT_EVENT.INPUT_AUDIO_UNMUTE, event_id: "c_2" });
-    yield* openedSockets(script, 2);
     const second = script.sockets[1];
     assert.ok(second);
     yield* settled(() => second.sent.length >= 3, "the held sends behind the attach frame");
@@ -626,11 +637,9 @@ it.live(
         ],
       );
       first.closeFromServer({ code: 1001 });
-      // The gap begins where the socket's own reader takes that close, which is the turn after it.
-      yield* pause;
+      yield* inTheGap(script);
       // Pressed in the gap: the model is still speaking across the service's recycle, so the stop is still meant.
       opened.stopSpeaking();
-      yield* openedSockets(script, 2);
       const second = script.sockets[1];
       assert.ok(second);
       yield* settled(() => second.sent.length >= 2, "the held stop behind the attach frame");
@@ -656,11 +665,9 @@ it.live(
       const [first] = script.sockets;
       assert.ok(first);
       first.closeFromServer({ code: 1001 });
-      // The gap begins where the socket's own reader takes that close, which is the turn after it.
-      yield* pause;
+      yield* inTheGap(script);
       // Hung up in the gap: the session outlives the service's recycle, so the ask still stands.
       opened.hangUp();
-      yield* openedSockets(script, 2);
       const second = script.sockets[1];
       assert.ok(second);
       yield* settled(() => second.sent.length >= 2, "the held hang-up behind the attach frame");
@@ -1054,16 +1061,33 @@ it.effect(
     }),
 );
 
-/** Every line logged while `body` ran, read off a logger standing in for the host's reporter. */
+/**
+ * Every line logged while `body` ran, read off a logger standing in for the
+ * host's reporter, and a wait for a given line to have been logged, woken by
+ * the logging itself.
+ */
 function loggedLines<A>(
-  body: (lines: readonly string[]) => Effect.Effect<A, never, Scope.Scope>,
+  body: (
+    lines: readonly string[],
+    logged: (line: string) => Effect.Effect<void>,
+  ) => Effect.Effect<A, never, Scope.Scope>,
 ): Effect.Effect<A, never, Scope.Scope> {
   const lines: string[] = [];
+  const listeners = new Set<() => void>();
+  const onLogged = (listener: () => void) => {
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
+  };
+  const logged = (line: string) =>
+    arrival(onLogged, () => lines.includes(line), `the line "${line}" to be logged`);
   return Effect.provide(
-    body(lines),
+    body(lines, logged),
     Logger.layer([
       Logger.make((options) => {
         lines.push(String(options.message));
+        for (const listener of [...listeners]) listener();
       }),
     ]),
   );
@@ -1237,34 +1261,38 @@ it.live(
     }),
 );
 
-it.live(
+it.effect(
   "a normal close right behind session.created ends the recovering socket, and the sideband that subscribes afterwards is told",
   () =>
-    Effect.gen(function* () {
-      const script = scriptedOpenSocket([
-        (socket) => {
-          socket.onSent(() =>
-            queueMicrotask(() => {
-              socket.receive(createdFrame());
-              socket.closeFromServer({ code: 1000 });
-            }),
-          );
-          return undefined;
-        },
-      ]);
-      const source = hosted(script);
-      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
-      assert.ok(opened);
-      const sideband = yield* opened.attach();
-      // The close was queued behind the answer; this pause is the recovering socket's turn on it,
-      // before the sideband's reader stands.
-      yield* pause;
-      const read = yield* readSideband(sideband);
-      yield* pause;
-      assert.deepEqual(
-        read.closes.map((close) => close.code),
-        [1000],
-      );
-      assert.equal(script.sockets.length, 1);
-    }),
+    loggedLines((_lines, logged) =>
+      Effect.gen(function* () {
+        const script = scriptedOpenSocket([
+          (socket) => {
+            socket.onSent(() =>
+              queueMicrotask(() => {
+                socket.receive(createdFrame());
+                socket.closeFromServer({ code: 1000 });
+              }),
+            );
+            return undefined;
+          },
+        ]);
+        const source = hosted(script);
+        const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+        assert.ok(opened);
+        const sideband = yield* opened.attach();
+        // The close was queued behind the answer. The recovering socket logs taking it as the end
+        // and this fiber resumes inside that log, so it yields the rest of that turn to the
+        // recovering socket, which ends there, before the sideband's reader stands.
+        yield* logged("voice socket closed: code=1000 reason=none age=0s next=end");
+        yield* Effect.yieldNow;
+        const read = yield* readSideband(sideband);
+        yield* closesReported(read.closes);
+        assert.deepEqual(
+          read.closes.map((close) => close.code),
+          [1000],
+        );
+        assert.equal(script.sockets.length, 1);
+      }),
+    ),
 );
