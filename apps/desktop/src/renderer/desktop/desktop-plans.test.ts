@@ -73,9 +73,11 @@ let copies = 0;
 function Page({
   staged,
   work,
+  agents,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
+  agents?: PlansControl["agents"] | undefined;
 }) {
   const sidePanel = useSidePanel(staged, undefined, workerCallIds(work?.turns));
   useAppKeymap(true);
@@ -93,6 +95,7 @@ function Page({
         },
       },
       ...(work === undefined ? undefined : { work }),
+      ...(agents === undefined ? undefined : { agents }),
     }),
   });
   return createElement(
@@ -113,13 +116,17 @@ function keydown(init: KeyboardEventInit): boolean {
 }
 
 function mountOpenPlan(
-  options: { staged?: SidePanelState; work?: PlansControl["work"] } = {},
+  options: {
+    staged?: SidePanelState;
+    work?: PlansControl["work"];
+    agents?: PlansControl["agents"];
+  } = {},
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { staged: options.staged, work: options.work })));
+  act(() => root.render(createElement(Page, { ...options, staged: options.staged })));
   return container;
 }
 
@@ -1588,12 +1595,12 @@ test("Delete on a tab the arrow keys reached closes it and hands focus to the ta
 const TAB_PITCH = 100;
 const TAB_WIDTH = 90;
 
-/** Lays the panel's tabs out in a row in their strip's order, the strip room for them all; jsdom lays out nothing. */
-function layOutTabs(): void {
+/** Lays the panel's tabs out in a row in their strip's order, the strip room for four unless said; jsdom lays out nothing. */
+function layOutTabs(strip: { width: number } = { width: 4 * TAB_PITCH }): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.classList.contains("tab-strip")) return DOMRect.fromRect({ width: 4 * TAB_PITCH });
+    if (this.classList.contains("tab-strip")) return DOMRect.fromRect(strip);
     const row = this.classList.contains("tab") ? this.parentElement : null;
     const at = row === null ? -1 : [...row.querySelectorAll(":scope > .tab")].indexOf(this);
     return DOMRect.fromRect(at < 0 ? {} : { x: at * TAB_PITCH, width: TAB_WIDTH });
@@ -1735,6 +1742,55 @@ test("the × on a tab starts no drag", () => {
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
 });
 
+test("a tab let go anywhere short of the first tab's middle lands first, and past the last tab's middle lands last, wherever it was held", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs();
+
+  // Work spans 300 to 390, held near its start and let go at 40, short of
+  // Board's middle at 45, though its own middle stands past Board's.
+  dragTab(tabNamed(page, "Work"), 305, [200, 40], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+
+  // Board, now at 100 to 190, held near its end and let go at 350, past
+  // Transcript's middle at 345, though its own middle falls short of it.
+  dragTab(tabNamed(page, "Board"), 185, [250, 350], DRAG_END.DROP);
+  assert.deepEqual(panelTabs(page), ["Work", "Code", "Transcript", "Board"]);
+});
+
+test("only the fixed tabs move: one dragged on among the agents' tabs lands last of the fixed, and an agent's tab is not dragged nor stepped", () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const agents = codingAgentsControl({ agents: [agent], agentIds: [agent.id] });
+  const page = mountOpenPlan({ agents });
+  press(page, '[aria-label="Show panel"]');
+  layOutTabs({ width: 6 * TAB_PITCH });
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
+
+  // Let go at 480, past the agent's middle at 445.
+  const moved = dragTab(tabNamed(page, "Board"), 45, [200, 480], DRAG_END.DROP);
+  assert.deepEqual(moved, ["Board", "Code", "Transcript", "Work"], "the agent's tab stands still");
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+  assert.equal(movedSaid(page), "Board moved to position 4 of 5");
+
+  const claude = tabNamed(page, "Claude Opus 5.5");
+  assert.deepEqual(dragTab(claude, 445, [300, 100], DRAG_END.DROP), []);
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+
+  const board = tabNamed(page, "Board");
+  act(() => board.focus());
+  keydown({ key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true });
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+  assert.equal(movedSaid(page), "Board moved to position 4 of 5", "no move is said");
+});
+
 test("Shift-Command-Arrow moves the focused tab along the strip, focus and choice staying put, and says where", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1808,6 +1864,63 @@ test("a tab chosen, or opened, past the strip's shown room is scrolled into view
   );
 });
 
+/**
+ * The display's frames, run when a test says: each frame asked for is held
+ * until `run` runs it, as the window would on its next paint.
+ */
+function heldFrames() {
+  const asked = new Map<number, FrameRequestCallback>();
+  let next = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    next += 1;
+    asked.set(next, callback);
+    return next;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (frame: number) => asked.delete(frame));
+  // Runs frames until none is asked for, answering how many ran.
+  const run = () => {
+    let ran = 0;
+    for (const [frame, callback] of asked) {
+      asked.delete(frame);
+      act(() => callback(ran));
+      ran += 1;
+      assert.ok(ran < 1000, "the frames never stop being asked for");
+    }
+    return ran;
+  };
+  return { run };
+}
+
+test("a tab held at the edge of a strip scrolled along runs it back to the tabs it hides, and lands first", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = layOutScrollingTabs();
+  act(() => tabNamed(page, "Work").click());
+  assert.equal(tabInView(page, strip, "Board"), false, "Board is scrolled out of sight");
+  const frames = heldFrames();
+
+  // Work, shown at 110 to 200, held at 10, within the strip's faded edge.
+  dragTab(tabNamed(page, "Work"), 155, [100, 10], DRAG_END.DROP, () => {
+    assert.ok(frames.run() > 1, "the strip runs along over frames");
+  });
+  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
+});
+
+test("a tab held still while the strip scrolls under it lands where the row has brought it", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = layOutScrollingTabs();
+
+  // Code, held at 150, clear of both edges, while a wheel runs the row two tabs along.
+  dragTab(tabNamed(page, "Code"), 145, [150], DRAG_END.DROP, () =>
+    act(() => {
+      strip.scrollLeft = 2 * TAB_PITCH;
+      strip.dispatchEvent(new Event("scroll"));
+    }),
+  );
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+});
+
 test("a strip narrowed past its chosen tab scrolls to keep it in view", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1846,6 +1959,65 @@ test("a wheel turned up and down over a strip with tabs hidden runs it along, a 
   assert.equal(strip.scrollLeft, 72);
   wheel({ deltaX: 40, deltaY: 10 });
   assert.equal(strip.scrollLeft, 72, "a sideways swipe is the strip's own native scroll");
+});
+
+/** The edges of the strip faded for the tabs it hides beyond them. */
+function fadedEdges(strip: HTMLElement): string[] {
+  const start = strip.getAttribute("data-overflow-start") === "true" ? ["start"] : [];
+  return strip.getAttribute("data-overflow-end") === "true" ? [...start, "end"] : start;
+}
+
+test("the strip fades exactly the edges it hides tabs beyond, as it scrolls, resizes, and opens and closes tabs", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = page.querySelector<HTMLElement>(".side-panel .tab-strip");
+  assert.ok(strip, "the panel draws its tabs");
+  const shown = { width: 4 * TAB_PITCH };
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this === strip ? strip.children.length * TAB_PITCH : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this === strip ? shown.width : 0;
+  });
+  const scroll = (to: number) =>
+    act(() => {
+      strip.scrollLeft = to;
+      strip.dispatchEvent(new Event("scroll"));
+    });
+  act(() => relayout());
+  assert.deepEqual(fadedEdges(strip), [], "a strip showing every tab fades neither edge");
+
+  shown.width = 2 * TAB_PITCH;
+  act(() => relayout());
+  assert.deepEqual(fadedEdges(strip), ["end"]);
+  scroll(2 * TAB_PITCH);
+  assert.deepEqual(fadedEdges(strip), ["start"]);
+  scroll(TAB_PITCH);
+  assert.deepEqual(fadedEdges(strip), ["start", "end"]);
+
+  // Widened to hold every tab, as the panel's edge is dragged out; the
+  // strip, scrolled no further than it can be, comes back to its start.
+  shown.width = 4 * TAB_PITCH;
+  strip.scrollLeft = 0;
+  act(() => relayout());
+  assert.deepEqual(fadedEdges(strip), [], "the fades go once every tab is held");
+
+  // The tabs' fractional widths can leave a sub-pixel the strip rounds up to one.
+  shown.width = 4 * TAB_PITCH - 1;
+  act(() => relayout());
+  assert.deepEqual(
+    fadedEdges(strip),
+    [],
+    "a strip that holds every tab to the eye fades neither edge",
+  );
+
+  shown.width = 3 * TAB_PITCH;
+  act(() => relayout());
+  assert.deepEqual(fadedEdges(strip), ["end"]);
+  press(page, '[aria-label="Close Board"]');
+  assert.deepEqual(fadedEdges(strip), [], "a tab closed leaves room for the rest");
+  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
+  assert.deepEqual(fadedEdges(strip), ["end"], "a tab opened hides one again");
 });
 
 test("the plan's tab, cut short as its toolbar narrows, says its whole name in its hint", () => {

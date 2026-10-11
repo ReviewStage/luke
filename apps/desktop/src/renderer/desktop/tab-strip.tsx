@@ -26,7 +26,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * with an ellipsis and said whole in its hint. Past holding them all, the
  * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
  * sideways, and the tab chosen, or the one the keyboard reaches, is brought
- * into the room it shows, and kept there as the strip is narrowed.
+ * into the room it shows, and kept there as the strip is narrowed. An edge
+ * the strip hides tabs beyond wears `data-overflow-start` or
+ * `data-overflow-end`, which desktop.css fades.
  *
  * Its words are text, which the session recording masks with the rest.
  */
@@ -42,6 +44,13 @@ const WHEEL_DELTA = {
 
 /** The CSS pixels a wheel's line stands for, the tabs' own line of text. */
 const WHEEL_LINE = 16;
+
+/**
+ * How far, in CSS pixels, the strip hides its tabs past an edge before that
+ * edge fades: more than the sub-pixel the tabs' fractional widths can leave
+ * over a strip that, to the eye, holds them all.
+ */
+const OVERFLOW_SLACK = 1;
 
 /**
  * The tab a navigation key moves to from the focused one, or nothing for any
@@ -93,6 +102,18 @@ function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   else if (after > 0) scrollStrip(strip, after, glide);
 }
 
+/**
+ * Marks each edge the strip hides tabs beyond, for its fade. Note that it is
+ * measured rather than left to a scroll timeline, because a timeline is
+ * active over any overflow at all, the sub-pixel one included, and a fade
+ * must stand on exactly the edges that hide a tab, at every width.
+ */
+function markOverflow(strip: HTMLElement): void {
+  const hidden = strip.scrollWidth - strip.clientWidth;
+  strip.setAttribute("data-overflow-start", String(strip.scrollLeft > OVERFLOW_SLACK));
+  strip.setAttribute("data-overflow-end", String(hidden - strip.scrollLeft > OVERFLOW_SLACK));
+}
+
 /** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
 function focusTab(strip: HTMLElement | null, tab: HTMLElement | undefined | null): void {
   tab?.focus({ preventScroll: true });
@@ -108,18 +129,23 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
  * The strip of tabs. Note that focus follows a tab closed from the keyboard
  * to the tab that took its place a render later, because the tab it was on
  * is gone by then; with none left, it goes on to the button after the
- * strip, or the first in what follows it: the side panel's "+". `onMove`, while given, lets the tabs be
- * moved, and hears each move as the tab's place before and after it.
+ * strip, or the first in what follows it: the side panel's "+". `onMove`,
+ * while given, lets the tabs be moved, and hears each move as the tab's
+ * place before and after it; `movable` is how many of them, from the
+ * first, move, among themselves, while the rest stand where they are.
+ * Every tab moves unless said.
  */
 export function TabStrip({
   label,
   className,
   onMove,
+  movable = Number.POSITIVE_INFINITY,
   children,
 }: {
   label: string;
   className?: string;
   onMove?: TabMove | undefined;
+  movable?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
@@ -152,17 +178,24 @@ export function TabStrip({
   });
   // A strip narrowed, its panel dragged or the window resized, keeps the
   // chosen tab in view as an editor keeps its active tab, at once rather
-  // than gliding behind the edge being dragged.
+  // than gliding behind the edge being dragged, and fades the edges it now
+  // hides tabs beyond.
   useLayoutEffect(() => {
     const node = strip.current;
     if (node === null) return;
     const observer = new ResizeObserver(() => {
       const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
       if (chosen !== null) reveal(node, chosen, false);
+      markOverflow(node);
     });
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
+  // A tab opened, closed, or renamed moves the edges the strip hides tabs
+  // beyond, and need not resize the strip, which may already be at its least.
+  useLayoutEffect(() => {
+    if (strip.current !== null) markOverflow(strip.current);
+  });
 
   const move =
     onMove === undefined
@@ -172,14 +205,16 @@ export function TabStrip({
           setMovedSaid(movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
-  const onPointerDown = useTabDrag(move);
+  const onPointerDown = useTabDrag(move, movable);
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
     const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(TAB) ?? [])];
     const tab = tabs.find((each) => each === document.activeElement);
     const at = tab === undefined ? -1 : tabs.indexOf(tab);
-    if (tab === undefined || move === undefined || at + by < 0 || at + by >= tabs.length) return;
+    const end = Math.min(tabs.length, movable);
+    if (tab === undefined || move === undefined || at >= end || at + by < 0 || at + by >= end)
+      return;
     flushSync(() => move(at, at + by));
     focusTab(strip.current, tab);
   };
@@ -235,6 +270,7 @@ export function TabStrip({
         onKeyDown={keyDown}
         onPointerDown={onPointerDown}
         onWheel={wheel}
+        onScroll={(event) => markOverflow(event.currentTarget)}
         onFocus={() => setFocused(true)}
         onBlur={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);
