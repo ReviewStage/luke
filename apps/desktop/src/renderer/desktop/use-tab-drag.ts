@@ -275,6 +275,11 @@ export function useTabDrag(
     const cancel = (event: PointerEvent) => {
       if (event.pointerId === press.pointerId) putBack();
     };
+    // The row run along under a pointer held still, by a wheel or by the
+    // strip bringing a tab into view, moves where the tab would land.
+    const runBeneath = () => {
+      if (press.dragging) draw(press, strip);
+    };
     // Escape puts a drag back, and is the drag's alone while it lasts, so it
     // steps the window back no layer as well.
     const onEscape = (event: KeyboardEvent) => {
@@ -287,6 +292,7 @@ export function useTabDrag(
     window.addEventListener("pointerup", drop, true);
     window.addEventListener("pointercancel", cancel, true);
     window.addEventListener("keydown", onEscape, true);
+    strip.addEventListener("scroll", runBeneath);
     release.current = () => {
       if (press.frame !== undefined) cancelAnimationFrame(press.frame);
       press.frame = undefined;
@@ -294,6 +300,7 @@ export function useTabDrag(
       window.removeEventListener("pointerup", drop, true);
       window.removeEventListener("pointercancel", cancel, true);
       window.removeEventListener("keydown", onEscape, true);
+      strip.removeEventListener("scroll", runBeneath);
       release.current = undefined;
     };
   };

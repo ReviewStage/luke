@@ -1906,6 +1906,21 @@ test("a tab held at the edge of a strip scrolled along runs it back to the tabs 
   assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript"]);
 });
 
+test("a tab held still while the strip scrolls under it lands where the row has brought it", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = layOutScrollingTabs();
+
+  // Code, held at 150, clear of both edges, while a wheel runs the row two tabs along.
+  dragTab(tabNamed(page, "Code"), 145, [150], DRAG_END.DROP, () =>
+    act(() => {
+      strip.scrollLeft = 2 * TAB_PITCH;
+      strip.dispatchEvent(new Event("scroll"));
+    }),
+  );
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+});
+
 test("a strip narrowed past its chosen tab scrolls to keep it in view", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
