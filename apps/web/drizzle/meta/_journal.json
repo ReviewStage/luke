@@ -505,6 +505,13 @@
       "when": 1790960000000,
       "tag": "0072_coding_agent_context",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790985000000,
+      "tag": "0073_plan_revision",
+      "breakpoints": true
     }
   ]
 }

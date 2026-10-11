@@ -8,7 +8,7 @@ import {
   planNotesSchema,
   readNotes,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
@@ -43,7 +43,9 @@ import { spendHostedMeter } from "../hosted/quota.js";
  * call has been quiet for a beat, whoever spoke last, it makes one model call
  * over what was said since its cursor, which answers with notes: a point
  * added under a field, an example added to a rule, a phrase corrected, or a
- * line struck. They are saved through `saveNotes`, the plan's one write.
+ * line struck. They are saved through `saveNotes`, the plan's one write,
+ * under the call, so the plan's history keeps the call's saves as one
+ * revision.
  * While the model writes, the notes so far go to the device as a draft of the
  * plan (`notesInProgress`), each draft differing from the last only where the
  * newest note lands, so the Plans tab types each note in as it is taken. It is the plan's only writer and its
@@ -88,6 +90,8 @@ const NOTES_OUTPUT = Output.object({
 export interface PlanScribeOptions {
   readonly userId: string;
   readonly planId: string;
+  /** The call the scribe listens to, which every save it makes is kept under in the plan's history. */
+  readonly liveSessionId: string;
   /** The deployment's model for the scribe; a test hands in a mock. */
   readonly model: LanguageModel;
   /** Where each draft of the plan goes as it is written, and the saved document once it lands. */
@@ -254,6 +258,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         const saved = yield* saveNotes(
           { userId: options.userId, planId: options.planId },
           output.notes,
+          { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: options.liveSessionId },
         );
         if (saved.status !== PLAN_SAVE_STATUS.SAVED) {
           options.report(`The plan's notetaker could not save: ${saved.reason}`);

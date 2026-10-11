@@ -10,7 +10,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * document is the whole of what the plan's notetaker writes, through notes
  * the service takes into the plan's fields and formats into the body as the
  * one fixed template (`plan-template.ts`), and it is replaced whole on every
- * save: there is no version, no revision argument, and no per-assumption id.
+ * save: there is no revision argument and no per-assumption id. The service
+ * keeps every save as a revision of the plan under the writer who made it,
+ * and a plan carries its newest as `lastEdit`, which is what the window's
+ * "Edited by" line reads.
  * A plan may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
@@ -160,7 +163,35 @@ export const agentEditLineSchema = EffectSchema.Struct({
   at: countedNumber,
 });
 
-/** One plan with its saved document, and the saves coding agents made on it, oldest first. */
+/**
+ * Who wrote a revision of a plan: the developer, the notetaker on a call
+ * (whom the developer knows as Luke), a coding agent, or, for the one
+ * revision a plan from before history starts with, nobody the service can
+ * name.
+ */
+export const PLAN_ACTOR = {
+  DEVELOPER: "developer",
+  NOTETAKER: "notetaker",
+  AGENT: "agent",
+  EARLIER: "earlier",
+} as const;
+
+export type PlanActor = (typeof PLAN_ACTOR)[keyof typeof PLAN_ACTOR];
+
+/** The newest revision of a plan, as its "Edited by" line reads it. */
+export const planLastEditSchema = EffectSchema.Struct({
+  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  /** The coding agent as its row names it now; present only where a coding agent wrote it. */
+  label: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
+  /** Epoch milliseconds of the revision's latest save. */
+  at: countedNumber,
+  /** Whether the revision was written on one of the plan's calls. */
+  duringCall: EffectSchema.Boolean,
+});
+
+export type PlanLastEdit = typeof planLastEditSchema.Type;
+
+/** One plan with its saved document, its newest revision, and the saves coding agents made on it, oldest first. */
 export const planSchema = EffectSchema.Struct({
   ...planSummaryFields,
   document: planDocumentSchema,
@@ -168,6 +199,8 @@ export const planSchema = EffectSchema.Struct({
   agentEdits: EffectSchema.optionalKey(
     EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
   ),
+  /** Absent for a plan nobody has written since history began, and from a service before it. */
+  lastEdit: EffectSchema.optionalKey(planLastEditSchema),
 });
 
 export type Plan = typeof planSchema.Type;

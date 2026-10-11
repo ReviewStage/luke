@@ -60,11 +60,17 @@ your account: its name and the plan's one document, a Markdown body and a list o
 assumptions, written by the planning call's notetaker as you talk. It is
 stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
-replaces the document and no earlier version is kept; deleting a plan removes
-it at once, with the record of each coding agent started on it and the copy
-of the plan, or the task you wrote in its place, that agent was handed, and marks the plan's conversation and each
-agent's transcript deleted, removed thirty days later; deleting your account
-removes every plan.
+replaces the document, and our service keeps what each save changed as the
+plan's history: the plan's content as it stood after each revision, who
+wrote it (the notetaker, on which call, or which coding agent), and when,
+stored and readable the same way as the document, with no limit on how many
+revisions a plan keeps. A coding agent's saves are also kept as the notes it
+took, the last fifty, so Luke can tell you what an agent changed. Deleting a
+plan removes it at once, with its history, the record of each coding agent
+started on it and the copy of the plan, or the task you wrote in its place,
+that agent was handed, and marks the plan's conversation and each agent's
+transcript deleted, removed thirty days later; deleting your account removes
+every plan.
 
 **A plan's whiteboard.** Each plan has a whiteboard that Luke's planning model
 and you can both draw on. Our service stores it with the plan, under your
@@ -177,7 +183,8 @@ saves the fields that call answers into that one plan. It runs only during a
 planning call you started and only for that call's plan, each run is counted
 in your daily usage as Luke's turns are, and a run that fails writes nothing.
 Nothing it reads or answers is kept
-beyond the saved plan, said aloud, or shown anywhere but the plan itself, and
+beyond the saved plan and its history, said aloud, or shown anywhere but the
+plan itself, and
 OpenAI keeps the request and its reply under its own retention policy.
 
 **Your account.** Signing in with Google or GitHub gives us your name, email

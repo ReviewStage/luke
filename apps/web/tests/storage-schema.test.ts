@@ -82,6 +82,7 @@ const DECLARED_TABLES = [
   "observation_pass",
   "plan",
   "plan_board",
+  "plan_revision",
   "provider_cursors",
   "provider_key",
   "roster_snapshot",

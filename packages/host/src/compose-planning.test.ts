@@ -19,6 +19,7 @@ import {
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
 import {
+  PLAN_ACTOR,
   PLAN_FILE_REFUSAL,
   type Plan,
   type PlanFileAnswer,
@@ -350,7 +351,7 @@ it.effect("the tab showing again reads a save made since, and draws it", () =>
 );
 
 it.effect(
-  "a draft the notetaker sends during a call is drawn in place of the open plan, and the saved one carries its save",
+  "a draft the notetaker sends during a call is drawn in place of the open plan, and the saved one carries its save, by Luke on the call",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -379,7 +380,12 @@ it.effect(
       });
       assert.deepEqual(last()?.document, {
         status: PLANNING_READ.READY,
-        plan: { ...invites, updatedAt: 11, document: saved },
+        plan: {
+          ...invites,
+          updatedAt: 11,
+          document: saved,
+          lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
+        },
       });
     }),
 );

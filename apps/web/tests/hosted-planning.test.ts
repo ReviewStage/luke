@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { NOTE_KIND, PLAN_FIELD } from "@sidecar/hosted/plan-template";
-import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
 import {
@@ -585,7 +585,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           }),
         );
         const binding = { userId, planId };
-        const author = { agentId: started.agent.id };
+        const author = { actor: PLAN_ACTOR.AGENT, agentId: started.agent.id } as const;
         yield* saveNotes(
           binding,
           [{ kind: NOTE_KIND.ADD, field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" }],
