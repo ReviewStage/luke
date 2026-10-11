@@ -36,9 +36,6 @@ export const CODER = {
    * starting forever and no transcript read is held for it.
    */
   STARTING_GRACE: Duration.minutes(5),
-  /** Each worker session's own token budget, so one runaway worker costs a bounded amount; the planning worker's bounds (`brain-host/bounds.ts`). */
-  WORKER_INPUT_TOKENS: 600_000,
-  WORKER_OUTPUT_TOKENS: 40_000,
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */

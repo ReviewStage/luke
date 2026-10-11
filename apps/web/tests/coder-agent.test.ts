@@ -17,7 +17,6 @@ import {
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
-import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
 import {
@@ -179,11 +178,10 @@ test("the session is told its shell and its file tools start in the checkout", (
   }
 });
 
-test("the worker is hidden behind the delegation tool, bounded per session, and authored exactly the read-only tools, with nothing that writes or publishes among them", () => {
+test("the worker is hidden behind the delegation tool, authors no token budget of its own beneath the uncapped agent, and authored exactly the read-only tools, with nothing that writes or publishes among them", () => {
   assert.equal(worker.tool, false);
   assert.equal(worker.defaultTools, false);
-  assert.equal(worker.limits?.maxInputTokensPerSession, CODER.WORKER_INPUT_TOKENS);
-  assert.equal(worker.limits?.maxOutputTokensPerSession, CODER.WORKER_OUTPUT_TOKENS);
+  assert.equal("limits" in worker, false);
   const authored = authoredTools(WORKER_TOOLS_DIRECTORY);
   assert.deepEqual(authored, [...WORKER_TOOL_NAMES].sort());
   for (const writes of [CODER_TOOL.WRITE_FILE, CODER_TOOL.APPLY_PATCH, CODER_TOOL.DELEGATE]) {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import agent from "../eve/agent";
+import worker from "../eve/subagents/worker/agent";
 import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_TURN_POLICY,
@@ -23,6 +24,11 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 test("the agent runs none of eve's default tools and sessions have no lifetime of eve's", () => {
   assert.equal(agent.defaultTools, false);
   assert.equal(agent.limits?.sessionTimeoutMs, false);
+});
+
+test("the root caps no input tokens and the worker authors no budget of its own, so a worker runs uncapped rather than on a share of eve's default", () => {
+  assert.equal(agent.limits?.maxInputTokensPerSession, false);
+  assert.equal("limits" in worker, false);
 });
 
 test("a follow-up steers the turn under way rather than queueing behind it, and the account bearer is checked before the development principal", () => {

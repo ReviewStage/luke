@@ -1715,8 +1715,8 @@ the planning worker's shape (`eve/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included
 (`defineParentSandbox`), authored exactly the agent's reads
 (`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_fetch`,
-`web_search`), told to change nothing, and bounded per session
-(`CODER.WORKER_INPUT_TOKENS`, `WORKER_OUTPUT_TOKENS`). It is declared
+`web_search`), told to change nothing, and uncapped in tokens, as the
+agent it runs under is. It is declared
 hidden (`tool: false`), because eve's own subagent tool carries a message
 and nothing else, and the agent chooses each worker's model and effort: the
 model sees `delegate` (`coder/tools/delegate.ts`), a workflow tool whose

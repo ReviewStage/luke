@@ -1,5 +1,5 @@
 import { defineAgent, defineDynamic } from "eve";
-import { CODER, CODER_REFUSAL } from "../../../server/hosted/coder-host/bounds.js";
+import { CODER_REFUSAL } from "../../../server/hosted/coder-host/bounds.js";
 import { selectDelegatedModel } from "../../host.js";
 import { delegationRecord } from "../../session-prompt.js";
 
@@ -9,8 +9,8 @@ import { delegationRecord } from "../../session-prompt.js";
  * when it is done (`../../tools/delegate.ts`). It is declared hidden, so the
  * agent reaches it through that tool alone and chooses its model and effort
  * there: eve hands a resolver no lineage, so the step reads the call its
- * hook pinned and the delegation recorded under it. Its tokens are bounded
- * per session, so one runaway worker costs a bounded amount.
+ * hook pinned and the delegation recorded under it. It authors no token
+ * budget, so it runs under the agent's, which is none (`../../agent.ts`).
  */
 export default defineAgent({
   description:
@@ -27,8 +27,4 @@ export default defineAgent({
       },
     },
   }),
-  limits: {
-    maxInputTokensPerSession: CODER.WORKER_INPUT_TOKENS,
-    maxOutputTokensPerSession: CODER.WORKER_OUTPUT_TOKENS,
-  },
 });
