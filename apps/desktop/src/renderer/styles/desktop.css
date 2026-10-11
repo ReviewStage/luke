@@ -2927,6 +2927,13 @@ body:has(.app-stage[data-capture="true"]) .toast {
   pointer-events: auto;
 }
 
+/* A modal's question is answered before anything behind it changes, so
+   while one stands an action toast lets the pointer through to the dimmed
+   window, as the modal's own Tab already keeps focus off it. */
+body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
+  pointer-events: none;
+}
+
 /* The action reads as the link it is, set off from the words before it. */
 .toast-action {
   margin-left: var(--space-4);
