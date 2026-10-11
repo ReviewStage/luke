@@ -46,7 +46,15 @@ the plan the way Luke's notetaker does, and the plan says which agent made
 each edit. New coding agent in the side panel's + opens a draft agent whose
 first message is its task, so it starts on your task instead of the plan.
 Each agent gets a generated title, and you can rename it from its tab's
-right-click menu.
+right-click menu. Ask Luke in a call to start a coding agent, on the plan or on
+any instructions you give him, and he starts it without Start.
+
+### Luke ends the call
+
+Say you're done, with "bye" or "that's all", and Luke says goodbye and hangs
+up once it has played. The call bar under the plan is redesigned: one start
+pill at rest, and during a call the status beside speaker mute, microphone
+mute, and End call.
 
 ### Subagents
 
@@ -71,6 +79,11 @@ transcript, and the row opens the worker's own tab in the side panel.
   he greets you
 - Luke always shows in the Dock and ⌘Tab
 - The theme defaults to System
+- The sidebar offers Restart to update above the account row
+- Side panel tabs appear only once the plan has used them
+- A long tab title fades out at its end instead of ending in an ellipsis
+- A worker's task reads as formatted markdown, and its tab is named by the
+  task's first line
 
 ### Fixes
 
@@ -79,6 +92,7 @@ transcript, and the row opens the worker's own tab in the side panel.
 - Fixed a dragged tab stopping short of either end of the tab strip
 - Fixed a coding agent's shell starting outside its checkout
 - Fixed a shadow behind the composer's card
+- Fixed a planning call going quiet when a worker ran out of its token budget
 
 ### Misc
 
