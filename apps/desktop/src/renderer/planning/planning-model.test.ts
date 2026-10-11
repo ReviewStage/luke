@@ -25,6 +25,8 @@ import {
   plansPage,
   recentRepositories,
   repositoryFailureNote,
+  repositoryGroups,
+  repositoryLabel,
   repositoryPageUrl,
   START_FAILED_NOTE,
 } from "./planning-model";
@@ -298,4 +300,43 @@ test("a planning call in progress holds the panel open, and a desk call or a fin
   assert.equal(on(LIVE_STATUS.CLOSING, INVITES), false);
   assert.equal(on(LIVE_STATUS.FAILED, INVITES), false);
   assert.equal(on(LIVE_STATUS.IDLE, undefined), false);
+});
+
+/** A plan's row of the list on a repository, last updated at `updatedAt`. */
+function onRepository(name: string, repository: string | null, updatedAt: number) {
+  return { id: name, name, createdAt: 1, updatedAt, repository };
+}
+
+test("plans group by repository, the group updated last first and the plans with none last, each group keeping the order it was handed", () => {
+  const groups = repositoryGroups([
+    onRepository("Exports", "acme/ledger", 10),
+    onRepository("Notes", null, 99),
+    onRepository("Invites", "acme/relay", 30),
+    onRepository("Billing", "acme/ledger", 40),
+    onRepository("Search", "acme/relay", 20),
+  ]);
+
+  assert.deepEqual(
+    groups.map(({ repository, plans }) => [repository, plans.map((plan) => plan.name)]),
+    [
+      ["acme/ledger", ["Exports", "Billing"]],
+      ["acme/relay", ["Invites", "Search"]],
+      [null, ["Notes"]],
+    ],
+  );
+});
+
+test("a group's header names its repository alone, and owner and name where another repository shares the name", () => {
+  const groups = repositoryGroups([
+    onRepository("Invites", "acme/relay", 3),
+    onRepository("Fork", "dean/relay", 2),
+    onRepository("Billing", "acme/ledger", 1),
+  ]);
+
+  assert.deepEqual(
+    ["acme/relay", "dean/relay", "acme/ledger"].map((repository) =>
+      repositoryLabel(repository, groups),
+    ),
+    ["acme/relay", "dean/relay", "ledger"],
+  );
 });

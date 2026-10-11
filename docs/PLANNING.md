@@ -114,7 +114,16 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 
 - Every named plan the account owns, newest started first. Opening a plan
   moves no row, so a new plan stands at the head and nothing else moves.
-  Each row shows the plan's name and its `owner/repository`.
+  The plans are grouped under their repositories' headers, the repository's
+  name with its owner on hover (or `owner/name` where two share a name), the
+  group whose plan was updated most recently first and "No repository" last;
+  within a group the order stays newest started first, so no row moves while
+  Luke writes. A header's chevron folds the group, remembered on this Mac,
+  and its + (shown on hover or focus) opens the new-plan page with that
+  repository already chosen. Each row shows the plan's name and, muted at its
+  end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
+  the date), moved on each minute, the full moment on hover. Pinned and
+  archived rows stay flat and name their `owner/repository` beneath.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
 - `New plan` at the head of the list leaves any open plan for the new-plan
@@ -173,7 +182,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 - The plan's name. The toolbar is one row, the side panel's bar's height
   exactly (`--desktop-bar-height`, the one token both take), so their bottom
   borders are one line across the window.
-- The plan's repository is the sidebar row's to name, under the plan's name.
+- The plan's repository is the sidebar's to name, by the group it stands in.
   A plan with none yet, the 13 plans from before repositories among them,
   shows a compact `Choose repository` chip in the toolbar's actions row, left
   of Start, with the composer's menu: a pick is saved through

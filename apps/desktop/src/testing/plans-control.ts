@@ -123,8 +123,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onRetryList: ignore,
     onRetryDocument: ignore,
     onNewPlan: ignore,
+    onNewPlanIn: ignore,
     newPlan: {
       presses: 0,
+      preset: undefined,
       start: () => Promise.resolve(undefined),
     },
     onLeavePlan: ignore,

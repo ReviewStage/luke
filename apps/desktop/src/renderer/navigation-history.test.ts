@@ -147,7 +147,9 @@ function where(): string {
   const page = document.body.querySelector(".settings-page")?.getAttribute("aria-label");
   if (page) return page;
   if (document.body.querySelector("button[aria-label='Start plan']")) return NEW_PLAN_PAGE;
-  const current = document.body.querySelector(".sidebar-plan[aria-current='page']");
+  const current = document.body.querySelector(
+    ".sidebar-plan[aria-current='page'] .sidebar-plan-name",
+  );
   assert.ok(current, "a plan is open");
   return current.textContent ?? "";
 }
@@ -161,7 +163,7 @@ function click(button: HTMLButtonElement | null | undefined): void {
 function openPlan(plan: PlanSummary): void {
   click(
     [...document.body.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].find(
-      (row) => row.textContent === plan.name,
+      (row) => row.querySelector(".sidebar-plan-name")?.textContent === plan.name,
     ),
   );
 }

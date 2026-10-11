@@ -60,6 +60,8 @@ function mount(
     onTabChange?: (tab: PanelTab) => void;
     tab?: PanelTab;
     plans?: Partial<PlansControl>;
+    /** Whether the run keeps none of the sidebar's preferences, as a fixture run does. */
+    staged?: boolean;
   } = {},
 ): HTMLElement {
   const container = document.createElement("div");
@@ -79,6 +81,7 @@ function mount(
           width: SIDEBAR_WIDTH.DEFAULT,
           onToggle: () => undefined,
           onResize: () => undefined,
+          staged: options.staged ?? false,
         },
         identity: {
           speakers: { listening: false, lukeSpeaking: false },
@@ -420,4 +423,165 @@ test("a refusal noted on an archived plan unfolds the archived list, so its note
     container.querySelector(".sidebar-archived [role='alert']")?.textContent,
     "The plan could not be unarchived. Try again.",
   );
+});
+
+/** A plan's row of the list on a repository, last updated at `updatedAt`. */
+function onRepository(name: string, repository: string | null, updatedAt = 1) {
+  return { id: `plan-${name}`, name, createdAt: 1, updatedAt, repository };
+}
+
+/** Each repository group the Plans section draws, by its header, with the plans standing under it. */
+function groups(container: HTMLElement): [string, string[]][] {
+  return [...container.querySelectorAll<HTMLElement>(".sidebar-repository")].map((group) => [
+    group.querySelector(".sidebar-repository-name")?.textContent ?? "",
+    [...group.querySelectorAll(".sidebar-plan-name")].map((name) => name.textContent ?? ""),
+  ]);
+}
+
+function header(container: HTMLElement, name: string): HTMLElement {
+  const found = [...container.querySelectorAll<HTMLElement>(".sidebar-repository-header")].find(
+    (candidate) => candidate.querySelector(".sidebar-repository-name")?.textContent === name,
+  );
+  assert.ok(found, `the ${name} group is drawn`);
+  return found;
+}
+
+test("the plans stand under their repositories' headers, newest updated group first and No repository last, the pinned ones flat and naming theirs", () => {
+  window.localStorage.clear();
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        { ...onRepository("Invites", "acme/relay", 5), pinnedAt: 9 },
+        onRepository("Notes", null, 99),
+        onRepository("Search", "acme/relay", 20),
+        onRepository("Billing", "acme/ledger", 40),
+      ],
+    },
+  });
+
+  assert.deepEqual(groups(container), [
+    ["ledger", ["Billing"]],
+    ["relay", ["Search"]],
+    ["No repository", ["Notes"]],
+  ]);
+  const pinned = container.querySelector("nav[aria-label='Pinned'] .sidebar-plan");
+  assert.equal(pinned?.querySelector(".sidebar-plan-repository")?.textContent, "acme/relay");
+  assert.equal(
+    container.querySelector(".sidebar-repository .sidebar-plan-repository"),
+    null,
+    "a grouped row leaves its repository to the header",
+  );
+});
+
+test("a group folded stays folded when the sidebar stands again, and walking the list passes its plans over", () => {
+  window.localStorage.clear();
+  const plans = {
+    plans: [onRepository("Billing", "acme/ledger", 2), onRepository("Search", "acme/relay")],
+  };
+  const first = mount(DEAN, { plans });
+  const toggle = header(first, "ledger").querySelector<HTMLButtonElement>(
+    ".sidebar-repository-toggle",
+  );
+  assert.ok(toggle);
+  act(() => toggle.click());
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  unmountAll();
+
+  const opened: string[] = [];
+  const again = mount(DEAN, { plans: { ...plans, onSelect: (planId) => opened.push(planId) } });
+  const event = new KeyboardEvent("keydown", {
+    key: "ArrowDown",
+    code: "ArrowDown",
+    metaKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+
+  assert.deepEqual(groups(again), [
+    ["ledger", []],
+    ["relay", ["Search"]],
+  ]);
+  assert.deepEqual(opened, ["plan-Search"]);
+});
+
+test("a repository's + asks for a new plan on it and folds nothing, and No repository offers none", () => {
+  window.localStorage.clear();
+  const asked: string[] = [];
+  const container = mount(DEAN, {
+    plans: {
+      plans: [onRepository("Billing", "acme/ledger"), onRepository("Notes", null)],
+      onNewPlanIn: (repository) => asked.push(repository),
+    },
+  });
+  const plus = header(container, "ledger").querySelector<HTMLButtonElement>(
+    ".sidebar-repository-new",
+  );
+  assert.ok(plus);
+
+  act(() => plus.click());
+
+  assert.equal(plus.getAttribute("aria-label"), "New plan in ledger");
+  assert.deepEqual(asked, ["acme/ledger"]);
+  assert.deepEqual(groups(container)[0], ["ledger", ["Billing"]]);
+  assert.equal(header(container, "No repository").querySelector(".sidebar-repository-new"), null);
+});
+
+/** Option-Command and an arrow pressed in the window, answering whether the window claimed it. */
+function walk(key: "ArrowUp" | "ArrowDown"): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    code: key,
+    metaKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
+}
+
+test("the open plan under a folded group still walks to its neighbours", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/relay"]));
+  const opened: string[] = [];
+  mount(DEAN, {
+    plans: {
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: "plan-Search",
+      plans: [
+        onRepository("Billing", "acme/ledger", 9),
+        onRepository("Search", "acme/relay", 5),
+        onRepository("Notes", null),
+      ],
+      onSelect: (planId) => opened.push(planId),
+    },
+  });
+
+  assert.equal(walk("ArrowUp"), true);
+  assert.equal(walk("ArrowDown"), true);
+  assert.deepEqual(opened, ["plan-Billing", "plan-Notes"]);
+  window.localStorage.clear();
+});
+
+test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps none of its own", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
+  const container = mount(DEAN, {
+    staged: true,
+    plans: { plans: [onRepository("Billing", "acme/ledger")] },
+  });
+  const toggle = header(container, "ledger").querySelector<HTMLButtonElement>(
+    ".sidebar-repository-toggle",
+  );
+  assert.ok(toggle);
+
+  const unfolded = groups(container);
+  act(() => toggle.click());
+
+  assert.deepEqual(unfolded, [["ledger", ["Billing"]]]);
+  assert.deepEqual(groups(container), [["ledger", []]]);
+  assert.equal(window.localStorage.getItem("luke.sidebarFoldedGroups"), '["acme/ledger"]');
+  window.localStorage.clear();
 });
