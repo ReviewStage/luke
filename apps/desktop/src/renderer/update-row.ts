@@ -39,6 +39,36 @@ export function updateAvailable(update: UpdateSnapshot): boolean {
   );
 }
 
+/**
+ * Whether the sidebar carries the release itself, above the account row: while
+ * it downloads and once it waits on its restart, the two states where the
+ * row's next step is the release's own. Every other state, a failure
+ * included, stays in Settings, and the gear's dot points there.
+ */
+export function updateInSidebar(update: UpdateSnapshot): boolean {
+  const { action } = updateRow(update);
+  return action === UPDATE_ROW_ACTION.DOWNLOADING || action === UPDATE_ROW_ACTION.RESTART;
+}
+
+/**
+ * The release a fixture run stages as downloaded and waiting on its restart,
+ * one minor version past the running build, so every capture shows the
+ * sidebar's update control. A live run has the updater's own answer.
+ */
+export function fixtureUpdate(
+  run: { readonly fixtureMode: boolean },
+  update: UpdateSnapshot,
+): UpdateSnapshot {
+  if (!run.fixtureMode) return update;
+  const [major = "0", minor = "0"] = update.currentVersion.split(".");
+  return {
+    status: UPDATE_STATUS.READY,
+    currentVersion: update.currentVersion,
+    installSupported: true,
+    latestVersion: `${major}.${Number(minor) + 1}.0`,
+  };
+}
+
 function downloadingDetail(update: UpdateSnapshot & { status: "downloading" }): string {
   const percent = update.progress ? ` (${Math.round(update.progress.percent)}%)` : "";
   return `Downloading version ${update.latestVersion}…${percent}`;

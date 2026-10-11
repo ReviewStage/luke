@@ -26,6 +26,7 @@ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settin
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { CAPTION_TONE } from "./strip-hold";
+import { fixtureUpdate } from "./update-row";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
@@ -341,7 +342,7 @@ export function App(): React.JSX.Element {
     onOpenSettings: () => tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS),
   };
   const updates: UpdateControl = {
-    update: state.update,
+    update: fixtureUpdate(state.run, state.update),
     // Answered rather than fire-and-forget so the row that asked redraws from
     // the same snapshot the broadcast carries to every other window.
     onCheck: async () => {

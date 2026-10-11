@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
-import { UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
+import { fixtureUpdate, UPDATE_ROW_ACTION, updateAvailable, updateRow } from "./update-row";
 
 function supported(update: Partial<UpdateSnapshot> & Pick<UpdateSnapshot, "status">) {
   // SAFETY: every call site passes the fields its status's snapshot variant
@@ -95,4 +95,14 @@ test("only a positively known newer release counts as news", () => {
     updateAvailable(supported({ status: UPDATE_STATUS.UPDATED, previousVersion: "0.1.0" })),
     false,
   );
+});
+
+test("a fixture run stages a newer release waiting on its restart, and a live run keeps the updater's answer", () => {
+  const live = supported({ status: UPDATE_STATUS.IDLE, upToDate: true });
+
+  const staged = fixtureUpdate({ fixtureMode: true }, live);
+  assert.equal(updateRow(staged).action, UPDATE_ROW_ACTION.RESTART);
+  assert.equal(updateRow(staged).detail, "Version 0.2.0 is downloaded.");
+
+  assert.equal(fixtureUpdate({ fixtureMode: false }, live), live);
 });

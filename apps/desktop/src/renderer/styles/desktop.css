@@ -529,6 +529,32 @@ body,
   margin: 0;
 }
 
+/* A release on its way in, above the account row. Waiting on its restart it
+   is a row tinted the working blue the gear's dot answers in: news, not
+   urgency, so a wash rather than the accent's fill. Downloading it is a
+   quiet line, with nothing yet to press. */
+.sidebar-update {
+  margin-bottom: var(--space-4);
+  background: color-mix(in srgb, var(--state-working) 12%, transparent);
+  color: var(--state-working);
+  font-weight: 600;
+}
+
+.sidebar-update:hover {
+  background: color-mix(in srgb, var(--state-working) 20%, transparent);
+  color: var(--state-working);
+}
+
+.sidebar-update-progress {
+  margin: 0 0 var(--space-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-update-progress:hover {
+  background: none;
+  color: var(--text-secondary);
+}
+
 /* Work column ------------------------------------------------------------- */
 
 .desktop-main {
