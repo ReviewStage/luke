@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
+import type { PlanFields } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
 import {
   CHASE_CHARS_PER_SECOND,

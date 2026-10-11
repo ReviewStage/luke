@@ -1,5 +1,7 @@
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-edit";
 import {
+  PLAN_FIELD_BOUNDS,
   type PlanFileRequest,
   planFileRequestSchema,
   planRevisionSeqSchema,
@@ -36,7 +38,12 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { readPlanFile } from "./hosted/plan-file.js";
-import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision } from "./hosted/plan-notes.js";
+import {
+  PLAN_SAVE_REFUSAL,
+  PLAN_SAVE_STATUS,
+  restoreRevision,
+  saveDeveloperEdit,
+} from "./hosted/plan-notes.js";
 import { listRevisions, readRevision } from "./hosted/plan-revisions.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
@@ -49,10 +56,13 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan id another account
  * owns answers exactly as one that names nothing, so nothing is learned
- * about plans the caller does not hold. Nothing here writes a document but
- * a restore: the planning call's notetaker and the coding agents write it
- * through notes, and the developer puts back an earlier revision, each through
- * the plan's one write (`hosted/plan-notes.ts`).
+ * about plans the caller does not hold. The developer writes a document in
+ * two ways here, each through the plan's one write (`hosted/plan-notes.ts`)
+ * that the notetaker and the coding agents save their notes through: `POST
+ * /api/plans/{id}/edit` is their edit of one field, saved, or answered as a
+ * conflict with what the field holds now where Luke wrote it meanwhile and
+ * the edit no longer lands, with nothing saved; and a restore puts back an
+ * earlier revision.
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. A pin
  * and an archive are changes like a rename, and the list leaves the archived
@@ -109,6 +119,8 @@ const PLANS_PATH = {
   REVISION: "/api/plans/revision",
   /** POST restores one revision as the plan's content; the rewrite moves the path's id and number into the `id` and `seq` queries. */
   RESTORE: "/api/plans/restore",
+  /** POST saves the developer's edit of one field; the rewrite moves the path's id into the `id` query. */
+  EDIT: "/api/plans/edit",
 } as const;
 
 const HTTP_METHOD = {
@@ -136,6 +148,9 @@ const FILE_QUERY = {
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
+
+/** An edit is a field's answer twice, its base and its value, each at its bound with every character escaped. */
+const MAXIMUM_EDIT_BODY_BYTES = PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS * 2 * 6 + 1_024;
 
 /** A save is a scene at its byte bound and its image at its own, with room for the drawing's number around them. */
 const MAXIMUM_BOARD_BODY_BYTES = BOARD_BOUNDS.MAX_BYTES + BOARD_BOUNDS.MAX_IMAGE_CHARS + 1_024;
@@ -501,6 +516,42 @@ const restoreEndpoint = /* @__PURE__ */ Effect.fn("web/planRestoreEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: restored.plan });
 });
 
+/**
+ * POST saves the developer's edit of one field: answered with the plan as
+ * saved, with the field as it now stands where the edit conflicts with it,
+ * or as refused where the plan would be longer than a plan may be.
+ */
+const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_EDIT_BODY_BYTES);
+  const edit = readEither(planEditRequestSchema)(body);
+  if (Result.isFailure(edit)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const saved = yield* saveDeveloperEdit({ userId, planId }, edit.success);
+  switch (saved.status) {
+    case PLAN_SAVE_STATUS.SAVED:
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: saved.plan });
+    case PLAN_SAVE_STATUS.CONFLICT:
+      return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { conflict: { current: saved.current } });
+    case PLAN_SAVE_STATUS.NOT_SAVED:
+      if (saved.reason === PLAN_SAVE_REFUSAL.TOO_LONG) {
+        return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { refused: PLAN_EDIT_REFUSAL.TOO_LONG });
+      }
+      return yield* Effect.fail(
+        saved.reason === PLAN_SAVE_REFUSAL.NO_PLAN
+          ? HOSTED_REFUSAL.NOT_FOUND
+          : HOSTED_REFUSAL.UNAVAILABLE,
+      );
+  }
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
@@ -513,6 +564,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISIONS, hostedRefusing(revisionsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.EDIT, hostedRefusing(editEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

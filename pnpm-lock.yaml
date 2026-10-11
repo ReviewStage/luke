@@ -655,6 +655,9 @@ importers:
       '@sidecar/wire':
         specifier: workspace:*
         version: link:../wire
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.115

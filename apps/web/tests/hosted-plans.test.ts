@@ -597,7 +597,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         const room = PLAN_BOUNDS.MAX_BODY_CHARS - planBody(RELAY_PLAN, withProblem("x")).length;
         const fields = withProblem("x".repeat(room - 9));
         const body = planBody(RELAY_PLAN, fields);
-        yield* savePlanDocument(userId, planId, { body, assumptions: [] }, fields);
+        yield* savePlanDocument(userId, planId, { body, assumptions: [] }, { fields });
 
         const renamed = yield* updatePlan(userId, planId, {
           name: "y".repeat(PLAN_BOUNDS.MAX_NAME_CHARS),

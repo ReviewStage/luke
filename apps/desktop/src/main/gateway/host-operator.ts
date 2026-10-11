@@ -43,6 +43,8 @@ import {
   PLAN_CALL_FAILURE,
   type PlanningArchiveParams,
   type PlanningBoardSaveParams,
+  type PlanningEditAnswer,
+  type PlanningEditParams,
   type PlanningFileAnswer,
   type PlanningFileParams,
   type PlanningPinParams,
@@ -57,6 +59,7 @@ import {
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
+  planningEditAnswerSchema,
   planningFileAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
@@ -171,6 +174,8 @@ export interface HostOperator {
   planningSetRepository(
     params: PlanningSetRepositoryParams,
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
+  /** The developer's edit of one field of a plan; saved, a conflict with what the field holds now, or why nothing was saved. */
+  planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
@@ -481,6 +486,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningSetRepositoryAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningEdit: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_EDIT, {
+          planId: params.planId,
+          field: params.field,
+          base: params.base,
+          value: params.value,
+        }),
+        (answer): PlanningEditAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningEditAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

@@ -20,6 +20,10 @@
     "dest": "/api/default.js?route=plans/file&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/edit",
+    "dest": "/api/default.js?route=plans/edit&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/agents",
     "dest": "/api/default.js?route=plans/agents&id=$1"
   },

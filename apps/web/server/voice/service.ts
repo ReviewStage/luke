@@ -526,7 +526,9 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
             planId: opened.planId,
             document: draft.document,
+            readAt: draft.readAt,
             ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
+            ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

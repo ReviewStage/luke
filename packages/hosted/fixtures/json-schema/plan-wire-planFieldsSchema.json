@@ -1,0 +1,301 @@
+{
+  "type": "object",
+  "properties": {
+    "goal": {
+      "type": "object",
+      "properties": {
+        "problem": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "outcome": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "problem",
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "included": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "excluded": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "constraints": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "included",
+        "excluded",
+        "constraints"
+      ],
+      "additionalProperties": false
+    },
+    "rules": {
+      "anyOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "statement": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "examples": {
+                "anyOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "given": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "when": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "then": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 1000
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        }
+                      },
+                      "required": [
+                        "given",
+                        "when",
+                        "then"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 200
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "statement",
+              "examples"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 1,
+          "maxItems": 200
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "implementation": {
+      "type": "object",
+      "properties": {
+        "changeMap": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "contracts": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "patterns": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "order": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200000
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "changeMap",
+        "contracts",
+        "patterns",
+        "order"
+      ],
+      "additionalProperties": false
+    },
+    "decisions": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "verification": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "leftToAgent": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200000
+      },
+      "maxItems": 200
+    },
+    "dataAndMigration": {
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "goal",
+    "scope",
+    "rules",
+    "implementation",
+    "decisions",
+    "verification",
+    "leftToAgent",
+    "openQuestions",
+    "dataAndMigration"
+  ],
+  "additionalProperties": false
+}

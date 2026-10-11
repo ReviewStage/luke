@@ -18,6 +18,8 @@ import {
   LOOK_AT_BOARD_TOOL_NAME,
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
+import type { PlanEditAnswer } from "@sidecar/hosted/plan-edit";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FILE_REFUSAL,
@@ -112,7 +114,12 @@ interface FakeService extends PlanningClient {
   olderHistory: Record<number, PlanRevisionsAnswer>;
   /** Each revision the service holds, by its number, which a restore puts back as the plan's document. */
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
+  /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
+  editAnswer: PlanEditAnswer | undefined;
 }
+
+/** The instant the fake service stamps every edit's save with. */
+const EDITED_AT = 7_000;
 
 function fakeService(plans: Plan[]): FakeService {
   const service: FakeService = {
@@ -153,6 +160,24 @@ function fakeService(plans: Plan[]): FakeService {
           candidate.id === planId ? restored : candidate,
         );
         return restored;
+      }),
+    editAnswer: undefined,
+    // The service writes the edit's value into the document's decisions and answers the plan whole.
+    edit: (planId, edit) =>
+      Effect.sync((): PlanCallResult<PlanEditAnswer, typeof PLAN_CALL_FAILURE.NOT_FOUND> => {
+        if (service.editAnswer !== undefined) return { ok: true, answer: service.editAnswer };
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        if (found === undefined) return { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND };
+        const edited = {
+          ...found,
+          updatedAt: EDITED_AT,
+          document: { ...found.document, body: `${found.document.body}\n\n${edit.value}` },
+          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: EDITED_AT, duringCall: false },
+        };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? edited : candidate,
+        );
+        return { ok: true, answer: { plan: edited } };
       }),
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
@@ -418,6 +443,92 @@ it.effect(
           lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true },
         },
       });
+    }),
+);
+
+it.effect(
+  "the developer's edit is saved on the service and the open document takes the plan it answered",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
+        planId: INVITES,
+        field: PLAN_FIELD.DECISIONS,
+        base: null,
+        value: "Invites expire.",
+      });
+
+      assert.deepEqual(answer, { saved: true });
+      assert.deepEqual(last()?.document, {
+        status: PLANNING_READ.READY,
+        plan: service.plans[0],
+      });
+    }),
+);
+
+it.effect(
+  "an edit the field no longer takes answers what the field holds and leaves the document as it stood",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      service.editAnswer = { conflict: { current: "- Luke's words." } };
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
+        planId: INVITES,
+        field: PLAN_FIELD.PROBLEM,
+        base: null,
+        value: "- Mine.",
+      });
+
+      assert.deepEqual(answer, { conflict: { current: "- Luke's words." } });
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
+    }),
+);
+
+it.effect(
+  "after the developer's edit, a draft the notetaker drew over an older save is dropped, and its later save is drawn",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Teammate invitations", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
+        planId: INVITES,
+        field: PLAN_FIELD.DECISIONS,
+        base: null,
+        value: "Invites expire.",
+      });
+      const edited = last()?.document;
+
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: { body: "# Teammate invitations\n\nA stale draft.", assumptions: [] },
+        readAt: EDITED_AT - 1,
+      });
+      const afterStale = last()?.document;
+      const saved = { body: "# Teammate invitations\n\nInvites expire.\n\nMore.", assumptions: [] };
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: saved,
+        readAt: EDITED_AT - 1,
+        savedAt: EDITED_AT + 1,
+      });
+
+      assert.deepEqual(afterStale, edited);
+      assert.deepEqual(last()?.document.plan?.document, saved);
     }),
 );
 

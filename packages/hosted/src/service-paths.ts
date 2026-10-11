@@ -64,6 +64,11 @@ export function planBoardPath(planId: string): string {
   return `${planPath(planId)}/board`;
 }
 
+/** The developer's edit of one field of one plan (POST). */
+export function planEditPath(planId: string): string {
+  return `${planPath(planId)}/edit`;
+}
+
 /** What was said on one plan's calls (GET). */
 export function planTranscriptPath(planId: string): string {
   return `${planPath(planId)}/transcript`;

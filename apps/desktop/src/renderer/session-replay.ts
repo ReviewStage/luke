@@ -21,14 +21,16 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * it is `SESSION_REPLAY_MASKING` below, not an allowlist: every text node and
  * every input is masked, the attributes that carry words or an image are
  * asterisked, and autocapture is off. What leaves is layout, pointer
- * positions, and asterisks of the right length. Nine elements also block
+ * positions, and asterisks of the right length. Ten elements also block
  * their whole subtree with the library's fixed `ph-no-capture` class as a
  * second line: the feedback dialog, whose screenshots are pictures of the
  * person's screen, the Settings tab's Memory page, a plan's whiteboard,
  * a plan's transcript, a plan's Work tab, the code on screen, a plan's
- * History tab, the version of a plan drawn from it, and each coding agent's
- * tab. The whiteboard is the one surface that draws its words on a
- * canvas, which the text masking cannot reach, so its block is its only
+ * History tab, the version of a plan drawn from it, each coding agent's
+ * tab, and the editor a field of a plan is edited in, whose masked value
+ * would still record the rhythm of the typing. The whiteboard is the one
+ * surface that draws its words on a canvas, which the text masking cannot
+ * reach, so its block is its only
  * line, and canvas recording is held off by name rather than by the
  * library's default.
  *

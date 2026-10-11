@@ -1,5 +1,4 @@
-import type { PlanFields } from "@sidecar/hosted/plan-template";
-import type { PlanActor, PlanAssumption } from "@sidecar/hosted/plan-wire";
+import type { PlanActor, PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
 import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
 import { codingAgent } from "./coding-agent-schema.js";
 import { instant } from "./instant.js";

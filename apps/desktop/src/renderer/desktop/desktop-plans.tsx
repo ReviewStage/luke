@@ -262,6 +262,7 @@ function PlanDocument({
               plan={plan}
               live={plans.live}
               onShowHistory={() => sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY)}
+              onEdit={(request) => plans.edit(plan.id, request)}
             />
           ) : (
             <VersionView

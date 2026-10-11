@@ -1,19 +1,21 @@
 import {
   EMPTY_PLAN_FIELDS,
   type PlanAgentEdit,
-  type PlanFields,
+  type PlanFieldWriter,
   planAgentEditSchema,
   planBody,
-  planFieldsSchema,
+  planFieldWriterSchema,
 } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
+  type PlanFields,
   type PlanLastEdit,
   type PlanSummary,
   planAssumptionSchema,
+  planFieldsSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
@@ -64,6 +66,8 @@ export interface StoredPlan {
   readonly conversationId: string | undefined;
   /** Whether the document was ever saved: false for a plan untouched since it started, or since the template's reset. */
   readonly saved: boolean;
+  /** Who last changed each field a save has changed since this was kept. */
+  readonly fieldWriters: readonly PlanFieldWriter[];
 }
 
 /** A plan to start: its name, and the repository it is about where one is chosen. */
@@ -89,6 +93,7 @@ const PLAN_COLUMNS = {
   assumptions: plan.assumptions,
   fields: plan.fields,
   agentEdits: plan.agentEdits,
+  fieldWriters: plan.fieldWriters,
   repository: plan.repository,
   pinnedAt: plan.pinnedAt,
   archivedAt: plan.archivedAt,
@@ -105,6 +110,7 @@ const PlanRowSchema = Schema.Struct({
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
+  fieldWriters: Schema.Array(planFieldWriterSchema),
   repository: Schema.NullOr(Schema.String),
   pinnedAt: Schema.NullOr(InstantColumnSchema),
   archivedAt: Schema.NullOr(InstantColumnSchema),
@@ -179,17 +185,20 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
     const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
       Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
     );
+    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
     return {
       plan: {
         ...summary,
         document: { body, assumptions: row.assumptions },
         agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
+        fields,
       },
-      fields: row.fields ?? EMPTY_PLAN_FIELDS,
+      fields,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
       saved: row.fields !== null,
+      fieldWriters: row.fieldWriters,
     };
   });
 }
@@ -273,10 +282,11 @@ const replaceDocument = SqlSchema.findOneOption({
     assumptions: Schema.Array(planAssumptionSchema),
     fields: Schema.optionalKey(planFieldsSchema),
     agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
+    fieldWriters: Schema.optionalKey(Schema.Array(planFieldWriterSchema)),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, body, assumptions, fields, agentEdits, now }) =>
+  execute: ({ userId, planId, body, assumptions, fields, agentEdits, fieldWriters, now }) =>
     db
       .update(plan)
       .set({
@@ -284,6 +294,7 @@ const replaceDocument = SqlSchema.findOneOption({
         assumptions,
         ...(fields ? { fields } : undefined),
         ...(agentEdits ? { agentEdits } : undefined),
+        ...(fieldWriters ? { fieldWriters } : undefined),
         updatedAt: now,
       })
       .where(ownedPlan(userId, planId))
@@ -499,18 +510,27 @@ export function readPlanForUpdate(
   );
 }
 
+/** What a save writes beside the document, each where it is handed. */
+export interface PlanSaveExtras {
+  /** The fields the body was formatted from. */
+  readonly fields?: PlanFields;
+  /** The coding agents' journal. */
+  readonly agentEdits?: readonly PlanAgentEdit[];
+  /** Who last changed each field. */
+  readonly fieldWriters?: readonly PlanFieldWriter[];
+}
+
 /**
  * Replaces the plan's document whole, with the fields its body was formatted
- * from and the agents' journal where they are handed, and answers it as
- * saved, or nothing where the account owns no such plan; nothing is ever
- * created here.
+ * from, the agents' journal, and the fields' writers where they are handed,
+ * and answers it as saved, or nothing where the account owns no such plan;
+ * nothing is ever created here.
  */
 export function savePlanDocument(
   userId: string,
   planId: string,
   document: PlanDocument,
-  fields?: PlanFields,
-  agentEdits?: readonly PlanAgentEdit[],
+  extras: PlanSaveExtras = {},
 ): PlanStoreEffect<Option.Option<Plan>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -519,8 +539,7 @@ export function savePlanDocument(
       planId,
       body: document.body,
       assumptions: document.assumptions,
-      ...(fields ? { fields } : undefined),
-      ...(agentEdits ? { agentEdits } : undefined),
+      ...extras,
       now,
     });
     return yield* Effect.transposeOption(Option.map(row, planOf));

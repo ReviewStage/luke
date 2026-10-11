@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
@@ -81,6 +82,11 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`repository:${params.planId}:${params.repository}`);
           return { repository: params.repository };
+        }),
+      planningEdit: (params) =>
+        Effect.sync(() => {
+          asked.push(`edit:${params.planId}:${params.field}`);
+          return { saved: true } as const;
         }),
       planningBoardSave: (params) =>
         Effect.sync(() => void asked.push(`board:${params.planId}:${params.appliedDrawing}`)),
@@ -194,6 +200,30 @@ it.effect(
       assert.deepEqual(changed, { status: ACT_OUTCOME_STATUS.DONE, value: { repository: null } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, ["repositories", `repository:${PLAN_ID}:null`]);
+    }),
+);
+
+it.effect(
+  "the developer's edit of a field reaches the host from a panel, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const edit = {
+        kind: ACT_KIND.PLANNING_EDIT,
+        payload: {
+          planId: PLAN_ID,
+          field: PLAN_FIELD.DECISIONS,
+          base: null,
+          value: "Invites expire.",
+        },
+      } as const;
+
+      const saved = yield* f.router.performAct(edit, PANEL);
+      const fromVoice = yield* f.router.performAct(edit, VOICE);
+
+      assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, [`edit:${PLAN_ID}:${PLAN_FIELD.DECISIONS}`]);
     }),
 );
 

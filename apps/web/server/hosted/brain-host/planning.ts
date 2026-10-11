@@ -3,9 +3,12 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD,
+  PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
+  type PlanFieldWriter,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -106,6 +109,8 @@ Luke puts your questions to the user himself, one at a time, while you keep work
 The goal is to produce a highly detailed plan document that a separate agent can implement without having heard this conversation. The plan document should be detailed enough so there's no ambiguity and two different agents would implement the same document the exact same way. Every field of the document is a branch of the design tree.
 
 A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
+
+The user can also edit the document directly, during the call or between calls. A field named under [fields the developer wrote] holds the user's own words: treat it as what they decided, and raise anything that contradicts it with them rather than working around it.
 
 ## How to plan
 
@@ -239,6 +244,7 @@ You are handed the saved plan as its fields, the call's latest lines, and Luke's
 
 - Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
+- The developer also edits the plan directly. A field named under [fields the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
 - Keep each note as tight as a good design document's line.
 - When the latest lines change nothing, answer with no notes.
@@ -253,6 +259,8 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+/** The marker the fields the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
+export const DEVELOPER_FIELDS_MARKER = "[fields the developer wrote]";
 
 /** The most agents' saves the model is told of, the newest; the journal keeps more. */
 const RECENT_AGENT_EDITS = 5;
@@ -295,10 +303,23 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
   ];
 }
 
+/** The fields the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
+function developerFieldsText(writers: readonly PlanFieldWriter[]): readonly string[] {
+  const written = writers.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
+  if (written.length === 0) return [];
+  return [
+    DEVELOPER_FIELDS_MARKER,
+    ...written.map(
+      (writer) => `- ${PLAN_FIELD_HEADING[writer.field]}, ${new Date(writer.at).toISOString()}`,
+    ),
+  ];
+}
+
 /**
  * What a planning turn is handed beside its instructions every turn: the
  * plan's name, the saved document as JSON, the newest saves coding agents
- * made on it (so Luke can raise what an agent asked or decided), and the
+ * made on it (so Luke can raise what an agent asked or decided), the fields
+ * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
  * turn so what the notetaker saved and what the developer drew is what the
  * next turn reads. A plan that no longer stands gets the heading alone.
@@ -317,6 +338,7 @@ export function planningStandingContext(
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
     ...agentEditsText(stored.agentEdits),
+    ...developerFieldsText(stored.fieldWriters),
     boardText(board),
   ].join("\n");
 }

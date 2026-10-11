@@ -57,13 +57,17 @@ fixture or evidence run keeps no conversation at all.
 
 **Feature plans.** When you start a named plan, our service stores it under
 your account: its name and the plan's one document, a Markdown body and a list of
-assumptions, written by the planning call's notetaker as you talk. It is
+assumptions, written by the planning call's notetaker as you talk and by you,
+when you edit a section of it in Luke. An edit you make is sent to our service
+as you pause typing and when you finish, and saved into the plan as the
+notetaker's notes are; words you have typed but not yet saved stay in Luke's
+memory on your Mac, never on disk. It is
 stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
 replaces the document, and our service keeps what each save changed as the
 plan's history: the plan's content as it stood after each revision, who
-wrote it (the notetaker, on which call, which coding agent, or you, restoring
-an earlier version, with which one), and when,
+wrote it (you, editing a section or restoring an earlier version, with which
+one; the notetaker, on which call; or which coding agent), and when,
 stored and readable the same way as the document, with no limit on how many
 revisions a plan keeps. A coding agent's saves are also kept as the notes it
 took, the last fifty, so Luke can tell you what an agent changed. Deleting a
@@ -180,7 +184,9 @@ plan document; Luke's own judgment no longer does. Once you have been quiet
 for about a second, it makes one call to OpenAI (`gpt-5.6-luna`) on our key,
 carrying the plan as it is saved, both sides of what was said since its last
 note with a few lines before them, and the words of Luke's own replies, and
-saves the fields that call answers into that one plan. It runs only during a
+saves the fields that call answers into that one plan. It is told which
+sections you last wrote yourself, so it adds to your words rather than
+rewording them, and Luke's planning model is told the same. It runs only during a
 planning call you started and only for that call's plan, each run is counted
 in your daily usage as Luke's turns are, and a run that fails writes nothing.
 Nothing it reads or answers is kept
@@ -242,8 +248,8 @@ address, and anything you type into a field all appear as blocks. The
 feedback form is left out whole, since a screenshot you attach to it is a
 picture of your screen and could carry another app's words, and so are a
 plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's History
-tab and an earlier version of it you are viewing, and each coding agent's
-tab, as a second line. The whiteboard draws its
+tab and an earlier version of it you are viewing, each coding agent's tab,
+and the editor you edit a field of a plan in, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.

@@ -21,6 +21,7 @@ import {
   PLANNING_READ,
   type PlanCodeShowing,
   type PlanningDocument,
+  type PlanningEditAnswer,
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -32,6 +33,7 @@ import {
   type PlanWorkTurn,
   planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
+  planningEditParamsSchema,
   planningFileParamsSchema,
   planningPinParamsSchema,
   planningRenameParamsSchema,
@@ -119,6 +121,7 @@ export type PlanningClient = Pick<
   | "restore"
   | "repositories"
   | "setRepository"
+  | "edit"
 >;
 
 export interface PlanningDependencies {
@@ -237,14 +240,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    */
   let telling: { readonly planId: string; readonly turnIds: Set<string> } | undefined;
 
+  /**
+   * The developer's newest save of an edit, and the plan it was of. A draft
+   * the notetaker drew over a save older than it does not hold the edit, so
+   * it is dropped rather than drawn: the edit would vanish until the
+   * notetaker's next save, which takes it in under the plan's lock.
+   */
+  let developerSaved: { readonly planId: string; readonly at: number } | undefined;
+
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
     const held = view.document.plan;
     return held?.id === planId ? held : undefined;
   }
 
-  /** A plan's row of the list: everything but its document. */
-  function summaryOf({ document: _document, ...summary }: Plan): PlanningView["plans"][number] {
+  /** A plan's row of the list: everything but its document and what is written of it. */
+  function summaryOf({
+    document: _document,
+    agentEdits: _agentEdits,
+    lastEdit: _lastEdit,
+    fields: _fields,
+    ...summary
+  }: Plan): PlanningView["plans"][number] {
     return summary;
   }
 
@@ -343,8 +360,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       if (draft.savedAt === undefined || draft.savedAt <= restoredFence.at) return;
       restoredFence = undefined;
     }
-    // A saved draft carries its save's instant, so the copy held is the save's,
-    // written by the notetaker on this call.
+    const drawnOver = draft.savedAt ?? draft.readAt;
+    if (
+      drawnOver !== undefined &&
+      developerSaved?.planId === draft.planId &&
+      drawnOver < developerSaved.at
+    ) {
+      return;
+    }
+    // A saved draft carries its save's instant and fields, so the copy held
+    // is the save's, written by the notetaker on this call.
     const plan = {
       ...held,
       document: draft.document,
@@ -354,6 +379,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             updatedAt: draft.savedAt,
             lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: draft.savedAt, duringCall: true },
           }),
+      ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
     };
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
@@ -830,6 +856,31 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
               return carried<PlanningSetRepositoryAnswer>({ failure: changed.failure });
             takeAnswered(changed.answer);
             return carried<PlanningSetRepositoryAnswer>({ repository: changed.answer.repository });
+          }),
+        );
+      }),
+    // The plan the service answered is drawn in place, so the edit stands on
+    // the document at once and the notetaker's drafts drawn before it drop.
+    [GATEWAY_METHOD.PLANNING_EDIT]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningEditParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("an edit names a plan, a field, its base, and its value");
+        }
+        if (!gate()) return carried<PlanningEditAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        const { planId, ...edit } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const edited = yield* Effect.provide(client.edit(planId, edit), FetchHttpClient.layer);
+            if (!edited.ok) return carried<PlanningEditAnswer>({ failure: edited.failure });
+            const answer = edited.answer;
+            if ("conflict" in answer)
+              return carried<PlanningEditAnswer>({ conflict: answer.conflict });
+            if ("refused" in answer)
+              return carried<PlanningEditAnswer>({ failure: answer.refused });
+            developerSaved = { planId, at: answer.plan.updatedAt };
+            takeAnswered(answer.plan);
+            return carried<PlanningEditAnswer>({ saved: true });
           }),
         );
       }),

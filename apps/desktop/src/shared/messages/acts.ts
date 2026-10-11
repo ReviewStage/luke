@@ -38,6 +38,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
+  type PlanningEditAnswer,
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -46,6 +47,8 @@ import {
   type PlanningStartAnswer,
   planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
+  planningEditAnswerSchema,
+  planningEditParamsSchema,
   planningFileAnswerSchema,
   planningFileParamsSchema,
   planningPinParamsSchema,
@@ -115,8 +118,9 @@ export const ACT_KIND = {
    * document read as the tab shows, one plan made the active one, the open
    * plan left, a plan started on a repository, and a plan renamed, given its
    * repository, pinned or unpinned, archived or brought back, or deleted. The view arrives on the document rather than as
-   * an answer; nothing here writes a plan's document, which the plan's
-   * notetaker alone saves.
+   * an answer. The one write of a plan's document from here is the
+   * developer's edit of a field, `PLANNING_EDIT`, which answers whether it
+   * saved, conflicted with what Luke wrote meanwhile, or failed.
    */
   PLANNING_REFRESH: "planning.refresh",
   PLANNING_SELECT: "planning.select",
@@ -130,6 +134,8 @@ export const ACT_KIND = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** A plan given its repository on the service, or none; answers the repository as kept, or why it is unchanged. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
+  /** The developer's edit of one field of the open plan, saved on the service; answers saved, a conflict with what the field holds now, or why nothing was saved. */
+  PLANNING_EDIT: "planning.edit",
   /** A page of GitHub's opened in the browser: a repository, or where the Luke GitHub App is installed. No other address opens through it. */
   GITHUB_OPEN: "github.open",
   /** The Plans tab's microphone button: a call about the plan the panel has open, opened, or its microphone toggled. */
@@ -463,6 +469,11 @@ export const ACT = {
     payload: actSchema(planningSetRepositoryParamsSchema),
     result: wireResult<PlanningSetRepositoryAnswer>(isReadable(planningSetRepositoryAnswerSchema)),
     refusal: "Could not change that plan's repository on this system.",
+  },
+  [ACT_KIND.PLANNING_EDIT]: {
+    payload: actSchema(planningEditParamsSchema),
+    result: wireResult<PlanningEditAnswer>(isReadable(planningEditAnswerSchema)),
+    refusal: "Could not save that edit on this system.",
   },
   [ACT_KIND.GITHUB_OPEN]: {
     payload: record({ url: githubAddress }),

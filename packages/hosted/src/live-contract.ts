@@ -9,7 +9,7 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema } from "./plan-wire.js";
+import { planDocumentSchema, planFieldsSchema } from "./plan-wire.js";
 import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
@@ -358,6 +358,9 @@ export type SessionReportFrame = typeof sessionReportFrameSchema.Type;
  * The plan's document as the notetaker has it now: a draft while its model is
  * still writing, and the saved document with the instant it was saved once
  * the save lands, or the document as it stood where the run saved nothing.
+ * Each names the save it was drawn over, so a window that saved an edit of
+ * its own since can drop a draft that does not hold it; the saved one
+ * carries the fields it was formatted from, which an editor opens on.
  */
 export const planDraftFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_DRAFT),
@@ -365,6 +368,10 @@ export const planDraftFrameSchema = Schema.Struct({
   document: planDocumentSchema,
   /** Epoch milliseconds of the save the document is; absent while it is a draft. */
   savedAt: Schema.optionalKey(Schema.Number),
+  /** The fields the saved document was formatted from; absent while it is a draft, and from a service before editing. */
+  fields: Schema.optionalKey(planFieldsSchema),
+  /** Epoch milliseconds of the save the notetaker read before it wrote; absent from a service before editing. */
+  readAt: Schema.optionalKey(Schema.Number),
 });
 
 export type PlanDraftFrame = typeof planDraftFrameSchema.Type;

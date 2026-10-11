@@ -8,6 +8,13 @@ import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
+  EditableUnit,
+  type PlanEditDoor,
+  PlanFieldEditor,
+  useFieldEditing,
+} from "./plan-field-editor";
+import { textFieldOfUnit } from "./plan-field-editor-model";
+import {
   type ChaseState,
   chaseBehind,
   chaseOpened,
@@ -36,11 +43,12 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * line opens the plan's History tab, where each earlier version is.
  */
 
-/** The document the chase was last aimed at, and where its typing stands. */
+/** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
 interface Chase {
   readonly planId: string;
   readonly body: string;
   readonly assumptions: readonly string[];
+  readonly lastEditAt: number | undefined;
   readonly state: ChaseState;
 }
 
@@ -148,7 +156,13 @@ function sameTexts(left: readonly string[], right: readonly string[]): boolean {
 
 function opened(plan: Plan): Chase {
   const { body, assumptions } = plan.document;
-  return { planId: plan.id, body, assumptions: textsOf(assumptions), state: chaseOpened(body) };
+  return {
+    planId: plan.id,
+    body,
+    assumptions: textsOf(assumptions),
+    lastEditAt: plan.lastEdit?.at,
+    state: chaseOpened(body),
+  };
 }
 
 /** The chase aimed at the plan as handed over now: a new target for the same plan, a fresh start for another. */
@@ -157,10 +171,13 @@ function aimed(chase: Chase, plan: Plan): Chase {
   const { body } = plan.document;
   const assumptions = textsOf(plan.document.assumptions);
   const added = { before: chase.assumptions, after: assumptions };
+  // The developer's own edit lands at once: they watched it being typed already.
+  const lastEditAt = plan.lastEdit?.at;
+  const ownEdit = plan.lastEdit?.actor === PLAN_ACTOR.DEVELOPER && lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
-  const aim = { reduced: prefersReducedMotion() };
+  const aim = { reduced: ownEdit || prefersReducedMotion() };
   const state = chaseRetargeted(chase.state, body, added, aim);
-  return { planId: plan.id, body, assumptions, state };
+  return { planId: plan.id, body, assumptions, lastEditAt, state };
 }
 
 /**
@@ -222,22 +239,30 @@ function AssumptionRow({
   );
 }
 
+/** The door of a document nothing is edited through: every edit answered as unanswered. */
+const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
+
 /**
  * The plan's body and its assumptions, the assumptions' section standing even
  * while the list is empty. `live` is the plan's call in progress, which keeps
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
- * plan's History tab from the "Edited by" line.
+ * plan's History tab from the "Edited by" line. With `onEdit`, and fields
+ * from a service that sends them, each text field opens in an editor in place.
  */
 export function PlanBody({
   plan,
   live,
   onShowHistory,
+  onEdit,
 }: {
   plan: Plan;
   live: boolean;
   onShowHistory?: () => void;
+  onEdit?: PlanEditDoor;
 }): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
+  const editable = onEdit !== undefined && plan.fields !== undefined;
+  const editing = useFieldEditing(plan.id, editable ? plan.fields : undefined, onEdit ?? NO_EDIT);
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
@@ -279,14 +304,33 @@ export function PlanBody({
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <div className="plan-body">
-        {views.map((view) => (
-          <MarkdownMessage
-            key={view.id}
-            words={view.words}
-            className={unitClass(view)}
-            edit={view.edit}
-          />
-        ))}
+        {views.map((view) => {
+          const field = editable ? textFieldOfUnit(view.words) : undefined;
+          const drawn = (
+            <MarkdownMessage
+              key={view.id}
+              words={view.words}
+              className={unitClass(view)}
+              edit={view.edit}
+            />
+          );
+          if (field === undefined) return drawn;
+          if (editing.editor?.field === field) {
+            return (
+              <PlanFieldEditor
+                key={view.id}
+                words={view.words}
+                editor={editing.editor}
+                editing={editing}
+              />
+            );
+          }
+          return (
+            <EditableUnit key={view.id} field={field} editing={editing}>
+              {drawn}
+            </EditableUnit>
+          );
+        })}
       </div>
       <section className="plan-assumptions" aria-label="Assumptions">
         <h2 className="plan-assumptions-heading">Assumptions</h2>

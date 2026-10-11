@@ -13,8 +13,9 @@ The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
 - **One saved document per named plan**, a Markdown `body` and an `assumptions`
-  list of `{ text }`, written only by the plan's notetaker, which takes
-  notes into it ("The notetaker" below). The body is always the one fixed
+  list of `{ text }`, written by the plan's notetaker, which takes notes into
+  it ("The notetaker" below), by coding agents through the same notes, and by
+  the developer, a field at a time ("Editing" below). The body is always the one fixed
   template (LUKE-352, "The fixed template" below): the service takes each
   note into the plan's stored fields and formats the result into the body.
   Every save that changes the plan is kept as a revision under the writer
@@ -24,8 +25,8 @@ are not reopened here. The two that shape everything below:
   and the final review live in the planning model's instructions, and the
   planning model never writes the document: it is handed the saved document
   every turn, so Luke keeps talking while the notetaker writes.
-  The tab saves nothing of its own and decides nothing; it shows the saved
-  document and the voice state.
+  The tab decides nothing; it shows the saved document and the voice state,
+  and saves only the developer's own edits of a field.
 
 ## What the tab is not
 
@@ -33,7 +34,9 @@ A reviewer can hold the build to these as easily as to the layout:
 
 - No typed-chat composer and no typed fallback. The developer speaks; the only
   text fields are ordinary setup fields (the plan's name and the repository
-  filter), and nothing typed into them reaches the model as conversation.
+  filter) and the editor a field of the document opens in, and nothing typed
+  into them reaches the model as conversation. An edited field reaches it as
+  the document it is handed, marked as the developer's own words.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
   read and restored from its History tab ("History" below), which is the one
@@ -227,7 +230,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 
 - Above the body, one muted line says who last edited the plan, from its
   newest revision ("History" below): "Edited by Luke during your call · 2h
-  ago", or a coding agent by its row's name. The
+  ago", "Edited by you · just now", or a coding agent by its row's name. The
   notetaker is "Luke", because the developer talks to Luke and never meets a
   notetaker. The time moves on once a minute, and a save the notetaker makes
   on the open plan's call moves the line as it lands. A plan nobody has
@@ -237,9 +240,12 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
   unanswered field as "Unanswered".
-- It is read-only and selectable, so a selection can be copied.
+- It is selectable, so a selection can be copied, and each text field opens
+  in an editor in place ("Editing" below). A rule, the open questions, and
+  the assumptions are not yet edited here.
 - When a save lands, the document redraws in place and keeps its scroll
-  position. There is no diff, highlight, or animation of what changed.
+  position, the caret typing in what the notetaker changed; the developer's
+  own edit lands at once.
 - Each assumption is a plain bulleted row with its text, and nothing in it
   responds to a click. With no assumptions, the section stands and reads
   "None recorded".
@@ -477,7 +483,7 @@ research notes. Once the developer has been quiet for about a second, it makes
 one `gpt-5.6-luna` call over the plan's saved fields and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
 the answer through `saveNotes` (`apps/web/server/hosted/plan-notes.ts`). Its
-runs never overlap, so it is the plan's only writer, and a run that fails
+runs never overlap, so no run of its own races another, and a run that fails
 moves nothing forward.
 
 The answer is notes, the way a person takes notes on a call, never a field
@@ -502,18 +508,67 @@ row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" the planning model is handed both say what the row
 says now.
 
+### Editing
+
+The developer edits the document a field at a time, never as a whole: the
+body is the fixed template formatted from the fields, so every heading stays
+the formatter's and a field is the one unit the service stores, the notetaker
+writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
+
+- **Opening.** A click into a text field's words that selects nothing, or the
+  pencil that shows on hover and on focus (the keyboard's way in, named
+  "Edit Problem" and so on), opens the field's Markdown in a plain text box
+  in place of its answer, the heading still drawn above it. One field is open
+  at a time. An unanswered field opens empty, and leaving it empty keeps it
+  unanswered. A heading line typed into a field is escaped by the formatter,
+  so no edit can open a section of its own.
+- **Saving.** The words save a second after the developer stops typing, and
+  again as the editor closes, on Esc, ⌘↩, or focus leaving it; the editor
+  waits for that save before it goes. Each save names the answer the words
+  were written from (the field as it opened, then the developer's own last
+  save), through `POST /api/plans/{id}/edit` and the plan's one write, under
+  the row's lock, as the developer's revision ("History" below).
+- **During a call.** Luke may write the same field while the developer
+  types. Where the field still holds what the words were written from, the
+  edit replaces it. Where it does not, the developer's change is laid over
+  what it holds now as a patch, so a point Luke added elsewhere in the field
+  stays, and the editor's words stay. A change to a line Luke also changed is
+  a conflict: nothing is saved, and under the box the editor says "Luke
+  changed this section while you were editing." with **Keep mine**, which
+  saves the developer's words over his, and **Use Luke's**, which closes the
+  editor on his. A draft the notetaker drew over a save older than the
+  developer's edit is dropped rather than drawn, so the edit never flickers
+  back out (each `plan.draft` frame names the save it was drawn over).
+- **What Luke is told.** The planning model's standing context names the
+  fields the developer last wrote, by heading, under `[fields the developer
+  wrote]`, as their decisions; the notetaker is told the same fields and
+  never rewords or strikes them unless the call says to. A field the
+  notetaker writes again leaves that list. The voice is not told mid-call,
+  and a coding agent already running keeps the plan it was handed.
+- **Failures.** A save that fails keeps the words and says why under the box
+  ("Not saved: the service did not answer.", "Not saved: this plan no longer
+  exists.", or "Not saved: the plan would be longer than a plan may be."),
+  with Try again; it is tried again when the developer asks or types on, and
+  the editor stays open until it saves. Unsaved words live in the window's
+  memory alone, never on disk.
+- **Undo.** Inside the editor, the box's own undo. A saved edit is undone
+  from the plan's history.
+- **Recording.** The editor stands under `ph-no-capture`, and the box is a
+  textarea, whose value the recording masks in any case.
+
 ### History
 
 Every save that changes the plan is kept as a revision
 (`apps/web/server/hosted/plan-revisions.ts`, table `plan_revision`): the
 plan's fields and assumptions as they stood after it, who wrote it (the
-notetaker, on the call it listens to, a coding agent by its row, or the
-developer restoring an earlier revision, named in `restored_from`), when
-its first and latest saves were, and how many notes it took. It is written in
+developer, editing a field or restoring the earlier revision `restored_from`
+names; the notetaker, on the call it listens to; or a coding agent, by its
+row), when its first and latest saves were, and how many notes it took. It is written in
 the transaction that saves the plan, so the two never disagree. The same
 writer's saves one after another are one revision: the notetaker's on one
-call, or an agent's, while the revision's latest save is at most ten minutes
-old, so a call is about one revision rather than one per pause. Notes that
+call, an agent's, or the developer's, while the revision's latest save is at
+most ten minutes old, so a call is about one revision rather than one per
+pause. Notes that
 change nothing are no revision, and a rename is none. A plan written before
 history began is found by its first later save, which first records what the
 plan held, at its last save, as the plan's first revision ("earlier"). History

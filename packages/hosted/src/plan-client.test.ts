@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
+import { PLAN_FIELD } from "./plan-template.js";
 import { PLAN_FILE_REFUSAL } from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
@@ -491,4 +492,59 @@ it.effect(
       assert.deepEqual(yield* Effect.provide(client().restore(PLAN_ID, 2), api.layer), restored);
       assert.equal(yield* Effect.provide(client().restore(PLAN_ID, 9), api.layer), undefined);
     }),
+);
+
+it.effect(
+  "an edit of one field sends its base and value trimmed, and answers the plan as saved or the field as it stands",
+  () =>
+    Effect.gen(function* () {
+      const saved = { ...PLAN, updatedAt: 1_800_000_400_000 };
+      const conflict = { conflict: { current: "- Luke's words." } };
+      let sent = 0;
+      const api = fakeCloudApi({
+        [`POST /api/plans/${PLAN_ID}/edit`]: {
+          answer: () => {
+            sent += 1;
+            return sent === 1 ? { plan: saved } : conflict;
+          },
+        },
+      });
+      const edit = { field: PLAN_FIELD.PROBLEM, base: null, value: " - Mine. " };
+
+      const first = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
+      const second = yield* Effect.provide(client().edit(PLAN_ID, edit), api.layer);
+      const blank = yield* Effect.provide(
+        client().edit(PLAN_ID, { field: PLAN_FIELD.PROBLEM, base: null, value: "  " }),
+        api.layer,
+      );
+
+      assert.deepEqual(first, { ok: true, answer: { plan: saved } });
+      assert.deepEqual(second, { ok: true, answer: conflict });
+      assert.deepEqual(blank, { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED });
+      assert.deepEqual(
+        api.requests().map((request) => JSON.parse(request.body ?? "{}")),
+        [
+          { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
+          { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
+        ],
+      );
+    }),
+);
+
+it.effect("an edit of a plan the service does not find reads as not found", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`POST /api/plans/${PLAN_ID}/edit`]: {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const edited = yield* Effect.provide(
+      client().edit(PLAN_ID, { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." }),
+      api.layer,
+    );
+
+    assert.deepEqual(edited, { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND });
+  }),
 );
