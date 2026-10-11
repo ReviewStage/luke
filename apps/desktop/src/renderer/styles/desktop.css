@@ -434,6 +434,89 @@ body,
   outline: none;
 }
 
+/* A row's first line: the plan's name, cut short where it must, and how long
+   ago it was updated at the end, muted and in even figures so the column of
+   times lines up. */
+.sidebar-plan-line {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.sidebar-plan-line .sidebar-plan-name {
+  min-width: 0;
+  flex: 1;
+}
+
+.sidebar-plan-time {
+  flex: none;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A repository's plans under a quiet header in the headings' voice: the
+   fold's chevron and the name, and a + at the end that shows while the
+   header is hovered or holds focus. */
+.sidebar-repository + .sidebar-repository,
+.sidebar-plans + .sidebar-repository {
+  margin-top: var(--space-8);
+}
+
+/* Its end stands in from the scroller's edge, so the +'s focus ring is not cut. */
+.sidebar-repository-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-right: var(--space-6);
+}
+
+.sidebar-repository-toggle {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--row-inset);
+  border-radius: 7px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-repository-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-repository-toggle svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  transition: transform var(--duration-hover) ease;
+}
+
+.sidebar-repository-toggle[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
+.sidebar-repository-new {
+  width: 22px;
+  height: 22px;
+  opacity: 0;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-repository-header:hover .sidebar-repository-new,
+.sidebar-repository-header:focus-within .sidebar-repository-new {
+  opacity: 1;
+}
+
 /* Archived plans fold away behind one quiet row at the foot of the list,
    drawn in the heading's voice so it reads as a way in rather than a plan. */
 .sidebar-archived {

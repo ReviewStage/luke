@@ -48,6 +48,7 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
   const opened: string[] = [];
   let newPlan: NewPlan = {
     presses: 0,
+    preset: undefined,
     start: (name, repository) => {
       started.push([name, repository]);
       return Promise.resolve(undefined);
@@ -426,4 +427,18 @@ test("each press of New plan brings focus back to the name field", async () => {
   page.restand({ presses: 1 });
 
   assert.ok(document.activeElement === page.nameField(), "the name field holds focus");
+});
+
+test("a New plan that chose a repository chooses it in the composer, on arrival and over a pick made before it", async () => {
+  const page = mount({ preset: { repository: "acme/ledger" } }, { recent: ["acme/relay"] });
+  await settle();
+  const arrived = page.chip().textContent;
+
+  page.restand({ preset: undefined });
+  const plain = page.chip().textContent;
+  page.restand({ preset: { repository: "acme/gateway" } });
+
+  assert.equal(arrived, "acme/ledger");
+  assert.equal(plain, "acme/ledger", "a press that chose nothing leaves the pick standing");
+  assert.equal(page.chip().textContent, "acme/gateway");
 });

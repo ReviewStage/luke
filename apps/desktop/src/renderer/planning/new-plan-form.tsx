@@ -117,8 +117,10 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
 
 /**
  * The page with its own state: the name, the repository chosen over the
- * last one used, and the start under way. A started plan becomes the host's
- * open one, which is what turns the tab to its document.
+ * last one used, and the start under way. A press of New plan that chose a
+ * repository, a repository group's +, chooses it here as a pick would, on
+ * arrival or over whatever was picked before it. A started plan becomes the
+ * host's open one, which is what turns the tab to its document.
  */
 export function NewPlanForm({
   newPlan,
@@ -128,7 +130,14 @@ export function NewPlanForm({
   repositories: PlansControl["repositories"];
 }): React.JSX.Element {
   const [name, setName] = useState("");
-  const [chosen, setChosen] = useState<string | undefined>(undefined);
+  const [chosen, setChosen] = useState(newPlan.preset?.repository);
+  // Note that a preset is taken during the render that brings it, the way
+  // React adjusts state to a prop, so the chip never draws the old pick first.
+  const [presetTaken, setPresetTaken] = useState(newPlan.preset);
+  if (newPlan.preset !== presetTaken) {
+    setPresetTaken(newPlan.preset);
+    if (newPlan.preset !== undefined) setChosen(newPlan.preset.repository);
+  }
   const [starting, setStarting] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
   const repository = chosen ?? repositories.recent[0] ?? null;

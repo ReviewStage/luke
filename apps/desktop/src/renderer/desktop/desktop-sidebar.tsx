@@ -6,6 +6,7 @@ import {
   ChevronRightIcon,
   ComposeIcon,
   GearIcon,
+  PlusIcon,
   UpdateIcon,
   UserIcon,
 } from "@sidecar/panel";
@@ -15,11 +16,18 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLANS_PAGE } from "../planning/planning-model";
+import { useMinute } from "../planning/plan-time";
+import {
+  PLANS_PAGE,
+  type RepositoryGroup,
+  repositoryGroups,
+  repositoryLabel,
+} from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { updateAvailable, updateInSidebar, updateRow } from "../update-row";
+import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
@@ -30,6 +38,9 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * sidebar is dragged no wider than the window less this.
  */
 const WORK_RESERVE = 360;
+
+/** What the header over the plans with no repository says. */
+const NO_REPOSITORY = "No repository";
 
 /**
  * The edge of the window's left column, the plans' sidebar or Settings' page
@@ -213,27 +224,36 @@ function AccountButton({
   );
 }
 
-/** One section's plans, each a row of the sidebar. */
+/** What every row of the plans is drawn with, whichever section it stands in. */
+interface RowContext {
+  readonly plans: PlansControl;
+  readonly current: (planId: string) => boolean;
+  readonly onOpen: (planId: string) => void;
+  /** The time each row's last update is counted back from. */
+  readonly now: number;
+}
+
+/** One section's plans, each a row of the sidebar, naming its repository where nothing above it does. */
 function PlanRows({
-  plans,
   rows,
-  current,
-  onOpen,
+  repositoryShown,
+  context,
 }: {
-  plans: PlansControl;
   rows: readonly PlanSummary[];
-  current: (planId: string) => boolean;
-  onOpen: (planId: string) => void;
+  repositoryShown: boolean;
+  context: RowContext;
 }): React.JSX.Element {
   return (
     <ul className="sidebar-plans">
       {rows.map((plan) => (
         <SidebarPlan
           key={plan.id}
-          plans={plans}
+          plans={context.plans}
           plan={plan}
-          current={current(plan.id)}
-          onOpen={() => onOpen(plan.id)}
+          current={context.current(plan.id)}
+          repositoryShown={repositoryShown}
+          now={context.now}
+          onOpen={() => context.onOpen(plan.id)}
         />
       ))}
     </ul>
@@ -241,31 +261,83 @@ function PlanRows({
 }
 
 /**
+ * One repository's plans under a quiet header in the headings' voice, which
+ * folds and unfolds them, the fold kept across launches. A repository's
+ * header also offers a + that starts a new plan with that repository
+ * already chosen, shown while the header is hovered or holds focus, the way
+ * Codex and Cursor reveal a row's actions; it stands beside the fold rather
+ * than inside it, so pressing it folds nothing. The plans with no
+ * repository stand under "No repository", with nothing to preset.
+ */
+function RepositorySection({
+  group,
+  label,
+  folds,
+  onNewPlanIn,
+  context,
+}: {
+  group: RepositoryGroup;
+  /** What the header says for the repository: its name, or `owner/name` where another shares the name. */
+  label: string;
+  folds: FoldedGroups;
+  onNewPlanIn: (repository: string) => void;
+  context: RowContext;
+}): React.JSX.Element {
+  const { repository } = group;
+  const folded = folds.folded(repository);
+  const named = repository ?? NO_REPOSITORY;
+  return (
+    <div className="sidebar-repository">
+      <div className="sidebar-repository-header">
+        <Tooltip label={repository === null || label === repository ? undefined : repository}>
+          <button
+            type="button"
+            className="sidebar-repository-toggle"
+            aria-expanded={!folded}
+            onClick={() => folds.toggle(repository)}
+          >
+            <ChevronRightIcon />
+            <span className="sidebar-repository-name">{repository === null ? named : label}</span>
+          </button>
+        </Tooltip>
+        {repository === null ? null : (
+          <Tooltip label={`New plan in ${label}`}>
+            <button
+              type="button"
+              className="icon-button sidebar-repository-new"
+              aria-label={`New plan in ${label}`}
+              onClick={() => onNewPlanIn(repository)}
+            >
+              <PlusIcon />
+            </button>
+          </Tooltip>
+        )}
+      </div>
+      {folded ? null : <PlanRows rows={group.plans} repositoryShown={false} context={context} />}
+    </div>
+  );
+}
+
+/**
  * The plans under Archived, folded away behind one quiet row that counts
  * them, the way Codex and ChatGPT keep theirs: a press on the row unfolds
  * the list beneath it, and each archived plan opens and offers its actions
- * like any other. It draws nothing while no plan is archived, and it starts
- * folded, because an archived plan is one the developer put out of the way.
+ * like any other, flat and naming its repository. It draws nothing while no
+ * plan is archived, and it starts folded, because an archived plan is one
+ * the developer put out of the way.
  */
-function ArchivedPlans({
-  plans,
-  current,
-  onOpen,
-}: {
-  plans: PlansControl;
-  current: (planId: string) => boolean;
-  onOpen: (planId: string) => void;
-}): React.JSX.Element | null {
+function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
+  const { archived, markNotes } = context.plans;
   // A refusal noted on an archived plan unfolds the list, so the note under
   // its row is seen even where the list was folded while the ask was out.
-  const noted = plans.archived.some((plan) => plans.markNotes.has(plan.id));
+  const noted = archived.some((plan) => markNotes.has(plan.id));
   const [notedBefore, setNotedBefore] = useState(false);
   if (noted !== notedBefore) {
     setNotedBefore(noted);
     if (noted) setUnfolded(true);
   }
-  if (plans.archived.length === 0) return null;
+  if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
       <button
@@ -275,11 +347,9 @@ function ArchivedPlans({
         onClick={() => setUnfolded((was) => !was)}
       >
         <ChevronRightIcon />
-        Archived ({plans.archived.length})
+        Archived ({archived.length})
       </button>
-      {unfolded ? (
-        <PlanRows plans={plans} rows={plans.archived} current={current} onOpen={onOpen} />
-      ) : null}
+      {unfolded ? <PlanRows rows={archived} repositoryShown context={context} /> : null}
     </div>
   );
 }
@@ -288,7 +358,9 @@ function ArchivedPlans({
  * The window's left column: Luke, the way to a new plan, every plan the
  * account owns, and the account's row that leads to Settings. The pinned
  * plans stand in a section of their own above the rest while any are pinned,
- * newest pinned first, and the archived ones are folded away under the rest.
+ * newest pinned first and each naming its repository; the rest are grouped
+ * under their repositories' headers, the group updated most recently first;
+ * and the archived ones are folded away under them all.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
  * A plan's actions are a right-click on it away, whether or not it is open.
@@ -328,21 +400,33 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
+  const newPlanIn = (repository: string) => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.onNewPlanIn(repository);
+  };
+  const folds = useFoldedGroups();
+  const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
+  const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
+  const context: RowContext = { plans, current, onOpen: openPlan, now };
+  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  const groups = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  // The rows as the list draws them: the pinned, then each group not folded away.
+  const drawn = [
+    ...pinned,
+    ...groups.flatMap((group) => (folds.folded(group.repository) ? [] : group.plans)),
+  ];
   // Moving up and down the list as it reads, New plan at its head: up from
   // the first plan is the new-plan page, and down from that page is the
   // first plan. The ends go no further.
-  const at = composing ? -1 : plans.plans.findIndex((plan) => plan.id === plans.activePlanId);
+  const at = composing ? -1 : drawn.findIndex((plan) => plan.id === plans.activePlanId);
   const step = (by: number) => {
     const next = at + by;
     if (next === -1) newPlan();
-    const plan = plans.plans[next];
+    const plan = drawn[next];
     if (plan !== undefined) openPlan(plan.id);
   };
-  const listed = plans.signedIn && plans.plans.length > 0;
-  const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
-  const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
-  const rest = plans.plans.filter((plan) => plan.pinnedAt === undefined);
+  const listed = plans.signedIn && drawn.length > 0;
   // Note that the gear's dot wears the update row's own words, so its hover
   // and the row it leads to tell one story, and that it stands down while the
   // release has its own control above it, so the news is said once.
@@ -350,10 +434,7 @@ export function DesktopSidebar({
   const settingsNote =
     updateAvailable(update) && !updateInSidebar(update) ? updateRow(update).detail : undefined;
   useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
-  useAppCommand(
-    APP_COMMAND.NEXT_PLAN,
-    listed && at < plans.plans.length - 1 ? () => step(1) : undefined,
-  );
+  useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
   return (
     <aside className="desktop-sidebar" inert={sidebar.collapsed}>
@@ -380,7 +461,7 @@ export function DesktopSidebar({
         {plans.signedIn && pinned.length > 0 ? (
           <nav className="sidebar-group" aria-label="Pinned">
             <h2 className="sidebar-heading">Pinned</h2>
-            <PlanRows plans={plans} rows={pinned} current={current} onOpen={openPlan} />
+            <PlanRows rows={pinned} repositoryShown context={context} />
           </nav>
         ) : null}
         <nav className="sidebar-group" aria-label="Plans">
@@ -400,10 +481,21 @@ export function DesktopSidebar({
             <p className="sidebar-note">No plans yet.</p>
           ) : null}
           {plans.signedIn ? null : <p className="sidebar-note">Sign in to plan a feature.</p>}
-          <PlanRows plans={plans} rows={rest} current={current} onOpen={openPlan} />
-          {plans.signedIn ? (
-            <ArchivedPlans plans={plans} current={current} onOpen={openPlan} />
-          ) : null}
+          {groups.map((group) => (
+            <RepositorySection
+              key={group.repository ?? NO_REPOSITORY}
+              group={group}
+              label={
+                group.repository === null
+                  ? NO_REPOSITORY
+                  : repositoryLabel(group.repository, groups)
+              }
+              folds={folds}
+              onNewPlanIn={newPlanIn}
+              context={context}
+            />
+          ))}
+          {plans.signedIn ? <ArchivedPlans context={context} /> : null}
         </nav>
       </div>
 

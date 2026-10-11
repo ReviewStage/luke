@@ -504,6 +504,23 @@ test("an archive of the open plan the service refused leaves the plan open and i
   assert.equal(tab.control().markNotes.get(PLAN.id), "The plan could not be archived. Try again.");
 });
 
+test("New plan in a repository leaves the open plan for the new-plan page with that repository chosen, and plain New plan chooses none", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined) },
+  );
+
+  await act(async () => tab.control().onNewPlanIn("acme/ledger"));
+  const chosen = tab.control().newPlan;
+  act(() => tab.control().onNewPlan());
+
+  assert.equal(tab.control().boundFor, undefined);
+  assert.deepEqual(chosen.preset, { repository: "acme/ledger" });
+  assert.equal(chosen.presses, 1);
+  assert.equal(tab.control().newPlan.preset, undefined);
+  assert.ok(tab.told.includes(ACT_KIND.PLANNING_CLOSE));
+});
+
 test("a fixture's plan is pinned and archived nowhere", () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
   act(() => fixture.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));

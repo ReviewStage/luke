@@ -347,6 +347,59 @@ export function sidebarPlans(plans: readonly PlanSummary[]): SidebarPlans {
   return { pinned, rest, archived };
 }
 
+/** The plans of one repository, as the sidebar groups them under its header; null is the plans with none. */
+export interface RepositoryGroup {
+  readonly repository: string | null;
+  readonly plans: readonly PlanSummary[];
+}
+
+/**
+ * The plans grouped by their repository, the group whose plan was updated
+ * most recently first and the plans with none last whatever their age.
+ * Within a group the plans keep the order they were handed in, newest
+ * started first, so a row never moves while Luke writes its plan; only a
+ * group moves, and only past another.
+ */
+export function repositoryGroups(plans: readonly PlanSummary[]): readonly RepositoryGroup[] {
+  const grouped = new Map<string | null, PlanSummary[]>();
+  for (const plan of plans) {
+    const group = grouped.get(plan.repository);
+    if (group === undefined) grouped.set(plan.repository, [plan]);
+    else group.push(plan);
+  }
+  const latest = (group: readonly PlanSummary[]) =>
+    Math.max(...group.map((plan) => plan.updatedAt));
+  return [...grouped]
+    .map(([repository, members]) => ({ repository, plans: members }))
+    .sort((a, b) => {
+      if (a.repository === null || b.repository === null) {
+        return Number(a.repository === null) - Number(b.repository === null);
+      }
+      return latest(b.plans) - latest(a.plans);
+    });
+}
+
+/** A repository's name without its owner: `relay` of `acme/relay`. */
+function nameOf(repository: string): string {
+  return repository.slice(repository.indexOf("/") + 1);
+}
+
+/**
+ * What a group's header says for its repository: the repository's name
+ * alone, its owner left to the hover, unless another group's repository
+ * shares the name, where both say `owner/name` so neither is mistaken.
+ */
+export function repositoryLabel(repository: string, groups: readonly RepositoryGroup[]): string {
+  const name = nameOf(repository);
+  const shared = groups.some(
+    (group) =>
+      group.repository !== null &&
+      group.repository !== repository &&
+      nameOf(group.repository) === name,
+  );
+  return shared ? repository : name;
+}
+
 /** The status word beside the microphone for a call, or nothing where none stands. */
 const STATUS_WORD = {
   [LIVE_STATUS.UNAVAILABLE]: undefined,

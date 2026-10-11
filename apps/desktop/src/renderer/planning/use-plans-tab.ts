@@ -159,10 +159,18 @@ export interface PlansControl {
   onRetryDocument: () => void;
   /** Leaves any open plan for the new-plan page, and has that page focus its name field. */
   onNewPlan: () => void;
+  /** New plan with a repository already chosen in the page's composer: what a repository group's + asks. */
+  onNewPlanIn: (repository: string) => void;
   /** What the new-plan page offers and the two presses it makes. */
   newPlan: {
     /** Counts the presses of New plan, so the page focuses its name field on each. */
     presses: number;
+    /**
+     * The repository the last press of New plan chose for the composer,
+     * where it chose one; each press hands a new one, so the same
+     * repository chosen twice is chosen again over what was picked between.
+     */
+    preset: { readonly repository: string } | undefined;
     /** Starts the plan on the repository given, or none, which opens it; answers why it did not start, or nothing once it has. */
     start: (name: string, repository: string | null) => Promise<string | undefined>;
   };
@@ -250,6 +258,7 @@ export function usePlansTab(input: {
   const { act, tell } = input.acts;
   const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
   const [newPlanPresses, setNewPlanPresses] = useState(0);
+  const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
 
@@ -531,6 +540,14 @@ export function usePlansTab(input: {
       (refused: Error) => refused.message,
     );
 
+  // Each press of New plan is counted, so the page focuses its name field
+  // again, and hands the repository it chose, if any, to the composer.
+  const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) => {
+    if (page === PLANS_PAGE.DOCUMENT) leavePlan();
+    setNewPlanPresses((presses) => presses + 1);
+    setNewPlanPreset(preset);
+  };
+
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
@@ -618,12 +635,11 @@ export function usePlansTab(input: {
     onRetryDocument: () => {
       if (planning.activePlanId !== undefined) select(planning.activePlanId);
     },
-    onNewPlan: () => {
-      if (page === PLANS_PAGE.DOCUMENT) leavePlan();
-      setNewPlanPresses((presses) => presses + 1);
-    },
+    onNewPlan: () => newPlanWith(undefined),
+    onNewPlanIn: (repository) => newPlanWith({ repository }),
     newPlan: {
       presses: newPlanPresses,
+      preset: newPlanPreset,
       start: startPlan,
     },
     onLeavePlan: leavePlan,

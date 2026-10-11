@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
+import { momentText, sinceText } from "../planning/plan-time";
 import { DOCUMENT_REGION, PLAN_MARK } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
@@ -236,8 +237,9 @@ export function PlanActionsButton({
 }
 
 /**
- * A plan in the sidebar, pinned, listed, or archived alike: a press opens
- * it, and a right-click offers its actions where the pointer is. Renamed,
+ * A plan in the sidebar, pinned, listed, or archived alike: its name, and at
+ * the row's end how long ago it was last updated, the full moment on hover.
+ * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row. A pin or an archive the service refused says
  * so under the row the plan went back to.
@@ -246,12 +248,18 @@ export function SidebarPlan({
   plans,
   plan,
   current,
+  repositoryShown,
+  now,
   onOpen,
 }: {
   plans: PlansControl;
   plan: PlanSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
+  /** Whether the row names its repository beneath its name: a row under its repository's header leaves it to the header. */
+  repositoryShown: boolean;
+  /** The time the row's last update is counted back from. */
+  now: number;
   onOpen: () => void;
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
@@ -265,9 +273,14 @@ export function SidebarPlan({
     row.current?.focus();
   }, [rename.editing]);
   const repository =
-    plan.repository !== null ? (
+    repositoryShown && plan.repository !== null ? (
       <span className="sidebar-plan-repository">{plan.repository}</span>
     ) : null;
+  const updated = (
+    <Tooltip label={`Updated ${momentText(plan.updatedAt)}`}>
+      <span className="sidebar-plan-time">{sinceText(plan.updatedAt, now)}</span>
+    </Tooltip>
+  );
   return (
     <li>
       {rename.editing ? (
@@ -302,7 +315,10 @@ export function SidebarPlan({
             );
           }}
         >
-          <span className="sidebar-plan-name">{plan.name}</span>
+          <span className="sidebar-plan-line">
+            <span className="sidebar-plan-name">{plan.name}</span>
+            {updated}
+          </span>
           {repository}
         </button>
       )}
