@@ -20,12 +20,14 @@ import { TestClock } from "effect/testing";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext, SessionContext } from "eve/context";
 import {
+  ACTION_RESULT_STATUS,
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
   TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
+  unparsedWire,
 } from "../server/core";
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
@@ -35,6 +37,14 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model";
+import {
+  PLAN_EDIT,
+  PLAN_EDIT_REFUSAL,
+  requestedNotes,
+  reserveNotes,
+  settleNotes,
+  takenInTurn,
+} from "../server/hosted/coder-host/plan-edit";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
@@ -47,6 +57,7 @@ import {
 } from "../server/hosted/coder-host/transcript";
 import {
   awaitingLinesOf,
+  type CodingAgentBriefText,
   createCodingAgent,
   fillCodingAgentTitle,
   latestTurnsOf,
@@ -55,7 +66,7 @@ import {
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { createPlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
 import {
   type ConversationTarget,
   listMessagesPast,
@@ -170,7 +181,12 @@ function mintSession(): string {
 }
 
 /** An account with one agent started on a plan, on the model given, its session claimed as the hook claims it. */
-const openAgent = (host: CoderHost, model = "anthropic/claude-opus-5.5", effort = "high") =>
+const openAgent = (
+  host: CoderHost,
+  model = "anthropic/claude-opus-5.5",
+  effort = "high",
+  brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const plan = yield* createPlan(userId, {
@@ -182,8 +198,7 @@ const openAgent = (host: CoderHost, model = "anthropic/claude-opus-5.5", effort 
       idempotencyKey: `start-${minted}`,
       model,
       effort,
-      planSnapshot: PLAN_TEXT,
-      task: null,
+      ...brief,
       repository: "acme/relay",
     });
     assert.ok(Option.isSome(started));
@@ -1033,6 +1048,97 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         );
         const turn = yield* turnRow(hostTurnId(sessionId, "turn_0"));
         assert.equal(turn?.model, CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID);
+      }),
+  );
+  it.effect(
+    "an agent's notes are taken into its plan as the notetaker's are, the ones the plan cannot take reported, and read back in the plan",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const input = unparsedWire({
+          notes: [
+            {
+              kind: "add",
+              field: "openQuestions",
+              text: "Who may withdraw an invite? Going on as: the member who sent it.",
+            },
+            { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
+            { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+          ],
+        });
+
+        const answer = yield* host.editPlan(admitted, input, 0);
+
+        assert.deepEqual(answer, {
+          status: ACTION_RESULT_STATUS.ACCEPTED,
+          taken: 2,
+          missed: ["replace problem"],
+        });
+        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.deepEqual(stored.fields.openQuestions, [
+          "Who may withdraw an invite? Going on as: the member who sent it.",
+        ]);
+        assert.equal(stored.fields.decisions, "- Invites expire after 7 days.");
+        assert.ok(stored.plan.document.body.includes("- Who may withdraw an invite?"));
+        // The save is journaled as the agent's, with the notes that were taken and the agent named by its row.
+        const at = yield* Clock.currentTimeMillis;
+        assert.deepEqual(stored.plan.agentEdits, [{ agentId: agent.id, label: agent.model, at }]);
+        assert.deepEqual(
+          stored.agentEdits.map((edit) => edit.notes.map((note) => note.kind)),
+          [["add", "add"]],
+        );
+      }),
+  );
+
+  it.effect(
+    "notes outside the template or past the turn's cap are refused, and the plan stands",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, admitted } = yield* openAgent(host);
+        const outside = unparsedWire({ notes: [{ kind: "add", field: "title", text: "x" }] });
+        const two = unparsedWire({
+          notes: [
+            { kind: "add", field: "decisions", text: "One." },
+            { kind: "add", field: "decisions", text: "Two." },
+          ],
+        });
+
+        assert.deepEqual(yield* host.editPlan(admitted, outside, 0), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.UNREADABLE,
+        });
+        assert.deepEqual(yield* host.editPlan(admitted, two, PLAN_EDIT.MAX_NOTES_PER_TURN - 1), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.TOO_MANY,
+        });
+        const stored = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        assert.equal(stored.fields.decisions, null);
+
+        // An agent handed a task never saw the plan, so it is refused by name.
+        const onTask = yield* openAgent(host, "anthropic/claude-opus-5.5", "high", {
+          planSnapshot: null,
+          task: "Rename the invite button.",
+        });
+        assert.deepEqual(yield* host.editPlan(onTask.admitted, two, 0), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: PLAN_EDIT_REFUSAL.NO_PLAN,
+        });
+
+        // Two calls one step makes run at once: each reserves its notes before its save goes out,
+        // so the second reads the first's reservation, and a refused call gives its reservation back.
+        assert.equal(requestedNotes(two), 2);
+        assert.equal(requestedNotes(outside), 0);
+        let count = reserveNotes({ count: 0 }, "turn_0", PLAN_EDIT.MAX_NOTES_PER_TURN);
+        assert.equal(takenInTurn(count, "turn_0"), PLAN_EDIT.MAX_NOTES_PER_TURN);
+        count = reserveNotes(count, "turn_0", 2);
+        count = settleNotes(count, "turn_0", 2, 0);
+        count = settleNotes(count, "turn_0", PLAN_EDIT.MAX_NOTES_PER_TURN, 38);
+        assert.equal(takenInTurn(count, "turn_0"), 38);
+        // The count is the session's own: a new turn starts it over.
+        assert.equal(takenInTurn(count, "turn_1"), 0);
+        assert.deepEqual(reserveNotes(count, "turn_1", 1), { turnId: "turn_1", count: 1 });
       }),
   );
 });

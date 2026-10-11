@@ -104,6 +104,7 @@ const CALL_ICON = {
   [CALL_KIND.DRAW_ON_BOARD]: PencilLineIcon,
   [CALL_KIND.LOOK_AT_BOARD]: EyeIcon,
   [CALL_KIND.QUEUE_QUESTION]: MessageCircleQuestionIcon,
+  [CALL_KIND.EDIT_PLAN]: FilePenIcon,
   [CALL_KIND.WORKER]: BotIcon,
   [CALL_KIND.WORKER_WAIT]: HourglassIcon,
   [CALL_KIND.WORKER_CANCEL]: CircleStopIcon,

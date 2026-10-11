@@ -1,5 +1,5 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
-import type { PlanFields } from "@sidecar/hosted/plan-template";
+import type { PlanAgentEdit, PlanFields } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
@@ -13,8 +13,9 @@ import { conversations } from "./storage-schema.js";
  * One row per plan, keyed by a UUID of the service's own and owned by the
  * account that started it: its name and the one
  * document the planning model saves, a Markdown body and the assumptions list
- * beside it, with the template's fields the body was formatted from. A save
- * replaces all three columns in one statement, so there is no
+ * beside it, with the template's fields the body was formatted from, and the
+ * journal of the saves coding agents made on it. A save
+ * replaces the document's columns in one statement, so there is no
  * earlier document to fall back on and none half-written: a save that failed
  * left the row as it stood. The document is stored as written, like the
  * conversation, readable by an operator and kept the developer's own by the
@@ -42,6 +43,11 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The template's fields the body was formatted from; null until the first save, an untouched template. */
     fields: jsonb("fields").$type<PlanFields>(),
+    /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
+    agentEdits: jsonb("agent_edits")
+      .$type<readonly PlanAgentEdit[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     /**
      * The GitHub repository the plan is about, `owner/name` as GitHub spells
      * it, confirmed reachable through the Luke GitHub App by the account

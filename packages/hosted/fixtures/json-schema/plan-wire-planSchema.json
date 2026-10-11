@@ -65,6 +65,35 @@
         "assumptions"
       ],
       "additionalProperties": false
+    },
+    "agentEdits": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 36
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "agentId",
+          "label",
+          "at"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 50
     }
   },
   "required": [

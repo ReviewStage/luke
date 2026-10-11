@@ -116,10 +116,26 @@ export const planSummarySchema = EffectSchema.Struct(planSummaryFields);
 
 export type PlanSummary = typeof planSummarySchema.Type;
 
-/** One plan with its saved document. */
+/** The most saves by coding agents a plan answers, newest last; the same bound the service keeps. */
+const MAX_AGENT_EDITS = 50;
+
+/** One save a coding agent made on the plan, as the window reads it: the agent, how it is named now, and when. */
+export const agentEditLineSchema = EffectSchema.Struct({
+  agentId: wireUuidSchema,
+  /** The agent as its row names it now: its title where it has one, else its model. */
+  label: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  /** Epoch milliseconds of the save. */
+  at: countedNumber,
+});
+
+/** One plan with its saved document, and the saves coding agents made on it, oldest first. */
 export const planSchema = EffectSchema.Struct({
   ...planSummaryFields,
   document: planDocumentSchema,
+  /** Optional on the wire so a plan from a service without the journal still reads; none is no edits. */
+  agentEdits: EffectSchema.optionalKey(
+    EffectSchema.Array(agentEditLineSchema).check(EffectSchema.isMaxLength(MAX_AGENT_EDITS)),
+  ),
 });
 
 export type Plan = typeof planSchema.Type;

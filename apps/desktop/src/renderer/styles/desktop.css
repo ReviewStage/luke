@@ -881,6 +881,7 @@ body,
 }
 
 .desktop-document .plan-body,
+.desktop-document .plan-edit-note,
 .desktop-document .plan-assumptions {
   max-width: var(--reading-width);
   margin-right: auto;

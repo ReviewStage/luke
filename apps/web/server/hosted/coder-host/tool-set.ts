@@ -10,8 +10,9 @@ import { wireValidatedTool } from "../../core.js";
  * The coding agent runs eve's own tools, authored one file each under
  * `coder/tools/` so the set is exactly this list and eve adds nothing
  * beside it: its shell and its file tools, the code extension's patch and
- * search, the provider-run web reads, and the delegation of a slice of its
- * work to a worker (`coder/tools/delegate.ts`). The worker's own rows name
+ * search, the provider-run web reads, the delegation of a slice of its
+ * work to a worker (`coder/tools/delegate.ts`), and the notes it takes on
+ * its plan (`plan-edit.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -31,6 +32,7 @@ export const CODER_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
+  EDIT_PLAN: "edit_plan",
 } as const;
 
 /**

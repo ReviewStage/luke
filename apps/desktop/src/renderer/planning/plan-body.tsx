@@ -23,7 +23,9 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * developer has scrolled the document themselves, and lights each unit and new assumption as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
  * fixed template always runs past the panel's ceiling, so the typing grows
- * the scrolled document and never the surface.
+ * the scrolled document and never the surface. A plan a coding agent has
+ * saved on says so in one muted line above the document, naming the agent
+ * as its row names it now and how long ago its newest save was.
  */
 
 /** The document the chase was last aimed at, and where its typing stands. */
@@ -41,6 +43,20 @@ interface PlanChase {
   readonly freshAssumptions: ReadonlySet<number>;
   /** How many times the caret has jumped, so the view can bring a jump to the middle. */
   readonly jumps: number;
+}
+
+/** The units "ago" is said in, longest first, each with its letter. */
+const AGO_UNITS = [
+  [86_400_000, "d"],
+  [3_600_000, "h"],
+  [60_000, "m"],
+] as const;
+
+/** How long ago an agent's save was, in the shortest words: "just now", "3m ago", "2h ago", "5d ago". */
+export function agoText(at: number, now: number): string {
+  const elapsed = Math.max(0, now - at);
+  const unit = AGO_UNITS.find(([span]) => elapsed >= span);
+  return unit === undefined ? "just now" : `${Math.floor(elapsed / unit[0])}${unit[1]} ago`;
 }
 
 /** The class of a unit or assumption lit as it settles. */
@@ -182,8 +198,15 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
   });
 
   const { assumptions } = plan.document;
+  // The journal is oldest first, so the newest save is its last.
+  const edited = plan.agentEdits?.at(-1);
   return (
     <div ref={scroller} className="plan-document-scroll">
+      {edited === undefined ? null : (
+        <p className="plan-edit-note">
+          Updated by {edited.label} · {agoText(edited.at, Date.now())}
+        </p>
+      )}
       <div className="plan-body">
         {views.map((view) => (
           <MarkdownMessage

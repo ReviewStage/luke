@@ -26,6 +26,7 @@ import {
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { AGENT_TOOL } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
@@ -515,6 +516,18 @@ function agentPart(part: WireValue): AgentPart {
 /** The parts of a message as the tab draws them, in the row's order. */
 export function agentParts(message: CodingAgentMessage): readonly AgentPart[] {
   return message.parts.map(agentPart);
+}
+
+/** How many of the agent's plan edits have answered, which is when the plan the window holds is behind the service's. */
+export function settledPlanEdits(messages: readonly CodingAgentMessage[]): number {
+  return messages
+    .flatMap(agentParts)
+    .filter(
+      (part) =>
+        part.kind === AGENT_PART.TOOL &&
+        part.tool === AGENT_TOOL.EDIT_PLAN &&
+        part.state === TOOL_STATE.OUTPUT_AVAILABLE,
+    ).length;
 }
 
 /** How the fold reads a part: its words, its reasoning as a note, and each call grouped with the calls beside it. */

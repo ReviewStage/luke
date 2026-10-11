@@ -162,3 +162,27 @@ test("a plan's card is titled by its first heading, or its first line of words",
   assert.equal(planCardTitle("\n\nInvite by email.\n# Later"), "Invite by email.");
   assert.equal(planCardTitle("   "), "");
 });
+
+test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {
+  const notes = [
+    {
+      kind: "add",
+      field: "openQuestions",
+      text: "Who may withdraw an invite? Assuming the sender.",
+    },
+    { kind: "add", field: "decisions", text: "- Invites expire after 7 days." },
+    { kind: "replace", field: "problem", find: "an admin", text: "an owner" },
+  ];
+  const view = toolCallView({
+    tool: "edit_plan",
+    input: { notes },
+    output: { status: "accepted", taken: 3, missed: [] },
+  });
+  assert.equal(view.kind, CALL_KIND.EDIT_PLAN);
+  assert.equal(view.subject, "2 added, 1 corrected");
+  assert.equal(view.input.kind, TOOL_BLOCK.JSON);
+  assert.equal(
+    toolCallView({ tool: "edit_plan", input: undefined, output: undefined }).subject,
+    "",
+  );
+});

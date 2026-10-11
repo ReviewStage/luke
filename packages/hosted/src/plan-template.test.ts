@@ -7,12 +7,14 @@ import {
   EMPTY_PLAN_CONTENT,
   NOTE_KIND,
   notesInProgress,
+  PLAN_AGENT_EDITS_KEPT,
   PLAN_EMPTY_TEXT,
   PLAN_FIELD,
   type PlanContent,
   type PlanField,
   type PlanNote,
   planBody,
+  withAgentEdit,
 } from "./plan-template.js";
 
 const HEADER = { name: "Teammate invitations" } as const;
@@ -293,4 +295,15 @@ test("a phrase standing in more than one place names no place, so the note is mi
     text: "an owner",
   });
   assert.equal(named?.fields.goal.problem, PROBLEM.replace("an admin", "an owner"));
+});
+
+test("the agents' journal keeps the newest saves and lets the oldest go past its bound", () => {
+  const note: PlanNote = { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "x" };
+  let journal: ReturnType<typeof withAgentEdit> = [];
+  for (let at = 1; at <= PLAN_AGENT_EDITS_KEPT + 2; at += 1) {
+    journal = withAgentEdit(journal, { agentId: "agent", at, notes: [note] });
+  }
+  assert.equal(journal.length, PLAN_AGENT_EDITS_KEPT);
+  assert.equal(journal[0]?.at, 3);
+  assert.equal(journal.at(-1)?.at, PLAN_AGENT_EDITS_KEPT + 2);
 });

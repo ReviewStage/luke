@@ -1688,7 +1688,17 @@ tools and authors its own under `coder/tools/`, which is exactly the set the
 store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, `glob`, `web_fetch`, and `web_search`, the code
 extension's `apply_patch` and `grep` from `eve/extensions/code/tools`, and
-`delegate`, Luke's own hand-off to a worker (below); the
+two of Luke's own: `delegate`, the hand-off to a worker (below), and
+`edit_plan` (`coder-host/plan-edit.ts`), which takes the
+notetaker's own notes (`@sidecar/hosted/plan-template`'s `planNotesSchema`)
+into the agent's plan through the plan's one write (`plan-notes.ts`): an open
+question the agent met with the assumption it goes on under, a fact it
+corrected in the code, a decision it made. The save is journaled on the plan
+row (`plan.agent_edits`, the last fifty, the agent's id and its notes as
+taken) and named from the agent's row at read time, so the window's "Updated
+by" line and the planning model's "recent edits by coding agents" say what the
+row says now; the developer reads them on their next planning call while the
+agent runs on, and a turn may take only so many notes. The
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The

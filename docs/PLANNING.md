@@ -445,6 +445,14 @@ A note naming a phrase the plan does not hold is passed over, reported, and
 never guessed into another; a note that does not read under the schema is
 passed over alone. The rest save.
 
+A coding agent takes the same notes through its `edit_plan` tool
+(`apps/web/server/hosted/coder-host/plan-edit.ts`). Its save is written into
+the plan's journal (`plan.agent_edits`, the last fifty) as the agent's id,
+the instant, and the notes as taken; the agent is named at read time from its
+row, so the window's "Updated by" line over the document and the "recent
+edits by coding agents" the planning model is handed both say what the row
+says now.
+
 The notes type in while they are written. The call streams its answer, and
 the notes so far are taken over the saved fields and formatted exactly as a
 save would be (`notesInProgress` in `packages/hosted/src/plan-template.ts`):
@@ -481,7 +489,7 @@ and the planning model reads the canonical Markdown on its next turn.
 | Decisions | `decisions` | Each consequential choice, why, and the alternative rejected. |
 | Verification | `verification` | The end-to-end check that proves the change works, beyond the examples passing. |
 | Left to the agent | `leftToAgent` | Exactly which choices the implementing agent may make itself. |
-| Open questions | `openQuestions` | What is still unresolved. |
+| Open questions | `openQuestions` | What is still unresolved, including a question a coding agent met while implementing, with the assumption it went on under. |
 | Data and migration | `dataAndMigration` | Only when stored data changes: what is stored, how existing data moves, and how the change is undone. |
 | Assumptions | `assumptions` | The existing `{ text }` list. |
 

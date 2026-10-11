@@ -494,6 +494,31 @@ export const planNotesSchema = EffectSchema.Struct({
   ),
 });
 
+/** The most saves by coding agents a plan keeps word of; older ones fall off the front. */
+export const PLAN_AGENT_EDITS_KEPT = 50;
+
+/**
+ * One save a coding agent made on the plan: which agent, when, and the notes
+ * as they were taken. The agent is named by its id alone, so whoever reads
+ * the journal names it by what its row says now.
+ */
+export const planAgentEditSchema = EffectSchema.Struct({
+  agentId: EffectSchema.String,
+  /** Epoch milliseconds of the save. */
+  at: EffectSchema.Number,
+  notes: EffectSchema.Array(planNoteSchema),
+});
+
+export type PlanAgentEdit = typeof planAgentEditSchema.Type;
+
+/** The journal with one more save on its end, the oldest let go past the bound. */
+export function withAgentEdit(
+  journal: readonly PlanAgentEdit[],
+  edit: PlanAgentEdit,
+): readonly PlanAgentEdit[] {
+  return [...journal, edit].slice(-PLAN_AGENT_EDITS_KEPT);
+}
+
 /** How one text field is read from the fields and written back. */
 interface TextFieldLens {
   readonly read: (fields: PlanFields) => string | null;
