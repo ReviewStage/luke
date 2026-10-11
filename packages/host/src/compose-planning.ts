@@ -7,7 +7,7 @@ import {
   invalid,
 } from "@sidecar/gateway";
 import type { HostedPlanClient, PlanActivityFrame, PlanDraftFrame } from "@sidecar/hosted";
-import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
+import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -155,6 +155,12 @@ export interface PlanningComposer extends Composer {
    * read. An ask about any other plan is dropped.
    */
   showCode: (planId: string, ref: CodeRef) => void;
+  /**
+   * Reads the open plan's board again, as Luke starts to talk about the
+   * drawing his planning model just made on it; word about any other plan
+   * is dropped.
+   */
+  showBoard: (planId: string) => void;
   /**
    * Shows a planning turn's work on the call about the open plan, in place
    * of the same turn as last told, the newest turns kept; work about any
@@ -334,23 +340,27 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   /**
-   * Shows the call's activity, and asks for the board again where it says a
-   * draw just settled: the planning model's pending call was a draw and is
-   * not any more, or the planning model stopped working, which also covers a
-   * draw that settled between two words about it. A look that just became
-   * the pending call asks too, because a draw made in the same step never
-   * shows as pending, and the look waits on the board holding it.
+   * Shows the call's activity, and asks for the board again where the
+   * planning model stopped working, which catches a drawing Luke never got
+   * to talk about. A drawing is otherwise read as Luke starts to talk about
+   * it (`showBoard`), not as its draw settles, so it lands with his words. A
+   * look that just became the pending call asks too, because the look waits
+   * on the board holding the drawing it checks.
    */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
     if (view.activePlanId !== planId) return;
     const was = view.activity?.planner;
-    const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
     const looking =
       activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
       was?.action !== LOOK_AT_BOARD_TOOL_NAME;
     write({ activity });
-    if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
+    if (stopped || looking) Queue.offerUnsafe(boardReads, planId);
+  }
+
+  function showBoard(planId: string): void {
+    if (view.activePlanId !== planId) return;
+    Queue.offerUnsafe(boardReads, planId);
   }
 
   // Note that only the newest ask is kept, because code named while an older
@@ -577,6 +587,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     showDraft,
     showActivity,
     showCode,
+    showBoard,
     showWork,
     callEnded,
     reset: Effect.gen(function* () {

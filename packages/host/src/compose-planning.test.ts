@@ -971,7 +971,7 @@ function drawing(number: number) {
 }
 
 it.effect(
-  "opening a plan draws its board, and a drawing the planning model settled on the call is read again",
+  "opening a plan draws its board, and a drawing the planning model settled is read again only once Luke starts to talk about it",
   () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -990,7 +990,14 @@ it.effect(
         );
         planning.showActivity(activityFrame(INVITES, { planner: {}, notes: false }));
         for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+        assert.deepEqual(last()?.board, { elements: [box("note")], appliedDrawing: 0 });
 
+        planning.showBoard(BILLING);
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+        assert.deepEqual(last()?.board, { elements: [box("note")], appliedDrawing: 0 });
+
+        planning.showBoard(INVITES);
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
         assert.deepEqual(last()?.board, drawn);
       }),
     ),

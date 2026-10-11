@@ -8,10 +8,12 @@ import {
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanBoardFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
   planActivityFrameFromWire,
+  planBoardFrameFromWire,
   planCodeFrameFromWire,
   planDraftFrameFromWire,
   planWorkFrameFromWire,
@@ -158,6 +160,8 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanActivity?(listener: (activity: PlanActivityFrame) => void): void;
   /** Tells the listener each time Luke puts code on screen on a planning call, on the same terms as `onPlanDraft`. */
   onPlanCode?(listener: (code: PlanCodeFrame) => void): void;
+  /** Tells the listener each time Luke's drawing lands on the board on a planning call, on the same terms as `onPlanDraft`. */
+  onPlanBoard?(listener: (board: PlanBoardFrame) => void): void;
   /** Tells the listener each planning turn's work as it changes on a planning call, on the same terms as `onPlanDraft`. */
   onPlanWork?(listener: (work: PlanWorkFrame) => void): void;
 }
@@ -887,6 +891,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       const draftListeners = new Set<(draft: PlanDraftFrame) => void>();
       const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const codeListeners = new Set<(code: PlanCodeFrame) => void>();
+      const boardListeners = new Set<(board: PlanBoardFrame) => void>();
       const workListeners = new Set<(work: PlanWorkFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
@@ -898,6 +903,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           },
           onPlanCode: (code) => {
             for (const listener of [...codeListeners]) listener(code);
+          },
+          onPlanBoard: (board) => {
+            for (const listener of [...boardListeners]) listener(board);
           },
           onPlanWork: (work) => {
             for (const listener of [...workListeners]) listener(work);
@@ -942,6 +950,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanCode: (listener) => {
           codeListeners.add(listener);
         },
+        onPlanBoard: (listener) => {
+          boardListeners.add(listener);
+        },
         onPlanWork: (listener) => {
           workListeners.add(listener);
         },
@@ -961,13 +972,14 @@ const isServiceFrame = Schema.is(
       VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
       VOICE_SERVICE_FRAME.PLAN_CODE,
       VOICE_SERVICE_FRAME.PLAN_WORK,
+      VOICE_SERVICE_FRAME.PLAN_BOARD,
     ]),
   }),
 );
 
 /**
  * The socket with the service's own frames, `plan.draft`, `plan.activity`,
- * `plan.code`, and `plan.work`, taken off its arrivals and told to their
+ * `plan.code`, `plan.work`, and `plan.board`, taken off its arrivals and told to their
  * listeners, so the sideband over it reads only what the session said. A
  * frame is routed by the type it decodes to and then checked by that type's
  * own schema. The substring test ahead of the decode only keeps a transcript
@@ -982,6 +994,7 @@ function withoutServiceFrames(
     readonly onPlanDraft: (draft: PlanDraftFrame) => void;
     readonly onPlanActivity: (activity: PlanActivityFrame) => void;
     readonly onPlanCode: (code: PlanCodeFrame) => void;
+    readonly onPlanBoard: (board: PlanBoardFrame) => void;
     readonly onPlanWork: (work: PlanWorkFrame) => void;
   },
 ): LiveSocket {
@@ -994,6 +1007,8 @@ function withoutServiceFrames(
       told(planCodeFrameFromWire(value), listeners.onPlanCode),
     [VOICE_SERVICE_FRAME.PLAN_WORK]: (value: UnparsedWireValue) =>
       told(planWorkFrameFromWire(value), listeners.onPlanWork),
+    [VOICE_SERVICE_FRAME.PLAN_BOARD]: (value: UnparsedWireValue) =>
+      told(planBoardFrameFromWire(value), listeners.onPlanBoard),
   };
   return {
     send: (data) => socket.send(data),

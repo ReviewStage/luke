@@ -9,6 +9,7 @@ import {
 import {
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanBoardFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -84,6 +85,8 @@ export interface LiveSessionHolderOptions {
   onPlanActivity?: (activity: PlanActivityFrame) => void;
   /** Luke put code on screen on the standing planning call, on the same terms as `onPlanDraft`. */
   onPlanCode?: (code: PlanCodeFrame) => void;
+  /** Luke's drawing landed on the board on the standing planning call, on the same terms as `onPlanDraft`. */
+  onPlanBoard?: (board: PlanBoardFrame) => void;
   /** A planning turn's work on the standing planning call changed, on the same terms as `onPlanDraft`. */
   onPlanWork?: (work: PlanWorkFrame) => void;
   /** The planning call about the plan named ended, so what it put on screen goes with it. */
@@ -339,6 +342,7 @@ export class LiveSessionHolder {
       opened.onPlanDraft?.((draft) => this.#drafted(session, draft));
       opened.onPlanActivity?.((activity) => this.#activity(session, activity));
       opened.onPlanCode?.((code) => this.#code(session, code));
+      opened.onPlanBoard?.((board) => this.#board(session, board));
       opened.onPlanWork?.((work) => this.#work(session, work));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
@@ -560,6 +564,12 @@ export class LiveSessionHolder {
   #code(session: HeldSession, code: PlanCodeFrame): void {
     if (session.ended || code.planId !== session.planId) return;
     this.#options.onPlanCode?.(code);
+  }
+
+  /** Luke's drawing landing on the board of the plan the session is bound to, passed on while the session stands. */
+  #board(session: HeldSession, board: PlanBoardFrame): void {
+    if (session.ended || board.planId !== session.planId) return;
+    this.#options.onPlanBoard?.(board);
   }
 
   /** A planning turn's work on the call about the plan the session is bound to, passed on while the session stands. */

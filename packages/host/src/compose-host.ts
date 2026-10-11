@@ -7,6 +7,7 @@ import {
 import {
   HostedPlanClient,
   type PlanActivityFrame,
+  type PlanBoardFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -92,6 +93,7 @@ export const hostAssemblyLayer: Layer.Layer<
     let showPlanActivity: (activity: PlanActivityFrame) => void = () => undefined;
     let planCallEnded: (planId: string) => void = () => undefined;
     let showPlanCode: (code: PlanCodeFrame) => void = () => undefined;
+    let showPlanBoard: (board: PlanBoardFrame) => void = () => undefined;
     let showPlanWork: (work: PlanWorkFrame) => void = () => undefined;
     const live = yield* composeLive({
       settings,
@@ -101,6 +103,7 @@ export const hostAssemblyLayer: Layer.Layer<
       showPlanActivity: (activity) => showPlanActivity(activity),
       planCallEnded: (planId) => planCallEnded(planId),
       showPlanCode: (code) => showPlanCode(code),
+      showPlanBoard: (board) => showPlanBoard(board),
       showPlanWork: (work) => showPlanWork(work),
     });
     const planning = yield* composePlanning({
@@ -118,6 +121,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
     showPlanCode = (code) => planning.showCode(code.planId, code.ref);
+    showPlanBoard = (board) => planning.showBoard(board.planId);
     showPlanWork = (work) => planning.showWork(work.planId, work.turn);
 
     /**

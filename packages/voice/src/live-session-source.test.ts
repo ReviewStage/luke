@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   HOSTED_API_ERROR,
   type PlanActivityFrame,
+  type PlanBoardFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -738,6 +739,41 @@ it.live(
         "the code frame and the session's event to land",
       );
       assert.deepEqual(told, [shown]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+    }),
+);
+
+it.live(
+  "word of Luke's drawing landing on a planning call's board is taken off the socket for its listener and never reaches the sideband",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+      assert.ok(opened?.onPlanBoard);
+      const told: PlanBoardFrame[] = [];
+      opened.onPlanBoard((board) => told.push(board));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const drawn: PlanBoardFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_BOARD,
+        planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+      };
+      first.receive(drawn);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      yield* settled(
+        () => told.length === 1 && reading.events.length === 1,
+        "the board frame and the session's event to land",
+      );
+      assert.deepEqual(told, [drawn]);
       assert.deepEqual(
         reading.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],
