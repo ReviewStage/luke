@@ -62,7 +62,14 @@ import {
   LIVE_BRAIN_FOLLOW_BOUNDS,
 } from "../server/voice/live-brain";
 import { stampedEveEvent } from "./support/eve-events";
-import { FIRST_EVE_TURN, parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
+import {
+  FIRST_EVE_TURN,
+  parkedTurn,
+  resumedTurn,
+  STARTING_WORKER_CALL,
+  spokenTurn,
+  steeredTurn,
+} from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { deleteConversation, insertConversation } from "./support/store-rows";
 
@@ -1600,6 +1607,87 @@ it.effect(
       const looked = f.looks();
       yield* TestClock.adjust(Duration.times(POLL, 3));
       assert.equal(f.looks(), looked);
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+/** A worker's child session saying `words` in a turn of its own, relayed into the child conversation of the call that started its task. */
+function childTurn(turnId: string, words: string): readonly MessageStreamEvent[] {
+  return [
+    stampedEveEvent({ type: "turn.started", data: { turnId, sequence: 0 } }, NOW),
+    stampedEveEvent(
+      { type: "message.received", data: { turnId, sequence: 0, message: "Do the job." } },
+      NOW,
+    ),
+    stampedEveEvent(
+      { type: "step.started", data: { turnId, sequence: 0, stepIndex: 0, modelId: "m" } },
+      NOW,
+    ),
+    stampedEveEvent(
+      {
+        type: "message.completed",
+        data: { turnId, sequence: 0, stepIndex: 0, finishReason: "stop", message: words },
+      },
+      NOW,
+    ),
+  ];
+}
+
+it.effect(
+  "a worker the followed turn steers shows the session of the call an earlier turn started its task with, where eve records the steered work",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const f = yield* standOnTestClock(target);
+      const shown: PlanWorkTurn[] = [];
+      f.brain.onWork((work) => shown.push(work));
+
+      // An earlier turn started the task, and the task's session holds the work the steer gave it.
+      const relayed = (to: ConversationTarget, turn: RelayStanding["turn"]): RelayStanding => ({
+        sessionId: `wrun_${randomUUID()}`,
+        target: to,
+        turn,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      });
+      yield* Effect.promise(() =>
+        play(parkedTurn(FIRST_EVE_TURN, 0, NOW), relayed(target, BRAIN_HOST_TURN.SPOKEN)),
+      );
+      const child = {
+        userId: target.userId,
+        conversationId: childConversationId(target.conversationId, STARTING_WORKER_CALL),
+      };
+      yield* Effect.promise(() =>
+        database.run(openChildConversation(target, child.conversationId, "worker")),
+      );
+      const childStanding = relayed(child, RELAY_TURN.CHILD);
+      yield* Effect.promise(() =>
+        play(childTurn(FIRST_EVE_TURN, "Queue A lets an admin revoke."), childStanding),
+      );
+      yield* Effect.promise(() =>
+        play(childTurn("turn_1", "Only queue B batches."), childStanding),
+      );
+
+      const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
+      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+      yield* Effect.promise(() =>
+        play(steeredTurn(FIRST_EVE_TURN, 0, NOW), {
+          ...relayed(target, BRAIN_HOST_TURN.SPOKEN),
+          sessionId,
+        }),
+      );
+      yield* f.release;
+      yield* f.arrived(2);
+      yield* f.polls(2);
+
+      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+      assert.notEqual(drawn.id, STARTING_WORKER_CALL);
+      assert.deepEqual(drawn.session?.parts.at(-1), {
+        type: PLAN_WORK_PART.TEXT,
+        text: "Only queue B batches.",
+      });
       yield* Effect.promise(() => f.stop());
     }),
 );

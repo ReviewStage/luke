@@ -79,6 +79,7 @@ const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
+const isText = Schema.is(Schema.String);
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -275,12 +276,78 @@ function newest<Part>(parts: readonly Part[]) {
   };
 }
 
-/** The planning model's `worker` calls in a journal, whose subagents' sessions the work draws inside them. */
-export function workerCallIdsOf(journal: StoredUIMessage | undefined): readonly string[] {
-  return (journal?.parts ?? [])
-    .filter(isStoredToolPart)
-    .filter((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER)
+/**
+ * eve's receipt on the call that started a task, which names the task. Note
+ * that the receipt is the one place a journal keeps a task's id, because
+ * the relay records a call and its answer, not eve's task events.
+ */
+const STARTED_TASK = /^Started task (\S+)\. /u;
+
+/** The planning model's `worker` calls in the journals. */
+function workerCallsIn(journals: readonly (StoredUIMessage | undefined)[]): StoredToolPart[] {
+  return journals.flatMap((journal) =>
+    (journal?.parts ?? [])
+      .filter(isStoredToolPart)
+      .filter((part) => storedToolName(part) === EVE_DELEGATION_TOOL.WORKER),
+  );
+}
+
+/** The task a worker call sent more work to, which its input names; nothing for a call that started one. */
+function sentTaskOf(part: StoredToolPart): string | undefined {
+  const { input } = part;
+  return isWorkerInput(input) ? (input.taskId ?? undefined) : undefined;
+}
+
+/** The task a worker call started, read off its receipt; nothing before it answered or where it started none. */
+function startedTaskOf(part: StoredToolPart): string | undefined {
+  if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE || !isText(part.output)) {
+    return undefined;
+  }
+  return STARTED_TASK.exec(part.output)?.[1];
+}
+
+/**
+ * The worker calls of a journal that send work to a task the journal did not
+ * start, whose start only the conversation's other journals hold: a worker
+ * redirected in a later turn than the one that started it.
+ */
+export function callsSendingToEarlierTasks(journal: StoredUIMessage | undefined): string[] {
+  const calls = workerCallsIn([journal]);
+  const started = new Set(calls.map(startedTaskOf));
+  return calls
+    .filter((part) => {
+      const sent = sentTaskOf(part);
+      return sent !== undefined && !started.has(sent);
+    })
     .map((part) => part.toolCallId);
+}
+
+/**
+ * The planning model's `worker` calls in a journal, each with the call whose
+ * child conversation records its subagent's session. A call that started a
+ * task reads its own. A call that sent more work to a task already started
+ * reads the starting call's, because eve hands that work to the task's
+ * standing session, whose turns are all recorded under the call that opened
+ * it; the start is looked for in the journal, then in `earlier`, the
+ * conversation's other journals, and a start found in neither leaves the
+ * call its own.
+ */
+export function workerSessionCallsOf(
+  journal: StoredUIMessage | undefined,
+  earlier: readonly StoredUIMessage[] = [],
+): ReadonlyMap<string, string> {
+  const startedBy = new Map<string, string>();
+  for (const part of workerCallsIn([...earlier, journal])) {
+    const started = startedTaskOf(part);
+    if (started !== undefined) startedBy.set(started, part.toolCallId);
+  }
+  return new Map(
+    workerCallsIn([journal]).map((part) => {
+      const sent = sentTaskOf(part);
+      const starter = sent === undefined ? undefined : startedBy.get(sent);
+      return [part.toolCallId, starter ?? part.toolCallId];
+    }),
+  );
 }
 
 /**

@@ -70,7 +70,7 @@ import type { RunMode } from "./run-mode.js";
  */
 
 /**
- * How long after a call's end its transcript is read a second time. Note
+ * How long after a call's end its transcript and work are read a second time. Note
  * that the first read can land before the service has written the call's
  * last words, because the service closes the device's socket first and only
  * then waits on the writes it already started, and says nothing once they
@@ -203,8 +203,15 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
-  /** The plans a call just ended about, whose transcript is read again by the loop below. */
-  const transcriptReads = yield* Queue.sliding<string>(1);
+  /** The plans a call just ended about, whose transcript and work are read again by the loop below. */
+  const callEndReads = yield* Queue.sliding<string>(1);
+
+  /**
+   * The plan whose call is telling its turns' work as they run, whose told
+   * turns stand over the record's running copies; none once that call ended,
+   * since nothing it told is ahead of the record any more.
+   */
+  let tellingPlanId: string | undefined;
 
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
@@ -316,15 +323,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   /**
    * The held turns with a page the service answered laid among them, in the
-   * order the turns began. Note that a turn a call told since the plan
-   * opened stands over the record's copy while that copy still runs,
-   * because the call is ahead of the record there.
+   * order the turns began. Note that a turn the open plan's call told stands
+   * over the record's copy while that copy still runs and the call still
+   * tells, because the call is ahead of the record there; once the call has
+   * ended, a turn still running on record, parked on a worker, is the
+   * record's, because the record goes on following the worker after the
+   * call's last word.
    */
   function withPage(page: readonly PlanWorkTurn[]): PlanWorkTurn[] {
+    const telling = tellingPlanId !== undefined && tellingPlanId === view.activePlanId;
     const told = new Map((view.work ?? []).map((turn) => [turn.turnId, turn]));
     const recorded = page.map((turn) => {
       const live = told.get(turn.turnId);
-      return live !== undefined && turn.state === PLAN_WORK_STATE.RUNNING ? live : turn;
+      return telling && live !== undefined && turn.state === PLAN_WORK_STATE.RUNNING ? live : turn;
     });
     const read = new Set(page.map((turn) => turn.turnId));
     const unread = (view.work ?? []).filter((turn) => !read.has(turn.turnId));
@@ -419,6 +430,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function showWork(planId: string, turn: PlanWorkTurn): void {
     if (view.activePlanId !== planId) return;
+    tellingPlanId = planId;
     const held = view.work ?? [];
     // A turn told again stays where it first stood, so the tab never reorders what it drew.
     const turns = held.some((standing) => standing.turnId === turn.turnId)
@@ -428,8 +440,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   function callEnded(planId: string): void {
+    if (tellingPlanId === planId) tellingPlanId = undefined;
     if (view.activePlanId !== planId) return;
-    Queue.offerUnsafe(transcriptReads, planId);
+    Queue.offerUnsafe(callEndReads, planId);
   }
 
   /** Draws `plan` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -695,8 +708,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }),
       );
     }),
-    // The board reads a settled draw asks for and the transcript reads a
-    // call's end asks for; every other read of the plans is an ask's.
+    // The board reads a settled draw asks for and the transcript and work
+    // reads a call's end asks for; every other read of the plans is an ask's.
     lifetime: Effect.gen(function* () {
       yield* Effect.forkScoped(
         Effect.forever(
@@ -707,9 +720,11 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       );
       yield* Effect.forkScoped(
         Effect.forever(
-          Effect.flatMap(Queue.take(transcriptReads), (planId) => {
+          Effect.flatMap(Queue.take(callEndReads), (planId) => {
             const read = Effect.suspend(() =>
-              gate() && view.activePlanId === planId ? serial(readTranscript(planId)) : Effect.void,
+              gate() && view.activePlanId === planId
+                ? serial(Effect.andThen(readTranscript(planId), readWork(planId)))
+                : Effect.void,
             );
             return Effect.andThen(read, Effect.andThen(Effect.sleep(TRANSCRIPT_SETTLE), read));
           }),

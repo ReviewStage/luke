@@ -141,24 +141,45 @@ export function goodbyeTurn(turnId: string, now: number): readonly MessageStream
   ];
 }
 
-/** The worker's receipt, as eve answers a subagent call the moment its task starts. */
-const WORKER_RECEIPT =
-  "Started task worker-ha1bbn. Its result will arrive in a <task_result> message.";
-
-const DELEGATION_CALL = "call-delegate";
+/** The task the parked turn's worker call starts, which the steered turn sends more work to by its id. */
 const WORKER_TASK = "worker-ha1bbn";
 
+/** One call to the worker as a turn makes it: its id, what it carries, and eve's receipt for it. */
+interface WorkerCall {
+  readonly callId: string;
+  readonly input: { readonly message: string; readonly taskId?: string };
+  readonly receipt: string;
+}
+
+/** The id of the parked turn's call, whose child conversation records the worker's session. */
+export const STARTING_WORKER_CALL = "call-delegate";
+
+/** The parked turn's call, which starts the worker's task. */
+const STARTING_CALL: WorkerCall = {
+  callId: STARTING_WORKER_CALL,
+  input: { message: "Compare the two queue libraries." },
+  receipt: `Started task ${WORKER_TASK}. Its result will arrive in a <task_result> message.`,
+};
+
+/** The steered turn's call, which sends more work to the task the parked turn started. */
+const STEERING_CALL: WorkerCall = {
+  callId: "call-steer",
+  input: { message: "Also check whether either library batches.", taskId: WORKER_TASK },
+  receipt: `Sent to task ${WORKER_TASK}. Its reply will arrive in a <task_result> message.`,
+};
+
 /**
- * A turn in which the planning model hands work to the worker, as eve streams
- * it up to the park: the call eve announces as its own kind of action, the
- * receipt as the call's result, the words before the wait, and the park on
- * the task. Every event is stamped with the deliveries the turn's start named.
+ * A turn in which the planning model calls the worker, as eve streams it up
+ * to the park: the call eve announces as its own kind of action, the receipt
+ * as the call's result, the words before the wait, and the park on the task.
+ * Every event is stamped with the deliveries the turn's start named.
  */
-export function parkedTurn(
+function delegatingTurn(
+  call: WorkerCall,
   turnId: string,
   sequence: number,
   now: number,
-  deliveryIds?: readonly string[],
+  deliveryIds: readonly string[] | undefined,
 ): readonly MessageStreamEvent[] {
   const stampedWith = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
     stampedEveEvent(event, now, deliveryIds);
@@ -178,12 +199,12 @@ export function parkedTurn(
         actions: [
           {
             kind: "subagent-call",
-            callId: DELEGATION_CALL,
+            callId: call.callId,
             name: EVE_DELEGATION_TOOL.WORKER,
             subagentName: EVE_DELEGATION_TOOL.WORKER,
             description: "Do one job in the background.",
             nodeId: "subagents/worker",
-            input: { message: "Compare the two queue libraries." },
+            input: call.input,
           },
         ],
       },
@@ -196,7 +217,7 @@ export function parkedTurn(
       type: "task.started",
       data: {
         turnId,
-        callId: DELEGATION_CALL,
+        callId: call.callId,
         kind: "agent",
         name: EVE_DELEGATION_TOOL.WORKER,
         taskId: WORKER_TASK,
@@ -211,9 +232,9 @@ export function parkedTurn(
         status: "completed",
         result: {
           kind: "tool-result",
-          callId: DELEGATION_CALL,
+          callId: call.callId,
           toolName: EVE_DELEGATION_TOOL.WORKER,
-          output: WORKER_RECEIPT,
+          output: call.receipt,
         },
       },
     }),
@@ -237,7 +258,7 @@ export function parkedTurn(
       type: "agent.started",
       data: {
         turnId,
-        callId: DELEGATION_CALL,
+        callId: call.callId,
         taskId: WORKER_TASK,
         name: EVE_DELEGATION_TOOL.WORKER,
         sessionId: "wrun_child",
@@ -245,6 +266,26 @@ export function parkedTurn(
       },
     }),
   ];
+}
+
+/** A turn that hands work to the worker, starting its task, up to the park. */
+export function parkedTurn(
+  turnId: string,
+  sequence: number,
+  now: number,
+  deliveryIds?: readonly string[],
+): readonly MessageStreamEvent[] {
+  return delegatingTurn(STARTING_CALL, turnId, sequence, now, deliveryIds);
+}
+
+/** A later turn that sends more work to the task the parked turn started, up to the park. */
+export function steeredTurn(
+  turnId: string,
+  sequence: number,
+  now: number,
+  deliveryIds?: readonly string[],
+): readonly MessageStreamEvent[] {
+  return delegatingTurn(STEERING_CALL, turnId, sequence, now, deliveryIds);
 }
 
 /** The rest of a parked turn: the task's result, the words after it, and the end, stamped with the turn's deliveries. */
@@ -262,7 +303,7 @@ export function resumedTurn(
       type: "task.settled",
       data: {
         turnId,
-        callId: DELEGATION_CALL,
+        callId: STARTING_CALL.callId,
         kind: "agent",
         name: EVE_DELEGATION_TOOL.WORKER,
         taskId: WORKER_TASK,
