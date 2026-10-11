@@ -1750,8 +1750,13 @@ body,
 }
 
 .tab-add-menu {
-  width: 280px;
   -webkit-app-region: no-drag;
+}
+
+/* An agent's dot stands in its row's glyph column, as it does in its tab's,
+   so its name starts where every other row's does. */
+.tab-add-menu .agent-status-dot {
+  margin: 5px; /* off-scale */
 }
 
 .tab-add-anchor[data-side="end"] .tab-add-menu {

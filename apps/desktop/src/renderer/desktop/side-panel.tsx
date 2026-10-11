@@ -1,5 +1,11 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import type { PlanCode, PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  PLAN_WORK_STATE,
+  type PlanCode,
+  type PlanWorkState,
+  type PlanWorkTurn,
+} from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
   CodeIcon,
@@ -15,10 +21,11 @@ import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
+import { Shimmer } from "../ai-elements/shimmer";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
-import { agentTabLabel } from "../planning/coding-agent-model";
+import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -40,6 +47,7 @@ import {
 import {
   type WorkTurnRow,
   type WorkWorkerBlock,
+  workerCallIds,
   workerJob,
   workerOf,
   workRowsOf,
@@ -65,9 +73,10 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * panel's coming and going never moves it. The fixed tabs come first and
  * the plan's coding agents follow, one tab each, named by model with a dot
  * for where the agent stands; after them stand the subagents opened from
- * the Work tab, one tab each, named by job. A fixed tab and a subagent's
- * close, an agent's never does. The plan's own actions stay in the plan's
- * toolbar and never come into the panel.
+ * the Work tab or the "+", one tab each, named by job. Every tab closes,
+ * and closing an agent's or a subagent's closes only the view: the agent
+ * goes on as it was, and the "+" opens its tab again. The plan's own
+ * actions stay in the plan's toolbar and never come into the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -130,8 +139,33 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** Why a kind already open is not offered again, said where its shortcut would be. */
-const KIND_OPEN = "Open";
+/** What a row of the "+" says at its end for a tab already open: a kind's, which is dimmed, or an agent's, which is chosen again. */
+const TAB_OPEN = "Open";
+
+/** The "+" menu's sections after the fixed kinds. */
+const ADD_SECTION = {
+  AGENTS: "Coding agents",
+  SUBAGENTS: "Subagents",
+} as const;
+
+/** Where a coding agent stands, as its row in the "+" menu says it. */
+const AGENT_STATUS_WORD = {
+  [CODING_AGENT_STATUS.STARTING]: "Starting",
+  [CODING_AGENT_STATUS.RUNNING]: "Running",
+  [CODING_AGENT_STATUS.COMPLETED]: "Done",
+  [CODING_AGENT_STATUS.FAILED]: "Failed",
+  [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
+} as const satisfies Record<CodingAgentStatus, string>;
+
+/** Where a subagent stands, as its row says it; one its call left running is stopped, since nothing more of it will be told. */
+const SUBAGENT_STATE_WORD = {
+  [PLAN_WORK_STATE.RUNNING]: "Stopped",
+  [PLAN_WORK_STATE.DONE]: "Done",
+  [PLAN_WORK_STATE.FAILED]: "Stopped",
+} as const satisfies Record<PlanWorkState, string>;
+
+/** The word for a subagent still running, which shimmers as the work tab's does. */
+const SUBAGENT_RUNNING_WORD = "Running";
 
 /** Which edge of the "+" its menu hangs from: its left, or its right where the window leaves no room. */
 const MENU_SIDE = {
@@ -153,7 +187,7 @@ function kindAction(
     command: TAB_COMMAND[tab],
     onSelect: () => onChoose(tab),
   };
-  return tabAddable(tab, tabs) ? action : { ...action, unavailable: KIND_OPEN };
+  return tabAddable(tab, tabs) ? action : { ...action, unavailable: TAB_OPEN };
 }
 
 /** The "+" menu's row for a kind: its glyph, its name, and its shortcut, or dimmed where it is open and may not be again. */
@@ -163,31 +197,92 @@ function kindRow(tab: FixedSidePanelTab, tabs: readonly FixedSidePanelTab[]): Me
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
     command: TAB_COMMAND[tab],
-    disabled: tabAddable(tab, tabs) ? undefined : KIND_OPEN,
+    disabled: tabAddable(tab, tabs) ? undefined : TAB_OPEN,
   };
+}
+
+/** Words that shimmer while what they say is under way, as a running line does. */
+function stateWords(word: string, live: boolean): React.ReactNode {
+  return live ? <Shimmer>{word}</Shimmer> : word;
+}
+
+/** One row of the "+" menu, and what picking it does. */
+interface AddEntry {
+  row: MenuRow;
+  onPick: () => void;
+}
+
+/**
+ * The "+" menu's rows: the fixed kinds; then, under Coding agents, each of
+ * the plan's agents in the order started; then, under Subagents, each
+ * subagent the plan's work holds. An agent's and a subagent's row wear the glyph its tab wears and
+ * say where it stands, shimmering while it runs, and one whose tab is open
+ * says so and is chosen again rather than dimmed.
+ */
+function addEntries(input: {
+  panel: SidePanelControl;
+  agents: CodingAgentsControl;
+  workers: readonly WorkWorkerBlock[];
+}): AddEntry[] {
+  const { panel, agents, workers } = input;
+  const kinds = SIDE_PANEL_TABS.map((kind) => ({
+    row: kindRow(kind, panel.tabs),
+    onPick: () => panel.onChoose(kind),
+  }));
+  const agentRows = (agents.agents ?? []).map((agent) => ({
+    row: {
+      id: agent.id,
+      label: agentTabLabel(agent, agents.models),
+      icon: <AgentStatusDot status={agent.status} />,
+      detail: stateWords(AGENT_STATUS_WORD[agent.status], agentStillWriting(agent.status)),
+      terms: [AGENT_STATUS_WORD[agent.status]],
+      section: ADD_SECTION.AGENTS,
+      hint: panel.closedAgents.includes(agent.id) ? undefined : TAB_OPEN,
+    },
+    onPick: () => panel.onChoose({ agent: agent.id }),
+  }));
+  const subagentRows = workers.map(({ call }) => {
+    const word = call.running ? SUBAGENT_RUNNING_WORD : SUBAGENT_STATE_WORD[call.state];
+    return {
+      row: {
+        id: call.id,
+        label: workerJob(call),
+        icon: <BotIcon className={call.running ? "text-luke" : undefined} />,
+        detail: stateWords(word, call.running),
+        terms: [word],
+        section: ADD_SECTION.SUBAGENTS,
+        hint: panel.subagents.includes(call.id) ? TAB_OPEN : undefined,
+      },
+      onPick: () => panel.onChoose({ subagent: call.id }),
+    };
+  });
+  return [...kinds, ...agentRows, ...subagentRows];
 }
 
 /**
  * The "+" after the last tab, and the menu it drops: the shared searchable
- * one, as the repository and model pickers drop, over every kind of tab
- * with its shortcut, those that may not be opened again dimmed. It hangs
- * from the "+"'s left edge, or from its right where the window ends before
- * the menu would, measured before it is painted. With every kind open there
- * is nothing to add, so it is dimmed and says so.
+ * one, as the repository and model pickers drop, over the rows
+ * `addEntries` lists. It hangs from the "+"'s left edge, or from its right
+ * where the window ends before the menu would, measured before it is
+ * painted. Opening it asks `onOpen` to read what the rows say again, as the
+ * Start menu reads its models, so an agent whose tab is not shown, which
+ * nothing follows, says where it stands now rather than where it last did.
+ * With no row to pick, every kind open and no agent or subagent to offer,
+ * it is dimmed and says so.
  */
 function AddTabButton({
-  tabs,
-  onChoose,
+  entries,
+  onOpen,
 }: {
-  tabs: readonly FixedSidePanelTab[];
-  onChoose: (tab: FixedSidePanelTab) => void;
+  entries: readonly AddEntry[];
+  onOpen: () => void;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
-  const full = SIDE_PANEL_TABS.every((kind) => !tabAddable(kind, tabs));
+  const full = entries.every((entry) => entry.row.disabled !== undefined);
 
   useLayoutEffect(() => {
     const menu = root.current?.querySelector(".searchable-menu") ?? null;
@@ -203,9 +298,9 @@ function AddTabButton({
     opener.current?.focus();
   };
   const pick = (id: string) => {
-    const kind = SIDE_PANEL_TABS.find((each) => each === id);
+    const entry = entries.find((each) => each.row.id === id);
     close();
-    if (kind !== undefined) onChoose(kind);
+    entry?.onPick();
   };
 
   return (
@@ -228,6 +323,7 @@ function AddTabButton({
             if (full) return;
             setSide(MENU_SIDE.START);
             setOpen(true);
+            onOpen();
           }}
         >
           <PlusIcon />
@@ -238,8 +334,8 @@ function AddTabButton({
           id={menuId}
           className="tab-add-menu"
           label="Open a tab"
-          placeholder="Search tabs"
-          rows={SIDE_PANEL_TABS.map((kind) => kindRow(kind, tabs))}
+          placeholder="Search tabs and agents"
+          rows={entries.map((entry) => entry.row)}
           value={undefined}
           noMatch="No tabs match"
           onPick={pick}
@@ -255,10 +351,11 @@ function AddTabButton({
 
 /**
  * The strip of tabs across the panel's top: the open fixed tabs, then one
- * per coding agent of the plan, then the "+". A tab's own word is all it
+ * per coding agent of the plan whose tab was not closed, then the "+". A tab's own word is all it
  * needs to say, so it hangs no pill; a fixed tab's chord is in the View
  * menu, the "+" menu, and on the Keyboard shortcuts page, and an agent's
- * tab wears the dot for where the agent stands in its glyph's place. A tab
+ * tab wears the dot for where the agent stands in its glyph's place; no
+ * agent's or subagent's tab has a chord. A tab
  * something arrived on while another was shown, and an agent's whose end no
  * one was looking at, wear the note at their corner until shown. The fixed
  * tabs are dragged or stepped into the order the panel keeps; the agent
@@ -273,12 +370,15 @@ function PanelTabs({
   unread,
   agents,
   subagents,
+  workers,
 }: {
   panel: SidePanelControl;
   unread: readonly SidePanelTab[];
   agents: CodingAgentsControl;
   /** The open subagent tabs the plan's work holds, in the strip's order. */
   subagents: readonly WorkWorkerBlock[];
+  /** Every subagent the plan's work holds, in the order started, which the "+" offers. */
+  workers: readonly WorkWorkerBlock[];
 }): React.JSX.Element {
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
@@ -304,16 +404,19 @@ function PanelTabs({
             onClose={() => panel.onClose(tab)}
           />
         ))}
-        {(agents.agents ?? []).map((agent) => (
-          <Tab
-            key={agent.id}
-            icon={<AgentStatusDot status={agent.status} />}
-            label={agentTabLabel(agent, agents.models)}
-            selected={chosen({ agent: agent.id })}
-            unread={noted({ agent: agent.id })}
-            onSelect={() => panel.onChoose({ agent: agent.id })}
-          />
-        ))}
+        {(agents.agents ?? [])
+          .filter((agent) => !panel.closedAgents.includes(agent.id))
+          .map((agent) => (
+            <Tab
+              key={agent.id}
+              icon={<AgentStatusDot status={agent.status} />}
+              label={agentTabLabel(agent, agents.models)}
+              selected={chosen({ agent: agent.id })}
+              unread={noted({ agent: agent.id })}
+              onSelect={() => panel.onChoose({ agent: agent.id })}
+              onClose={() => panel.onClose({ agent: agent.id })}
+            />
+          ))}
         {subagents.map(({ call }) => (
           <Tab
             key={call.id}
@@ -332,7 +435,7 @@ function PanelTabs({
           </button>
         ) : null}
       </TabStrip>
-      <AddTabButton tabs={panel.tabs} onChoose={panel.onChoose} />
+      <AddTabButton entries={addEntries({ panel, agents, workers })} onOpen={agents.onRetryList} />
     </div>
   );
 }
@@ -684,12 +787,15 @@ export function SidePanel({
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const { tab } = panel;
-  // The subagent tabs the plan's work still holds, each with its session, in the strip's order.
+  // Every subagent the plan's work holds, and those with a tab open, each
+  // with its session, in the order started and the strip's order.
   const workRows = workRowsOf(work.turns, work.callLive);
-  const subagents = panel.subagents.flatMap((callId) => {
+  const held = (callId: string) => {
     const worker = workerOf(workRows, callId);
     return worker === undefined ? [] : [worker];
-  });
+  };
+  const workers = workerCallIds(work.turns).flatMap(held);
+  const subagents = panel.subagents.flatMap(held);
   const shownAgent =
     tab !== undefined && isAgentTab(tab)
       ? agents.agents?.find((agent) => agent.id === tab.agent)
@@ -738,7 +844,13 @@ export function SidePanel({
         {/* The row is a drag region and each control in it is not; Chromium
             takes regions in document order, so the controls follow it. */}
         <div className="side-panel-bar">
-          <PanelTabs panel={panel} unread={unread} agents={agents} subagents={subagents} />
+          <PanelTabs
+            panel={panel}
+            unread={unread}
+            agents={agents}
+            subagents={subagents}
+            workers={workers}
+          />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
             leaving={leaving !== PANEL_LEAVING.NONE}

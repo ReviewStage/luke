@@ -145,3 +145,36 @@ test("with no agent, closing the last fixed tab chooses a subagent tab the plan 
   assert.equal(panel.control().tab, undefined);
   assert.deepEqual(panel.control().subagents, []);
 });
+
+test("an agent's tab closes to the open agent after it, else the one before, else the last fixed tab, stays closed across a launch while an agent started since opens, and opens again when chosen", () => {
+  const THIRD = "3b8f4e5d-7c6a-4b9f-9eaf-4a5b6c7d8e9f";
+  const first = mount([AGENT, OTHER, THIRD]);
+  act(() => first.control().onChoose({ agent: OTHER }));
+
+  act(() => first.control().onClose({ agent: OTHER }));
+  assert.deepEqual(first.control().closedAgents, [OTHER]);
+  assert.deepEqual(first.control().tab, { agent: THIRD }, "the open agent after it");
+  act(() => first.control().onClose({ agent: THIRD }));
+  assert.deepEqual(first.control().tab, { agent: AGENT }, "with none after, the one before");
+  act(() => first.control().onClose({ agent: AGENT }));
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "with no agent open, the last fixed tab");
+  assert.equal(first.control().open, true, "closing tabs leaves the panel open");
+
+  // Closing a tab that is not chosen leaves the chosen one.
+  act(() => first.control().onChoose({ agent: AGENT }));
+  act(() => first.control().onChoose({ agent: THIRD }));
+  assert.deepEqual(first.control().closedAgents, [OTHER]);
+  act(() => first.control().onClose({ agent: AGENT }));
+  assert.deepEqual(first.control().tab, { agent: THIRD });
+
+  // Another launch keeps the tabs closed, and an agent the plan started since stands open.
+  const NEWER = "4c9a5f6e-8d7b-4cae-afb0-5b6c7d8e9fa0";
+  const second = mount([AGENT, OTHER, THIRD, NEWER]);
+  assert.deepEqual(second.control().closedAgents, [OTHER, AGENT]);
+  assert.deepEqual(second.control().tab, { agent: THIRD });
+
+  // Choosing a closed agent's tab, from the "+", opens it again.
+  act(() => second.control().onChoose({ agent: OTHER }));
+  assert.deepEqual(second.control().closedAgents, [AGENT]);
+  assert.deepEqual(second.control().tab, { agent: OTHER });
+});

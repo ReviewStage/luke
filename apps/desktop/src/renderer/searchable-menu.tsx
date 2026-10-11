@@ -41,10 +41,12 @@ export interface MenuRow {
   icon?: React.ReactNode;
   /** Words a search matches beside the label, such as a model's provider. */
   terms?: readonly string[];
-  /** Muted words after the label: the effort a model runs at, an owner, "(Fast)". */
-  detail?: string | undefined;
-  /** The heading the row stands under, with the rows beside it that share it; none stands under no heading. */
+  /** Muted words after the label: the effort a model runs at, an owner, "(Fast)", where an agent stands. */
+  detail?: React.ReactNode;
+  /** The heading the row stands under, with the rows beside it that share it, and which a search matches; none stands under no heading. */
   section?: string | undefined;
+  /** Muted words at the row's end in the shortcut's place: "Open" on a tab already open. */
+  hint?: string | undefined;
   /** The shortcut that does what picking the row does, printed muted at the row's end. */
   command?: KeyedCommand | undefined;
   /** Why the row cannot be picked now, printed muted at its end in the shortcut's place; the row is dimmed and the arrows pass over it. */
@@ -124,12 +126,17 @@ function firstOpen(rows: readonly MenuRow[]): number {
   return rows.findIndex((row) => row.disabled === undefined);
 }
 
-/** The rows whose label or terms hold every word of the query, case aside; all of them for no query. */
+/** The rows whose label, terms, or section hold every word of the query, case aside; all of them for no query. */
 function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
   if (words.length === 0) return rows;
   return rows.filter((row) => {
-    const terms = [row.label, ...(row.terms ?? [])].map((term) => term.toLowerCase());
+    const named = [
+      row.label,
+      ...(row.terms ?? []),
+      ...(row.section === undefined ? [] : [row.section]),
+    ];
+    const terms = named.map((term) => term.toLowerCase());
     return words.every((word) => terms.some((term) => term.includes(word)));
   });
 }
@@ -176,11 +183,10 @@ function highlightOver(input: {
   return input.first;
 }
 
-/** What a row prints before its end slot: why it cannot be picked, or its shortcut, or nothing. */
+/** What a row prints before its end slot: why it cannot be picked, its own words, its shortcut, or nothing. */
 function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
-  if (row.disabled !== undefined) {
-    return <span className="plan-compose-menu-hint">{row.disabled}</span>;
-  }
+  const words = row.disabled ?? row.hint;
+  if (words !== undefined) return <span className="plan-compose-menu-hint">{words}</span>;
   if (row.command === undefined) return null;
   return <ShortcutGlyphs command={row.command} className="plan-compose-menu-hint" />;
 }
@@ -189,7 +195,7 @@ function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
 function RowBody(props: {
   icon: React.ReactNode;
   label: string;
-  detail: string | undefined;
+  detail: React.ReactNode;
   hint?: React.ReactNode;
   end: React.ReactNode;
 }): React.JSX.Element {

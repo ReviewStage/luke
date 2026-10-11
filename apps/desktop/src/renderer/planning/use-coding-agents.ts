@@ -24,8 +24,8 @@ import type { TranscriptReader } from "./use-agent-transcript";
 /**
  * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
- * The agents are read when a plan opens and again after a Start or a Stop,
- * and never on a clock; an agent's status moves between those reads only
+ * The agents are read when a plan opens, again after a Start or a Stop,
+ * and as the side panel's "+" opens, and never on a clock; an agent's status moves between those reads only
  * as its own transcript page reports it, or as the service answers a
  * message to it, which is the agent running. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
@@ -48,6 +48,7 @@ export interface CodingAgentsControl {
   agentIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
+  /** Reads the list again: after a read that failed, or as the panel's "+" opens, so it says where each agent stands now. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;

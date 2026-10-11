@@ -16,14 +16,17 @@ import { useCallback, useEffect, useState } from "react";
  * panel", which in this renderer is Luke's whole surface.
  *
  * The four fixed kinds are a constant; the agent tabs are the plan's, one
- * per agent, drawn after them, and come and go with the plan, so none of
- * them closes. A kept tab naming an agent the open plan has none of reads
- * as the first open fixed tab, so leaving a plan or opening another never
- * shows a tab with nothing behind it, while the kept value stands until the
- * next choice: the plan whose agent it names shows it again. A subagent's
- * tab, opened from its call in the Work tab, follows the agents: it is held
- * to the open plan's work the same way, it closes, and it is kept nowhere,
- * so a launch opens none.
+ * per agent, drawn after them, and come and go with the plan. An agent's
+ * tab closes as any other does, which closes the view and leaves the agent
+ * running, and the "+" opens it again; the agents whose tabs were closed
+ * are kept, so a closed tab stays closed across a launch, and an agent
+ * started since opens its tab. A kept tab naming an agent the open plan
+ * has none of reads as the first open fixed tab, so leaving a plan or
+ * opening another never shows a tab with nothing behind it, while the kept
+ * value stands until the next choice: the plan whose agent it names shows
+ * it again. A subagent's tab, opened from its call in the Work tab or from
+ * the "+", follows the agents: it is held to the open plan's work the same
+ * way, it closes, and it is kept nowhere, so a launch opens none.
  *
  * The panel holds tabs the way an editor's pane does: the developer closes
  * the ones they do not want, and the "+" or a tab's shortcut opens one again
@@ -67,9 +70,6 @@ export interface SubagentSidePanelTab {
 
 /** A tab of the panel: one of the fixed kinds, one agent's, or one subagent's. */
 export type SidePanelTab = FixedSidePanelTab | AgentSidePanelTab | SubagentSidePanelTab;
-
-/** A tab the developer may close: a fixed one, or a subagent's; an agent's always stands. */
-type ClosableSidePanelTab = FixedSidePanelTab | SubagentSidePanelTab;
 
 /** What the panel knows of a kind of tab. */
 export interface SidePanelTabKind {
@@ -137,19 +137,28 @@ export const SIDE_PANEL_WIDTH = {
 /** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.sidePanel";
 
+/**
+ * How many agents whose tabs were closed are kept, the latest closed. Note
+ * that the agents are every plan's, so the list is held to a bound rather
+ * than growing with every agent ever closed; one past it opens again.
+ */
+const CLOSED_AGENTS_KEPT = 500;
+
 const sidePanelTabSchema = Schema.Literals(SIDE_PANEL_TABS);
 const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Schema.String })]);
 
 /**
- * The open fixed tabs in the strip's order, and the chosen tab, which is
- * none only while no tab is open. The agent tabs are the plan's rather than
- * the panel's to keep, so only the chosen one may name an agent.
+ * The open fixed tabs in the strip's order, the chosen tab, which is none
+ * only while no tab is open, and the agents whose tabs were closed. The
+ * agent tabs are the plan's rather than the panel's to keep, so only the
+ * chosen one may name an agent, and the agents kept are those not drawn.
  */
 const sidePanelStateSchema = Schema.Struct({
   open: Schema.Boolean,
   tabs: Schema.Array(sidePanelTabSchema),
   tab: Schema.optional(anyTabSchema),
   width: Schema.Number,
+  closedAgents: Schema.optional(Schema.Array(Schema.String)),
 });
 
 export type SidePanelState = typeof sidePanelStateSchema.Type;
@@ -160,9 +169,10 @@ export type SidePanelState = typeof sidePanelStateSchema.Type;
  * rather than the preference's, so they are kept nowhere, and a subagent's
  * tab chosen is written as no tab, which the next launch reads as the first.
  */
-interface HeldState extends Omit<SidePanelState, "tab"> {
+interface HeldState extends Omit<SidePanelState, "tab" | "closedAgents"> {
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly string[];
+  readonly closedAgents: readonly string[];
 }
 
 /** What was kept before the panel's tabs could close: every tab open, and the one chosen. */
@@ -194,6 +204,8 @@ export interface SidePanelControl {
   tabs: readonly FixedSidePanelTab[];
   /** The open subagent tabs, by the call that started each, in the order opened; they follow the agent tabs, and only those the open plan's work holds are drawn. */
   subagents: readonly string[];
+  /** The agents whose tabs were closed, which the strip draws none for until one is opened again. */
+  closedAgents: readonly string[];
   /** The chosen tab, which is none only while no tab is open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -205,8 +217,8 @@ export interface SidePanelControl {
   onChoose: (tab: SidePanelTab) => void;
   /** Opens the tab at the strip's end where it was closed, leaving the chosen one chosen. */
   onAdd: (tab: FixedSidePanelTab) => void;
-  /** Closes the tab; closing the chosen one chooses its neighbour, the one after it where there is one. */
-  onClose: (tab: ClosableSidePanelTab) => void;
+  /** Closes the tab, and only the view: an agent's goes on as it was. Closing the chosen one chooses its neighbour, the one after it where there is one. */
+  onClose: (tab: SidePanelTab) => void;
   /** Moves the open fixed tab to the place in the strip's order, leaving the chosen one chosen; the agent tabs keep their place after the fixed ones. */
   onMove: (tab: FixedSidePanelTab, to: number) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
@@ -225,8 +237,9 @@ export function tabAddable(tab: FixedSidePanelTab, tabs: readonly FixedSidePanel
 
 /**
  * The state with the tab open at the strip's end where it was not, and
- * chosen if asked or if nothing was. An agent's tab always stands, so it
- * is only ever chosen; a subagent's opens at the end of its own run.
+ * chosen if asked or if nothing was. An agent's tab opens again in its
+ * place among the agents, which stand in the order started; a subagent's
+ * opens at the end of its own run.
  */
 function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState {
   const tabs = isFixedTab(tab) && !held.tabs.includes(tab) ? [...held.tabs, tab] : held.tabs;
@@ -234,10 +247,17 @@ function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState
     isSubagentTab(tab) && !held.subagents.includes(tab.subagent)
       ? [...held.subagents, tab.subagent]
       : held.subagents;
+  const closedAgents =
+    isAgentTab(tab) && held.closedAgents.includes(tab.agent)
+      ? held.closedAgents.filter((each) => each !== tab.agent)
+      : held.closedAgents;
   const chosen = choose || held.tab === undefined ? tab : held.tab;
-  return tabs === held.tabs && subagents === held.subagents && chosen === held.tab
+  return tabs === held.tabs &&
+    subagents === held.subagents &&
+    closedAgents === held.closedAgents &&
+    chosen === held.tab
     ? held
-    : { ...held, tabs, subagents, tab: chosen };
+    : { ...held, tabs, subagents, closedAgents, tab: chosen };
 }
 
 /** The tabs the plan draws beside the fixed ones: its agents, and the open subagent tabs its work holds, in the strip's order. */
@@ -251,17 +271,25 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly string[] {
   return held.subagents.filter((each) => drawn.subagents.includes(each));
 }
 
+/** The plan's agents whose tabs are open, in the order started; nothing while the agents are unread. */
+function drawnAgents(
+  agents: readonly string[] | undefined,
+  closedAgents: readonly string[],
+): readonly string[] | undefined {
+  return agents?.filter((each) => !closedAgents.includes(each));
+}
+
 /**
  * The state with the fixed tab closed, its neighbour chosen in its place
  * if it was the chosen one: the fixed tab after it, or where no fixed tab
- * is left, the plan's first agent, or the first subagent tab it draws.
+ * is left, the plan's first open agent, or the first subagent tab it draws.
  */
 function withoutFixedTab(held: HeldState, tab: FixedSidePanelTab, drawn: DrawnTabs): HeldState {
   const at = held.tabs.indexOf(tab);
   if (at < 0) return held;
   const tabs = held.tabs.filter((each) => each !== tab);
   if (held.tab !== tab) return { ...held, tabs };
-  const agent = drawn.agents?.[0];
+  const agent = drawnAgents(drawn.agents, held.closedAgents)?.[0];
   const subagent = drawnSubagents(held, drawn)[0];
   const next: SidePanelTab | undefined =
     tabs[Math.min(at, tabs.length - 1)] ??
@@ -273,7 +301,7 @@ function withoutFixedTab(held: HeldState, tab: FixedSidePanelTab, drawn: DrawnTa
  * The state with the subagent's tab closed, its neighbour chosen in its
  * place if it was the chosen one: among the subagent tabs the plan draws,
  * the one after it, or the tab before it where none is left, the plan's
- * last agent or the last fixed tab. A tab another plan's work holds is not
+ * last open agent or the last fixed tab. A tab another plan's work holds is not
  * a neighbour, since it is not in the strip.
  */
 function withoutSubagentTab(
@@ -288,7 +316,7 @@ function withoutSubagentTab(
   if (held.tab === undefined || !sameTab(held.tab, tab)) return { ...held, subagents };
   const beside = shown.filter((each) => each !== tab.subagent);
   const neighbour = beside[Math.min(Math.max(at, 0), beside.length - 1)];
-  const last = drawn.agents?.at(-1);
+  const last = drawnAgents(drawn.agents, held.closedAgents)?.at(-1);
   const next: SidePanelTab | undefined =
     neighbour !== undefined
       ? { subagent: neighbour }
@@ -298,9 +326,33 @@ function withoutSubagentTab(
   return { ...held, subagents, tab: next };
 }
 
+/**
+ * The state with the agent's tab closed, which closes nothing of the
+ * agent's own, its neighbour chosen in its place if it was the chosen one:
+ * among the plan's open agents, the one after it, or the one before it
+ * where none is after, or with no other agent open, the last fixed tab, or
+ * the first subagent tab the plan draws.
+ */
+function withoutAgentTab(held: HeldState, tab: AgentSidePanelTab, drawn: DrawnTabs): HeldState {
+  if (held.closedAgents.includes(tab.agent)) return held;
+  const shown = drawnAgents(drawn.agents, held.closedAgents) ?? [];
+  const at = shown.indexOf(tab.agent);
+  const closedAgents = [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT);
+  if (held.tab === undefined || !sameTab(held.tab, tab)) return { ...held, closedAgents };
+  const beside = shown.filter((each) => each !== tab.agent);
+  const neighbour = beside[Math.min(Math.max(at, 0), beside.length - 1)];
+  const subagent = drawnSubagents(held, drawn)[0];
+  const next: SidePanelTab | undefined =
+    neighbour !== undefined
+      ? { agent: neighbour }
+      : (held.tabs.at(-1) ?? (subagent !== undefined ? { subagent } : undefined));
+  return { ...held, closedAgents, tab: next };
+}
+
 /** The state with the tab closed, its neighbour chosen in its place if it was the chosen one. */
-function withoutTab(held: HeldState, tab: ClosableSidePanelTab, drawn: DrawnTabs): HeldState {
-  return isFixedTab(tab) ? withoutFixedTab(held, tab, drawn) : withoutSubagentTab(held, tab, drawn);
+function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
+  if (isFixedTab(tab)) return withoutFixedTab(held, tab, drawn);
+  return isAgentTab(tab) ? withoutAgentTab(held, tab, drawn) : withoutSubagentTab(held, tab, drawn);
 }
 
 /** The state with the open tab taken out and put back at `to` in the strip's order. */
@@ -323,12 +375,24 @@ function settled(state: SidePanelState): HeldState {
     state.tab !== undefined && (isAgentTab(state.tab) || tabs.includes(state.tab))
       ? state.tab
       : tabs[0];
-  return { ...state, tabs, tab, width: clampWidth(state.width), subagents: [] };
+  return {
+    ...state,
+    tabs,
+    tab,
+    width: clampWidth(state.width),
+    subagents: [],
+    closedAgents: state.closedAgents ?? [],
+  };
 }
 
 /** What is kept of the state: the preference without the subagent tabs, and without a subagent's tab chosen. */
 function stored(state: HeldState): SidePanelState {
-  const kept = { open: state.open, tabs: state.tabs, width: state.width };
+  const kept = {
+    open: state.open,
+    tabs: state.tabs,
+    width: state.width,
+    closedAgents: state.closedAgents,
+  };
   return state.tab !== undefined && !isSubagentTab(state.tab) ? { ...kept, tab: state.tab } : kept;
 }
 
@@ -379,6 +443,11 @@ export function shownTab(
   return subagents.includes(kept.subagent) ? kept : tabs[0];
 }
 
+/** A staged state as the hook holds it: no subagent tab open, and the agents it closed. */
+function heldOf(staged: SidePanelState): HeldState {
+  return { ...staged, subagents: [], closedAgents: staged.closedAgents ?? [] };
+}
+
 /**
  * The side panel's state: the kept preference, kept again on every change,
  * or where a fixture run stages one, that staged state and the presses on
@@ -398,11 +467,11 @@ export function useSidePanel(
   const [kept, setKept] = useState<HeldState>(readStored);
   const [moved, setMoved] = useState<HeldState | undefined>(undefined);
   const [fullScreen, setFullScreen] = useState(false);
-  const state = staged === undefined ? kept : (moved ?? { ...staged, subagents: [] });
+  const state = staged === undefined ? kept : (moved ?? heldOf(staged));
   const update = useCallback(
     (change: (held: HeldState) => HeldState) => {
       if (staged === undefined) setKept(change);
-      else setMoved((held) => change(held ?? { ...staged, subagents: [] }));
+      else setMoved((held) => change(held ?? heldOf(staged)));
     },
     [staged],
   );
@@ -432,7 +501,7 @@ export function useSidePanel(
     [update],
   );
   const onClose = useCallback(
-    (tab: ClosableSidePanelTab) => update((held) => withoutTab(held, tab, { agents, subagents })),
+    (tab: SidePanelTab) => update((held) => withoutTab(held, tab, { agents, subagents })),
     [update, agents, subagents],
   );
   const onMove = useCallback(
@@ -447,7 +516,8 @@ export function useSidePanel(
     open: state.open,
     tabs: state.tabs,
     subagents: state.subagents,
-    tab: shownTab(state.tab, state.tabs, agents, subagents),
+    closedAgents: state.closedAgents,
+    tab: shownTab(state.tab, state.tabs, drawnAgents(agents, state.closedAgents), subagents),
     width: state.width,
     fullScreen: state.open && fullScreen,
     onToggle,
