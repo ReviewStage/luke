@@ -642,9 +642,16 @@ function sameHolds(a: PlanHolds, b: PlanHolds): boolean {
   return SIDE_PANEL_TABS.every((tab) => a[tab] === b[tab]);
 }
 
-/** Whether a kind the plan held nothing of holds something now: an arrival, rather than a read landing. */
+/**
+ * Whether a kind the plan did not hold holds something now. Note that a
+ * kind not yet read counts as one held nothing, because the host leaves the
+ * plan's work and code absent both before their read and when it found
+ * none, so a first snippet or turn arrives from nothing known; a read
+ * landing after another tab shows is held to the same rule, and the tab
+ * shown stands rather than flickering to the one that landed.
+ */
 function arrived(was: PlanHolds, now: PlanHolds): boolean {
-  return SIDE_PANEL_TABS.some((tab) => was[tab] === false && now[tab] === true);
+  return SIDE_PANEL_TABS.some((tab) => was[tab] !== true && now[tab] === true);
 }
 
 /**

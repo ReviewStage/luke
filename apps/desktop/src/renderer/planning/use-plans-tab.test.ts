@@ -596,6 +596,18 @@ test("a new plan has no tab, and each kind's first content adds its tab in its p
   );
 });
 
+test("a first snippet, its read having left the code absent, is added ahead of the Transcript tab shown without taking its place", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, transcript: ONE_CALL } });
+  act(() => tab.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  tab.stand({ voice: ON_CALL });
+
+  tab.stand({ planning: { ...OPEN, transcript: ONE_CALL, shownCode: SHOWN } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);
+});
+
 test("a call's line heard live adds the Transcript tab before the record holds it", () => {
   const tab = mount({ shown: true, planning: NOTHING_YET });
   tab.stand({
