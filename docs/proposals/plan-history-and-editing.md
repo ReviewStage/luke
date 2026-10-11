@@ -347,8 +347,9 @@ Refusals reuse `PLAN_SAVE_REFUSAL`, adding `TOO_LONG`, which is the body bound.
 
 ### `0073_plan_revision.sql`
 
-- Next after `0072` (`0072_coding_agent_context`, #2014). As shipped in PR 1, the table is declared in its own
-  module, `apps/web/server/db/plan-revision-schema.ts`, because
+- Next after `0072_coding_agent_context` (#2014). As shipped in PR 1, the
+  table is declared in its own module,
+  `apps/web/server/db/plan-revision-schema.ts`, because
   `coding-agent-schema.ts` already imports `plan-schema.ts`.
   `drizzle-schema.test.ts` holds both directions.
 

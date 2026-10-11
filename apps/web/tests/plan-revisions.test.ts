@@ -187,6 +187,33 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     }),
   );
 
+  it.effect("a correction that takes a field to the words it already held is no revision", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* saveNotes(
+        { userId, planId },
+        [added(PLAN_FIELD.PROBLEM, "- Only admins invite.")],
+        ON_CALL,
+      );
+      const written = yield* listRevisions(userId, planId);
+      yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
+      yield* saveNotes(
+        { userId, planId },
+        [
+          {
+            kind: NOTE_KIND.REPLACE,
+            field: PLAN_FIELD.PROBLEM,
+            find: "Only admins invite.",
+            text: "Only admins invite.",
+          },
+        ],
+        ON_CALL,
+      );
+
+      assert.deepEqual(yield* listRevisions(userId, planId), written);
+    }),
+  );
+
   it.effect(
     "a plan written before its history began keeps what it held as its first revision, at its last save",
     () =>

@@ -265,7 +265,12 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
           return;
         }
         drafted.landed = true;
-        options.onDraft?.({ document: saved.document, savedAt: saved.savedAt });
+        // A save whose notes all missed under the lock, the plan written meanwhile, is no edit of Luke's.
+        options.onDraft?.(
+          saved.moved
+            ? { document: saved.document, savedAt: saved.savedAt }
+            : { document: saved.document },
+        );
       }
       cursor.heardThrough = heardThrough;
       cursor.notesRead = notesRead;

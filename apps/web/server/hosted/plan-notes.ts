@@ -1,4 +1,10 @@
-import { applyNotes, type PlanNote, planBody, withAgentEdit } from "@sidecar/hosted/plan-template";
+import {
+  applyNotes,
+  changedFields,
+  type PlanNote,
+  planBody,
+  withAgentEdit,
+} from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -71,6 +77,8 @@ export type PlanSaveResult =
       readonly savedAt: number;
       /** The notes that could not be taken, passed over while the rest were saved. */
       readonly missed: readonly PlanNote[];
+      /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
+      readonly moved: boolean;
     }
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
@@ -106,8 +114,9 @@ function savedUnderLock(
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.TOO_LONG } as const;
     }
     const taken = notes.filter((note) => !missed.includes(note));
-    // Notes that all missed leave the content as it was, which is no revision.
-    if (content !== before) {
+    // Notes that missed, or took a field to the words it held, leave the plan as it was: no revision.
+    const moved = changedFields(before, content).length > 0;
+    if (moved) {
       yield* recordRevision({
         planId: binding.planId,
         writer,
@@ -140,6 +149,7 @@ function savedUnderLock(
         document: savedPlan.document,
         savedAt: savedPlan.updatedAt,
         missed,
+        moved,
       }),
     });
   });

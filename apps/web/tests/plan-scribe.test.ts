@@ -188,6 +188,46 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       ),
   );
 
+  it.effect(
+    "a run whose notes all miss, the plan written meanwhile, sends the document back unsaved and names no edit of Luke's",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const find = "an admin";
+          const { scribe, asked, pace, drafts } = yield* scribeFor(userId, planId, [
+            {
+              paced: {
+                notes: [
+                  { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "an owner" },
+                ],
+              },
+            },
+          ]);
+
+          scribe.observe(heard("Owners add people, not admins.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => asked.length),
+            (count) => count > 0,
+          );
+          // The plan is written while the notetaker's answer is still streaming.
+          yield* saveNotes({ userId, planId }, [
+            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "a manager" },
+          ]);
+          const written = yield* readPlan(userId, planId);
+          while (pace()) yield* settle;
+          const last = yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft !== undefined && !draft.document.body.includes(find),
+          );
+
+          assert.equal(last?.savedAt, undefined);
+          assert.equal(last?.document.body, Option.getOrThrow(written).plan.document.body);
+        }),
+      ),
+  );
+
   it.effect("what Luke says is written into the plan without waiting on the developer", () =>
     Effect.scoped(
       Effect.gen(function* () {
