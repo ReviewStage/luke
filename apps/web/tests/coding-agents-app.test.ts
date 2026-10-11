@@ -1462,7 +1462,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "an agent's run is counted from its own start before any turn, from its newest turn's queueing and then its start, and from nowhere while a message awaits its turn",
+    "an agent's run is counted from its own start before any turn, from its newest turn's queueing and then its start, and from nowhere while a message awaits its turn, in the list and on the transcript's page alike",
     () =>
       Effect.gen(function* () {
         const { owner, plan, agent, ask, target, writer, sent } = yield* startedAgent(
@@ -1474,6 +1474,13 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
             ask(request(PLAN_AGENTS, owner, { id: plan.id })),
             (answered) =>
               readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents[0],
+          );
+        const paged = () =>
+          Effect.map(
+            ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .runStartedAt,
           );
         assert.equal((yield* listed())?.runStartedAt, agent.createdAt);
 
@@ -1510,6 +1517,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
         assert.equal(answered.agent.runStartedAt, undefined);
         assert.equal((yield* listed())?.runStartedAt, undefined);
+        assert.equal(yield* paged(), undefined);
 
         const nextTurn = randomUUID();
         yield* TestClock.adjust(Duration.minutes(2));
@@ -1531,6 +1539,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         const running = yield* listed();
         assert.equal(running?.turnId, nextTurn);
         assert.equal(running?.runStartedAt, agent.createdAt + 126_000);
+        assert.equal(yield* paged(), agent.createdAt + 126_000);
       }),
   );
 

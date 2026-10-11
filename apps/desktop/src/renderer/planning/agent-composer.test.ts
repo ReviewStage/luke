@@ -165,7 +165,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         new Promise((answer) => {
           sends.push({ text, clientKey, answer });
         }),
-      onStatus: (_agentId, status) => {
+      onStatus: (_agentId, { status }) => {
         statuses.push(status);
         setHeld((was) => ({ ...was, status }));
       },

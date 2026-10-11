@@ -242,6 +242,7 @@ function transcriptResponse(
     messages: page.messages,
     cursor: cursorToWire(page.cursor),
     status: page.status,
+    ...(page.runStartedAt === undefined ? undefined : { runStartedAt: page.runStartedAt }),
     title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),

@@ -124,11 +124,13 @@ export interface AgentTurnStanding {
   readonly lineAwaits: boolean;
 }
 
-/** When the run the status is read from began: the newest turn's start, the agent's own before any turn, and none while a line awaits its turn. */
-function runStartedAt(agent: CodingAgent, standing: AgentTurnStanding): number | undefined {
-  if (standing.lineAwaits) return undefined;
-  const turn = standing.turn;
-  return (turn === undefined ? agent.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
+/** When the run the status is read from began: the newest turn's start, or its queueing before eve starts it, the agent's own before any turn, and none while a line awaits its turn. */
+export function codingAgentRunStartedAt(
+  turn: CodingAgentLatestTurn | undefined,
+  standing: Pick<AgentStanding, "createdAt" | "lineAwaits">,
+): number | undefined {
+  if (standing.lineAwaits === true) return undefined;
+  return (turn === undefined ? standing.createdAt : (turn.startedAt ?? turn.queuedAt)).getTime();
 }
 
 /** One agent as the tabs draw it, its status read at `now`. */
@@ -152,6 +154,9 @@ export function codingAgentSummary(
     turnId: standing.turn?.id ?? null,
     brief: agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK,
   };
-  const started = runStartedAt(agent, standing);
+  const started = codingAgentRunStartedAt(standing.turn, {
+    createdAt: agent.createdAt,
+    lineAwaits: standing.lineAwaits,
+  });
   return started === undefined ? summary : { ...summary, runStartedAt: started };
 }

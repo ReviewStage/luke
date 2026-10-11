@@ -73,6 +73,7 @@ async function settle(): Promise<void> {
 function mount(initial: Standing) {
   const reads: HeldRead[] = [];
   const statuses: CodingAgentStatus[] = [];
+  const starts: (number | undefined)[] = [];
   const titles: (string | null)[] = [];
   let control: AgentTranscriptControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
@@ -87,8 +88,9 @@ function mount(initial: Standing) {
         new Promise((answer) => {
           reads.push({ after, answer });
         }),
-      onStatus: (_agentId, status) => {
+      onStatus: (_agentId, { status, runStartedAt }) => {
         statuses.push(status);
+        starts.push(runStartedAt);
         setHeld((was) => ({ ...was, status }));
       },
       onTitle: (_agentId, title) => {
@@ -105,6 +107,7 @@ function mount(initial: Standing) {
   return {
     reads,
     statuses,
+    starts,
     titles,
     control: () => {
       assert.ok(control);
@@ -140,7 +143,11 @@ test("a running agent's tab reads from the start, reads on from each page's curs
 
   // The hold let go with nothing new: the next read starts where this one ended,
   // and the page carries the title the agent has since been given.
-  await tab.answer(page([], "1:1", CODING_AGENT_STATUS.RUNNING, undefined, "Sign-out button"));
+  // It also carries when the run under way began, which a turn opened since has moved.
+  await tab.answer({
+    ...page([], "1:1", CODING_AGENT_STATUS.RUNNING, undefined, "Sign-out button"),
+    runStartedAt: 9_000,
+  });
   assert.equal(tab.reads.length, 3);
 
   // A message heard again is redrawn in place, and a page saying the agent ended ends the loop, with why where it failed.
@@ -164,6 +171,7 @@ test("a running agent's tab reads from the start, reads on from each page's curs
     CODING_AGENT_STATUS.RUNNING,
     CODING_AGENT_STATUS.FAILED,
   ]);
+  assert.deepEqual(tab.starts, [undefined, 9_000, undefined]);
   assert.deepEqual(tab.titles, [null, "Sign-out button", "Sign-out button"]);
   // The ended agent is read through: one more page, empty, and then nothing.
   assert.equal(tab.reads.length, 4);

@@ -20,7 +20,12 @@ import {
 import { ModelCatalog } from "../model-catalog.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
-import { type AgentStanding, codingAgentFailureOf, codingAgentStatusOf } from "./status.js";
+import {
+  type AgentStanding,
+  codingAgentFailureOf,
+  codingAgentRunStartedAt,
+  codingAgentStatusOf,
+} from "./status.js";
 import { usageOfTurn, usageOfTurns } from "./usage.js";
 
 /**
@@ -68,6 +73,8 @@ export interface TranscriptPage {
   readonly messages: readonly StoredUIMessage[];
   readonly cursor: MessageCursor;
   readonly status: CodingAgentStatus;
+  /** When the run that status is read from began, as the agent's summary says it; absent while a line awaits its turn. */
+  readonly runStartedAt?: number;
   readonly failureReason?: CodingAgentFailure;
   /** What the agent has cost over every turn it and its workers settled; absent before one has. */
   readonly usage?: CodingAgentUsage;
@@ -90,21 +97,19 @@ const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
   CODING_AGENT_STATUS.RUNNING,
 ]);
 
-/** The agent's status now, read from its newest turn and whether a line awaits one, and why where that turn failed. */
+/** The agent's status now, read from its newest turn and whether a line awaits one, when that run began, and why where that turn failed. */
 const statusNow = (target: ConversationTarget, createdAt: Date) =>
   Effect.gen(function* () {
     const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
     const awaiting = yield* awaitingLinesOf(target.userId, [target.conversationId]);
     const now = yield* Clock.currentTimeMillis;
     const turn = turns.get(target.conversationId);
-    const status = codingAgentStatusOf(turn, {
-      createdAt,
-      now,
-      lineAwaits: awaiting.has(target.conversationId),
-    });
+    const lineAwaits = awaiting.has(target.conversationId);
+    const status = codingAgentStatusOf(turn, { createdAt, now, lineAwaits });
+    const runStartedAt = codingAgentRunStartedAt(turn, { createdAt, lineAwaits });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
-    return { status, failureReason, turn };
+    return { status, runStartedAt, failureReason, turn };
   });
 
 /**
@@ -145,12 +150,13 @@ function pagePast(
       tools,
       after,
     );
-    const { status, failureReason, turn } = yield* statusNow(target, createdAt);
+    const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
     return {
       page: {
         messages: read.ok ? read.value.map((record) => record.message) : [],
         cursor,
         status,
+        ...(runStartedAt === undefined ? undefined : { runStartedAt }),
         ...(failureReason === undefined ? undefined : { failureReason }),
       },
       turn,

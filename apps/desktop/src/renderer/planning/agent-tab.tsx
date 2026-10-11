@@ -609,7 +609,7 @@ export function AgentSubagentTab({
     status,
     shown,
     read: control.readTranscript,
-    onStatus: (_agentId, next) => onStatus(next),
+    onStatus: (_agentId, next) => onStatus(next.status),
     // A worker's page names the worker's conversation, which is no title of the agent's.
     onTitle: () => undefined,
   });

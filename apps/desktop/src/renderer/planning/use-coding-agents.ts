@@ -4,17 +4,18 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentStatus, CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
 import {
+  type AgentRun,
   MODEL_CHANGE_FAILED,
   START_NEEDS_REPOSITORY,
   startFailureNote,
   withAgent,
-  withAgentStatus,
+  withAgentRun,
 } from "./coding-agent-model";
 import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
@@ -111,7 +112,7 @@ export interface CodingAgentsControl {
   /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
   onRename: (agentId: string, title: string) => Promise<boolean>;
   /** An agent's transcript page said where it stands now. */
-  onStatus: (agentId: string, status: CodingAgentStatus) => void;
+  onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
   onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
@@ -341,7 +342,7 @@ export function useCodingAgents(input: {
       setList((was) =>
         was.agents === undefined
           ? was
-          : { ...was, agents: withAgentStatus(was.agents, agentId, answer.agent.status) },
+          : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
       );
     }
     readAgain();
@@ -358,7 +359,7 @@ export function useCodingAgents(input: {
         setList((was) =>
           was.agents === undefined
             ? was
-            : { ...was, agents: withAgentStatus(was.agents, agentId, answer.agent.status) },
+            : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
         );
       }
       return answer;
@@ -423,11 +424,9 @@ export function useCodingAgents(input: {
     );
   }, []);
 
-  const onStatus = useCallback((agentId: string, status: CodingAgentStatus) => {
+  const onStatus = useCallback((agentId: string, run: AgentRun) => {
     setList((was) =>
-      was.agents === undefined
-        ? was
-        : { ...was, agents: withAgentStatus(was.agents, agentId, status) },
+      was.agents === undefined ? was : { ...was, agents: withAgentRun(was.agents, agentId, run) },
     );
   }, []);
 

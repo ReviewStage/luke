@@ -338,6 +338,8 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /** When the run that status is read from began, as the agent's summary says it, so a tab following the transcript counts the run a new turn opened. */
+  runStartedAt: EffectSchema.optionalKey(countedNumber),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
