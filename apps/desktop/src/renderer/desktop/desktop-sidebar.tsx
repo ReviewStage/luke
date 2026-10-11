@@ -328,15 +328,7 @@ function RepositorySection({
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
-  const { archived, markNotes } = context.plans;
-  // A refusal noted on an archived plan unfolds the list, so the note under
-  // its row is seen even where the list was folded while the ask was out.
-  const noted = archived.some((plan) => markNotes.has(plan.id));
-  const [notedBefore, setNotedBefore] = useState(false);
-  if (noted !== notedBefore) {
-    setNotedBefore(noted);
-    if (noted) setUnfolded(true);
-  }
+  const { archived } = context.plans;
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">

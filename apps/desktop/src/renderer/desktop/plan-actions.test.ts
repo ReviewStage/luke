@@ -9,13 +9,7 @@ import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
-import {
-  DOCUMENT_REGION,
-  MARK_FAILED_NOTES,
-  PLAN_MARK,
-  PLANS_PAGE,
-  type PlanMark,
-} from "../planning/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
@@ -335,25 +329,6 @@ test("Permanently delete on an archived plan asks without pointing at Archive", 
     dialog()?.querySelector("p")?.textContent,
     "“Billing export” and its board and transcript will be deleted. This can’t be undone.",
   );
-});
-
-test("a pin or an archive the service refused says so under the plan's row and beside the open plan's name", () => {
-  const { plans, asked } = openTab();
-  const noted = { ...plans, markNotes: new Map([[PLAN.id, MARK_FAILED_NOTES[PLAN_MARK.PIN]]]) };
-
-  const container = mount(createElement(DesktopPlans, { plans: noted }));
-  const open = mountSidebarPlan(noted, PLAN, asked);
-  const other = mountSidebarPlan(noted, OTHER, asked);
-
-  assert.equal(
-    container.querySelector('.desktop-toolbar [role="alert"]')?.textContent,
-    "The plan could not be pinned. Try again.",
-  );
-  assert.equal(
-    open.parentElement?.querySelector('[role="alert"]')?.textContent,
-    "The plan could not be pinned. Try again.",
-  );
-  assert.equal(other.parentElement?.querySelector('[role="alert"]'), null);
 });
 
 test("an archived plan's page says so quietly over its document, and Unarchive brings it back", () => {

@@ -9,10 +9,14 @@ import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import type { ActHandle } from "../act";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import {
   type AgentRun,
   MODEL_CHANGE_FAILED,
+  RENAME_FAILED,
+  START_FAILED_AWAY,
   START_NEEDS_REPOSITORY,
+  STOP_FAILED,
   startFailureNote,
   withAgent,
   withAgentRun,
@@ -166,6 +170,11 @@ export function useCodingAgents(input: {
   const [note, setNote] = useState<{ planId: string; note: string } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
+  const toast = useToast();
+  const failed = useCallback(
+    (words: string) => toast({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED }),
+    [toast],
+  );
   // Note that the acts and the opening are read through a ref, because the
   // tab hands new closures on every render and a read is owed to the plan
   // opening, not to a render.
@@ -285,6 +294,9 @@ export function useCodingAgents(input: {
         // Only a service that never answered is asked again under the same key.
         if (answer.failure !== CODING_AGENT_CALL_FAILURE.UNANSWERED) pending.current = undefined;
         setNote({ planId, note: startFailureNote(answer.failure) });
+        // The note waits beside the plan's Start; a developer who left the
+        // plan while it was out hears of it now.
+        if (latest.current.planId !== planId) failed(START_FAILED_AWAY);
         return;
       }
       pending.current = undefined;
@@ -336,6 +348,7 @@ export function useCodingAgents(input: {
     return undefined;
   };
 
+  // A refused Stop leaves the button as it was, so it says so in a toast.
   const onStop = async (agentId: string): Promise<void> => {
     const answer = await act(ACT_KIND.CODING_AGENTS_STOP, { agentId }).catch(() => undefined);
     if (answer !== undefined && !("failure" in answer)) {
@@ -344,6 +357,8 @@ export function useCodingAgents(input: {
           ? was
           : { ...was, agents: withAgentRun(was.agents, agentId, answer.agent) },
       );
+    } else {
+      failed(STOP_FAILED);
     }
     readAgain();
   };
@@ -391,7 +406,8 @@ export function useCodingAgents(input: {
   );
 
   // A rename's field closes as the edit ends, so a second rename may be out before the first
-  // answers; as with a change of model, only the newest one's answer is taken into the list.
+  // answers; as with a change of model, only the newest one's answer is taken into the list,
+  // and only the newest one's refusal is said, in a toast, as the old name comes back.
   const renames = useRef(new Map<string, number>());
   const onRename = useCallback(
     async (agentId: string, title: string) => {
@@ -401,15 +417,19 @@ export function useCodingAgents(input: {
         agentId,
         title,
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
-      if ("failure" in answer) return false;
-      if (renames.current.get(agentId) === rename) {
+      const newest = renames.current.get(agentId) === rename;
+      if ("failure" in answer) {
+        if (newest) failed(RENAME_FAILED);
+        return false;
+      }
+      if (newest) {
         setList((was) =>
           was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
         );
       }
       return true;
     },
-    [act],
+    [act, failed],
   );
 
   const onTitle = useCallback((agentId: string, title: string | null) => {

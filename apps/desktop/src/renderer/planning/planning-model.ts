@@ -172,13 +172,22 @@ export const PLAN_MARK = {
 
 export type PlanMark = (typeof PLAN_MARK)[keyof typeof PLAN_MARK];
 
-/** What a plan's row says when the service refused a pin or an archive, by what was asked. */
+/** What the toast says when the service refused a pin or an archive, by what was asked. */
 export const MARK_FAILED_NOTES = {
   [PLAN_MARK.PIN]: "The plan could not be pinned. Try again.",
   [PLAN_MARK.UNPIN]: "The plan could not be unpinned. Try again.",
   [PLAN_MARK.ARCHIVE]: "The plan could not be archived. Try again.",
   [PLAN_MARK.UNARCHIVE]: "The plan could not be unarchived. Try again.",
 } as const satisfies Record<PlanMark, string>;
+
+/**
+ * What the toast says once an archive, or its undoing, landed, and the mark
+ * its Undo asks for. A pin says nothing, since the row it moves is in sight.
+ */
+export const MARK_UNDOS = {
+  [PLAN_MARK.ARCHIVE]: { note: "Plan archived", undo: PLAN_MARK.UNARCHIVE },
+  [PLAN_MARK.UNARCHIVE]: { note: "Plan unarchived", undo: PLAN_MARK.ARCHIVE },
+} as const satisfies Partial<Record<PlanMark, { note: string; undo: PlanMark }>>;
 
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<PlanSummary, "pinnedAt" | "archivedAt">;

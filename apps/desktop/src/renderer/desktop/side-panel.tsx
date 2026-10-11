@@ -84,6 +84,7 @@ import {
   workRowsOf,
 } from "../planning/work-model";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, MenuItem, type OpenMenu } from "./action-menu";
 import { paneTiming } from "./pane-motion";
@@ -132,6 +133,9 @@ const NOTHING_YET_LINE = "Luke's board, code, transcript, and work appear here a
 
 /** What the toast says once a tab's transcript, concise or full, is on the clipboard. */
 const TRANSCRIPT_COPIED_NOTE = "Transcript copied";
+
+/** What the toast says when a tab's transcript could not be read whole for a copy. */
+const TRANSCRIPT_UNREAD_NOTE = "The transcript could not be copied. Try again.";
 
 /**
  * What the panel leaves the document beside it, as desktop.css declares it
@@ -594,8 +598,10 @@ function stripTabs(input: {
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
   copyText: (words: string) => void;
+  /** Says a copy whose transcript could not be read. */
+  copyUnread: () => void;
 }): StripTab[] {
-  const { panel, unread, agents, subagents, files, copyText } = input;
+  const { panel, unread, agents, subagents, files, copyText, copyUnread } = input;
   const look = (tab: SidePanelTab, drawn: Omit<PanelTabLook, "selected" | "onSelect">) => ({
     ...drawn,
     unread: unread.some((each) => sameTab(each, tab)),
@@ -606,10 +612,9 @@ function stripTabs(input: {
     (read: () => Promise<CopiedTranscript | undefined>) =>
     (copy: TranscriptCopy): void => {
       read().then(
-        (transcript) => {
-          if (transcript !== undefined) copyText(transcriptMarkdown(transcript, copy));
-        },
-        () => undefined,
+        (transcript) =>
+          transcript === undefined ? copyUnread() : copyText(transcriptMarkdown(transcript, copy)),
+        copyUnread,
       );
     };
   const fixed = panel.tabs.map((tab) => ({
@@ -757,8 +762,11 @@ function PanelTabs({
   shownFiles: readonly CodeRef[];
 }): React.JSX.Element {
   const copyWithToast = useCopyToast();
+  const toast = useToast();
   const copyText = (words: string) => copyWithToast(words, TRANSCRIPT_COPIED_NOTE);
-  const drawn = stripTabs({ panel, unread, agents, subagents, files, copyText });
+  const copyUnread = () =>
+    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+  const drawn = stripTabs({ panel, unread, agents, subagents, files, copyText, copyUnread });
   const { strip, pins, runs } = pinnedFirst(drawn, panel.pinned);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // is left to fall through to nothing rather than to the window.

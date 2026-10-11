@@ -27,6 +27,7 @@ import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";
+import { useUpdatedToast } from "./update-toast";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
 import { usePrefersReducedMotion } from "./use-reduced-motion";
@@ -60,6 +61,7 @@ export function App(): React.JSX.Element {
   );
   /** The note being written to the people who make Luke, while its dialog stands. */
   const [feedbackKind, setFeedbackKind] = useState<FeedbackKind>();
+  useUpdatedToast(state ? fixtureUpdate(state.run, state.update) : undefined);
   /**
    * Which stretch of unbroken silence is on screen, advanced each time one
    * begins. A "Got it" is remembered against the stretch it answered, so it
@@ -441,8 +443,8 @@ export function App(): React.JSX.Element {
         account={account}
         onClose={() => setFeedbackKind(undefined)}
       />
-      {/* The window's passing notice: the thank-you after a note lands, and
-          what came of a copy made from a menu. */}
+      {/* The window's passing notice: the thank-you after a note lands, what
+          came of a change made from a menu, and an update arrived. */}
       <ToastHost />
       {/* Every command the window can run now and every plan, behind ⌘K,
           past the sign-in alone. */}

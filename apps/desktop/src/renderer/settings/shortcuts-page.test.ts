@@ -31,7 +31,10 @@ function mountPage(): void {
             return accepted();
           },
         },
-        writes: { setting: accepted, reset: accepted },
+        writes: {
+          setting: accepted,
+          reset: () => Promise.reject(new Error("Nothing is reset in this test.")),
+        },
         voiceAvailable: true,
       }),
     );

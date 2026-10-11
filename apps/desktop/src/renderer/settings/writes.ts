@@ -1,4 +1,9 @@
-import type { AppSettingField, AppSettingValue, SettingsResetScope } from "@sidecar/settings/wire";
+import type {
+  AppSettingField,
+  AppSettingValue,
+  SettingsResetScope,
+  SettingsUpdateResult,
+} from "@sidecar/settings/wire";
 import type { ActionResult } from "@sidecar/wire";
 import { useMemo } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -6,7 +11,8 @@ import { useAct } from "../act";
 
 export interface SettingsWrites {
   setting(field: AppSettingField, value: AppSettingValue<AppSettingField>): Promise<ActionResult>;
-  reset(scope: SettingsResetScope): Promise<ActionResult>;
+  /** Answers the settings as the reset left them, for an Undo to read what it changed. */
+  reset(scope: SettingsResetScope): Promise<SettingsUpdateResult>;
 }
 
 /**

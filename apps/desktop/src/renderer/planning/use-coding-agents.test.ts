@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -10,10 +11,14 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import { act, createElement, useState } from "react";
+import { Effect } from "effect";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ToastHost } from "../toast";
 import { MODEL_CHANGE_FAILED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
@@ -57,9 +62,10 @@ async function settle(): Promise<void> {
 
 /**
  * Mounts the hook over a service the test scripts act by act: each kind
- * answers from its own queue of answers, and every ask is written down.
+ * answers from its own queue of answers, and every ask is written down. The
+ * window's toast stands beside it, its atoms on `registry` where given.
  */
-function mount(initial: Standing) {
+function mount(initial: Standing, registry?: AtomRegistry) {
   const asked: Asked[] = [];
   const started: string[] = [];
   const answers = new Map<ActKind, unknown[]>();
@@ -105,7 +111,8 @@ function mount(initial: Standing) {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
     },
     mount: async () => {
-      act(() => root.render(createElement(Probe)));
+      const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
+      act(() => root.render(registry === undefined ? surface : onRegistry(registry, surface)));
       await settle();
     },
     control: () => {
@@ -326,44 +333,95 @@ test("a choice written as the default is asked of the service as given, and one 
   assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
 });
 
-test("a rename asks the service for that agent alone and the agent it answers takes its place in the list, a refusal answers false and changes nothing, and a transcript page's title lands on the agent it names", async () => {
+// Note that the refusal raises the window's toast, whose waits stand on the test's clock.
+it.effect(
+  "a rename asks the service for that agent alone and the agent it answers takes its place in the list, a refusal answers false and changes nothing, and a transcript page's title lands on the agent it names",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
+      yield* Effect.promise(async () => {
+        const renamed = { ...STARTED, title: "Sign-out button" };
+        tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+        tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { agent: renamed });
+        await tab.mount();
+
+        assert.equal(await tab.control().onRename(AGENT, "Sign-out button"), true);
+        await settle();
+        assert.deepEqual(tab.asked.at(-1), {
+          kind: ACT_KIND.CODING_AGENTS_RENAME,
+          payload: { agentId: AGENT, title: "Sign-out button" },
+        });
+        assert.deepEqual(tab.control().agents, [renamed]);
+
+        tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+        assert.equal(await tab.control().onRename(AGENT, "Another"), false);
+        await settle();
+        assert.deepEqual(tab.control().agents, [renamed]);
+
+        act(() => tab.control().onTitle(AGENT, "Sign-out button in account menu"));
+        assert.deepEqual(tab.control().agents, [
+          { ...renamed, title: "Sign-out button in account menu" },
+        ]);
+
+        // Two renames answered out of order: the one made last is what stands, whichever answers first.
+        let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
+        const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
+          answerFirst = resolve;
+        });
+        const last = { ...renamed, title: "Second" };
+        tab.answer(ACT_KIND.CODING_AGENTS_RENAME, first, { agent: last });
+        const older = tab.control().onRename(AGENT, "First");
+        await tab.control().onRename(AGENT, "Second");
+        answerFirst?.({ agent: { ...renamed, title: "First" } });
+        await older;
+        await settle();
+        assert.deepEqual(tab.control().agents, [last]);
+      });
+    }),
+);
+
+it.effect(
+  "a refused Stop, the newest rename refused, and a Start that fails after the developer left its plan each say so in the window's toast",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
+      const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
+      const refused = { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] }, { agents: [STARTED] });
+      yield* Effect.promise(tab.mount);
+
+      tab.answer(ACT_KIND.CODING_AGENTS_STOP, refused);
+      yield* Effect.promise(() => act(() => tab.control().onStop(AGENT)));
+      yield* Effect.promise(settle);
+      assert.equal(toast(), "The agent could not be stopped. Try again.");
+
+      tab.answer(ACT_KIND.CODING_AGENTS_RENAME, refused);
+      yield* Effect.promise(() => act(() => tab.control().onRename(AGENT, "Sign-out button")));
+      yield* Effect.promise(settle);
+      assert.equal(toast(), "The agent could not be renamed. Try again.");
+
+      tab.answer(ACT_KIND.CODING_AGENTS_START, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      act(() => tab.control().start.onPress());
+      yield* Effect.promise(() => tab.stand({ planId: "another-plan" }));
+      assert.equal(toast(), "The coding agent could not be started.");
+      yield* Effect.promise(() => tab.stand({ planId: PLAN }));
+      assert.equal(
+        tab.control().start.note,
+        "The agent could not be started. Try again.",
+        "the plan's own note says why on its return",
+      );
+    }),
+);
+
+test("a Start that fails while its plan is open says so beside Start alone, with no toast", async () => {
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
-  const renamed = { ...STARTED, title: "Sign-out button" };
-  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
-  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { agent: renamed });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  tab.answer(ACT_KIND.CODING_AGENTS_START, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   await tab.mount();
-
-  assert.equal(await tab.control().onRename(AGENT, "Sign-out button"), true);
+  act(() => tab.control().start.onPress());
   await settle();
-  assert.deepEqual(tab.asked.at(-1), {
-    kind: ACT_KIND.CODING_AGENTS_RENAME,
-    payload: { agentId: AGENT, title: "Sign-out button" },
-  });
-  assert.deepEqual(tab.control().agents, [renamed]);
-
-  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
-  assert.equal(await tab.control().onRename(AGENT, "Another"), false);
-  await settle();
-  assert.deepEqual(tab.control().agents, [renamed]);
-
-  act(() => tab.control().onTitle(AGENT, "Sign-out button in account menu"));
-  assert.deepEqual(tab.control().agents, [
-    { ...renamed, title: "Sign-out button in account menu" },
-  ]);
-
-  // Two renames answered out of order: the one made last is what stands, whichever answers first.
-  let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
-  const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
-    answerFirst = resolve;
-  });
-  const last = { ...renamed, title: "Second" };
-  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, first, { agent: last });
-  const older = tab.control().onRename(AGENT, "First");
-  await tab.control().onRename(AGENT, "Second");
-  answerFirst?.({ agent: { ...renamed, title: "First" } });
-  await older;
-  await settle();
-  assert.deepEqual(tab.control().agents, [last]);
+  assert.equal(tab.control().start.note, "The agent could not be started. Try again.");
+  assert.equal(document.querySelector(".toast"), null);
 });
 
 test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list", async () => {
