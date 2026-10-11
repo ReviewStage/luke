@@ -150,14 +150,9 @@ function menuItems(): HTMLButtonElement[] {
 const chipOf = (container: HTMLElement) =>
   container.querySelector<HTMLButtonElement>(".agent-published-chip");
 
-/** Right-clicks the chip, as the pointer would, and answers whether the page's own menu was kept from opening. */
-function rightClick(chip: HTMLElement): boolean {
-  const event = new MouseEvent("contextmenu", {
-    bubbles: true,
-    cancelable: true,
-    clientX: 40,
-    clientY: 300,
-  });
+/** Right-clicks the chip at the point given, the keyboard's menu key saying none, and answers whether the page's own menu was kept from opening. */
+function rightClick(chip: HTMLElement, at = { clientX: 40, clientY: 300 }): boolean {
+  const event = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, ...at });
   act(() => chip.dispatchEvent(event));
   return event.defaultPrevented;
 }
@@ -745,7 +740,7 @@ test("a press of the chip opens the pull request on GitHub, or the branch compar
     "https://github.com/acme/relay/pull/123",
     "https://github.com/acme/relay/compare/luke/teammate-invitations?expand=1",
   ]);
-  assert.deepEqual(menuItems(), [], "a press drops no menu");
+  assert.equal(menuItems().length, 0, "a press drops no menu");
 });
 
 test("a right-click on the chip offers copying the branch and its checkout command word for word, each with its toast, and no menu where there is no branch", () => {
@@ -772,15 +767,35 @@ test("a right-click on the chip offers copying the branch and its checkout comma
     ],
   ]);
   assert.deepEqual(opened, [], "a right-click opens nothing");
-  assert.deepEqual(menuItems(), [], "the menu closes on a choice");
+  assert.equal(menuItems().length, 0, "the menu closes on a choice");
+
+  rightClick(chip);
+  act(() => chip.click());
+  assert.equal(menuItems().length, 0, "a press with the menu open closes it as it opens GitHub");
+  assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
 
   const branchless = chipOf(mountedChip({ ...PUBLISHED, branch: null }, SHUT));
   assert.ok(branchless);
   assert.equal(rightClick(branchless), false);
-  assert.deepEqual(menuItems(), []);
+  assert.equal(menuItems().length, 0);
 });
 
-test("a finished transcript ends on the pull request's row: its number and title, the lines added in green and removed in red, where it stands only once it is no longer open, and no dot; a press opens it", () => {
+test("the chip's menu hangs at the pointer, and under the chip where the keyboard asked for it with no point of its own", () => {
+  const chip = chipOf(mountedChip(PUBLISHED, SHUT));
+  assert.ok(chip);
+  chip.getBoundingClientRect = () => DOMRect.fromRect({ x: 120, y: 176, width: 80, height: 24 });
+  const menuAt = () => {
+    const menu = document.querySelector<HTMLElement>('[role="menu"]');
+    assert.ok(menu, "the menu stands");
+    return [menu.style.left, menu.style.top];
+  };
+  rightClick(chip);
+  assert.deepEqual(menuAt(), ["40px", "300px"]);
+  rightClick(chip, { clientX: 0, clientY: 0 });
+  assert.deepEqual(menuAt(), ["120px", "204px"]);
+});
+
+test("a finished transcript ends on the pull request's row: its number and title, that its checks failed only once they have, the lines added in green and removed in red, where it stands only once it is no longer open, and no dot; a press opens it", () => {
   const row = (pullRequest: CodingAgentPullRequest) =>
     renderToStaticMarkup(
       createElement(AgentTranscriptView, {
@@ -798,7 +813,12 @@ test("a finished transcript ends on the pull request's row: its number and title
     open,
     /<\/div><button type="button" class="agent-published-row" data-published-row="" data-state="open">[\s\S]*agent-published-title" data-overflow="false">#123 · Teammate invitations<\/span><span class="agent-published-lines"><span class="agent-published-added">\+210<\/span> <span class="agent-published-removed">−14<\/span><\/span><\/button>/u,
   );
-  assert.doesNotMatch(open, /agent-check-dot|data-checks|Pull request|Open<|files?</u);
+  assert.doesNotMatch(open, /agent-check-dot|data-checks|Pull request|Open<|files?<|Checks/u);
+  assert.doesNotMatch(row({ ...PULL_REQUEST, checks: CHECK_SUMMARY.PENDING }), /Checks/u);
+  assert.match(
+    row({ ...PULL_REQUEST, checks: CHECK_SUMMARY.FAILING }),
+    /Teammate invitations<\/span><span class="agent-published-checks">Checks failing<\/span><span class="agent-published-lines">/u,
+  );
   assert.match(
     row({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
     /Teammate invitations<\/span><span class="agent-published-state">Merged<\/span><span class="agent-published-lines">/u,

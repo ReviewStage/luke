@@ -1,12 +1,20 @@
-import type {
-  CodingAgentPullRequest,
-  CodingAgentPullRequestAnswer,
+import {
+  CHECK_SUMMARY,
+  type CodingAgentPullRequest,
+  type CodingAgentPullRequestAnswer,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CopyIcon } from "@sidecar/panel";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
 import { type ReactNode, useCallback, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
-import { ActionMenu, MENU_ALIGN, type MenuAction, type OpenMenu } from "../desktop/action-menu";
+import {
+  ActionMenu,
+  MENU_ALIGN,
+  MENU_DROP,
+  type MenuAction,
+  type MenuPlacement,
+  type OpenMenu,
+} from "../desktop/action-menu";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import {
@@ -26,11 +34,12 @@ import {
  * a branch and no pull request yet, one naming the branch. A press of
  * either opens it on GitHub, the pull request or the branch compared, and
  * a right-click offers what a press does not: copying the branch's name or
- * the command that checks it out. The row says the number and title, the
- * lines added and removed, and where the pull request stands only where
- * that changes what the developer would do; a press of it opens the pull
- * request. Nothing here is drawn before the service has said what stands,
- * so a tab on an agent still reading the repository wears nothing yet.
+ * the command that checks it out. The row says the number and title, that
+ * the checks failed where they did, the lines added and removed, and where
+ * the pull request stands only where that changes what the developer would
+ * do; a press of it opens the pull request. Nothing here is drawn before
+ * the service has said what stands, so a tab on an agent still reading the
+ * repository wears nothing yet.
  */
 
 /** The doors the chip and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
@@ -41,6 +50,16 @@ export interface PublishedDoors {
 
 const MENU_LABEL = "Branch actions";
 const OPEN_HINT = "Open on GitHub";
+const CHECKS_FAILING = "Checks failing";
+
+/** Where the right-click menu hangs: at the pointer, or under the chip where the keyboard asked and said no point of its own. */
+function menuPlacement(event: React.MouseEvent<HTMLElement>): MenuPlacement {
+  if (event.clientX !== 0 || event.clientY !== 0) {
+    return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
+  }
+  const bounds = event.currentTarget.getBoundingClientRect();
+  return { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START };
+}
 
 /** What the chip's right-click offers for a branch: its name and the command that checks it out, each to the clipboard. */
 function branchActions(branch: string, doors: PublishedDoors): MenuAction[][] {
@@ -106,16 +125,16 @@ export function PublishedChip({
           data-state={pullRequest?.state}
           data-menu-open={String(open !== undefined)}
           aria-label={label}
-          onClick={() => doors.openGitHub(url)}
+          onClick={() => {
+            close(false);
+            doors.openGitHub(url);
+          }}
           onContextMenu={
             branch === null
               ? undefined
               : (event) => {
                   event.preventDefault();
-                  setOpen({
-                    placement: { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
-                    opener: event.currentTarget,
-                  });
+                  setOpen({ placement: menuPlacement(event), opener: event.currentTarget });
                 }
           }
         >
@@ -134,7 +153,7 @@ export function PublishedChip({
   );
 }
 
-/** The row at the end of a finished transcript: the pull request's number and title, the lines it adds and removes, and where it stands if that matters; a press opens it. */
+/** The row at the end of a finished transcript: the pull request's number and title, that its checks failed where they did, the lines it adds and removes, and where it stands if that matters; a press opens it. */
 export function PublishedRow({
   pullRequest,
   openGitHub,
@@ -158,6 +177,9 @@ export function PublishedRow({
         <span ref={words} className="agent-published-title" data-overflow={String(clipped)}>
           {pullRequestNumberLabel(pullRequest)} · {pullRequest.title}
         </span>
+        {pullRequest.checks === CHECK_SUMMARY.FAILING ? (
+          <span className="agent-published-checks">{CHECKS_FAILING}</span>
+        ) : null}
         {state === undefined ? null : <span className="agent-published-state">{state}</span>}
         <span className="agent-published-lines">
           <span className="agent-published-added">+{pullRequest.additions}</span>{" "}

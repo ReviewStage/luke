@@ -789,6 +789,13 @@ button.code-card-path:hover {
   color: var(--text-tertiary);
 }
 
+/* The one word the checks still get: said, in the danger red, only once
+   they have failed, since that is the one result that asks for a look. */
+.agent-published-checks {
+  flex: 0 0 auto;
+  color: var(--danger-text);
+}
+
 .agent-published-lines {
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
