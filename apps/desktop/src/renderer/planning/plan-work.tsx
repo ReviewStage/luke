@@ -16,12 +16,12 @@ import {
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
-import { TOOL_BLOCK, TOOL_STATE, type ToolState, ToolStateMark } from "../ai-elements/tool";
-import { cn } from "../ai-elements/utils";
+import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
 import {
   TranscriptNote,
   TranscriptReasoning,
   TranscriptRows,
+  TranscriptSubagent,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
@@ -47,10 +47,10 @@ import { WorkingLine, WorkingTime } from "./working-time";
  * blocks every transcript shares (`transcript-blocks.tsx`): the model's
  * words as a reply, its reasoning folded behind one line, each call a row
  * wearing its kind's icon that opens onto its input and output, and the
- * runs of calls and a finished turn's lead folded as an agent's are. What
- * is this tab's own is the worker, a boxed line wearing the mark a call's
- * row wears for where it stands, which opens its session in a tab of the
- * panel's own (`SubagentTab`), or chooses that tab where it is open. The
+ * runs of calls and a finished turn's lead folded as an agent's are, and
+ * each worker the subagent's row an agent's delegation is too, one button
+ * that opens its session in a tab of the panel's own (`SubagentTab`), or
+ * chooses that tab where it is open. The
  * tab draws the session as an agent's tab draws its transcript: the task a
  * card at the top that opens onto the whole message the subagent was
  * handed, a shimmering line at the end while the subagent runs, a quiet one
@@ -104,23 +104,18 @@ function WorkCall({ call }: { call: WorkCallRow }): React.JSX.Element {
  */
 const OpenSubagentContext = createContext<(callId: string) => void>(() => undefined);
 
-/**
- * A subagent's call as one boxed line: its job, cut to the line, and the
- * mark a call's row wears for where it stands. The whole line is the one
- * button that opens its tab, so it carries no link of its own.
- */
+/** A subagent's call as the one button every subagent's row is, which opens its tab. */
 function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
   const open = useContext(OpenSubagentContext);
   return (
-    <button
-      type="button"
-      className="work-worker-line ai-trigger flex w-full min-w-0 items-center gap-2"
-      onClick={() => open(call.id)}
-    >
-      <BotIcon className={cn("size-3.5 shrink-0", call.running && "text-luke")} />
-      <span className="min-w-0 flex-1 truncate text-foreground">{workerJob(call)}</span>
-      <ToolStateMark state={toolStateOf(call)} />
-    </button>
+    <TranscriptSubagent
+      callId={call.id}
+      job={workerJob(call)}
+      pair={undefined}
+      state={toolStateOf(call)}
+      errorText={undefined}
+      onOpen={() => open(call.id)}
+    />
   );
 }
 

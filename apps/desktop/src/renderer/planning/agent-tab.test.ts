@@ -277,7 +277,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model and effort with the provider's mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; the row opens onto the answer, and Open in tab opens the worker without opening the row", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model and effort with the provider's mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -301,7 +301,7 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
     );
   });
 
-  const rows = [...container.querySelectorAll<HTMLDetailsElement>("[data-subagent-row]")];
+  const rows = [...container.querySelectorAll<HTMLElement>("[data-subagent-row]")];
   assert.deepEqual(
     rows.map((row) => row.getAttribute("data-call-id")),
     ["call_d1", "call_d2"],
@@ -309,10 +309,7 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(container.querySelector("[data-turn-fold]"), null, "each on a row of its own");
   const [done, running] = rows;
   assert.ok(done && running);
-  assert.equal(
-    done.querySelector("summary")?.textContent,
-    "Count the routes.Claude Sonnet 5.5 · Medium",
-  );
+  assert.equal(done.textContent, "Count the routes.Claude Sonnet 5.5 · Medium");
   assert.ok(done.querySelector("[data-subagent-pair] svg.provider-mark"), "the provider's mark");
   assert.ok(done.querySelector('[data-tool-state="output-available"]'));
   assert.equal(
@@ -321,15 +318,62 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   );
   assert.ok(running.querySelector('[data-tool-state="input-available"]'));
   assert.ok(running.querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
+  for (const row of rows) {
+    assert.equal(row.tagName, "BUTTON", "the whole row is the button");
+    assert.equal(row.closest("details"), null, "nothing to expand");
+    assert.equal(row.querySelector("button, summary, details"), null, "no control inside it");
+  }
+  assert.equal(container.textContent?.includes("Three routes"), false, "the answer is the tab's");
 
-  assert.equal(done.open, false);
-  assert.equal(container.textContent?.includes("Three routes"), false);
-  act(() => done.querySelector<HTMLElement>('[aria-label="Open in tab"]')?.click());
-  assert.deepEqual(opened, [["call_d1", TASK, CODING_AGENT_STATUS.COMPLETED]]);
-  assert.equal(done.open, false, "the press is the button's, not the line's");
-  act(() => done.querySelector("summary")?.click());
-  assert.equal(done.open, true);
-  assert.ok(done.querySelector("[data-subagent-result]")?.textContent?.includes("Three routes"));
+  act(() => running.click());
+  act(() => done.click());
+  assert.deepEqual(opened, [
+    ["call_d2", "Find the sweep's bound.", CODING_AGENT_STATUS.RUNNING],
+    ["call_d1", TASK, CODING_AGENT_STATUS.COMPLETED],
+  ]);
+  assert.equal(container.textContent?.includes("Three routes"), false, "nothing opened in place");
+});
+
+test("a delegation refused before its worker began says why in red under its row, with nothing to open first", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const refusal = "The model anthropic/claude-haiku-9 is not in the catalog.";
+  act(() => {
+    root.render(
+      createElement(AgentTranscriptView, {
+        messages: [
+          PLAN,
+          {
+            id: "m-refused",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-delegate",
+                toolCallId: "call_d3",
+                state: "output-error",
+                input: { task: "Count the routes." },
+                errorText: refusal,
+              },
+            ],
+          },
+        ],
+        delegation: { models: [SONNET], onOpen: ignore },
+        reading: false,
+        failed: false,
+        working: false,
+        onRetry: ignore,
+        openGitHub: ignore,
+      }),
+    );
+  });
+
+  const row = container.querySelector<HTMLElement>('[data-subagent-row][data-call-id="call_d3"]');
+  assert.ok(row);
+  assert.equal(row.tagName, "BUTTON");
+  assert.ok(row.querySelector('[data-tool-state="output-error"]'));
+  assert.equal(container.querySelector('[role="alert"]')?.textContent, refusal);
 });
 
 /** Opens the fold whose root the selector names, by the click a reader would make on its line. */

@@ -547,7 +547,7 @@ test("a worker's line in the Work tab is one button saying where the subagent st
   act(() => tabNamed(page, "Work").click());
   const work = page.querySelector('section[aria-label="Work"]');
   assert.ok(work);
-  const lines = [...work.querySelectorAll<HTMLElement>(".work-worker-line")];
+  const lines = [...work.querySelectorAll<HTMLElement>("[data-subagent-row]")];
   // Each line is the one button: its job, and the state mark every call's row wears.
   assert.deepEqual(
     lines.map((line) => [
@@ -624,7 +624,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   const page = mountOpenPlan({ work: workerWork(job, task) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
   assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
@@ -649,7 +649,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   assert.ok(content?.textContent?.includes("Queue A lets an admin revoke."));
 
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
 
@@ -720,7 +720,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   act(() => tabNamed(page, "Claude Opus 5.5").click());
   await settle();
 
-  press(page, '[data-subagent-row][data-call-id="call_d1"] [aria-label="Open in tab"]');
+  press(page, '[data-subagent-row][data-call-id="call_d1"]');
   assert.deepEqual(panelTabs(page), [
     "Board",
     "Code",
@@ -745,14 +745,14 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   assert.equal(content?.querySelector("[data-turn-fold]"), null);
   // The worker's thinking folds under one quiet line, as the Work tab's and the agent's do.
   const thought = content?.querySelector<HTMLDetailsElement>(
-    "details:not([data-call-id]):not([data-plan-card]):not([data-subagent-row])",
+    "details:not([data-call-id]):not([data-plan-card])",
   );
   assert.equal(thought?.querySelector("summary")?.textContent, "Thought");
   assert.equal(thought?.open, false);
 
   act(() => tabNamed(page, "Claude Opus 5.5").click());
   await settle();
-  press(page, '[data-subagent-row][data-call-id="call_d1"] [aria-label="Open in tab"]');
+  press(page, '[data-subagent-row][data-call-id="call_d1"]');
   assert.deepEqual(panelTabs(page), [
     "Board",
     "Code",
@@ -780,7 +780,7 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
   act(() => relayout());
 
   assert.equal(hover(tabNamed(page, "Work")), undefined);
@@ -799,7 +799,7 @@ test("a tab's label cut short is marked to fade at its end, while a label shown 
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
   act(() => relayout());
   const faded = (label: string) =>
     tabNamed(page, label).querySelector(".tab-label")?.getAttribute("data-overflow");
@@ -2888,7 +2888,7 @@ test("a right-click on any of the panel's tabs offers Close, Close others, and P
   const job = "Compare the two queue libraries.";
   const page = mountAgents(workerWork(job));
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
 
   const everyTab: [string, boolean][] = [
     ["Close", true],
@@ -3082,7 +3082,7 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
   chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy full transcript");
   await settle();
   act(() => tabNamed(page, "Work").click());
-  press(page, ".work-worker-line");
+  press(page, "[data-subagent-row]");
   chooseFromTab(tabNamed(page, job), "Copy concise transcript");
   await settle();
 
