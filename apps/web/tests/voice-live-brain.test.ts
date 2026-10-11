@@ -1633,62 +1633,97 @@ function childTurn(turnId: string, words: string): readonly MessageStreamEvent[]
   ];
 }
 
+/** A standing relaying into `to` as a session of its own. */
+function relayedInto(to: ConversationTarget, turn: RelayStanding["turn"]): RelayStanding {
+  return {
+    sessionId: `wrun_${randomUUID()}`,
+    target: to,
+    turn,
+    model: "scripted-model",
+    state: memoryRelayState(),
+  };
+}
+
+/**
+ * Follows an ask whose turn steers the task an earlier turn started, whose
+ * session holds the work the steer gave it, and answers the steering call as
+ * the follow last drew it. With `receiptLate`, the earlier turn's receipt,
+ * which names the task, reaches the record only after the follow first
+ * looked at the steer.
+ */
+const steeredFollow = Effect.fnUntraced(function* (receiptLate: boolean) {
+  const target = yield* Effect.promise(() => account());
+  const f = yield* standOnTestClock(target);
+  const shown: PlanWorkTurn[] = [];
+  f.brain.onWork((work) => shown.push(work));
+
+  const earlier = relayedInto(target, BRAIN_HOST_TURN.SPOKEN);
+  const parked = parkedTurn(FIRST_EVE_TURN, 0, NOW);
+  const late = (event: MessageStreamEvent) => receiptLate && event.type === "action.result";
+  yield* Effect.promise(() =>
+    play(
+      parked.filter((event) => !late(event)),
+      earlier,
+    ),
+  );
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, STARTING_WORKER_CALL),
+  };
+  yield* Effect.promise(() =>
+    database.run(openChildConversation(target, child.conversationId, "worker")),
+  );
+  const childStanding = relayedInto(child, RELAY_TURN.CHILD);
+  yield* Effect.promise(() =>
+    play(childTurn(FIRST_EVE_TURN, "Queue A lets an admin revoke."), childStanding),
+  );
+  yield* Effect.promise(() => play(childTurn("turn_1", "Only queue B batches."), childStanding));
+
+  const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
+  if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
+  const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
+  yield* Effect.promise(() =>
+    play(steeredTurn(FIRST_EVE_TURN, 0, NOW), {
+      ...relayedInto(target, BRAIN_HOST_TURN.SPOKEN),
+      sessionId,
+    }),
+  );
+  yield* f.release;
+  yield* f.arrived(2);
+  yield* f.polls(2);
+  if (receiptLate) {
+    yield* Effect.promise(() => play(parked.filter(late), earlier));
+    yield* f.polls(2);
+  }
+
+  const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
+  yield* Effect.promise(() => f.stop());
+  assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+  assert.notEqual(drawn.id, STARTING_WORKER_CALL);
+  return drawn;
+});
+
 it.effect(
   "a worker the followed turn steers shows the session of the call an earlier turn started its task with, where eve records the steered work",
   () =>
     Effect.gen(function* () {
-      const target = yield* Effect.promise(() => account());
-      const f = yield* standOnTestClock(target);
-      const shown: PlanWorkTurn[] = [];
-      f.brain.onWork((work) => shown.push(work));
-
-      // An earlier turn started the task, and the task's session holds the work the steer gave it.
-      const relayed = (to: ConversationTarget, turn: RelayStanding["turn"]): RelayStanding => ({
-        sessionId: `wrun_${randomUUID()}`,
-        target: to,
-        turn,
-        model: "scripted-model",
-        state: memoryRelayState(),
-      });
-      yield* Effect.promise(() =>
-        play(parkedTurn(FIRST_EVE_TURN, 0, NOW), relayed(target, BRAIN_HOST_TURN.SPOKEN)),
-      );
-      const child = {
-        userId: target.userId,
-        conversationId: childConversationId(target.conversationId, STARTING_WORKER_CALL),
-      };
-      yield* Effect.promise(() =>
-        database.run(openChildConversation(target, child.conversationId, "worker")),
-      );
-      const childStanding = relayed(child, RELAY_TURN.CHILD);
-      yield* Effect.promise(() =>
-        play(childTurn(FIRST_EVE_TURN, "Queue A lets an admin revoke."), childStanding),
-      );
-      yield* Effect.promise(() =>
-        play(childTurn("turn_1", "Only queue B batches."), childStanding),
-      );
-
-      const accepted = yield* f.brain.submitAsk(spokenAsk("q"));
-      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return assert.fail("not accepted");
-      const sessionId = yield* Effect.promise(() => sessionOf(target, accepted.runId));
-      yield* Effect.promise(() =>
-        play(steeredTurn(FIRST_EVE_TURN, 0, NOW), {
-          ...relayed(target, BRAIN_HOST_TURN.SPOKEN),
-          sessionId,
-        }),
-      );
-      yield* f.release;
-      yield* f.arrived(2);
-      yield* f.polls(2);
-
-      const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);
-      assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
-      assert.notEqual(drawn.id, STARTING_WORKER_CALL);
+      const drawn = yield* steeredFollow(false);
       assert.deepEqual(drawn.session?.parts.at(-1), {
         type: PLAN_WORK_PART.TEXT,
         text: "Only queue B batches.",
       });
-      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.effect(
+  "a steered worker whose task's start reaches the record after the follow first looked still finds that start's session on a later look",
+  () =>
+    Effect.gen(function* () {
+      const drawn = yield* steeredFollow(true);
+      assert.deepEqual(drawn.session?.parts.at(-1), {
+        type: PLAN_WORK_PART.TEXT,
+        text: "Only queue B batches.",
+      });
     }),
 );
 

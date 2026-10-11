@@ -207,11 +207,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   const callEndReads = yield* Queue.sliding<string>(1);
 
   /**
-   * The plan whose call is telling its turns' work as they run, whose told
-   * turns stand over the record's running copies; none once that call ended,
-   * since nothing it told is ahead of the record any more.
+   * The plan whose call is telling its turns' work as they run, and the
+   * turns that call told, which stand over the record's running copies; none
+   * once that call ended, since nothing it told is ahead of the record any
+   * more. A turn an earlier call told is not among them.
    */
-  let tellingPlanId: string | undefined;
+  let telling: { readonly planId: string; readonly turnIds: Set<string> } | undefined;
 
   /** The document of `planId` as held now, if the held one is that plan's. */
   function heldPlanOf(planId: string): PlanningDocument["plan"] {
@@ -324,18 +325,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   /**
    * The held turns with a page the service answered laid among them, in the
    * order the turns began. Note that a turn the open plan's call told stands
-   * over the record's copy while that copy still runs and the call still
+   * over the record's copy while that copy still runs and that call still
    * tells, because the call is ahead of the record there; once the call has
    * ended, a turn still running on record, parked on a worker, is the
    * record's, because the record goes on following the worker after the
    * call's last word.
    */
   function withPage(page: readonly PlanWorkTurn[]): PlanWorkTurn[] {
-    const telling = tellingPlanId !== undefined && tellingPlanId === view.activePlanId;
+    const calling = telling?.planId === view.activePlanId ? telling?.turnIds : undefined;
     const told = new Map((view.work ?? []).map((turn) => [turn.turnId, turn]));
     const recorded = page.map((turn) => {
       const live = told.get(turn.turnId);
-      return telling && live !== undefined && turn.state === PLAN_WORK_STATE.RUNNING ? live : turn;
+      const ahead = calling?.has(turn.turnId) === true && turn.state === PLAN_WORK_STATE.RUNNING;
+      return ahead && live !== undefined ? live : turn;
     });
     const read = new Set(page.map((turn) => turn.turnId));
     const unread = (view.work ?? []).filter((turn) => !read.has(turn.turnId));
@@ -430,7 +432,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function showWork(planId: string, turn: PlanWorkTurn): void {
     if (view.activePlanId !== planId) return;
-    tellingPlanId = planId;
+    if (telling?.planId !== planId) telling = { planId, turnIds: new Set() };
+    telling.turnIds.add(turn.turnId);
     const held = view.work ?? [];
     // A turn told again stays where it first stood, so the tab never reorders what it drew.
     const turns = held.some((standing) => standing.turnId === turn.turnId)
@@ -440,7 +443,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   }
 
   function callEnded(planId: string): void {
-    if (tellingPlanId === planId) tellingPlanId = undefined;
+    if (telling?.planId === planId) telling = undefined;
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(callEndReads, planId);
   }

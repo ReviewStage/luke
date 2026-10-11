@@ -472,16 +472,18 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   /**
    * The journal's `worker` calls, each with the call its session is read
    * from (`workerSessionCallsOf`). The conversation's other journals are read
-   * only for a call sending work to a task an earlier turn started that no
-   * look has placed yet, so a turn is not read back on every poll; a read
-   * that fails leaves the call its own.
+   * only for a call sending work to a task an earlier turn started whose
+   * start no look has found yet, so a turn is not read back on every poll
+   * once it is; a start not recorded yet, or a read that fails, leaves the
+   * call its own until a later look finds it.
    */
   const workerSessionsOf = Effect.fnUntraced(function* (
     conversationId: string,
     message: StoredUIMessage | undefined,
     placed: ReadonlyMap<string, string>,
   ) {
-    if (callsSendingToEarlierTasks(message).every((callId) => placed.has(callId))) {
+    const found = (callId: string) => (placed.get(callId) ?? callId) !== callId;
+    if (callsSendingToEarlierTasks(message).every(found)) {
       const local = workerSessionCallsOf(message);
       return new Map([...local].map(([callId, own]) => [callId, placed.get(callId) ?? own]));
     }
