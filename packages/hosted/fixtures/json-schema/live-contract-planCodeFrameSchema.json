@@ -65,6 +65,11 @@
             "maxLength": 400
           },
           "maxItems": 200
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
         }
       },
       "required": [

@@ -274,22 +274,49 @@ const FIXTURE_CODE: PlanCode = {
   ],
 };
 
+/** The fixture's file around lines `startLine` to `endLine`, three either side, as the host keeps a card's lines. */
+function fixtureExcerpt(startLine: number, endLine: number): PlanCode {
+  const firstLine = Math.max(1, startLine - 3);
+  return {
+    ...FIXTURE_CODE,
+    ref: { path: FIXTURE_CODE.ref.path, startLine, endLine },
+    firstLine,
+    lines: FIXTURE_CODE.lines.slice(firstLine - 1, endLine + 3),
+  };
+}
+
 /**
- * Every code Luke showed in the fixture's call: the import at the file's
- * top, then the invite check he is asking about, two snippets of one file.
+ * Every code Luke showed in the fixture's call, a walkthrough of one file in
+ * three steps, each with his note: where a link lands, the check he is asking
+ * about, and the expiry after it.
  */
 const FIXTURE_SHOWN_CODE: readonly PlanCodeShowing[] = [
   {
     callId: "fixture-show-1",
     turnId: "fixture-turn-1",
     shownAt: Date.parse("2026-10-07T16:21:00Z"),
-    code: { ...FIXTURE_CODE, ref: { path: FIXTURE_CODE.ref.path, startLine: 1, endLine: 1 } },
+    code: {
+      ...fixtureExcerpt(4, 5),
+      note: "An invite link lands here: acceptInvite finds the invite by its token, so this is where the new rules have to hold.",
+    },
   },
   {
     callId: "fixture-show-2",
     turnId: "fixture-turn-1",
     shownAt: Date.parse("2026-10-07T16:21:00Z"),
-    code: FIXTURE_CODE,
+    code: {
+      ...fixtureExcerpt(6, 8),
+      note: 'A used invite is already refused here. A withdrawn one should be refused the same way, as "no longer valid".',
+    },
+  },
+  {
+    callId: "fixture-show-3",
+    turnId: "fixture-turn-1",
+    shownAt: Date.parse("2026-10-07T16:21:00Z"),
+    code: {
+      ...fixtureExcerpt(9, 9),
+      note: "Expiry is checked after that, so a link that is both withdrawn and expired reads as no longer valid.",
+    },
   },
 ];
 

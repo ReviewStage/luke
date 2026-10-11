@@ -1108,6 +1108,38 @@ it.effect(
     }),
 );
 
+it.effect(
+  "Luke's note on code reaches the view from the call and from the record, and code shown before notes carries none",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const recordedNote = "acceptInvite trusts the token alone; expiry is checked nowhere.";
+      const liveNote = "The token is returned as-is, which is where a check would go.";
+      service.works[INVITES] = {
+        turns: [],
+        code: [
+          shownOn("turn-0", shownCode({ path: "old.ts" })),
+          shownOn("turn-1", { ...shownCode({ path: "invite.ts" }), note: recordedNote }),
+        ],
+      };
+      const { planning, last } = yield* openPlan(service);
+
+      planning.showCode(
+        INVITES,
+        shownOn("turn-2", {
+          ...shownCode({ path: "invite.ts", startLine: 2, endLine: 2 }),
+          note: liveNote,
+        }),
+      );
+
+      assert.deepEqual(
+        (last()?.shownCode ?? []).map(({ code }) => code.note),
+        [undefined, recordedNote, liveNote],
+      );
+    }),
+);
+
 it.effect("the call's end keeps the code it put on screen, and leaving the plan clears it", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);

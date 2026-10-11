@@ -201,6 +201,8 @@ export type BrainRunEventBody =
         readonly firstLine: number;
         readonly lineCount: number;
         readonly lines: readonly string[];
+        /** What Luke said the lines are for. */
+        readonly note?: string;
       };
     }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }

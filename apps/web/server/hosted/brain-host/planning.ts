@@ -174,7 +174,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
-- show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
+- show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - worker does a job in the background, as above.
@@ -340,6 +340,8 @@ interface PlanningTool {
   readonly name: string;
   readonly description: string;
   readonly inputSchema: Schema.Codec<unknown, UnparsedWireValue>;
+  /** A wider schema its stored rows are read back under, where rows journaled before a newer input was asked for still stand. */
+  readonly storedInputSchema?: Schema.Codec<unknown, UnparsedWireValue>;
   readonly run: (
     call: PlanningCall,
     input: UnparsedWireValue,
@@ -493,7 +495,7 @@ export function planningToolSet(): ToolSet {
   return Object.fromEntries([
     ...PLANNING_TOOLS.map((tool) => [
       tool.name,
-      wireValidatedTool(tool.description, tool.inputSchema),
+      wireValidatedTool(tool.description, tool.storedInputSchema ?? tool.inputSchema),
     ]),
     ...Object.entries(EVE_DELEGATION_INPUT).map(([name, inputSchema]) => [
       name,

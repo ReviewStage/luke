@@ -188,12 +188,21 @@ export const SHOWN_CODE_BOUNDS = {
   WINDOW_LINES: 200,
   /** The most characters of one line that travel; a longer line is cut there. */
   MAX_LINE_CHARS: 400,
+  /** The most characters of the note Luke writes beside the lines: a sentence or two. */
+  NOTE_CHARS: 280,
 } as const;
+
+/** What Luke says the lines are for, in a sentence or two of his own words, for the developer reading them. */
+export const codeNoteSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.NOTE_CHARS),
+);
 
 /**
  * Code on screen during a planning call, with its lines: the place named,
- * the repository the service read it from, and the window of the file it
- * holds around the lines pointed at. The service reads the lines from the
+ * the repository the service read it from, the window of the file it
+ * holds around the lines pointed at, and Luke's note on why he showed it,
+ * which code shown before notes were asked for does not carry. The service reads the lines from the
  * planning session's checkout of the repository as `show_code` runs, and
  * they travel in the call's own journal and on the `plan.code` frame; the Mac
  * reads nothing of its own.
@@ -209,6 +218,7 @@ export const shownCodeSchema = EffectSchema.Struct({
   lines: EffectSchema.Array(
     EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
   ).check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.WINDOW_LINES)),
+  note: EffectSchema.optionalKey(codeNoteSchema),
 });
 
 export type ShownCode = typeof shownCodeSchema.Type;

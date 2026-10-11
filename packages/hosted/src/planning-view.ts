@@ -251,8 +251,8 @@ export type CodeToken = typeof codeTokenSchema.Type;
 
 /**
  * One code Luke showed on the active plan: what he named, the repository
- * the service read it from, and the file's lines as they arrived and this
- * Mac coloured them, the window's first line first. Nothing of it enters
+ * the service read it from, the file's lines as they arrived and this
+ * Mac coloured them, the window's first line first, and his note on them. Nothing of it enters
  * the plan's document.
  */
 const planCodeSchema = EffectSchema.Struct({
@@ -264,6 +264,8 @@ const planCodeSchema = EffectSchema.Struct({
   /** How many lines the whole file has. */
   lineCount: EffectSchema.Int,
   lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+  /** What Luke said the lines are for; absent on code shown before notes were asked for. */
+  note: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type PlanCode = typeof planCodeSchema.Type;

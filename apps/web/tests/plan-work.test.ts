@@ -551,17 +551,19 @@ function shownBy(read: Option.Option<PlanWorkAnswer>) {
   return (read.value.code ?? []).map(({ callId, turnId, code }) => [callId, turnId, code]);
 }
 
-test("a plan's work reads back from its conversation after the call: its turns oldest first and every code shown, several of one file included, for the account that owns it alone", async () => {
+test("a plan's work reads back from its conversation after the call: its turns oldest first and every code shown with Luke's note, several of one file included, for the account that owns it alone", async () => {
   const target = await planConversation();
   const first = standingFor(target);
   const second = standingFor(target);
   const old = shownAt("src/old.ts", "old");
-  const invite = shownAt("src/invite.ts", "export function invite() {}");
+  const note = "Every invite starts here, so expiry belongs in this function.";
+  const invite = { ...shownAt("src/invite.ts", "export function invite() {}"), note };
   const revoke = shownAt("src/invite.ts", "export function revoke() {}");
   await play(
     [
       ...opening(FIRST_EVE_TURN),
       ...callingStep(FIRST_EVE_TURN, 0, [
+        // A call journaled before notes were asked for carries none, and still reads.
         {
           toolName: SHOW_CODE_TOOL.name,
           input: { path: "src/old.ts" },
@@ -569,7 +571,7 @@ test("a plan's work reads back from its conversation after the call: its turns o
         },
         {
           toolName: SHOW_CODE_TOOL.name,
-          input: { path: "src/invite.ts" },
+          input: { path: "src/invite.ts", note },
           output: { status: "accepted", code: invite },
         },
       ]),
