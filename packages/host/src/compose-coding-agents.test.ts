@@ -22,6 +22,7 @@ const AGENT: CodingAgentSummary = {
   planId: PLAN_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
+  title: null,
   createdAt: 1_800_000_000_000,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
@@ -92,6 +93,7 @@ function fakeService() {
           messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
           cursor,
           status: CODING_AGENT_STATUS.RUNNING,
+          title: null,
         };
       }),
     message: (agentId, request) =>
@@ -103,6 +105,11 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`choose:${agentId}:${choice.model}:${choice.effort}`);
         return { agent: { ...AGENT, ...choice } };
+      }),
+    rename: (agentId, request) =>
+      Effect.sync(() => {
+        asked.push(`rename:${agentId}:${request.title}`);
+        return { agent: { ...AGENT, title: request.title } };
       }),
     stop: (agentId) =>
       Effect.sync(() => {
@@ -169,6 +176,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
         messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
         cursor: "2:1",
         status: CODING_AGENT_STATUS.RUNNING,
+        title: null,
       },
     );
     assert.deepEqual(
@@ -187,6 +195,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       }),
       { agent: { ...AGENT, model: "openai/gpt-6.1-sol", effort: "low" } },
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_RENAME, {
+        agentId: AGENT_ID,
+        title: "Sign-out button",
+      }),
+      { agent: { ...AGENT, title: "Sign-out button" } },
+    );
     assert.deepEqual(yield* call(GATEWAY_METHOD.CODING_AGENTS_STOP, { agentId: AGENT_ID }), {
       agent: { ...AGENT, status: CODING_AGENT_STATUS.CANCELLED },
     });
@@ -204,6 +219,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
+      `rename:${AGENT_ID}:Sign-out button`,
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
     ]);

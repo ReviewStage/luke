@@ -477,6 +477,13 @@
       "when": 1790875000000,
       "tag": "0068_coding_agent_branch",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1790900000000,
+      "tag": "0069_coding_agent_title",
+      "breakpoints": true
     }
   ]
 }

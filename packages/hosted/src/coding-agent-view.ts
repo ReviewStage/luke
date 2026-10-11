@@ -3,6 +3,7 @@ import {
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  codingAgentRenameRequestSchema,
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
@@ -132,6 +133,14 @@ export const codingAgentChooseParamsSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentChooseParams = typeof codingAgentChooseParamsSchema.Type;
+
+/** One agent renamed, as the window asks it: the agent and the title, empty to clear it. */
+export const codingAgentRenameParamsSchema = EffectSchema.Struct({
+  agentId: EffectSchema.NonEmptyString,
+  ...codingAgentRenameRequestSchema.fields,
+});
+
+export type CodingAgentRenameParams = typeof codingAgentRenameParamsSchema.Type;
 
 /** One agent, as the window names it to stop. */
 export const codingAgentStopParamsSchema = EffectSchema.Struct({

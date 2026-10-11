@@ -37,7 +37,10 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * effort picked in the Start menu is written as the account's default, which
  * is what the next Start runs on; one picked on an agent's chip is written
  * on that agent alone, for its next step, and the agent the service answers
- * takes its place in the list.
+ * takes its place in the list, as does the agent a rename answers. A page
+ * of an agent's transcript carries its title too, which is how the title
+ * generated as the agent started reaches a tab the list opened before it
+ * landed.
  *
  * A draft is an agent the developer opened from the panel's "+" and has
  * not yet sent anything: it exists only here, so a draft let go leaves
@@ -105,8 +108,12 @@ export interface CodingAgentsControl {
   onMessage: MessageSender;
   /** Changes one agent's model and effort for its next step, and takes the agent as the service answers it. */
   onChoose: ChoiceWriter;
+  /** Renames one agent, taking the agent as the service answers it; answers whether the rename took. */
+  onRename: (agentId: string, title: string) => Promise<boolean>;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
+  /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
+  onTitle: (agentId: string, title: string | null) => void;
   /** One read of an agent's transcript past a cursor, as the tab's loop asks it. */
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it. */
@@ -382,6 +389,40 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  // A rename's field closes as the edit ends, so a second rename may be out before the first
+  // answers; as with a change of model, only the newest one's answer is taken into the list.
+  const renames = useRef(new Map<string, number>());
+  const onRename = useCallback(
+    async (agentId: string, title: string) => {
+      const rename = (renames.current.get(agentId) ?? 0) + 1;
+      renames.current.set(agentId, rename);
+      const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
+        agentId,
+        title,
+      }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
+      if ("failure" in answer) return false;
+      if (renames.current.get(agentId) === rename) {
+        setList((was) =>
+          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+        );
+      }
+      return true;
+    },
+    [act],
+  );
+
+  const onTitle = useCallback((agentId: string, title: string | null) => {
+    setList((was) =>
+      was.agents === undefined ||
+      !was.agents.some((agent) => agent.id === agentId && agent.title !== title)
+        ? was
+        : {
+            ...was,
+            agents: was.agents.map((agent) => (agent.id === agentId ? { ...agent, title } : agent)),
+          },
+    );
+  }, []);
+
   const onStatus = useCallback((agentId: string, status: CodingAgentStatus) => {
     setList((was) =>
       was.agents === undefined
@@ -424,7 +465,9 @@ export function useCodingAgents(input: {
     onStop,
     onMessage,
     onChoose,
+    onRename,
     onStatus,
+    onTitle,
     readTranscript,
     readPullRequest,
   };

@@ -30,11 +30,13 @@ function page(
   cursor: string,
   status: CodingAgentStatus,
   failure?: CodingAgentFailure,
+  title: string | null = null,
 ): CodingAgentMessagesAnswerView {
   return {
     messages,
     cursor,
     status,
+    title,
     ...(failure === undefined ? undefined : { failureReason: failure }),
   };
 }
@@ -71,6 +73,7 @@ async function settle(): Promise<void> {
 function mount(initial: Standing) {
   const reads: HeldRead[] = [];
   const statuses: CodingAgentStatus[] = [];
+  const titles: (string | null)[] = [];
   let control: AgentTranscriptControl | undefined;
   let restand: ((next: Standing) => void) | undefined;
   function Probe() {
@@ -88,6 +91,9 @@ function mount(initial: Standing) {
         statuses.push(status);
         setHeld((was) => ({ ...was, status }));
       },
+      onTitle: (_agentId, title) => {
+        titles.push(title);
+      },
     });
     return null;
   }
@@ -99,6 +105,7 @@ function mount(initial: Standing) {
   return {
     reads,
     statuses,
+    titles,
     control: () => {
       assert.ok(control);
       return control;
@@ -131,8 +138,9 @@ test("a running agent's tab reads from the start, reads on from each page's curs
   );
   assert.equal(tab.control().reading, false);
 
-  // The hold let go with nothing new: the next read starts where this one ended.
-  await tab.answer(page([], "1:1", CODING_AGENT_STATUS.RUNNING));
+  // The hold let go with nothing new: the next read starts where this one ended,
+  // and the page carries the title the agent has since been given.
+  await tab.answer(page([], "1:1", CODING_AGENT_STATUS.RUNNING, undefined, "Sign-out button"));
   assert.equal(tab.reads.length, 3);
 
   // A message heard again is redrawn in place, and a page saying the agent ended ends the loop, with why where it failed.
@@ -143,6 +151,7 @@ test("a running agent's tab reads from the start, reads on from each page's curs
       "1:2",
       CODING_AGENT_STATUS.FAILED,
       CODING_AGENT_FAILURE.MODEL,
+      "Sign-out button",
     ),
   );
   assert.deepEqual(
@@ -155,6 +164,7 @@ test("a running agent's tab reads from the start, reads on from each page's curs
     CODING_AGENT_STATUS.RUNNING,
     CODING_AGENT_STATUS.FAILED,
   ]);
+  assert.deepEqual(tab.titles, [null, "Sign-out button", "Sign-out button"]);
   // The ended agent is read through: one more page, empty, and then nothing.
   assert.equal(tab.reads.length, 4);
   await tab.answer(page([], "1:2", CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.MODEL));

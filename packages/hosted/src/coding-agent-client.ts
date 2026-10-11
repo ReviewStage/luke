@@ -28,12 +28,14 @@ import {
 } from "./coding-agent-view.js";
 import {
   type CodingAgentMessageRequest,
+  type CodingAgentRenameRequest,
   type CodingAgentStartRequest,
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
+  codingAgentRenameRequestSchema,
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
 import {
@@ -288,6 +290,23 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, codingAgentAnswerSchema, CHOOSE_REFUSALS),
+    );
+  }
+
+  /** Renames one agent, or clears its title with an empty one, answering it as it then stands; a title past the bound is refused here without traveling. */
+  rename(
+    agentId: string,
+    request: CodingAgentRenameRequest,
+  ): Effect.Effect<CodingAgentAgentAnswer, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(codingAgentRenameRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PATCH,
+        path: agentPath(agentId),
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, codingAgentAnswerSchema, ROW_REFUSALS),
     );
   }
 

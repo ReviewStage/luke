@@ -413,6 +413,7 @@ export function AgentTab({
     shown,
     read: control.readTranscript,
     onStatus: control.onStatus,
+    onTitle: control.onTitle,
   });
   const composer = useAgentComposer({
     agentId: agent.id,

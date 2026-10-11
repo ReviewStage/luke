@@ -3,12 +3,14 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { RENAME_FAILED_NOTE } from "../planning/planning-model";
 
 /**
- * plan-name-field.tsx -- a plan's name edited where it is drawn, in the sidebar's row or on the open plan's toolbar, the way a desktop list renames in place.
+ * plan-name-field.tsx -- a name edited where it is drawn, in the sidebar's row, on the open plan's tab, or on an agent's, the way a desktop list renames in place.
  *
  * The field opens over the name with all of it selected. Return or a press
  * elsewhere keeps what was typed, and Escape keeps the name it opened on; a
  * name left empty or unchanged renames nothing. Its words are an input's
- * value, which session replay masks as it masks every input.
+ * value, which session replay masks as it masks every input. The field and
+ * the rename hook are a plan's by default and an agent's where the caller
+ * says so: what differs is the name said for a reader and the bound.
  */
 
 /** How an edit ended: what to rename the plan to, if anything, and whether a key ended it, so focus goes back to the name. */
@@ -21,10 +23,15 @@ export interface NameEdit {
 export function PlanNameField({
   name,
   className,
+  label = "Plan name",
+  maxLength = PLAN_BOUNDS.MAX_NAME_CHARS,
   onEnd,
 }: {
   name: string;
   className: string;
+  /** What the field is called for a reader; a plan's name unless said otherwise. */
+  label?: string;
+  maxLength?: number;
   onEnd: (edit: NameEdit) => void;
 }): React.JSX.Element {
   const field = useRef<HTMLInputElement | null>(null);
@@ -46,9 +53,9 @@ export function PlanNameField({
       ref={field}
       type="text"
       className={className}
-      aria-label="Plan name"
+      aria-label={label}
       defaultValue={name}
-      maxLength={PLAN_BOUNDS.MAX_NAME_CHARS}
+      maxLength={maxLength}
       spellCheck={false}
       onBlur={() => end(true, false)}
       onKeyDown={(event) => {
@@ -69,10 +76,10 @@ export function PlanNameField({
 }
 
 /**
- * One surface's rename of the plan it draws: whether its field is open, and
- * the note a refusal leaves beside the name until the next edit. Both are
- * held for the plan they were about, so a surface that moves on to another
- * plan draws neither over it. Note that the field closes as soon as it ends,
+ * One surface's rename of the plan, or the agent, it draws: whether its
+ * field is open, and the note a refusal leaves beside the name until the
+ * next edit. Both are held for the one they were about, so a surface that
+ * moves on to another draws neither over it. Note that the field closes as soon as it ends,
  * because the new name is drawn at once and a refusal puts the old one back
  * by itself. Each edit is counted, so the refusal of one an edit since has
  * replaced says nothing about the name drawn now.

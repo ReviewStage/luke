@@ -24,6 +24,16 @@
               "effort": {
                 "type": "string"
               },
+              "title": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "createdAt": {
                 "type": "number",
                 "minimum": 0
@@ -63,6 +73,7 @@
               "planId",
               "model",
               "effort",
+              "title",
               "createdAt",
               "status",
               "turnId"

@@ -1,3 +1,4 @@
+import type { LanguageModel } from "ai";
 import { Effect } from "effect";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
@@ -8,7 +9,7 @@ import type { SessionOwnership } from "../brain-host/door.js";
 import { HostedEnvironment } from "../environment.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
-import type { ProviderKeys } from "./model.js";
+import { type ProviderKeys, titleModel } from "./model.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -30,6 +31,8 @@ export interface CoderHostSeams {
   readonly ownership: SessionOwnership;
   /** Luke's own provider keys, each absent where the deployment holds none. */
   readonly keys: () => ProviderKeys;
+  /** The model an agent's title is generated on; nothing leaves every agent untitled. */
+  readonly titleModel: () => LanguageModel | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of the providers. */
   readonly scriptedModel: () => boolean;
   readonly now: () => number;
@@ -64,6 +67,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
         }),
       keys: () => keys,
+      titleModel: () => titleModel(keys),
       scriptedModel: () =>
         process.env[CODER_ENVIRONMENT.MODEL_FIXTURE] === CODER_MODEL_FIXTURE.SCRIPTED,
       now: () => Date.now(),

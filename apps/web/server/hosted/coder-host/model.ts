@@ -15,9 +15,14 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the two providers spell it differently: Anthropic takes `effort` and
  * OpenAI's Responses API `reasoningEffort`, each under its own provider
  * options. Nothing goes through AI Gateway, so the catalog's efforts for a
- * model are handed to the provider as the catalog lists them. A key is
+ * model are handed to the provider as the catalog lists them. The agent's
+ * title is one small call beside the steps, on a fixed cheap model at the
+ * same provider door. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
  */
+
+/** The one model an agent's title is generated on: the cheapest that names a task well, at Anthropic's own id. */
+const AGENT_TITLE_MODEL_ID = "claude-haiku-5-5";
 
 /** Luke's own keys, sealed; one absent is that provider's agents refused at their first step. */
 export interface ProviderKeys {
@@ -40,6 +45,13 @@ function effortOptions(provider: ModelProvider, effort: string): AgentModelOptio
     case MODEL_PROVIDER.OPENAI:
       return { providerOptions: { openai: { reasoningEffort: effort } } };
   }
+}
+
+/** The model an agent's title is generated on, or nothing where the deployment holds no Anthropic key, which leaves agents untitled. */
+export function titleModel(keys: ProviderKeys): LanguageModel | undefined {
+  if (keys.anthropic === undefined) return undefined;
+  // The key is revealed here alone, into the SDK client that puts it on its requests.
+  return createAnthropic({ apiKey: Redacted.value(keys.anthropic) })(AGENT_TITLE_MODEL_ID);
 }
 
 /** The choice as a step runs it, or why it cannot: a provider Luke does not run, or a key the deployment does not hold. */

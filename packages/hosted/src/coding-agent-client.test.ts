@@ -20,6 +20,7 @@ const AGENT = {
   planId: PLAN_ID,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
+  title: null,
   createdAt: 1_800_000_000_000,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
@@ -199,7 +200,12 @@ it.effect("reads the transcript past the cursor at the agent's messages address"
     };
     const api = fakeCloudApi({
       [`GET /api/agents/${AGENT_ID}/messages`]: {
-        answer: () => ({ messages: [message], cursor: "3:2", status: CODING_AGENT_STATUS.RUNNING }),
+        answer: () => ({
+          messages: [message],
+          cursor: "3:2",
+          status: CODING_AGENT_STATUS.RUNNING,
+          title: null,
+        }),
       },
     });
 
@@ -212,6 +218,7 @@ it.effect("reads the transcript past the cursor at the agent's messages address"
       messages: [message],
       cursor: "3:2",
       status: CODING_AGENT_STATUS.RUNNING,
+      title: null,
     });
     assert.equal(
       api.requests()[0]?.url,
@@ -311,6 +318,31 @@ it.effect(
 
       assert.deepEqual(answer, { agent: chosen });
       assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), CHOICE);
+    }),
+);
+
+it.effect(
+  "renames an agent at its own address, as the title alone, and refuses a title past the bound without asking",
+  () =>
+    Effect.gen(function* () {
+      const renamed = { ...AGENT, title: "Sign-out button" };
+      const api = fakeCloudApi({
+        [`PATCH /api/agents/${AGENT_ID}`]: { answer: () => ({ agent: renamed }) },
+      });
+
+      const answer = yield* Effect.provide(
+        client().rename(AGENT_ID, { title: " Sign-out button " }),
+        api.layer,
+      );
+      assert.deepEqual(answer, { agent: renamed });
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), { title: "Sign-out button" });
+
+      const refused = yield* Effect.provide(
+        client().rename(AGENT_ID, { title: "x".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1) }),
+        api.layer,
+      );
+      assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+      assert.equal(api.requests().length, 1);
     }),
 );
 

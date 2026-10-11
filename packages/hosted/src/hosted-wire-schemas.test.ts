@@ -41,6 +41,7 @@ const EFFECT_MODULE_SCHEMAS = {
   "coding-agent-wire": {
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
     codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
+    codingAgentRenameRequestSchema: codingAgentWire.codingAgentRenameRequestSchema,
     codingAgentSummarySchema: codingAgentWire.codingAgentSummarySchema,
     codingAgentAnswerSchema: codingAgentWire.codingAgentAnswerSchema,
     codingAgentListAnswerSchema: codingAgentWire.codingAgentListAnswerSchema,
@@ -66,6 +67,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentMessageParamsSchema: codingAgentView.codingAgentMessageParamsSchema,
     codingAgentMessagesAnswerViewSchema: codingAgentView.codingAgentMessagesAnswerViewSchema,
     codingAgentChooseParamsSchema: codingAgentView.codingAgentChooseParamsSchema,
+    codingAgentRenameParamsSchema: codingAgentView.codingAgentRenameParamsSchema,
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,

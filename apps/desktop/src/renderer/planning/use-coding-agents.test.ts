@@ -25,6 +25,7 @@ const STARTED: CodingAgentSummary = {
   planId: PLAN,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
+  title: null,
   createdAt: 1,
   status: CODING_AGENT_STATUS.STARTING,
   turnId: null,
@@ -316,6 +317,46 @@ test("a choice written as the default is asked of the service as given, and one 
   await settle();
   assert.deepEqual(unanswered, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
   assert.equal(tab.control().start.note, MODEL_CHANGE_FAILED);
+});
+
+test("a rename asks the service for that agent alone and the agent it answers takes its place in the list, a refusal answers false and changes nothing, and a transcript page's title lands on the agent it names", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  const renamed = { ...STARTED, title: "Sign-out button" };
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { agent: renamed });
+  await tab.mount();
+
+  assert.equal(await tab.control().onRename(AGENT, "Sign-out button"), true);
+  await settle();
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_RENAME,
+    payload: { agentId: AGENT, title: "Sign-out button" },
+  });
+  assert.deepEqual(tab.control().agents, [renamed]);
+
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+  assert.equal(await tab.control().onRename(AGENT, "Another"), false);
+  await settle();
+  assert.deepEqual(tab.control().agents, [renamed]);
+
+  act(() => tab.control().onTitle(AGENT, "Sign-out button in account menu"));
+  assert.deepEqual(tab.control().agents, [
+    { ...renamed, title: "Sign-out button in account menu" },
+  ]);
+
+  // Two renames answered out of order: the one made last is what stands, whichever answers first.
+  let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
+  const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
+    answerFirst = resolve;
+  });
+  const last = { ...renamed, title: "Second" };
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, first, { agent: last });
+  const older = tab.control().onRename(AGENT, "First");
+  await tab.control().onRename(AGENT, "Second");
+  answerFirst?.({ agent: { ...renamed, title: "First" } });
+  await older;
+  await settle();
+  assert.deepEqual(tab.control().agents, [last]);
 });
 
 test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list", async () => {

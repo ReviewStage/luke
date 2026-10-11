@@ -32,6 +32,7 @@ import {
   codingAgentModelsAnswerSchema,
   codingAgentPullRequestAnswerViewSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
@@ -130,7 +131,7 @@ export const ACT_KIND = {
    * agents with their status, one started under the press's own key, one's
    * transcript past a cursor (held open by the service while the agent
    * runs), one sent a message naming how it reaches a turn under way, one
-   * given another model and effort for its next step, one stopped, and
+   * given another model and effort for its next step, one renamed, one stopped, and
    * what one published: its branch and pull request as GitHub
    * holds them. The window holds what it draws; nothing here does.
    */
@@ -142,6 +143,7 @@ export const ACT_KIND = {
   CODING_AGENTS_MESSAGES: "codingAgents.messages",
   CODING_AGENTS_MESSAGE: "codingAgents.message",
   CODING_AGENTS_CHOOSE: "codingAgents.choose",
+  CODING_AGENTS_RENAME: "codingAgents.rename",
   CODING_AGENTS_STOP: "codingAgents.stop",
   /**
    * Which agent's tab the panel shows, or none: what main's notification of
@@ -486,6 +488,11 @@ export const ACT = {
     payload: actSchema(codingAgentChooseParamsSchema),
     result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
     refusal: "Could not change the agent's model on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_RENAME]: {
+    payload: actSchema(codingAgentRenameParamsSchema),
+    result: wireResult<CodingAgentAgentAnswer>(isReadable(codingAgentAgentAnswerSchema)),
+    refusal: "Could not rename the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_STOP]: {
     payload: actSchema(codingAgentStopParamsSchema),

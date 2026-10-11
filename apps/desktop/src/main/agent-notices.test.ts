@@ -33,6 +33,7 @@ function agent(
     planId: PLAN_ID,
     model: MODEL,
     effort: "high",
+    title: null,
     createdAt: 1_800_000_000_000,
     status,
     turnId: TURN_ID,
@@ -237,9 +238,11 @@ it.effect("a window focused on another tab, or a plan left behind, is told", () 
     f.focus(true);
     notices.shown(null);
     notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING)]);
+    // The page that says it failed carries the title generated since the list named the agent.
+    notices.observeTitle(AGENT_ID, "Fix invitations");
     notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.FAILED);
     yield* Effect.yieldNow;
-    assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Claude Opus 5.5 failed" }]);
+    assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Fix invitations failed" }]);
   }),
 );
 
@@ -348,16 +351,28 @@ it.effect("a pull request, once a reader hands one in, is the end the notice say
       noticeText({
         planName: PLAN_NAME,
         model: MODEL,
+        title: null,
         status: CODING_AGENT_STATUS.COMPLETED,
         models: undefined,
         pullRequest: 123,
       }),
       { title: PLAN_NAME, body: "Claude Opus 5.5 opened #123" },
     );
+    assert.deepEqual(
+      noticeText({
+        planName: PLAN_NAME,
+        model: MODEL,
+        title: "Sign-out button in account menu",
+        status: CODING_AGENT_STATUS.COMPLETED,
+        models: undefined,
+      }),
+      { title: PLAN_NAME, body: "Sign-out button in account menu finished" },
+    );
     assert.equal(
       noticeText({
         planName: PLAN_NAME,
         model: MODEL,
+        title: null,
         status: CODING_AGENT_STATUS.RUNNING,
         models: undefined,
       }),
