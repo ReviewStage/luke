@@ -5,7 +5,9 @@
  * for each turn, and only while the window is focused, the OS's
  * notification saying it while the window is behind. The toast says what
  * the notification would, but the plan's name, and its View does what the
- * notification's click does.
+ * notification's click does. Several agents may end in one read, so each end
+ * waits its turn rather than taking the place of the one before it, whose
+ * View would go with it.
  */
 
 import { useEffect, useRef } from "react";
@@ -26,6 +28,7 @@ export function useAgentEndToasts(view: (planId: string, agentId: string) => voi
       window.sidecar.onAgentEnded(({ planId, agentId, words, failed }) =>
         toast({
           words,
+          waits: true,
           tone: failed ? TOAST_TONE.FAILED : TOAST_TONE.DONE,
           action: { label: VIEW_LABEL, onPress: () => viewing.current(planId, agentId) },
         }),

@@ -108,3 +108,25 @@ it.effect(
       assert.deepEqual(panel.viewed, [["plan-2", "agent-2"]]);
     }),
 );
+
+it.effect("two agents that end in one read are each said in turn, each with its own View", () =>
+  Effect.gen(function* () {
+    const panel = mount(yield* registryOnTestClock);
+    panel.end({ planId: "plan-1", agentId: "agent-1", words: "Opus 5.5 finished", failed: false });
+    panel.end({
+      planId: "plan-1",
+      agentId: "agent-2",
+      words: "GPT 5.6 Sol finished",
+      failed: false,
+    });
+    yield* landed;
+    assert.equal(toast()?.textContent, "Opus 5.5 finishedView");
+    yield* TestClock.adjust(Duration.millis(5_000 + MOTION_DURATION_MS.EXIT));
+    yield* landed;
+    assert.equal(toast()?.textContent, "GPT 5.6 Sol finishedView");
+    const view = toast()?.querySelector("button");
+    assert.ok(view);
+    act(() => view.click());
+    assert.deepEqual(panel.viewed, [["plan-1", "agent-2"]]);
+  }),
+);

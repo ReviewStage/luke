@@ -6,7 +6,8 @@
  * closed with the send, a plan archived from a menu, or a change that was
  * refused where nothing beside it is left to say so. One stands at a time,
  * bottom-centre; a second takes the first's place and starts its hold
- * afresh. A toast may carry one action, such as Undo, as a button at its
+ * afresh, unless it waits, as news that arrives in runs does, for the one
+ * standing to leave. A toast may carry one action, such as Undo, as a button at its
  * end: it then stands for `ACTION_HOLD`, its hold paused while the pointer
  * is over it or focus is in it, and a press of the action takes it away.
  * One with no action is never pointed at, so clicks pass through it. It
@@ -50,9 +51,16 @@ interface ToastAction {
 
 /**
  * A toast to show: its words and its tone, and either how long it stands
- * before it leaves or the action it carries, which sets its own hold.
+ * before it leaves or the action it carries, which sets its own hold. One
+ * that `waits` stands only once the toast standing has left, rather than
+ * taking its place, for news that arrives in runs and each piece of which
+ * is the developer's to act on.
  */
-export type ToastNotice = { readonly words: string; readonly tone: ToastTone } & (
+export type ToastNotice = {
+  readonly words: string;
+  readonly tone: ToastTone;
+  readonly waits?: boolean;
+} & (
   | { readonly hold: Duration.Duration; readonly action?: never }
   | { readonly action: ToastAction; readonly hold?: never }
 );
@@ -93,6 +101,9 @@ interface ToastShown {
 
 const toastShownAtom = Atom.keepAlive(Atom.make<ToastShown | undefined>(undefined));
 
+/** The toasts that wait for the one standing to leave, oldest first. */
+const toastWaitingAtom = Atom.keepAlive(Atom.make<readonly ToastNotice[]>([]));
+
 /** What is left of a standing toast's hold at `now`: none once it is leaving. */
 function holdLeft(shown: ToastShown, now: number): Duration.Duration {
   if (shown.leaving) return Duration.zero;
@@ -103,22 +114,55 @@ function holdLeft(shown: ToastShown, now: number): Duration.Duration {
   );
 }
 
+/** A toast to stand: which it is among those shown, what it says, and how much of its hold is left. */
+type ToastStanding = Pick<ToastShown, "count" | "notice" | "left">;
+
+/**
+ * Stands a toast for what is left of its hold and lets it leave, then each
+ * toast waiting after it in turn, until none waits.
+ */
+function standInTurn(get: Atom.FnContext, first: ToastStanding): Effect.Effect<void> {
+  return Effect.gen(function* () {
+    let next: ToastStanding | undefined = first;
+    while (next !== undefined) {
+      const shown: ToastStanding = next;
+      get.set(toastShownAtom, { ...shown, leaving: false, since: yield* Clock.currentTimeMillis });
+      yield* Effect.sleep(shown.left);
+      get.set(toastShownAtom, { ...shown, leaving: true, left: Duration.zero, since: undefined });
+      yield* Effect.sleep(TOAST_EXIT);
+      const [waiting, ...rest] = get(toastWaitingAtom);
+      get.set(toastWaitingAtom, rest);
+      next =
+        waiting === undefined
+          ? undefined
+          : { count: shown.count + 1, notice: waiting, left: waiting.hold ?? ACTION_HOLD };
+    }
+    get.set(toastShownAtom, undefined);
+  });
+}
+
 /**
  * A toast's life, as an atom whose work is its waits: it stands for its
- * hold, leaves, and is gone. A pause ends the wait where it stands and keeps
- * what was left of it, which a resume waits out; a pause while the toast is
- * leaving brings it back for the pointer that reached it. Note that it is
- * kept alive, because whoever asked for it is often a menu already unmounted
- * by the time it leaves, and each step interrupts the waits of the one
- * before it.
+ * hold, leaves, and is gone, and the toasts that wait stand after it. A
+ * pause ends the wait where it stands and keeps what was left of it, which a
+ * resume waits out; a pause while the toast is leaving brings it back for
+ * the pointer that reached it. A toast that waits joins the line and lets
+ * the one standing run on. Note that it is kept alive, because whoever asked
+ * for it is often a menu already unmounted by the time it leaves, and each
+ * step interrupts the waits of the one before it, which is why one that
+ * merely joins the line takes the standing toast's wait back up.
  */
 const toastLifeAtom = Atom.keepAlive(
   rendererRuntime.fn((step: ToastStep, get) =>
     Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       const standing = get(toastShownAtom);
+      const joins =
+        step.kind === TOAST_STEP.SHOW && step.notice.waits === true && standing !== undefined;
+      if (joins) get.set(toastWaitingAtom, [...get(toastWaitingAtom), step.notice]);
+      const paused = standing !== undefined && !standing.leaving && standing.since === undefined;
       const shown =
-        step.kind === TOAST_STEP.SHOW
+        step.kind === TOAST_STEP.SHOW && !joins
           ? {
               count: (standing?.count ?? 0) + 1,
               notice: step.notice,
@@ -132,15 +176,12 @@ const toastLifeAtom = Atom.keepAlive(
                 left: step.kind === TOAST_STEP.DISMISS ? Duration.zero : holdLeft(standing, now),
               };
       if (shown === undefined) return;
-      if (step.kind === TOAST_STEP.PAUSE) {
+      // A pause, or a toast joining the line behind one paused, leaves it standing as it is.
+      if (step.kind === TOAST_STEP.PAUSE || (joins && paused)) {
         get.set(toastShownAtom, { ...shown, leaving: false, since: undefined });
         return;
       }
-      get.set(toastShownAtom, { ...shown, leaving: false, since: now });
-      yield* Effect.sleep(shown.left);
-      get.set(toastShownAtom, { ...shown, leaving: true, left: Duration.zero, since: undefined });
-      yield* Effect.sleep(TOAST_EXIT);
-      get.set(toastShownAtom, undefined);
+      yield* standInTurn(get, shown);
     }),
   ),
 );

@@ -253,8 +253,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
 
     /**
      * One end announced: what the agent published read, then the toast shown
-     * where the window was focused as the turn ended, or else the
-     * notification posted.
+     * where the window was focused as the turn ended and still is, or else
+     * the notification posted. Note that focus is read on both sides of the
+     * read, because a toast to a window gone behind while it was out would
+     * play to nobody, and a window come forward meanwhile had already been
+     * told nothing of the end it missed.
      */
     const announce = Effect.gen(function* () {
       const end = yield* Queue.take(ends);
@@ -269,7 +272,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       });
       if (text === undefined) return;
       const place = { planId: end.agent.planId, agentId: end.agentId };
-      if (end.focused) {
+      if (end.focused && focused) {
         doors.toast({
           place,
           words: text.body,

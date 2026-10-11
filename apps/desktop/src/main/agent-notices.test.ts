@@ -284,6 +284,24 @@ it.effect(
     }),
 );
 
+it.effect(
+  "an end whose window went behind while what the agent published was read is posted as a notification, not toasted to nobody",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      notices.shown(null);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      // The window goes behind before the announcement's read has answered.
+      f.focus(false);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.toasted, []);
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 finished" }]);
+    }),
+);
+
 it.effect("an agent first seen ended, as after a relaunch, is not announced", () =>
   Effect.gen(function* () {
     const f = fixture();
