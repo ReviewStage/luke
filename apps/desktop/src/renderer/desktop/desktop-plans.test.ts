@@ -571,6 +571,7 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
   press(page, '.work-worker-line [aria-label="Open in tab"]');
+  act(() => relayout());
 
   assert.equal(hover(tabNamed(page, "Work")), undefined);
   assert.equal(hover(tabNamed(page, job)), job);
@@ -1594,14 +1595,14 @@ test("Shift-Command-Arrow moves the focused tab along the strip, focus and choic
   assert.equal(document.activeElement, code);
 });
 
-/** Lays the panel's tabs out in a row as `layOutTabs` does, in a strip that shows only two of them at a time and scrolls. */
-function layOutScrollingTabs(): HTMLElement {
+/** Lays the panel's tabs out in a row as `layOutTabs` does, in a strip that shows only `shown.tabs` of them at a time, two unless said, and scrolls. */
+function layOutScrollingTabs(shown: { tabs: number } = { tabs: 2 }): HTMLElement {
   const strip = document.querySelector<HTMLElement>(".side-panel .tab-strip");
   assert.ok(strip, "the panel draws its tabs");
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this === strip) return DOMRect.fromRect({ width: 2 * TAB_PITCH });
+    if (this === strip) return DOMRect.fromRect({ width: shown.tabs * TAB_PITCH });
     const at = this.parentElement === strip ? [...strip.children].indexOf(this) : -1;
     return DOMRect.fromRect(
       at < 0 ? {} : { x: at * TAB_PITCH - strip.scrollLeft, width: TAB_WIDTH },
@@ -1642,4 +1643,61 @@ test("a tab chosen, or opened, past the strip's shown room is scrolled into view
     tabInView(page, strip, "Board"),
     "a tab opened at the strip's end is brought into view",
   );
+});
+
+test("a strip narrowed past its chosen tab scrolls to keep it in view", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const shown = { tabs: 4 };
+  const strip = layOutScrollingTabs(shown);
+  act(() => tabNamed(page, "Work").click());
+  assert.equal(strip.scrollLeft, 0, "the strip shows every tab");
+
+  shown.tabs = 2;
+  act(() => relayout());
+  assert.ok(tabInView(page, strip, "Work"));
+});
+
+test("a wheel turned up and down over a strip with tabs hidden runs it along, a line of a wheel that counts lines a line of text", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = page.querySelector<HTMLElement>(".side-panel .tab-strip");
+  assert.ok(strip, "the panel draws its tabs");
+  const wheel = (init: WheelEventInit) =>
+    act(() => {
+      strip.dispatchEvent(new WheelEvent("wheel", { bubbles: true, ...init }));
+    });
+
+  wheel({ deltaY: 120 });
+  assert.equal(strip.scrollLeft, 0, "a strip showing every tab does not scroll");
+
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this === strip ? 400 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this === strip ? 200 : 0;
+  });
+  wheel({ deltaY: 120 });
+  assert.equal(strip.scrollLeft, 120);
+  wheel({ deltaY: -3, deltaMode: WheelEvent.DOM_DELTA_LINE });
+  assert.equal(strip.scrollLeft, 72);
+  wheel({ deltaX: 40, deltaY: 10 });
+  assert.equal(strip.scrollLeft, 72, "a sideways swipe is the strip's own native scroll");
+});
+
+test("the plan's tab, cut short as its toolbar narrows, says its whole name in its hint", () => {
+  const page = mountOpenPlan();
+  const label = page.querySelector('.desktop-toolbar [role="tab"] .tab-label');
+  assert.ok(label, "the plan's tab draws its name");
+  const tab = tabNamed(page, PLAN.name);
+  assert.equal(hover(tab), undefined);
+
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this === label ? 180 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this === label ? 60 : 0;
+  });
+  act(() => relayout());
+  assert.equal(hover(tab), PLAN.name);
 });

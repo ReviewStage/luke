@@ -1,5 +1,5 @@
 import { CloseIcon } from "@sidecar/panel";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -26,12 +26,22 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * with an ellipsis and said whole in its hint. Past holding them all, the
  * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
  * sideways, and the tab chosen, or the one the keyboard reaches, is brought
- * into the room it shows.
+ * into the room it shows, and kept there as the strip is narrowed.
  *
  * Its words are text, which the session recording masks with the rest.
  */
 
 const TAB = '[role="tab"]';
+
+/** What a wheel's delta counts, as its `deltaMode` says: pixels, lines, or pages. */
+const WHEEL_DELTA = {
+  PIXEL: 0,
+  LINE: 1,
+  PAGE: 2,
+} as const;
+
+/** The CSS pixels a wheel's line stands for, the tabs' own line of text. */
+const WHEEL_LINE = 16;
 
 /**
  * The tab a navigation key moves to from the focused one, or nothing for any
@@ -58,6 +68,13 @@ function closesTab(key: string): boolean {
   return key === "Delete" || key === "Backspace";
 }
 
+/** Scrolls the strip `by` along, gliding as its stylesheet says or at once. */
+function scrollStrip(strip: HTMLElement, by: number, glide: boolean): void {
+  if (!glide) strip.style.scrollBehavior = "auto";
+  strip.scrollLeft += by;
+  strip.style.scrollBehavior = "";
+}
+
 /**
  * Scrolls the strip, and nothing around it, the least that shows the whole
  * of `tab`'s pill clear of the faded edges. Note that the strip's own scroll
@@ -72,10 +89,8 @@ function reveal(strip: HTMLElement, tab: HTMLElement, glide = true): void {
   const style = getComputedStyle(strip);
   const before = shown.left + (Number.parseFloat(style.scrollPaddingLeft) || 0) - own.left;
   const after = own.right - shown.right + (Number.parseFloat(style.scrollPaddingRight) || 0);
-  if (!glide) strip.style.scrollBehavior = "auto";
-  if (before > 0) strip.scrollLeft -= before;
-  else if (after > 0) strip.scrollLeft += after;
-  strip.style.scrollBehavior = "";
+  if (before > 0) scrollStrip(strip, -before, glide);
+  else if (after > 0) scrollStrip(strip, after, glide);
 }
 
 /** Focus moved to a tab by the strip's own keys, which bring it into view with the strip's glide. */
@@ -134,6 +149,19 @@ export function TabStrip({
     revealed.current = chosen;
     reveal(strip.current, chosen, drawn);
   });
+  // A strip narrowed, its panel dragged or the window resized, keeps the
+  // chosen tab in view as an editor keeps its active tab, at once rather
+  // than gliding behind the edge being dragged.
+  useLayoutEffect(() => {
+    const node = strip.current;
+    if (node === null) return;
+    const observer = new ResizeObserver(() => {
+      const chosen = node.querySelector<HTMLElement>(`${TAB}[aria-selected="true"]`);
+      if (chosen !== null) reveal(node, chosen, false);
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const move =
     onMove === undefined
@@ -180,7 +208,13 @@ export function TabStrip({
     const node = event.currentTarget;
     if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
     if (node.scrollWidth <= node.clientWidth) return;
-    node.scrollBy({ left: event.deltaY, behavior: "instant" });
+    const unit =
+      event.deltaMode === WHEEL_DELTA.LINE
+        ? WHEEL_LINE
+        : event.deltaMode === WHEEL_DELTA.PAGE
+          ? node.clientWidth
+          : 1;
+    scrollStrip(node, event.deltaY * unit, false);
   };
 
   // The line a move says stands before the strip, so the control after the
@@ -242,16 +276,15 @@ export function Tab({
   onSelect: () => void;
   onClose?: (() => void) | undefined;
 }): React.JSX.Element {
-  const words = useRef<HTMLSpanElement>(null);
-  // Note that the label is measured on every render rather than watched,
-  // because a panel's tab keeps its own width whatever the strip's, so only
-  // the label itself, drawn again here, changes whether it is cut short; the
-  // plan's one tab, which gives way to its toolbar, is measured as it draws.
+  // Whether the label is cut short, measured whenever its box resizes: a
+  // label renamed, or the plan's one tab giving way to its toolbar.
   const [clipped, setClipped] = useState(false);
-  useLayoutEffect(() => {
-    const node = words.current;
-    setClipped(node !== null && node.scrollWidth > node.clientWidth);
-  });
+  const words = useCallback((node: HTMLSpanElement | null) => {
+    if (node === null) return;
+    const observer = new ResizeObserver(() => setClipped(node.scrollWidth > node.clientWidth));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const hint = !clipped ? tooltip : tooltip === undefined ? label : `${label} · ${tooltip}`;
   const glyph = (
     <span className="tab-icon">
