@@ -153,8 +153,8 @@ export function sandboxDouble(
         });
         return Promise.resolve(result(EXIT.OK));
       }
-      // A command from the checkout root, from the table.
-      const command = env?.[VARIABLE.COMMAND];
+      // A command from the checkout root, from the table: the model's under its variable, or the host's own as given.
+      const command = env?.[VARIABLE.COMMAND] ?? (env === undefined ? run.command : undefined);
       if (run.workingDirectory === PATH.CHECKOUT && command !== undefined) {
         const answer = commands(command);
         return Promise.resolve(answer ?? result(EXIT.NOT_FOUND, "", "command not found"));

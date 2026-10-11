@@ -304,11 +304,10 @@ selected the moment its Start lands.
   the service keeps its answer thirty seconds per agent, reading afresh
   the first time after the agent ends, so a tab reading beside every held
   page asks GitHub a few times a minute at most and the pull request an
-  agent opens last shows the moment it ends. The branch and the pull
-  request are the agent's own: read off the commands it ran and the
-  addresses in its words and its tools' answers, with a pull request
-  counted only on the branch the agent itself named, so a link in a file
-  it read is never worn as its own.
+  agent opens last shows the moment it ends. The branch is the one
+  checked out in the agent's sandbox as its turn ended, written on its row
+  by the service as the sandbox stops, and the pull request is the newest
+  from that branch.
 - **The transcript.** The agent's stored `UIMessage`s, drawn with the same
   AI Elements components as the Transcript tab, on the same spacing: the
   plan it was handed, the first of the developer's messages, as a Plan card

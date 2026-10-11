@@ -6,11 +6,13 @@ import type { CodingAgent } from "../coding-agent-store.js";
 import {
   type CheckoutIdentity,
   cloneRepository,
+  REPOSITORY_REFUSAL,
   type RepositorySandbox,
+  runInSandbox,
   setCheckoutIdentity,
 } from "../repository-shell.js";
 import type { ConversationTarget } from "../store/index.js";
-import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
+import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
  * checkout.ts -- a coding agent's checkout of its repository, and the credential its sandbox pushes through.
@@ -37,6 +39,12 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * message ends with Luke's co-author trailer under the App's own bot. The
  * identity is set here, as the checkout opens, and never by the model, whose
  * instructions say so.
+ *
+ * The agent publishes through `git` and `gh` of its own, so what it
+ * published is read off the checkout rather than guessed: the branch
+ * checked out as a turn ends is the one its pull request is on, whatever
+ * branches it cut, switched, or deleted on the way, and the session's
+ * turn-end hook writes it on the agent's row through the host.
  */
 
 /** Why the checkout or a mint ran nothing, in the host's own words. */
@@ -46,6 +54,9 @@ export class CheckoutRefused extends Data.TaggedError("CheckoutRefused")<{
 
 /** What a mint or a checkout may reach: GitHub through the App, and the store for the account's token. */
 export type CheckoutServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+
+/** The branch checked out, as git prints it: the name, or nothing on a detached HEAD. */
+const SHOW_BRANCH = "git branch --show-current";
 
 /** The name Luke's co-author trailer carries; the address beside it is the App's bot's. */
 const LUKE_COMMIT_NAME = "Luke";
@@ -143,3 +154,23 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
     return minted.token;
   },
 );
+
+/**
+ * The branch checked out in the agent's sandbox now, or null where the
+ * checkout stands detached; refused where the sandbox is gone or git could
+ * not say.
+ */
+export const checkoutBranch = /* @__PURE__ */ Effect.fn("web/checkoutBranch")(function* (
+  sandbox: RepositorySandbox,
+): Effect.fn.Return<string | null, CheckoutRefused> {
+  const shown = yield* runInSandbox(
+    sandbox,
+    { command: SHOW_BRANCH, workingDirectory: CODER.CHECKOUT_PATH },
+    REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
+  ).pipe(Effect.mapError((refused) => new CheckoutRefused({ reason: refused.reason })));
+  if (shown.exitCode !== 0) {
+    return yield* new CheckoutRefused({ reason: `\`${SHOW_BRANCH}\` exited ${shown.exitCode}` });
+  }
+  const branch = shown.stdout.trim();
+  return branch.length === 0 ? null : branch;
+});

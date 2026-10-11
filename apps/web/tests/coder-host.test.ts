@@ -48,6 +48,7 @@ import {
   awaitingLinesOf,
   createCodingAgent,
   latestTurnsOf,
+  readCodingAgent,
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
@@ -62,6 +63,7 @@ import {
 import { stampedEveEvent } from "./support/eve-events";
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -372,6 +374,38 @@ const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
   });
 
 it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it) => {
+  it.effect(
+    "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore;
+        const { userId, agent, admitted } = yield* openAgent(host);
+        let shown: ReturnType<CommandTable> = { exitCode: 0, stdout: "luke/invites\n", stderr: "" };
+        const sandbox = sandboxDouble((command) =>
+          command === "git branch --show-current" ? shown : undefined,
+        );
+        sandbox.checkedOut = agent.repository;
+        const branchOnRow = Effect.map(readCodingAgent(userId, agent.id), (row) =>
+          Option.isSome(row) ? row.value.branch : assert.fail("the agent is gone"),
+        );
+
+        yield* host.recordBranch(admitted, sandbox);
+        assert.equal(yield* branchOnRow, "luke/invites");
+
+        // A detached HEAD prints nothing.
+        shown = { exitCode: 0, stdout: "", stderr: "" };
+        yield* host.recordBranch(admitted, sandbox);
+        assert.equal(yield* branchOnRow, null);
+
+        shown = { exitCode: 0, stdout: "luke/invites\n", stderr: "" };
+        yield* host.recordBranch(admitted, sandbox);
+        // git could not say: the row keeps what it had, and the record answers rather than fails.
+        shown = undefined;
+        yield* host.recordBranch(admitted, sandbox);
+        assert.equal(yield* branchOnRow, "luke/invites");
+      }),
+  );
+
   it.effect(
     "a step is told the model and effort the agent's row holds now, with the window the catalog lists, and the fallback where it lists none",
     () =>

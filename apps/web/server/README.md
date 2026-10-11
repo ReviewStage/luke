@@ -1875,32 +1875,31 @@ pull request from it with its state (`open`, `draft`, `merged`, `closed`),
 its checks as one word (`pending`, `passing`, `failing`, `none`), and its
 additions, deletions, and changed files; null for a branch or a pull
 request it has not. The agent reaches GitHub through `git` and `gh` in its
-shell alone, so its own transcript rows are where the two are named, and
-named for this agent and no other, every page of them read: the branch is
-read off the commands it ran (a push, a branch cut, a head given to `gh pr
-create`, or any name under `CODER.BRANCH_PREFIX`), the newest naming
-winning, and the pull request off any address of one on the agent's
-repository in its words or a tool's answer, case aside. The branch is the
-anchor: an agent whose commands named none published nothing, whatever
-addresses its reads turned up, and a pull request named by number is the
-agent's only where its head is that branch, so a link in a file it read is
-never worn as its own. GitHub then says what stands, once the developer's
-reach of the repository through the App is confirmed as a Start confirms it
-(`repository-not-reachable`, 403, otherwise), on the developer's own App
-token (`github/pull-requests.ts`): the pull request by its number on that
-head, else the newest from the branch, else whether the branch was pushed
-at all, with the head's check runs and commit statuses read together for
-the one word, and a head whose checks the App may not read reading as
-`none` with a warning rather than failing the answer. The answer is kept
+shell alone, and the branch its sandbox stands on as a turn ends is the one
+its pull request is on, whatever it cut, switched, or deleted on the way:
+the service's hook (`coder/hooks/store.ts`) runs `git branch
+--show-current` in the checkout as each turn ends and writes the answer on
+the agent's row (`coding_agent.branch`, through `coder-host/host.ts`'s
+`recordBranch`), null for a detached HEAD, before it stops the sandbox; a
+read that fails is logged and the sandbox stops regardless, and a turn
+that opened no sandbox writes nothing. A row with no branch published
+nothing, and GitHub is not asked. GitHub then says what stands, once the
+developer's reach of the repository through the App is confirmed as a Start
+confirms it (`repository-not-reachable`, 403, otherwise), on the
+developer's own App token (`github/pull-requests.ts`): the newest pull
+request from the branch, else whether the branch was pushed at all, with
+the head's check runs and commit statuses read together for the one word,
+and a head whose checks the App may not read reading as `none` with a
+warning rather than failing the answer. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
 ended, so the first read after a turn ends is fresh rather than the running
 turn's kept answer; a failed read is kept for no time. A tab reading beside
 every held page thus asks GitHub a few times a minute at most.
 `tests/coding-agents-app.test.ts` answers the routes over a fake eve, a
-scripted GitHub, a fixed catalog, and PGlite, and
-`tests/coder-host-published.test.ts` holds the transcript scan alone; `tests/coder-host.test.ts`
-drives the host, the shared relay, and the held read on the test clock;
+scripted GitHub, a fixed catalog, and PGlite; `tests/coder-host.test.ts`
+drives the host, the shared relay, the branch recorded at a turn's end
+over the sandbox double, and the held read on the test clock;
 `tests/coder-host-checkout.test.ts` holds the checkout over the sandbox
 double, reading every run for the token and never finding it.
 
