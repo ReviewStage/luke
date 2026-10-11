@@ -305,27 +305,24 @@ test("the panel's tabs hang no pill, their words being enough, while Copy plan's
   assert.equal(copies, before + 1);
 });
 
-test("a panel too narrow for its tabs whole names each unchosen tab in a pill, and widened, hangs none again", () => {
+test("a panel too narrow for its tabs whole still draws every tab's label, hanging no pill on one whose label shows whole", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
   const panelTabs = page.querySelector(".side-panel .tab-strip");
   assert.ok(panelTabs, "the panel draws its tabs");
-  const stripRoom = (tabsNeed: number) => {
-    vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
-      return this === panelTabs ? tabsNeed : 0;
-    });
-    vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
-      return this === panelTabs ? 200 : 0;
-    });
-    act(() => relayout());
-  };
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this === panelTabs ? 320 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this === panelTabs ? 200 : 0;
+  });
+  act(() => relayout());
+  act(() => tabNamed(page, "Transcript").click());
 
-  stripRoom(320);
-  assert.equal(hover(tabNamed(page, "Board")), undefined);
-  assert.equal(hover(tabNamed(page, "Code")), "Code");
-
-  stripRoom(180);
-  assert.equal(hover(tabNamed(page, "Code")), undefined);
+  for (const label of ["Board", "Code", "Work"]) {
+    assert.equal(tabNamed(page, label).querySelector(".tab-label")?.textContent, label);
+    assert.equal(hover(tabNamed(page, label)), undefined, `${label} hangs a pill`);
+  }
 });
 
 test("the Code tab draws the code Luke has on screen", () => {
@@ -486,48 +483,51 @@ test("a worker in the Work tab opens its own session in the tab's place, and the
   assert.ok(work.textContent?.includes("While that runs"));
 });
 
+/** The open plan's work: one call that ran a worker on `job`, its session a call and a line of words. */
+function workerWork(job: string): PlansControl["work"] {
+  return {
+    callLive: true,
+    turns: [
+      {
+        turnId: "turn-1",
+        startedAt: 1_000,
+        state: PLAN_WORK_STATE.RUNNING,
+        earlierOmitted: false,
+        parts: [
+          {
+            type: PLAN_WORK_PART.TOOL,
+            id: "call-worker",
+            tool: PLAN_WORK_TOOL.WORKER,
+            name: "worker",
+            state: PLAN_WORK_STATE.RUNNING,
+            subject: job,
+            input: "{}",
+            session: {
+              earlierOmitted: false,
+              parts: [
+                {
+                  type: PLAN_WORK_PART.TOOL,
+                  id: "worker-call",
+                  tool: PLAN_WORK_TOOL.REPOSITORY,
+                  name: "run_in_repository",
+                  state: PLAN_WORK_STATE.DONE,
+                  subject: "ls src",
+                  input: '{ "command": "ls src" }',
+                  output: "queue.ts",
+                },
+                { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 test("a worker's line offers Open in tab, which opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Work tab draws it; opened again it is chosen rather than doubled, and its × closes it", () => {
   const job = "Compare the two queue libraries.";
-  const page = mountOpenPlan({
-    work: {
-      callLive: true,
-      turns: [
-        {
-          turnId: "turn-1",
-          startedAt: 1_000,
-          state: PLAN_WORK_STATE.RUNNING,
-          earlierOmitted: false,
-          parts: [
-            {
-              type: PLAN_WORK_PART.TOOL,
-              id: "call-worker",
-              tool: PLAN_WORK_TOOL.WORKER,
-              name: "worker",
-              state: PLAN_WORK_STATE.RUNNING,
-              subject: job,
-              input: "{}",
-              session: {
-                earlierOmitted: false,
-                parts: [
-                  {
-                    type: PLAN_WORK_PART.TOOL,
-                    id: "worker-call",
-                    tool: PLAN_WORK_TOOL.REPOSITORY,
-                    name: "run_in_repository",
-                    state: PLAN_WORK_STATE.DONE,
-                    subject: "ls src",
-                    input: '{ "command": "ls src" }',
-                    output: "queue.ts",
-                  },
-                  { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
-                ],
-              },
-            },
-          ],
-        },
-      ],
-    },
-  });
+  const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
   press(page, '.work-worker-line [aria-label="Open in tab"]');
@@ -556,6 +556,24 @@ test("a worker's line offers Open in tab, which opens the subagent's session in 
   press(page, `[aria-label="Close ${job}"]`);
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Work");
+});
+
+test("a subagent's tab cuts a long job short and says the whole of it in its hint, while a tab shown whole hangs none", () => {
+  const job =
+    "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("tab-label") && this.textContent === job ? 600 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("tab-label") && this.textContent === job ? 160 : 0;
+  });
+  const page = mountOpenPlan({ work: workerWork(job) });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, '.work-worker-line [aria-label="Open in tab"]');
+
+  assert.equal(hover(tabNamed(page, "Work")), undefined);
+  assert.equal(hover(tabNamed(page, job)), job);
 });
 
 test("the Work tab with no turn says what will appear there", () => {
@@ -1574,4 +1592,54 @@ test("Shift-Command-Arrow moves the focused tab along the strip, focus and choic
   for (const _ of SIDE_PANEL_TABS) keydown(left);
   assert.deepEqual(panelTabs(page), ["Code", "Board", "Transcript", "Work"]);
   assert.equal(document.activeElement, code);
+});
+
+/** Lays the panel's tabs out in a row as `layOutTabs` does, in a strip that shows only two of them at a time and scrolls. */
+function layOutScrollingTabs(): HTMLElement {
+  const strip = document.querySelector<HTMLElement>(".side-panel .tab-strip");
+  assert.ok(strip, "the panel draws its tabs");
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this === strip) return DOMRect.fromRect({ width: 2 * TAB_PITCH });
+    const at = this.parentElement === strip ? [...strip.children].indexOf(this) : -1;
+    return DOMRect.fromRect(
+      at < 0 ? {} : { x: at * TAB_PITCH - strip.scrollLeft, width: TAB_WIDTH },
+    );
+  });
+  return strip;
+}
+
+/** Whether the strip shows the whole of the named tab's pill. */
+function tabInView(page: HTMLElement, strip: HTMLElement, label: string): boolean {
+  const pill = tabNamed(page, label).closest(".tab");
+  assert.ok(pill, `no pill for ${label}`);
+  const own = pill.getBoundingClientRect();
+  const shown = strip.getBoundingClientRect();
+  return own.left >= shown.left && own.right <= shown.right;
+}
+
+test("a tab chosen, or opened, past the strip's shown room is scrolled into view, and so is one the arrow keys reach", () => {
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const strip = layOutScrollingTabs();
+  assert.equal(tabInView(page, strip, "Work"), false);
+
+  act(() => tabNamed(page, "Work").click());
+  assert.ok(tabInView(page, strip, "Work"), "the chosen tab is brought into view");
+  assert.equal(tabInView(page, strip, "Board"), false);
+
+  const work = tabNamed(page, "Work");
+  act(() => work.focus());
+  key(work, "Home");
+  assert.equal(document.activeElement, tabNamed(page, "Board"));
+  assert.ok(tabInView(page, strip, "Board"), "the tab the keys reach is brought into view");
+
+  key(tabNamed(page, "Board"), "Delete");
+  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board"]);
+  assert.ok(
+    tabInView(page, strip, "Board"),
+    "a tab opened at the strip's end is brought into view",
+  );
 });

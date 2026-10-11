@@ -133,6 +133,9 @@
      two reasons — a capture must land on one frame, and reduced motion asked
      for stillness. */
   --loop-motion: running;
+  /* How a scroller the app moves itself, a tab strip bringing a tab into
+     view, gets there: a glide, held still where the durations are. */
+  --scroll-glide: smooth;
 
   /* The darkest fill, opaque, for what nothing behind may show through. */
   --surface-fill: #000;
@@ -754,6 +757,7 @@ body,
      hold still for exactly the same reason. */
   --face-motion: paused;
   --loop-motion: paused;
+  --scroll-glide: auto;
 }
 
 /* Reduced motion is answered at the tokens rather than element by element: a
@@ -773,5 +777,6 @@ body,
        spinner holds too — a working row still says Working in words. */
     --face-motion: paused;
     --loop-motion: paused;
+    --scroll-glide: auto;
   }
 }
