@@ -8,6 +8,7 @@ import {
 } from "@sidecar/gateway";
 import {
   type PlanActivityFrame,
+  type PlanCallEndingFrame,
   type PlanCodeFrame,
   type PlanWorkFrame,
   VOICE_SERVICE_FRAME,
@@ -125,6 +126,8 @@ interface Fixture {
   work: PlanWorkFrame[];
   /** The service's work frame, as the source's door would deliver it. */
   tellWork(work: PlanWorkFrame): void;
+  /** The service's word that Luke is ending the call, as the source's door would deliver it. */
+  tellEnding(ending: PlanCallEndingFrame): void;
   /** Every plan whose call the holder told its caller ended, in order. */
   callsEnded: string[];
   created: number;
@@ -148,6 +151,7 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
     let codeListener: ((code: PlanCodeFrame) => void) | undefined;
     const work: PlanWorkFrame[] = [];
     let workListener: ((work: PlanWorkFrame) => void) | undefined;
+    let endingListener: ((ending: PlanCallEndingFrame) => void) | undefined;
     const callsEnded: string[] = [];
     const state = {
       sourceAvailable: true,
@@ -185,6 +189,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
                   },
                   onPlanWork: (listener: (work: PlanWorkFrame) => void) => {
                     workListener = listener;
+                  },
+                  onPlanCallEnding: (listener: (ending: PlanCallEndingFrame) => void) => {
+                    endingListener = listener;
                   },
                 }
               : undefined),
@@ -244,6 +251,9 @@ function fixture(): Effect.Effect<Fixture, never, Scope.Scope> {
       work,
       tellWork: (frame) => {
         workListener?.(frame);
+      },
+      tellEnding: (frame) => {
+        endingListener?.(frame);
       },
       callsEnded,
       get reportsActivity() {
@@ -714,6 +724,40 @@ it.effect(
       // Code arriving after the call ended reaches nobody.
       f.tellCode(shown);
       assert.equal(f.code.length, 1);
+    }),
+);
+
+it.effect(
+  "Luke ending a planning call about its own plan is told to the peer as the session ending, with nothing closed; one about another plan, or after the call ended, is not",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const created = yield* f.holder.createSession("offer", INVITES_PLAN);
+      assert.ok(created);
+      const sideband = f.sidebands[0];
+      assert.ok(sideband);
+      sideband.started(created.sessionId);
+      yield* settle();
+      const endings = () =>
+        f.changes.filter((change) => change.phase === LIVE_SESSION_PHASE.ENDING);
+
+      const ending: PlanCallEndingFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
+        planId: INVITES_PLAN,
+      };
+      f.tellEnding({ ...ending, planId: BILLING_PLAN });
+      f.tellEnding(ending);
+      yield* settle();
+      assert.deepEqual(endings(), [
+        { sessionId: created.sessionId, phase: LIVE_SESSION_PHASE.ENDING },
+      ]);
+      assert.equal(sideband.hangUps, 0);
+      assert.deepEqual(f.callsEnded, []);
+
+      sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 4);
+      yield* settle();
+      f.tellEnding(ending);
+      assert.equal(endings().length, 1);
     }),
 );
 

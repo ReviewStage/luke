@@ -261,7 +261,11 @@ export function usePlansTab(input: {
       }),
     );
   }, [reported.callPlanId, reported.callTranscript, viewed.activePlanId]);
-  const transcript = transcriptRegion({ transcript: viewed.transcript, heard });
+  const transcript = transcriptRegion({
+    transcript: viewed.transcript,
+    heard,
+    lukeEndedCall: voice.view.lukeEndedCall,
+  });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
   // A file's tab is held to the files Luke showed on the plan the same way.

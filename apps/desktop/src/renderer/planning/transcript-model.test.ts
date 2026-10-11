@@ -8,6 +8,8 @@ import {
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { test } from "vitest";
 import {
+  CALL_ENDED_LINE,
+  callEndedLine,
   callHeading,
   type HeardCall,
   heardCalls,
@@ -241,4 +243,32 @@ test("consecutive lines from one speaker are one turn, keyed by the first line, 
   );
   assert.equal(turnText(turns[0]?.messages ?? []), "Invites should expire.\n\nAfter a week, say.");
   assert.deepEqual(speakerTurns([]), []);
+});
+
+test("a call that ended closes with a line saying so, one Luke ended says he did, and the call standing closes with none", () => {
+  const stored: PlanTranscript = {
+    calls: [
+      { id: EARLIER_CALL, startedAt: 1_000, messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Hi.")] },
+      { id: NEXT_CALL, startedAt: 2_000, messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Bye.")] },
+    ],
+    earlierOmitted: false,
+  };
+  const heard = heardCalls({
+    held: [],
+    voice: liveReport(LIVE_CALL, "Hello again"),
+    planId: PLAN,
+    now: 3_000,
+  });
+  const region = transcriptRegion({
+    transcript: { status: PLANNING_READ.READY, transcript: stored },
+    heard,
+    lukeEndedCall: NEXT_CALL,
+  });
+
+  assert.equal(region.kind, TRANSCRIPT_REGION.READY);
+  assert.deepEqual(region.kind === TRANSCRIPT_REGION.READY ? region.calls.map(callEndedLine) : [], [
+    CALL_ENDED_LINE.ENDED,
+    CALL_ENDED_LINE.LUKE_ENDED,
+    undefined,
+  ]);
 });

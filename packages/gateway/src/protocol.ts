@@ -96,6 +96,12 @@ export const LIVE_SESSION_PHASE = {
   CREATED: "created",
   /** The provider announced the session live. */
   STARTED: "started",
+  /**
+   * Luke said goodbye and is ending the call: the peer hangs up through its
+   * own hang-up once the goodbye has played, or keeps the call up if the
+   * developer speaks first. The host ends nothing on it.
+   */
+  ENDING: "ending",
   /** The host asked for a graceful close and is waiting for it to be confirmed. */
   CLOSING: "closing",
   CLOSED: "closed",

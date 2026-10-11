@@ -11,6 +11,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { CopyMessageAction } from "./copy-message";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
+  callEndedLine,
   callHeading,
   messageText,
   type SpeakerTurn,
@@ -80,7 +81,7 @@ function TranscriptTurn({
   );
 }
 
-/** One call: the checkpoint it begins at, then each speaker's turns. */
+/** One call: the checkpoint it begins at, each speaker's turns, and once it has ended, a quiet line saying so. */
 function TranscriptCall({
   call,
   now,
@@ -90,6 +91,7 @@ function TranscriptCall({
   now: number;
   copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
+  const ended = callEndedLine(call);
   return (
     <>
       <Checkpoint
@@ -107,6 +109,9 @@ function TranscriptCall({
       {speakerTurns(call.messages).map((turn) => (
         <TranscriptTurn key={turn.key} turn={turn} copyText={copyText} />
       ))}
+      {ended === undefined ? null : (
+        <TranscriptNote className="text-center">{ended}</TranscriptNote>
+      )}
     </>
   );
 }

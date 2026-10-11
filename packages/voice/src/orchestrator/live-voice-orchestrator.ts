@@ -7,7 +7,7 @@ import {
   type TranscriptSpeaker,
 } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { type Context, Deferred, Effect, Exit, Fiber, type Scope } from "effect";
+import { type Context, Deferred, Duration, Effect, Exit, Fiber, Option, type Scope } from "effect";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -67,6 +67,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   callPlanId: string | undefined;
   /** What was said on the standing call so far; none while no call stands or before its first line. */
   callTranscript: LiveCallTranscript | undefined;
+  /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
+  lukeEndedCall: string | undefined;
 }
 
 /** Everything the policy asks of the process that hosts it. */
@@ -96,6 +98,50 @@ const SPEAKER_OF_KIND = {
 /** Nobody heard on either side, which is what a call that is gone carries. */
 const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
 
+/**
+ * How long Luke's goodbye is waited on once the host says he is ending the
+ * call. The word can land before the goodbye's audio does, since the voice
+ * delegates as it starts speaking, so a Luke still quiet is given
+ * `START_MS` to begin before his goodbye is taken as already over. A goodbye
+ * is one short line; Luke still talking `PLAYBACK_MS` after the word is Luke
+ * carrying on, so the call stays up rather than cutting him off.
+ */
+export const LUKE_ENDING_BOUNDS = {
+  START_MS: 1_500,
+  PLAYBACK_MS: 15_000,
+} as const;
+
+/** The quiet line the strip says once Luke has hung up, so his end is not read as a drop. */
+export const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
+
+/**
+ * Luke ending the standing call, from the host's word until his goodbye has
+ * played: the call it is about, the developer's words as they stood when the
+ * word came, whether Luke has been heard since, and whether the goodbye
+ * played out (true) or the developer spoke over it (false).
+ */
+interface LukeEnding {
+  readonly call: LiveVoiceCall;
+  readonly developerWords: string;
+  spoke: boolean;
+  readonly played: Deferred.Deferred<boolean>;
+}
+
+/**
+ * Everything the developer has said on the call so far, as words alone,
+ * which grows the moment they speak again. Note that a delta of spacing
+ * alone moves nothing, because the transcript's last fragments of the
+ * goodbye itself may still be landing.
+ */
+function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
+  return rows
+    .filter((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK)
+    .map((row) => row.entry.words)
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 const MICROPHONE_REFUSED_NOTE =
   "The talk key needs the microphone. Allow it in System Settings, " +
   "under Privacy & Security, Microphone — or type to Luke instead.";
@@ -110,6 +156,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.developerCaptions === right.developerCaptions &&
     left.callPlanId === right.callPlanId &&
     left.callTranscript === right.callTranscript &&
+    left.lukeEndedCall === right.lukeEndedCall &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
   );
@@ -168,6 +215,9 @@ export class LiveVoiceOrchestrator {
   #lifecycle: Fiber.Fiber<void> | undefined;
   /** Completed once the standing call should end, which is what lets its lifecycle fiber close the scope and release it. */
   #ending: Deferred.Deferred<void> | undefined;
+  /** Luke ending the standing call, from the host's word until his goodbye has played or the developer spoke over it. */
+  #lukeEnding: LukeEnding | undefined;
+  #lukeEndedCall: string | undefined;
   /**
    * Completed once a call told to end while still held is let go of. A
    * closing call hears nothing more, so a press landing during its close
@@ -389,6 +439,7 @@ export class LiveVoiceOrchestrator {
    * peer still shows.
    */
   obeySessionChange(change: VoiceLiveSessionChanged): Effect.Effect<void> {
+    if (change.phase === LIVE_SESSION_PHASE.ENDING) return this.#lukeEnds(change);
     return Effect.sync(() => {
       switch (change.phase) {
         case LIVE_SESSION_PHASE.CLOSING:
@@ -419,6 +470,70 @@ export class LiveVoiceOrchestrator {
           return;
       }
     });
+  }
+
+  /**
+   * The host's word that Luke is ending the call: once his goodbye has
+   * played, the call is hung up exactly as the panel's stop hangs it up, so
+   * the close, the record, and the view are the developer's own stop, and
+   * the strip says Luke ended it. A Luke still quiet when the word comes is
+   * given `LUKE_ENDING_BOUNDS.START_MS` to begin, and a goodbye that does not
+   * begin by then was over before the word. The developer speaking before it is over wins, and so
+   * does Luke still talking past `LUKE_ENDING_BOUNDS`: either leaves the call
+   * up. A second word while one is waiting adds nothing. The wait is a fiber
+   * of its own, detached from the subscription that told it, on that
+   * fiber's clock.
+   */
+  #lukeEnds(change: VoiceLiveSessionChanged): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const call = this.#call;
+      if (call === undefined || !this.#aboutThisCall(change) || this.#lukeEnding !== undefined) {
+        return Effect.void;
+      }
+      const ending: LukeEnding = {
+        call,
+        developerWords: developerWordsOf(this.#rows),
+        spoke: this.#status === LIVE_STATUS.SPEAKING,
+        played: Deferred.makeUnsafe<boolean>(),
+      };
+      this.#lukeEnding = ending;
+      return Effect.asVoid(
+        Effect.forkDetach(this.#hangUpAfterGoodbye(ending), { startImmediately: true }),
+      );
+    });
+  }
+
+  #hangUpAfterGoodbye(ending: LukeEnding): Effect.Effect<void> {
+    return Effect.gen({ self: this }, function* () {
+      if (!ending.spoke) {
+        yield* Effect.sleep(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+        if (!ending.spoke) Deferred.doneUnsafe(ending.played, Exit.succeed(true));
+      }
+      const played = yield* Effect.timeoutOption(
+        Deferred.await(ending.played),
+        Duration.millis(LUKE_ENDING_BOUNDS.PLAYBACK_MS),
+      );
+      if (this.#lukeEnding !== ending) return;
+      this.#lukeEnding = undefined;
+      if (Option.isNone(played) || !played.value || this.#call !== ending.call) return;
+      // Said before the stop, which lets the call go at once and reports the view with it.
+      this.#lukeEndedCall = this.#callTranscript?.voiceSessionId;
+      this.#strip.showNotice(LUKE_ENDED_CALL_NOTE);
+      yield* this.stopCall();
+    });
+  }
+
+  /** What Luke's ending hears of the call it is about: his goodbye over, or the developer speaking over it. */
+  #heardDuringEnding(call: LiveVoiceCall): void {
+    const ending = this.#lukeEnding;
+    if (ending === undefined || ending.call !== call) return;
+    if (developerWordsOf(this.#rows) !== ending.developerWords) {
+      Deferred.doneUnsafe(ending.played, Exit.succeed(false));
+    } else if (this.#status === LIVE_STATUS.SPEAKING) {
+      ending.spoke = true;
+    } else if (ending.spoke) {
+      Deferred.doneUnsafe(ending.played, Exit.succeed(true));
+    }
   }
 
   /**
@@ -511,6 +626,7 @@ export class LiveVoiceOrchestrator {
    */
   #letGo(): void {
     this.#call = undefined;
+    this.#lukeEnding = undefined;
     const closing = this.#closing;
     this.#closing = undefined;
     if (closing) Deferred.doneUnsafe(closing, Exit.void);
@@ -595,6 +711,7 @@ export class LiveVoiceOrchestrator {
     if (this.#call !== call) return;
     this.#status = status;
     this.#speakers = speakers;
+    this.#heardDuringEnding(call);
     if (status === LIVE_STATUS.IDLE || status === LIVE_STATUS.FAILED) {
       this.#rows = [];
       this.#releasePress();
@@ -608,6 +725,7 @@ export class LiveVoiceOrchestrator {
   #onCaptions(call: LiveVoiceCall, rows: readonly LiveCaptionRow[]): void {
     if (this.#call !== call) return;
     this.#rows = rows;
+    this.#heardDuringEnding(call);
     this.#recomposeCaptions();
     this.#touch();
   }
@@ -659,6 +777,7 @@ export class LiveVoiceOrchestrator {
       developerCaptions: this.#developerCaptions,
       callPlanId: this.#call === undefined ? undefined : this.#callPlan,
       callTranscript: this.#call === undefined ? undefined : this.#callTranscript,
+      lukeEndedCall: this.#lukeEndedCall,
     };
   }
 

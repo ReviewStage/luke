@@ -61,6 +61,8 @@ export interface VoiceView extends VoiceSpeakers {
   callPlanId: string | undefined;
   /** What was said on the standing call so far, whatever the captions preference; none for no call or before its first line. */
   callTranscript: VoiceCallTranscript | undefined;
+  /** The store's id for the session of the last call Luke ended himself; none before he has. */
+  lukeEndedCall: string | undefined;
 }
 
 /**
@@ -109,6 +111,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   developerCaptions: undefined,
   callPlanId: undefined,
   callTranscript: undefined,
+  lukeEndedCall: undefined,
 };
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -157,6 +160,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isWireBoolean(value.talkOpening)) return false;
   if (!isOptionalWireString(value.callPlanId)) return false;
   if (!isOptionalCallTranscript(value.callTranscript)) return false;
+  if (!isOptionalWireString(value.lukeEndedCall)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
   return (
     isOptionalWireStrings(value.lukeCaptions) && isOptionalWireStrings(value.developerCaptions)

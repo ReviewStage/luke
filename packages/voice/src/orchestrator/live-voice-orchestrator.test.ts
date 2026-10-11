@@ -3,7 +3,8 @@ import { it } from "@effect/vitest";
 import { LIVE_SESSION_PHASE, type VoiceLiveSessionChanged } from "@sidecar/gateway";
 import { LIVE_CLOSE_REASON, LIVE_STATUS, type LiveStatus, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { CONVERSATION_ENTRY_KIND, type ConversationEntryKind } from "@sidecar/session";
-import { Context, Deferred, Effect, Fiber } from "effect";
+import { Context, Deferred, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type {
   LiveCaptionRow,
   LiveVoiceCall,
@@ -15,6 +16,8 @@ import {
   LiveVoiceOrchestrator,
   type LiveVoiceSurroundings,
   type LiveVoiceView,
+  LUKE_ENDED_CALL_NOTE,
+  LUKE_ENDING_BOUNDS,
 } from "./live-voice-orchestrator.js";
 
 const INVITES_PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -1115,4 +1118,140 @@ it.effect(
       assert.equal(f.calls.length, 1);
       assert.equal(planCall.status, LIVE_STATUS.LISTENING);
     }),
+);
+
+/** A planning call about the invites plan, standing and heard, with Luke saying his goodbye. */
+function goodbyeCall(f: ReturnType<typeof fixture>) {
+  return Effect.gen(function* () {
+    const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+      startImmediately: true,
+    });
+    const call = f.latest();
+    assert.ok(call);
+    call.started();
+    yield* Fiber.join(pressed);
+    call.events.onCaptions([
+      {
+        ...row("row-1", CONVERSATION_ENTRY_KIND.ASK, "that's all, bye", true),
+        voiceSessionId: "vs-1",
+      },
+    ]);
+    call.settle(LIVE_STATUS.SPEAKING);
+    return call;
+  });
+}
+
+it.effect(
+  "Luke's end of the call waits for his goodbye to play, hangs up as the panel's stop does, says he ended it, and the next press opens a new call",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      yield* settleFibers();
+      assert.equal(call.closes, 0, "the goodbye is not cut off mid-word");
+
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+      assert.equal(call.silences, 0);
+      const ended = f.views.at(-1);
+      assert.deepEqual(
+        [ended?.voiceStatus, ended?.voiceNotice, ended?.callPlanId, ended?.lukeEndedCall],
+        [LIVE_STATUS.IDLE, LUKE_ENDED_CALL_NOTE, undefined, "vs-1"],
+      );
+
+      const pressed = yield* Effect.forkChild(f.talkAboutPlan(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      f.latest()?.started();
+      yield* Fiber.join(pressed);
+      yield* settleFibers();
+      assert.equal(f.calls.length, 2);
+      assert.equal(f.views.at(-1)?.voiceNotice, undefined);
+    }),
+);
+
+it.effect(
+  "Luke still quiet when his end arrives is given a moment to begin the goodbye: one that begins is waited out, and one that does not was already over",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      yield* settleFibers();
+      call.settle(LIVE_STATUS.SPEAKING);
+      yield* TestClock.adjust(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+      yield* settleFibers();
+      assert.equal(call.closes, 0, "a goodbye that has just begun is not cut off");
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+
+      const g = fixture();
+      const quiet = yield* goodbyeCall(g);
+      quiet.settle(LIVE_STATUS.LISTENING);
+      yield* g.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(quiet) });
+      yield* settleFibers();
+      assert.equal(quiet.closes, 0);
+      yield* TestClock.adjust(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+      yield* settleFibers();
+      assert.equal(quiet.closes, 1);
+    }),
+);
+
+it.effect(
+  "the last spacing of the developer's goodbye landing late does not keep the call up",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      call.events.onCaptions([
+        {
+          ...row("row-1", CONVERSATION_ENTRY_KIND.ASK, "that's all, bye ", true),
+          voiceSessionId: "vs-1",
+        },
+      ]);
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+    }),
+);
+
+it.effect(
+  "the developer speaking during Luke's goodbye keeps the call up, and so does an end about another session",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: "another" });
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      call.events.onCaptions([
+        row("row-1", CONVERSATION_ENTRY_KIND.ASK, "that's all, bye", true),
+        row("row-2", CONVERSATION_ENTRY_KIND.REPLY, "Bye for"),
+        row("row-3", CONVERSATION_ENTRY_KIND.ASK, "oh wait"),
+      ]);
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 0);
+      assert.equal(f.views.at(-1)?.voiceStatus, LIVE_STATUS.LISTENING);
+      assert.equal(f.views.at(-1)?.voiceNotice, undefined);
+    }),
+);
+
+it.effect("Luke still talking past the bound on his goodbye keeps the call up", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    const call = yield* goodbyeCall(f);
+    yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+    yield* settleFibers();
+    yield* TestClock.adjust(Duration.millis(LUKE_ENDING_BOUNDS.PLAYBACK_MS + 1));
+    yield* settleFibers();
+    call.settle(LIVE_STATUS.LISTENING);
+    yield* settleFibers();
+    assert.equal(call.closes, 0);
+  }),
 );

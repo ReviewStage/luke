@@ -129,7 +129,7 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       region: {
         kind: TRANSCRIPT_REGION.READY,
         earlierOmitted: false,
-        calls: [{ key: "c1", startedAt: 1, live: true, messages: CALL }],
+        calls: [{ key: "c1", startedAt: 1, live: true, lukeEnded: false, messages: CALL }],
       },
       onRetry: () => undefined,
       copyText: () => Promise.resolve(),

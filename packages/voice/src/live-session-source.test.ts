@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import {
   HOSTED_API_ERROR,
   type PlanActivityFrame,
+  type PlanCallEndingFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -855,6 +856,41 @@ it.live(
       );
       assert.deepEqual(worked, [work]);
       assert.deepEqual(active, [busy]);
+      assert.deepEqual(
+        reading.events.map((event) => event.type),
+        [LIVE_SERVER_EVENT.SESSION_STARTED],
+      );
+    }),
+);
+
+it.live(
+  "Luke ending a planning call is taken off the socket for its listener and never read as a session event",
+  () =>
+    Effect.gen(function* () {
+      const script = scriptedOpenSocket([answering(createdFrame())]);
+      const source = reattaching(script);
+      const opened = yield* source.create({ sdpOffer: SDP_OFFER, planId: PLAN_ID });
+      assert.ok(opened?.onPlanCallEnding);
+      const endings: PlanCallEndingFrame[] = [];
+      opened.onPlanCallEnding((ending) => endings.push(ending));
+      const reading = yield* readSideband(yield* opened.attach());
+      const [first] = script.sockets;
+      assert.ok(first);
+      const ending: PlanCallEndingFrame = {
+        type: VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
+        planId: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
+      };
+      first.receive(ending);
+      first.receive({
+        type: LIVE_SERVER_EVENT.SESSION_STARTED,
+        event_id: "e1",
+        session: { id: SESSION_ID },
+      });
+      yield* settled(
+        () => endings.length === 1 && reading.events.length === 1,
+        "the ending and the session's event to land",
+      );
+      assert.deepEqual(endings, [ending]);
       assert.deepEqual(
         reading.events.map((event) => event.type),
         [LIVE_SERVER_EVENT.SESSION_STARTED],
