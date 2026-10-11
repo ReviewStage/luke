@@ -1688,12 +1688,14 @@ const steeredFollow = Effect.fnUntraced(function* (receiptLate: boolean) {
       sessionId,
     }),
   );
+  // A look finds the start ahead of its journal, the next reads the session there, and what
+  // that one draws lands after its own journal read, so a poll more is waited past each.
   yield* f.release;
   yield* f.arrived(2);
-  yield* f.polls(2);
+  yield* f.polls(3);
   if (receiptLate) {
     yield* Effect.promise(() => play(parked.filter(late), earlier));
-    yield* f.polls(2);
+    yield* f.polls(3);
   }
 
   const drawn = shown.at(-1)?.parts.find((part) => part.type === PLAN_WORK_PART.TOOL);

@@ -195,6 +195,33 @@ interface FollowTold {
   work: PlanWorkTurn | undefined;
   /** The `worker` calls the last look found on the journal, each with the call whose child conversation the next look reads its subagent's session from. */
   workers: ReadonlyMap<string, string>;
+  /** Whether one of those calls sends work to a task an earlier turn started whose start no look has found yet, which the next look looks for. */
+  seeking: boolean;
+}
+
+/** Whether a look found where a worker call's session is recorded other than under the call itself: the start of the task it steered. */
+function found(workers: ReadonlyMap<string, string>, callId: string): boolean {
+  return (workers.get(callId) ?? callId) !== callId;
+}
+
+/**
+ * The journal's `worker` calls, each with the call its session is read from
+ * (`workerSessionCallsOf`), a start found in `earlier` or by an earlier look
+ * kept. A start not recorded yet leaves the call its own until a later look
+ * finds it.
+ */
+function workerSessionsOf(
+  message: StoredUIMessage | undefined,
+  earlier: readonly StoredUIMessage[],
+  placed: ReadonlyMap<string, string>,
+): ReadonlyMap<string, string> {
+  const sessions = workerSessionCallsOf(message, earlier);
+  return new Map(
+    [...sessions].map(([callId, session]) => [
+      callId,
+      found(sessions, callId) ? session : (placed.get(callId) ?? session),
+    ]),
+  );
 }
 
 /** What one look answers the follow: the turn still runs, it ended, or it ran past the bound that applies to it. */
@@ -470,23 +497,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
   });
 
   /**
-   * The journal's `worker` calls, each with the call its session is read
-   * from (`workerSessionCallsOf`). The conversation's other journals are read
-   * only for a call sending work to a task an earlier turn started whose
-   * start no look has found yet, so a turn is not read back on every poll
-   * once it is; a start not recorded yet, or a read that fails, leaves the
-   * call its own until a later look finds it.
+   * The conversation's journals that call the worker, where a task an
+   * earlier turn started was started; none where they could not be read.
    */
-  const workerSessionsOf = Effect.fnUntraced(function* (
-    conversationId: string,
-    message: StoredUIMessage | undefined,
-    placed: ReadonlyMap<string, string>,
-  ) {
-    const found = (callId: string) => (placed.get(callId) ?? callId) !== callId;
-    if (callsSendingToEarlierTasks(message).every(found)) {
-      const local = workerSessionCallsOf(message);
-      return new Map([...local].map(([callId, own]) => [callId, placed.get(callId) ?? own]));
-    }
+  const workerJournalsOf = Effect.fnUntraced(function* (conversationId: string) {
     const read = yield* listJournalsCalling(
       options.userId,
       conversationId,
@@ -496,7 +510,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed(() => undefined),
     );
-    return workerSessionCallsOf(message, read?.ok ? read.value.map((row) => row.message) : []);
+    return read?.ok ? read.value.map((row) => row.message) : [];
   });
 
   /**
@@ -538,6 +552,8 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     // the journal, so the journal stays each look's last read and a subagent's work shows one
     // poll behind the call that started it.
     const subagents = yield* subagentJournalsOf(turn.conversationId, told.workers);
+    // The start of a task the last look's calls steered is looked for ahead of the journal too.
+    const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
@@ -566,9 +582,10 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       emit({ kind: LIVE_BRAIN_RUN_EVENT.ACTIVITY, runId: askId, action });
     }
     // The work is shown by the turn's teller alone, so a turn several asks were folded into is shown once.
-    told.workers = telling
-      ? yield* workerSessionsOf(turn.conversationId, message, told.workers)
-      : new Map();
+    told.workers = telling ? workerSessionsOf(message, earlier, told.workers) : new Map();
+    told.seeking = callsSendingToEarlierTasks(message).some(
+      (callId) => !found(told.workers, callId),
+    );
     const work = telling ? planWorkOf(turn, message, subagents) : undefined;
     if (work !== undefined && !isDeepStrictEqual(work, told.work)) {
       told.work = work;
@@ -630,6 +647,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       delegated: false,
       work: undefined,
       workers: new Map(),
+      seeking: false,
     };
     const cadence = Schedule.spaced(bounds.POLL).pipe(
       Schedule.setInputType<FollowLook>(),
