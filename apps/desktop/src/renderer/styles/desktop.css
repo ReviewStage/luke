@@ -1856,7 +1856,7 @@ body,
    button's size, raised while chosen and plain and muted otherwise, with its
    × standing on the chosen tab and shown on another while the pointer is on
    it. Every tab stands whole at its own width, up to a most past which its
-   label ends in an ellipsis; past holding them all, the strip scrolls along
+   label fades out at its end; past holding them all, the strip scrolls along
    with no bar drawn, as a browser's does, and the end it has hidden tabs
    beyond dissolves over `--scroll-fade`. The strip measures which edges
    those are (tab-strip.tsx) as it scrolls and resizes, rather than riding a
@@ -2004,8 +2004,16 @@ body,
 
 .tab-label {
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A label cut short fades out over its last `--label-fade` rather than
+   ending in an ellipsis, as a browser's tab does. Only a label measured cut
+   short (tab-strip.tsx) fades, so a short one ends on its last letter. The
+   mask fades the words themselves, so it reads alike over every fill a tab
+   wears, at rest, hovered, chosen, or dragged. */
+.tab-label[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
 /* Renamed in place, the label gives way to a field in the same type,

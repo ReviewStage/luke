@@ -23,8 +23,10 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * way the strip says where the tab now stands to whoever reads it aloud.
  *
  * Every tab stands whole, its glyph and its label, a long label cut short
- * with an ellipsis and said whole in its hint. Past holding them all, the
- * strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
+ * and said whole in its hint. A label measured cut short wears
+ * `data-overflow`, which desktop.css fades out at its end, as Chrome's and
+ * Arc's tabs do, rather than ending it in an ellipsis. Past holding them all,
+ * the strip scrolls along, as Chrome's and VS Code's do: a mouse's wheel runs it
  * sideways, and the tab chosen, or the one the keyboard reaches, is brought
  * into the room it shows, and kept there as the strip is narrowed. An edge
  * the strip hides tabs beyond wears `data-overflow-start` or
@@ -350,7 +352,7 @@ export function Tab({
       }}
     >
       {glyph}
-      <span ref={words} className="tab-label">
+      <span ref={words} className="tab-label" data-overflow={String(clipped)}>
         {label}
       </span>
     </button>
