@@ -10,7 +10,7 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
-import { act, createElement, Fragment } from "react";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -19,8 +19,10 @@ import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
+import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
@@ -1245,7 +1247,7 @@ test("the plan's tab names the plan, has no × to close it, and its hint says th
   );
 });
 
-test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by model, dotted for where each stands and for an end unseen, with no × and no shortcut", () => {
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by model, dotted for where each stands and for an end unseen, each with an × and no shortcut", () => {
   const running: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: PLAN.id,
@@ -1297,7 +1299,7 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
   assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
   assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
   assert.equal(claude.getAttribute("aria-keyshortcuts"), null);
-  assert.equal(container.querySelector('[aria-label="Close Claude Opus 5.5"]'), null);
+  assert.ok(container.querySelector('[aria-label="Close Claude Opus 5.5"]'));
   assert.ok(container.querySelector('[aria-label="Close Board"]'));
   assert.equal(
     container.querySelector('.side-panel-content[role="tabpanel"]')?.getAttribute("aria-label"),
@@ -1380,24 +1382,18 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  // Every kind is open, so there is nothing to add.
-  assert.equal(addButton(page).getAttribute("aria-disabled"), "true");
-  assert.equal(hover(addButton(page)), "Every tab is open");
-  act(() => addButton(page).click());
-  assert.equal(document.querySelector(".tab-add-menu"), null);
-
   press(page, '[aria-label="Close Code"]');
-  assert.equal(addButton(page).getAttribute("aria-disabled"), "false");
   act(() => addButton(page).click());
   assert.deepEqual(addRows(), [
     ["Board", "Open", false],
     ["Code", "⌥⌘2", true],
     ["Transcript", "Open", false],
     ["Work", "Open", false],
+    ["New coding agent", "Unavailable", false],
   ]);
   assert.equal(
     document.activeElement?.getAttribute("placeholder"),
-    "Search tabs",
+    "Search tabs and agents",
     "the search takes focus as the menu opens",
   );
   assert.equal(addHighlighted(), "Code", "the highlight starts on the one kind to open");
@@ -1433,7 +1429,7 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   typeSearch("");
   assert.deepEqual(
     addRows().map(([label]) => label),
-    ["Board", "Code", "Transcript", "Work"],
+    ["Board", "Code", "Transcript", "Work", "New coding agent"],
   );
 
   key(focused(), "Escape");
@@ -1786,4 +1782,241 @@ test("the plan's tab, cut short as its toolbar narrows, says its whole name in i
   });
   act(() => relayout());
   assert.equal(hover(tab), PLAN.name);
+});
+
+/** A coding agent of the plan's that is running, on Claude. */
+const RUNNING_AGENT: CodingAgentSummary = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: PLAN.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  createdAt: 3,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+};
+
+/** A coding agent of the plan's that has finished, on GPT. */
+const DONE_AGENT: CodingAgentSummary = {
+  ...RUNNING_AGENT,
+  id: "1f6d2c3b-5a4e-4f7d-9c8b-2e3f4a5b6c7d",
+  model: "openai/gpt-5.6-sol",
+  status: CODING_AGENT_STATUS.COMPLETED,
+};
+
+/** The agent a Start makes on the page below. */
+const STARTED_AGENT: CodingAgentSummary = {
+  ...RUNNING_AGENT,
+  id: "2a7e3d4c-6b5f-4a8e-8d9c-3f4a5b6c7d8e",
+  model: "openai/gpt-6-astra",
+  status: CODING_AGENT_STATUS.STARTING,
+};
+
+/** Every Stop an agent was asked for on the page below. */
+let stops: string[] = [];
+
+/**
+ * The open plan's page over the real side panel with the plan's coding
+ * agents, whose Start makes one as the service answers it and opens its
+ * tab as the Plans tab does, and whose every Stop is recorded.
+ */
+function AgentsPage({
+  start,
+  work,
+}: {
+  start: Partial<CodingAgentsControl["start"]>;
+  work?: PlansControl["work"] | undefined;
+}) {
+  const [agents, setAgents] = useState([RUNNING_AGENT, DONE_AGENT]);
+  const agentIds = agents.map((agent) => agent.id);
+  const sidePanel = useSidePanel(undefined, agentIds, workerCallIds(work?.turns));
+  const page = createElement(DesktopPlans, {
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+      sidePanel,
+      agents: codingAgentsControl({
+        agents,
+        agentIds,
+        start: {
+          available: true,
+          reason: undefined,
+          busy: false,
+          note: undefined,
+          onPress: () => {
+            setAgents((was) => [...was, STARTED_AGENT]);
+            sidePanel.onChoose({ agent: STARTED_AGENT.id });
+          },
+          ...start,
+        },
+        onStop: (agentId) => {
+          stops.push(agentId);
+          return Promise.resolve();
+        },
+      }),
+      ...(work === undefined ? undefined : { work }),
+    }),
+  });
+  return createElement(
+    Fragment,
+    null,
+    page,
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+  );
+}
+
+/** Mounts the plan's page with its agents and the panel shown. */
+function mountAgents(
+  start: Partial<CodingAgentsControl["start"]> = {},
+  work?: PlansControl["work"],
+): HTMLElement {
+  installScrollIntoView();
+  stops = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(AgentsPage, { start, work })));
+  // A page mounted again opens the panel as the last one left it.
+  if (!panelShown(container)) press(container, '[aria-label="Show panel"]');
+  return container;
+}
+
+/** The "+" menu's sections after the fixed kinds: each heading and the rows under it. */
+function addSections(): [string | null, string[]][] {
+  return [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="group"]')].map(
+    (group) => [
+      group.getAttribute("aria-label"),
+      [...group.querySelectorAll('[role="option"]')].map(
+        (row) => row.querySelector(".plan-compose-menu-name")?.textContent ?? "",
+      ),
+    ],
+  );
+}
+
+/** The "+" menu's row named so. */
+function addRow(label: string): HTMLElement {
+  const row = [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].find(
+    (each) => each.querySelector(".plan-compose-menu-name")?.textContent === label,
+  );
+  assert.ok(row, `no ${label} row in the + menu`);
+  return row;
+}
+
+test("the + lists the plan's coding agents and its subagents in sections of their own, each with its tab's glyph and where it stands, found by a search, and picking one opens its tab or chooses the one open", () => {
+  const job = "Compare the two queue libraries.";
+  const page = mountAgents({}, workerWork(job));
+  act(() => addButton(page).click());
+
+  assert.deepEqual(addSections(), [
+    ["Coding agents", ["New coding agent", "Claude Opus 5.5", "GPT 5.6 Sol"]],
+    ["Subagents", [job]],
+  ]);
+  assert.deepEqual(addRows().slice(4), [
+    ["New coding agent", "", true],
+    ["Claude Opus 5.5", "Open", true],
+    ["GPT 5.6 Sol", "Open", true],
+    [job, "", true],
+  ]);
+  const claude = addRow("Claude Opus 5.5");
+  assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
+  assert.equal(claude.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
+  assert.ok(claude.querySelector(".animate-shimmer"), "a running agent's state shimmers");
+  const sol = addRow("GPT 5.6 Sol");
+  assert.equal(sol.querySelector(".plan-compose-menu-detail")?.textContent, "Done");
+  assert.equal(sol.querySelector(".animate-shimmer"), null);
+  const worker = addRow(job);
+  assert.ok(worker.querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(worker.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
+
+  // An agent's tab already open is chosen again, not doubled.
+  typeSearch("sol");
+  assert.deepEqual(
+    addRows().map(([label]) => label),
+    ["GPT 5.6 Sol"],
+  );
+  key(focused(), "Enter");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.equal(chosenTab(page), "GPT 5.6 Sol");
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Code",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+
+  // A subagent is found by its section's name too, and opens its tab at the strip's end.
+  act(() => addButton(page).click());
+  typeSearch("subagents");
+  assert.deepEqual(
+    addRows().map(([label]) => label),
+    [job],
+  );
+  key(focused(), "Enter");
+  assert.equal(panelTabs(page).at(-1), job);
+  assert.equal(chosenTab(page), job);
+  act(() => addButton(page).click());
+  assert.equal(addRow(job).querySelector(".plan-compose-menu-hint")?.textContent, "Open");
+});
+
+test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the + lists it as it stands, and picking it there opens the tab again in its place", () => {
+  const page = mountAgents();
+  act(() => tabNamed(page, "Claude Opus 5.5").click());
+
+  press(page, '[aria-label="Close Claude Opus 5.5"]');
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "GPT 5.6 Sol"]);
+  assert.equal(chosenTab(page), "GPT 5.6 Sol", "the agent after it");
+  assert.deepEqual(stops, []);
+
+  act(() => addButton(page).click());
+  const claude = addRow("Claude Opus 5.5");
+  assert.equal(claude.querySelector(".plan-compose-menu-hint"), null, "its tab is not open");
+  assert.equal(claude.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
+  act(() => claude.click());
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Code",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+  assert.equal(chosenTab(page), "Claude Opus 5.5");
+
+  const sol = tabNamed(page, "GPT 5.6 Sol");
+  act(() => sol.focus());
+  key(sol, "Delete");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
+  assert.equal(chosenTab(page), "Claude Opus 5.5", "closing another tab leaves the chosen one");
+  assert.deepEqual(stops, []);
+});
+
+test("the + starts a coding agent as Start does, its tab opening chosen, and while Start cannot run the row says why and starts nothing", () => {
+  const page = mountAgents();
+  act(() => addButton(page).click());
+  assert.equal(addHighlighted(), "New coding agent", "the first row that can be picked");
+  key(focused(), "Enter");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.equal(panelTabs(page).at(-1), "GPT 6 Astra");
+  assert.equal(chosenTab(page), "GPT 6 Astra");
+  unmountAll();
+
+  const unfiled = mountAgents({ available: false, reason: START_NEEDS_REPOSITORY });
+  act(() => addButton(unfiled).click());
+  const row = addRow("New coding agent");
+  assert.equal(row.getAttribute("aria-disabled"), "true");
+  assert.equal(row.querySelector(".plan-compose-menu-hint")?.textContent, START_NEEDS_REPOSITORY);
+  act(() => row.click());
+  assert.ok(document.querySelector(".tab-add-menu"), "nothing was picked");
+  assert.equal(panelTabs(unfiled).includes("GPT 6 Astra"), false);
+  unmountAll();
+
+  const starting = mountAgents({ busy: true });
+  act(() => addButton(starting).click());
+  assert.equal(
+    addRow("New coding agent").querySelector(".plan-compose-menu-hint")?.textContent,
+    "Starting…",
+  );
 });

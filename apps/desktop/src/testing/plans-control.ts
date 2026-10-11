@@ -61,6 +61,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       fullScreen: false,
       tabs: SIDE_PANEL_TABS,
       subagents: [],
+      closedAgents: [],
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
