@@ -128,7 +128,7 @@ export const hostAssemblyLayer: Layer.Layer<
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
     planCallEnded = planning.callEnded;
-    showPlanCode = (frame) => planning.showCode(frame.planId, frame.code);
+    showPlanCode = ({ type: _type, planId, ...shown }) => planning.showCode(planId, shown);
     showPlanWork = (work) => planning.showWork(work.planId, work.turn);
 
     /**

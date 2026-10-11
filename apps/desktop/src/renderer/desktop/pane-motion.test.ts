@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import type { Plan } from "@sidecar/hosted/plan-wire";
-import type { PlanCode } from "@sidecar/hosted/planning-view";
+import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
@@ -27,13 +27,20 @@ const PLAN: Plan = {
 };
 
 /** The code Luke puts on screen during a call, its pointed lines part way down. */
-const CODE: PlanCode = {
-  ref: { path: "src/invite.ts", startLine: 3, endLine: 3 },
-  repository: "acme/relay",
-  firstLine: 1,
-  lineCount: 3,
-  lines: [[{ text: "import" }], [{ text: "" }], [{ text: "export function accept() {}" }]],
-};
+const CODE: readonly PlanCodeShowing[] = [
+  {
+    callId: "show-1",
+    turnId: "turn-1",
+    shownAt: 1,
+    code: {
+      ref: { path: "src/invite.ts", startLine: 3, endLine: 3 },
+      repository: "acme/relay",
+      firstLine: 1,
+      lineCount: 3,
+      lines: [[{ text: "import" }], [{ text: "" }], [{ text: "export function accept() {}" }]],
+    },
+  },
+];
 
 /** The motion tokens as base.css leaves them, which jsdom does not load: as shipped, and under reduced motion. */
 const MOTION = {
@@ -131,22 +138,15 @@ function startOf(element: Element): Keyframe | undefined {
 }
 
 /**
- * Lays the code pane out as the panel arriving on it draws it: its lines
- * 200px tall from 100px down, the pointed line 400px down in them, and all of
- * it past the window's right edge, where the panel starts its slide in.
+ * Lays the panel's content out as the panel arriving on it draws it: past
+ * the window's right edge, where the panel starts its slide in.
  */
 function layOutArrivingCode(): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    const past = window.innerWidth + 10;
-    if (this.classList.contains("code-lines")) {
-      return DOMRect.fromRect({ x: past, y: 100, width: 400, height: 200 });
-    }
-    if (this.dataset.pointed === "true") {
-      return DOMRect.fromRect({ x: past, y: 400, width: 400, height: 20 });
-    }
-    return DOMRect.fromRect();
+    if (this.closest(".side-panel-content") === null) return DOMRect.fromRect();
+    return DOMRect.fromRect({ x: window.innerWidth + 10, y: 100, width: 400, height: 200 });
   });
 }
 
@@ -173,7 +173,7 @@ function scrolledSideways(page: HTMLElement): string[] {
 }
 
 /** The window as `App` stands it, with a plan open and, on a call, the code Luke has on screen. */
-function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
+function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): React.JSX.Element {
   const sidebar = useSidebarCollapse(false);
   const sidePanel = useSidePanel(undefined);
   const unreadTabs = usePanelArrivals({
@@ -205,7 +205,7 @@ function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
       region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
       sidePanel,
       unreadTabs,
-      code,
+      shownCode: code,
     }),
     history: navigationHistory(),
     sidebar,
@@ -223,7 +223,7 @@ function show(): HTMLElement {
 }
 
 /** Redraws the window with the code Luke now has on screen. */
-function showCode(code: PlanCode): void {
+function showCode(code: readonly PlanCodeShowing[]): void {
   act(() => root?.render(createElement(Window, { code })));
 }
 
@@ -444,7 +444,7 @@ test("under reduced motion folding the sidebar moves the plan's title at once", 
   assert.equal(animating(find(page, ".desktop-toolbar-heading")), false);
 });
 
-test("the panel opening on Luke's first code slides in with the pointed line in the middle of its lines, scrolling nothing else in the window", () => {
+test("the panel opening on Luke's first code slides in on the code, scrolling nothing else in the window", () => {
   motion(MOTION.ON);
   installScrollIntoView();
   layOutArrivingCode();
@@ -458,19 +458,7 @@ test("the panel opening on Luke's first code slides in with the pointed line in 
     [],
     "the shell, its sidebar, and the document stay where they are",
   );
-  assert.equal(find(page, ".code-lines").scrollTop, 210, "the pointed line is centred");
-});
-
-test("lines Luke points at next are centred from their start, even where a long line was scrolled along", () => {
-  motion(MOTION.ON);
-  layOutArrivingCode();
-  const page = show();
-  showCode(CODE);
-  const lines = find(page, ".code-lines");
-  lines.scrollLeft = 120;
-
-  showCode({ ...CODE, ref: { ...CODE.ref, startLine: 2, endLine: 2 } });
-  assert.equal(lines.scrollLeft, 0);
+  assert.ok(find(page, ".code-card"), "the code is drawn");
 });
 
 test("the panel's toggle is one button standing in the title bar through showing, full screen, hiding, and each motion between", () => {

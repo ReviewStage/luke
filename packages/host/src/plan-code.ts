@@ -76,6 +76,18 @@ const LANGUAGE_BY_EXTENSION: ReadonlyMap<string, string> = new Map([
   [".toml", "toml"],
 ]);
 
+/**
+ * How much of a window the Code tab's card for it draws: the lines pointed
+ * at with this many of the file on either side, or, for a file shown from
+ * its top, its head. Note that the rest of the window is left here rather
+ * than in the window, because colouring is what costs and the view
+ * carrying every code shown on a plan is told to the window whole.
+ */
+const CODE_EXCERPT_LINES = {
+  CONTEXT: 3,
+  HEAD: 24,
+} as const;
+
 /** The themes the code is coloured in, one per appearance. */
 const THEME = { DARK: "github-dark-default", LIGHT: "github-light-default" } as const;
 
@@ -160,6 +172,22 @@ function colouredLines(path: string, lines: readonly string[]): CodeToken[][] {
     themes: { [THEME.DARK]: THEME.DARK, [THEME.LIGHT]: THEME.LIGHT },
   });
   return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
+}
+
+/** The part of a window the Code tab's card draws: the lines pointed at and a few either side, or the file's head. */
+export function codeExcerpt(code: ShownCode): ShownCode {
+  const { startLine, endLine } = code.ref;
+  if (startLine === undefined || endLine === undefined) {
+    return { ...code, lines: code.lines.slice(0, CODE_EXCERPT_LINES.HEAD) };
+  }
+  const lastLine = code.firstLine + code.lines.length - 1;
+  const from = Math.max(code.firstLine, startLine - CODE_EXCERPT_LINES.CONTEXT);
+  const to = Math.min(lastLine, endLine + CODE_EXCERPT_LINES.CONTEXT);
+  return {
+    ...code,
+    firstLine: from,
+    lines: code.lines.slice(from - code.firstLine, to - code.firstLine + 1),
+  };
 }
 
 /** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from. */

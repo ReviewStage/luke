@@ -259,8 +259,12 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   read answers twenty turns a page, the newest first; scrolling to the
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
   newest page also carries every code shown on the plan, oldest first,
-  several of one file included, of which the Code tab draws the newest. With
-  no code ever shown, the Code tab says so quietly rather than going away. The strip scrolls where the agents
+  several of one file included, all of which the Code tab draws, a card
+  each under the call it was shown on, a live call's code appending at the
+  bottom; the record's copy of a live call's code is told apart by its
+  `show_code` call, which the `plan.code` frame carries with its turn and
+  time, so it is drawn once. With no code ever shown, the Code tab says so
+  quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for Luke's first drawing on the
@@ -616,7 +620,7 @@ of its own (`packages/host/src/plan-code.ts`). Every answered call's lines
 are read back from the journals with the plan's work when the plan opens,
 picked by their parts in the statement and read by the same reading
 (`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
-keeps the last code shown after the call. A file that is missing,
+keeps every code shown after the call. A file that is missing,
 outside the checkout, binary, too large, or secret, and a checkout that
 cannot be reached, answer `rejected` with why, and nothing goes on screen.
 

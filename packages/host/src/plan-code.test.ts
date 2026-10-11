@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
-import { highlightCode } from "./plan-code.js";
+import { codeExcerpt, highlightCode } from "./plan-code.js";
 
 const INVITE = [
   'import { db } from "./db.js";',
@@ -48,4 +48,37 @@ test("a file of no language the highlighter knows is drawn plain, one run per li
   const code = highlightCode(shown("notes.txt", ["first line", "", "third line"]));
 
   assert.deepEqual(code.lines, [[{ text: "first line" }], [], [{ text: "third line" }]]);
+});
+
+test("a card's part of a window is the lines pointed at with three of the file either side, kept within the window, or a whole file's head", () => {
+  const numbered = Array.from({ length: 200 }, (_, at) => `line ${40 + at}`);
+  const window = { ...shown("src/invite.ts", numbered, 40), lineCount: 400 };
+
+  const middle = codeExcerpt({
+    ...window,
+    ref: { path: "src/invite.ts", startLine: 100, endLine: 101 },
+  });
+  assert.equal(middle.firstLine, 97);
+  assert.deepEqual(middle.lines, [
+    "line 97",
+    "line 98",
+    "line 99",
+    "line 100",
+    "line 101",
+    "line 102",
+    "line 103",
+    "line 104",
+  ]);
+  assert.equal(middle.lineCount, 400, "the whole file's length is kept");
+
+  const top = codeExcerpt({
+    ...window,
+    ref: { path: "src/invite.ts", startLine: 40, endLine: 40 },
+  });
+  assert.equal(top.firstLine, 40);
+  assert.deepEqual(top.lines, ["line 40", "line 41", "line 42", "line 43"]);
+
+  const head = codeExcerpt({ ...window, ref: { path: "src/invite.ts" } });
+  assert.equal(head.firstLine, 40);
+  assert.equal(head.lines.length, 24);
 });

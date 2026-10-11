@@ -1799,19 +1799,15 @@ body,
   flex-direction: column;
 }
 
-/* The board and the code fill the tab edge to edge: the panel is their
-   frame, so their own inset card gives way. */
-.side-panel .plan-board,
-.side-panel .code-pane {
+/* The board fills the tab edge to edge: the panel is its frame, so its own
+   inset card gives way. */
+.side-panel .plan-board {
   max-height: none;
   flex: 1;
   margin: 0;
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.side-panel .plan-board {
   background: none;
 }
 

@@ -42,6 +42,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { readPlanWork } from "../server/hosted/plan-work-store";
 import {
   SEARCH_WEB_REFUSAL,
   SEARCH_WEB_STATUS,
@@ -49,6 +50,7 @@ import {
 } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
@@ -1220,6 +1222,60 @@ it.live(
           LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
           LIVE_BRAIN_RUN_EVENT.ENDED,
         ],
+      );
+      yield* Effect.promise(() => f.stop());
+    }),
+);
+
+it.live(
+  "code the planning model showed reaches the service under the call, turn, and time the plan's work reads it back by",
+  () =>
+    Effect.gen(function* () {
+      const target = yield* Effect.promise(() => account());
+      const { planId, planConversation } = yield* Effect.promise(() =>
+        database.run(
+          Effect.gen(function* () {
+            const plan = yield* createPlan(target.userId, PLAN);
+            const conversation = yield* openPlanConversation(target.userId, plan.id);
+            return { planId: plan.id, planConversation: Option.getOrThrow(conversation) };
+          }),
+        ),
+      );
+      const f = yield* Effect.promise(() => stand(target, QUICK, database.store, planConversation));
+      const accepted = yield* Effect.promise(() => database.run(f.brain.submitAsk(spokenAsk("q"))));
+      assert.equal(accepted.outcome, LIVE_BRAIN_SUBMISSION.ACCEPTED);
+      if (accepted.outcome !== LIVE_BRAIN_SUBMISSION.ACCEPTED) return;
+      const standing: RelayStanding = {
+        sessionId: yield* Effect.promise(() => sessionOf(target, accepted.runId)),
+        target: { userId: target.userId, conversationId: planConversation },
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      const ref = { path: "src/invite.ts", startLine: 2, endLine: 2 };
+      const code = {
+        ref,
+        repository: "acme/relay",
+        firstLine: 1,
+        lineCount: 3,
+        lines: ["export function acceptInvite() {", "  return true;", "}"],
+      };
+      const events = planningTurn(FIRST_EVE_TURN, NOW, {
+        toolName: SHOW_CODE_TOOL.name,
+        input: ref,
+        output: { status: "accepted", code },
+      });
+      yield* Effect.promise(() => play(events, standing));
+      yield* f.arrived(1);
+      const recorded = yield* Effect.promise(() =>
+        database.run(readPlanWork(target.userId, planId, undefined)),
+      );
+      const [shown] = Option.getOrThrow(recorded).code ?? [];
+      assert.ok(shown);
+      assert.deepEqual(shown.code, code);
+      assert.deepEqual(
+        f.events.find((event) => event.kind === LIVE_BRAIN_RUN_EVENT.CODE_SHOWN),
+        { kind: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN, runId: accepted.runId, ...shown },
       );
       yield* Effect.promise(() => f.stop());
     }),

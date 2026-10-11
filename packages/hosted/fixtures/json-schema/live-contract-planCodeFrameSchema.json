@@ -12,6 +12,15 @@
       "minLength": 1,
       "maxLength": 36
     },
+    "callId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "shownAt": {
+      "type": "number"
+    },
     "code": {
       "type": "object",
       "properties": {
@@ -71,6 +80,9 @@
   "required": [
     "type",
     "planId",
+    "callId",
+    "turnId",
+    "shownAt",
     "code"
   ],
   "additionalProperties": false

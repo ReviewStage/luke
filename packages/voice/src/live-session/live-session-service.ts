@@ -1,6 +1,6 @@
 import { LIVE_TRANSPORT_STATE, type LiveTransportState } from "@sidecar/gateway";
-import type { CodeRef, ShownCode } from "@sidecar/hosted/plan-wire";
-import { VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import { type PlanShownCode, VOICE_PHASE, type VoicePhase } from "@sidecar/hosted/planning-view";
 import {
   chunkForAppend,
   commentaryAppend,
@@ -208,7 +208,7 @@ export interface LiveSessionServiceOptions {
   /** What the standing session's voice and brain are doing, told whole on a change alone. */
   onStatus?: (status: LiveSessionStatus) => void;
   /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
-  onCode?: (code: ShownCode) => void;
+  onCode?: (shown: PlanShownCode) => void;
 }
 
 /**
@@ -288,7 +288,9 @@ interface StandingSession {
    * queued for him, so it goes on screen as he talks about it; the newest
    * replaces any still held.
    */
-  pendingCode: { readonly code: ShownCode; readonly delegationId: LiveDelegationId } | undefined;
+  pendingCode:
+    | { readonly shown: PlanShownCode; readonly delegationId: LiveDelegationId }
+    | undefined;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -1448,8 +1450,8 @@ export class LiveSessionService {
       // Code is held for the words it belongs to, which start with Luke's next answer.
       case LIVE_BRAIN_RUN_EVENT.CODE_SHOWN: {
         const session = this.#sessionOf(exchange);
-        if (session)
-          session.pendingCode = { code: event.code, delegationId: this.#delegationOf(exchange) };
+        const { kind: _kind, runId: _runId, ...shown } = event;
+        if (session) session.pendingCode = { shown, delegationId: this.#delegationOf(exchange) };
         return;
       }
       // The brain tells the settle as soon as no write of the run is still
@@ -1538,12 +1540,12 @@ export class LiveSessionService {
     const held = session.pendingCode;
     if (held === undefined) return;
     session.pendingCode = undefined;
-    this.#options.onCode?.(held.code);
+    this.#options.onCode?.(held.shown);
     session.channel.enqueue(
       Effect.suspend(() =>
         Effect.asVoid(
           session.channel.send(
-            thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.code.ref))),
+            thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.shown.code.ref))),
           ),
         ),
       ),

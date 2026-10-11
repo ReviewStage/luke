@@ -9,8 +9,8 @@ import {
 import { EXCESS_KEYS, SCHEMA_REFUSAL, type UnparsedWireValue } from "@sidecar/wire";
 import { declareReader, emitJsonSchema, readEither, wireRefusal } from "@sidecar/wire/effect";
 import { Result, Schema, SchemaGetter } from "effect";
-import { planDocumentSchema, shownCodeSchema } from "./plan-wire.js";
-import { planActivitySchema, planWorkTurnSchema } from "./planning-view.js";
+import { planDocumentSchema } from "./plan-wire.js";
+import { planActivitySchema, planShownCodeSchema, planWorkTurnSchema } from "./planning-view.js";
 import { hostedQuotaSchema, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -371,11 +371,16 @@ export const planActivityFrameSchema = Schema.Struct({
 
 export type PlanActivityFrame = typeof planActivityFrameSchema.Type;
 
-/** Code Luke put on screen on the call about the plan named, with its lines as the service read them from the plan's repository. */
+/**
+ * Code Luke put on screen on the call about the plan named, with its lines
+ * as the service read them from the plan's repository, and the `show_code`
+ * call and turn that showed it, as the plan's work reads them back, so the
+ * desktop holds a call's code and the record's copy of it once.
+ */
 export const planCodeFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CODE),
   planId: wireUuidSchema,
-  code: shownCodeSchema,
+  ...planShownCodeSchema.fields,
 });
 
 export type PlanCodeFrame = typeof planCodeFrameSchema.Type;

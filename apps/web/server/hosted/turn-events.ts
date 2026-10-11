@@ -91,7 +91,9 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   }
   if (name === SHOW_CODE_TOOL.name) {
     const shown = shownCodeOf(part);
-    return shown === undefined ? undefined : { kind: TURN_EVENT_KIND.CODE_SHOWN, code: shown };
+    return shown === undefined
+      ? undefined
+      : { kind: TURN_EVENT_KIND.CODE_SHOWN, callId: part.toolCallId, code: shown };
   }
   return name === RUN_IN_REPOSITORY_TOOL.name
     ? { kind: TURN_EVENT_KIND.SLOW_STEP, step: SLOW_STEP_KIND.REPOSITORY_READ }

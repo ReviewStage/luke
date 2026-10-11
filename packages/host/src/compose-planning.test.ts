@@ -1042,9 +1042,9 @@ function shownCode(ref: ShownCode["ref"]): ShownCode {
   };
 }
 
-/** One code the service keeps as shown on a plan, by the turn that showed it. */
-function shownOn(turnId: string, code: ShownCode): PlanShownCode {
-  return { callId: `${turnId}-show`, turnId, shownAt: 0, code };
+/** One code shown on a plan, by the `show_code` call that showed it and its turn. */
+function shownOn(turnId: string, code: ShownCode, callId = `${turnId}-show`): PlanShownCode {
+  return { callId, turnId, shownAt: 0, code };
 }
 
 /** The open plan with its code loop running. */
@@ -1057,26 +1057,44 @@ function openPlan(service: FakeService) {
   });
 }
 
-it.effect("code Luke names on the open plan's call is drawn as it arrived, coloured", () =>
-  Effect.gen(function* () {
-    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { planning, last } = yield* openPlan(service);
+/** Each code a view holds, as its call, path, and lines pointed at. */
+function shownPlaces(view: PlanningView | undefined) {
+  return (view?.shownCode ?? []).map(({ callId, code: { ref } }) => ({ callId, ...ref }));
+}
 
-    planning.showCode(INVITES, shownCode({ path: "invite.ts", startLine: 1, endLine: 2 }));
+it.effect(
+  "code Luke names on the open plan's call is drawn as it arrived, coloured, after every code shown before it",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, last } = yield* openPlan(service);
 
-    const { code } = last() ?? {};
-    assert.deepEqual(code?.ref, { path: "invite.ts", startLine: 1, endLine: 2 });
-    assert.equal(code?.repository, "acme/relay");
-    assert.equal(code?.lineCount, 3);
-    assert.equal(
-      code?.lines[0]?.map((token) => token.text).join(""),
-      "export function acceptInvite(token: string) {",
-    );
-    assert.ok(
-      code?.lines[0]?.some((token) => token.color !== undefined),
-      "the line is coloured",
-    );
-  }),
+      planning.showCode(
+        INVITES,
+        shownOn("turn-1", shownCode({ path: "invite.ts", startLine: 1, endLine: 2 }), "show-a"),
+      );
+      planning.showCode(
+        INVITES,
+        shownOn("turn-1", shownCode({ path: "invite.ts", startLine: 3, endLine: 3 }), "show-b"),
+      );
+
+      assert.deepEqual(shownPlaces(last()), [
+        { callId: "show-a", path: "invite.ts", startLine: 1, endLine: 2 },
+        { callId: "show-b", path: "invite.ts", startLine: 3, endLine: 3 },
+      ]);
+      const [first] = last()?.shownCode ?? [];
+      assert.equal(first?.turnId, "turn-1");
+      assert.equal(first?.code.repository, "acme/relay");
+      assert.equal(first?.code.lineCount, 3);
+      assert.equal(
+        first?.code.lines[0]?.map((token) => token.text).join(""),
+        "export function acceptInvite(token: string) {",
+      );
+      assert.ok(
+        first?.code.lines[0]?.some((token) => token.color !== undefined),
+        "the line is coloured",
+      );
+    }),
 );
 
 it.effect("the call's end keeps the code it put on screen, and leaving the plan clears it", () =>
@@ -1084,17 +1102,20 @@ it.effect("the call's end keeps the code it put on screen, and leaving the plan 
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, planning, last } = yield* openPlan(service);
 
-    planning.showCode(INVITES, shownCode({ path: "invite.ts" }));
+    planning.showCode(INVITES, shownOn("turn-1", shownCode({ path: "invite.ts" })));
     planning.callEnded(INVITES);
-    assert.equal(last()?.code?.ref.path, "invite.ts");
+    assert.deepEqual(
+      shownPlaces(last()).map(({ path }) => path),
+      ["invite.ts"],
+    );
 
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
-    assert.equal(last()?.code, undefined);
+    assert.equal(last()?.shownCode, undefined);
   }),
 );
 
 it.effect(
-  "a plan opened after a restart or a switch draws its work and the code last shown as the service keeps them",
+  "a plan opened after a restart or a switch draws its work and every code shown on it as the service keeps them",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -1105,7 +1126,8 @@ it.effect(
         turns: [recorded],
         code: [
           shownOn("turn-0", shownCode({ path: "old.ts" })),
-          shownOn("turn-1", shownCode({ path: "invite.ts" })),
+          shownOn("turn-1", shownCode({ path: "invite.ts", startLine: 1, endLine: 1 }), "a"),
+          shownOn("turn-1", shownCode({ path: "invite.ts", startLine: 3, endLine: 3 }), "b"),
         ],
       };
 
@@ -1113,19 +1135,23 @@ it.effect(
       const { call, last } = yield* subject(service);
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       assert.deepEqual(last()?.work, [recorded]);
-      assert.equal(last()?.code?.ref.path, "invite.ts");
-      assert.ok(last()?.code?.lines[0]?.some((token) => token.color !== undefined));
+      assert.deepEqual(shownPlaces(last()), [
+        { callId: "turn-0-show", path: "old.ts" },
+        { callId: "a", path: "invite.ts", startLine: 1, endLine: 1 },
+        { callId: "b", path: "invite.ts", startLine: 3, endLine: 3 },
+      ]);
+      assert.ok(last()?.shownCode?.[1]?.code.lines[0]?.some((token) => token.color !== undefined));
 
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
       assert.equal(last()?.work, undefined);
-      assert.equal(last()?.code, undefined);
+      assert.equal(last()?.shownCode, undefined);
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       assert.deepEqual(last()?.work, [recorded]);
     }),
 );
 
 it.effect(
-  "the service's work read lands under what the open plan's call told: a turn still running on record stays as told, a settled one is the record's, and code the call shows while the read is out stands",
+  "the service's work read lands under what the open plan's call told: a turn still running on record stays as told, a settled one is the record's, the call's code stands once, and code it shows while the read is out stands after the record's",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -1139,25 +1165,38 @@ it.effect(
       planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls"));
       planning.showWork(INVITES, told);
       planning.showWork(INVITES, fresh);
+      planning.showCode(INVITES, shownOn("turn-2", shownCode({ path: "on-screen.ts" })));
+      planning.showCode(INVITES, shownOn("turn-3", shownCode({ path: "not-on-record.ts" })));
       service.works[INVITES] = {
         turns: [settled, workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts")],
-        code: [shownOn("turn-2", shownCode({ path: "read-before.ts" }))],
+        code: [
+          shownOn("turn-1", shownCode({ path: "earlier.ts" })),
+          shownOn("turn-2", shownCode({ path: "on-screen.ts" })),
+        ],
       };
       // The call shows code after the read left and before its answer lands.
       const read = service.readWork;
       service.readWork = (planId, before) =>
         Effect.tap(read(planId, before), () =>
-          Effect.sync(() => planning.showCode(INVITES, shownCode({ path: "on-screen.ts" }))),
+          Effect.sync(() =>
+            planning.showCode(
+              INVITES,
+              shownOn("turn-3", shownCode({ path: "while-read.ts" }), "w"),
+            ),
+          ),
         );
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
       assert.deepEqual(last()?.work, [settled, told, fresh]);
-      assert.equal(last()?.code?.ref.path, "on-screen.ts");
+      assert.deepEqual(
+        shownPlaces(last()).map(({ path }) => path),
+        ["earlier.ts", "on-screen.ts", "not-on-record.ts", "while-read.ts"],
+      );
     }),
 );
 
 it.effect(
-  "a refresh after a call's code takes the newer code the service keeps, as another session showed it",
+  "a refresh after a call's code adds the newer code the service keeps, as another session showed it",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -1165,7 +1204,7 @@ it.effect(
       const { call, last, planning } = yield* subject(service);
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-      planning.showCode(INVITES, shownCode({ path: "old.ts" }));
+      planning.showCode(INVITES, shownOn("turn-1", shownCode({ path: "old.ts" })));
       planning.callEnded(INVITES);
       service.works[INVITES] = {
         turns: [],
@@ -1176,7 +1215,10 @@ it.effect(
       };
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
-      assert.equal(last()?.code?.ref.path, "new.ts");
+      assert.deepEqual(
+        shownPlaces(last()).map(({ path }) => path),
+        ["old.ts", "new.ts"],
+      );
     }),
 );
 
@@ -1239,19 +1281,22 @@ it.effect(
     }),
 );
 
-it.effect("code named about a plan that is not open is not drawn", () =>
-  Effect.gen(function* () {
-    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
-    const { planning, told } = yield* openPlan(service);
+it.effect(
+  "code named about a plan that is not open is not drawn, nor a call's code told again",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const { planning, last } = yield* openPlan(service);
 
-    planning.showCode(BILLING, shownCode({ path: "invite.ts" }));
-    planning.showCode(INVITES, shownCode({ path: "invite.ts", startLine: 3, endLine: 3 }));
+      planning.showCode(BILLING, shownOn("turn-1", shownCode({ path: "invite.ts" }), "other"));
+      const shown = shownOn("turn-1", shownCode({ path: "invite.ts", startLine: 3, endLine: 3 }));
+      planning.showCode(INVITES, shown);
+      planning.showCode(INVITES, shown);
 
-    assert.deepEqual(
-      told.flatMap((view) => (view.code === undefined ? [] : [view.code.ref])),
-      [{ path: "invite.ts", startLine: 3, endLine: 3 }],
-    );
-  }),
+      assert.deepEqual(shownPlaces(last()), [
+        { callId: "turn-1-show", path: "invite.ts", startLine: 3, endLine: 3 },
+      ]);
+    }),
 );
 
 /** A plan's transcript of one call on which the developer said `words`. */

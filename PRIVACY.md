@@ -109,10 +109,10 @@ and our service sends them to your Mac, which draws them. Nothing is read
 from your Mac's disk. The service refuses a path outside the checkout and
 never reads a file named `.env` or starting with `.env`. Our service tells the
 voice model the file path and line numbers on screen, so Luke can refer to
-them. After the call, the Code tab keeps showing the last code Luke showed
-on the plan: when you open the plan, Luke on your Mac reads back the code
-shown on it from what our service keeps with the plan's planning
-conversation, by the same rules (nothing the service refused, and no `.env` file, is read back),
+them. The Code tab shows every code Luke showed on the plan, and keeps
+showing it after the call: when you open the plan, Luke on your Mac reads
+back the code shown on it from what our service keeps with the plan's
+planning conversation, by the same rules (nothing the service refused, and no `.env` file, is read back),
 and holds them in the panel's memory, never on disk, until you leave the
 plan or quit Luke. They are never part of the plan's document.
 

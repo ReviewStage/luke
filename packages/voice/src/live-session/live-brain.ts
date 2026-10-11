@@ -1,4 +1,4 @@
-import type { ShownCode } from "@sidecar/hosted/plan-wire";
+import type { PlanShownCode } from "@sidecar/hosted/planning-view";
 import type { Effect } from "effect";
 
 /**
@@ -70,12 +70,12 @@ export type LiveBrainRunEvent =
       readonly question: string;
       readonly recommendation: string;
     }
-  | {
+  // Code of the plan's repository the planning model put on screen, with its
+  // lines, for Luke's next words, under the call and turn that showed it.
+  | ({
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
-      /** Code of the plan's repository the planning model put on screen, with its lines, for Luke's next words. */
-      readonly code: ShownCode;
-    }
+    } & PlanShownCode)
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;

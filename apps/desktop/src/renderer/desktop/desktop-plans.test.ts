@@ -348,22 +348,42 @@ test("a panel too narrow for its tabs whole still draws every tab's label, hangi
   }
 });
 
-test("the Code tab draws the code Luke has on screen", () => {
-  const markup = renderToStaticMarkup(
-    createElement(DesktopPlans, {
-      plans: plansControl({
-        page: PLANS_PAGE.DOCUMENT,
-        activePlanId: PLAN.id,
-        region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-        sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
-        code: CODE,
+test("the Code tab draws every code Luke showed on the plan, and says so where he showed none", () => {
+  const drawn = (shownCode: PlansControl["shownCode"]) => {
+    const page = document.createElement("div");
+    page.innerHTML = renderToStaticMarkup(
+      createElement(DesktopPlans, {
+        plans: plansControl({
+          page: PLANS_PAGE.DOCUMENT,
+          activePlanId: PLAN.id,
+          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.CODE },
+          shownCode,
+        }),
       }),
-    }),
-  );
+    );
+    return page.querySelector(".side-panel [role='tabpanel']");
+  };
 
-  assert.match(
-    markup,
-    /<aside class="side-panel"[\s\S]*class="code-pane ph-no-capture"[\s\S]*src\/invite\.ts/u,
+  const shown = drawn([
+    { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+    {
+      callId: "show-2",
+      turnId: "turn-1",
+      shownAt: 2,
+      code: { ...CODE, ref: { path: "src/roles.ts" } },
+    },
+  ]);
+  assert.ok(shown?.querySelector(".code-pane.ph-no-capture"), "left out of the recording");
+  assert.deepEqual(
+    [...(shown?.querySelectorAll(".code-card") ?? [])].map((card) =>
+      card.getAttribute("aria-label"),
+    ),
+    ["src/invite.ts, Line 1", "src/roles.ts"],
+  );
+  assert.equal(
+    drawn(undefined)?.textContent,
+    "When Luke shows you code during a call, it appears here.",
   );
 });
 
