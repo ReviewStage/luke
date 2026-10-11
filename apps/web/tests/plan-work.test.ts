@@ -10,7 +10,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
@@ -48,6 +48,11 @@ import { insertConversation } from "./support/store-rows";
  */
 
 const NOW = 1_800_000_000_000;
+
+/** A worker's input as the tab reads it: JSON carrying the message it was handed. */
+const decodeWorkerInput = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ message: Schema.String })),
+);
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
@@ -310,6 +315,33 @@ test("a file put on screen reads as its path and lines, and a long output is cut
   assert.ok(ran?.type === PLAN_WORK_PART.TOOL);
   assert.equal(ran.output?.length, PLAN_WORK_BOUNDS.TEXT_CHARS);
   assert.ok(ran.output?.endsWith("x…"));
+});
+
+test("a worker handed a task longer than the bound carries it cut inside its input, so the input still reads as the message, marked where it was cut", async () => {
+  const target = await conversation();
+  const standing = standingFor(target);
+  // Quotes and line breaks, which the JSON escapes, so the cut has to leave room for the escapes too.
+  const message = 'Compare the "two" queue libraries.\n'.repeat(
+    Math.ceil(PLAN_WORK_BOUNDS.TEXT_CHARS / 20),
+  );
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        { toolName: EVE_DELEGATION_TOOL.WORKER, input: { message } },
+      ]),
+    ],
+    standing,
+  );
+
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+  assert.equal(worker.tool, PLAN_WORK_TOOL.WORKER);
+  assert.ok(worker.input.length <= PLAN_WORK_BOUNDS.TEXT_CHARS);
+  const { message: carried } = decodeWorkerInput(worker.input);
+  assert.ok(carried.endsWith("…"));
+  assert.ok(message.startsWith(carried.slice(0, -1)));
+  assert.ok(carried.length > PLAN_WORK_BOUNDS.SUBJECT_CHARS, "more of the task than its subject");
 });
 
 test("a turn of more calls than a frame carries keeps its newest and says older ones were left out", async () => {

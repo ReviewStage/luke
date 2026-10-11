@@ -84,6 +84,27 @@ function cut(text: string, max: number): string {
   return `${text.slice(0, max - 1)}…`;
 }
 
+/**
+ * A call's input as the JSON the tab reads, cut to the bound. Note that a
+ * worker's message is cut inside the JSON rather than the JSON cut whole,
+ * because the desktop reads the message back out of it to show the task the
+ * worker was handed, and a cut JSON reads as nothing. The room left for the
+ * message is what the rest of the JSON and the message's own escapes leave,
+ * so the JSON the cut message makes stays within the bound.
+ */
+function inputOf(tool: PlanWorkTool, part: StoredToolPart): string {
+  const { input } = part;
+  const max = PLAN_WORK_BOUNDS.TEXT_CHARS;
+  if (tool !== PLAN_WORK_TOOL.WORKER || !isWorkerInput(input)) {
+    return cut(JSON.stringify(input ?? {}, null, 2), max);
+  }
+  const { message } = input;
+  const frame = JSON.stringify({ ...input, message: "" }, null, 2).length;
+  const escapes = JSON.stringify(message).length - message.length - 2;
+  const room = Math.max(1, max - frame - escapes);
+  return cut(JSON.stringify({ ...input, message: cut(message, room) }, null, 2), max);
+}
+
 /** The one input of a call a reader looks for first, or nothing for a tool whose input has none. */
 function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined {
   const { input } = part;
@@ -185,7 +206,7 @@ function toolPartOf(part: StoredToolPart, state: PlanWorkState, answered: boolea
     ...(subject === undefined
       ? undefined
       : { subject: cut(subject, PLAN_WORK_BOUNDS.SUBJECT_CHARS) }),
-    input: cut(JSON.stringify(part.input ?? {}, null, 2), PLAN_WORK_BOUNDS.TEXT_CHARS),
+    input: inputOf(tool, part),
     ...(output === undefined ? undefined : { output: cut(output, PLAN_WORK_BOUNDS.TEXT_CHARS) }),
   };
 }
