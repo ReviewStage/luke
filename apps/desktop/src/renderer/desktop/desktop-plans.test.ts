@@ -2354,6 +2354,7 @@ const readListed: TranscriptReader = (params) =>
  * agents, read again as the service lists them, and every Stop recorded.
  */
 function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
+  useAppKeymap(true);
   const [agents, setAgents] = useState(listed);
   const agentIds = agents.map((agent) => agent.id);
   const sidePanel = useSidePanel(
@@ -2844,7 +2845,7 @@ function tabMenu(tab: HTMLElement): [string, boolean][] {
   assert.ok(menu, "the tab's menu opened");
   assert.equal(menus.length, 1, "one menu stands at a time");
   return [...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].map((item) => [
-    item.textContent ?? "",
+    item.querySelector(".plan-menu-label")?.textContent ?? "",
     !item.disabled,
   ]);
 }
@@ -2861,7 +2862,7 @@ function closeMenu(): void {
 function chooseFromTab(tab: HTMLElement, label: string): void {
   tabMenu(tab);
   const item = [...document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.textContent === label,
+    (each) => each.querySelector(".plan-menu-label")?.textContent === label,
   );
   assert.ok(item, `no ${label} in the tab's menu`);
   act(() => item.click());
@@ -3094,4 +3095,42 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
     `# ${job}\n\n## Task\n\nCompare queue A and queue B.\n\n## Subagent\n\n- Ran \`ls src\`\n\nQueue A lets an admin revoke.\n`,
   ]);
   assert.equal(chosenTab(page), job, "copying chooses no tab");
+});
+
+test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the next tab is chosen", () => {
+  const page = mountAgents();
+  act(() => tabNamed(page, "Code").click());
+  assert.equal(keydown({ key: "w", metaKey: true }), true);
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    "GPT 5.6 Sol",
+  ]);
+  assert.equal(chosenTab(page), "Transcript");
+
+  chooseFromTab(tabNamed(page, "Work"), "Pin tab");
+  act(() => tabNamed(page, "Work").click());
+  tabMenu(tabNamed(page, "Work"));
+  assert.equal(document.body.querySelector('[role="menuitem"] .plan-menu-end')?.textContent, "⌘W");
+  closeMenu();
+  keydown({ key: "w", metaKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+  assert.equal(page.querySelector('.side-panel .tab[data-pinned="true"]'), null);
+
+  act(() => tabNamed(page, "GPT 5.6 Sol").click());
+  keydown({ key: "w", metaKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5"]);
+  assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
+});
+
+test("with nothing to close, Command-W is left unclaimed: the panel hidden, or open with no tab", () => {
+  const page = mountOpenPlan({ holds: {} });
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "the panel hidden");
+  press(page, '[aria-label="Show panel"]');
+  assert.deepEqual(panelTabs(page), []);
+  assert.equal(keydown({ key: "w", metaKey: true }), false, "no tab open");
+  assert.ok(panelShown(page));
+  assert.equal(page.querySelector('.desktop-toolbar [role="tab"]')?.textContent, PLAN.name);
 });

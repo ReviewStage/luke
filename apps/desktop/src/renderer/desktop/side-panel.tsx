@@ -396,6 +396,8 @@ function AddTabButton({
 /** A tab's menu, as the strip offers it to every tab of the panel: what each action does, and those it holds beyond Close and Pin. */
 interface TabDoors {
   pinned: boolean;
+  /** Whether the tab is the one chosen, which ⌘W closes. */
+  chosen: boolean;
   onClose: () => void;
   /** Closes every other tab that closes, none where there is none. */
   onCloseOthers: (() => void) | undefined;
@@ -420,7 +422,13 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
     : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.onPin };
   return [
     [
-      { label: "Close", icon: <CloseIcon />, onSelect: doors.onClose },
+      {
+        label: "Close",
+        icon: <CloseIcon />,
+        onSelect: doors.onClose,
+        // ⌘W closes the tab chosen, so only the chosen tab's Close says it.
+        ...(doors.chosen ? { command: APP_COMMAND.CLOSE_TAB } : undefined),
+      },
       {
         label: "Close others",
         icon: <ListXIcon />,
@@ -721,6 +729,7 @@ function pinnedFirst(drawn: readonly StripTab[], pinned: readonly SidePanelTab[]
  */
 function PanelTabs({
   panel,
+  keys,
   unread,
   agents,
   subagents,
@@ -729,6 +738,8 @@ function PanelTabs({
   shownFiles,
 }: {
   panel: SidePanelControl;
+  /** Whether the panel offers its keys: on screen and not on its way out. */
+  keys: boolean;
   unread: readonly SidePanelTab[];
   agents: CodingAgentsControl;
   /** The open subagent tabs the plan draws, in the strip's order. */
@@ -745,10 +756,15 @@ function PanelTabs({
   const copyText = (words: string) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words });
   const drawn = stripTabs({ panel, unread, agents, subagents, files, copyText });
   const { strip, pins, runs } = pinnedFirst(drawn, panel.pinned);
+  // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
+  // is left to fall through to nothing rather than to the window.
+  const chosen = strip.find((entry) => entry.look.selected);
+  useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const doorsOf = (entry: StripTab, at: number): TabDoors => {
     const others = strip.filter((_, place) => place !== at && place >= pins);
     return {
       pinned: at < pins,
+      chosen: entry.look.selected,
       onClose: entry.close,
       onCloseOthers:
         others.length === 0
@@ -1344,6 +1360,7 @@ export function SidePanel({
         <div className="side-panel-bar">
           <PanelTabs
             panel={panel}
+            keys={shown && leaving === PANEL_LEAVING.NONE}
             unread={unread}
             agents={agents}
             subagents={subagents}

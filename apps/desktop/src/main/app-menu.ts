@@ -60,6 +60,22 @@ function commandItem(command: KeyedCommand): MenuItemConstructorOptions {
   };
 }
 
+/**
+ * Close Window, which main runs itself rather than handing the window: it
+ * closes the window chosen over, which hides it as every close does
+ * (`panel-manager.ts`). Note that its key runs it too, unlike a command
+ * item's, because the window's keymap claims no ⇧⌘W, so a key reaching it
+ * is the one press it will see; ⌘W is the window's own, closing its tab.
+ */
+function closeWindowItem(): MenuItemConstructorOptions {
+  const shortcut = APP_SHORTCUTS[APP_COMMAND.CLOSE_WINDOW];
+  return {
+    label: menuTitle(shortcut.label),
+    accelerator: shortcutAccelerator(shortcut.chord),
+    click: (_item, window: BaseWindow | undefined) => window?.close(),
+  };
+}
+
 /** A command with no key: named with an ellipsis, as an item that opens a dialog is. */
 function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
   return { label: `${menuTitle(MENU_COMMAND_LABELS[command])}…`, click: sendCommand(command) };
@@ -67,7 +83,8 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
- * own menu as macOS puts it; the plan's commands are File's, the window's
+ * own menu as macOS puts it; the plan's commands are File's, with Close Tab
+ * and Close Window as Chrome's File keeps them, the window's
  * columns are View's, the call's microphone and speaker are Call's, back and forward are Go's as Finder and Safari keep
  * them, and the shortcuts and the notes to the people who make Luke are
  * Help's.
@@ -96,6 +113,9 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
       label: "File",
       submenu: [
         commandItem(APP_COMMAND.NEW_PLAN),
+        SEPARATOR,
+        commandItem(APP_COMMAND.CLOSE_TAB),
+        closeWindowItem(),
         SEPARATOR,
         commandItem(APP_COMMAND.COPY_PLAN),
         SEPARATOR,
