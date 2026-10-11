@@ -201,7 +201,7 @@ export function highlightFile(window: PlanFileWindow): PlanFileShown {
   return { ...window, lines: colouredLines(window.path, window.lines) };
 }
 
-/** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from. */
+/** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from, with Luke's note where he wrote one. */
 export function highlightCode(code: ShownCode): PlanCode {
   return {
     ref: code.ref,
@@ -209,5 +209,6 @@ export function highlightCode(code: ShownCode): PlanCode {
     firstLine: code.firstLine,
     lineCount: code.lineCount,
     lines: colouredLines(code.ref.path, code.lines),
+    ...(code.note === undefined ? undefined : { note: code.note }),
   };
 }

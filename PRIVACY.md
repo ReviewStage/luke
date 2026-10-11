@@ -105,7 +105,9 @@ lines, and our service reads those lines from its own checkout of the
 repository, in the same sandbox the planning model reads the repository in.
 The file path, the line numbers, and the lines themselves (at most 200 lines,
 each cut to 400 characters) are stored with the plan's planning conversation,
-and our service sends them to your Mac, which draws them. Nothing is read
+with the planning model's note on why it showed them (at most 280
+characters, which the Code tab draws above the lines), and our service sends
+them to your Mac, which draws them. Nothing is read
 from your Mac's disk. The service refuses a path outside the checkout and
 never reads a file named `.env` or starting with `.env`. Our service tells the
 voice model the file path and line numbers on screen, so Luke can refer to

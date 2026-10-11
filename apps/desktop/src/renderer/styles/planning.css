@@ -368,6 +368,27 @@ button.code-card-path:hover {
   color: var(--text-secondary);
 }
 
+/* Luke's note reads as the step's words, so the path above it steps back. */
+.code-card:has(> .code-card-note) .code-card-path {
+  color: var(--text-secondary);
+}
+
+.code-card-note {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.code-card-header:has(+ .code-card-note) {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 /* Lines wrap rather than scroll sideways, so no card takes a swipe from the feed. */
 .code-lines {
   padding: var(--space-6) 0;

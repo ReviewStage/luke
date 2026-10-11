@@ -152,6 +152,28 @@ test("a card numbers its lines from where they sit in the file and lights the li
   assert.deepEqual(numbered, ["8", "9", "10", "11 lit", "12 lit", "13", "14", "15"]);
 });
 
+test("a card says Luke's note on its lines in words between its heading and the lines, and code shown before notes reads without one", () => {
+  const { container, draw } = mounted();
+  const note = "The invite is looked up by its token alone, so an expired token still finds it.";
+
+  draw([
+    showing("a", 2_000, { ...windowOf("src/invite.ts", 3, 4), note }),
+    showing("b", 3_000, windowOf("src/roles.ts", 7, 7)),
+  ]);
+
+  const [noted, bare] = [...container.querySelectorAll(".code-card")];
+  assert.ok(noted && bare);
+  assert.deepEqual(
+    [...noted.children].map((part) => part.className),
+    ["code-card-header", "code-card-note", "code-lines"],
+  );
+  assert.equal(noted.querySelector(".code-card-note")?.textContent, note);
+  assert.deepEqual(
+    [...bare.children].map((part) => part.className),
+    ["code-card-header", "code-lines"],
+  );
+});
+
 test("a run carries its colour in both appearances, so the stylesheet picks one as the appearance changes", () => {
   const code: PlanCode = {
     ...windowOf("src/invite.ts", 1, 1),

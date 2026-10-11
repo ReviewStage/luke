@@ -23,7 +23,9 @@ import { testSqlClient } from "./support/sql-client";
  * around the lines pointed at is the call's answer, cut to the bounds, and
  * every file that cannot be shown is refused in words that say nothing was
  * shown. The sandbox is a double at eve's boundary, GitHub a script, and the
- * store PGlite. Synthetic repositories and code throughout.
+ * store PGlite. Synthetic repositories and code throughout. Every call
+ * carries the model's note on why it shows the lines, which travels with
+ * them, and a call without one shows nothing.
  */
 
 const RELAY = { owner: "Acme", name: "Relay", defaultBranch: "trunk" } as const;
@@ -38,6 +40,8 @@ const INVITE = [
   "  return invite;",
   "}",
 ].join("\n");
+
+const NOTE = "acceptInvite finds the invite by its token and never checks that it has expired.";
 
 const LONG_FILE = Array.from({ length: 2_000 }, (_, index) => `line ${index + 1}`).join("\n");
 
@@ -64,11 +68,16 @@ const openPlan = (repository: string | null) =>
     return { sandbox, call };
   });
 
-const show = (
+/** A call as the model makes it, its input as given, the note included only where the input names one. */
+const showExactly = (
   call: RepositoryCall,
   input: WireRecord,
   github: Layer.Layer<GitHubApp | HttpClient.HttpClient> = githubReaching([INSTALLATION]).layer,
 ) => runShowCode(call, unparsedWire(input)).pipe(Effect.provide(github));
+
+/** A call with the note the model writes beside the lines. */
+const show = (call: RepositoryCall, input: WireRecord) =>
+  showExactly(call, { note: NOTE, ...input });
 
 /** The lines an accepted answer carries. */
 function linesOf(answer: WireRecord): readonly string[] {
@@ -97,6 +106,7 @@ it.layer(testSqlClient)("show_code reads the plan's checkout", (it) => {
             firstLine: 1,
             lineCount: 6,
             lines: INVITE.split("\n"),
+            note: NOTE,
           },
         });
         assert.equal(sandbox.clones.length, 1);
@@ -158,6 +168,32 @@ it.layer(testSqlClient)("show_code reads the plan's checkout", (it) => {
           read.some((path) => path?.includes(".env")),
           false,
         );
+      }),
+  );
+
+  it.effect(
+    "a call without a note, with a blank one, or with one longer than a sentence or two, shows nothing and reads no file",
+    () =>
+      Effect.gen(function* () {
+        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
+        const path = "src/invite.ts";
+
+        const answers = [
+          yield* showExactly(call, { path }),
+          yield* showExactly(call, { path, note: "" }),
+          yield* showExactly(call, { path, note: " \n\t " }),
+          yield* showExactly(call, { path, note: "x".repeat(SHOWN_CODE_BOUNDS.NOTE_CHARS + 1) }),
+        ];
+
+        for (const answer of answers) {
+          assert.deepEqual(answer, {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: SHOW_CODE_REFUSAL.NO_NOTE,
+          });
+        }
+        assert.equal(sandbox.openings, 0);
+        const longest = yield* show(call, { path, note: "x".repeat(SHOWN_CODE_BOUNDS.NOTE_CHARS) });
+        assert.equal(longest.status, ACTION_RESULT_STATUS.ACCEPTED);
       }),
   );
 

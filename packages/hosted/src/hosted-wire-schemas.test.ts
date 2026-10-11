@@ -112,6 +112,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planAnswerSchema: planWire.planAnswerSchema,
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
     codeRefSchema: planWire.codeRefSchema,
+    codeNoteSchema: planWire.codeNoteSchema,
     shownCodeSchema: planWire.shownCodeSchema,
     planFileRequestSchema: planWire.planFileRequestSchema,
     planFileWindowSchema: planWire.planFileWindowSchema,

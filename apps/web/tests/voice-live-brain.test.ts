@@ -1234,7 +1234,7 @@ it.live(
 );
 
 it.live(
-  "code the planning model showed reaches the service under the call, turn, and time the plan's work reads it back by",
+  "code the planning model showed reaches the service with its note, under the call, turn, and time the plan's work reads it back by",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -1259,16 +1259,18 @@ it.live(
         state: memoryRelayState(),
       };
       const ref = { path: "src/invite.ts", startLine: 2, endLine: 2 };
+      const note = "Every invite is accepted here, whatever its age.";
       const code = {
         ref,
         repository: "acme/relay",
         firstLine: 1,
         lineCount: 3,
         lines: ["export function acceptInvite() {", "  return true;", "}"],
+        note,
       };
       const events = planningTurn(FIRST_EVE_TURN, NOW, {
         toolName: SHOW_CODE_TOOL.name,
-        input: ref,
+        input: { ...ref, note },
         output: { status: "accepted", code },
       });
       yield* Effect.promise(() => play(events, standing));

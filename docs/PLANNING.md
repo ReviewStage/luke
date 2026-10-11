@@ -260,7 +260,8 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   oldest turn drawn reads the page before it (`?before=<turn>`), and the
   newest page also carries every code shown on the plan, oldest first,
   several of one file included, all of which the Code tab draws, a card
-  each under the call it was shown on, a live call's code appending at the
+  each under the call it was shown on, Luke's note on why he showed it
+  above its lines so the feed reads as a walkthrough, a live call's code appending at the
   bottom; the record's copy of a live call's code is told apart by its
   `show_code` call, which the `plan.code` frame carries with its turn and
   time, so it is drawn once. Each card opens its whole file in a File tab,
@@ -627,8 +628,11 @@ as read.
 `show_code` (`apps/web/server/hosted/show-code.ts`) reads from the same
 checkout: the file named and a window of at most 200 lines around the lines
 pointed at, each line cut to 400 characters, with the path resolved inside
-the checkout root and a `.env` file never read. The lines are the call's
-answer, so they are journaled with the call, told to the voice as the
+the checkout root and a `.env` file never read. The call carries a note of
+at most 280 characters, the model's own words on what the lines do for the
+plan and what to notice, and a call without one shows nothing; a walk
+through code is a few calls in order, each a focused range with its own
+note. The lines and the note are the call's answer, so they are journaled with the call, told to the voice as the
 `code_shown` turn event once the call has answered, held until Luke next
 starts to speak, and sent to the Mac on the `plan.code` frame with the
 repository they came from; the Mac colours and draws them and reads nothing

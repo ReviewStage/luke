@@ -27,8 +27,9 @@ import { callHeading } from "./transcript-model";
  * starts to speak about them; the service reads them from its checkout of
  * the repository, and the host keeps the lines pointed at with a few of the
  * file around them and colours them (`plan-code.ts`). The tab draws each
- * as a card: the file's path, those lines numbered from where they sit in
- * the file, and a copy of the lines pointed at. Two
+ * as a card: the file's path, Luke's note on why he showed them, those
+ * lines numbered from where they sit in the file, and a copy of the lines
+ * pointed at, so the feed reads as a walkthrough, a step a card. Two
  * snippets of one file are two cards. The cards stand under the call they
  * were shown on, each call opening at the Checkpoint the Transcript tab
  * opens it at, and the feed keeps to its newest card while it is scrolled
@@ -173,7 +174,8 @@ function CopyLinesButton({
  * One snippet: its path, cut from the left so the file's own name stays in
  * sight, with the whole path in its hint; the lines pointed at; their copy;
  * the whole file opened in a tab of its own, from the path or its button;
- * and the lines themselves.
+ * Luke's note, where code shown before notes were asked for has none; and
+ * the lines themselves.
  */
 function CodeCardContent({
   showing,
@@ -218,6 +220,7 @@ function CodeCardContent({
           </Tooltip>
         </span>
       </header>
+      {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
       <CodeLines code={code} />
     </article>
   );

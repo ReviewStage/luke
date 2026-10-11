@@ -1,8 +1,10 @@
 import {
   CODE_PATH_MAX_CHARS,
   type CodeRef,
+  codeNoteSchema,
   codeRefSchema,
   codeWindow,
+  SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -40,11 +42,14 @@ import {
  * The call reads the lines itself: from the planning session's sandbox, on
  * the same checkout of the plan's repository `run_in_repository` reads
  * (`repository-shell.ts`), a window of the file around the lines pointed at,
- * cut to `SHOWN_CODE_BOUNDS`. The lines are the call's answer, so the store
- * journals them with the call, the voice's follow reads them off the journal
- * mid-turn (`projectTurnEvents`), and the voice service holds them until
- * Luke next starts to speak, then sends them to the developer's Mac, which
- * draws them. Nothing on the Mac reads a file. A read that fails answers
+ * cut to `SHOWN_CODE_BOUNDS`. The model writes a note beside them, a
+ * sentence or two on what the lines do for the plan and what to notice, so
+ * the Code tab reads as a walkthrough rather than bare code. The lines and
+ * the note are the call's answer, so the store journals them with the
+ * call, the voice's follow reads them off the journal mid-turn
+ * (`projectTurnEvents`), and the voice service holds them until Luke next
+ * starts to speak, then sends them to the developer's Mac, which draws
+ * them. Nothing on the Mac reads a file. A read that fails answers
  * `rejected` and says why, so nothing unread is ever described as shown.
  */
 
@@ -52,6 +57,7 @@ import {
 export const SHOW_CODE_REFUSAL = {
   UNREADABLE:
     "Not shown: name a path, and both lines or neither, the first no later than the last and at most 200 apart.",
+  NO_NOTE: `Not shown: write a note of one or two sentences, at most ${SHOWN_CODE_BOUNDS.NOTE_CHARS} characters, on what these lines do and what to notice.`,
   SECRET: "Not shown: that file holds secrets, such as a `.env`, and is never put on screen.",
   MISSING: "Not shown: no such file in the repository.",
   NOT_TEXT: "Not shown: that file is too large to show, or is not text.",
@@ -121,7 +127,7 @@ const FILE_WINDOW_SCRIPT = `sed -n "$\{${SANDBOX_VARIABLE.FIRST_LINE}},$\{${SAND
 
 const lineNumber = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
-const SHOW_CODE_INPUT = Schema.Struct({
+const SHOW_CODE_PLACE = {
   path: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(CODE_PATH_MAX_CHARS)),
     'The file, relative to the repository\'s root, such as "src/members/invite.ts".',
@@ -135,7 +141,26 @@ const SHOW_CODE_INPUT = Schema.Struct({
       "The last line you are talking about; the same as startLine for one line. Leave both out to show the file from its top.",
     ),
   ),
+};
+
+const SHOW_CODE_NOTE = describeWire(
+  codeNoteSchema,
+  "One or two plain sentences, shown above the lines, for the developer reading the plan later: what this code does for the plan, and what to notice in it. No headings, and never a secret.",
+);
+
+const SHOW_CODE_INPUT = Schema.Struct({ ...SHOW_CODE_PLACE, note: SHOW_CODE_NOTE });
+
+/**
+ * A call as its stored row is read back. Note that the note is optional
+ * here, because calls journaled before notes were asked for carry none,
+ * and a row its tool's schema refuses refuses the conversation's whole page.
+ */
+const SHOW_CODE_ROW_INPUT = Schema.Struct({
+  ...SHOW_CODE_PLACE,
+  note: Schema.optionalKey(SHOW_CODE_NOTE),
 });
+
+const readNote = Schema.decodeUnknownResult(Schema.Struct({ note: codeNoteSchema }));
 
 // Note that the wire's own reference is what is read, so a range out of order or too long is no reference at all.
 const readShownRef = Schema.decodeUnknownResult(codeRefSchema);
@@ -156,9 +181,10 @@ export const SHOW_CODE_TOOL = {
     "Put lines of a file in the plan's repository on the developer's screen, lit, as Luke starts " +
     "saying your next words. Call it just before the queue_question or the return that talks " +
     "about those lines, with the lines you found through run_in_repository. Point at the few " +
-    "lines that matter, at most 200. Answers `accepted` with the lines as shown, or `rejected` " +
-    "and why nothing was shown.",
+    "lines that matter, at most 200, and say in the note why you are showing them. Answers " +
+    "`accepted` with the lines as shown, or `rejected` and why nothing was shown.",
   inputSchema: SHOW_CODE_INPUT,
+  storedInputSchema: SHOW_CODE_ROW_INPUT,
 } as const;
 
 /**
@@ -231,8 +257,9 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
 
 /**
  * One call of `show_code`: the lines read from the plan's checkout and
- * answered as shown, or `rejected` and why. A reason the checkout could not
- * be reached is the repository's own, worded as nothing shown.
+ * answered as shown with the model's note, or `rejected` and why. A reason
+ * the checkout could not be reached is the repository's own, worded as
+ * nothing shown.
  */
 export function runShowCode(
   call: RepositoryCall,
@@ -243,8 +270,11 @@ export function runShowCode(
     if (Result.isFailure(read)) return rejected(SHOW_CODE_REFUSAL.UNREADABLE);
     const ref = read.success;
     if (isSecretFile(ref.path)) return rejected(SHOW_CODE_REFUSAL.SECRET);
+    // Note that a note of blanks alone is no note, because the card would draw it empty.
+    const note = Result.getOrUndefined(readNote(input))?.note.trim();
+    if (note === undefined || note === "") return rejected(SHOW_CODE_REFUSAL.NO_NOTE);
     const code = yield* readLines(call, ref);
-    return { status: ACTION_RESULT_STATUS.ACCEPTED, code } satisfies WireRecord;
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, code: { ...code, note } } satisfies WireRecord;
   });
   return shown.pipe(
     Effect.catchTag("ShowCodeRefusal", (refusal) => Effect.succeed(rejected(refusal.reason))),
