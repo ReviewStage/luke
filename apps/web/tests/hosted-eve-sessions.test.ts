@@ -126,7 +126,25 @@ it.effect(
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.ACCOUNT), ACCOUNT);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.CONVERSATION), CONVERSATION);
       assert.equal(request.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
-      assert.deepEqual(request.body, { message: "hello" });
+      assert.deepEqual(request.body, { message: "hello", capabilities: { requestInput: false } });
+    }),
+);
+
+it.effect(
+  "every session is opened unable to ask a human, so a worker past its token budget fails back to its caller rather than parking on a prompt nobody answers, on both services",
+  () =>
+    Effect.gen(function* () {
+      for (const mount of Object.values(EVE_MOUNT)) {
+        const { seen, sessions } = answeringEach(
+          [{ status: 202, body: { ok: true, sessionId: SESSION, status: "accepted" } }],
+          { mount },
+        );
+        yield* Effect.flatMap(sessions, (eve) => eve.open(MESSAGE));
+        assert.deepEqual(
+          seen.map((request) => request.body),
+          [{ message: "hello", capabilities: { requestInput: false } }],
+        );
+      }
     }),
 );
 
