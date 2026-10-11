@@ -850,6 +850,16 @@ body,
   color: var(--danger-text);
 }
 
+/* An item that does not apply now, dimmed with its glyph and lit by nothing. */
+.plan-menu-item:disabled {
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.plan-menu-item:disabled .plan-menu-icon {
+  color: inherit;
+}
+
 /* Every item keeps the icon's column, drawn or not, so the labels start in
    one line down the menu. Muted beside its label, and red with it on Delete. */
 .plan-menu-icon {
@@ -2137,7 +2147,8 @@ body,
 /* Only the chosen tab keeps room for its ×, so the strip holds more before
    it scrolls; another tab's × comes over the end of its label, which fades
    beneath it. */
-.tab[data-closable="true"][data-selected="true"] {
+.tab[data-closable="true"][data-selected="true"],
+.tab[data-pinned="true"] {
   --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
 }
 
@@ -2234,6 +2245,19 @@ body,
 .tab:hover .tab-close,
 .tab[data-selected="true"] .tab-close {
   opacity: 1;
+}
+
+/* A pinned tab wears its pin where the × would be, standing whether or not
+   the tab is chosen or under the pointer, as VS Code's pinned editor does,
+   and drawn a size down so it reads as a mark on the tab rather than a
+   control beside it. */
+.tab[data-pinned="true"] .tab-pin {
+  opacity: 1;
+}
+
+.tab-close.tab-pin svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Note that the × draws no ground under the pointer, because it is a glyph

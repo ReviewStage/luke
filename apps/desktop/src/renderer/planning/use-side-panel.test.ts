@@ -394,3 +394,32 @@ test("a fixed tab dragged among a plan's few keeps its place on a plan that has 
     SIDE_PANEL_TAB.TRANSCRIPT,
   ]);
 });
+
+test("a subagent's and a file's tab pinned on a plan are open on it at the next launch, a draft's pin is kept nowhere, and closing a pinned tab unpins it", () => {
+  const DRAFT = "draft-key-1";
+  const delegated = { subagent: CALL, delegation: { agent: AGENT, task: "Find the sweep." } };
+  const first = mount([AGENT], [], DRAFT, [INVITE, ROLES]);
+  act(() => first.control().onOpenFile({ path: ROLES, startLine: 2, endLine: 2 }));
+  act(() => first.control().onChoose(delegated));
+  act(() => first.control().onChoose({ draft: DRAFT }));
+  for (const tab of [{ file: ROLES }, delegated, { draft: DRAFT }, SIDE_PANEL_TAB.WORK]) {
+    act(() => first.control().onPin(tab));
+  }
+  assert.deepEqual(first.control().pinned, [
+    { file: ROLES },
+    delegated,
+    { draft: DRAFT },
+    SIDE_PANEL_TAB.WORK,
+  ]);
+
+  const second = mount([AGENT], [], undefined, [INVITE, ROLES]);
+  assert.deepEqual(second.control().pinned, [{ file: ROLES }, delegated, SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(second.control().files, [{ path: ROLES, range: undefined, opened: 0 }]);
+  assert.deepEqual(second.control().subagents, [delegated]);
+
+  act(() => second.control().onClose({ file: ROLES }));
+  act(() => second.control().onUnpin(SIDE_PANEL_TAB.WORK));
+  assert.deepEqual(second.control().pinned, [delegated]);
+  assert.deepEqual(second.control().files, []);
+  assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.WORK), "unpinned, it stays open");
+});

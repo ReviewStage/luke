@@ -46,6 +46,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CALL_ID_CHARS: 128,
   /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
   MAX_TITLE_CHARS: 80,
+  /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
+  MESSAGES_PAGE: 200,
 } as const;
 
 /** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */

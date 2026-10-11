@@ -9,8 +9,9 @@
  * tabs beyond, it runs the strip along toward them, as VS Code's does.
  * Letting go puts it there and chooses it, as Chrome and VS Code choose a
  * tab the developer drags; Escape, or the system taking the pointer away,
- * puts every tab back and changes nothing. Only the first `movable` tabs
- * move, and only among themselves; a press on another is a click.
+ * puts every tab back and changes nothing. The strip's tabs move in runs
+ * from its first, each tab only among its own run, as a pinned tab moves
+ * only among the pinned; a press on a tab past every run is a click.
  *
  * The drag is drawn on the tabs' own `transform` and nothing else, and the
  * stylesheet (desktop.css) times every slide from the motion tokens, so
@@ -65,6 +66,8 @@ interface TabPress {
   pointer: number;
   scrolled: number;
   view: Slot;
+  /** Where the pressed tab's run starts in the strip; `at`, `to`, and the slots count from it. */
+  start: number;
   at: number;
   tabs: HTMLElement[];
   slots: Slot[];
@@ -76,6 +79,26 @@ interface TabPress {
 
 /** What the strip's owner hears from a drop: the tab at `from` now stands at `to`, which differs from it. */
 export type TabMove = (from: number, to: number) => void;
+
+/** Where a run of the strip's tabs starts and where the next begins. */
+export interface TabRun {
+  start: number;
+  end: number;
+}
+
+/**
+ * The run holding the tab at `index`, where `runs` are how many tabs each
+ * run holds, from the strip's first, or nothing past them all.
+ */
+export function runOf(runs: readonly number[], index: number): TabRun | undefined {
+  if (index < 0) return undefined;
+  let start = 0;
+  for (const count of runs) {
+    if (index < start + count) return { start, end: start + count };
+    start += count;
+  }
+  return undefined;
+}
 
 /** The space between two tabs, read from how far the tabs run past their own widths. */
 function tabGap(slots: readonly Slot[]): number {
@@ -199,12 +222,12 @@ function settleDropped(tab: HTMLElement, left: number): void {
  * The strip's drag: spread `onPointerDown` on the strip. A press is heard at
  * the window from then on, so it outlives the pointer leaving the strip, and
  * the pointer is captured only once the press is a drag, so a press that
- * stays a click lands on the tab as any click does. `movable` is how many
- * of the strip's tabs, from the first, may be dragged.
+ * stays a click lands on the tab as any click does. `runs` are how many of
+ * the strip's tabs, from the first, each run holds (`runOf`).
  */
 export function useTabDrag(
   onMove: TabMove | undefined,
-  movable: number,
+  runs: readonly number[],
 ): React.PointerEventHandler<HTMLElement> | undefined {
   const latest = useRef(onMove);
   const release = useRef<(() => void) | undefined>(undefined);
@@ -255,7 +278,10 @@ export function useTabDrag(
       if (!press.dragging || tab === undefined) return;
       // A tab opened or closed under the drag leaves its places stale, so
       // the drag is put back rather than dropped at a place that moved.
-      const now = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)].slice(0, movable);
+      const now = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)].slice(
+        press.start,
+        press.start + press.tabs.length,
+      );
       if (now.length !== press.tabs.length || now.some((each, at) => each !== press.tabs[at])) {
         lower(press, strip, true);
         return;
@@ -266,7 +292,7 @@ export function useTabDrag(
       // is chosen as a press on it chooses it, because the captured
       // pointer's own click lands on the strip rather than on the tab.
       flushSync(() => {
-        if (press.to !== press.at) latest.current?.(press.at, press.to);
+        if (press.to !== press.at) latest.current?.(press.start + press.at, press.start + press.to);
         tab.querySelector<HTMLElement>('[role="tab"]')?.click();
       });
       lower(press, strip, false);
@@ -310,7 +336,13 @@ export function useTabDrag(
     const target = event.target instanceof Element ? event.target : null;
     if (event.button !== 0 || release.current !== undefined || target === null) return;
     if (target.closest(".tab-close, [data-editing]") !== null) return;
-    const tabs = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)].slice(0, movable);
+    const pills = [...strip.querySelectorAll<HTMLElement>(TAB_PILL)];
+    const run = runOf(
+      runs,
+      pills.findIndex((tab) => tab.contains(target)),
+    );
+    if (run === undefined) return;
+    const tabs = pills.slice(run.start, run.end);
     const at = tabs.findIndex((tab) => tab.contains(target));
     if (at < 0 || tabs.length < 2) return;
     const shown = strip.getBoundingClientRect();
@@ -321,7 +353,17 @@ export function useTabDrag(
       return { left: rect.left - view.left + scrolled, width: rect.width };
     });
     const pointer = { pointerId: event.pointerId, x: event.clientX, pointer: event.clientX };
-    const press = { ...pointer, scrolled, view, at, tabs, slots, gap: tabGap(slots), to: at };
+    const press = {
+      ...pointer,
+      scrolled,
+      view,
+      start: run.start,
+      at,
+      tabs,
+      slots,
+      gap: tabGap(slots),
+      to: at,
+    };
     begin(strip, { ...press, dragging: false, frame: undefined });
   };
 }

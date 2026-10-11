@@ -58,6 +58,15 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * it. A tab dragged or moved from the keyboard to another place in the
  * strip is kept there.
  *
+ * A tab of any kind may be pinned on the plan, as VS Code pins an editor:
+ * the plan's pinned tabs stand first in the strip, in the order pinned or
+ * dragged among themselves, and each stands there for as long as its kind
+ * does at all, a fixed one though the plan holds nothing of it. Closing a
+ * pinned tab unpins it. The pins are the plan's, kept with its other choices,
+ * so a launch draws them again: a subagent's or a file's tab pinned is kept
+ * open across it, where it would otherwise not be, and a draft's, kept
+ * nowhere as the draft is, is not.
+ *
  * These facts are this window's preference rather than anything main
  * holds, so they are kept in the renderer's own storage and read once at
  * mount. What an earlier version kept still reads: the fixed tabs it held
@@ -228,13 +237,33 @@ const PLANS_KEPT = 500;
 const sidePanelTabSchema = Schema.Literals(SIDE_PANEL_TABS);
 const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Schema.String })]);
 
-/** The fixed tabs the developer opened on one plan though it held nothing of them, and those they closed on it. A kind is in one or neither. */
+/** A tab a plan keeps pinned: any kind but a draft's, which is kept nowhere. */
+const pinnedTabSchema = Schema.Union([
+  sidePanelTabSchema,
+  Schema.Struct({ agent: Schema.String }),
+  Schema.Struct({
+    subagent: Schema.String,
+    delegation: Schema.optionalKey(Schema.Struct({ agent: Schema.String, task: Schema.String })),
+  }),
+  Schema.Struct({ file: Schema.String }),
+]);
+
+/**
+ * The fixed tabs the developer opened on one plan though it held nothing of
+ * them, those they closed on it, and the tabs they pinned on it, in the
+ * strip's order. A kind is in `opened` or `closed` or neither, and a pinned
+ * fixed tab is in `opened`, so unpinning it leaves it open.
+ */
 const planTabsSchema = Schema.Struct({
   opened: Schema.Array(sidePanelTabSchema),
   closed: Schema.Array(sidePanelTabSchema),
+  pinned: Schema.optional(Schema.Array(pinnedTabSchema)),
 });
 
-type PlanTabs = typeof planTabsSchema.Type;
+/** A plan's own choices as the hook holds them, whose pins may hold a draft's tab the record keeps none of. */
+interface PlanTabs extends Omit<typeof planTabsSchema.Type, "pinned"> {
+  readonly pinned?: readonly SidePanelTab[] | undefined;
+}
 
 /**
  * The fixed tabs in the strip's order, the chosen tab, the agents whose
@@ -302,6 +331,8 @@ export interface SidePanelControl {
   tabs: readonly FixedSidePanelTab[];
   /** The fixed tabs the developer closed on the open plan, which stay closed there however much arrives until one is opened again. */
   closedTabs: readonly FixedSidePanelTab[];
+  /** The tabs pinned on the open plan, which stand first in the strip in this order, each while its kind stands at all. */
+  pinned: readonly SidePanelTab[];
   /** The open subagent tabs in the order opened; they follow the agent tabs, and only those the open plan's work or open agent tabs hold are drawn. */
   subagents: readonly SubagentSidePanelTab[];
   /** The agents whose tabs were closed, which the strip draws none for until one is opened again. */
@@ -317,10 +348,17 @@ export interface SidePanelControl {
   onToggleFullScreen: () => void;
   /** Shows the panel on the tab, opening it where it was closed or the open plan has not used it; a fixed tab stays open on that plan. */
   onChoose: (tab: SidePanelTab) => void;
-  /** Closes the tab, and only the view: an agent's goes on as it was. Closing the chosen one chooses its neighbour, the one after it where there is one. */
+  /** Closes the tab, and only the view: an agent's goes on as it was. Closing the chosen one chooses its neighbour, the one after it where there is one. A pinned tab closed is unpinned. */
   onClose: (tab: SidePanelTab) => void;
-  /** Moves the open fixed tab to the place in the strip's order, leaving the chosen one chosen; the agent tabs keep their place after the fixed ones. */
-  onMove: (tab: FixedSidePanelTab, to: number) => void;
+  /**
+   * Moves the tab to the place `to` among its own: the pinned tabs, or the
+   * open fixed tabs not pinned, leaving the chosen one chosen. Any other tab
+   * keeps its place after the fixed ones.
+   */
+  onMove: (tab: SidePanelTab, to: number) => void;
+  /** Pins the open tab on the open plan, last of its pinned tabs. */
+  onPin: (tab: SidePanelTab) => void;
+  onUnpin: (tab: SidePanelTab) => void;
   /** Shows the panel on the file's tab, opening one at the strip's end where none stands, its lit lines the reference's. */
   onOpenFile: (ref: CodeRef) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
@@ -369,31 +407,71 @@ function drawnFixed(held: HeldState, plan: OpenPlan): readonly FixedSidePanelTab
 }
 
 /**
- * The state with the fixed tab opened or closed on the plan, that plan's
- * choices kept latest and the oldest plan's let go past the bound. With no
- * plan open there is nothing to keep the choice on.
+ * The state with the plan's choices changed, that plan's kept latest and the
+ * oldest plan's let go past the bound. With no plan open there is nothing to
+ * keep a choice on, and a change that answers the choices it was handed
+ * changes nothing.
  */
+function withPlanTabs(
+  held: HeldState,
+  planId: string | undefined,
+  change: (was: PlanTabs) => PlanTabs,
+): HeldState {
+  if (planId === undefined) return held;
+  const was = planTabs(held, planId);
+  const choice = change(was);
+  if (choice === was) return held;
+  const kept = Object.entries(held.plans).filter(([plan]) => plan !== planId);
+  return {
+    ...held,
+    plans: Object.fromEntries([...kept, [planId, choice] as const].slice(-PLANS_KEPT)),
+  };
+}
+
+/** The state with the fixed tab opened or closed on the plan. */
 function withChoice(
   held: HeldState,
   planId: string | undefined,
   tab: FixedSidePanelTab,
   opened: boolean,
 ): HeldState {
-  if (planId === undefined) return held;
-  const was = planTabs(held, planId);
-  if ((opened ? was.opened : was.closed).includes(tab)) return held;
-  const others = {
-    opened: was.opened.filter((each) => each !== tab),
-    closed: was.closed.filter((each) => each !== tab),
-  };
-  const choice: PlanTabs = opened
-    ? { ...others, opened: [...others.opened, tab] }
-    : { ...others, closed: [...others.closed, tab] };
-  const kept = Object.entries(held.plans).filter(([plan]) => plan !== planId);
-  return {
-    ...held,
-    plans: Object.fromEntries([...kept, [planId, choice] as const].slice(-PLANS_KEPT)),
-  };
+  return withPlanTabs(held, planId, (was) => {
+    if ((opened ? was.opened : was.closed).includes(tab)) return was;
+    const others = {
+      ...was,
+      opened: was.opened.filter((each) => each !== tab),
+      closed: was.closed.filter((each) => each !== tab),
+    };
+    return opened
+      ? { ...others, opened: [...others.opened, tab] }
+      : { ...others, closed: [...others.closed, tab] };
+  });
+}
+
+/** The tabs pinned on the plan, in the strip's order. */
+function pinnedOn(held: HeldState, planId: string | undefined): readonly SidePanelTab[] {
+  return planTabs(held, planId).pinned ?? [];
+}
+
+/** Whether the tab is pinned on the plan. */
+function pinnedTab(held: HeldState, planId: string | undefined, tab: SidePanelTab): boolean {
+  return pinnedOn(held, planId).some((each) => sameTab(each, tab));
+}
+
+/** The state with the tab pinned on the plan, last of its pins; a fixed tab pinned is opened on it too, so it stands though the plan holds nothing of it. */
+function withPin(held: HeldState, planId: string | undefined, tab: SidePanelTab): HeldState {
+  const opened = isFixedTab(tab) ? withChoice(held, planId, tab, true) : held;
+  if (pinnedTab(opened, planId, tab)) return opened;
+  return withPlanTabs(opened, planId, (was) => ({ ...was, pinned: [...(was.pinned ?? []), tab] }));
+}
+
+/** The state with the tab unpinned on the plan, left open where it stands. */
+function withoutPin(held: HeldState, planId: string | undefined, tab: SidePanelTab): HeldState {
+  if (!pinnedTab(held, planId, tab)) return held;
+  return withPlanTabs(held, planId, (was) => ({
+    ...was,
+    pinned: (was.pinned ?? []).filter((each) => !sameTab(each, tab)),
+  }));
 }
 
 /**
@@ -484,25 +562,39 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentSid
 }
 
 /**
- * The tab chosen in place of the closed one: the next of its own run (the
- * plan's fixed tabs, the open agents, the draft, the subagent tabs and the
- * file tabs the plan draws), or the one before it in the run, or where it was the run's last,
- * the tab before it in the strip, or the one after. A tab another plan's
- * work holds is not a neighbour, since it is not in the strip.
+ * The strip as runs, in its order: the tabs pinned on the plan that it
+ * draws, then, of those not pinned, its fixed tabs, the open agents, the
+ * draft, the subagent tabs, and the file tabs the plan draws. A tab another
+ * plan's work holds is in no run, since it is not in the strip.
  */
-function neighbourOf(
-  held: HeldState,
-  tab: SidePanelTab,
-  drawn: DrawnTabs,
-): SidePanelTab | undefined {
+function stripRuns(held: HeldState, drawn: DrawnTabs): readonly (readonly SidePanelTab[])[] {
   const agents = drawnAgents(drawn.agents, held.closedAgents) ?? [];
-  const runs: readonly (readonly SidePanelTab[])[] = [
+  const kinds: readonly (readonly SidePanelTab[])[] = [
     drawnFixed(held, drawn.plan),
     agents.map((agent) => ({ agent })),
     drawn.draft === undefined ? [] : [{ draft: drawn.draft }],
     drawnSubagents(held, drawn),
     drawnFiles(held, drawn).map((file) => ({ file })),
   ];
+  const pins = pinnedOn(held, drawn.plan.id).filter((pin) =>
+    kinds.some((run) => run.some((other) => sameTab(other, pin))),
+  );
+  const unpinned = (run: readonly SidePanelTab[]) =>
+    run.filter((other) => !pins.some((pin) => sameTab(pin, other)));
+  return [pins, ...kinds.map(unpinned)];
+}
+
+/**
+ * The tab chosen in place of the closed one: the next of its own run
+ * (`stripRuns`), or the one before it in the run, or where it was the run's
+ * last, the tab before it in the strip, or the one after.
+ */
+function neighbourOf(
+  held: HeldState,
+  tab: SidePanelTab,
+  drawn: DrawnTabs,
+): SidePanelTab | undefined {
+  const runs = stripRuns(held, drawn);
   const run = runs.find((each) => each.some((other) => sameTab(other, tab))) ?? [];
   const strip = runs.flat();
   const at = run.findIndex((other) => sameTab(other, tab));
@@ -512,9 +604,9 @@ function neighbourOf(
 
 /**
  * The state with the tab closed, its neighbour chosen in its place if it
- * was the chosen one. A fixed tab closes on the open plan alone. Closing an
- * agent's tab closes nothing of the agent's own, and closing a draft's
- * leaves the draft its owner's to let go.
+ * was the chosen one, and unpinned. A fixed tab closes on the open plan
+ * alone. Closing an agent's tab closes nothing of the agent's own, and
+ * closing a draft's leaves the draft its owner's to let go.
  */
 function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldState {
   const closed: HeldState | undefined = isFixedTab(tab)
@@ -534,39 +626,82 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
           : held;
   if (closed === undefined) return held;
   const chosen = held.tab !== undefined && sameTab(held.tab, tab);
-  return chosen ? { ...closed, tab: neighbourOf(held, tab, drawn) } : closed;
+  const after = chosen ? { ...closed, tab: neighbourOf(held, tab, drawn) } : closed;
+  return withoutPin(after, drawn.plan.id, tab);
 }
 
 /**
- * The state with the plan's fixed tab taken out and put back at `to` in its
- * strip, the place before the tab that stands there now, or after every
- * kind where none does, in the order every plan's strip is drawn in.
+ * `all` with the tab taken out and put back at `to` in `run`, the part of
+ * it the strip draws: before the tab that stands there now, or after every
+ * one of `all` where none does. Nothing where the tab does not move.
  */
-function withTabAt(held: HeldState, tab: FixedSidePanelTab, to: number, plan: OpenPlan): HeldState {
-  const strip = drawnFixed(held, plan);
-  const at = strip.indexOf(tab);
-  if (at < 0 || to === at) return held;
-  const before = strip.filter((each) => each !== tab)[Math.max(0, to)];
-  const tabs = held.tabs.filter((each) => each !== tab);
-  tabs.splice(before === undefined ? tabs.length : tabs.indexOf(before), 0, tab);
-  return { ...held, tabs };
+function movedIn<T extends SidePanelTab>(
+  all: readonly T[],
+  run: readonly SidePanelTab[],
+  tab: SidePanelTab,
+  to: number,
+): readonly T[] | undefined {
+  const at = run.findIndex((other) => sameTab(other, tab));
+  const own = all.find((other) => sameTab(other, tab));
+  if (at < 0 || to === at || own === undefined) return undefined;
+  const before = run.filter((other) => !sameTab(other, tab))[Math.max(0, to)];
+  const rest = all.filter((other) => !sameTab(other, tab));
+  const place = before === undefined ? -1 : rest.findIndex((other) => sameTab(other, before));
+  return place < 0 ? [...rest, own] : [...rest.slice(0, place), own, ...rest.slice(place)];
+}
+
+/**
+ * The state with the tab moved to `to` among its own: a pinned tab among
+ * the plan's pins, and a fixed tab among the fixed tabs not pinned, in the
+ * order every plan's strip is drawn in. No other tab moves.
+ */
+function withTabAt(held: HeldState, tab: SidePanelTab, to: number, drawn: DrawnTabs): HeldState {
+  const [pins = [], fixed = []] = stripRuns(held, drawn);
+  const planId = drawn.plan.id;
+  if (pinnedTab(held, planId, tab)) {
+    const pinned = movedIn(pinnedOn(held, planId), pins, tab, to);
+    return pinned === undefined ? held : withPlanTabs(held, planId, (was) => ({ ...was, pinned }));
+  }
+  const tabs = isFixedTab(tab) ? movedIn(held.tabs, fixed, tab, to) : undefined;
+  return tabs === undefined ? held : { ...held, tabs };
 }
 
 /**
  * A kept or staged state made whole: every kind in the order once, those it
- * did not hold last, the width no narrower than its least, and no subagent
- * tab open.
+ * did not hold last, the width no narrower than its least, and open only the
+ * subagent and file tabs some plan pinned, each once.
  */
 function settled(state: SidePanelState): HeldState {
+  const plans = state.plans ?? {};
+  const pins = Object.values(plans).flatMap((plan): readonly SidePanelTab[] => plan.pinned ?? []);
+  const subagents = pins
+    .filter(isSubagentTab)
+    .filter((tab, at, all) => all.findIndex((other) => sameTab(other, tab)) === at);
+  const paths = new Set(pins.filter(isFileTab).map((tab) => tab.file));
   return {
     ...state,
     tabs: [...new Set([...state.tabs, ...SIDE_PANEL_TABS])],
     width: clampWidth(state.width),
-    subagents: [],
-    files: [],
+    subagents,
+    files: [...paths].map((path) => ({ path, range: undefined, opened: 0 })),
     closedAgents: state.closedAgents ?? [],
-    plans: state.plans ?? {},
+    plans,
   };
+}
+
+/** Whether a pinned tab is kept across a launch: any but a draft's, which is kept nowhere. */
+function keptPin(tab: SidePanelTab): tab is Exclude<SidePanelTab, DraftSidePanelTab> {
+  return !isDraftTab(tab);
+}
+
+/** Each plan's choices as they are kept: its pins without a draft's, and none where it pinned nothing. */
+function storedPlans(plans: HeldState["plans"]): NonNullable<SidePanelState["plans"]> {
+  return Object.fromEntries(
+    Object.entries(plans).map(([plan, { opened, closed, pinned = [] }]) => {
+      const kept = pinned.filter(keptPin);
+      return [plan, kept.length === 0 ? { opened, closed } : { opened, closed, pinned: kept }];
+    }),
+  );
 }
 
 /** What is kept of the state: the preference without the subagent and file tabs, and without a subagent's, a draft's, or a file's tab chosen. */
@@ -576,7 +711,7 @@ function stored(state: HeldState): SidePanelState {
     tabs: state.tabs,
     width: state.width,
     closedAgents: state.closedAgents,
-    plans: state.plans,
+    plans: storedPlans(state.plans),
   };
   const tab = state.tab;
   return tab !== undefined && (isFixedTab(tab) || isAgentTab(tab)) ? { ...kept, tab } : kept;
@@ -758,8 +893,17 @@ export function useSidePanel(
     [update],
   );
   const onMove = useCallback(
-    (tab: FixedSidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, seen)),
-    [update, seen],
+    (tab: SidePanelTab, to: number) =>
+      update((held) => withTabAt(held, tab, to, { plan: seen, agents, subagents, draft, files })),
+    [update, seen, agents, subagents, draft, files],
+  );
+  const onPin = useCallback(
+    (tab: SidePanelTab) => update((held) => withPin(held, planId, tab)),
+    [update, planId],
+  );
+  const onUnpin = useCallback(
+    (tab: SidePanelTab) => update((held) => withoutPin(held, planId, tab)),
+    [update, planId],
   );
   const onResize = useCallback(
     (width: number) => update((held) => ({ ...held, width: clampWidth(width) })),
@@ -769,6 +913,7 @@ export function useSidePanel(
     open: state.open,
     tabs,
     closedTabs: planTabs(state, planId).closed,
+    pinned: pinnedOn(state, planId),
     subagents: state.subagents,
     closedAgents: state.closedAgents,
     files: state.files,
@@ -780,6 +925,8 @@ export function useSidePanel(
     onChoose,
     onClose,
     onMove,
+    onPin,
+    onUnpin,
     onOpenFile,
     onResize,
   };

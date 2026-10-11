@@ -354,13 +354,15 @@ const findJournalRevision = SqlSchema.findOneOption({
  * conversation's journal revision as it stands now, read before the page
  * so an amendment that lands between the two is heard again rather than
  * missed. A conversation that no longer stands answers no rows and the
- * cursor asked.
+ * cursor asked. A page holds at most `limit` rows, no more than any read
+ * here answers, and fewer only once nothing more stands past the cursor.
  */
 export function listMessagesPast(
   userId: string,
   conversationId: string,
   tools: ToolSet,
   cursor: MessageCursor,
+  limit?: number,
 ): Effect.Effect<MessagePagePast, MessageReadFailure, SqlClient.SqlClient> {
   return Effect.gen(function* () {
     const standing = yield* findJournalRevision({ conversationId, userId });
@@ -370,7 +372,7 @@ export function listMessagesPast(
       userId,
       seq: cursor.seq,
       revision: cursor.revision,
-      limit: MAXIMUM_READ_PAGE,
+      limit: pageLimit({ ...(limit === undefined ? undefined : { limit }) }),
     });
     const read = yield* readSelected(selected, tools);
     const seq = selected.reduce((highest, row) => Math.max(highest, row.seq), cursor.seq);

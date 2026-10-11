@@ -1,4 +1,5 @@
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
@@ -149,6 +150,7 @@ function pagePast(
       target.conversationId,
       tools,
       after,
+      CODING_AGENT_BOUNDS.MESSAGES_PAGE,
     );
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
     return {
