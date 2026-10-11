@@ -1,15 +1,7 @@
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { text } from "node:stream/consumers";
@@ -17,6 +9,7 @@ import type { SandboxCommandResult, SandboxRunOptions } from "eve/sandbox";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { test } from "vitest";
 import { applyPatchIn, globIn, readFileIn } from "../server/hosted/coder-host/files";
+import { linuxShellPath } from "./support/linux-shell-tools";
 
 /**
  * The coding agent's file tools resolve every path from the checkout: a
@@ -32,31 +25,7 @@ import { applyPatchIn, globIn, readFileIn } from "../server/hosted/coder-host/fi
  * path the sandbox is asked for is the whole of what the tool decides.
  */
 
-/**
- * The PATH a sandbox command runs on. eve's `apply_patch` resolves its root
- * with GNU `realpath -e`, which the coding agent's Linux sandbox has and a
- * Mac's BSD `realpath` refuses. Note that we put a `realpath` taking `-e`
- * ahead of the host's when the host's refuses it, because BSD `realpath`
- * already fails on a missing path, which is all `-e` asks.
- */
-function sandboxPath(): string {
-  const hostPath = process.env.PATH ?? "";
-  try {
-    execFileSync("/bin/sh", ["-c", "realpath -e /"], { stdio: "ignore" });
-    return hostPath;
-  } catch {
-    const host = execFileSync("/bin/sh", ["-c", "command -v realpath"], {
-      encoding: "utf8",
-    }).trim();
-    const shims = mkdtempSync(join(tmpdir(), "coder-files-path-"));
-    const shim = join(shims, "realpath");
-    writeFileSync(shim, `#!/bin/sh\n[ "$1" = -e ] && shift\nexec ${host} "$@"\n`);
-    chmodSync(shim, 0o755);
-    return `${shims}:${hostPath}`;
-  }
-}
-
-const SANDBOX_PATH = sandboxPath();
+const SANDBOX_PATH = linuxShellPath();
 
 /** A command in a real shell started at the directory given, as eve's sandbox runs one. */
 async function runShell(cwd: string, run: SandboxRunOptions): Promise<SandboxCommandResult> {
