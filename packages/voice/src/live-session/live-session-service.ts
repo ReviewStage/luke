@@ -682,12 +682,14 @@ export class LiveSessionService {
       session.revisions = Math.max(session.revisions, recovery.revision);
       for (const run of recovery.runs) {
         session.claimedDelegations.add(run.delegationId);
+        // Note that a run taken up never ends the call, because its goodbye was
+        // said on the lost connection and how long ago is not on record.
         const exchange = newExchange(
           run.runId,
           run.delegationId,
           run.revision,
           session.sessionId,
-          this.#now(),
+          Number.NEGATIVE_INFINITY,
         );
         if (run.revision < recovery.revision || run.stopped || run.stale) this.#silence(exchange);
         exchange.cancelAsked = run.stopped;

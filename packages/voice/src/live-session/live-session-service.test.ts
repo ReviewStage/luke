@@ -2443,6 +2443,20 @@ it.effect(
     }),
 );
 
+it.effect("a run taken up on a re-attached session never ends the call", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.recovery = {
+      revision: 1,
+      runs: [recoveredRun("run-a", "item_a", 1)],
+      told: [{ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-a" }],
+    };
+    yield* reattach(f, "sess-live");
+    yield* advanceClock(1000);
+    assert.equal(f.endings.count, 0);
+  }),
+);
+
 it.effect(
   "the newest run taken up, ended too long ago to be news, is silenced: nothing of its reply is said",
   () =>
