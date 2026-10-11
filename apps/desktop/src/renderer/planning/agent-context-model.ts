@@ -18,7 +18,8 @@ import { sinceText } from "./plan-time";
  * popover divides the read into the parts the service could name: the
  * instructions, the tool definitions, and the plan or task while eve has
  * never compacted, each an estimate, and the conversation as what is left,
- * which leans on the estimates and so is one too. A "~" marks every count
+ * which leans on the estimates and so is one too; estimates that outrun the
+ * count are scaled down to it, so the parts never add up to more. A "~" marks every count
  * that is an estimate, and the total, which was counted at the last step
  * and has grown by that step's answer since.
  */
@@ -148,13 +149,18 @@ export function contextRows(
     });
   }
   const named = rows.reduce((sum, row) => sum + row.tokens, 0);
-  rows.push({
+  // Note that estimates that outrun the provider's count are scaled down to it, because the
+  // count is the one measured figure and the parts must not add up to more than it.
+  const scale = named > context.inputTokens ? context.inputTokens / named : 1;
+  const fitted = rows.map((row) => ({ ...row, tokens: Math.round(row.tokens * scale) }));
+  const left = context.inputTokens - fitted.reduce((sum, row) => sum + row.tokens, 0);
+  fitted.push({
     part: CONTEXT_PART.CONVERSATION,
     label: "Conversation",
-    tokens: Math.max(0, context.inputTokens - named),
+    tokens: Math.max(0, left),
     estimated: true,
   });
-  return rows;
+  return fitted;
 }
 
 /** A legend row's count: "~1.2k" for an estimate, "1.2k" for a count. */

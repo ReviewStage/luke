@@ -838,15 +838,19 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             measured.inputTokens,
         );
 
-        // The next step runs on another model, whose window the catalog does not list.
+        // The next step runs on another model, whose window the catalog does not list: a read
+        // under the agent as it stood before the change still tells the window of the model now.
         yield* updateCodingAgentChoice(userId, agent.id, {
           model: "openai/gpt-6.1-sol",
           effort: "high",
         });
-        const moved = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, {
-          id: agent.id,
-          model: "openai/gpt-6.1-sol",
-        }).pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        const moved = yield* transcriptPast(
+          target,
+          CODER_TOOL_SET,
+          CURSOR_START,
+          agent,
+          agent,
+        ).pipe(Effect.provide(modelCatalogOf(CATALOG)));
         assert.equal(moved.context?.windowTokens, CODER.FALLBACK_CONTEXT_WINDOW_TOKENS);
         assert.equal(
           moved.context?.compactionThresholdTokens,

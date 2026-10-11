@@ -305,12 +305,17 @@ const updateAgentCompaction = SqlSchema.void({
 const findAgentContext = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({
+    model: Schema.String,
     lastStep: Schema.NullOr(AgentStepColumnSchema),
     compactedAt: Schema.NullOr(InstantColumnSchema),
   }),
   execute: ({ userId, agentId }) =>
     db
-      .select({ lastStep: codingAgent.lastStep, compactedAt: codingAgent.compactedAt })
+      .select({
+        model: codingAgent.model,
+        lastStep: codingAgent.lastStep,
+        compactedAt: codingAgent.compactedAt,
+      })
       .from(codingAgent)
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
       .limit(1),
@@ -494,8 +499,9 @@ export function readCodingAgentOfConversation(
   return findAgentOfConversation({ userId, conversationId });
 }
 
-/** What the agent's own conversation holds in its model's context: its newest step, and when eve last compacted it; null for each before it happens. */
+/** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
 export interface CodingAgentContextRow {
+  readonly model: string;
   readonly lastStep: StoredAgentStep | null;
   readonly compactedAt: Date | null;
 }

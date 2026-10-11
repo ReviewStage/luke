@@ -76,7 +76,7 @@ test("the popover divides the read into the instructions, the tools, the plan, a
   assert.ok(Math.abs(filled - 62) < 1e-9);
 });
 
-test("an agent handed a task names its brief so; once eve compacted, the brief is folded into the conversation; a read the estimates outrun leaves no conversation rather than less than none", () => {
+test("an agent handed a task names its brief so; once eve compacted, the brief is folded into the conversation; estimates that outrun the read are scaled down to it", () => {
   assert.deepEqual(
     contextRows(CONTEXT, CODING_AGENT_BRIEF.TASK).map((row) => row.label),
     ["System prompt", "Tool definitions", "Task", "Conversation"],
@@ -94,8 +94,17 @@ test("an agent handed a task names its brief so; once eve compacted, the brief i
       ["Conversation", "~616.0k"],
     ],
   );
-  const tiny = contextRows(reading(3_000), undefined);
+  // A read the estimates outrun scales them down to it: the parts add up to the count and the
+  // bar fills what the step read, with no conversation left rather than less than none.
+  const small = reading(3_000);
+  const tiny = contextRows(small, undefined);
   assert.equal(rowCount(tiny[tiny.length - 1] ?? assert.fail("no conversation row")), "~0");
+  assert.equal(
+    tiny.reduce((sum, row) => sum + row.tokens, 0),
+    3_000,
+  );
+  const filled = tiny.reduce((sum, row) => sum + rowWidth(row, small), 0);
+  assert.ok(Math.abs(filled - 0.3) < 1e-9);
 });
 
 test("under the legend: what the cache read and wrote, the last step's output, where eve compacts, and when it last did, where it has", () => {

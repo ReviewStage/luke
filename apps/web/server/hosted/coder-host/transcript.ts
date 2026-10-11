@@ -102,8 +102,8 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
 /** The newest turn as a page reads it: what it ran under and cost; nothing before the first. */
 type NewestTurn = Parameters<typeof usageOfTurn>[0];
 
-/** The agent whose own transcript a page is, as its context is read: its row, and the model it runs on now. */
-type OwnAgent = Pick<CodingAgent, "id" | "model">;
+/** The agent whose own transcript a page is, as its context is read: its row. */
+type OwnAgent = Pick<CodingAgent, "id">;
 
 /** The statuses a read waits through: more may still land. */
 const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -126,12 +126,18 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     return { status, runStartedAt, failureReason, turn };
   });
 
-/** The agent's context as its row holds it, against the window the catalog lists for the model it runs on now; nothing before its first step. */
+/**
+ * The agent's context as its row holds it, against the window the catalog
+ * lists for the model the same read says it runs on now; nothing before its
+ * first step. Note that the model is read here rather than taken from the
+ * agent the request read, because a change of model during the hold is
+ * what the step this page carries ran on.
+ */
 const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly OfferedModel[]) =>
   Effect.map(readCodingAgentContext(target.userId, own.id), (held) =>
     Option.isNone(held)
       ? undefined
-      : codingAgentContextOf(held.value, contextWindowOf(offered, own.model)),
+      : codingAgentContextOf(held.value, contextWindowOf(offered, held.value.model)),
   );
 
 /**
