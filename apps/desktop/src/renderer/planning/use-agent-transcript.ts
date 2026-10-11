@@ -5,6 +5,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_CURSOR_START,
+  type CodingAgentContext,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
@@ -26,7 +27,8 @@ import {
  * the loop here is one read after another with no clock of its own: each
  * answer's cursor is where the next read starts, each page joins the
  * messages held by id, and each page's status is the agent's as the page
- * was read, with why where its turn failed, which the tab's end line says.
+ * was read, with why where its turn failed, which the tab's end line says,
+ * and what its model's context holds, which the box's ring draws.
  * The loop runs while the tab is on screen and the agent may
  * still write, and ends on its own when a page says the agent ended; an
  * agent that has ended is read once through, page by page, and then left
@@ -50,6 +52,8 @@ export interface AgentTranscriptControl {
   usage: CodingAgentUsage | undefined;
   /** What its newest turn cost, as the last page said; nothing until that turn settled. */
   turnUsage: CodingAgentUsage | undefined;
+  /** What the agent's model's context holds as its newest step left it, as the last page said; nothing before a step ended, and on a worker's. */
+  context: CodingAgentContext | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -64,6 +68,7 @@ interface Held {
   failure: CodingAgentFailure | undefined;
   usage: CodingAgentUsage | undefined;
   turnUsage: CodingAgentUsage | undefined;
+  context: CodingAgentContext | undefined;
   failed: boolean;
 }
 
@@ -75,6 +80,7 @@ function fresh(agentId: string): Held {
     failure: undefined,
     usage: undefined,
     turnUsage: undefined,
+    context: undefined,
     failed: false,
   };
 }
@@ -139,6 +145,7 @@ export function useAgentTranscript(input: {
           failure: answer.failureReason,
           usage: answer.usage,
           turnUsage: answer.turnUsage,
+          context: answer.context,
         }));
         latest.current.onStatus(agentId, answer);
         latest.current.onTitle(agentId, answer.title);
@@ -167,6 +174,7 @@ export function useAgentTranscript(input: {
     failure: held.failure,
     usage: held.usage,
     turnUsage: held.turnUsage,
+    context: held.context,
     reading: active && held.messages.length === 0,
     failed: held.failed,
     onRetry,

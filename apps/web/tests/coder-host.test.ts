@@ -774,6 +774,106 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "each step's end leaves what its provider counted on the agent's own page, against the window of the model it runs on now and eve's threshold in it, with estimates of its instructions, tools, and plan; a compaction drops the plan's estimate",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relay = (event: MessageStreamEvent) =>
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash });
+        const context = Effect.map(
+          transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          ),
+          (page) => page.context,
+        );
+        const turnId = "turn_0";
+        const sequence = 0;
+        const stepEnded = (
+          stepIndex: number,
+          usage: Extract<MessageStreamEvent, { type: "step.completed" }>["data"]["usage"],
+        ) =>
+          stamped({
+            type: "step.completed",
+            data: { turnId, sequence, stepIndex, finishReason: "tool-calls", usage },
+          });
+
+        // The plan lands first, so each read answers at once rather than holding for the next message.
+        yield* relay(stamped({ type: "turn.started", data: { turnId, sequence } }));
+        yield* relay(
+          stamped({ type: "message.received", data: { turnId, sequence, message: PLAN_TEXT } }),
+        );
+        assert.equal(yield* context, undefined);
+
+        yield* relay(
+          stepEnded(0, { inputTokens: 30_000, outputTokens: 400, cacheWriteTokens: 29_000 }),
+        );
+        yield* relay(
+          stepEnded(1, { inputTokens: 64_000, outputTokens: 1_200, cacheReadTokens: 60_000 }),
+        );
+        // A step whose provider counted nothing leaves the one before it standing.
+        yield* relay(stepEnded(2, undefined));
+        const measured = yield* context;
+        assert.ok(measured);
+        const { estimated, ...counted } = measured;
+        assert.deepEqual(counted, {
+          windowTokens: 1_000_000,
+          compactionThresholdTokens: 900_000,
+          inputTokens: 64_000,
+          outputTokens: 1_200,
+          cachedInputTokens: 60_000,
+          measuredAt: NOW,
+        });
+        // The plan is estimated at about four bytes a token, as eve estimates; the instructions
+        // and the tools are text of the service's own, each well short of what the step read.
+        assert.ok(estimated.briefTokens !== undefined);
+        assert.ok(Math.abs(estimated.briefTokens - PLAN_TEXT.length / 4) <= 2);
+        assert.ok(estimated.systemPromptTokens > estimated.briefTokens);
+        assert.ok(estimated.toolDefinitionTokens > estimated.briefTokens);
+        assert.ok(
+          estimated.systemPromptTokens + estimated.toolDefinitionTokens + estimated.briefTokens <
+            measured.inputTokens,
+        );
+
+        // The next step runs on another model, whose window the catalog does not list.
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "openai/gpt-6.1-sol",
+          effort: "high",
+        });
+        const moved = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, {
+          id: agent.id,
+          model: "openai/gpt-6.1-sol",
+        }).pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.equal(moved.context?.windowTokens, CODER.FALLBACK_CONTEXT_WINDOW_TOKENS);
+        assert.equal(
+          moved.context?.compactionThresholdTokens,
+          CODER.FALLBACK_CONTEXT_WINDOW_TOKENS * CODER.COMPACTION_THRESHOLD_SHARE,
+        );
+
+        yield* relay(
+          stamped({
+            type: "compaction.completed",
+            data: { turnId, sequence, stepIndex: 3, sessionId, modelId: "m" },
+          }),
+        );
+        const compacted = yield* context;
+        assert.equal(compacted?.compactedAt, NOW);
+        assert.equal(compacted?.inputTokens, 64_000);
+        assert.equal(compacted?.estimated.briefTokens, undefined);
+        assert.equal(compacted?.estimated.systemPromptTokens, estimated.systemPromptTokens);
+
+        // A worker's transcript, read under no agent of its own, carries no context.
+        const worker = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
+        assert.equal(worker.context, undefined);
+      }),
+  );
+
+  it.effect(
     "a transcript read past the cursor is held open while the agent is starting or the turn runs, answers the moment a message lands with the agent's status, hears an amended journal again, and lets go at the hold; an agent that ended answers at once",
     () =>
       Effect.gen(function* () {

@@ -4,7 +4,11 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
-import { codingAgent, codingAgentDelegation } from "../db/coding-agent-schema.js";
+import {
+  codingAgent,
+  codingAgentDelegation,
+  type StoredAgentStep,
+} from "../db/coding-agent-schema.js";
 import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
@@ -48,8 +52,12 @@ import {
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
  * one generated as the agent starts lands without ever covering a name the
- * developer gave, and renamed, which replaces whatever stands. Every function is an effect
- * over the ambient `SqlClient` and names no database of its own.
+ * developer gave, and renamed, which replaces whatever stands. The newest
+ * model step of the agent's own conversation and eve's last compaction of
+ * it are written by the coder host as eve tells them, and read back with
+ * the transcript, which is what the tab's context ring draws. Every
+ * function is an effect over the ambient `SqlClient` and names no database
+ * of its own.
  */
 
 type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
@@ -260,6 +268,54 @@ const fillAgentTitle = SqlSchema.findAll({
       .returning({ id: codingAgent.id }),
 });
 
+/** The `last_step` column as the coder host writes it (`StoredAgentStep`). */
+const AgentStepColumnSchema = Schema.Struct({
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+  cachedInputTokens: Schema.optionalKey(Schema.Number),
+  cacheWriteTokens: Schema.optionalKey(Schema.Number),
+  systemPromptTokens: Schema.Number,
+  toolDefinitionTokens: Schema.Number,
+  briefTokens: Schema.Number,
+  at: Schema.Number,
+});
+
+const updateAgentStep = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    lastStep: AgentStepColumnSchema,
+  }),
+  execute: ({ userId, agentId, lastStep }) =>
+    db
+      .update(codingAgent)
+      .set({ lastStep })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+});
+
+const updateAgentCompaction = SqlSchema.void({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, at: Schema.Date }),
+  execute: ({ userId, agentId, at }) =>
+    db
+      .update(codingAgent)
+      .set({ compactedAt: at })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+});
+
+const findAgentContext = SqlSchema.findOneOption({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
+  Result: Schema.Struct({
+    lastStep: Schema.NullOr(AgentStepColumnSchema),
+    compactedAt: Schema.NullOr(InstantColumnSchema),
+  }),
+  execute: ({ userId, agentId }) =>
+    db
+      .select({ lastStep: codingAgent.lastStep, compactedAt: codingAgent.compactedAt })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .limit(1),
+});
+
 const findAgentsOfPlan = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -436,6 +492,38 @@ export function readCodingAgentOfConversation(
   conversationId: string,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return findAgentOfConversation({ userId, conversationId });
+}
+
+/** What the agent's own conversation holds in its model's context: its newest step, and when eve last compacted it; null for each before it happens. */
+export interface CodingAgentContextRow {
+  readonly lastStep: StoredAgentStep | null;
+  readonly compactedAt: Date | null;
+}
+
+/** The newest model step of the account's agent's own conversation, which replaces the one before it; nothing written for an agent the account does not own. */
+export function recordCodingAgentStep(
+  userId: string,
+  agentId: string,
+  lastStep: StoredAgentStep,
+): CodingAgentStoreEffect<void> {
+  return updateAgentStep({ userId, agentId, lastStep });
+}
+
+/** When eve compacted the account's agent's own conversation; nothing written for an agent the account does not own. */
+export function recordCodingAgentCompaction(
+  userId: string,
+  agentId: string,
+  at: Date,
+): CodingAgentStoreEffect<void> {
+  return updateAgentCompaction({ userId, agentId, at });
+}
+
+/** What the account's agent's own conversation holds in its model's context, or nothing for an agent the account does not own. */
+export function readCodingAgentContext(
+  userId: string,
+  agentId: string,
+): CodingAgentStoreEffect<Option.Option<CodingAgentContextRow>> {
+  return findAgentContext({ userId, agentId });
 }
 
 /** What an agent chose for one worker, and when the delegation was recorded. */

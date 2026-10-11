@@ -51,7 +51,7 @@ const MILLION = 1_000_000;
 const LEAST_CENTS = 0.005;
 
 /** A count of tokens compact enough for a line: 812, 12.3k, 1.2M. */
-function compactCount(count: number): string {
+export function compactCount(count: number): string {
   if (count >= MILLION) return `${(count / MILLION).toFixed(1)}M`;
   if (count >= THOUSAND) return `${(count / THOUSAND).toFixed(1)}k`;
   return String(count);

@@ -484,6 +484,8 @@ export function AgentTabView({
           models={models}
           readModels={readModels}
           usage={transcript.usage}
+          context={transcript.context}
+          brief={agent.brief}
           published={published}
           doors={doors}
           onStop={onStop}

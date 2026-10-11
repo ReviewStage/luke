@@ -498,6 +498,13 @@
       "when": 1790950000000,
       "tag": "0071_plan_pinned_archived",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1790960000000,
+      "tag": "0072_coding_agent_context",
+      "breakpoints": true
     }
   ]
 }

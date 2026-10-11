@@ -533,6 +533,169 @@ button.code-card-path:hover {
   width: min(340px, calc(100% - 32px));
 }
 
+/* The context ring beside the model chip: the window's one icon button
+   holding a ring a glyph's size, its track faint and its fill muted with
+   room to spare, amber within a tenth of the window of eve's compaction,
+   and red at or past it. */
+.agent-context-button {
+  --context-fill: var(--text-secondary);
+}
+
+.agent-context-button[data-level="near"] {
+  --context-fill: var(--state-attention);
+}
+
+.agent-context-button[data-level="over"] {
+  --context-fill: var(--danger);
+}
+
+.agent-context-ring {
+  transform: rotate(-90deg);
+  fill: none;
+}
+
+.agent-context-track {
+  stroke: var(--hairline-strong);
+}
+
+.agent-context-fill {
+  stroke: var(--context-fill);
+  stroke-linecap: round;
+  transition: stroke-dasharray var(--duration-quick) var(--spring);
+}
+
+/* The popover hangs above the card where the model menu does, at its
+   width, on the menu's own surface; each part of the context wears one
+   colour on the bar and on its legend row's square. */
+.agent-context-popover {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% - var(--space-6));
+  left: var(--space-16);
+  display: flex;
+  width: min(340px, calc(100% - 2 * var(--space-16)));
+  flex-direction: column;
+  gap: var(--space-12);
+  padding: var(--space-12) var(--space-16) var(--space-16);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--surface-overlay);
+  box-shadow: 0 16px 40px var(--shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.agent-context-popover:focus-visible {
+  outline: none;
+}
+
+.agent-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-right: calc(-1 * var(--space-8));
+}
+
+.agent-context-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.agent-context-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--control-gap);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-context-full {
+  font-weight: 600;
+}
+
+.agent-context-total {
+  color: var(--text-secondary);
+}
+
+.agent-context-bar {
+  display: flex;
+  height: 6px;
+  overflow: hidden;
+  gap: var(--space-2);
+  border-radius: 999px;
+  background: var(--raised-strong);
+}
+
+.agent-context-segment {
+  flex: none;
+  background: var(--context-part);
+}
+
+.agent-context-legend,
+.agent-context-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-context-stats {
+  padding-top: var(--space-12);
+  border-top: 1px solid var(--hairline);
+}
+
+.agent-context-row {
+  display: flex;
+  align-items: center;
+  gap: var(--glyph-gap);
+}
+
+.agent-context-swatch {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--context-part);
+}
+
+.agent-context-label {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.agent-context-count {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-context-note {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.agent-context-popover [data-part="system-prompt"] {
+  --context-part: var(--state-merged);
+}
+
+.agent-context-popover [data-part="tool-definitions"] {
+  --context-part: var(--state-working);
+}
+
+.agent-context-popover [data-part="brief"] {
+  --context-part: var(--state-complete);
+}
+
+.agent-context-popover [data-part="conversation"] {
+  --context-part: var(--text-secondary);
+}
+
 .agent-published-chip {
   flex: 0 1 auto;
   font-variant-numeric: tabular-nums;

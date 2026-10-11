@@ -1,5 +1,6 @@
 import { Effect, Result } from "effect";
 import { defineAgent, defineDynamic } from "eve";
+import { CODER } from "../server/hosted/coder-host/bounds.js";
 import { runWeb } from "../server/runtime.js";
 import { host, seams } from "./host.js";
 import { scriptedModel } from "./scripted-model.js";
@@ -12,12 +13,14 @@ import { scriptedModel } from "./scripted-model.js";
  * provider-run web reads. No subagent is declared, since the code
  * extension's worker runs on an AI Gateway model and Luke calls the
  * providers directly. The session's input tokens are uncapped, as the plan
- * decided, and compaction is eve's default. The model is chosen at every
+ * decided, and compaction runs at eve's default share of the window, named
+ * where the agent's tab reads it too. The model is chosen at every
  * step from the agent's row, so a later change to the row is the next
  * step's model, and a session has no lifetime of eve's own.
  */
 export default defineAgent({
   defaultTools: false,
+  compaction: { thresholdPercent: CODER.COMPACTION_THRESHOLD_SHARE },
   limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
   model: defineDynamic({
     events: {

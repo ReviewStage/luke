@@ -24,6 +24,8 @@ import {
   fillCodingAgentTitle,
   readCodingAgentOfConversation,
   readDelegation,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
   updateCodingAgentBranch,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
@@ -39,6 +41,8 @@ import {
   checkOutAgentRepository,
   checkoutBranch,
 } from "./checkout.js";
+import { contextWindowOf } from "./context.js";
+import { agentStepOf } from "./context-estimate.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
@@ -69,6 +73,9 @@ import { CODER_TOOL } from "./tool-set.js";
  * agent's title is the host's one model call of its own: generated from the
  * plan as the agent's first session starts, written where no title stands
  * yet, and never again, so a name the developer gives is the last word.
+ * Beside the relay, each step's end and each compaction of the agent's own
+ * conversation is written on the agent's row, which is what the tab's
+ * context ring reads (`context-estimate.ts`).
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
@@ -231,11 +238,41 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         });
       }
       const offered = yield* catalogNow;
-      const contextWindow =
-        offered.find((model) => model.id === choice.model)?.contextWindow ??
-        CODER.FALLBACK_CONTEXT_WINDOW_TOKENS;
-      return coderModel(choice, seams.keys(), contextWindow);
+      return coderModel(choice, seams.keys(), contextWindowOf(offered, choice.model));
     });
+
+  /** The instructions the agent's session runs under, composed as its session's start composes them. */
+  const promptOf = (agent: CodingAgent): CoderSessionPrompt => {
+    const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
+    const text = coderInstructions(agent.repository, brief);
+    return { text, hash: promptHashOf(text) };
+  };
+
+  /**
+   * What a step's end or a compaction leaves in the agent's context,
+   * written on its row; every other event writes nothing. A write that
+   * fails is logged and the relay goes on, since the transcript stands
+   * without it and the next step writes again.
+   */
+  const recordContext = (event: MessageStreamEvent, userId: string, agent: CodingAgent) => {
+    const written = Effect.suspend(() => {
+      switch (event.type) {
+        case "step.completed": {
+          const step = agentStepOf(
+            event.data.usage,
+            { instructions: promptOf(agent).text, brief: agent.task ?? agent.planSnapshot ?? "" },
+            seams.now(),
+          );
+          return step === undefined ? Effect.void : recordCodingAgentStep(userId, agent.id, step);
+        }
+        case "compaction.completed":
+          return recordCodingAgentCompaction(userId, agent.id, new Date(seams.now()));
+        default:
+          return Effect.void;
+      }
+    });
+    return written.pipe(Effect.catch(logStoreFailure));
+  };
 
   /** One event relayed through the shared relay, with no ask record beside it. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
@@ -306,11 +343,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         return yield* selectedModel({ model, effort }, scripted);
       }),
 
-    prompt: (agent) => {
-      const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
-      const text = coderInstructions(agent.repository, brief);
-      return { text, hash: promptHashOf(text) };
-    },
+    prompt: promptOf,
 
     checkOut: (admitted, sandbox) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
@@ -414,6 +447,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           ...(prompt.hash !== undefined ? { promptHash: prompt.hash } : undefined),
           state,
         });
+        if (agent !== undefined) yield* recordContext(event, admitted.target.userId, agent);
       }),
   };
 }

@@ -177,6 +177,7 @@ function tabMarkup(
         failure,
         usage: undefined,
         turnUsage,
+        context: undefined,
         reading: false,
         failed: false,
         onRetry: ignore,

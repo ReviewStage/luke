@@ -326,6 +326,40 @@ export const codingAgentUsageSchema = EffectSchema.Struct({
 export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
 
 /**
+ * What the agent's own conversation holds in its model's context, as its
+ * newest model step left it: the tokens that step's provider counted as
+ * read, how many of those its prefix cache answered and how many it wrote
+ * to the cache, and what the step wrote; the window of the model the agent
+ * runs on now, and the count past which eve compacts the conversation
+ * against it. Beside the counts, the estimates of what the step read that
+ * no provider counts apart, each made from the text the service composed
+ * at about four bytes a token, which is eve's own estimate: the
+ * instructions, the tool definitions, and the plan or task the agent was
+ * handed, which is absent once eve has compacted the conversation, since
+ * a compaction's summary may have folded it in. When that step ended, and
+ * when eve last compacted the conversation, where it has.
+ */
+export const codingAgentContextSchema = EffectSchema.Struct({
+  windowTokens: countedNumber,
+  compactionThresholdTokens: countedNumber,
+  inputTokens: countedNumber,
+  outputTokens: countedNumber,
+  cachedInputTokens: EffectSchema.optionalKey(countedNumber),
+  cacheWriteTokens: EffectSchema.optionalKey(countedNumber),
+  estimated: EffectSchema.Struct({
+    systemPromptTokens: countedNumber,
+    toolDefinitionTokens: countedNumber,
+    briefTokens: EffectSchema.optionalKey(countedNumber),
+  }),
+  /** Epoch milliseconds the step ended. */
+  measuredAt: countedNumber,
+  /** Epoch milliseconds eve last compacted the conversation. */
+  compactedAt: EffectSchema.optionalKey(countedNumber),
+});
+
+export type CodingAgentContext = typeof codingAgentContextSchema.Type;
+
+/**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
  * learns from the page that ends the hold that there is nothing more to
@@ -334,7 +368,9 @@ export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
  * settled, and what its newest turn cost once settled; neither before a
  * turn has.
  * The page carries the agent's title too, since the title generated as the
- * agent starts lands a moment after the list that opened its tab was read.
+ * agent starts lands a moment after the list that opened its tab was read,
+ * and what its model's context holds once a step has ended; a worker's
+ * page carries no context.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
@@ -348,4 +384,5 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   ),
   usage: EffectSchema.optionalKey(codingAgentUsageSchema),
   turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  context: EffectSchema.optionalKey(codingAgentContextSchema),
 });

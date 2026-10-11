@@ -1,4 +1,4 @@
-import { index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
 import { plan } from "./plan-schema.js";
@@ -20,7 +20,12 @@ import { conversations } from "./storage-schema.js";
  * or where the checkout stood detached; the title is the agent's name on
  * its tab, generated once from what it was handed as its first session
  * starts and renamed by the developer, null until either and after a rename
- * that cleared it. There is no commit column: the
+ * that cleared it. The last step is what the provider counted of the
+ * newest model step of the agent's own conversation, with the estimates of
+ * what it read that no provider counts apart (`StoredAgentStep`), and
+ * `compacted_at` when eve last compacted that conversation; both are null
+ * until it happens, and both are what the tab's context ring reads. There
+ * is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
@@ -29,6 +34,26 @@ import { conversations } from "./storage-schema.js";
  * starting a second. The row goes with its plan, its account, and its
  * conversation alike.
  */
+/**
+ * The newest model step of an agent's own conversation, as the coder host
+ * relayed it: the tokens its provider counted, the share of them its
+ * prefix cache read or wrote, and the estimates of what the step read that
+ * the provider does not count apart, the instructions, the tool
+ * definitions, and the plan or task the agent was handed, each estimated
+ * as eve's own compaction estimates (`coder-host/context-estimate.ts`).
+ * `at` is the epoch milliseconds the step's end was relayed.
+ */
+export interface StoredAgentStep {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens?: number;
+  readonly cacheWriteTokens?: number;
+  readonly systemPromptTokens: number;
+  readonly toolDefinitionTokens: number;
+  readonly briefTokens: number;
+  readonly at: number;
+}
+
 export const codingAgent = pgTable(
   "coding_agent",
   {
@@ -55,6 +80,10 @@ export const codingAgent = pgTable(
     branch: text("branch"),
     /** The agent's title as its tab shows it; null falls back to the model's name. */
     title: text("title"),
+    /** The newest model step of the agent's own conversation; null before its first. */
+    lastStep: jsonb("last_step").$type<StoredAgentStep>(),
+    /** When eve last compacted the agent's own conversation; null where it never has. */
+    compactedAt: instant("compacted_at"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },

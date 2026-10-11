@@ -1,8 +1,7 @@
-import { codingAgentDelegationInputSchema } from "@sidecar/hosted/coding-agent-wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import { Result } from "effect";
 import { defineWorkflowTool, type WorkflowStepToolContext } from "eve/tools";
-import type { DelegationAsk } from "../../server/hosted/coder-host/delegation.js";
+import { DELEGATE_TOOL, type DelegationAsk } from "../../server/hosted/coder-host/delegation.js";
 import { makeDelegation } from "../host.js";
 
 /**
@@ -42,8 +41,8 @@ async function prepareDelegation(
 }
 
 export default defineWorkflowTool({
-  description: `Hand one scoped task to a read-only worker that reads your checkout, your uncommitted edits included, and wait for its complete answer. Name the model and effort it runs on, or leave either to your own. Several calls in one step run at once.`,
-  inputSchema: emitJsonSchema(codingAgentDelegationInputSchema),
+  description: DELEGATE_TOOL.description,
+  inputSchema: emitJsonSchema(DELEGATE_TOOL.inputSchema),
   async execute(input: { task: string; model?: string; effort?: string }, ctx) {
     "use workflow";
     const prepared = await prepareDelegation(ctx, { model: input.model, effort: input.effort });
