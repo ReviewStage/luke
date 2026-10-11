@@ -339,7 +339,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
       const stored = yield* Effect.provide(client.readWork(planId), FetchHttpClient.layer);
       if (stored === undefined || view.activePlanId !== planId) return;
       const work = withPage(stored.turns);
-      const olderHeld = work[0] !== undefined && !stored.turns.includes(work[0]);
+      const oldest = work[0]?.turnId;
+      const olderHeld =
+        oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
       const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
       const shown = stored.code?.at(-1)?.code;
       const code = view.code ?? (shown === undefined ? undefined : highlightCode(shown));

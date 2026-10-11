@@ -1152,6 +1152,26 @@ it.effect(
 );
 
 it.effect(
+  "a newest page whose oldest turn a call told stays as told takes the service's place for the page before it",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      planning.showWork(INVITES, workTurn("turn-5", PLAN_WORK_STATE.RUNNING, "ls", "a.ts"));
+      service.works[INVITES] = {
+        turns: [workTurn("turn-5", PLAN_WORK_STATE.RUNNING, "ls")],
+        earlier: "turn-5",
+      };
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.equal(last()?.workEarlier, "turn-5");
+    }),
+);
+
+it.effect(
   "the Work tab's ask reads the page before the oldest turn held, until no older turn stands, and a later read of the newest page keeps the older pages",
   () =>
     Effect.gen(function* () {
