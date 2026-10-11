@@ -13,6 +13,7 @@ import {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  isRecord,
   isWireString,
   MESSAGE_AUTHOR,
   MESSAGE_ROLE,
@@ -530,6 +531,17 @@ test("a message to the plan's agent steers its session as the deployment acting 
   assert.equal(eve.sent.length, 1);
 });
 
+/** The agent a start answered, as the model reads it; the test fails where the answer carries none. */
+function startedAgentOf(answer: WireRecord) {
+  const agent = answer.agent;
+  assert.ok(isRecord(agent), JSON.stringify(answer));
+  const { id, model, effort, status } = agent;
+  assert.ok(
+    isWireString(id) && isWireString(model) && isWireString(effort) && isWireString(status),
+  );
+  return { id, model, effort, status };
+}
+
 test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no task, on a task and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
   const userId = await database.run(openGithubUser());
   const plan = await planConversation(userId, RELAY_FULL_NAME);
@@ -543,8 +555,8 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
 
   const started = await call(START_CODING_AGENT_TOOL.name, {});
   assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
-  const agent = started.agent as { readonly id: string };
-  assert.deepEqual(started.agent, {
+  const agent = startedAgentOf(started);
+  assert.deepEqual(agent, {
     id: agent.id,
     model: CODING_AGENT_DEFAULT_CHOICE.model,
     effort: CODING_AGENT_DEFAULT_CHOICE.effort,
@@ -565,7 +577,7 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
 
   // The same call run again is the same agent, and opens nothing again.
   const again = await call(START_CODING_AGENT_TOOL.name, {});
-  assert.equal((again.agent as { readonly id: string }).id, agent.id);
+  assert.equal(startedAgentOf(again).id, agent.id);
   assert.equal(eve.sent.length, 1);
 
   const tasked = await call(
@@ -574,17 +586,14 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     "call-2",
   );
   assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
-  const second = tasked.agent as {
-    readonly id: string;
-    readonly model: string;
-    readonly effort: string;
-  };
+  const second = startedAgentOf(tasked);
   assert.deepEqual([second.model, second.effort], [SOL, "low"]);
   assert.equal(JSON.parse(eve.sent[1]?.body ?? "").message, TASK);
   // The agents it started are the ones the other tools then read.
   const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
+  assert.ok(Array.isArray(listed.agents));
   assert.deepEqual(
-    (listed.agents as readonly { readonly id: string }[]).map((each) => each.id),
+    listed.agents.map((each) => (isRecord(each) ? each.id : undefined)),
     [agent.id, second.id],
   );
 

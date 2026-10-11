@@ -122,7 +122,7 @@ export const DEPLOYMENT_ACT = {
   FOLLOW_UP: "follow-up",
 } as const;
 
-export type DeploymentAct = (typeof DEPLOYMENT_ACT)[keyof typeof DEPLOYMENT_ACT];
+type DeploymentAct = (typeof DEPLOYMENT_ACT)[keyof typeof DEPLOYMENT_ACT];
 
 /** A channel's table: for each act, every kind of turn and whether a message under the secret may do it; a cell admitted nowhere is refused outright. */
 export type DeploymentTurnTable = Readonly<
