@@ -24,10 +24,10 @@ function wireWithTheme(theme: AppSettings["stored"]["theme"]): AppSettings {
   };
 }
 
-test("a theme nobody chose is Dark, and System is kept as System", () => {
-  // An installation from before the setting existed has no theme at all.
-  assert.equal(appSettingsView(wireWithTheme(undefined)).theme, THEME.DARK);
-  assert.equal(appSettingsView(wireWithTheme(THEME.SYSTEM)).theme, THEME.SYSTEM);
+test("a theme nobody chose follows the Mac, and a chosen one stays as chosen", () => {
+  // An installation that never chose a theme has none stored at all.
+  assert.equal(appSettingsView(wireWithTheme(undefined)).theme, THEME.SYSTEM);
+  assert.equal(appSettingsView(wireWithTheme(THEME.DARK)).theme, THEME.DARK);
   assert.equal(appSettingsView(wireWithTheme(THEME.LIGHT)).theme, THEME.LIGHT);
 });
 
@@ -50,7 +50,7 @@ test("the theme heads the Appearance page as a Light, Dark, System pop-up", () =
   );
   assert.equal(first?.field, APP_SETTING_SCHEMA.theme.field);
   assert.deepEqual(first?.control, {
-    value: THEME.DARK,
+    value: THEME.SYSTEM,
     options: [
       { value: THEME.LIGHT, label: "Light" },
       { value: THEME.DARK, label: "Dark" },
@@ -63,8 +63,8 @@ test("the theme heads the Appearance page as a Light, Dark, System pop-up", () =
   assert.equal(settingFromOption("theme", "sepia", view), undefined);
 });
 
-test("a theme away from Dark is what the Appearance reset is offered for", () => {
+test("a theme away from System is what the Appearance reset is offered for", () => {
   assert.equal(settingsScopeChanged(settingsView(), SETTINGS_RESET_SCOPE.APPEARANCE), false);
-  const light = settingsView({ theme: THEME.LIGHT });
-  assert.equal(settingsScopeChanged(light, SETTINGS_RESET_SCOPE.APPEARANCE), true);
+  const dark = settingsView({ theme: THEME.DARK });
+  assert.equal(settingsScopeChanged(dark, SETTINGS_RESET_SCOPE.APPEARANCE), true);
 });

@@ -10,10 +10,10 @@ import { applyThemePreference, followAppearance, NativeTheme } from "./appearanc
  * whenever the override is assigned or the Mac changes. The Mac starts light,
  * so a dark window can only come from the override.
  */
-function fakeNativeTheme() {
+function fakeNativeTheme(options: { macDark?: boolean } = {}) {
   const listeners = new Set<() => void>();
   let source: Theme = THEME.SYSTEM;
-  let macDark = false;
+  let macDark = options.macDark ?? false;
   const emit = (): void => {
     for (const listener of listeners) listener();
   };
@@ -38,19 +38,36 @@ function fakeNativeTheme() {
   return { layer: Layer.succeed(NativeTheme, surface), surface, setMacDark };
 }
 
-it.effect("an absent preference steers the app dark, and a chosen one as chosen", () => {
+it.effect("an absent preference follows the Mac, and a chosen one holds as chosen", () => {
   const native = fakeNativeTheme();
   return Effect.gen(function* () {
     yield* applyThemePreference(undefined);
-    assert.equal(native.surface.themeSource, THEME.DARK);
-    assert.equal(native.surface.shouldUseDarkColors, true);
-    // System is handed on as itself, so the Mac goes on deciding.
-    yield* applyThemePreference(THEME.SYSTEM);
     assert.equal(native.surface.themeSource, THEME.SYSTEM);
+    assert.equal(native.surface.shouldUseDarkColors, false);
+    // An explicit Dark stays dark on a light Mac.
+    yield* applyThemePreference(THEME.DARK);
+    assert.equal(native.surface.shouldUseDarkColors, true);
     yield* applyThemePreference(THEME.LIGHT);
     assert.equal(native.surface.shouldUseDarkColors, false);
   }).pipe(Effect.provide(native.layer));
 });
+
+it.effect("a first launch grounds its windows in the Mac's appearance before any opens", () =>
+  Effect.gen(function* () {
+    // The launch's own order: apply the stored preference, then paint the
+    // ground every window is created on.
+    for (const macDark of [false, true]) {
+      const native = fakeNativeTheme({ macDark });
+      const painted: boolean[] = [];
+      yield* applyThemePreference(undefined).pipe(Effect.provide(native.layer));
+      yield* followAppearance((dark) => painted.push(dark)).pipe(
+        Effect.scoped,
+        Effect.provide(native.layer),
+      );
+      assert.deepEqual(painted, [macDark]);
+    }
+  }),
+);
 
 it.effect("the windows follow the Mac under System alone, and stop when the scope closes", () => {
   const native = fakeNativeTheme();

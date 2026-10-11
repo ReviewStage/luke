@@ -56,7 +56,7 @@ export const APP_SETTING_SCHEMA = {
     token: (theme) => theme,
     optionLabel: themeOptionLabel,
     guard: (value: UnparsedWireValue) => optional(value, isTheme),
-    default: THEME.DARK,
+    default: THEME.SYSTEM,
     page: SETTINGS_PAGE.APPEARANCE,
     order: 5,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
