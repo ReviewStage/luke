@@ -1520,7 +1520,8 @@ export class LiveSessionService {
 
   /**
    * A run's ask to end the call, passed to the peer once: only for a run the
-   * developer asked, still the newest and not stopped, and inside
+   * developer asked, still the newest delegation, even one the brain has not
+   * yet taken, and not stopped, and inside
    * `END_CALL_BOUNDS` of its delegation. A run silenced by a later
    * delegation or the stop key answers a goodbye the developer has since
    * talked past, and a run the brain opened of its own answers no goodbye
@@ -1530,7 +1531,9 @@ export class LiveSessionService {
    */
   #endCall(exchange: Exchange): void {
     if (exchange.woken || exchange.silenced || exchange.endAsked) return;
-    if (this.#sessionOf(exchange) === undefined) return;
+    // A later delegation still on its way to the brain has not silenced this run yet, but it counts.
+    const session = this.#sessionOf(exchange);
+    if (session === undefined || exchange.revision < session.revisions) return;
     if (this.#now() - exchange.askedAt > END_CALL_BOUNDS.WITHIN_MS) {
       this.#options.report("An end of the call came past its bound, and the call stays up");
       return;

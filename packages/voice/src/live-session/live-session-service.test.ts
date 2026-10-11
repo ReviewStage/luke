@@ -909,7 +909,7 @@ it.effect(
 );
 
 it.effect(
-  "an end of the call from a run the developer has since talked past, or stopped, leaves the call up",
+  "an end of the call from a run the developer has since talked past, even before the brain has their next ask, or stopped, leaves the call up",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -926,8 +926,20 @@ it.effect(
 
       sayBye(sideband, "item_3", 5000);
       yield* settle();
-      assert.equal(f.service.stopSpeaking(), true);
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      sideband.input("Actually, one more question.", 6000, 6800);
+      sideband.delegation("item_4", 6900);
+      yield* settle();
       f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-3" });
+      yield* settle();
+      assert.equal(f.endings.count, 0, "a later delegation the brain has not taken yet counts too");
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      f.brain.answerWhen = undefined;
+
+      sayBye(sideband, "item_5", 8000);
+      yield* settle();
+      assert.equal(f.service.stopSpeaking(), true);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-5" });
       yield* settle();
       assert.equal(f.endings.count, 0, "the stop key cancels the goodbye's end");
     }),
