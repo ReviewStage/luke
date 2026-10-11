@@ -5,8 +5,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, test } from "vitest";
+import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { GitHubMark } from "./account-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu";
@@ -48,6 +49,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
   document.head.innerHTML = "";
@@ -365,12 +367,13 @@ test("every icon in the menu has a size from the sheet, so none fills the compos
   assert.equal(getComputedStyle(menu.find(".plan-compose-menu-search svg")).width, "16px");
 });
 
-test("the list scrolls past a bounded height, inside itself, and the foot stands outside it", () => {
+test("the list scrolls past a bounded height, inside itself and never sideways, and the foot stands outside it", () => {
   const menu = mount({ foot: gitHubFoot() });
   const list = menu.find(".plan-compose-menu-list");
   const style = getComputedStyle(list);
   assert.match(style.maxHeight, /^\d+px$/u, "the list has a bound");
   assert.equal(style.overflowY, "auto");
+  assert.equal(style.overflowX, "hidden");
   assert.equal(style.overscrollBehavior, "contain");
   const foot = menu.find(".plan-compose-menu-foot");
   assert.ok(!list.contains(foot), "the foot is pinned outside the list");
@@ -628,4 +631,34 @@ test("a row the highlight was moved to gives it up once it can no longer be pick
   assert.equal(menu.highlighted(), "acme/relay");
   press("Enter");
   assert.deepEqual(menu.picked, ["acme/relay"]);
+});
+
+test("a name or a detail cut short by the menu's width is marked to fade at its end, and words shown whole are not", () => {
+  const long = "acme/a-repository-named-at-length-past-the-menu";
+  const folder = "src/server/hosted/store/a/deep/folder";
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this.textContent === long || this.textContent === folder ? 600 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.textContent === long || this.textContent === folder ? 160 : 0;
+  });
+  const menu = mount({
+    rows: [...ROWS, { id: long, label: long, detail: folder }],
+  });
+  act(() => relayout());
+  const marks = menu
+    .rows()
+    .map((row) => [
+      row.querySelector(".plan-compose-menu-name")?.getAttribute("data-overflow"),
+      row.querySelector(".plan-compose-menu-detail")?.getAttribute("data-overflow"),
+    ]);
+
+  assert.deepEqual(marks, [
+    ["false", undefined],
+    ["false", undefined],
+    ["false", undefined],
+    ["true", "true"],
+  ]);
+  const fade = getComputedStyle(menu.find('.plan-compose-menu-name[data-overflow="true"]'));
+  assert.equal(fade.textOverflow, "clip", "a fade, not an ellipsis");
 });

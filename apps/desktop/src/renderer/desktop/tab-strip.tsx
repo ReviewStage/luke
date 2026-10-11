@@ -1,9 +1,10 @@
 import { CloseIcon } from "@sidecar/panel";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
+import { useClipped } from "../use-clipped";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
@@ -318,15 +319,9 @@ export function Tab({
   onClose?: (() => void) | undefined;
   onContextMenu?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
 }): React.JSX.Element {
-  // Whether the label is cut short, measured whenever its box resizes: a
-  // label renamed, or the plan's one tab giving way to its toolbar.
-  const [clipped, setClipped] = useState(false);
-  const words = useCallback((node: HTMLSpanElement | null) => {
-    if (node === null) return;
-    const observer = new ResizeObserver(() => setClipped(node.scrollWidth > node.clientWidth));
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
+  // Whether the label is cut short: a label renamed, or the plan's one tab
+  // giving way to its toolbar.
+  const [words, clipped] = useClipped();
   const hint = !clipped ? tooltip : tooltip === undefined ? label : `${label} · ${tooltip}`;
   const glyph = (
     <span className="tab-icon">

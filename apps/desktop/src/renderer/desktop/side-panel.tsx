@@ -6,12 +6,7 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import {
-  PLAN_WORK_STATE,
-  type PlanCodeShowing,
-  type PlanWorkState,
-  type PlanWorkTurn,
-} from "@sidecar/hosted/planning-view";
+import type { PlanCodeShowing, PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
   CodeIcon,
@@ -20,6 +15,7 @@ import {
   PencilIcon,
   PlusIcon,
   SidePanelIcon,
+  TerminalIcon,
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
@@ -28,7 +24,6 @@ import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useSt
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
-import { Shimmer } from "../ai-elements/shimmer";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
@@ -166,9 +161,6 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** What a row of the "+" says at its end for a tab already open, which picking it chooses rather than opens again. */
-const TAB_OPEN = "Open";
-
 /** The "+" menu's sections after the fixed kinds. */
 const ADD_SECTION = {
   AGENTS: "Coding agents",
@@ -181,25 +173,6 @@ const NEW_AGENT_ROW = "new-coding-agent";
 
 /** What the row that opens a draft says while a Start is out. */
 const NEW_AGENT_STARTING = "Starting…";
-
-/** Where a coding agent stands, as its row in the "+" menu says it. */
-const AGENT_STATUS_WORD = {
-  [CODING_AGENT_STATUS.STARTING]: "Starting",
-  [CODING_AGENT_STATUS.RUNNING]: "Running",
-  [CODING_AGENT_STATUS.COMPLETED]: "Done",
-  [CODING_AGENT_STATUS.FAILED]: "Failed",
-  [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
-} as const satisfies Record<CodingAgentStatus, string>;
-
-/** Where a subagent stands, as its row says it; one its call left running is stopped, since nothing more of it will be told. */
-const SUBAGENT_STATE_WORD = {
-  [PLAN_WORK_STATE.RUNNING]: "Stopped",
-  [PLAN_WORK_STATE.DONE]: "Done",
-  [PLAN_WORK_STATE.FAILED]: "Stopped",
-} as const satisfies Record<PlanWorkState, string>;
-
-/** The word for a subagent still running, which shimmers as the work tab's does. */
-const SUBAGENT_RUNNING_WORD = "Running";
 
 /** Which edge of the "+" its menu hangs from: its left, or its right where the window leaves no room. */
 const MENU_SIDE = {
@@ -222,20 +195,14 @@ function kindAction(
   };
 }
 
-/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, or that it is open, where picking it chooses it. */
-function kindRow(tab: FixedSidePanelTab, tabs: readonly FixedSidePanelTab[]): MenuRow {
+/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, whether or not its tab is open. */
+function kindRow(tab: FixedSidePanelTab): MenuRow {
   return {
     id: tab,
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
     command: TAB_COMMAND[tab],
-    hint: tabs.includes(tab) ? TAB_OPEN : undefined,
   };
-}
-
-/** Words that shimmer while what they say is under way, as a running line does. */
-function stateWords(word: string, live: boolean): React.ReactNode {
-  return live ? <Shimmer>{word}</Shimmer> : word;
 }
 
 /** One row of the "+" menu, and what picking it does. */
@@ -250,11 +217,12 @@ interface AddEntry {
  * one, unavailable with Start's own reason while Start could not run, and
  * each of the plan's agents in the order started; then, under Subagents,
  * each subagent the plan's work holds; then, under Files, each file Luke
- * showed on the plan, by name with its folder beside it. An agent's and a
- * subagent's row wear the glyph its tab wears and say where it stands,
- * shimmering while it runs. Any row whose tab is open says so, and picking
- * it chooses that tab rather than opening another; a file not open opens on
- * the newest snippet of it.
+ * showed on the plan, by name with its folder beside it. An agent's row
+ * wears the Coding agents glyph and a subagent's the worker's, and neither
+ * says where it stands, which its tab does. Picking a row whose tab is open
+ * chooses that tab rather than opening another, as a browser's tab search
+ * does, so no row says it is open; a file not open opens on the newest
+ * snippet of it.
  */
 function addEntries(input: {
   panel: SidePanelControl;
@@ -265,7 +233,7 @@ function addEntries(input: {
   const { panel, agents, workers, files } = input;
   const { start } = agents;
   const kinds = SIDE_PANEL_TABS.map((kind) => ({
-    row: kindRow(kind, panel.tabs),
+    row: kindRow(kind),
     onPick: () => panel.onChoose(kind),
   }));
   const newAgent: AddEntry = {
@@ -283,29 +251,20 @@ function addEntries(input: {
     row: {
       id: agent.id,
       label: agentTabLabel(agent, agents.models),
-      icon: <AgentStatusDot status={agent.status} />,
-      detail: stateWords(AGENT_STATUS_WORD[agent.status], agentStillWriting(agent.status)),
-      terms: [AGENT_STATUS_WORD[agent.status]],
+      icon: <TerminalIcon />,
       section: ADD_SECTION.AGENTS,
-      hint: panel.closedAgents.includes(agent.id) ? undefined : TAB_OPEN,
     },
     onPick: () => panel.onChoose({ agent: agent.id }),
   }));
-  const subagentRows = workers.map(({ call }) => {
-    const word = call.running ? SUBAGENT_RUNNING_WORD : SUBAGENT_STATE_WORD[call.state];
-    return {
-      row: {
-        id: call.id,
-        label: workerJob(call),
-        icon: <BotIcon className={call.running ? "text-luke" : undefined} />,
-        detail: stateWords(word, call.running),
-        terms: [word],
-        section: ADD_SECTION.SUBAGENTS,
-        hint: panel.subagents.some((tab) => tab.subagent === call.id) ? TAB_OPEN : undefined,
-      },
-      onPick: () => panel.onChoose({ subagent: call.id }),
-    };
-  });
+  const subagentRows = workers.map(({ call }) => ({
+    row: {
+      id: call.id,
+      label: workerJob(call),
+      icon: <BotIcon />,
+      section: ADD_SECTION.SUBAGENTS,
+    },
+    onPick: () => panel.onChoose({ subagent: call.id }),
+  }));
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
   const fileRows = files.map((ref, at) => {
@@ -319,7 +278,6 @@ function addEntries(input: {
         detail: ref.path.slice(0, -name.length - 1) || undefined,
         terms: [ref.path],
         section: ADD_SECTION.FILES,
-        hint: open ? TAB_OPEN : undefined,
       },
       onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref)),
     };

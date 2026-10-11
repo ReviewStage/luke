@@ -1737,7 +1737,7 @@ function addButton(page: HTMLElement): HTMLElement {
   return button;
 }
 
-test("the + drops the searchable menu over every kind, an open one saying so and chosen by a pick, and a closed one opened in its place", () => {
+test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
   installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1745,10 +1745,10 @@ test("the + drops the searchable menu over every kind, an open one saying so and
   press(page, '[aria-label="Close Code"]');
   act(() => addButton(page).click());
   assert.deepEqual(addRows(), [
-    ["Board", "Open", true],
+    ["Board", "⌥⌘1", true],
     ["Code", "⌥⌘2", true],
-    ["Transcript", "Open", true],
-    ["Work", "Open", true],
+    ["Transcript", "⌥⌘3", true],
+    ["Work", "⌥⌘4", true],
     ["New coding agent", "", true],
   ]);
   assert.equal(
@@ -2413,7 +2413,7 @@ function addRow(label: string): HTMLElement {
   return row;
 }
 
-test("the + lists the plan's coding agents and its subagents in sections of their own, each with its tab's glyph and where it stands, found by a search, and picking one opens its tab or chooses the one open", () => {
+test("the + lists the plan's coding agents and its subagents in sections of their own, each by its glyph and name alone, found by a search, and picking one opens its tab or chooses the one open", () => {
   const job = "Compare the two queue libraries.";
   const page = mountAgents(workerWork(job));
   act(() => addButton(page).click());
@@ -2424,20 +2424,18 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
   ]);
   assert.deepEqual(addRows().slice(4), [
     ["New coding agent", "", true],
-    ["Claude Opus 5.5", "Open", true],
-    ["GPT 5.6 Sol", "Open", true],
+    ["Claude Opus 5.5", "", true],
+    ["GPT 5.6 Sol", "", true],
     [job, "", true],
   ]);
-  const claude = addRow("Claude Opus 5.5");
-  assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
-  assert.equal(claude.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
-  assert.ok(claude.querySelector(".animate-shimmer"), "a running agent's state shimmers");
-  const sol = addRow("GPT 5.6 Sol");
-  assert.equal(sol.querySelector(".plan-compose-menu-detail")?.textContent, "Done");
-  assert.equal(sol.querySelector(".animate-shimmer"), null);
-  const worker = addRow(job);
-  assert.ok(worker.querySelector("svg.lucide-bot"), "the worker's glyph");
-  assert.equal(worker.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
+  // Neither an agent's row nor a subagent's says where it stands, by word or by dot.
+  for (const label of ["Claude Opus 5.5", "GPT 5.6 Sol", job]) {
+    const row = addRow(label);
+    assert.equal(row.querySelector(".agent-status-dot"), null);
+    assert.equal(row.querySelector(".plan-compose-menu-detail"), null);
+    assert.equal(row.textContent, label);
+  }
+  assert.ok(addRow(job).querySelector("svg.lucide-bot"), "the worker's glyph");
 
   // An agent's tab already open is chosen again, not doubled.
   typeSearch("sol");
@@ -2468,7 +2466,7 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
   assert.equal(panelTabs(page).at(-1), job);
   assert.equal(chosenTab(page), job);
   act(() => addButton(page).click());
-  assert.equal(addRow(job).querySelector(".plan-compose-menu-hint")?.textContent, "Open");
+  assert.equal(addRow(job).textContent, job, "an open tab's row says nothing of it");
 });
 
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the + lists it as it stands, and picking it there opens the tab again in its place", () => {
@@ -2481,10 +2479,7 @@ test("an agent's × or Delete closes its tab and nothing of the agent's: it is n
   assert.deepEqual(stops, []);
 
   act(() => addButton(page).click());
-  const claude = addRow("Claude Opus 5.5");
-  assert.equal(claude.querySelector(".plan-compose-menu-hint"), null, "its tab is not open");
-  assert.equal(claude.querySelector(".plan-compose-menu-detail")?.textContent, "Running");
-  act(() => claude.click());
+  act(() => addRow("Claude Opus 5.5").click());
   assert.deepEqual(panelTabs(page), [
     "Board",
     "Code",
@@ -2503,17 +2498,17 @@ test("an agent's × or Delete closes its tab and nothing of the agent's: it is n
   assert.deepEqual(stops, []);
 });
 
-test("the + reads the plan's agents again as it opens, so an agent no tab follows says where it stands now", () => {
+test("the + reads the plan's agents again as it opens, so an agent no tab follows is named as it is now", () => {
   const page = mountAgents();
   press(page, '[aria-label="Close Claude Opus 5.5"]');
 
-  // The agent finishes with its tab closed, where no transcript follows it.
-  listed = [{ ...RUNNING_AGENT, status: CODING_AGENT_STATUS.COMPLETED }, DONE_AGENT];
+  // The agent is named with its tab closed, where nothing follows it.
+  listed = [{ ...RUNNING_AGENT, title: "Queue spike" }, DONE_AGENT];
   act(() => addButton(page).click());
-  assert.equal(
-    addRow("Claude Opus 5.5").querySelector(".plan-compose-menu-detail")?.textContent,
-    "Done",
-  );
+  assert.deepEqual(addSections()[0], [
+    "Coding agents",
+    ["New coding agent", "Queue spike", "GPT 5.6 Sol"],
+  ]);
 });
 
 /** The key the draft below is minted under, which its first message starts the agent with. */
@@ -2810,7 +2805,7 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   );
   assert.deepEqual(
     files.map((option) => option.textContent),
-    ["invite.tssrc", "roles.tssrcOpen"],
+    ["invite.tssrc", "roles.tssrc"],
   );
   act(() => files[1]?.click());
   assert.deepEqual(

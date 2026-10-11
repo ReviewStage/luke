@@ -2,6 +2,7 @@ import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs, Tooltip } from "./tooltip";
+import { useClipped } from "./use-clipped";
 
 /**
  * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.
@@ -10,7 +11,8 @@ import { ShortcutGlyphs, Tooltip } from "./tooltip";
  * opens and filtering as it is typed in; under it the rows, each an icon,
  * a name, a muted detail where the row has one, the shortcut that does the
  * same where there is one, and an end slot the check stands in where it is
- * the one chosen, in a list that scrolls past a bounded height, the rows
+ * the one chosen; a name or a detail cut short by the menu's width fades
+ * out at its end rather than ending in an ellipsis, in a list that scrolls past a bounded height, the rows
  * of a section under its heading; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
  * on GitHub or the effort an agent will run at. A pinned row is a press of
@@ -45,8 +47,6 @@ export interface MenuRow {
   detail?: React.ReactNode;
   /** The heading the row stands under, with the rows beside it that share it, and which a search matches; none stands under no heading. */
   section?: string | undefined;
-  /** Muted words at the row's end in the shortcut's place: "Open" on a tab already open. */
-  hint?: string | undefined;
   /** The shortcut that does what picking the row does, printed muted at the row's end. */
   command?: KeyedCommand | undefined;
   /** Why the row cannot be picked now, printed muted at its end in the shortcut's place; the row is dimmed and the arrows pass over it. */
@@ -183,12 +183,23 @@ function highlightOver(input: {
   return input.first;
 }
 
-/** What a row prints before its end slot: why it cannot be picked, its own words, its shortcut, or nothing. */
+/** What a row prints before its end slot: why it cannot be picked, its shortcut, or nothing. */
 function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
-  const words = row.disabled ?? row.hint;
-  if (words !== undefined) return <span className="plan-compose-menu-hint">{words}</span>;
+  if (row.disabled !== undefined) {
+    return <span className="plan-compose-menu-hint">{row.disabled}</span>;
+  }
   if (row.command === undefined) return null;
   return <ShortcutGlyphs command={row.command} className="plan-compose-menu-hint" />;
+}
+
+/** Words in a row cut short by its width, marked so desktop.css fades them out at their end. */
+function RowWords(props: { className: string; children: React.ReactNode }): React.JSX.Element {
+  const [words, clipped] = useClipped();
+  return (
+    <span ref={words} className={props.className} data-overflow={String(clipped)}>
+      {props.children}
+    </span>
+  );
 }
 
 /** The inside of every row: the mark, the name, the detail, the hint, and the end slot, which is drawn whether or not it holds anything so the names line up. */
@@ -202,9 +213,9 @@ function RowBody(props: {
   return (
     <>
       {props.icon}
-      <span className="plan-compose-menu-name">{props.label}</span>
+      <RowWords className="plan-compose-menu-name">{props.label}</RowWords>
       {props.detail !== undefined ? (
-        <span className="plan-compose-menu-detail">{props.detail}</span>
+        <RowWords className="plan-compose-menu-detail">{props.detail}</RowWords>
       ) : null}
       {props.hint}
       <span className="plan-compose-menu-end">{props.end}</span>
