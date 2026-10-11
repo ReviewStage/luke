@@ -83,7 +83,7 @@ export function scriptedHarness(
                   type: "tool-result",
                   toolCallId: callId,
                   toolName: String(step.toolName),
-                  result: output,
+                  result: output as never,
                 });
               }
             }

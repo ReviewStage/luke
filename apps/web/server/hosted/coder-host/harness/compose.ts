@@ -1,5 +1,6 @@
 import { Effect } from "effect";
 import { runWeb } from "../../../runtime.js";
+import type { EveSessions } from "../../brain-host/eve-sessions.js";
 import { HostedEnvironment, hostedEnvironment } from "../../environment.js";
 import { storeWriter } from "../../store/index.js";
 import { openProductionConversation } from "./harness-production.js";
@@ -24,7 +25,7 @@ import { HARNESS_TOOL_SET } from "./tool-vocabulary.js";
  * is kept alive (`waitUntil`, at most the function's maximum duration).
  */
 export function harnessFromEnvironment():
-  | ((userId: string) => ReturnType<typeof harnessSessions>)
+  | ((userId: string) => Effect.Effect<EveSessions, never, HarnessServices>)
   | undefined {
   const runtime = coderRuntimeOf(process.env[CODER_HARNESS_VARIABLE]);
   if (runtime === CODER_RUNTIME.EVE) return undefined;
@@ -37,7 +38,7 @@ export function harnessFromEnvironment():
       hostedEnvironment,
     ),
   );
-  const seams: HarnessSessionsSeams = {
+  const seams: HarnessSessionsSeams<HarnessServices> = {
     runtime,
     openConversation: openProductionConversation(runtime, () => keys, runWeb),
     parked: new Map(),
@@ -47,5 +48,5 @@ export function harnessFromEnvironment():
     fork: (turn: Effect.Effect<void, never, HarnessServices>) =>
       Effect.asVoid(Effect.forkDetach(turn)),
   };
-  return (userId) => harnessSessions(seams, userId);
+  return (userId) => harnessSessions<HarnessServices>(seams, userId);
 }

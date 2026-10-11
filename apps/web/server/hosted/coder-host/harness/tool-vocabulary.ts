@@ -53,7 +53,7 @@ const HARNESS_CALL = {
 } as const;
 
 /** The spike's own names for the calls the agent's vocabulary has no kind for. */
-export const HARNESS_ONLY_TOOL = {
+const HARNESS_ONLY_TOOL = {
   TODO_LIST: "todo_list",
   SUBAGENT: "subagent",
   NOTEBOOK_EDIT: "notebook_edit",

@@ -67,14 +67,14 @@ export interface HarnessConversation {
 }
 
 /** What the harness path is composed over: the deployment's in production, scripted doubles in a test. */
-export interface HarnessSessionsSeams {
+export interface HarnessSessionsSeams<R = HarnessServices> {
   readonly runtime: HarnessRuntime;
   /** The agent's session opened, or resumed from the state its last turn parked it in, with its checkout standing. */
   openConversation(
     target: ConversationTarget,
     agent: CodingAgent,
     parkedState: unknown,
-  ): Effect.Effect<HarnessConversation, HarnessRefused, HarnessServices>;
+  ): Effect.Effect<HarnessConversation, HarnessRefused, R | SqlClient.SqlClient>;
   /** The parked state of each conversation's session, between its turns. */
   readonly parked: Map<string, unknown>;
   /** The turn under way on this instance for each conversation, whose fiber a Stop interrupts. */
@@ -83,14 +83,14 @@ export interface HarnessSessionsSeams {
   readonly now: () => number;
   /** Runs a turn past the request that started it: a detached fiber here, a durable driver in a real build. */
   fork(
-    turn: Effect.Effect<void, never, HarnessServices>,
-  ): Effect.Effect<void, never, HarnessServices>;
+    turn: Effect.Effect<void, never, R | SqlClient.SqlClient>,
+  ): Effect.Effect<void, never, R | SqlClient.SqlClient>;
 }
 
 export type HarnessServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
 
 /** A turn under way: the id it is recorded under, and the fiber reading its stream. */
-export interface RunningTurn {
+interface RunningTurn {
   readonly eveTurnId: string;
   readonly fiber: Fiber.Fiber<void, HarnessRefused>;
 }
@@ -122,8 +122,8 @@ function streamInto(
  * ended it; then the branch the checkout stands on recorded for the pull
  * request, and the session parked for the next turn.
  */
-const runTurn = (
-  seams: HarnessSessionsSeams,
+const runTurn = <R>(
+  seams: HarnessSessionsSeams<R>,
   target: ConversationTarget,
   agent: CodingAgent,
   eveTurnId: string,
@@ -200,11 +200,13 @@ function harnessTurnId(now: number): string {
  * because both adapters mark steering experimental; the desktop retries a
  * not-ready send.
  */
-export const harnessSessions = (
-  seams: HarnessSessionsSeams,
+export const harnessSessions = <R = HarnessServices>(
+  seams: HarnessSessionsSeams<R>,
   userId: string,
-): Effect.Effect<EveSessions, never, HarnessServices> =>
-  Effect.map(Effect.context<HarnessServices>(), (context): EveSessions => {
+): Effect.Effect<EveSessions, never, R | SqlClient.SqlClient> =>
+  Effect.map(Effect.context<R | SqlClient.SqlClient>(), (context): EveSessions => {
+    const provided = <A>(effect: Effect.Effect<A, never, R | SqlClient.SqlClient>) =>
+      Effect.provideContext(effect, context);
     const startTurn = (conversationId: string, message: string) =>
       Effect.gen(function* () {
         const target = { userId, conversationId };
@@ -216,7 +218,7 @@ export const harnessSessions = (
         return sessionId;
       }).pipe(
         Effect.catch(() => Effect.succeed(undefined)),
-        Effect.provideContext(context),
+        provided,
       );
     return {
       open: (message) =>

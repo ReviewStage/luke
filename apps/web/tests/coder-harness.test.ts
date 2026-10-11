@@ -5,12 +5,12 @@ import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, jsonSchema, tool } from "ai";
 import { Deferred, Effect, Exit, Fiber, Layer, Option, Result } from "effect";
+import type { SqlClient } from "effect/unstable/sql";
 import { MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { recordedRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import {
   type HarnessConversation,
-  type HarnessServices,
   type HarnessSessionsSeams,
   harnessSessionId,
   harnessSessions,
@@ -26,6 +26,7 @@ import {
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
+import live from "./fixtures/harness/claude-code-live.json" with { type: "json" };
 import { openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { sandboxDouble } from "./support/repository-sandbox";
@@ -250,7 +251,7 @@ function harnessOver(
   );
   // The checkout the first turn's open would have cloned.
   sandbox.checkedOut = "acme/relay";
-  const seams: HarnessSessionsSeams = {
+  const seams: HarnessSessionsSeams<never> = {
     runtime: CODER_RUNTIME.CLAUDE_CODE,
     openConversation: (target, _agent, parkedState) =>
       Effect.promise(async (): Promise<HarnessConversation> => {
@@ -274,7 +275,7 @@ function harnessOver(
     running: new Map(),
     writer: () => storeWriter({ tools: HARNESS_TOOL_SET }),
     now: () => NOW,
-    fork: (turn: Effect.Effect<void, never, HarnessServices>) =>
+    fork: (turn: Effect.Effect<void, never, SqlClient.SqlClient>) =>
       Effect.map(Effect.forkDetach(turn), (fiber) => {
         turnsForked.push(fiber);
       }),
@@ -469,6 +470,46 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))(
             { role: MESSAGE_ROLE.ASSISTANT, text: "Resumed: done." },
           ]);
           assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+        }),
+    );
+
+    it.effect(
+      "a live Claude Code run, replayed as its adapter emitted it, reads as the agent's own transcript: its commands, its edit as a patch, its answer, and the turn's usage",
+      () =>
+        Effect.gen(function* () {
+          const { userId, agent, target } = yield* openAgent();
+          const [task, followUp] = live.turns;
+          assert.ok(task !== undefined && followUp !== undefined);
+          const harness = harnessOver([() => task, () => followUp]);
+          const sessions = yield* harnessSessions(harness.seams, userId);
+          yield* sessions.open({
+            conversationId: agent.conversationId,
+            turn: BRAIN_HOST_TURN.TYPED,
+            message: "The test fails: run it, fix the bug, commit, push the branch.",
+          });
+          yield* harness.settled;
+
+          const page = yield* transcriptOf(target, agent.createdAt);
+          assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
+          const calls = callsOf(page);
+          assert.deepEqual(
+            calls.map(({ name }) => name),
+            ["bash", "bash", "bash", "apply_patch", "bash"],
+          );
+          assert.deepEqual(calls[3]?.input, {
+            patchText:
+              "*** Begin Patch\n*** Update File: /tmp/harness-live/work/sum.mjs\n@@\n-  return a - b;\n+  return a + b;\n*** End Patch",
+          });
+          assert.deepEqual(calls[3]?.output, {
+            files: [{ operation: "update", path: "/tmp/harness-live/work/sum.mjs" }],
+          });
+          const answer = page.messages.at(-1);
+          assert.match(
+            answer?.parts.filter(isTextUIPart).at(-1)?.text ?? "",
+            /Fixed and pushed `luke\/fix-sum`/u,
+          );
+          assert.equal(page.turnUsage?.inputTokens, 157_177);
+          assert.equal(page.turnUsage?.outputTokens, 1_394);
         }),
     );
 

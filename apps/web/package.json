@@ -44,7 +44,6 @@
     "@sidecar/voice": "workspace:*",
     "@sidecar/wire": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
-    "@vercel/sandbox": "3.6.1",
     "ai": "catalog:",
     "better-auth": "1.6.29",
     "drizzle-orm": "0.45.2",

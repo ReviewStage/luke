@@ -1,0 +1,1662 @@
+{
+  "note": "SPIKE (do not merge): parts the Claude Code harness adapter (@ai-sdk/harness-claude-code 1.0.152, claude-haiku-5-5, effort low) emitted in a live local run on 2026-10-11, key scrubbed; turn 1 is a task, turn 2 a follow-up on a fresh agent resumed from the parked state.",
+  "turns": [
+    [
+      {
+        "type": "stream-start"
+      },
+      {
+        "type": "reasoning-start",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": "I notice the"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": " working directory differ"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": "s from where AGENTS"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": ".md lives, so I should"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": " check things"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": " before running node test.mjs"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": " in the repo."
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6",
+        "delta": "\n\n"
+      },
+      {
+        "type": "reasoning-end",
+        "id": "ab9f70a5-eeca-444b-9a89-d3936286ecb6"
+      },
+      {
+        "type": "tool-input-start",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "toolName": "bash",
+        "providerExecuted": true
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": ""
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": "{\"command\": \"node"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " test.mjs;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " echo \\\"exit=$?"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": "\\\"; git status --short;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " git branch --"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": "show-current;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " git remote -v"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": "\", \"description\": \"Run test"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " suite and check git"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": " state"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "delta": "\"}"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "toolName": "bash",
+        "input": "{\"command\":\"node test.mjs; echo \\\"exit=$?\\\"; git status --short; git branch --show-current; git remote -v\",\"description\":\"Run test suite and check git state\"}",
+        "providerExecuted": true,
+        "nativeName": "Bash"
+      },
+      {
+        "type": "tool-input-end",
+        "id": "toolu_01Ufmx7nwauUhTQKa6nHXUdK"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "36677398-9d80-482e-b341-a27d05e01b27",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 30132,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 30132,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 190,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 79
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 190,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 30132,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 30132,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "tool-result",
+        "toolCallId": "toolu_01Ufmx7nwauUhTQKa6nHXUdK",
+        "toolName": "bash",
+        "result": {
+          "stdout": "node:internal/modules/cjs/loader:1459\n  throw err;\n  ^\n\nError: Cannot find module '/tmp/harness-live/work/claude-code-spike-session/test.mjs'\n    at Module._resolveFilename (node:internal/modules/cjs/loader:1456:15)\n    at defaultResolveImpl (node:internal/modules/cjs/loader:1066:19)\n    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1071:22)\n    at Module._load (node:internal/modules/cjs/loader:1242:25)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)\n    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)\n    at node:internal/main/run_main_module:33:47 {\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n\nNode.js v24.14.1\nexit=1\nmain\norigin\t/tmp/harness-live/origin.git (fetch)\norigin\t/tmp/harness-live/origin.git (push)",
+          "stderr": "",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "isError": false
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 30134,
+            "noCache": 2,
+            "cacheRead": 0,
+            "cacheWrite": 30132
+          },
+          "outputTokens": {
+            "total": 190,
+            "text": 190
+          }
+        }
+      },
+      {
+        "type": "reasoning-start",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "I don't see test.mj"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "s in this repo direct"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "ory, but"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": " I recall AGENTS"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": ".md l"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "ives at /tmp/har"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "ness-live/work, so let"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": " me check there."
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6",
+        "delta": "\n\n"
+      },
+      {
+        "type": "reasoning-end",
+        "id": "4b8cc09c-b874-49b2-a9d4-ae8d5a85e7b6"
+      },
+      {
+        "type": "text-start",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": "The"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " test"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " file"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " isn't in this repo."
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " The"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " AGENTS.md is"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " at `/tmp/har"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": "ness-live/work`, so"
+      },
+      {
+        "type": "text-delta",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27",
+        "delta": " I'll look there."
+      },
+      {
+        "type": "text-end",
+        "id": "d4e6a954-d4d7-4d3d-bc60-100771b65c27"
+      },
+      {
+        "type": "tool-input-start",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "toolName": "bash",
+        "providerExecuted": true
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": ""
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "{\"command\": \"ls -la /tmp/"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "harness-live/work/"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": ";"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": " cd /tmp/har"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "ness-live/work 2>"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "/dev/null && git r"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "ev-parse --show-to"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "plevel 2>/d"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "ev/null; ls /"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "tmp/harness-live"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "/work/claude-code-"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "spike-session"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "\", \"description\": \"List work"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": " directory cont"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "ents"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "delta": "\"}"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "toolName": "bash",
+        "input": "{\"command\":\"ls -la /tmp/harness-live/work/; cd /tmp/harness-live/work 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null; ls /tmp/harness-live/work/claude-code-spike-session\",\"description\":\"List work directory contents\"}",
+        "providerExecuted": true,
+        "nativeName": "Bash"
+      },
+      {
+        "type": "tool-input-end",
+        "id": "toolu_015hWbzSWxJEFiY4HMBc9ZZK"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "e153e14c-48d1-4f74-9ce8-cacca24b5957",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 599,
+            "cache_read_input_tokens": 30132,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 599,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 239,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 40
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 239,
+                "cache_read_input_tokens": 30132,
+                "cache_creation_input_tokens": 599,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 599,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "tool-result",
+        "toolCallId": "toolu_015hWbzSWxJEFiY4HMBc9ZZK",
+        "toolName": "bash",
+        "result": {
+          "stdout": "total 12\ndrwxrwxr-x 4 vercel-sandbox vercel-sandbox  99 Oct 11 20:07 .\ndrwxrwxr-x 5 vercel-sandbox vercel-sandbox  48 Oct 11 20:07 ..\ndrwxrwxr-x 7 vercel-sandbox vercel-sandbox 150 Oct 11 20:07 .git\n-rw-rw-r-- 1 vercel-sandbox vercel-sandbox  41 Oct 11 20:07 AGENTS.md\ndrwxrwxr-x 2 vercel-sandbox vercel-sandbox   6 Oct 11 20:07 claude-code-spike-session\n-rw-rw-r-- 1 vercel-sandbox vercel-sandbox  46 Oct 11 20:07 sum.mjs\n-rw-rw-r-- 1 vercel-sandbox vercel-sandbox 121 Oct 11 20:07 test.mjs\n/tmp/harness-live/work",
+          "stderr": "\nShell cwd was reset to /tmp/harness-live/work/claude-code-spike-session",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "isError": false
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 30733,
+            "noCache": 2,
+            "cacheRead": 30132,
+            "cacheWrite": 599
+          },
+          "outputTokens": {
+            "total": 239,
+            "text": 239
+          }
+        }
+      },
+      {
+        "type": "reasoning-start",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "I realize the actual git to"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "plevel is /tmp"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "/harness-live/work,"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": " not the spike-session sub"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "directory I chec"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "ked earlier, so I need"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": " to check git status from"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": " the corre"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "ct root location"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "."
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d",
+        "delta": "\n\n"
+      },
+      {
+        "type": "reasoning-end",
+        "id": "2ce84eef-cb4a-47b0-9904-140bddc9611d"
+      },
+      {
+        "type": "text-start",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "The"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": " git"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": " rep"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "o root is `/tmp"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "/harness-live/work`"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": ", which holds `test.m"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "js`"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": " and `sum.mjs"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "`. I"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": "'ll run"
+      },
+      {
+        "type": "text-delta",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c",
+        "delta": " the test there."
+      },
+      {
+        "type": "text-end",
+        "id": "32cbecfe-5fef-4a0e-8d54-e31071bd618c"
+      },
+      {
+        "type": "tool-input-start",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "toolName": "bash",
+        "providerExecuted": true
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": ""
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "{\"command\": \"c"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "d /tmp/harness"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "-live/work && node"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": " test.mjs;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": " echo \\\"exit=$?"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "\\\"; c"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "at test.mjs; ech"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "o ---"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "; cat sum.mj"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "s; echo ---; git"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": " status --short; git bran"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "ch --show-current; git rem"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "ote -v"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "\", \"description\": \"Run test in rep"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "o root and in"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "spect sources"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "delta": "\"}"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "toolName": "bash",
+        "input": "{\"command\":\"cd /tmp/harness-live/work && node test.mjs; echo \\\"exit=$?\\\"; cat test.mjs; echo ---; cat sum.mjs; echo ---; git status --short; git branch --show-current; git remote -v\",\"description\":\"Run test in repo root and inspect sources\"}",
+        "providerExecuted": true,
+        "nativeName": "Bash"
+      },
+      {
+        "type": "tool-input-end",
+        "id": "toolu_019H42heyEc7zYPwZvDAo7Zp"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "92339def-1af5-41d0-9418-e3476c6ef356",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 644,
+            "cache_read_input_tokens": 30731,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 644,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 278,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 74
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 278,
+                "cache_read_input_tokens": 30731,
+                "cache_creation_input_tokens": 644,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 644,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "tool-result",
+        "toolCallId": "toolu_019H42heyEc7zYPwZvDAo7Zp",
+        "toolName": "bash",
+        "result": {
+          "stdout": "node:internal/modules/run_main:107\n    triggerUncaughtException(\n    ^\n\nAssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n-1 !== 5\n\n    at file:///tmp/harness-live/work/test.mjs:3:8\n    at ModuleJob.run (node:internal/modules/esm/module_job:430:25)\n    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:661:26)\n    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5) {\n  generatedMessage: true,\n  code: 'ERR_ASSERTION',\n  actual: -1,\n  expected: 5,\n  operator: 'strictEqual',\n  diff: 'simple'\n}\n\nNode.js v24.14.1\nexit=1\nimport assert from 'node:assert/strict';\nimport { sum } from './sum.mjs';\nassert.equal(sum(2, 3), 5);\nconsole.log('ok');\n---\nexport function sum(a, b) {\n  return a - b;\n}\n---\nmain\norigin\t/tmp/harness-live/origin.git (fetch)\norigin\t/tmp/harness-live/origin.git (push)",
+          "stderr": "\nShell cwd was reset to /tmp/harness-live/work/claude-code-spike-session",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "isError": false
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 31377,
+            "noCache": 2,
+            "cacheRead": 30731,
+            "cacheWrite": 644
+          },
+          "outputTokens": {
+            "total": 278,
+            "text": 278
+          }
+        }
+      },
+      {
+        "type": "text-start",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": "The b"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": "ug is in `sum.m"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": "js`: it"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": " subtracts inst"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": "ead of adding. I'll"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": " fix it, create the branch"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": ", and comm"
+      },
+      {
+        "type": "text-delta",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92",
+        "delta": "it."
+      },
+      {
+        "type": "text-end",
+        "id": "b0c60bed-7d3c-4226-a700-1109b7d77a92"
+      },
+      {
+        "type": "tool-input-start",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "toolName": "edit",
+        "providerExecuted": true
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": ""
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "{\"file_path\": \"/tmp/harness-"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "live/work/sum.m"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "js"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "\", \"old_string\": \"  return a - b;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "\", \"new_string\": \"  return a +"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": " b;"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "delta": "\"}"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "toolName": "edit",
+        "input": "{\"replace_all\":false,\"file_path\":\"/tmp/harness-live/work/sum.mjs\",\"old_string\":\"  return a - b;\",\"new_string\":\"  return a + b;\"}",
+        "providerExecuted": true,
+        "nativeName": "Edit"
+      },
+      {
+        "type": "tool-input-end",
+        "id": "toolu_01Ft74VtckkhujzpFrRfqxcf"
+      },
+      {
+        "type": "tool-input-start",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "toolName": "bash",
+        "providerExecuted": true
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": ""
+      },
+      {
+        "type": "tool-result",
+        "toolCallId": "toolu_01Ft74VtckkhujzpFrRfqxcf",
+        "toolName": "edit",
+        "result": {
+          "filePath": "/tmp/harness-live/work/sum.mjs",
+          "oldString": "  return a - b;",
+          "newString": "  return a + b;",
+          "originalFile": "export function sum(a, b) {\n  return a - b;\n}\n",
+          "structuredPatch": [
+            {
+              "oldStart": 1,
+              "oldLines": 3,
+              "newStart": 1,
+              "newLines": 3,
+              "lines": [
+                " export function sum(a, b) {",
+                "-  return a - b;",
+                "+  return a + b;",
+                " }"
+              ]
+            }
+          ],
+          "userModified": false,
+          "replaceAll": false,
+          "contentNotInModelContext": true
+        },
+        "isError": false
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "{\"command\": \"cd /"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "tmp/harness-live"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "/work && node test.mj"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "s && git checkout -b"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " luke/fix-sum"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " && git add sum.mj"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "s && git commit -q"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " -m \\\"$"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "(c"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "at <<'EOF'"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\\nFix sum retur"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "ning dif"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "ference instead of total"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\\n\\nsum()"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " subtracted its"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " oper"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "ands,"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " so sum(2, 3"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": ") returned -1."
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\\n\\nCo-Authored-"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "By: Claude Code "
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "<noreply@anthropic"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": ".com>\\nEOF"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\\n)\\\" && git push -u"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " orig"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "in luke/fix-s"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "um && git status --short &&"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " git log --oneline -2"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\", \"description\": \"Verify f"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "ix, create"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": " branch, comm"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "it, and push"
+      },
+      {
+        "type": "tool-input-delta",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "delta": "\"}"
+      },
+      {
+        "type": "tool-call",
+        "toolCallId": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "toolName": "bash",
+        "input": "{\"command\":\"cd /tmp/harness-live/work && node test.mjs && git checkout -b luke/fix-sum && git add sum.mjs && git commit -q -m \\\"$(cat <<'EOF'\\nFix sum returning difference instead of total\\n\\nsum() subtracted its operands, so sum(2, 3) returned -1.\\n\\nCo-Authored-By: Claude Code <noreply@anthropic.com>\\nEOF\\n)\\\" && git push -u origin luke/fix-sum && git status --short && git log --oneline -2\",\"description\":\"Verify fix, create branch, commit, and push\"}",
+        "providerExecuted": true,
+        "nativeName": "Bash"
+      },
+      {
+        "type": "tool-input-end",
+        "id": "toolu_01XqoXc7gMBNSh9qk8UGBTVG"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "b0e964e2-02ad-4a89-b473-d9750e8a5d24",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 752,
+            "cache_read_input_tokens": 31375,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 752,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 409,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 409,
+                "cache_read_input_tokens": 31375,
+                "cache_creation_input_tokens": 752,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 752,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "tool-result",
+        "toolCallId": "toolu_01XqoXc7gMBNSh9qk8UGBTVG",
+        "toolName": "bash",
+        "result": {
+          "stdout": "ok\nSwitched to a new branch 'luke/fix-sum'\nconductor: could not reach the GitHub auth broker socket (curl exit 1); git will be unauthenticated (context: )\nbranch 'luke/fix-sum' set up to track 'origin/luke/fix-sum'.\n35f9383 Fix sum returning difference instead of total\n7ebfcb3 seed",
+          "stderr": "\nShell cwd was reset to /tmp/harness-live/work/claude-code-spike-session",
+          "interrupted": false,
+          "isImage": false,
+          "noOutputExpected": false
+        },
+        "isError": false
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 32129,
+            "noCache": 2,
+            "cacheRead": 31375,
+            "cacheWrite": 752
+          },
+          "outputTokens": {
+            "total": 409,
+            "text": 409
+          }
+        }
+      },
+      {
+        "type": "reasoning-start",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": "The push succ"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": "eeded and"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": " the branch is now set up to"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": " track the remote; the auth"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": " broker warning is just noise"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": ", not an actual fail"
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": "ure."
+      },
+      {
+        "type": "reasoning-delta",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a",
+        "delta": "\n\n"
+      },
+      {
+        "type": "reasoning-end",
+        "id": "a615c101-10d9-490b-9f1a-f3f6d26c137a"
+      },
+      {
+        "type": "text-start",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "Fixed and"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " p"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "ushed `"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "luke/fix-sum"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "`.\n\n- **B"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "ug:** `sum()"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "` in `sum.mj"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "s` returned `a - b"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "`, so `sum(2"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": ", 3)` gave `"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "-1`. It now returns"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " `a + b`.\n-"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " **Test:** `node test"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": ".mjs` pr"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "ints `ok`"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": ".\n- **Commit:"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "** `35f9383`"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " on `luke/fix-"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "sum`, p"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "ushed to `"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "origin`"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " with up"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "stream tracking.\n\nThe"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " repo root is `/tm"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "p/harness-live/work"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "`, not the"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " `"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "claude-code-spike-"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "session` subdirectory I"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " started in"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": ". A"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " git war"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "ning about the"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " au"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": "th broker appeared during the"
+      },
+      {
+        "type": "text-delta",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47",
+        "delta": " push, but the push went through."
+      },
+      {
+        "type": "text-end",
+        "id": "2dfcdd99-dcd5-43b4-ab9b-91a692151c47"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "79044284-527c-4e5d-9ff5-1b2c6742ba83",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 675,
+            "cache_read_input_tokens": 32127,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 675,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 278,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 70
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 278,
+                "cache_read_input_tokens": 32127,
+                "cache_creation_input_tokens": 675,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 675,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 32804,
+            "noCache": 2,
+            "cacheRead": 32127,
+            "cacheWrite": 675
+          },
+          "outputTokens": {
+            "total": 278,
+            "text": 278
+          }
+        }
+      },
+      {
+        "type": "finish",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "totalUsage": {
+          "inputTokens": {
+            "total": 157177,
+            "noCache": 10,
+            "cacheRead": 124365,
+            "cacheWrite": 32802
+          },
+          "outputTokens": {
+            "total": 1394,
+            "text": 1394
+          }
+        },
+        "harnessMetadata": {
+          "claude-code": {
+            "costUsd": 0.217767,
+            "sessionId": "bc68d4ef-3479-414d-97c0-ca585e7f750f"
+          }
+        }
+      }
+    ],
+    [
+      {
+        "type": "stream-start"
+      },
+      {
+        "type": "text-start",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "I changed `sum()"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "` in `sum.mj"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "s` from `a - b`"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": " to `a + b`, committ"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "ed it as"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": " `35f9383` on a"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": " new `"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "luke/fix-sum"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": "` branch, and pushed"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": " that"
+      },
+      {
+        "type": "text-delta",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a",
+        "delta": " branch to `origin`."
+      },
+      {
+        "type": "text-end",
+        "id": "3a1388a6-c620-4dd0-ad02-719b9eddc96a"
+      },
+      {
+        "type": "raw",
+        "rawValue": {
+          "type": "stream_event",
+          "event": {
+            "type": "message_stop"
+          },
+          "session_id": "bc68d4ef-3479-414d-97c0-ca585e7f750f",
+          "parent_tool_use_id": null,
+          "uuid": "0c0129a9-3a2f-455d-aaf5-4adcf8dda95b",
+          "usage": {
+            "input_tokens": 2,
+            "cache_creation_input_tokens": 329,
+            "cache_read_input_tokens": 32802,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 329,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "output_tokens": 71,
+            "service_tier": "standard",
+            "inference_geo": "global",
+            "output_tokens_details": {
+              "thinking_tokens": 0
+            },
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 71,
+                "cache_read_input_tokens": 32802,
+                "cache_creation_input_tokens": 329,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 329,
+                  "ephemeral_1h_input_tokens": 0
+                },
+                "type": "message"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "type": "finish-step",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "usage": {
+          "inputTokens": {
+            "total": 33133,
+            "noCache": 2,
+            "cacheRead": 32802,
+            "cacheWrite": 329
+          },
+          "outputTokens": {
+            "total": 71,
+            "text": 71
+          }
+        }
+      },
+      {
+        "type": "finish",
+        "finishReason": {
+          "unified": "stop",
+          "raw": "stop"
+        },
+        "totalUsage": {
+          "inputTokens": {
+            "total": 33133,
+            "noCache": 2,
+            "cacheRead": 32802,
+            "cacheWrite": 329
+          },
+          "outputTokens": {
+            "total": 71,
+            "text": 71
+          }
+        },
+        "harnessMetadata": {
+          "claude-code": {
+            "costUsd": 0.2274004,
+            "sessionId": "bc68d4ef-3479-414d-97c0-ca585e7f750f"
+          }
+        }
+      }
+    ]
+  ]
+}

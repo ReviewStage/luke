@@ -74,7 +74,7 @@ type HarnessPart = typeof HarnessPartSchema.Type;
 const readPart = Schema.decodeUnknownOption(HarnessPartSchema);
 
 /** The code a failed harness turn is recorded under; the message beside it is redacted by the relay. */
-export const HARNESS_TURN_FAILURE = "HARNESS_TURN_FAILED";
+const HARNESS_TURN_FAILURE = "HARNESS_TURN_FAILED";
 
 /** eve's word for the end of a step, which the relay does not read; every harness step ends as `stop` here. */
 const STEP_FINISH = "stop";
