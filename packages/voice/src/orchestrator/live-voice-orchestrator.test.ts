@@ -1173,15 +1173,52 @@ it.effect(
     }),
 );
 
-it.effect("a goodbye already over when Luke's end arrives hangs up at once", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const call = yield* goodbyeCall(f);
-    call.settle(LIVE_STATUS.LISTENING);
-    yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
-    yield* settleFibers();
-    assert.equal(call.closes, 1);
-  }),
+it.effect(
+  "Luke still quiet when his end arrives is given a moment to begin the goodbye: one that begins is waited out, and one that does not was already over",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      yield* settleFibers();
+      call.settle(LIVE_STATUS.SPEAKING);
+      yield* TestClock.adjust(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+      yield* settleFibers();
+      assert.equal(call.closes, 0, "a goodbye that has just begun is not cut off");
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+
+      const g = fixture();
+      const quiet = yield* goodbyeCall(g);
+      quiet.settle(LIVE_STATUS.LISTENING);
+      yield* g.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(quiet) });
+      yield* settleFibers();
+      assert.equal(quiet.closes, 0);
+      yield* TestClock.adjust(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+      yield* settleFibers();
+      assert.equal(quiet.closes, 1);
+    }),
+);
+
+it.effect(
+  "the last spacing of the developer's goodbye landing late does not keep the call up",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const call = yield* goodbyeCall(f);
+      yield* f.obey({ phase: LIVE_SESSION_PHASE.ENDING, sessionId: sessionIdOf(call) });
+      call.events.onCaptions([
+        {
+          ...row("row-1", CONVERSATION_ENTRY_KIND.ASK, "that's all, bye ", true),
+          voiceSessionId: "vs-1",
+        },
+      ]);
+      call.settle(LIVE_STATUS.LISTENING);
+      yield* settleFibers();
+      assert.equal(call.closes, 1);
+    }),
 );
 
 it.effect(

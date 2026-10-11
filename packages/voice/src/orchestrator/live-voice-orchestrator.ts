@@ -99,11 +99,15 @@ const SPEAKER_OF_KIND = {
 const SILENT: LiveVoiceSpeakers = { listening: false, lukeSpeaking: false };
 
 /**
- * How long Luke's goodbye may still be playing once the host says he is
- * ending the call. A goodbye is one short line; Luke still talking past this
- * is Luke carrying on, so the call stays up rather than cutting him off.
+ * How long Luke's goodbye is waited on once the host says he is ending the
+ * call. The word can land before the goodbye's audio does, since the voice
+ * delegates as it starts speaking, so a Luke still quiet is given
+ * `START_MS` to begin before his goodbye is taken as already over. A goodbye
+ * is one short line; Luke still talking `PLAYBACK_MS` after the word is Luke
+ * carrying on, so the call stays up rather than cutting him off.
  */
 export const LUKE_ENDING_BOUNDS = {
+  START_MS: 1_500,
   PLAYBACK_MS: 15_000,
 } as const;
 
@@ -113,21 +117,29 @@ export const LUKE_ENDED_CALL_NOTE = "Luke ended the call.";
 /**
  * Luke ending the standing call, from the host's word until his goodbye has
  * played: the call it is about, the developer's words as they stood when the
- * word came, and whether the goodbye played out (true) or the developer
- * spoke over it (false).
+ * word came, whether Luke has been heard since, and whether the goodbye
+ * played out (true) or the developer spoke over it (false).
  */
 interface LukeEnding {
   readonly call: LiveVoiceCall;
   readonly developerWords: string;
+  spoke: boolean;
   readonly played: Deferred.Deferred<boolean>;
 }
 
-/** Everything the developer has said on the call so far, which grows the moment they speak again. */
+/**
+ * Everything the developer has said on the call so far, as words alone,
+ * which grows the moment they speak again. Note that a delta of spacing
+ * alone moves nothing, because the transcript's last fragments of the
+ * goodbye itself may still be landing.
+ */
 function developerWordsOf(rows: readonly LiveCaptionRow[]): string {
   return rows
     .filter((row) => row.entry.kind === CONVERSATION_ENTRY_KIND.ASK)
     .map((row) => row.entry.words)
-    .join("\n");
+    .join(" ")
+    .replace(/\s+/gu, " ")
+    .trim();
 }
 
 const MICROPHONE_REFUSED_NOTE =
@@ -464,8 +476,9 @@ export class LiveVoiceOrchestrator {
    * The host's word that Luke is ending the call: once his goodbye has
    * played, the call is hung up exactly as the panel's stop hangs it up, so
    * the close, the record, and the view are the developer's own stop, and
-   * the strip says Luke ended it. A goodbye already over when the word comes
-   * hangs up at once. The developer speaking before it is over wins, and so
+   * the strip says Luke ended it. A Luke still quiet when the word comes is
+   * given `LUKE_ENDING_BOUNDS.START_MS` to begin, and a goodbye that does not
+   * begin by then was over before the word. The developer speaking before it is over wins, and so
    * does Luke still talking past `LUKE_ENDING_BOUNDS`: either leaves the call
    * up. A second word while one is waiting adds nothing. The wait is a fiber
    * of its own, detached from the subscription that told it, on that
@@ -480,11 +493,10 @@ export class LiveVoiceOrchestrator {
       const ending: LukeEnding = {
         call,
         developerWords: developerWordsOf(this.#rows),
+        spoke: this.#status === LIVE_STATUS.SPEAKING,
         played: Deferred.makeUnsafe<boolean>(),
       };
       this.#lukeEnding = ending;
-      if (this.#status !== LIVE_STATUS.SPEAKING)
-        Deferred.doneUnsafe(ending.played, Exit.succeed(true));
       return Effect.asVoid(
         Effect.forkDetach(this.#hangUpAfterGoodbye(ending), { startImmediately: true }),
       );
@@ -493,6 +505,10 @@ export class LiveVoiceOrchestrator {
 
   #hangUpAfterGoodbye(ending: LukeEnding): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
+      if (!ending.spoke) {
+        yield* Effect.sleep(Duration.millis(LUKE_ENDING_BOUNDS.START_MS));
+        if (!ending.spoke) Deferred.doneUnsafe(ending.played, Exit.succeed(true));
+      }
       const played = yield* Effect.timeoutOption(
         Deferred.await(ending.played),
         Duration.millis(LUKE_ENDING_BOUNDS.PLAYBACK_MS),
@@ -513,7 +529,9 @@ export class LiveVoiceOrchestrator {
     if (ending === undefined || ending.call !== call) return;
     if (developerWordsOf(this.#rows) !== ending.developerWords) {
       Deferred.doneUnsafe(ending.played, Exit.succeed(false));
-    } else if (this.#status !== LIVE_STATUS.SPEAKING) {
+    } else if (this.#status === LIVE_STATUS.SPEAKING) {
+      ending.spoke = true;
+    } else if (ending.spoke) {
       Deferred.doneUnsafe(ending.played, Exit.succeed(true));
     }
   }
