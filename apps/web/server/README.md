@@ -1708,9 +1708,10 @@ it at every step and is told the recorded pair (`host.delegatedModel`), and
 the hook relays the worker's stream into the child conversation as a child
 turn naming that pair (`host.relayChild`). The tool's output names the pair
 and the worker's answer; the tool part's `toolCallId` is what names the
-child. `delegate` is among `SANDBOX_TOOLS`, since the worker reads the
-checkout in the agent's sandbox, so a turn that only delegated still stops
-the sandbox as it ends.
+child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
+delegation opens no sandbox, and counting it would have the turn's end open
+one only to stop it, so a sandbox a worker opened is stopped at the end of
+the first turn in which the agent runs a sandbox tool of its own.
 
 The model is chosen at every step (`coder-host/model.ts`): the agent's row
 names the catalog id and effort, `providerModelOf` turns the id into the

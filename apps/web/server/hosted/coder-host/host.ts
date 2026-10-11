@@ -245,7 +245,15 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         }
         const childId = childConversationId(admitted.target.conversationId, callId);
         yield* recordDelegation(admitted.target, childId, choice, CODER_TOOL.DELEGATE);
-        return Result.succeed(choice);
+        // The pair answered is the pair recorded: a call replayed after the agent's row changed
+        // finds the delegation it already made, which is the one the worker runs on.
+        const recorded = yield* readDelegation(admitted.target, childId);
+        return Result.succeed(
+          Option.match(recorded, {
+            onNone: () => choice,
+            onSome: ({ model, effort }) => ({ model, effort }),
+          }),
+        );
       }),
 
     delegatedModel: (admitted, parentCallId, scripted) =>

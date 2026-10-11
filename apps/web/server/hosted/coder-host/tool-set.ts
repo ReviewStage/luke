@@ -49,7 +49,15 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
   CODER_TOOL.WEB_SEARCH,
 ]);
 
-/** The tools whose every call runs in the agent's sandbox, which is what tells the host a sandbox was opened; a delegation is among them because the worker reads the checkout in the agent's own sandbox. */
+/**
+ * The tools whose every call runs in the agent's sandbox, which is what
+ * tells the host a sandbox was opened. A delegation is not among them: a
+ * worker opens the agent's sandbox only when it reads the checkout, and a
+ * refused or web-only delegation opens none, so counting it would have the
+ * turn's end open a sandbox, checkout and all, only to stop it. A sandbox a
+ * worker opened is stopped at the end of the first turn in which the agent
+ * runs a sandbox tool of its own, which a turn that edits always does.
+ */
 export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.BASH,
   CODER_TOOL.READ_FILE,
@@ -57,7 +65,6 @@ export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GLOB,
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
-  CODER_TOOL.DELEGATE,
 ]);
 
 /** A call's input as the row keeps it: one JSON object, whose fields are eve's own tool's to read. */

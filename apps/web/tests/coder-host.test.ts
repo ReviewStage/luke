@@ -407,7 +407,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore;
-        const { auth, sessionId, admitted } = yield* openAgent(host);
+        const { agent, auth, sessionId, admitted } = yield* openAgent(host);
         const made = yield* host
           .delegate(admitted, "call-1", {})
           .pipe(Effect.provide(modelCatalogOf(CATALOG)));
@@ -432,6 +432,17 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             .delegatedModel(delegated.success, "call-nobody-made", undefined)
             .pipe(Effect.provide(modelCatalogOf(CATALOG))),
           Result.fail(CODER_REFUSAL.NO_DELEGATION),
+        );
+        // The same call made again after the agent's row changed answers the pair it already recorded.
+        yield* updateCodingAgentChoice(admitted.target.userId, agent.id, {
+          model: "openai/gpt-6.1-sol",
+          effort: "low",
+        });
+        assert.deepEqual(
+          yield* host
+            .delegate(admitted, "call-1", {})
+            .pipe(Effect.provide(modelCatalogOf(CATALOG))),
+          Result.succeed({ model: "anthropic/claude-opus-5.5", effort: "high" }),
         );
       }),
   );
