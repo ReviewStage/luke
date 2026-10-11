@@ -290,11 +290,27 @@ export function delegationView(
   };
 }
 
-/** A markdown heading's marks, which a plan's first line usually opens on. */
-const HEADING_MARKS = /^#{1,6}\s+/u;
+/** The marks a markdown line opens on: a heading's, a quote's, or a list item's, which a plan's or a task's first line may carry. */
+const LINE_MARKS = /^(?:#{1,6}|>|[-*+]|\d+[.)])\s+/u;
 
-/** How a plan, or a worker's task, is named on its card and its tab: its first heading, or its first line of words. */
+/**
+ * The marks of strong emphasis and code inside a line, which a title drawn
+ * as plain words leaves out. Note that `__` stays, because it is more often
+ * a name's own (`__init__`) than emphasis.
+ */
+const INLINE_MARKS = /\*\*|`/gu;
+
+/** A markdown link, whose words a title keeps and whose destination it leaves out. */
+const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
+
+/**
+ * How a plan, or a worker's task, is named on its card, its line, and its
+ * tab: its first line of words, as plain words, since the line is drawn as
+ * text and the markdown is the opened card's.
+ */
 export function cardTitle(text: string): string {
   const first = text.split("\n").find((line) => line.trim().length > 0);
-  return first === undefined ? "" : first.trim().replace(HEADING_MARKS, "");
+  return first === undefined
+    ? ""
+    : first.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
 }

@@ -203,6 +203,18 @@ test("the session is told when to delegate, how to choose a worker's model, and 
   }
 });
 
+test("the session is told to write a worker's task as Markdown the developer can read, its goal one plain sentence on the first line, which the worker's row and tab are named by", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief);
+    for (const kept of [
+      "short Markdown in complete sentences",
+      "the goal as one plain sentence on the first line",
+    ]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
+  }
+});
+
 test("an agent handed a task is told its job is the developer's task, in the same repository, and is told of no plan", () => {
   const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN);
   assert.ok(planned.includes("implement the plan given as the first message"));
