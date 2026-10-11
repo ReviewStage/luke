@@ -1,6 +1,13 @@
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import type { Properties } from "posthog-js";
-import posthog from "posthog-js/dist/module.full.no-external";
+import posthog from "posthog-js/dist/module.no-external";
+// Note that the recorder is imported for its side effect, because the client
+// above loads no script of its own: the "no-external" build never fetches the
+// recorder, so this import is what registers it (`__PosthogExtensions__`),
+// and without it recording would silently never start. The two together are
+// the "full" build without the surveys, product tours, web vitals, and the
+// rest that Luke never turns on, which was over a quarter of the renderer bundle.
+import "posthog-js/dist/posthog-recorder";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
 
 /**
