@@ -19,9 +19,6 @@ const VOICE_STATUS = {
 
 type VoiceStatus = (typeof VOICE_STATUS)[keyof typeof VOICE_STATUS];
 
-/** What the card says while no call stands. */
-const RESTING_LINE = "Ready";
-
 /**
  * The one line of voice state the card draws. Luke speaking wins over the
  * microphone, because the session is full duplex and his answer is what the
@@ -47,9 +44,10 @@ export interface LukeIdentityProps {
 }
 
 /**
- * Luke at the head of the sidebar: his face, reacting to the voice, his
- * name, and one line saying what the voice is doing, with a meter for
- * whoever is talking.
+ * Luke at the head of the sidebar: his face, reacting to the voice, and his
+ * name. During a call one line under the name says what the voice is doing,
+ * with a meter for whoever is talking; at rest there is nothing to say, so
+ * the name stands alone.
  */
 export function LukeIdentity({
   levels = SILENT_VOICE_LEVELS,
@@ -73,7 +71,6 @@ export function LukeIdentity({
       : status === VOICE_STATUS.LISTENING
         ? WAVEFORM_VOICE.DEVELOPER
         : undefined;
-  const line = status ?? RESTING_LINE;
 
   return (
     <div className="luke-identity" data-turn={meterVoice}>
@@ -82,10 +79,11 @@ export function LukeIdentity({
       </span>
       <span className="luke-identity-copy">
         <span className="luke-identity-name">Luke</span>
-        <span className="luke-identity-status" role="status">
-          {status === undefined ? <span className="luke-identity-dot" aria-hidden="true" /> : null}
-          {line}
-        </span>
+        {status ? (
+          <span className="luke-identity-status" role="status">
+            {status}
+          </span>
+        ) : null}
       </span>
       {meterVoice ? (
         <span className="wing-meter luke-identity-meter" data-turn={meterVoice}>

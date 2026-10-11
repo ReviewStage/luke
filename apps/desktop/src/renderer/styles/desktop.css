@@ -292,13 +292,6 @@ body,
   font-size: 12px;
 }
 
-.luke-identity-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--state-complete);
-}
-
 .luke-identity[data-turn="luke"] .luke-identity-status {
   color: var(--voice-luke);
 }
