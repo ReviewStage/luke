@@ -368,3 +368,18 @@ test("a section the body leaves out while empty is offered to add, and opens its
     { field: PLAN_FIELD.DATA_AND_MIGRATION, base: null, value: "No stored data changes." },
   ]);
 });
+
+test("a rule only a notetaker's draft holds so far is drawn but not yet offered to edit", () => {
+  const drafted: PlanFields = {
+    ...LISTED_FIELDS,
+    rules: [RULE, { statement: "Invites expire after 7 days.", examples: null }],
+  };
+  const { container } = mount({
+    ...LISTED,
+    document: { ...LISTED.document, body: planBody({ name: "Teammate invitations" }, drafted) },
+  });
+
+  assert.ok(container.textContent?.includes("Invites expire after 7 days."));
+  assert.ok(container.querySelector('[aria-label="Edit Rule 1"]'));
+  assert.equal(container.querySelector('[aria-label="Edit Rule 2"]'), null);
+});

@@ -258,6 +258,15 @@ function editorHeading(target: EditTarget, words: string, ruleCount: number): st
 }
 
 /**
+ * Whether a unit is a rule only a notetaker's draft holds so far: drawn, but
+ * not yet among the saved rules an editor opens on, so it is edited once it
+ * is saved rather than opened empty.
+ */
+function draftedOnly(target: EditTarget, words: string, ruleCount: number): boolean {
+  return "rule" in target && target.rule >= ruleCount && !words.startsWith("## ");
+}
+
+/**
  * One unit of the body: drawn as the chase has it, the editor where it is
  * the one the editor opened from, nothing where it is the field an editor
  * holds elsewhere, and the way into its editor where it can be edited.
@@ -275,7 +284,7 @@ function BodyUnit({
 }): React.JSX.Element | null {
   const drawn = <MarkdownMessage words={view.words} className={unitClass(view)} edit={view.edit} />;
   const target = editable ? editTargetOfUnit(view.words, ruleCount) : undefined;
-  if (target === undefined) return drawn;
+  if (target === undefined || draftedOnly(target, view.words, ruleCount)) return drawn;
   const { editor, host } = editing;
   if (editor !== undefined && host === view.id) {
     const heading = editorHeading(editor.target, view.words, ruleCount);

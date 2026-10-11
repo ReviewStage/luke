@@ -193,6 +193,16 @@ function itemsOf(text: string): readonly string[] {
     .filter((line) => line !== "");
 }
 
+/**
+ * The box's items with each line left as typed from an item standing back to
+ * that item, its own line breaks and all, since the box drew it on one line;
+ * only a line the developer changed or added saves as typed.
+ */
+function itemsKept(lines: readonly string[], standing: readonly string[]): readonly string[] {
+  const byLine = new Map(standing.map((item) => [oneLine(item), item]));
+  return lines.map((line) => byLine.get(line) ?? line);
+}
+
 /** A clause as saved: null where nothing but whitespace stands. */
 function clauseOf(text: string): string | null {
   const trimmed = text.trim();
@@ -288,16 +298,40 @@ function requestOf(editor: FieldEditor): PlanEditRequest {
       return { field: saved.field, base: saved.base, value: rulesWith(saved.base, index, rule) };
     }
     case PLAN_FIELD.OPEN_QUESTIONS:
-      return { field: saved.field, base: saved.base, value: itemsOf(textOf(draft)) };
-    case PLAN_FIELD.ASSUMPTIONS:
       return {
         field: saved.field,
         base: saved.base,
-        value: itemsOf(textOf(draft)).map((text) => ({ text })),
+        value: itemsKept(itemsOf(textOf(draft)), saved.base),
       };
+    case PLAN_FIELD.ASSUMPTIONS: {
+      const standing = saved.base.map((assumption) => assumption.text);
+      return {
+        field: saved.field,
+        base: saved.base,
+        value: itemsKept(itemsOf(textOf(draft)), standing).map((text) => ({ text })),
+      };
+    }
     default:
       return { field: saved.field, base: saved.base, value: clauseOf(textOf(draft)) };
   }
+}
+
+/**
+ * The editor's target once the field it edits stands as `now`: a rule moved
+ * by Luke's change found again where the rule the editor opened on now
+ * stands, its place kept where Luke changed the rule itself, and the end of
+ * the rules where it is gone and its place with it. Any other target stands.
+ */
+function retargeted(editor: FieldEditor, now: EditBase): EditTarget {
+  const { target, saved } = editor;
+  if (!("rule" in target) || saved.field !== PLAN_FIELD.RULES || now.field !== PLAN_FIELD.RULES) {
+    return target;
+  }
+  const opened = JSON.stringify(saved.base?.[target.rule]);
+  const rules = now.base ?? [];
+  const found = rules.findIndex((rule) => JSON.stringify(rule) === opened);
+  if (found !== -1) return { ...target, rule: found };
+  return { ...target, rule: Math.min(target.rule, rules.length) };
 }
 
 /** The field as the service holds it of the developer's once a save lands. */
@@ -402,17 +436,20 @@ export function editorRetried(editor: FieldEditor): FieldEditor {
 export function editorKeptMine(editor: FieldEditor): FieldEditor {
   if (editor.state.kind !== FIELD_EDITOR_STATE.CONFLICT) return editor;
   const saved = currentAs(editor.saved.field, editor.state.current) ?? editor.saved;
-  return { ...editor, saved, state: { kind: FIELD_EDITOR_STATE.EDITING } };
+  const target = retargeted(editor, saved);
+  return { ...editor, target, saved, state: { kind: FIELD_EDITOR_STATE.EDITING } };
 }
 
 /** The developer takes Luke's words: the editor holds them and closes, with nothing to save. */
 export function editorTookLukes(editor: FieldEditor): FieldEditor {
   if (editor.state.kind !== FIELD_EDITOR_STATE.CONFLICT) return editor;
   const saved = currentAs(editor.saved.field, editor.state.current) ?? editor.saved;
+  const target = retargeted(editor, saved);
   return {
     ...editor,
+    target,
     saved,
-    draft: draftOf(editor.target, saved),
+    draft: draftOf(target, saved),
     state: { kind: FIELD_EDITOR_STATE.EDITING },
     closing: true,
   };

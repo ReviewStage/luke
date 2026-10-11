@@ -233,3 +233,36 @@ test("an editor asked to close waits for its words to save, then closes", () => 
   assert.ok(editorCloses(editorAnswered(out, { saved: true })));
   assert.ok(editorCloses(editorCloseAsked(editorOpened(PROBLEM, CONTENT))));
 });
+
+test("an item with line breaks opened and closed saves nothing, and keeps its breaks when another line changes", () => {
+  const broken: PlanContent = {
+    ...CONTENT,
+    assumptions: [{ text: "Check access\nwhen revoked" }, { text: "Invites reuse memberships." }],
+  };
+  const opened = editorOpened({ field: PLAN_FIELD.ASSUMPTIONS }, broken);
+
+  assert.equal(pendingSave(opened), undefined);
+  assert.deepEqual(
+    saved(editorTyped(opened, text("Check access when revoked\nInvites reuse accounts."))).value,
+    [{ text: "Check access\nwhen revoked" }, { text: "Invites reuse accounts." }],
+  );
+});
+
+test("keeping mine on a rule that moved while Luke struck one before it saves it where it now stands", () => {
+  const first = { statement: "Admins approve invites.", examples: null };
+  const content = { ...CONTENT, fields: { ...CONTENT.fields, rules: [first, RULE] } };
+  const edited = { statement: "Any member may invite by email or link.", examples: [] };
+  const typed = editorTyped(editorOpened({ field: PLAN_FIELD.RULES, rule: 1 }, content), {
+    kind: EDIT_DRAFT.RULE,
+    rule: edited,
+  });
+  const conflicted = editorAnswered(editorSent(typed, saved(typed)), {
+    conflict: { current: [RULE] },
+  });
+
+  assert.deepEqual(saved(editorKeptMine(conflicted)), {
+    field: PLAN_FIELD.RULES,
+    base: [RULE],
+    value: [{ statement: edited.statement, examples: null }],
+  });
+});
