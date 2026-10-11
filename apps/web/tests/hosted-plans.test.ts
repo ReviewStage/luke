@@ -624,6 +624,98 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
     }),
   );
 
+  it.effect(
+    "a pin carries the instant it was made, a second pin keeps it, an unpin takes it away, and the list's order stands",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const relay = yield* createPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
+        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        yield* TestClock.adjust("1 minute");
+
+        const pinned = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: true }));
+        yield* TestClock.adjust("1 minute");
+        const again = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: true }));
+        const listed = yield* listPlans(userId);
+        const unpinned = Option.getOrThrow(yield* updatePlan(userId, relay.id, { pinned: false }));
+
+        assert.equal(pinned.pinnedAt, pinned.createdAt + 120_000);
+        assert.equal(again.pinnedAt, pinned.pinnedAt);
+        assert.equal(pinned.updatedAt, relay.updatedAt);
+        assert.deepEqual(
+          listed.map(({ id, pinnedAt }) => [id, pinnedAt]),
+          [
+            [ledger.id, undefined],
+            [relay.id, pinned.pinnedAt],
+          ],
+        );
+        assert.equal("pinnedAt" in unpinned, false);
+        assert.equal(
+          "pinnedAt" in Option.getOrThrow(yield* readPlan(userId, relay.id)).plan,
+          false,
+        );
+      }),
+  );
+
+  it.effect(
+    "an archived plan leaves the list unless it is asked for, and comes back where it stood, its pin with it",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const relay = yield* createPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
+        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        yield* updatePlan(userId, relay.id, { pinned: true });
+        yield* TestClock.adjust("1 minute");
+
+        const archived = Option.getOrThrow(yield* updatePlan(userId, relay.id, { archived: true }));
+        const listed = yield* listPlans(userId);
+        const everything = yield* listPlans(userId, { includeArchived: true });
+        const opened = Option.getOrThrow(yield* readPlan(userId, relay.id)).plan;
+        yield* updatePlan(userId, relay.id, { archived: false });
+        const restored = yield* listPlans(userId);
+
+        assert.equal(archived.archivedAt, relay.createdAt + 120_000);
+        assert.deepEqual(
+          listed.map(({ id }) => id),
+          [ledger.id],
+        );
+        assert.deepEqual(
+          everything.map(({ id, archivedAt }) => [id, archivedAt]),
+          [
+            [ledger.id, undefined],
+            [relay.id, archived.archivedAt],
+          ],
+        );
+        assert.equal(opened.archivedAt, archived.archivedAt);
+        assert.deepEqual(
+          restored.map(({ id, pinnedAt, archivedAt }) => [id, pinnedAt, archivedAt]),
+          [
+            [ledger.id, undefined, undefined],
+            [relay.id, archived.pinnedAt, undefined],
+          ],
+        );
+      }),
+  );
+
+  it.effect("a second account cannot pin or archive another's plan", () =>
+    Effect.gen(function* () {
+      const owner = yield* openUser;
+      const intruder = yield* openUser;
+      const { id: planId } = yield* createPlan(owner, RELAY_PLAN);
+      const before = yield* readPlan(owner, planId);
+
+      assert.equal(Option.isNone(yield* updatePlan(intruder, planId, { pinned: true })), true);
+      assert.equal(Option.isNone(yield* updatePlan(intruder, planId, { archived: true })), true);
+      assert.deepEqual(yield* readPlan(owner, planId), before);
+      assert.deepEqual(
+        (yield* listPlans(owner)).map(({ id }) => id),
+        [planId],
+      );
+    }),
+  );
+
   it.effect("a save the store refuses is reported as not saved and the prior document stands", () =>
     Effect.gen(function* () {
       const userId = yield* openUser;

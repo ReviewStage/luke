@@ -29,7 +29,8 @@ import { InstantColumnSchema } from "./store/database.js";
  *
  * Every statement here names the account it runs for beside the plan, so a
  * plan id another account owns reads, saves, changes, and deletes exactly as an
- * id that names nothing: as no plan. A plan's repository is kept here as
+ * id that names nothing: as no plan. A pin and an archive are stamps on the
+ * row, so they are the account's and read alike on every Mac it signs in on. A plan's repository is kept here as
  * handed and confirmed nowhere here: whether the account reaches it through
  * the Luke GitHub App is the route's to settle before it calls, on the
  * service that reads GitHub (`github/github-app.ts`). A save is one `update` over the row that
@@ -69,10 +70,12 @@ export interface NewPlan {
   readonly repository?: string | null;
 }
 
-/** What a change to a plan names: a new name, a repository or null to clear it, or both. */
+/** What a change to a plan names: a new name, a repository or null to clear it, pinned or not, archived or not, or any of them at once. */
 export interface PlanChanges {
   readonly name?: string;
   readonly repository?: string | null;
+  readonly pinned?: boolean;
+  readonly archived?: boolean;
 }
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -85,6 +88,8 @@ const PLAN_COLUMNS = {
   fields: plan.fields,
   agentEdits: plan.agentEdits,
   repository: plan.repository,
+  pinnedAt: plan.pinnedAt,
+  archivedAt: plan.archivedAt,
   conversationId: plan.conversationId,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
@@ -99,6 +104,8 @@ const PlanRowSchema = Schema.Struct({
   fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
   repository: Schema.NullOr(Schema.String),
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
   conversationId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
   updatedAt: InstantColumnSchema,
@@ -175,7 +182,8 @@ function planOf(row: PlanRow): PlanStoreEffect<Plan> {
  * The row as one line of the list. Note that `openedAt` is still answered,
  * as the start, because a desktop through v0.7.1 refuses a summary without it.
  * It goes once a release whose decoder treats it as optional has shipped and
- * v0.7.1 is no longer supported.
+ * v0.7.1 is no longer supported. A pin and an archive are answered only where
+ * they stand, so a plan that is neither reads as every plan did before them.
  */
 function summaryOf(row: PlanRow): PlanSummary {
   const createdAt = row.createdAt.getTime();
@@ -186,6 +194,8 @@ function summaryOf(row: PlanRow): PlanSummary {
     updatedAt: row.updatedAt.getTime(),
     repository: row.repository,
     openedAt: createdAt,
+    ...(row.pinnedAt === null ? undefined : { pinnedAt: row.pinnedAt.getTime() }),
+    ...(row.archivedAt === null ? undefined : { archivedAt: row.archivedAt.getTime() }),
   };
 }
 
@@ -217,13 +227,13 @@ const insertPlan = SqlSchema.findOne({
 });
 
 const findPlans = SqlSchema.findAll({
-  Request: Schema.String,
+  Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
   Result: PlanRowSchema,
-  execute: (userId) =>
+  execute: ({ userId, includeArchived }) =>
     db
       .select(PLAN_COLUMNS)
       .from(plan)
-      .where(eq(plan.userId, userId))
+      .where(and(eq(plan.userId, userId), includeArchived ? undefined : isNull(plan.archivedAt)))
       .orderBy(desc(plan.createdAt), desc(plan.id)),
 });
 
@@ -267,7 +277,7 @@ const lockPlan = SqlSchema.findOneOption({
     db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).for("update"),
 });
 
-/** The row changed: whichever of the name, the body, and the repository the change names, in one statement. */
+/** The row changed: whichever of the name, the body, the repository, the pin, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
@@ -275,6 +285,8 @@ const applyChanges = SqlSchema.findOne({
     name: Schema.optionalKey(Schema.String),
     body: Schema.optionalKey(Schema.String),
     repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
+    pinnedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
+    archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
   }),
   Result: PlanRowSchema,
   execute: ({ userId, planId, ...changes }) =>
@@ -422,12 +434,20 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
 }
 
 /**
- * Every plan the account owns, newest started first, without their documents.
- * Nothing but starting a plan moves the order: opening, reading, and saving
- * one leave every row where it stood.
+ * Every plan the account owns, newest started first, without their documents,
+ * and without the archived ones unless `includeArchived` asks for them.
+ * Nothing but starting a plan moves the order: opening, reading, saving,
+ * pinning, and archiving one leave every row where it stood, and the order a
+ * pin draws is the window's to draw from `pinnedAt`.
  */
-export function listPlans(userId: string): PlanStoreEffect<readonly PlanSummary[]> {
-  return Effect.map(findPlans(userId), (rows) => rows.map(summaryOf));
+export function listPlans(
+  userId: string,
+  options: { readonly includeArchived?: boolean } = {},
+): PlanStoreEffect<readonly PlanSummary[]> {
+  return Effect.map(
+    findPlans({ userId, includeArchived: options.includeArchived === true }),
+    (rows) => rows.map(summaryOf),
+  );
 }
 
 /**
@@ -502,11 +522,23 @@ function retitledBody(row: PlanRow, name: string): string {
 }
 
 /**
+ * The instant a pin or an archive stands from after a change: now where it
+ * is asked for, the one already standing where it already was, so asking
+ * twice moves nothing, and none where it is taken away.
+ */
+function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null {
+  if (!asked) return null;
+  return standing ?? now;
+}
+
+/**
  * Changes the plan, a new name with its document's heading, a repository or
- * none, and answers it as changed, or nothing where the account owns no
- * such plan. The changes arrive already read under the wire's rules, and a
- * repository already confirmed reachable. A change is not a save: the
- * document's `updatedAt` and the list's order stand.
+ * none, pinned or not, archived or not, and answers it as changed, or nothing
+ * where the account owns no such plan. The changes arrive already read under
+ * the wire's rules, and a repository already confirmed reachable. A change is
+ * not a save: the document's `updatedAt` and the list's order stand. A pin
+ * and an archive are kept apart, so a pinned plan archived and brought back
+ * is pinned again.
  */
 export function updatePlan(
   userId: string,
@@ -518,6 +550,7 @@ export function updatePlan(
       Effect.gen(function* () {
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
+        const now = yield* DateTime.nowAsDate;
         const row = yield* applyChanges({
           userId,
           planId,
@@ -525,6 +558,12 @@ export function updatePlan(
             ? undefined
             : { name: changes.name, body: retitledBody(locked.value, changes.name) }),
           ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
+          ...(changes.pinned === undefined
+            ? undefined
+            : { pinnedAt: stampOf(changes.pinned, locked.value.pinnedAt, now) }),
+          ...(changes.archived === undefined
+            ? undefined
+            : { archivedAt: stampOf(changes.archived, locked.value.archivedAt, now) }),
         }).pipe(
           // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),

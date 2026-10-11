@@ -681,10 +681,15 @@ answers the route over a fixed catalog.
 
 `server/plans-app.ts` is the Mac's Plans tab's route group over the account's
 named feature plans (`docs/PLANNING.md`): `GET /api/plans` lists them, newest
-started first, `POST /api/plans` starts one with its name, the untouched
+started first and the archived ones left out unless `?archived=include` asks
+for them, so a build from before archiving never draws one, `POST /api/plans`
+starts one with its name, the untouched
 template as its document, and the repository it is about where one is
 chosen, `GET /api/plans/{id}` opens one with its saved document,
-`PATCH /api/plans/{id}` changes its name, its repository, or both, and
+`PATCH /api/plans/{id}` changes its name, its repository, whether it is
+pinned, whether it is archived, or several at once, each pin and archive a
+stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and
+`archivedAt` only where it stands, and
 `DELETE /api/plans/{id}` deletes it, its coding agents' rows going with it
 and their conversations stamped deleted beside the plan's own (`deletePlan`),
 the id moved into

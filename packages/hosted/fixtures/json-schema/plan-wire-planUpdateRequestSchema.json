@@ -16,6 +16,12 @@
           "type": "null"
         }
       ]
+    },
+    "pinned": {
+      "type": "boolean"
+    },
+    "archived": {
+      "type": "boolean"
     }
   },
   "required": [],
