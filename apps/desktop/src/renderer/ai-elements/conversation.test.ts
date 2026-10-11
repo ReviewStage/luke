@@ -29,7 +29,8 @@ function scrollBox(container: HTMLElement, contentHeight: number): HTMLElement {
 
 test("the list follows the newest line only while it is scrolled to the bottom", () => {
   assert.equal(followsNewest({ scrollTop: 600, scrollHeight: 1_000, clientHeight: 400 }), true);
-  assert.equal(followsNewest({ scrollTop: 590, scrollHeight: 1_000, clientHeight: 400 }), true);
+  assert.equal(followsNewest({ scrollTop: 599.5, scrollHeight: 1_000, clientHeight: 400 }), true);
+  assert.equal(followsNewest({ scrollTop: 590, scrollHeight: 1_000, clientHeight: 400 }), false);
   assert.equal(followsNewest({ scrollTop: 300, scrollHeight: 1_000, clientHeight: 400 }), false);
 });
 

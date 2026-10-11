@@ -34,8 +34,8 @@ import { cn } from "./utils";
  * inside it. `planning/transcript-layout.test.ts` holds the rule.
  */
 
-/** How far from the bottom, in pixels, the list still counts as following the newest line. */
-const FOLLOW_SLACK_PX = 24;
+/** How far from the bottom, in pixels, the list still counts as following the newest line: a rounding's worth, since any wider snapped a reader scrolling up through it back down on the next render. */
+const FOLLOW_SLACK_PX = 1;
 
 /** Whether a list scrolled this far is at its newest line, so a new line should keep it there. */
 export function followsNewest(list: {

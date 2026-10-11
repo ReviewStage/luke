@@ -63,18 +63,15 @@ function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined
 }
 
 /**
- * Scrolls `lines` alone until `target` stands in its middle, read from the
- * lines' start, so lines pointed at are never left off to one side of a long
- * line scrolled along. Note that this is not `scrollIntoView`, because that
- * scrolls every box around the line as well, and the panel often arrives
- * sliding in from past the window's edge, so the window's own layout would be
- * scrolled sideways after it.
+ * Scrolls `lines` alone until `target` stands in its middle. Note that this
+ * is not `scrollIntoView`, because that scrolls every box around the line as
+ * well, and the panel often arrives sliding in from past the window's edge,
+ * so the window's own layout would be scrolled sideways after it.
  */
 export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
   const box = lines.getBoundingClientRect();
   const line = target.getBoundingClientRect();
   lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
-  lines.scrollLeft = 0;
 }
 
 /** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's. */
