@@ -227,7 +227,12 @@ export function usePlansTab(input: {
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
-  const sidePanel = useSidePanel(fixtureSidePanel(input.run), agents.agentIds, workers);
+  const sidePanel = useSidePanel(
+    fixtureSidePanel(input.run),
+    agents.agentIds,
+    workers,
+    agents.draft,
+  );
   panelRef.current = sidePanel;
   // Main hears which agent's tab is on screen, and none while the tab is
   // away or the panel shows something else; a fixture's staged agents are

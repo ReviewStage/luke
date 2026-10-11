@@ -14,7 +14,7 @@ coding agent's that you started from Luke, read from our service. The planning
 model reads a plan's code in a sandbox on our service, never on your Mac,
 as described under "How the planning model reads your repository" below. The
 only coding agents the Mac app lists are the ones you start on a plan from
-its Start button, which our service runs in a sandbox of its own as described
+its Start button or from New coding agent in its side panel, which our service runs in a sandbox of its own as described
 under "Who we send it to" below; it reads no other agent's session, on your
 Mac or anywhere else. No part of Luke's judgment runs on this Mac, so no
 transcript, working memory, or inbox of his is held here on disk, and in

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import {
+  CODING_AGENT_BRIEF,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import {
@@ -10,22 +15,26 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
-import { act, createElement, Fragment, useState } from "react";
+import { act, createElement, Fragment, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
+import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import { useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
+  type SidePanelControl,
   type SidePanelState,
   type SidePanelTab,
   useSidePanel,
@@ -1464,20 +1473,14 @@ test("the + drops the searchable menu over every kind with its shortcut, those o
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
-  // Every kind is open and the plan has no agent, so there is nothing to add.
-  assert.equal(addButton(page).getAttribute("aria-disabled"), "true");
-  assert.equal(hover(addButton(page)), "Every tab is open");
-  act(() => addButton(page).click());
-  assert.equal(document.querySelector(".tab-add-menu"), null);
-
   press(page, '[aria-label="Close Code"]');
-  assert.equal(addButton(page).getAttribute("aria-disabled"), "false");
   act(() => addButton(page).click());
   assert.deepEqual(addRows(), [
     ["Board", "Open", false],
     ["Code", "⌥⌘2", true],
     ["Transcript", "Open", false],
     ["Work", "Open", false],
+    ["New coding agent", "Unavailable", false],
   ]);
   assert.equal(
     document.activeElement?.getAttribute("placeholder"),
@@ -1517,7 +1520,7 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   typeSearch("");
   assert.deepEqual(
     addRows().map(([label]) => label),
-    ["Board", "Code", "Transcript", "Work"],
+    ["Board", "Code", "Transcript", "Work", "New coding agent"],
   );
 
   key(focused(), "Escape");
@@ -2137,10 +2140,11 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
   act(() => addButton(page).click());
 
   assert.deepEqual(addSections(), [
-    ["Coding agents", ["Claude Opus 5.5", "GPT 5.6 Sol"]],
+    ["Coding agents", ["New coding agent", "Claude Opus 5.5", "GPT 5.6 Sol"]],
     ["Subagents", [job]],
   ]);
   assert.deepEqual(addRows().slice(4), [
+    ["New coding agent", "Unavailable", false],
     ["Claude Opus 5.5", "Open", true],
     ["GPT 5.6 Sol", "Open", true],
     [job, "", true],
@@ -2230,5 +2234,202 @@ test("the + reads the plan's agents again as it opens, so an agent no tab follow
   assert.equal(
     addRow("Claude Opus 5.5").querySelector(".plan-compose-menu-detail")?.textContent,
     "Done",
+  );
+});
+
+/** The key the draft below is minted under, which its first message starts the agent with. */
+const DRAFT_KEY = "draft-key-1";
+
+/** The agent the service makes of the draft's first message. */
+const TASK_AGENT: CodingAgentSummary = {
+  ...RUNNING_AGENT,
+  id: "2a7e3d4c-6b5f-4a8e-8d9c-3f4a5b6c7d8e",
+  model: "openai/gpt-6-astra",
+  status: CODING_AGENT_STATUS.STARTING,
+  brief: CODING_AGENT_BRIEF.TASK,
+};
+
+/** Every act the page below asked, by kind and payload. */
+let draftAsks: { kind: ActKind; payload: unknown }[] = [];
+
+/** What the service answers each kind on the page below, in order; a kind with nothing queued is refused. */
+let draftAnswers = new Map<ActKind, unknown[]>();
+
+/**
+ * The open plan's page over the real side panel and the real coding-agents
+ * control, wired as the Plans tab wires them, over a service the test
+ * scripts act by act. The plan names a repository unless told otherwise.
+ */
+function DraftPage({ repository }: { repository: string | null }) {
+  const panelRef = useRef<SidePanelControl | undefined>(undefined);
+  const agents = useCodingAgents({
+    acts: {
+      act: <Kind extends ActKind>(
+        kind: Kind,
+        ...[payload]: unknown[]
+      ): Promise<ActResultFor<Kind>> => {
+        draftAsks.push({ kind, payload });
+        const next = draftAnswers.get(kind)?.shift();
+        if (next === undefined) return Promise.reject(new Error("Not answered in this test."));
+        // SAFETY: the test scripts each kind's answer in that kind's own shape.
+        return Promise.resolve(next as ActResultFor<Kind>);
+      },
+    },
+    planId: PLAN.id,
+    repository,
+    onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
+    mintKey: () => DRAFT_KEY,
+  });
+  const sidePanel = useSidePanel(undefined, agents.agentIds, [], agents.draft);
+  panelRef.current = sidePanel;
+  const page = createElement(DesktopPlans, {
+    plans: plansControl({
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: PLAN.id,
+      region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, repository } },
+      sidePanel,
+      agents,
+    }),
+  });
+  return createElement(
+    Fragment,
+    null,
+    page,
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+  );
+}
+
+/** Lets every answer under way land. */
+async function settled(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 12; tick += 1) await Promise.resolve();
+  });
+}
+
+/** Mounts the plan's page with no agent yet, the panel shown. */
+async function mountDraftPage(repository: string | null = "acme/relay"): Promise<HTMLElement> {
+  installScrollIntoView();
+  draftAsks = [];
+  draftAnswers = new Map<ActKind, unknown[]>([
+    [ACT_KIND.CODING_AGENTS_LIST, [{ agents: [] }]],
+    [
+      ACT_KIND.CODING_AGENTS_DEFAULT_READ,
+      [{ choice: { model: TASK_AGENT.model, effort: "high" } }],
+    ],
+  ]);
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(createElement(DraftPage, { repository })));
+  await settled();
+  press(container, '[aria-label="Show panel"]');
+  return container;
+}
+
+/** The Starts the page asked of the service. */
+function draftStarts(): unknown[] {
+  return draftAsks
+    .filter((ask) => ask.kind === ACT_KIND.CODING_AGENTS_START)
+    .map((ask) => ask.payload);
+}
+
+/** The draft's box. */
+function draftBox(page: HTMLElement): HTMLTextAreaElement {
+  const box = page.querySelector<HTMLTextAreaElement>(
+    '.side-panel [aria-label="Message to the agent"]',
+  );
+  assert.ok(box, "the draft's tab draws its box");
+  return box;
+}
+
+/** Opens a draft from the "+". */
+async function openDraft(page: HTMLElement): Promise<void> {
+  act(() => addButton(page).click());
+  act(() => addRow("New coding agent").click());
+  await settled();
+}
+
+test("New coding agent opens a draft tab with nothing said and the box focused, asking nothing of the service, whose first message starts the agent on those words, never the plan, and gives way to the agent's tab", async () => {
+  const page = await mountDraftPage();
+  await openDraft(page);
+
+  assert.equal(chosenTab(page), "New agent");
+  assert.equal(panelTabs(page).at(-1), "New agent");
+  assert.match(
+    page.querySelector(".side-panel-content")?.textContent ?? "",
+    /The agent starts when you send it\./u,
+  );
+  const box = draftBox(page);
+  assert.equal(document.activeElement, box, "the box takes focus as the tab opens");
+  assert.equal(box.getAttribute("placeholder"), "Describe a task for the agent…");
+  assert.deepEqual(draftStarts(), [], "a draft asks nothing of the service");
+
+  const task = "Rename the invite email's subject to say who sent it.";
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, task);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  // The first send is not answered: the words stay in the box with why, and Retry asks again under the draft's key.
+  draftAnswers.set(ACT_KIND.CODING_AGENTS_START, [
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+  ]);
+  press(page, '.side-panel [aria-label="Send"]');
+  await settled();
+  assert.equal(draftBox(page).value, task);
+  assert.match(
+    page.querySelector(".agent-composer-note")?.textContent ?? "",
+    /The agent could not be started\. Try again\./u,
+  );
+  assert.equal(chosenTab(page), "New agent");
+
+  draftAnswers.set(ACT_KIND.CODING_AGENTS_START, [{ agent: TASK_AGENT }]);
+  draftAnswers.set(ACT_KIND.CODING_AGENTS_LIST, [{ agents: [TASK_AGENT] }]);
+  const retry = [...page.querySelectorAll<HTMLButtonElement>(".agent-composer-note button")].find(
+    (button) => button.textContent === "Retry",
+  );
+  assert.ok(retry);
+  act(() => retry.click());
+  await settled();
+
+  assert.deepEqual(draftStarts(), [
+    { planId: PLAN.id, idempotencyKey: DRAFT_KEY, task },
+    { planId: PLAN.id, idempotencyKey: DRAFT_KEY, task },
+  ]);
+  assert.equal(panelTabs(page).includes("New agent"), false, "the draft gives way");
+  assert.equal(chosenTab(page), "GPT 6 Astra", "the agent's own tab opens chosen");
+});
+
+test("closing a draft's tab lets it go with nothing started, and the next New coding agent is a fresh draft", async () => {
+  const page = await mountDraftPage();
+  await openDraft(page);
+  const box = draftBox(page);
+  const setValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(box, "Half a thought");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  press(page, '[aria-label="Close New agent"]');
+  assert.equal(panelTabs(page).includes("New agent"), false);
+  assert.deepEqual(draftStarts(), []);
+
+  await openDraft(page);
+  assert.equal(chosenTab(page), "New agent");
+  assert.equal(draftBox(page).value, "", "a fresh draft holds nothing of the last");
+});
+
+test("while Start could not run, New coding agent says Start's reason and opens nothing, and nothing new stands beside Start", async () => {
+  const page = await mountDraftPage(null);
+  act(() => addButton(page).click());
+  const row = addRow("New coding agent");
+  assert.equal(row.getAttribute("aria-disabled"), "true");
+  assert.equal(row.querySelector(".plan-compose-menu-hint")?.textContent, START_NEEDS_REPOSITORY);
+  act(() => row.click());
+  assert.equal(panelTabs(page).includes("New agent"), false);
+  assert.doesNotMatch(
+    page.querySelector(".desktop-toolbar")?.textContent ?? "",
+    /New (coding )?agent/u,
   );
 });

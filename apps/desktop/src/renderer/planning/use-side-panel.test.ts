@@ -28,15 +28,23 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The agents the plan has, and the subagents its work holds, each nothing while unread. */
-type Stood = readonly (readonly string[] | undefined)[];
+/** The agents the plan has, and the subagents its work holds, each nothing while unread, and its draft agent's key. */
+interface Stood {
+  agents: readonly string[] | undefined;
+  subagents: readonly string[] | undefined;
+  draft?: string | undefined;
+}
 
-/** Mounts the panel alone over the agents and subagents the plan has now, answering the control as it stands. */
-function mount(agents: readonly string[] | undefined, subagents?: readonly string[]) {
+/** Mounts the panel alone over the agents, subagents, and draft the plan has now, answering the control as it stands. */
+function mount(
+  agents: readonly string[] | undefined,
+  subagents?: readonly string[],
+  draft?: string,
+) {
   let control: SidePanelControl | undefined;
   let restand: ((next: Stood) => void) | undefined;
   function Probe({ held }: { held: Stood }) {
-    control = useSidePanel(undefined, held[0], held[1]);
+    control = useSidePanel(undefined, held.agents, held.subagents, held.draft);
     return null;
   }
   const container = document.createElement("div");
@@ -45,14 +53,17 @@ function mount(agents: readonly string[] | undefined, subagents?: readonly strin
   roots.push(root);
   const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
   restand = render;
-  render([agents, subagents]);
+  render({ agents, subagents, draft });
   return {
     control: () => {
       assert.ok(control);
       return control;
     },
-    stand: (next: readonly string[] | undefined, nextSubagents?: readonly string[]) =>
-      restand?.([next, nextSubagents]),
+    stand: (
+      next: readonly string[] | undefined,
+      nextSubagents?: readonly string[],
+      nextDraft?: string,
+    ) => restand?.({ agents: next, subagents: nextSubagents, draft: nextDraft }),
   };
 }
 
@@ -177,4 +188,34 @@ test("an agent's tab closes to the open agent after it, else the one before, els
   act(() => second.control().onChoose({ agent: OTHER }));
   assert.deepEqual(second.control().closedAgents, [AGENT]);
   assert.deepEqual(second.control().tab, { agent: OTHER });
+});
+
+test("a draft agent's tab shows while the plan holds the draft, closes to the open agent before it, and is kept across no launch", () => {
+  const DRAFT = "draft-key-1";
+  const first = mount([AGENT], [], DRAFT);
+  act(() => first.control().onChoose({ draft: DRAFT }));
+  assert.deepEqual(first.control().tab, { draft: DRAFT });
+  assert.equal(tabKey({ draft: DRAFT }), DRAFT);
+  assert.equal(sameTab({ draft: DRAFT }, { draft: DRAFT }), true);
+  assert.equal(sameTab({ draft: DRAFT }, { agent: DRAFT }), false);
+
+  // Another plan holds no such draft: the first open tab shows, and the draft's again once back.
+  first.stand([OTHER], []);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  first.stand([AGENT], [], DRAFT);
+  assert.deepEqual(first.control().tab, { draft: DRAFT });
+
+  // A draft's tab chosen is kept as no tab, which a launch reads as the first open one.
+  const second = mount([AGENT], [], DRAFT);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+
+  act(() => first.control().onClose({ draft: DRAFT }));
+  assert.deepEqual(first.control().tab, { agent: AGENT }, "the open agent before it");
+  act(() => first.control().onChoose({ draft: DRAFT }));
+  act(() => first.control().onClose({ agent: AGENT }));
+  assert.deepEqual(
+    first.control().tab,
+    { draft: DRAFT },
+    "an agent's tab closes to the draft after it",
+  );
 });

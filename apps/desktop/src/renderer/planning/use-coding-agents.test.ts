@@ -5,7 +5,11 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BRIEF,
+  CODING_AGENT_STATUS,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
@@ -343,4 +347,81 @@ test("a change of an agent's model asks the service for that agent alone, and th
   await older;
   await settle();
   assert.deepEqual(tab.control().agents, [last]);
+});
+
+test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, opening its tab", async () => {
+  const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [] }, { agents: [STARTED] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: { ...STARTED, brief: CODING_AGENT_BRIEF.TASK } },
+  );
+  await tab.mount();
+
+  let draft = "";
+  act(() => {
+    draft = tab.control().onNewDraft();
+  });
+  assert.equal(tab.control().draft, draft);
+  let again = "";
+  act(() => {
+    again = tab.control().onNewDraft();
+  });
+  assert.equal(again, draft, "the plan's one draft is answered again");
+  assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
+
+  // Another plan holds no draft of this one's, and this plan's is there on coming back.
+  await tab.stand({ planId: OTHER_PLAN });
+  assert.equal(tab.control().draft, undefined);
+  await tab.stand({ planId: PLAN });
+  assert.equal(tab.control().draft, draft);
+
+  const task = "Rename the invite email's subject.";
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  let failed: string | undefined;
+  await act(async () => {
+    failed = await tab.control().startTask(draft, task, choice);
+  });
+  assert.equal(failed, "The agent could not be started. Try again.");
+  assert.equal(tab.control().draft, draft, "a send that did not start keeps the draft");
+  assert.deepEqual(tab.started, []);
+
+  await act(async () => {
+    failed = await tab.control().startTask(draft, task, undefined);
+  });
+  assert.equal(failed, undefined);
+  assert.deepEqual(startPayloads(tab.asked), [
+    { planId: PLAN, idempotencyKey: draft, task, ...choice },
+    { planId: PLAN, idempotencyKey: draft, task },
+  ]);
+  assert.deepEqual(tab.started, [AGENT]);
+  assert.equal(tab.control().draft, undefined, "the started draft is let go");
+  assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
+});
+
+test("a draft let go is gone, the next is a new one, and a plan without a repository starts none", async () => {
+  const tab = mount({ planId: PLAN, repository: null });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] });
+  await tab.mount();
+
+  let first = "";
+  act(() => {
+    first = tab.control().onNewDraft();
+  });
+  act(() => tab.control().onDiscardDraft(first));
+  assert.equal(tab.control().draft, undefined);
+  let second = "";
+  act(() => {
+    second = tab.control().onNewDraft();
+  });
+  assert.notEqual(second, first);
+
+  let failed: string | undefined;
+  await act(async () => {
+    failed = await tab.control().startTask(second, "Rename the subject.", undefined);
+  });
+  assert.equal(failed, START_NEEDS_REPOSITORY);
+  assert.deepEqual(startPayloads(tab.asked), []);
 });

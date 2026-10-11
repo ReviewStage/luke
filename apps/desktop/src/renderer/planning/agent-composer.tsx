@@ -46,7 +46,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * any more keeps the box, disabled, with the reason under it; a change of
  * model that did not take says why in the same place. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
- * opening a tab never takes the caret out of the plan.
+ * opening a tab never takes the caret out of the plan. A draft agent's tab
+ * draws the same box over a start rather than a message, with words of its
+ * own in the box, and its model chip once the choice it starts on is known.
  */
 
 /** What the box says it takes, whatever the agent is doing. */
@@ -76,10 +78,12 @@ export function AgentComposer({
   published,
   doors,
   onStop,
+  placeholder = PLACEHOLDER,
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
-  model: AgentModelControl;
+  /** What the agent runs on and its chip's change; nothing while it is not yet known, which draws no chip. */
+  model: AgentModelControl | undefined;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
   readModels: () => void;
@@ -90,6 +94,8 @@ export function AgentComposer({
   doors: PublishedDoors;
   /** Stops the agent; the promise settles once the service has answered. */
   onStop: () => Promise<void>;
+  /** What the box says it takes. */
+  placeholder?: string;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const [stopping, setStopping] = useState(false);
@@ -100,7 +106,7 @@ export function AgentComposer({
   const held = composer.sending || closed;
   const empty = composer.draft.trim() === "";
   const showsStop = empty && stoppable && !composer.sending;
-  const note = composer.closed ?? composer.note ?? model.note;
+  const note = composer.closed ?? composer.note ?? model?.note;
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries = composer.closed === undefined && composer.note !== undefined;
 
@@ -128,7 +134,7 @@ export function AgentComposer({
           ref={field}
           className="ph-no-capture"
           aria-label="Message to the agent"
-          placeholder={PLACEHOLDER}
+          placeholder={placeholder}
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           value={composer.draft}
           disabled={held}
@@ -137,7 +143,9 @@ export function AgentComposer({
         />
         <PromptInputFooter>
           <PromptInputTools>
-            <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
+            {model === undefined ? null : (
+              <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
+            )}
             <PublishedChip published={published} doors={doors} />
           </PromptInputTools>
           {showsStop ? (
