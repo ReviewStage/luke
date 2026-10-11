@@ -1,9 +1,15 @@
 import { codingAgentsApp } from "../../coding-agents-app.js";
 import { resolveHostedUserId } from "../../hosted/bearer.js";
 import { deploymentEveOrigin } from "../../hosted/brain-host/eve-origin.js";
+import { harnessFromEnvironment } from "../../hosted/coder-host/harness/compose.js";
 import { routeFromHttpRouter } from "../../route-effect.js";
 
 /** One coding agent's model and effort changed for its next step, or the agent renamed (PATCH). The logic lives in `server/coding-agents-app.ts`; this file only hands it the deployment's real seams. */
 export default routeFromHttpRouter(
-  codingAgentsApp({ resolveUserId: resolveHostedUserId, eveOrigin: deploymentEveOrigin }),
+  codingAgentsApp({
+    resolveUserId: resolveHostedUserId,
+    eveOrigin: deploymentEveOrigin,
+    // SPIKE (do not merge): nothing unless `LUKE_CODER_HARNESS` names a harness.
+    harness: harnessFromEnvironment(),
+  }),
 );

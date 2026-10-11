@@ -41,6 +41,7 @@ import {
 } from "./hosted/brain-host/eve-sessions.js";
 import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
+import { HARNESS_TOOL_SET } from "./hosted/coder-host/harness/tool-vocabulary.js";
 import {
   type PublishedCache,
   PublishedKey,
@@ -177,6 +178,10 @@ export interface CodingAgentsAppSeams {
   eveOrigin: () => string | undefined;
   /** eve as the developer reaches it, over the request's own authorization; a test hands a fake, and the deployment composes eve's client over the ambient `HttpClient`. */
   eve?: (authorization: Redacted.Redacted) => EveSessions;
+  /** SPIKE (do not merge): the account's agents on an official harness in eve's place; nothing, as everywhere today, runs eve. */
+  harness?:
+    | ((userId: string) => Effect.Effect<EveSessions, never, CodingAgentsAppServices>)
+    | undefined;
 }
 
 /** What the routes may require of the function that stands them. */
@@ -249,11 +254,18 @@ function transcriptResponse(
   });
 }
 
+/** SPIKE (do not merge): the tools an agent's rows are read against, with the harness's own names beside eve's where the harness runs it. */
+function transcriptTools(seams: CodingAgentsAppSeams) {
+  return seams.harness === undefined ? CODER_TOOL_SET : HARNESS_TOOL_SET;
+}
+
 /** eve as the developer reaches it, or unavailable where the deployment names no origin for eve. */
 const eveFor = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   request: Request,
-): Effect.fn.Return<EveSessions, HostedRefusal, HttpClient.HttpClient> {
+  userId: string,
+): Effect.fn.Return<EveSessions, HostedRefusal, CodingAgentsAppServices> {
+  if (seams.harness !== undefined) return yield* seams.harness(userId);
   const authorization = Redacted.make(request.headers.get("authorization") ?? "");
   if (seams.eve !== undefined) return seams.eve(authorization);
   const origin = seams.eveOrigin();
@@ -360,7 +372,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   }
   // The session opens as the developer, with the plan or the task as its first message; an eve
   // that did not take it leaves no agent behind, so the retry under the same key starts afresh.
-  const eve = yield* eveFor(seams, request);
+  const eve = yield* eveFor(seams, request, userId);
   const opened = yield* eve
     .open({
       conversationId: agent.conversationId,
@@ -465,7 +477,7 @@ const sendMessageEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_MESSAGE_BODY_BYTES);
   const asked = readEither(codingAgentMessageRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(messageRefusal(body));
-  const eve = yield* eveFor(seams, request);
+  const eve = yield* eveFor(seams, request, userId);
   yield* steerCodingAgent(eve, writer, userId, agent, asked.success);
   return hostedJsonResponse(HOSTED_HTTP_STATUS.ACCEPTED, {
     agent: yield* summaryOf(userId, agent),
@@ -488,7 +500,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   const after = yield* cursorOf(request);
   const { agent, target } = yield* ownedAgent(seams, request);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent),
+    transcriptPast(target, transcriptTools(seams), cursorOfWire(after), agent),
   );
   return transcriptResponse(page, agent.title);
 });
@@ -605,7 +617,7 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
   // The cancel names the turn the row was written for, never the session's turn under way, so a
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
-  const eve = yield* eveFor(seams, request);
+  const eve = yield* eveFor(seams, request, userId);
   const cancelled = yield* eve
     .cancel(sessionId, turn.eveTurnId)
     .pipe(
