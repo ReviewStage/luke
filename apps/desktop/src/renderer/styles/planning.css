@@ -351,8 +351,8 @@
    tab, each a frame the log fills, their rows drawn by the one set of
    blocks (../planning/transcript-blocks.tsx over ../ai-elements/). What
    follows is each tab's own: Luke's mark above his spoken turns, drawn at
-   the row's 16px in his voice's colour; the agent's head and composer;
-   the Work tab's worker line and session head. */
+   the row's 16px in his voice's colour; the agent's composer; the Work
+   tab's worker line. */
 .plan-transcript,
 .plan-work,
 .agent-tab {
@@ -432,10 +432,10 @@
   font-size: 12px;
 }
 
-/* The room under the transcript for the composer. */
+/* The room under the transcript for the composer, with no rule between
+   them: the card's own edge is where the transcript ends. */
 .agent-tab-foot {
   flex: 0 0 auto;
-  border-top: 1px solid var(--hairline);
 }
 
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
@@ -568,8 +568,7 @@
 
 /* The Work tab's own ----------------------------------------------------- */
 
-/* A quiet button-shaped line of the Work tab: a worker's line, the way
-   back from a worker's session. Note that it is written here
+/* A quiet button-shaped line of the Work tab, a worker's line. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
    colour outside the utilities' layer, and that rule wins over any utility. */
 .ai-trigger {
@@ -593,9 +592,9 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's call: a boxed line that opens its session, and at its end
-   the button that opens it in a tab of its own, shown while the pointer or
-   focus is on the line. */
+/* A subagent's call: a boxed line, the whole of it the button that opens
+   the subagent's tab, its hover fill on its own radius and its focus ring
+   the one every button of ours draws. */
 .work-worker-line {
   padding: 8px 10px;
   border: 1px solid var(--hairline);
@@ -606,31 +605,7 @@ svg.lucide {
   background: var(--raised);
 }
 
-.work-worker-tab {
-  width: 22px;
-  height: 22px;
-  margin: -4px -4px -4px 0;
-  opacity: 0;
-  transition:
-    opacity var(--duration-hover) ease,
-    color var(--duration-hover) ease;
-}
-
-.work-worker-line:hover .work-worker-tab,
-.work-worker-line:focus-within .work-worker-tab {
-  opacity: 1;
-}
-
-/* An opened subagent's session: the way back, and its job and state, above its blocks. */
-.work-session-header {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0 8px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--hairline);
-  background: var(--desktop-well);
+.work-worker-line:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }

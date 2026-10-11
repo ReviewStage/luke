@@ -7,11 +7,12 @@ import type { UIMessage } from "ai";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
-import { compiledTailwind, cssRules, ownDeclarations } from "#testing/css-rules";
+import { builtStylesheet, compiledTailwind, cssRules, ownDeclarations } from "#testing/css-rules";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanTranscript } from "./plan-transcript";
-import { PlanWork } from "./plan-work";
+import { PlanWork, SubagentTab } from "./plan-work";
 import { TRANSCRIPT_REGION } from "./transcript-model";
+import { workerOf, workRowsOf } from "./work-model";
 
 /**
  * The one layout rule a transcript's components keep, held against the
@@ -135,6 +136,7 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
     }),
     createElement(PlanWork, {
       callLive: true,
+      onOpenSubagent: () => undefined,
       turns: [
         {
           turnId: "turn-1",
@@ -181,5 +183,77 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
         }
       }
     }
+  }
+});
+
+/** A subagent's tab over a worker that has written one line. */
+function subagentTab(): ReactElement {
+  const rows = workRowsOf(
+    [
+      {
+        turnId: "turn-1",
+        startedAt: 1,
+        state: PLAN_WORK_STATE.RUNNING,
+        earlierOmitted: false,
+        parts: [
+          {
+            type: PLAN_WORK_PART.TOOL,
+            id: "call-worker",
+            tool: PLAN_WORK_TOOL.WORKER,
+            name: "worker",
+            state: PLAN_WORK_STATE.RUNNING,
+            subject: "Compare the queues.",
+            input: '{ "message": "Compare the queues." }',
+            session: {
+              earlierOmitted: false,
+              parts: [{ type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." }],
+            },
+          },
+        ],
+      },
+    ],
+    true,
+  );
+  const worker = workerOf(rows, "call-worker");
+  assert.ok(worker);
+  return createElement(SubagentTab, { worker });
+}
+
+test("the card at the top of an agent's tab and a subagent's stands off the tab row by the section gap, and clips its header's hover fill to its own rounded corners", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const surfaces = [
+    createElement(AgentTranscriptView, {
+      messages: [PLAN, TURN],
+      reading: false,
+      failed: false,
+      working: false,
+      onRetry: () => undefined,
+      openGitHub: () => undefined,
+      copyText: () => Promise.resolve(),
+    }),
+    subagentTab(),
+  ];
+  for (const surface of surfaces) {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() => root.render(surface));
+    const log = container.querySelector('[role="log"]');
+    const card = log?.firstElementChild;
+    assert.ok(card, "the log holds a card");
+    assert.ok(card.matches("[data-plan-card], [data-task-card]"), "the card opens the log");
+    const own = (element: Element, property: string) =>
+      ownDeclarations(rules, element)
+        .filter((each) => each.property === property && !each.selector.includes(":"))
+        .map((each) => each.value);
+    assert.ok(log);
+    assert.deepEqual(own(log, "padding-top"), ["var(--section-gap)"]);
+    // The header fills on hover edge to edge, so the card it fills is what rounds that fill.
+    const header = card.querySelector("summary");
+    assert.ok(header);
+    assert.ok(ownDeclarations(rules, header).some((each) => each.selector.includes(":hover")));
+    assert.deepEqual(own(card, "overflow"), ["clip"]);
+    assert.equal(own(card, "border-radius").length, 1);
   }
 });

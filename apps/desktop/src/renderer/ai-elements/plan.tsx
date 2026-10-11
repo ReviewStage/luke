@@ -20,7 +20,10 @@ import { cn } from "./utils";
  * here. Neither is its streaming title, because the plan a coding agent is
  * handed is finished before the agent starts. Closed by default, as
  * docs/PLANNING.md's rule for an agent's transcript asks: the plan is
- * there to be read, never in the way of the agent's own words.
+ * there to be read, never in the way of the agent's own words. The card
+ * clips what it holds to its rounded corners, so the header's hover fill
+ * follows the card's radius; the header's focus ring is drawn inside it
+ * for the same reason.
  */
 
 export type PlanProps = FoldProps;
@@ -28,7 +31,10 @@ export type PlanProps = FoldProps;
 export function Plan({ className, children, ...props }: PlanProps): ReactNode {
   return (
     <Fold
-      className={cn("rounded-lg border border-border bg-muted text-[12.5px]", className)}
+      className={cn(
+        "overflow-clip rounded-lg border border-border bg-muted text-[12.5px]",
+        className,
+      )}
       {...props}
     >
       {children}
@@ -43,7 +49,7 @@ export function PlanHeader({ className, children, ...props }: PlanHeaderProps): 
   return (
     <FoldSummary
       className={cn(
-        "flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary",
+        "flex h-8 items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:-outline-offset-2",
         className,
       )}
       {...props}

@@ -4,7 +4,12 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
-import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_WORK_PART,
+  PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
+  type PlanWorkState,
+} from "@sidecar/hosted/planning-view";
 import { act, createElement, Fragment } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -421,70 +426,71 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   assert.deepEqual(output, ["$ ls src", "invite.ts"]);
 });
 
-test("a worker in the Work tab opens its own session in the tab's place, and the way back returns to every turn", () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      createElement(DesktopPlans, {
-        plans: plansControl({
-          page: PLANS_PAGE.DOCUMENT,
-          activePlanId: PLAN.id,
-          region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
-          sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
-          work: {
-            callLive: true,
-            turns: [
-              {
-                turnId: "turn-1",
-                startedAt: 1_000,
-                state: PLAN_WORK_STATE.RUNNING,
-                earlierOmitted: false,
-                parts: [
-                  {
-                    type: PLAN_WORK_PART.TOOL,
-                    id: "call-worker",
-                    tool: PLAN_WORK_TOOL.WORKER,
-                    name: "worker",
-                    state: PLAN_WORK_STATE.RUNNING,
-                    subject: "Compare the two queue libraries.",
-                    input: "{}",
-                    session: {
-                      earlierOmitted: false,
-                      parts: [{ type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." }],
-                    },
-                  },
-                  { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm reading the code." },
-                ],
-              },
-            ],
-          },
-        }),
-      }),
-    ),
-  );
-  const work = container.querySelector('section[aria-label="Work"]');
+test("a worker's line in the Work tab is one button saying where the subagent stands with the mark a call wears, no link on it, and pressing it opens the subagent's tab rather than its session in the tab's place", () => {
+  const running = "Compare the two queue libraries.";
+  const done = "Find the admin check.";
+  const worker = (id: string, subject: string, state: PlanWorkState) => ({
+    type: PLAN_WORK_PART.TOOL,
+    id,
+    tool: PLAN_WORK_TOOL.WORKER,
+    name: "worker",
+    state,
+    subject,
+    input: "{}",
+    session: {
+      earlierOmitted: false,
+      parts: [{ type: PLAN_WORK_PART.TEXT, text: `Notes on: ${subject}` }],
+    },
+  });
+  const page = mountOpenPlan({
+    work: {
+      callLive: true,
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1_000,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            worker("call-running", running, PLAN_WORK_STATE.RUNNING),
+            worker("call-done", done, PLAN_WORK_STATE.DONE),
+            { type: PLAN_WORK_PART.TEXT, text: "While that runs, I'm reading the code." },
+          ],
+        },
+      ],
+    },
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  const work = page.querySelector('section[aria-label="Work"]');
   assert.ok(work);
-  const button = (text: string) =>
-    [...work.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes(text));
+  const lines = [...work.querySelectorAll<HTMLElement>(".work-worker-line")];
+  // Each line is the one button: its job, and the state mark every call's row wears.
+  assert.deepEqual(
+    lines.map((line) => [
+      line.tagName,
+      line.textContent,
+      line.querySelector("[data-tool-state]")?.getAttribute("aria-label"),
+    ]),
+    [
+      ["BUTTON", running, "Running"],
+      ["BUTTON", done, "Completed"],
+    ],
+  );
+  assert.equal(work.querySelector('[aria-label="Open in tab"]'), null);
 
-  assert.equal(work.textContent?.includes("Queue A lets an admin revoke."), false);
-  const worker = button("Compare the two queue libraries.");
-  assert.ok(worker);
-  act(() => worker.click());
-  assert.ok(work.textContent?.includes("Queue A lets an admin revoke."));
-  assert.equal(work.textContent?.includes("While that runs"), false);
-
-  const back = button("All work");
-  assert.ok(back);
-  act(() => back.click());
-  assert.ok(work.textContent?.includes("While that runs"));
+  act(() => lines[1]?.click());
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", done]);
+  assert.equal(chosenTab(page), done);
+  // Back on the Work tab, every turn still stands: no session took its place.
+  act(() => tabNamed(page, "Work").click());
+  const back = page.querySelector('section[aria-label="Work"]');
+  assert.ok(back?.textContent?.includes("While that runs"));
+  assert.equal(back?.textContent?.includes(`Notes on: ${done}`), false);
 });
 
-/** The open plan's work: one call that ran a worker on `job`, its session a call and a line of words. */
-function workerWork(job: string): PlansControl["work"] {
+/** The open plan's work: one call that ran a worker on `job`, handed `task` where one is given, its session a call and a line of words. */
+function workerWork(job: string, task?: string): PlansControl["work"] {
   return {
     callLive: true,
     turns: [
@@ -501,7 +507,7 @@ function workerWork(job: string): PlansControl["work"] {
             name: "worker",
             state: PLAN_WORK_STATE.RUNNING,
             subject: job,
-            input: "{}",
+            input: task === undefined ? "{}" : JSON.stringify({ message: task }, null, 2),
             session: {
               earlierOmitted: false,
               parts: [
@@ -525,19 +531,28 @@ function workerWork(job: string): PlansControl["work"] {
   };
 }
 
-test("a worker's line offers Open in tab, which opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Work tab draws it; opened again it is chosen rather than doubled, and its × closes it", () => {
+test("a worker's line opens the subagent's session in a tab of its own after the fixed tabs, drawn as the Work tab draws it, its task card opening onto the whole message it was handed; pressed again it is chosen rather than doubled, and its × closes it", () => {
   const job = "Compare the two queue libraries.";
-  const page = mountOpenPlan({ work: workerWork(job) });
+  // Longer than the subject the service cuts a worker's line to, as a task the planning model writes often is.
+  const task =
+    `${job} ${"Read each library's README and its source, and say which call revokes a pending invite. ".repeat(6)}`.trim();
+  const page = mountOpenPlan({ work: workerWork(job, task) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
-  press(page, '.work-worker-line [aria-label="Open in tab"]');
+  press(page, ".work-worker-line");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
   assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
   // As an agent's tab: the task a card at the top, and a working line at the end while the subagent runs.
-  assert.ok(content?.querySelector("[data-task-card]")?.textContent?.includes(job));
+  const card = content?.querySelector("[data-task-card]");
+  assert.ok(card?.textContent?.includes(job));
+  assert.equal(card?.textContent?.includes(task), false, "folded to its line");
+  const opener = card?.querySelector("summary");
+  assert.ok(opener);
+  act(() => opener.click());
+  assert.ok(card?.textContent?.includes(task), "the whole task, uncut");
   assert.ok(content?.querySelector("[data-working]"));
   // The session's rows as the Work tab draws them: the call a row that opens onto its output, the words after it.
   const call = [...(content?.querySelectorAll("summary") ?? [])].find((summary) =>
@@ -549,7 +564,7 @@ test("a worker's line offers Open in tab, which opens the subagent's session in 
   assert.ok(content?.textContent?.includes("Queue A lets an admin revoke."));
 
   act(() => tabNamed(page, "Work").click());
-  press(page, '.work-worker-line [aria-label="Open in tab"]');
+  press(page, ".work-worker-line");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", job]);
   assert.equal(chosenTab(page), job);
 
@@ -570,7 +585,7 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
   act(() => tabNamed(page, "Work").click());
-  press(page, '.work-worker-line [aria-label="Open in tab"]');
+  press(page, ".work-worker-line");
   act(() => relayout());
 
   assert.equal(hover(tabNamed(page, "Work")), undefined);

@@ -38,10 +38,10 @@ import {
   tabAddable,
 } from "../planning/use-side-panel";
 import {
-  openedWorker,
   type WorkTurnRow,
   type WorkWorkerBlock,
   workerJob,
+  workerOf,
   workRowsOf,
 } from "../planning/work-model";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
@@ -357,7 +357,7 @@ function TabContent({
     );
   }
   if (isSubagentTab(tab)) {
-    const worker = openedWorker(workRows, [tab.subagent]);
+    const worker = workerOf(workRows, tab.subagent);
     // As an agent's: the tab stands for a subagent the work no longer holds
     // only until the panel moves back to the board, a render away.
     return worker === undefined ? (
@@ -384,7 +384,9 @@ function TabContent({
         />
       );
     case SIDE_PANEL_TAB.WORK:
-      return <PlanWork turns={work.turns} callLive={work.callLive} onOpenInTab={onOpenSubagent} />;
+      return (
+        <PlanWork turns={work.turns} callLive={work.callLive} onOpenSubagent={onOpenSubagent} />
+      );
   }
 }
 
@@ -633,7 +635,7 @@ export function SidePanel({
   // The subagent tabs the plan's work still holds, each with its session, in the strip's order.
   const workRows = workRowsOf(work.turns, work.callLive);
   const subagents = panel.subagents.flatMap((callId) => {
-    const worker = openedWorker(workRows, [callId]);
+    const worker = workerOf(workRows, callId);
     return worker === undefined ? [] : [worker];
   });
   const shownAgent =
