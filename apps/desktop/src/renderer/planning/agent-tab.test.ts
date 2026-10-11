@@ -334,6 +334,48 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(container.textContent?.includes("Three routes"), false, "nothing opened in place");
 });
 
+test("a delegation refused before its worker began says why in red under its row, with nothing to open first", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const refusal = "The model anthropic/claude-haiku-9 is not in the catalog.";
+  act(() => {
+    root.render(
+      createElement(AgentTranscriptView, {
+        messages: [
+          PLAN,
+          {
+            id: "m-refused",
+            role: "assistant",
+            parts: [
+              {
+                type: "tool-delegate",
+                toolCallId: "call_d3",
+                state: "output-error",
+                input: { task: "Count the routes." },
+                errorText: refusal,
+              },
+            ],
+          },
+        ],
+        delegation: { models: [SONNET], onOpen: ignore },
+        reading: false,
+        failed: false,
+        working: false,
+        onRetry: ignore,
+        openGitHub: ignore,
+      }),
+    );
+  });
+
+  const row = container.querySelector<HTMLElement>('[data-subagent-row][data-call-id="call_d3"]');
+  assert.ok(row);
+  assert.equal(row.tagName, "BUTTON");
+  assert.ok(row.querySelector('[data-tool-state="output-error"]'));
+  assert.equal(container.querySelector('[role="alert"]')?.textContent, refusal);
+});
+
 /** Opens the fold whose root the selector names, by the click a reader would make on its line. */
 function open(container: HTMLElement, selector: string): HTMLDetailsElement {
   const fold = container.querySelector<HTMLDetailsElement>(selector);

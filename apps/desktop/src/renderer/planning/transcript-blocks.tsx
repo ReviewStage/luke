@@ -178,6 +178,8 @@ export type TranscriptSubagentProps = {
   /** What it runs on; none where the row knows no pair. */
   pair: SubagentPair | undefined;
   state: ToolState;
+  /** Why the call failed, drawn under the row, since a call refused before its worker began leaves no tab to read it in. */
+  errorText: string | undefined;
   /** Opens the subagent's tab, or chooses it where it is open; none where the row stands in a tab that opens no tab. */
   onOpen: (() => void) | undefined;
 };
@@ -190,13 +192,15 @@ export type TranscriptSubagentProps = {
  * row wears for where it stands. The whole line is the one button that
  * opens the subagent's tab, which is where its steps and its answer are
  * read, so it folds nothing open in place. Where it opens no tab it is the
- * same line, pressed by nothing.
+ * same line, pressed by nothing. A call that failed says why in red under
+ * the line, open from the start.
  */
 export function TranscriptSubagent({
   callId,
   job,
   pair,
   state,
+  errorText,
   onOpen,
 }: TranscriptSubagentProps): ReactNode {
   const [words, clipped] = useClipped();
@@ -223,20 +227,34 @@ export function TranscriptSubagent({
     </>
   );
   const className = "subagent-line flex w-full min-w-0 items-center gap-2";
-  return onOpen === undefined ? (
-    <div className={className} data-subagent-row="" data-call-id={callId}>
-      {line}
+  const row =
+    onOpen === undefined ? (
+      <div className={className} data-subagent-row="" data-call-id={callId}>
+        {line}
+      </div>
+    ) : (
+      <button
+        type="button"
+        className={className}
+        data-subagent-row=""
+        data-call-id={callId}
+        onClick={onOpen}
+      >
+        {line}
+      </button>
+    );
+  if (errorText === undefined) return row;
+  return (
+    <div>
+      {row}
+      {/* Note that the reason sits under the job, past the line's 1px border, 10px padding, glyph, and gap. */}
+      <p
+        className="m-0 mt-1 ml-[35px] text-[12.5px] text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+        role="alert"
+      >
+        {errorText}
+      </p>
     </div>
-  ) : (
-    <button
-      type="button"
-      className={className}
-      data-subagent-row=""
-      data-call-id={callId}
-      onClick={onOpen}
-    >
-      {line}
-    </button>
   );
 }
 

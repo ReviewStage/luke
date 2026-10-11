@@ -113,6 +113,7 @@ function WorkerLine({ call }: { call: WorkCallRow }): React.JSX.Element {
       job={workerJob(call)}
       pair={undefined}
       state={toolStateOf(call)}
+      errorText={undefined}
       onOpen={() => open(call.id)}
     />
   );

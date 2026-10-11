@@ -203,6 +203,7 @@ function DelegationRow({
             }
       }
       state={part.state}
+      errorText={part.errorText}
       onOpen={
         onOpen === undefined
           ? undefined
