@@ -1,19 +1,20 @@
 import {
   applyNotes,
   changedFields,
+  type PlanContent,
   type PlanNote,
   planBody,
   withAgentEdit,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_BOUNDS, type Plan, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { type PlanWriter, recordRevision } from "./plan-revisions.js";
+import { type PlanWriter, readRevisionContent, recordRevision } from "./plan-revisions.js";
 import { readPlanForUpdate, savePlanDocument } from "./plan-store.js";
-import { logStoreFailure } from "./store-failure.js";
+import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
- * plan-notes.ts -- the plan's one write: take the notetaker's notes into a plan and read back what was saved.
+ * plan-notes.ts -- the plan's one write: take the notetaker's notes, or the developer's restore of a revision, into a plan and read back what was saved.
  *
  * Its callers are a planning call's notetaker (`voice/plan-scribe.ts`) and a
  * coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models
@@ -30,7 +31,10 @@ import { logStoreFailure } from "./store-failure.js";
  * (`plan-revisions.ts`), in the same transaction, so the plan and its history
  * never disagree. A coding agent's save that took any note is also written
  * into the plan's journal with the notes as taken, which is what the planning
- * model is told of what each agent changed.
+ * model is told of what each agent changed. The developer restoring one of
+ * the plan's revisions is the same save with the revision's content in place
+ * of notes, kept as a revision of the developer's that names the one it
+ * brought back.
  *
  * Note that the notes are the plan's content and nothing else. Which account
  * and which plan they land in are the binding the service built from the
@@ -61,10 +65,11 @@ export const PLAN_SAVE_STATUS = {
   NOT_SAVED: "not-saved",
 } as const;
 
-/** Why notes saved nothing. */
+/** Why notes, or a restore, saved nothing. */
 export const PLAN_SAVE_REFUSAL = {
   TOO_LONG: "Not saved: the formatted plan is longer than a plan may be.",
   NO_PLAN: "Not saved: this plan no longer exists.",
+  NO_REVISION: "Not saved: this plan has no such revision.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -85,36 +90,60 @@ export type PlanSaveResult =
       readonly reason: string;
     };
 
-const NO_PLAN_RESULT: PlanSaveResult = {
+/** A save that saved nothing, and why. */
+type PlanNotSaved = Extract<PlanSaveResult, { status: typeof PLAN_SAVE_STATUS.NOT_SAVED }>;
+
+const NO_PLAN_RESULT: PlanNotSaved = {
   status: PLAN_SAVE_STATUS.NOT_SAVED,
   reason: PLAN_SAVE_REFUSAL.NO_PLAN,
 };
 
-/** The notes taken over what the plan holds, formatted, and saved; a refusal where the plan is gone or the body too long. */
-function savedNotes(binding: PlanDocumentBinding, notes: readonly PlanNote[], writer: PlanWriter) {
+/** What one save makes of the plan's content: the content after it, how many changes it made, and the notes it took and passed over, none for a restore. */
+interface ContentChange {
+  readonly content: PlanContent;
+  readonly changes: number;
+  readonly taken: readonly PlanNote[];
+  readonly missed: readonly PlanNote[];
+}
+
+/** What the locked save answers: the plan as saved with the notes passed over, or why nothing was. */
+type LockedSave =
+  | {
+      readonly status: typeof PLAN_SAVE_STATUS.SAVED;
+      readonly plan: Plan;
+      readonly missed: readonly PlanNote[];
+      readonly moved: boolean;
+    }
+  | PlanNotSaved;
+
+/** The change made over what the plan holds, formatted, and saved, in one transaction; a refusal where the plan is gone or the body too long. */
+function savedChange(
+  binding: PlanDocumentBinding,
+  writer: PlanWriter,
+  change: (before: PlanContent) => ContentChange,
+) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(savedUnderLock(binding, notes, writer)),
+    client.withTransaction(savedUnderLock(binding, writer, change)),
   );
 }
 
-/** The read and the save of `savedNotes`, run inside the transaction that holds the row. */
+/** The read and the save of `savedChange`, run inside the transaction that holds the row. */
 function savedUnderLock(
   binding: PlanDocumentBinding,
-  notes: readonly PlanNote[],
   writer: PlanWriter,
+  change: (before: PlanContent) => ContentChange,
 ) {
   return Effect.gen(function* () {
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
     const { fields, plan, saved: savedBefore } = stored.value;
     const before = { fields, assumptions: plan.document.assumptions };
-    const { content, missed } = applyNotes(before, notes);
+    const { content, changes, taken, missed } = change(before);
     const body = planBody({ name: plan.name }, content.fields);
     if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) {
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.TOO_LONG } as const;
     }
-    const taken = notes.filter((note) => !missed.includes(note));
-    // Notes that missed, or took a field to the words it held, leave the plan as it was: no revision.
+    // A change that leaves the plan's words as they were, notes that all missed among them, is no revision.
     const moved = changedFields(before, content).length > 0;
     if (moved) {
       yield* recordRevision({
@@ -122,7 +151,7 @@ function savedUnderLock(
         writer,
         before,
         after: content,
-        changes: taken.length,
+        changes,
         savedBefore: savedBefore ? Option.some(new Date(plan.updatedAt)) : Option.none(),
       });
     }
@@ -143,16 +172,49 @@ function savedUnderLock(
       journal,
     );
     return Option.match(saved, {
-      onNone: () => NO_PLAN_RESULT,
-      onSome: (savedPlan): PlanSaveResult => ({
+      onNone: (): LockedSave => NO_PLAN_RESULT,
+      onSome: (savedPlan): LockedSave => ({
         status: PLAN_SAVE_STATUS.SAVED,
-        document: savedPlan.document,
-        savedAt: savedPlan.updatedAt,
+        plan: savedPlan,
         missed,
         moved,
       }),
     });
   });
+}
+
+/** The notes taken in order over the content, counted by those taken. */
+function notesTaken(notes: readonly PlanNote[]) {
+  return (before: PlanContent): ContentChange => {
+    const { content, missed } = applyNotes(before, notes);
+    const taken = notes.filter((note) => !missed.includes(note));
+    return { content, changes: taken.length, taken, missed };
+  };
+}
+
+/** The content put back as a revision held it, counted by the fields it changes, the assumptions one of them. */
+function contentRestored(restored: PlanContent) {
+  return (before: PlanContent): ContentChange => ({
+    content: restored,
+    changes: changedFields(before, restored).length,
+    taken: [],
+    missed: [],
+  });
+}
+
+/** A save's failure logged and answered as the store being out of reach, so every outcome is a result. */
+function reachedStore<A>(
+  save: Effect.Effect<A, StoreFailure, SqlClient.SqlClient>,
+): Effect.Effect<A | PlanNotSaved, never, SqlClient.SqlClient> {
+  return save.pipe(
+    Effect.tapError(logStoreFailure),
+    Effect.catch(() =>
+      Effect.succeed<PlanNotSaved>({
+        status: PLAN_SAVE_STATUS.NOT_SAVED,
+        reason: PLAN_SAVE_REFUSAL.UNAVAILABLE,
+      }),
+    ),
+  );
 }
 
 /** The notetaker off any call: a writer a test, or a run with no call to name, saves as. */
@@ -164,13 +226,56 @@ export function saveNotes(
   notes: readonly PlanNote[],
   writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
-  return savedNotes(binding, notes, writer).pipe(
-    Effect.tapError(logStoreFailure),
-    Effect.catch(() =>
-      Effect.succeed<PlanSaveResult>({
-        status: PLAN_SAVE_STATUS.NOT_SAVED,
-        reason: PLAN_SAVE_REFUSAL.UNAVAILABLE,
-      }),
-    ),
+  const saved = Effect.map(
+    savedChange(binding, writer, notesTaken(notes)),
+    (result): PlanSaveResult =>
+      result.status === PLAN_SAVE_STATUS.SAVED
+        ? {
+            status: result.status,
+            document: result.plan.document,
+            savedAt: result.plan.updatedAt,
+            missed: result.missed,
+            moved: result.moved,
+          }
+        : result,
   );
+  return reachedStore(saved);
+}
+
+/** A restore answered: the plan as it now stands saved, or why it was not. */
+export type PlanRestoreResult =
+  | { readonly status: typeof PLAN_SAVE_STATUS.SAVED; readonly plan: Plan }
+  | PlanNotSaved;
+
+/**
+ * The developer's restore of one of the plan's revisions: the plan's content
+ * put back as the revision held it, through the same locked save as notes,
+ * and kept as a revision of the developer's naming the one it restored, so
+ * the content it replaced stays in the history to restore in turn. A
+ * revision that holds what the plan holds now saves nothing new and answers
+ * the plan as it stands.
+ */
+export function restoreRevision(
+  binding: PlanDocumentBinding,
+  seq: number,
+): Effect.Effect<PlanRestoreResult, never, SqlClient.SqlClient> {
+  const restored = Effect.gen(function* (): Effect.fn.Return<
+    PlanRestoreResult,
+    StoreFailure,
+    SqlClient.SqlClient
+  > {
+    const content = yield* readRevisionContent(binding.userId, binding.planId, seq);
+    if (Option.isNone(content)) {
+      return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.NO_REVISION } as const;
+    }
+    const saved = yield* savedChange(
+      binding,
+      { actor: PLAN_ACTOR.DEVELOPER, restoredFrom: seq },
+      contentRestored(content.value),
+    );
+    return saved.status === PLAN_SAVE_STATUS.SAVED
+      ? { status: saved.status, plan: saved.plan }
+      : saved;
+  });
+  return reachedStore(restored);
 }

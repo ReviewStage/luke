@@ -34,8 +34,10 @@ A reviewer can hold the build to these as easily as to the layout:
 - No typed-chat composer and no typed fallback. The developer speaks; the only
   text fields are ordinary setup fields (the plan's name and the repository
   filter), and nothing typed into them reaches the model as conversation.
-- No Approve button, no readiness meter, no progress or coverage score, no
-  version history, no diff view, and no separate export or handoff screen.
+- No Approve button, no readiness meter, no progress or coverage score, and
+  no separate export or handoff screen. Earlier versions of the plan are
+  read and restored from its History tab ("History" below), which is the one
+  place a version is compared with another.
 - The assumption list is read-only: plain text, with nothing to click.
 - The document is the record. What was said on the plan's calls can be read
   back in the side panel's Transcript tab, but nothing there is a second
@@ -229,7 +231,8 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   notetaker is "Luke", because the developer talks to Luke and never meets a
   notetaker. The time moves on once a minute, and a save the notetaker makes
   on the open plan's call moves the line as it lands. A plan nobody has
-  written since it started shows no line.
+  written since it started shows no line. A press on the line opens the
+  plan's History tab.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
@@ -283,7 +286,9 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   showed on the plan, read by the service from the plan's repository ("How
   the planning model reads code" below), live during a call and read back
   with the plan's work when the plan opens; `Transcript`, what was said on the
-  plan's calls ("Transcript" below); and, after them, one tab per coding
+  plan's calls ("Transcript" below); `History`, the plan's versions
+  ("History" below), which stands once anyone has written the plan since its
+  history began; and, after them, one tab per coding
   agent started on the plan, named by its model with a dot for where it
   stands ("Agent tabs" below). The Work tab, what the planning model wrote
   and ran on the plan's calls, is told live during a call and read back
@@ -502,7 +507,8 @@ says now.
 Every save that changes the plan is kept as a revision
 (`apps/web/server/hosted/plan-revisions.ts`, table `plan_revision`): the
 plan's fields and assumptions as they stood after it, who wrote it (the
-notetaker, on the call it listens to, or a coding agent by its row), when
+notetaker, on the call it listens to, a coding agent by its row, or the
+developer restoring an earlier revision, named in `restored_from`), when
 its first and latest saves were, and how many notes it took. It is written in
 the transaction that saves the plan, so the two never disagree. The same
 writer's saves one after another are one revision: the notetaker's on one
@@ -516,6 +522,42 @@ is deleted, and there is no cap on how many a plan keeps.
 
 The plan names its newest revision as its last edit, which the document's
 "Edited by" line reads ("Document" above).
+
+The History tab (`planning/history-tab.tsx`, ⌥⌘5) lists the revisions
+newest first, fifty a page (`GET /api/plans/{id}/revisions`), each as who
+wrote it ("Luke", "You", or a coding agent by its row), whether on a call,
+how many changes it made, and how long ago; the newest says it is the
+current one, and the plan from before history reads "Earlier". The list is
+read while the tab is on screen and again whenever the plan is edited
+meanwhile. Choosing a row reads that revision's content and the content
+before it (`GET /api/plans/{id}/revisions/{seq}`), both formatted under the
+plan's name as it stands, and draws the version read-only in the document's
+place (`planning/version-view.tsx`) under a bar: "Viewing version from 2h ago
+· Luke", the comparison, Restore this version, and Back to current. The
+version is drawn against the one before it by default, which is what the
+row's change count describes, or against the plan as it stands, which is
+what a restore would change: each section only one side holds is drawn
+whole, added or struck, and each section both hold that differs has its
+words written in on a green wash and struck out on a red one, word by word
+with jsdiff (`planning/plan-history-model.ts`); the assumptions are
+compared as a list. Escape, Back to current, another tab, or another plan
+goes back to the plan.
+
+Restore this version asks first, in the window's dialog, and then puts the
+revision's fields and assumptions back through the plan's one locked save
+(`POST /api/plans/{id}/revisions/{seq}/restore`, `restoreRevision` in
+`hosted/plan-notes.ts`). The restore is a revision of the developer's
+("You") naming the one it brought back, "Restored the version from Oct 11,
+2:14 PM"; it joins no revision and none joins it, so a restore is undone by
+restoring the revision before it, and it is allowed during a call. It takes
+no base: a save that landed after the version was chosen is the revision
+before the restore, and restoring it brings it back. The plan the service
+answers replaces the open document at once, and the window's toast says
+"Version restored" with an Undo, which restores the version that stood
+before it. Until the notetaker's next save lands, the host draws no draft
+of the open plan's call, since a turn in flight was written over the
+content the restore replaced. The newest revision is the plan as it
+stands, so it offers no restore.
 
 The notes type in while they are written. The call streams its answer, and
 the notes so far are taken over the saved fields and formatted exactly as a

@@ -3,11 +3,15 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import {
+  PLAN_ACTOR,
   PLAN_FILE_REFUSAL,
   planAnswerSchema,
   planFileAnswerSchema,
   planListAnswerSchema,
+  planRevisionAnswerSchema,
+  planRevisionsAnswerSchema,
 } from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
 import {
@@ -20,7 +24,7 @@ import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { eq } from "drizzle-orm";
-import { Clock, Effect, Layer, Option, Result, type Schema } from "effect";
+import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
@@ -40,6 +44,7 @@ import {
 } from "../server/hosted/board-tool";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import { PLAN_SAVE_STATUS, saveNotes } from "../server/hosted/plan-notes";
+import { PLAN_REVISION } from "../server/hosted/plan-revisions";
 import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
@@ -50,7 +55,7 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -73,6 +78,9 @@ const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
 const FILE = "/api/plans/file";
+const REVISIONS = "/api/plans/revisions";
+const REVISION = "/api/plans/revision";
+const RESTORE = "/api/plans/restore";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -1170,5 +1178,176 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
       );
     }),
+  );
+  /**
+   * The owner's plan written twice, far enough apart to be two revisions:
+   * the problem first, then the outcome.
+   */
+  const twoRevisions = (userId: string, planId: string) =>
+    Effect.gen(function* () {
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.PROBLEM, "Only admins can invite.")]);
+      yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
+      yield* saveNotes({ userId, planId }, [added(PLAN_FIELD.OUTCOME, "Members invite by email.")]);
+    });
+
+  it.effect(
+    "a plan's history lists newest first, and reads a revision beside the one before it",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* twoRevisions(owner, planId);
+
+        const page = readAnswer(
+          planRevisionsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISIONS, owner, { id: planId })),
+        );
+        const { revision } = readAnswer(
+          planRevisionAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "2" } })),
+        );
+        const first = readAnswer(
+          planRevisionAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "1" } })),
+        ).revision;
+        const opened = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        ).plan;
+
+        assert.deepEqual(
+          page.revisions.map(({ seq, lastEdit }) => [seq, lastEdit.actor]),
+          [
+            [2, PLAN_ACTOR.NOTETAKER],
+            [1, PLAN_ACTOR.NOTETAKER],
+          ],
+        );
+        assert.equal(page.earlier, undefined);
+        assert.deepEqual(revision.document, opened.document);
+        assert.deepEqual(revision.previous, first.document);
+        assert.equal(first.previous, null);
+        assert.ok(first.document.body.includes("Only admins can invite."));
+        assert.ok(!first.document.body.includes("Members invite by email."));
+      }),
+  );
+
+  it.effect(
+    "a restore puts a revision back as a new revision of the developer's, and answers the plan",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* twoRevisions(owner, planId);
+        const first = readAnswer(
+          planRevisionAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "1" } })),
+        ).revision;
+
+        const restored = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } })),
+        ).plan;
+        const page = readAnswer(
+          planRevisionsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISIONS, owner, { id: planId })),
+        );
+
+        assert.deepEqual(restored.document, first.document);
+        assert.equal(restored.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+        assert.deepEqual(
+          page.revisions.map(({ seq, lastEdit, restoredFrom }) => [
+            seq,
+            lastEdit.actor,
+            restoredFrom?.seq,
+          ]),
+          [
+            [3, PLAN_ACTOR.DEVELOPER, 1],
+            [2, PLAN_ACTOR.NOTETAKER, undefined],
+            [1, PLAN_ACTOR.NOTETAKER, undefined],
+          ],
+        );
+        assert.equal(page.revisions[0]?.restoredFrom?.at, page.revisions[2]?.lastEdit.at);
+      }),
+  );
+
+  it.effect(
+    "another account reads no history of the plan, no revision of it, and restores none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* twoRevisions(owner, planId);
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(yield* ask(request(REVISIONS, other, { id: planId })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { revisions: [] },
+        });
+        assert.deepEqual(
+          yield* ask(request(REVISION, other, { id: planId, query: { seq: "1" } })),
+          notFound,
+        );
+        assert.deepEqual(
+          yield* ask(request(RESTORE, other, { id: planId, method: "POST", query: { seq: "1" } })),
+          notFound,
+        );
+        const page = readAnswer(
+          planRevisionsAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(REVISIONS, owner, { id: planId })),
+        );
+        assert.deepEqual(
+          page.revisions.map(({ seq }) => seq),
+          [2, 1],
+        );
+      }),
+  );
+
+  it.effect(
+    "a revision the plan never had answers as none, and a number that names none is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* twoRevisions(owner, planId);
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+
+        assert.deepEqual(
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "9" } })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "9" } })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "0" } })),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(request(REVISIONS, owner, { id: planId, query: { before: "two" } })),
+          invalid,
+        );
+        assert.deepEqual(yield* ask(request(REVISION, owner, { id: planId })), invalid);
+        assert.deepEqual(
+          yield* ask(request(RESTORE, owner, { id: planId, query: { seq: "1" } })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
   );
 });

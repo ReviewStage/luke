@@ -444,3 +444,51 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "the history is read a page at a time, one revision beside the one before it, and a restore answers the plan as it now stands",
+  () =>
+    Effect.gen(function* () {
+      const line = (seq: number) => ({
+        seq,
+        lastEdit: { actor: "notetaker", at: 1_800_000_000_000 + seq, duringCall: true },
+        startedAt: 1_800_000_000_000,
+        changes: 3,
+      });
+      const restored = {
+        ...PLAN,
+        lastEdit: { actor: "developer", at: 1_800_000_500_000, duringCall: false },
+      };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/revisions`]: {
+          answer: (request) =>
+            request.searchParams.get("before") === "2"
+              ? { revisions: [line(1)] }
+              : { revisions: [line(3), line(2)], earlier: 2 },
+        },
+        [`GET /api/plans/${PLAN_ID}/revisions/2`]: {
+          answer: () => ({ revision: { seq: 2, document: PLAN.document, previous: null } }),
+        },
+        [`POST /api/plans/${PLAN_ID}/revisions/2/restore`]: { answer: () => ({ plan: restored }) },
+        [`POST /api/plans/${PLAN_ID}/revisions/9/restore`]: {
+          answer: () => ({ error: "not-found" }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().readRevisions(PLAN_ID), api.layer), {
+        revisions: [line(3), line(2)],
+        earlier: 2,
+      });
+      assert.deepEqual(yield* Effect.provide(client().readRevisions(PLAN_ID, 2), api.layer), {
+        revisions: [line(1)],
+      });
+      assert.deepEqual(yield* Effect.provide(client().readRevision(PLAN_ID, 2), api.layer), {
+        seq: 2,
+        document: PLAN.document,
+        previous: null,
+      });
+      assert.deepEqual(yield* Effect.provide(client().restore(PLAN_ID, 2), api.layer), restored);
+      assert.equal(yield* Effect.provide(client().restore(PLAN_ID, 9), api.layer), undefined);
+    }),
+);

@@ -1067,6 +1067,97 @@ body,
   flex-direction: column;
 }
 
+/* The "Edited by" line opens the History tab, so it is a press drawn as the
+   muted line it was, underlined only under the pointer or the keyboard. */
+.plan-edit-link {
+  padding: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.plan-edit-link:hover {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* A version drawn in the document's place (version-view.tsx): the bar over
+   it, whose version and its two presses share the first row and whose
+   comparison stands on its own under them, then the version, read-only. */
+.version-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.version-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-8) var(--space-12);
+  padding: var(--space-8) var(--page-inset);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--desktop-well);
+}
+
+.version-bar-title {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--control-gap);
+}
+
+.version-compare {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.version-note {
+  margin-top: 0;
+  margin-bottom: var(--space-16);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+/* A unit only one side holds is drawn whole: one written in on the green
+   wash's edge, one struck out struck and dimmed, as its words would be. */
+.desktop-document .plan-unit.version-added {
+  padding-left: var(--space-12);
+  border-left: 2px solid color-mix(in srgb, var(--state-complete) 70%, transparent);
+}
+
+.desktop-document .plan-unit.version-removed {
+  padding-left: var(--space-12);
+  border-left: 2px solid color-mix(in srgb, var(--danger) 60%, transparent);
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--danger) 60%, transparent);
+}
+
+.plan-assumption.version-added {
+  background: color-mix(in srgb, var(--state-complete) 14%, transparent);
+}
+
+.plan-assumption.version-removed {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--danger) 70%, transparent);
+}
+
 .desktop-document .plan-document-scroll {
   padding: var(--page-inset);
   /* Room for the last line to scroll clear of the captions over the call bar. */
@@ -1080,7 +1171,8 @@ body,
 
 .desktop-document .plan-body,
 .desktop-document .plan-edit-note,
-.desktop-document .plan-assumptions {
+.desktop-document .plan-assumptions,
+.desktop-document .version-note {
   max-width: var(--reading-width);
   margin-right: auto;
   margin-left: auto;

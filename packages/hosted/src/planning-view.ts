@@ -10,6 +10,9 @@ import {
   planCreateRequestSchema,
   planFileRequestSchema,
   planRenameRequestSchema,
+  planRevisionAnswerSchema,
+  planRevisionSeqSchema,
+  planRevisionsAnswerSchema,
   planSchema,
   planSummarySchema,
   shownCodeSchema,
@@ -494,3 +497,35 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
+
+/** A page of a plan's history, as the History tab asks the host for it: the plan, and the revision the page is read before where it is an older page. */
+export const planningRevisionsParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  before: EffectSchema.optionalKey(planRevisionSeqSchema),
+});
+
+export type PlanningRevisionsParams = typeof planningRevisionsParamsSchema.Type;
+
+/** The History tab's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
+export const planningRevisionsAnswerSchema = EffectSchema.Union([
+  planRevisionsAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningRevisionsAnswer = typeof planningRevisionsAnswerSchema.Type;
+
+/** One revision of a plan, as the History tab names it to read it or to restore it: the plan and the revision's number. */
+export const planningRevisionParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  seq: planRevisionSeqSchema,
+});
+
+export type PlanningRevisionParams = typeof planningRevisionParamsSchema.Type;
+
+/** The History tab's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
+export const planningRevisionAnswerSchema = EffectSchema.Union([
+  planRevisionAnswerSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningRevisionAnswer = typeof planningRevisionAnswerSchema.Type;

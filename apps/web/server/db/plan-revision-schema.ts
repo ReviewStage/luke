@@ -16,8 +16,10 @@ import { plan } from "./plan-schema.js";
  * is the template's fields and the assumptions, from which the body is
  * formatted again under whatever name the plan has now; a rename is not a
  * revision. A plan from before history starts it with the one revision its
- * first later save found, under `earlier`. Rows go with their plan, and
- * outlive the coding agent that wrote them unnamed.
+ * first later save found, under `earlier`. The developer restoring an
+ * earlier revision writes a revision of its own naming the one it brought
+ * back, which nothing joins. Rows go with their plan, and outlive the coding
+ * agent that wrote them unnamed.
  */
 export const planRevision = pgTable(
   "plan_revision",
@@ -40,6 +42,8 @@ export const planRevision = pgTable(
     startedAt: instant("started_at").notNull(),
     /** The revision's latest save. */
     at: instant("at").notNull(),
+    /** The revision of the same plan the developer restored, where this revision is that restore; null for any other. */
+    restoredFrom: integer("restored_from"),
   },
   (table) => [primaryKey({ columns: [table.planId, table.seq] })],
 );

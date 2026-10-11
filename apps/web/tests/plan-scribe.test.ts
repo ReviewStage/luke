@@ -174,7 +174,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           yield* quiet;
           yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
 
-          const revisions = yield* listRevisions(userId, planId);
+          const { revisions } = yield* listRevisions(userId, planId);
           assert.deepEqual(
             revisions.map(({ seq, lastEdit, changes }) => ({
               seq,

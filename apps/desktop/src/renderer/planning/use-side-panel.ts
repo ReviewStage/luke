@@ -7,8 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * The plan's document is always the page's main content; what supports it
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
- * calls, what Luke's planning model wrote and ran on them, and each coding
- * agent started on the plan) stands in a panel at the window's right that
+ * calls, what Luke's planning model wrote and ran on them, the plan's
+ * history, and each coding agent started on the plan) stands in a panel at the window's right that
  * the developer opens and closes, as every devtool
  * window's secondary sidebar does. The one thing that opens it on its own is
  * Luke first drawing on a plan's board or first showing its code
@@ -18,7 +18,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
  * board holds something, Luke showed code on it, a call on it has a line,
- * or Luke's planning model took a turn on it. So a new plan has no tab,
+ * Luke's planning model took a turn on it, or anyone wrote it since its
+ * history began. So a new plan has no tab,
  * and what arrives on it adds its tab as it arrives, never taking the
  * chosen one's place. The developer's own choices lie over that, per plan:
  * a tab they open from the "+" or its shortcut stands on that plan though
@@ -28,7 +29,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * so a tab dragged to the front is at the front on every plan that has it,
  * and a chosen tab the open plan does not have reads as the first it does.
  *
- * The four fixed kinds are a constant; the agent tabs are the plan's, one
+ * The five fixed kinds are a constant; the agent tabs are the plan's, one
  * per agent, drawn after them, and come and go with the plan. An agent's
  * tab closes as any other does, which closes the view and leaves the agent
  * running, and the "+" opens it again; the agents whose tabs were closed
@@ -81,12 +82,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * the document.
  */
 
-/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   TRANSCRIPT: "transcript",
   WORK: "work",
+  HISTORY: "history",
 } as const;
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
@@ -152,6 +154,7 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.CODE]: { label: "Code" },
   [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript" },
   [SIDE_PANEL_TAB.WORK]: { label: "Work" },
+  [SIDE_PANEL_TAB.HISTORY]: { label: "History" },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order a first launch stands them in and the "+" offers them; the agent tabs follow them. */
@@ -371,7 +374,8 @@ function clampWidth(width: number): number {
 
 /**
  * Whether the open plan holds something of each fixed kind: its board any
- * element, any code Luke showed, any call a line, its work any turn. A kind
+ * element, any code Luke showed, any call a line, its work any turn, its
+ * history any revision. A kind
  * not yet read on the plan is absent, which draws no tab, as nothing does.
  */
 export type PlanHolds = Partial<Record<FixedSidePanelTab, boolean | undefined>>;

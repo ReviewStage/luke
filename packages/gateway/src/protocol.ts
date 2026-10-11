@@ -37,6 +37,12 @@ export const GATEWAY_METHOD = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A window of a file of one plan's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   PLANNING_FILE: "planning.file",
+  /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
+  PLANNING_REVISIONS: "planning.revisions",
+  /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */
+  PLANNING_REVISION: "planning.revision",
+  /** One revision of one plan put back as its content on the service; the view takes the plan as the service answered it. */
+  PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** The models a coding agent may run on, read from the service's catalog now. */

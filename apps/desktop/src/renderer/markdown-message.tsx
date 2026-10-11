@@ -20,15 +20,30 @@ interface MarkdownSpan {
   to: number;
 }
 
+/** How a stretch of the words is marked as a change: written in, or struck out. */
+export const MARKDOWN_MARK = {
+  INSERTED: "inserted",
+  DELETED: "deleted",
+} as const;
+
+type MarkdownMarkKind = (typeof MARKDOWN_MARK)[keyof typeof MARKDOWN_MARK];
+
+/** A stretch of the words marked as a change. */
+export interface MarkdownMark extends MarkdownSpan {
+  kind: MarkdownMarkKind;
+}
+
 /**
  * A message drawn mid-edit: a stretch of its words left undrawn (typed in
- * but not reached yet, or being erased), a stretch drawn selected, and where
- * the caret stands. Offsets are in the words.
+ * but not reached yet, or being erased), a stretch drawn selected, where the
+ * caret stands, and the stretches marked as written in or struck out, which
+ * do not overlap. Offsets are in the words.
  */
 export interface MarkdownEdit {
   hidden?: MarkdownSpan | undefined;
   selection?: MarkdownSpan | undefined;
   caret?: number | undefined;
+  marks?: readonly MarkdownMark[] | undefined;
 }
 
 /** The caret a typed message ends in: a bar with no words of its own. */
@@ -41,6 +56,12 @@ const CARET: HastChild = {
 
 /** The class the stretch being selected wears, drawn as an editor draws a selection. */
 const SELECTION_CLASS = "markdown-selection";
+
+/** The element and class each kind of change mark is drawn as, so it reads as a change without its colour. */
+const MARK_DRAWN = {
+  [MARKDOWN_MARK.INSERTED]: { tagName: "ins", className: "markdown-inserted" },
+  [MARKDOWN_MARK.DELETED]: { tagName: "del", className: "markdown-deleted" },
+} as const satisfies Record<MarkdownMarkKind, { tagName: string; className: string }>;
 
 /** Whether a node is the line break the renderer leaves between block elements, which draws nothing. */
 function isBlockBreak(node: HastNode): boolean {
@@ -71,15 +92,15 @@ function insideHidden(walk: EditWalk, start: number, end: number): boolean {
 
 /**
  * One run of text cut into what is drawn: the hidden stretch dropped, the
- * selected stretch marked, and the caret set in where it falls. A run's
+ * selected stretch and each change marked, and the caret set in where it falls. A run's
  * place in the words maps letter for letter onto its value, which an escaped
  * character puts one letter off, the same small error the cut always made.
  */
 function editedText(text: HastText, start: number, walk: EditWalk): readonly HastChild[] {
-  const { hidden, selection, caret } = walk.edit;
+  const { hidden, selection, caret, marks = [] } = walk.edit;
   const local = (offset: number) => Math.min(Math.max(offset - start, 0), text.value.length);
   const cuts = new Set([0, text.value.length]);
-  for (const span of [hidden, selection]) {
+  for (const span of [hidden, selection, ...marks]) {
     if (span !== undefined) cuts.add(local(span.from)).add(local(span.to));
   }
   const caretAt = caret === undefined || walk.caretPlaced ? undefined : local(caret);
@@ -97,6 +118,8 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
     if (hidden !== undefined && from >= local(hidden.from) && to <= local(hidden.to)) return;
     const selected =
       selection !== undefined && from >= local(selection.from) && to <= local(selection.to);
+    const mark = marks.find((each) => from >= local(each.from) && to <= local(each.to));
+    const drawn = mark === undefined ? undefined : MARK_DRAWN[mark.kind];
     parts.push(
       selected
         ? {
@@ -105,7 +128,14 @@ function editedText(text: HastText, start: number, walk: EditWalk): readonly Has
             properties: { className: [SELECTION_CLASS] },
             children: [{ type: "text", value }],
           }
-        : { type: "text", value },
+        : drawn !== undefined
+          ? {
+              type: "element",
+              tagName: drawn.tagName,
+              properties: { className: [drawn.className] },
+              children: [{ type: "text", value }],
+            }
+          : { type: "text", value },
     );
   });
   return parts;

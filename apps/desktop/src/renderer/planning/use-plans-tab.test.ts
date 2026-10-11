@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -20,7 +20,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { MOTION_DURATION_MS } from "@sidecar/surface";
-import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
@@ -241,6 +241,126 @@ it.effect(
       act(() => tab.control().copy.onPress());
       yield* landed;
       assert.equal(toast(), "Could not copy to the clipboard. Try again.");
+    }),
+);
+
+/** A plan with a history: Luke wrote it on a call, over a first version. */
+const EDITED: PlanningView = {
+  ...OPEN,
+  document: {
+    status: PLANNING_READ.READY,
+    plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 20, duringCall: true } },
+  },
+};
+
+/** One revision as the history lists it, written by Luke on a call. */
+function revisionLine(seq: number) {
+  return {
+    seq,
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 10 * seq, duringCall: true },
+    startedAt: 10 * seq,
+    changes: 2,
+  };
+}
+
+const FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
+
+it.effect(
+  "the History tab reads the plan's versions; one chosen stands in the document's place until Escape or another tab, and a restore goes back to the plan and offers its Undo",
+  () =>
+    Effect.gen(function* () {
+      const restoredAnswer = { value: false };
+      const tab = mount(
+        { shown: true, planning: EDITED },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+          [ACT_KIND.PLANNING_RESTORE]: () => Promise.resolve(restoredAnswer.value),
+        },
+        yield* registryOnTestClock,
+      );
+      assert.ok(tab.control().sidePanel.tabs.includes(SIDE_PANEL_TAB.HISTORY));
+      assert.ok(!tab.told.includes(ACT_KIND.PLANNING_REVISIONS), "read only once it shows");
+
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
+      yield* landed;
+      const { list } = tab.control().history;
+      assert.deepEqual(
+        list.kind === "ready" ? list.revisions.map(({ seq }) => seq) : list.kind,
+        [2, 1],
+      );
+
+      act(() => tab.control().history.onSelect(1));
+      yield* landed;
+      const viewing = tab.control().history.viewing;
+      assert.equal(viewing?.line.seq, 1);
+      assert.equal(viewing?.current, false);
+      assert.deepEqual(
+        viewing?.read.kind === "ready" ? viewing.read.document : viewing?.read.kind,
+        FIRST_VERSION,
+      );
+
+      let stepped = false;
+      act(() => {
+        stepped = tab.control().back();
+      });
+      assert.ok(stepped);
+      assert.equal(tab.control().history.viewing, undefined);
+      assert.equal(
+        tab.control().page,
+        PLANS_PAGE.DOCUMENT,
+        "Escape left the version, not the plan",
+      );
+
+      act(() => tab.control().history.onSelect(1));
+      yield* landed;
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+      assert.equal(tab.control().history.viewing, undefined, "another tab leaves the version");
+
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
+      act(() => tab.control().history.onSelect(1));
+      yield* landed;
+      let refused: ActionResult | undefined;
+      act(() => {
+        tab
+          .control()
+          .history.onRestore()
+          .then((result) => {
+            refused = result;
+          });
+      });
+      yield* landed;
+      assert.equal(refused?.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(
+        tab.control().history.viewing?.line.seq,
+        1,
+        "a refused restore stays on the version",
+      );
+
+      restoredAnswer.value = true;
+      let restored: ActionResult | undefined;
+      act(() => {
+        tab
+          .control()
+          .history.onRestore()
+          .then((result) => {
+            restored = result;
+          });
+      });
+      yield* landed;
+      assert.equal(restored?.status, ACTION_RESULT_STATUS.ACCEPTED);
+      assert.equal(tab.control().history.viewing, undefined);
+      const undo = document.querySelector<HTMLButtonElement>(".toast button");
+      assert.equal(undo?.textContent, "Undo");
+      assert.equal(toast()?.replace("Undo", ""), "Version restored");
+
+      // The Undo is itself a restore, and one the service refuses says so.
+      restoredAnswer.value = false;
+      act(() => undo?.click());
+      yield* landed;
+      assert.equal(toast(), "The restore could not be undone. Try again.");
     }),
 );
 
@@ -961,6 +1081,10 @@ test("a new plan has no tab, and each kind's first content adds its tab in its p
       work: [TURN],
       shownCode: SHOWN,
       board: drawnBoard(1),
+      document: {
+        status: PLANNING_READ.READY,
+        plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: true } },
+      },
     },
   });
   assert.deepEqual(tab.control().sidePanel.tabs, SIDE_PANEL_TABS);

@@ -94,6 +94,24 @@ export function planFilePath(
   return `${planPath(planId)}/file?${query}`;
 }
 
+/** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */
+export function planRevisionsPath(planId: string, before?: number): string {
+  const path = `${planPath(planId)}/revisions`;
+  if (before === undefined) return path;
+  const query = new URLSearchParams({ before: String(before) });
+  return `${path}?${query}`;
+}
+
+/** One revision of one plan: its content beside the content before it (GET). */
+export function planRevisionPath(planId: string, seq: number): string {
+  return `${planRevisionsPath(planId)}/${seq}`;
+}
+
+/** One revision of one plan put back as its content (POST). */
+export function planRestorePath(planId: string, seq: number): string {
+  return `${planRevisionPath(planId, seq)}/restore`;
+}
+
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;

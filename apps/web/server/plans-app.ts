@@ -1,5 +1,9 @@
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
-import { type PlanFileRequest, planFileRequestSchema } from "@sidecar/hosted/plan-wire";
+import {
+  type PlanFileRequest,
+  planFileRequestSchema,
+  planRevisionSeqSchema,
+} from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {
@@ -32,6 +36,8 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { readPlanFile } from "./hosted/plan-file.js";
+import { PLAN_SAVE_REFUSAL, PLAN_SAVE_STATUS, restoreRevision } from "./hosted/plan-notes.js";
+import { listRevisions, readRevision } from "./hosted/plan-revisions.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
 import { readTranscript } from "./hosted/transcript-store.js";
@@ -43,8 +49,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan id another account
  * owns answers exactly as one that names nothing, so nothing is learned
- * about plans the caller does not hold. Nothing here writes a document; the
- * planning call's notetaker is the one writer (`hosted/plan-notes.ts`).
+ * about plans the caller does not hold. Nothing here writes a document but
+ * a restore: the planning call's notetaker and the coding agents write it
+ * through notes, and the developer puts back an earlier revision, each through
+ * the plan's one write (`hosted/plan-notes.ts`).
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
  * nothing: the list stands newest started first whatever is opened. A pin
  * and an archive are changes like a rename, and the list leaves the archived
@@ -61,7 +69,12 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
  * stands now through the App, under the rule `show_code` is held to
- * (`hosted/plan-file.ts`).
+ * (`hosted/plan-file.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
+ * one revision's content beside the one before it, both formatted under the
+ * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
+ * puts that content back as a revision of the developer's, answered with the
+ * plan (`hosted/plan-revisions.ts`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -90,6 +103,12 @@ const PLANS_PATH = {
   WORK: "/api/plans/work",
   /** GET reads a window of one file of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   FILE: "/api/plans/file",
+  /** GET reads a page of the plan's history, before the revision `before` names where it names one; the rewrite moves the path's id into the `id` query. */
+  REVISIONS: "/api/plans/revisions",
+  /** GET reads one revision's content and the one before it; the rewrite moves the path's id and number into the `id` and `seq` queries. */
+  REVISION: "/api/plans/revision",
+  /** POST restores one revision as the plan's content; the rewrite moves the path's id and number into the `id` and `seq` queries. */
+  RESTORE: "/api/plans/restore",
 } as const;
 
 const HTTP_METHOD = {
@@ -102,8 +121,11 @@ const HTTP_METHOD = {
 
 const PLAN_ID_QUERY = "id";
 
-/** The query naming the turn an older page of a plan's work is read before. */
+/** The query naming the turn an older page of a plan's work is read before, and the revision an older page of its history is. */
 const BEFORE_TURN_QUERY = "before";
+
+/** The query naming one revision of the plan by its number. */
+const REVISION_SEQ_QUERY = "seq";
 
 /** The queries naming a window of a file: its path, and its first and last line. */
 const FILE_QUERY = {
@@ -384,6 +406,101 @@ const fileEndpoint = /* @__PURE__ */ Effect.fn("web/planFileEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
 });
 
+/**
+ * The revision number the query `name` holds, named once, or nothing where
+ * it is absent. A number that is not a whole number from one names no
+ * revision, and is refused as a request that does not read.
+ */
+const revisionSeqOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+  name: string,
+): Effect.fn.Return<number | undefined, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(name);
+  const [seq] = named;
+  if (seq === undefined) return undefined;
+  const read = readEither(planRevisionSeqSchema)(unparsedWire(Number(seq)));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** The revision the path names, which a revision's routes cannot do without. */
+const namedRevisionOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<number, HostedRefusal> {
+  const seq = yield* revisionSeqOf(request, REVISION_SEQ_QUERY);
+  if (seq === undefined) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return seq;
+});
+
+/**
+ * GET reads a page of the plan's history, the newest first. A plan with no
+ * history yet answers an empty page, and so does a plan id the account does
+ * not own, as `readTranscript` answers neither apart.
+ */
+const revisionsEndpoint = /* @__PURE__ */ Effect.fn("web/planRevisionsEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const before = yield* revisionSeqOf(request, BEFORE_TURN_QUERY);
+  const page = yield* hostedStoreOrUnavailable(listRevisions(userId, planId, before));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
+});
+
+/** GET reads one revision's content and the content before it. */
+const revisionEndpoint = /* @__PURE__ */ Effect.fn("web/planRevisionEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const seq = yield* namedRevisionOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const revision = yield* hostedStoreOrUnavailable(readRevision(userId, planId, seq));
+  if (Option.isNone(revision)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { revision: revision.value });
+});
+
+/** What a restore that saved nothing answers, by why; the store out of reach is any other. */
+const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
+  [PLAN_SAVE_REFUSAL.NO_PLAN, HOSTED_REFUSAL.NOT_FOUND],
+  [PLAN_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
+  [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
+]);
+
+/**
+ * POST puts one revision's content back as the plan's, a revision of the
+ * developer's naming it, and answers the plan as it now stands. It names
+ * nothing in a body: the plan and the revision are the path's.
+ */
+const restoreEndpoint = /* @__PURE__ */ Effect.fn("web/planRestoreEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const seq = yield* namedRevisionOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const restored = yield* restoreRevision({ userId, planId }, seq);
+  if (restored.status !== PLAN_SAVE_STATUS.SAVED) {
+    return yield* Effect.fail(RESTORE_REFUSAL.get(restored.reason) ?? HOSTED_REFUSAL.UNAVAILABLE);
+  }
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: restored.plan });
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
@@ -393,6 +510,9 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISIONS, hostedRefusing(revisionsEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

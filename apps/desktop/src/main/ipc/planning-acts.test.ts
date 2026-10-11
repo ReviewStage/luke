@@ -89,6 +89,21 @@ function fixture() {
           asked.push(`file:${params.path}:${params.firstLine}-${params.lastLine}`);
           return { refusal: PLAN_FILE_REFUSAL.MISSING } as const;
         }),
+      planningRevisions: (params) =>
+        Effect.sync(() => {
+          asked.push(`revisions:${params.planId}:${params.before}`);
+          return { revisions: [] };
+        }),
+      planningRevision: (params) =>
+        Effect.sync(() => {
+          asked.push(`revision:${params.seq}`);
+          return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
+        }),
+      planningRestore: (params) =>
+        Effect.sync(() => {
+          asked.push(`restore:${params.seq}`);
+          return true;
+        }),
     },
     openExternal: (url) => {
       opened.push(url);
@@ -225,6 +240,43 @@ it.effect(
         reason: ACT[ACT_KIND.PLANNING_FILE].refusal,
       });
       assert.deepEqual(f.asked, ["file:src/gone.ts:1-500"]);
+    }),
+);
+
+it.effect(
+  "the History tab's reads and its restore reach the host from a panel, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const page = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REVISIONS, payload: { planId: PLAN_ID, before: 3 } },
+        PANEL,
+      );
+      const revision = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REVISION, payload: { planId: PLAN_ID, seq: 2 } },
+        PANEL,
+      );
+      const restored = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_RESTORE, payload: { planId: PLAN_ID, seq: 2 } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_RESTORE, payload: { planId: PLAN_ID, seq: 2 } },
+        VOICE,
+      );
+
+      assert.deepEqual(page, { status: ACT_OUTCOME_STATUS.DONE, value: { revisions: [] } });
+      assert.deepEqual(revision, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      });
+      assert.deepEqual(restored, { status: ACT_OUTCOME_STATUS.DONE, value: true });
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_RESTORE].refusal,
+      });
+      assert.deepEqual(f.asked, [`revisions:${PLAN_ID}:3`, "revision:2", "restore:2"]);
     }),
 );
 

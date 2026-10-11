@@ -410,12 +410,17 @@ CREATE TABLE "plan_revision" (
   Before a plan's history begins, the service answers the newest journaled
   agent save the same way. The `editors` list is not shipped.
 - `GET /api/plans/{id}/revisions` returns
-  `{ revisions: { seq, actor, label, startedAt, at, changes, duringCall, restoredFrom? }[] }`,
-  newest first, paged by `before`.
+  `{ revisions: { seq, lastEdit, startedAt, changes, restoredFrom? }[], earlier? }`,
+  newest first, fifty a page, paged by `before`. As shipped in PR 2, the
+  writer is the `lastEdit` the plan itself carries, and `restoredFrom` is
+  `{ seq, at }` (migration `0074_plan_revision_restored_from`).
 - `GET /api/plans/{id}/revisions/{seq}` returns
-  `{ document, previous: document | null }`, both formatted under the current
-  name.
-- `POST /api/plans/{id}/revisions/{seq}/restore` with `{ base: currentSeq }`.
+  `{ revision: { seq, document, previous: document | null } }`, both
+  formatted under the current name.
+- `POST /api/plans/{id}/revisions/{seq}/restore` answers `{ plan }`. As
+  shipped in PR 2 it takes no body and no base: what it replaced is the
+  revision before it, so a restore over a save that landed meanwhile is
+  undone by restoring that one.
 - `POST /api/plans/{id}/edits` (§3) answers
   `{ status: "saved", plan } | { status: "conflict", current } | { status: "refused", reason }`.
 - **Value sets** are `as const` (`PLAN_ACTOR`, `PLAN_EDIT_STATUS`).

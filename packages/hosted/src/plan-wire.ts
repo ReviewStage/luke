@@ -216,6 +216,64 @@ export const planAnswerSchema = EffectSchema.Struct({ plan: planSchema });
 /** A deleted plan (DELETE): its row, its document, and its association are gone. */
 export const planDeleteAnswerSchema = EffectSchema.Struct({ deleted: EffectSchema.Literal(true) });
 
+/** How a plan's history is read: the newest revisions first, a page at a time. */
+export const PLAN_HISTORY_BOUNDS = {
+  /** The most revisions one read of the history carries. */
+  PAGE: 50,
+} as const;
+
+/** A revision's number within its plan, from one. */
+export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
+/**
+ * One revision as the History tab lists it: its number, who wrote it and
+ * when it last moved, when it began, how many changes its saves made, and,
+ * for the developer's restore of an earlier revision, which one it brought
+ * back and that revision's latest save.
+ */
+export const planRevisionLineSchema = EffectSchema.Struct({
+  seq: planRevisionSeqSchema,
+  lastEdit: planLastEditSchema,
+  /** Epoch milliseconds of the revision's first save. */
+  startedAt: countedNumber,
+  changes: countedNumber,
+  restoredFrom: EffectSchema.optionalKey(
+    EffectSchema.Struct({ seq: planRevisionSeqSchema, at: countedNumber }),
+  ),
+});
+
+export type PlanRevisionLine = typeof planRevisionLineSchema.Type;
+
+/**
+ * A page of a plan's history (GET `/api/plans/{id}/revisions`), the newest
+ * first, before the revision the `before` query names where it names one;
+ * `earlier` is what the next older page is read before, absent on the oldest.
+ */
+export const planRevisionsAnswerSchema = EffectSchema.Struct({
+  revisions: EffectSchema.Array(planRevisionLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_HISTORY_BOUNDS.PAGE),
+  ),
+  earlier: EffectSchema.optionalKey(planRevisionSeqSchema),
+});
+
+export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
+
+/**
+ * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
+ * as it stood after the revision and as it stood before it, null for the
+ * first, each formatted under the plan's name as it stands now, so a rename
+ * since is no difference between them.
+ */
+export const planRevisionAnswerSchema = EffectSchema.Struct({
+  revision: EffectSchema.Struct({
+    seq: planRevisionSeqSchema,
+    document: planDocumentSchema,
+    previous: EffectSchema.NullOr(planDocumentSchema),
+  }),
+});
+
+export type PlanRevisionAnswer = typeof planRevisionAnswerSchema.Type;
+
 /** The most lines one code reference points at; a reference is a passage, not a file. */
 const CODE_REF_MAX_LINES = 200;
 

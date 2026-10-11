@@ -62,7 +62,8 @@ stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
 replaces the document, and our service keeps what each save changed as the
 plan's history: the plan's content as it stood after each revision, who
-wrote it (the notetaker, on which call, or which coding agent), and when,
+wrote it (the notetaker, on which call, which coding agent, or you, restoring
+an earlier version, with which one), and when,
 stored and readable the same way as the document, with no limit on how many
 revisions a plan keeps. A coding agent's saves are also kept as the notes it
 took, the last fifty, so Luke can tell you what an agent changed. Deleting a
@@ -240,8 +241,9 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. The
 feedback form is left out whole, since a screenshot you attach to it is a
 picture of your screen and could carry another app's words, and so are a
-plan's whiteboard, a plan's transcript, a plan's Work tab, and each coding
-agent's tab, as a second line. The whiteboard draws its
+plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's History
+tab and an earlier version of it you are viewing, and each coding agent's
+tab, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
 not report what you clicked.

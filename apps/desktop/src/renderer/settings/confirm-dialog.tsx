@@ -16,7 +16,8 @@ import {
  *
  * The desktop window asks the way every desktop app does: the window dims, a
  * card names what the act takes with it, and the two answers sit at its foot,
- * the safe one first and the act in red last. Focus lands on Cancel, so a key
+ * the safe one first and the act in red last, or in the accent for an act
+ * that can be undone, such as restoring a version of a plan. Focus lands on Cancel, so a key
  * already pressed changes nothing; Tab stays inside the card; Escape, a press
  * on the dimmed window, and Cancel all withdraw it and hand focus back to
  * whatever asked. Enter is the focused button's own, so it acts only from the
@@ -28,12 +29,27 @@ import {
  * the act can be tried again or let go.
  */
 
-/** What the dialog says: its title, what the act takes with it, and the act's word, and its word while it runs. */
+/** How the act's button is drawn: red for an act that destroys, the accent for one that can be undone. */
+export const DIALOG_TONE = {
+  DANGER: "danger",
+  PRIMARY: "primary",
+} as const;
+
+type DialogTone = (typeof DIALOG_TONE)[keyof typeof DIALOG_TONE];
+
+/** The act's button's class, by its tone. */
+const ACT_BUTTON_CLASS = {
+  [DIALOG_TONE.DANGER]: "danger-button",
+  [DIALOG_TONE.PRIMARY]: "primary-button",
+} as const satisfies Record<DialogTone, string>;
+
+/** What the dialog says: its title, what the act takes with it, and the act's word, and its word while it runs; the act is red unless its tone says otherwise. */
 export interface DialogQuestion {
   title: string;
   body: string;
   verb: string;
   running: string;
+  tone?: DialogTone;
 }
 
 /** What Tab may land on inside a modal card: its enabled controls, and never a hidden one. */
@@ -194,7 +210,12 @@ export function ConfirmDialog({
           >
             Cancel
           </button>
-          <button type="button" className="danger-button" disabled={acting} onClick={act}>
+          <button
+            type="button"
+            className={ACT_BUTTON_CLASS[question.tone ?? DIALOG_TONE.DANGER]}
+            disabled={acting}
+            onClick={act}
+          >
             {acting ? question.running : question.verb}
           </button>
         </div>

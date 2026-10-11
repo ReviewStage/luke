@@ -169,6 +169,113 @@
   padding: 3px 0;
 }
 
+/* The History tab: the plan's versions, newest first, one row each, the
+   row whose version is drawn lit as a chosen sidebar row is (history-tab.tsx). */
+.history-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: var(--space-8) var(--column-inset) var(--space-16);
+  scrollbar-color: var(--scrollbar) transparent;
+  scrollbar-width: thin;
+}
+
+.history-hint {
+  margin: 0 0 var(--space-8);
+  padding: 0 var(--row-inset);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.history-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.history-row:hover {
+  background: var(--raised);
+}
+
+.history-row[aria-current="true"] {
+  background: var(--raised-strong);
+}
+
+.history-row-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.history-row-author {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-row-tag {
+  flex: none;
+  padding: 0 var(--space-6);
+  border-radius: 5px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  line-height: 16px;
+}
+
+.history-row-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.history-row-summary {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-earlier {
+  margin-top: var(--space-8);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.history-earlier:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
 /* The Code tab: every code Luke showed on the plan, one card each under the
    call it was shown on, in a log that fills the tab (code-pane.tsx). */
 .code-pane {

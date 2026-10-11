@@ -512,6 +512,13 @@
       "when": 1790985000000,
       "tag": "0073_plan_revision",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1791010000000,
+      "tag": "0074_plan_revision_restored_from",
+      "breakpoints": true
     }
   ]
 }

@@ -727,6 +727,25 @@ its first bytes is refused by name; and each line is cut to 400
 characters. `packages/hosted/src/plan-wire.ts` declares the request and
 the answer (`planFileRequestSchema`, `planFileAnswerSchema`).
 
+`GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
+History tab (`server/hosted/plan-revisions.ts`): fifty revisions a page,
+newest first, each its writer as the "Edited by" line names it, when it
+began and last moved, how many changes it made, and for a restore the
+revision it brought back; `?before=<seq>` reads the page before that
+revision, and the answer names the revision the next older page is read
+before while one stands. `GET /api/plans/{id}/revisions/{seq}` reads one
+revision's content and the content before it, null for the first, each
+formatted under the plan's name as it stands now, so a rename since is no
+difference between them. `POST /api/plans/{id}/revisions/{seq}/restore`
+puts that revision's fields and assumptions back through the plan's one
+locked save (`server/hosted/plan-notes.ts`'s `restoreRevision`), kept as a
+revision of the developer's naming the one restored, and answers the plan.
+It takes no body and no base: what it replaced is the revision before it,
+so a restore over a save that landed meanwhile is undone by restoring that.
+A plan id another account owns reads as an empty history and restores as
+`not-found`. `packages/hosted/src/plan-wire.ts` declares the answers
+(`planRevisionsAnswerSchema`, `planRevisionAnswerSchema`).
+
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is

@@ -1665,6 +1665,7 @@ test("closing the chosen tab chooses its neighbour, and closing the last leaves 
     ["Code", "⌥⌘2", true],
     ["Transcript", "⌥⌘3", true],
     ["Work", "⌥⌘4", true],
+    ["History", "⌥⌘5", true],
   ]);
 
   const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
@@ -1682,7 +1683,7 @@ test("the open panel on a plan that has used no tab says what will stand there, 
   assert.deepEqual(panelTabs(page), []);
   assert.equal(
     page.querySelector(".side-panel-content")?.textContent,
-    "Luke's board, code, transcript, and work appear here as you plan.",
+    "Luke's board, code, transcript, and work, and the plan's history, appear here as you plan.",
   );
   assert.equal(page.querySelector(".side-panel-no-tabs"), null);
 
@@ -1739,6 +1740,7 @@ test("the + drops the searchable menu over every kind, each with its shortcut wh
     ["Code", "⌥⌘2", true],
     ["Transcript", "⌥⌘3", true],
     ["Work", "⌥⌘4", true],
+    ["History", "⌥⌘5", true],
     ["New coding agent", "", true],
   ]);
   assert.equal(
@@ -1785,7 +1787,7 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   typeSearch("");
   assert.deepEqual(
     addRows().map(([label]) => label),
-    ["Board", "Code", "Transcript", "Work", "New coding agent"],
+    ["Board", "Code", "Transcript", "Work", "History", "New coding agent"],
   );
 
   key(focused(), "Escape");
@@ -2435,7 +2437,7 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
     ["Coding agents", ["New coding agent", "Opus 5.5", "GPT 5.6 Sol"]],
     ["Subagents", [job]],
   ]);
-  assert.deepEqual(addRows().slice(4), [
+  assert.deepEqual(addRows().slice(SIDE_PANEL_TABS.length), [
     ["New coding agent", "", true],
     ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],

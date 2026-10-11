@@ -34,6 +34,18 @@ export const ONE_ACT_OF_EACH_KIND = {
       lastLine: 500,
     },
   },
+  [ACT_KIND.PLANNING_REVISIONS]: {
+    kind: ACT_KIND.PLANNING_REVISIONS,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
+  },
+  [ACT_KIND.PLANNING_REVISION]: {
+    kind: ACT_KIND.PLANNING_REVISION,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", seq: 2 },
+  },
+  [ACT_KIND.PLANNING_RESTORE]: {
+    kind: ACT_KIND.PLANNING_RESTORE,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", seq: 2 },
+  },
   [ACT_KIND.PLANNING_CLOSE]: { kind: ACT_KIND.PLANNING_CLOSE },
   [ACT_KIND.PLANNING_SELECT]: {
     kind: ACT_KIND.PLANNING_SELECT,
