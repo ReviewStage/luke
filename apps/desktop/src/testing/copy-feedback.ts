@@ -15,10 +15,15 @@ import { createElement, type ReactElement } from "react";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { rendererRuntime } from "../renderer/renderer-runtime";
 
+/** How many turns a late answer waits, past the few a prompt one takes to land. */
+const LATE_TURNS = 4;
+
 /** What main's clipboard was handed, in order, and whether it takes the next copy. */
 export interface TestClipboard {
   readonly copied: string[];
   refuse(refusing: boolean): void;
+  /** Refuses the next copy late: its answer lands turns after one a copy right behind it gets. */
+  refuseNextLate(): void;
 }
 
 /**
@@ -28,6 +33,7 @@ export interface TestClipboard {
 export function installClipboard(): TestClipboard {
   const copied: string[] = [];
   let refusing = false;
+  let late = false;
   // Note that a test that stood no channel up has none, whatever the bridge's type says.
   const before: Partial<Window["sidecar"]> | undefined =
     "sidecar" in window ? window.sidecar : undefined;
@@ -36,9 +42,14 @@ export function installClipboard(): TestClipboard {
     if (request.kind !== ACT_KIND.WINDOW_COPY_TEXT) {
       return before?.act === undefined ? Promise.resolve(done) : before.act(request);
     }
-    if (refusing) {
-      return Promise.resolve({ status: ACT_OUTCOME_STATUS.REFUSED, reason: "No clipboard." });
+    const refused: ActOutcome = { status: ACT_OUTCOME_STATUS.REFUSED, reason: "No clipboard." };
+    if (late) {
+      late = false;
+      let answer = Promise.resolve();
+      for (let turn = 0; turn < LATE_TURNS; turn += 1) answer = answer.then(() => undefined);
+      return answer.then(() => refused);
     }
+    if (refusing) return Promise.resolve(refused);
     copied.push(request.payload.words);
     return Promise.resolve(done);
   };
@@ -50,6 +61,9 @@ export function installClipboard(): TestClipboard {
     copied,
     refuse: (next) => {
       refusing = next;
+    },
+    refuseNextLate: () => {
+      late = true;
     },
   };
 }

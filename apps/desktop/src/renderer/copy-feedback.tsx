@@ -7,7 +7,8 @@
  * back; its label and accessible name stay as they were, so nothing beside
  * it shifts, and only its hint says "Copied" while the check stands. A
  * clipboard that refused turns the glyph to an alert instead, for the same
- * moment, its hint saying so. A second press restarts the moment. A copy
+ * moment, its hint saying so. A second press restarts the moment, and only
+ * the last press's answer is shown, however the clipboard orders them. A copy
  * made from a menu has no button left to answer on once the menu closes, so
  * it is answered with the window's toast (`toast.tsx`) instead.
  */
@@ -15,7 +16,7 @@
 import { useAtom } from "@effect/atom-react";
 import { Duration, Effect } from "effect";
 import { CheckIcon, CircleAlertIcon, CopyIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { rendererRuntime } from "./renderer-runtime";
@@ -45,6 +46,22 @@ const COPY_HINT = {
 /** What a copy's toast says when the clipboard refused it. */
 const COPY_FAILED_NOTE = "Could not copy to the clipboard. Try again.";
 
+/**
+ * The window's last menu copy, counted, so only its answer reaches the one
+ * toast: a slower clipboard answering an earlier copy says nothing.
+ */
+let latestMenuCopy = 0;
+
+/** What the clipboard's answer to a copy comes to: the check, or the alert. */
+function copyAnswer(
+  copying: Promise<void>,
+): Promise<typeof COPY_STATE.COPIED | typeof COPY_STATE.FAILED> {
+  return copying.then(
+    () => COPY_STATE.COPIED,
+    () => COPY_STATE.FAILED,
+  );
+}
+
 /** A button's own hold, as an atom whose work is the wait: waiting exactly as long as the glyph stands. */
 const buttonHoldAtom = () => rendererRuntime.fn(() => Effect.sleep(BUTTON_HOLD));
 
@@ -64,16 +81,17 @@ export function useCopyFeedback(): CopyFeedback {
   const [hold] = useState(buttonHoldAtom);
   const [held, restart] = useAtom(hold);
   const [landed, setLanded] = useState<CopyState>(COPY_STATE.IDLE);
+  // Note that this is a ref, because an answer reads it as it lands, which
+  // no render stands between.
+  const latest = useRef(0);
   const copy = (words: string) => {
-    act(ACT_KIND.WINDOW_COPY_TEXT, { words })
-      .then(
-        () => COPY_STATE.COPIED,
-        () => COPY_STATE.FAILED,
-      )
-      .then((answer) => {
-        setLanded(answer);
-        restart();
-      });
+    latest.current += 1;
+    const press = latest.current;
+    copyAnswer(act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then((answer) => {
+      if (press !== latest.current) return;
+      setLanded(answer);
+      restart();
+    });
   };
   return { state: held.waiting ? landed : COPY_STATE.IDLE, copy };
 }
@@ -110,9 +128,15 @@ export function useCopyToast(): (words: string, label: string) => void {
   const { act } = useAct();
   const show = useToast();
   return (words, label) => {
-    act(ACT_KIND.WINDOW_COPY_TEXT, { words }).then(
-      () => show({ words: label, tone: TOAST_TONE.DONE, hold: TOAST_HOLD }),
-      () => show({ words: COPY_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD }),
-    );
+    latestMenuCopy += 1;
+    const press = latestMenuCopy;
+    copyAnswer(act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then((answer) => {
+      if (press !== latestMenuCopy) return;
+      show(
+        answer === COPY_STATE.COPIED
+          ? { words: label, tone: TOAST_TONE.DONE, hold: TOAST_HOLD }
+          : { words: COPY_FAILED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD },
+      );
+    });
   };
 }

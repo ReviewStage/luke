@@ -220,6 +220,15 @@ it.effect(
       yield* advance(1 + MOTION_DURATION_MS.EXIT);
       assert.equal(toast(), undefined);
 
+      // An earlier copy's refusal landing after a later copy's says nothing.
+      clipboard.refuseNextLate();
+      act(() => tab.control().copy.onPress());
+      act(() => tab.control().copy.onPress());
+      yield* landed;
+      yield* landed;
+      assert.equal(toast(), "Plan copied");
+      yield* advance(1_500 + MOTION_DURATION_MS.EXIT);
+
       clipboard.refuse(true);
       act(() => tab.control().copy.onPress());
       yield* landed;

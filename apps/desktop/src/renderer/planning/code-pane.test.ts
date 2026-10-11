@@ -270,6 +270,26 @@ it.effect(
     }),
 );
 
+it.effect(
+  "a card's copy shows its last press's answer, however late an earlier press's answer lands",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const { container, draw } = mounted(openNothing, yield* registryOnTestClock);
+      draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+      const copy = container.querySelector<HTMLButtonElement>('button[aria-label="Copy lines"]');
+      assert.ok(copy);
+
+      // The first press's refusal lands after the second press's copy.
+      clipboard.refuseNextLate();
+      act(() => copy.click());
+      act(() => copy.click());
+      yield* settle;
+      yield* settle;
+      assert.deepEqual(copyAnswer(copy), { said: "Copied", glyph: "copied" });
+    }),
+);
+
 test("a card's Open file and its path each open the whole file, its lines lit", () => {
   const opened: CodeRef[] = [];
   const { container, draw } = mounted((ref) => opened.push(ref));

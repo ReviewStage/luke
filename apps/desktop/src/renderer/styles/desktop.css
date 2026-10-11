@@ -2607,6 +2607,14 @@ body,
   opacity: 0;
 }
 
+/* A capture run zeroes the motion tokens on its stage, which a toast drawn
+   at the body's end does not stand under, so it is held still here too. */
+body:has(.app-stage[data-capture="true"]) .toast {
+  --duration-quick: 0s;
+  --duration-fast: 0s;
+  --duration-exit: 0s;
+}
+
 .toast svg {
   width: 14px;
   height: 14px;
