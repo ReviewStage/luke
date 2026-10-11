@@ -29,6 +29,8 @@ export const APP_COMMAND = {
   SHOW_CODE: "show-code",
   SHOW_TRANSCRIPT: "show-transcript",
   SHOW_WORK: "show-work",
+  TOGGLE_MICROPHONE: "toggle-microphone",
+  TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
   SETTINGS: "settings",
@@ -76,6 +78,8 @@ const SHORTCUT_KEY = {
   N: { accelerator: "N", glyph: "N", key: "n", code: "KeyN" },
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
   R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
+  M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
+  S: { accelerator: "S", glyph: "S", key: "s", code: "KeyS" },
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
@@ -131,8 +135,9 @@ export interface AppShortcut {
  * ⌥⌘B for the secondary sidebar as VS Code and Cursor have it, ⌘/ for the
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
  * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
- * have it, and ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
- * keys VS Code's Move Editor Left and Right end in.
+ * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
+ * keys VS Code's Move Editor Left and Right end in, and ⇧⌘M to toggle the
+ * call's microphone as Teams has it, with ⇧⌘S for its speaker beside it.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -163,6 +168,14 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.THREE, option: true },
   },
   [APP_COMMAND.SHOW_WORK]: { label: "Show work", chord: { key: SHORTCUT_KEY.FOUR, option: true } },
+  [APP_COMMAND.TOGGLE_MICROPHONE]: {
+    label: "Toggle microphone",
+    chord: { key: SHORTCUT_KEY.M, shift: true },
+  },
+  [APP_COMMAND.TOGGLE_SPEAKER]: {
+    label: "Toggle speaker",
+    chord: { key: SHORTCUT_KEY.S, shift: true },
+  },
   [APP_COMMAND.MOVE_TAB_LEFT]: {
     label: "Move tab left",
     chord: { key: SHORTCUT_KEY.LEFT, shift: true },
@@ -196,6 +209,10 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.DELETE_PLAN,
     ],
+  },
+  {
+    title: "Call",
+    commands: [APP_COMMAND.TOGGLE_MICROPHONE, APP_COMMAND.TOGGLE_SPEAKER],
   },
   {
     title: "Navigation",

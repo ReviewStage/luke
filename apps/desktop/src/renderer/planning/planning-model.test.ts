@@ -162,7 +162,7 @@ test("a listening or muted call reads the voice's wait, speaking, connecting, an
     "About to answer",
   );
   assert.deepEqual(callStatus(call(LIVE_STATUS.SPEAKING), working), {
-    voiceWord: "Speaking",
+    voiceWord: "Luke speaking",
     backend,
   });
   assert.equal(callStatus(call(LIVE_STATUS.CONNECTING), working)?.voiceWord, "Connecting");

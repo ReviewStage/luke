@@ -167,6 +167,18 @@ export function SpeakerIcon(): React.JSX.Element {
   );
 }
 
+/** The speaker struck through, on a call whose voice is silenced on this Mac. */
+export function SpeakerOffIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M4 9.4h2.9L11.6 5v14L6.9 14.6H4Z" />
+      <path d="M14.8 9.3a4.1 4.1 0 0 1 0 5.4" />
+      <path d="M17.6 6.9a7.6 7.6 0 0 1 0 10.2" />
+      <path d="M4 3.4 20 19.4" />
+    </Glyph>
+  );
+}
+
 /** The display Luke stands on: everything about where and how he is drawn. */
 export function DisplayIcon(): React.JSX.Element {
   return (
@@ -386,15 +398,6 @@ export function ComposeIcon(): React.JSX.Element {
     <Glyph className="icon-button-glyph">
       <path d="M11.2 4.6H6a2.6 2.6 0 0 0-2.6 2.6v10.6A2.6 2.6 0 0 0 6 20.4h10.6a2.6 2.6 0 0 0 2.6-2.6v-5.2" />
       <path d="M17.5 3.9a2 2 0 0 1 2.8 2.8l-7.6 7.6-3.6.8.8-3.6z" />
-    </Glyph>
-  );
-}
-
-/** Stops the reply under way, drawn the way every chat surface draws it: a square. */
-export function StopIcon(): React.JSX.Element {
-  return (
-    <Glyph className="control-icon">
-      <rect x="5.2" y="5.2" width="13.6" height="13.6" rx="2.8" fill="currentColor" stroke="none" />
     </Glyph>
   );
 }

@@ -24,7 +24,12 @@ import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
-import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
+import {
+  IDLE_VOICE_VIEW,
+  VOICE_COMMAND,
+  type VoiceCommand,
+  type VoiceView,
+} from "#shared/messages/voice-view";
 import { DOCUMENT_REGION, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
@@ -51,6 +56,11 @@ const readShown = Schema.decodeUnknownOption(
   Schema.Struct({ agentId: Schema.NullOr(Schema.String) }),
 );
 
+/** A voice command's payload, read back as the act's own schema admits it. */
+const readVoiceCommand = Schema.decodeUnknownOption(
+  Schema.Struct({ command: Schema.Literals(Object.values(VOICE_COMMAND)) }),
+);
+
 interface Standing {
   shown: boolean;
   planning: PlanningView;
@@ -70,6 +80,8 @@ function mount(
   const agentActs: ActKind[] = [];
   /** Which agent's tab main was told is shown, each time it was told. */
   const shownAgents: (string | null)[] = [];
+  /** What the voice window was told to do, each time it was told. */
+  const voiceCommands: VoiceCommand[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -106,6 +118,10 @@ function mount(
           if (kind === ACT_KIND.CODING_AGENTS_SHOWN && shown !== undefined) {
             shownAgents.push(shown.agentId);
           }
+          const voiceCommand = Option.getOrUndefined(readVoiceCommand(args[0]));
+          if (kind === ACT_KIND.VOICE_COMMAND && voiceCommand !== undefined) {
+            voiceCommands.push(voiceCommand.command);
+          }
         },
       },
       planning: held.planning,
@@ -128,6 +144,7 @@ function mount(
     told,
     agentActs,
     shownAgents,
+    voiceCommands,
     control: () => {
       assert.ok(control);
       return control;
@@ -394,6 +411,21 @@ test("the microphone asks for the open plan's call, and the planning profile's f
     fixture.control().back();
   });
   assert.deepEqual(fixture.told, []);
+});
+
+test("the speaker silences Luke through the voice window and plays him again once he is silenced", () => {
+  const call: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    callPlanId: PLAN.id,
+  };
+  const tab = mount({ shown: true, planning: OPEN, voice: call });
+  assert.equal(tab.control().speaker.muted, false);
+  act(() => tab.control().speaker.onPress());
+  tab.stand({ voice: { ...call, speakerMuted: true } });
+  assert.equal(tab.control().speaker.muted, true);
+  act(() => tab.control().speaker.onPress());
+  assert.deepEqual(tab.voiceCommands, [VOICE_COMMAND.MUTE_SPEAKER, VOICE_COMMAND.UNMUTE_SPEAKER]);
 });
 
 test("the planning profile's fixture shows the planning model's command and the notetaker on its open plan, and a live run's idle call shows nothing", () => {

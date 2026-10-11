@@ -974,46 +974,132 @@ body,
   background: var(--desktop-well);
 }
 
-.desktop-call-bar .plan-microphone-row {
+/* The call bar's own row, laid out as a voice composer's controls are: at
+   rest one start pill in its middle; in a call the call's two lines at its
+   left and its controls at its right. Its height holds whichever it draws,
+   so the document above never moves when a call begins or ends. */
+.call-bar {
+  display: flex;
   max-width: var(--reading-width);
+  min-height: 36px;
+  align-items: center;
   margin: 0 auto;
-  padding: 0;
   gap: var(--space-12);
-  border: 0;
 }
 
-.desktop-call-bar .plan-microphone {
-  width: 42px;
-  height: 42px;
-  background: var(--message-sent);
-  color: var(--on-accent);
-  box-shadow: 0 6px 18px color-mix(in srgb, var(--message-sent) 35%, transparent);
+.call-bar[data-call="false"] {
+  justify-content: center;
 }
 
-.desktop-call-bar .plan-microphone[data-muted="true"] {
-  background: color-mix(in srgb, var(--danger) 18%, transparent);
-  color: var(--danger-text);
-  box-shadow: none;
+/* A call control is round rather than a toolbar's square, as a call's own
+   controls are drawn everywhere, so the three read as one cluster apart
+   from the window's toolbar. The start is a pill on the primary button's
+   fill: talking the plan through is what the page is for. */
+.call-start {
+  border-radius: calc(var(--control-height) / 2);
+  padding: 0 var(--space-16);
 }
 
-.desktop-call-bar .plan-stop {
-  width: 42px;
-  height: 42px;
+.call-status {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+  white-space: nowrap;
 }
 
-.desktop-call-bar .plan-microphone svg {
-  width: 18px;
-  height: 18px;
-}
-
-.desktop-call-bar .plan-voice-word {
+/* Each line is cut short on one line, so a long command never wraps the row
+   or pushes the controls, and the dots are never cut. */
+.call-status-word {
+  min-width: 0;
+  overflow: hidden;
   color: var(--text-primary);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
+  text-overflow: ellipsis;
 }
 
-.desktop-call-bar .plan-backend {
+.call-status-word[data-muted="true"] {
+  color: var(--danger-text);
+}
+
+.call-backend {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--text-secondary);
   font-size: 12px;
+}
+
+.call-backend-part {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-backend-action {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.call-controls {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-left: auto;
+  gap: var(--space-4);
+}
+
+.call-toggle,
+.call-end {
+  border-radius: 50%;
+}
+
+/* A mute that is on is unmistakable at a glance: struck through, and on
+   the warning tint, so a muted call is never read as one hearing you. */
+.call-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger-text);
+}
+
+.call-toggle[aria-pressed="true"]:hover {
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+  color: var(--danger-text);
+}
+
+/* End call: a solid disc in the text's own colour with the ground's ✕ in
+   it, white in the dark and near black in the light, standing apart from
+   the two quiet mutes. */
+.call-end {
+  display: grid;
+  width: var(--control-height);
+  height: var(--control-height);
+  margin-left: var(--space-4);
+  place-items: center;
+  background: var(--text-primary);
+  color: var(--desktop-well);
+  transition: opacity var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.call-end svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+
+.call-end:hover {
+  opacity: 0.85;
+}
+
+.call-end:active {
+  opacity: 0.7;
+}
+
+.call-end:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 /* The new-plan page -------------------------------------------------------- */

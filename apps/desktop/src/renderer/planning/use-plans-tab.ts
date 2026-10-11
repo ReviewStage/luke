@@ -96,6 +96,8 @@ export interface PlansControl {
   region: DocumentRegion;
   copy: { shown: CopyShown; onPress: () => void };
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
+  /** Silences Luke's voice on this Mac for the open plan's call, or plays it again; offered with the stop. */
+  speaker: { muted: boolean; onPress: () => void };
   /** Ends the open plan's call at once, offered only while that call is in progress. */
   stop: { shown: boolean; onPress: () => void };
   /** The open plan's call status beside the microphone, absent while none stands. */
@@ -481,6 +483,16 @@ export function usePlansTab(input: {
       enabled: microphone.press !== MICROPHONE_PRESS.NONE,
       muted: microphone.muted,
       onPress: pressMicrophone,
+    },
+    // The speaker is the voice window's to silence, since it plays Luke.
+    speaker: {
+      muted: voice.view.speakerMuted,
+      onPress: () =>
+        tell(ACT_KIND.VOICE_COMMAND, {
+          command: voice.view.speakerMuted
+            ? VOICE_COMMAND.UNMUTE_SPEAKER
+            : VOICE_COMMAND.MUTE_SPEAKER,
+        }),
     },
     // The stop is the voice window's to carry out, as every voice command is:
     // it holds the call, and ends whichever one stands.

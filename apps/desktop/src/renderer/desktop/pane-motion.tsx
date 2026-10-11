@@ -25,7 +25,7 @@ const GLIDERS = [
   ".desktop-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-document .plan-assumptions",
-  ".desktop-call-bar .plan-microphone-row",
+  ".desktop-call-bar .call-bar",
   ".desktop-empty > *",
   ".desktop-compose > *",
 ].join(", ");
