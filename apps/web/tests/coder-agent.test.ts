@@ -56,3 +56,10 @@ test("the session is told the checkout's commit identity is the developer's and 
     assert.ok(instructions.includes(kept), kept);
   }
 });
+
+test("the session is told its shell starts in the checkout and its file tools take absolute paths under it", () => {
+  const instructions = coderInstructions("Acme/Relay");
+  for (const kept of ["never open a command with a `cd`", "absolute paths", "`root`"]) {
+    assert.ok(instructions.includes(kept), kept);
+  }
+});

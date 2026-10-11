@@ -8,7 +8,10 @@ import { CODER } from "./bounds.js";
  * decided: it may open a pull request, a draft one, or none, and says
  * which; and that the branch rule is an instruction, enforced by nothing,
  * which the plan also decided. The repository's name and the checkout's
- * place are the two facts the session needs that the plan does not carry.
+ * place are the two facts the session needs that the plan does not carry;
+ * the checkout's place is told with where each tool's paths start from,
+ * since the shell starts in the checkout (`shell.ts`) and eve's file
+ * tools at the sandbox's root.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the commits are the developer's.
  */
@@ -19,7 +22,7 @@ export function coderInstructions(repository: string): string {
 
 ## The checkout
 
-The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current default branch. Work there. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in.
+The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current default branch. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. \`read_file\`, \`write_file\`, \`glob\`, and \`grep\` resolve paths from the sandbox's root rather than the checkout, so give them absolute paths under \`${CODER.CHECKOUT_PATH}\`, and give \`apply_patch\` \`${CODER.CHECKOUT_PATH}\` as its \`root\`. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in.
 
 ## How to work
 

@@ -28,7 +28,9 @@ import { host } from "./host.js";
  * the code extension's tooling (`gh`, signed commits, TypeScript
  * diagnostics), and the runtimes a repository's checks are likely to need,
  * which the base image carries or `prepare` installs. Node is the image's
- * own; pnpm and Python are added where absent.
+ * own; pnpm and Python are added where absent. Every command runs with
+ * `NO_COLOR` set, so a test runner's output reaches the model as words
+ * rather than escape codes it has to strip.
  */
 const PREPARE_SCRIPT = [
   "set -e",
@@ -42,6 +44,7 @@ const PREPARE_SCRIPT = [
 ].join("\n");
 
 export const environment = VercelSandbox.environment({
+  env: { NO_COLOR: "1" },
   prepare: async (sandbox) => {
     await installCodeTooling(sandbox);
     const prepared = await sandbox.run({ command: PREPARE_SCRIPT });
