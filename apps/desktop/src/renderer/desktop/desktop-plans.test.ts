@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
@@ -28,7 +29,7 @@ import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
-import { useCodingAgents } from "../planning/use-coding-agents";
+import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
   SIDE_PANEL_TAB,
@@ -1338,23 +1339,30 @@ test("the plan's tab names the plan, has no × to close it, and its hint says th
   );
 });
 
-test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by model, dotted for where each stands and for an end unseen, each with an × and no shortcut", () => {
-  const running: CodingAgentSummary = {
-    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
-    planId: PLAN.id,
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    createdAt: 3,
-    status: CODING_AGENT_STATUS.RUNNING,
-    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
-  };
-  const ended: CodingAgentSummary = {
-    ...running,
-    id: "1f6d2c3b-5a4e-4f7d-9c8b-2e3f4a5b6c7d",
-    model: "openai/gpt-5.6-sol",
-    status: CODING_AGENT_STATUS.COMPLETED,
-  };
-  const chosen: SidePanelTab[] = [];
+/** Two agents of the plan: one titled and running, one untitled and ended. */
+const TITLED_AGENT: CodingAgentSummary = {
+  id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+  planId: PLAN.id,
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+  title: "Sign-out button in account menu",
+  createdAt: 3,
+  status: CODING_AGENT_STATUS.RUNNING,
+  turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+};
+const UNTITLED_AGENT: CodingAgentSummary = {
+  ...TITLED_AGENT,
+  id: "1f6d2c3b-5a4e-4f7d-9c8b-2e3f4a5b6c7d",
+  model: "openai/gpt-5.6-sol",
+  title: null,
+  status: CODING_AGENT_STATUS.COMPLETED,
+};
+
+/** The panel open on two agent tabs over an open plan, the agents' control as given. */
+function mountAgentTabs(
+  agents: Partial<CodingAgentsControl>,
+  chosen: SidePanelTab[] = [],
+): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1370,27 +1378,41 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
             ...plansControl().sidePanel,
             open: true,
             tabs: [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.TRANSCRIPT],
-            tab: { agent: ended.id },
+            tab: { agent: UNTITLED_AGENT.id },
             onChoose: (tab) => chosen.push(tab),
           },
-          unreadTabs: [{ agent: running.id }],
+          unreadTabs: [{ agent: TITLED_AGENT.id }],
           agents: codingAgentsControl({
-            agents: [running, ended],
-            agentIds: [running.id, ended.id],
+            agents: [TITLED_AGENT, UNTITLED_AGENT],
+            agentIds: [TITLED_AGENT.id, UNTITLED_AGENT.id],
+            ...agents,
           }),
         }),
       }),
     ),
   );
+  return container;
+}
 
-  assert.deepEqual(panelTabs(container), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by title or else by model with the model in the hint, dotted for where each stands and for an end unseen, each with an × and no shortcut", () => {
+  const running = TITLED_AGENT;
+  const chosen: SidePanelTab[] = [];
+  const container = mountAgentTabs({}, chosen);
+
+  assert.deepEqual(panelTabs(container), [
+    "Board",
+    "Transcript",
+    "Sign-out button in account menu",
+    "GPT 5.6 Sol",
+  ]);
   assert.equal(chosenTab(container), "GPT 5.6 Sol");
-  const claude = tabNamed(container, "Claude Opus 5.5");
+  const claude = tabNamed(container, "Sign-out button in account menu");
+  assert.equal(hover(claude), "Claude Opus 5.5");
   assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
   assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
   assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
   assert.equal(claude.getAttribute("aria-keyshortcuts"), null);
-  assert.ok(container.querySelector('[aria-label="Close Claude Opus 5.5"]'));
+  assert.ok(container.querySelector('[aria-label="Close Sign-out button in account menu"]'));
   assert.ok(container.querySelector('[aria-label="Close Board"]'));
   assert.equal(
     container.querySelector('.side-panel-content[role="tabpanel"]')?.getAttribute("aria-label"),
@@ -1399,6 +1421,48 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
 
   act(() => claude.click());
   assert.deepEqual(chosen, [{ agent: running.id }]);
+});
+
+test("a right-click on an agent's tab offers Rename where the pointer is, and Rename turns the tab into a field whose Return renames the agent and hands focus back", async () => {
+  const renamed: [string, string][] = [];
+  const container = mountAgentTabs({
+    onRename: (agentId, title) => {
+      renamed.push([agentId, title]);
+      return Promise.resolve(true);
+    },
+  });
+  const tab = tabNamed(container, "GPT 5.6 Sol");
+  act(() => {
+    tab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }));
+  });
+  const menu = document.body.querySelector<HTMLElement>('[role="menu"]');
+  assert.ok(menu, "the tab's menu opened");
+  assert.deepEqual(
+    [...menu.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent),
+    ["Rename"],
+  );
+  assert.equal(menu.style.left, "40px");
+  assert.equal(menu.style.top, "12px");
+
+  const rename = menu.querySelector<HTMLButtonElement>('[role="menuitem"]');
+  assert.ok(rename);
+  act(() => rename.click());
+  const field = container.querySelector<HTMLInputElement>('input[aria-label="Agent name"]');
+  assert.ok(field, "the tab is its name's field");
+  assert.equal(document.activeElement, field);
+  assert.equal(field.value, "GPT 5.6 Sol");
+  assert.equal(field.maxLength, CODING_AGENT_BOUNDS.MAX_TITLE_CHARS);
+  assert.equal(container.querySelector('[role="menu"]'), null);
+
+  act(() => {
+    field.value = "Expiring invites";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  });
+  await act(() => Promise.resolve());
+  assert.deepEqual(renamed, [[UNTITLED_AGENT.id, "Expiring invites"]]);
+  assert.equal(container.querySelector('input[aria-label="Agent name"]'), null);
+  assert.equal(document.activeElement, tabNamed(container, "GPT 5.6 Sol"));
 });
 
 test("closing the chosen tab chooses its neighbour, and closing the last leaves the panel open offering every kind", () => {
@@ -1769,6 +1833,7 @@ test("only the fixed tabs move: one dragged on among the agents' tabs lands last
     planId: PLAN.id,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
+    title: null,
     createdAt: 3,
     status: CODING_AGENT_STATUS.RUNNING,
     turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
@@ -2048,6 +2113,7 @@ const RUNNING_AGENT: CodingAgentSummary = {
   planId: PLAN.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
+  title: null,
   createdAt: 3,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",

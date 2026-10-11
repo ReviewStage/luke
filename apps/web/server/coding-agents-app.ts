@@ -6,6 +6,7 @@ import {
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
+  codingAgentRenameRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
@@ -64,6 +65,7 @@ import {
   RUNNING_TURN_STATUSES,
   readCodingAgent,
   readDelegation,
+  renameCodingAgent,
   updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
@@ -126,7 +128,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * choice on the agent's row, checked against the catalog as a Start checks
  * its own; the row is read at every step, so the change is the next step's
  * whether a turn runs or the next one is yet to open, and the account's
- * default stands as it was. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
+ * default stands as it was. The same PATCH carrying a title instead renames
+ * the agent, the one write of the title that covers whatever stands, and an
+ * empty title clears it so the tab falls back to the model's name; the
+ * title generated as the agent started lands only where none stands, so a
+ * rename is never undone. A Stop (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
  * anything the agent pushed stays.
@@ -148,7 +154,7 @@ const AGENTS_PATH = {
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
-  /** PATCH changes the agent's model and effort; the rewrite moves the path's agent id into the `id` query. */
+  /** PATCH changes the agent's model and effort, or renames it; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -165,7 +171,7 @@ const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
 /** A Start names a key, a choice, and a task at most: the task's bound at JSON's widest escape, and room for the rest. */
 const MAXIMUM_START_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 4_096;
 
-/** A change of model names a model and an effort at most, so a body past this is no change. */
+/** A change names a model and an effort, or a title, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 /** A message is its words and a key: the bound's characters at JSON's widest escape, and room for the keys around them. */
@@ -234,11 +240,15 @@ const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
 });
 
 /** A page of a transcript as the wire answers it. */
-function transcriptResponse(page: TranscriptPage): HttpServerResponse.HttpServerResponse {
+function transcriptResponse(
+  page: TranscriptPage,
+  title: string | null,
+): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
     messages: page.messages,
     cursor: cursorToWire(page.cursor),
     status: page.status,
+    title,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.turnUsage === undefined ? undefined : { turnUsage: page.turnUsage }),
@@ -555,7 +565,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   const page = yield* hostedStoreOrUnavailable(
     transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent),
   );
-  return transcriptResponse(page);
+  return transcriptResponse(page, agent.title);
 });
 
 /** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. */
@@ -579,12 +589,19 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
         createdAt: delegation.value.createdAt,
       }),
     );
-    return transcriptResponse(page);
+    return transcriptResponse(page, null);
   },
 );
 
-/** PATCH changes the agent's model and effort for its next step: the choice checked against the catalog as a Start checks its own, written on the row the steps read, and the agent answered as it then stands; the account's default is untouched. */
-const chooseEndpoint = /* @__PURE__ */ Effect.fn("web/agentChooseEndpoint")(function* (
+/**
+ * PATCH changes the agent for what follows, and answers it as it then
+ * stands. A body naming a title renames it: the title written whole on the
+ * row, or cleared where the title is empty, so the tab falls back to the
+ * model's name. A body naming a model and effort changes what its next step
+ * runs on: the choice checked against the catalog as a Start checks its own,
+ * written on the row the steps read; the account's default is untouched.
+ */
+const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
   seams: CodingAgentsAppSeams,
 ): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
   const incoming = yield* HttpServerRequest.HttpServerRequest;
@@ -594,6 +611,17 @@ const chooseEndpoint = /* @__PURE__ */ Effect.fn("web/agentChooseEndpoint")(func
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const { userId, agent } = yield* ownedAgent(seams, request);
   const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
+  const rename = readEither(codingAgentRenameRequestSchema)(body);
+  if (Result.isSuccess(rename)) {
+    const { title } = rename.success;
+    const renamed = yield* hostedStoreOrUnavailable(
+      renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
+    );
+    if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(userId, renamed.value),
+    });
+  }
   const asked = readEither(modelChoiceSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const choice = yield* acceptedChoice(userId, asked.success);
@@ -719,7 +747,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.MESSAGES,
           hostedRefusing(messagesEndpoint(seams, writer)),
         ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(chooseEndpoint(seams))),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(changeEndpoint(seams))),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
           ANY_METHOD,

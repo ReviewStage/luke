@@ -14,6 +14,7 @@ import {
   codingAgentMessageParamsSchema,
   codingAgentMessagesParamsSchema,
   codingAgentPullRequestParamsSchema,
+  codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
@@ -51,6 +52,7 @@ export type CodingAgentClient = Pick<
   | "messages"
   | "message"
   | "choose"
+  | "rename"
   | "stop"
   | "pullRequest"
 >;
@@ -157,6 +159,16 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
           "changing an agent's model names the agent, a model, and its effort",
         );
         const answer = yield* asked(client.choose(agentId, choice));
+        return carried<CodingAgentAgentAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.CODING_AGENTS_RENAME]: (params) =>
+      Effect.gen(function* () {
+        const { agentId, ...request } = yield* read(
+          codingAgentRenameParamsSchema,
+          params,
+          "renaming an agent names the agent and its title",
+        );
+        const answer = yield* asked(client.rename(agentId, request));
         return carried<CodingAgentAgentAnswer>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_STOP]: (params) =>

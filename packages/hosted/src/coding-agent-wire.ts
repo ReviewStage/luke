@@ -26,7 +26,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * after a lost answer finds the message it already sent and sends nothing
  * again. An agent's model and effort can be changed while it stands: the
  * change is read at its next step, and the answer is the agent as it then
- * stands.
+ * stands. An agent's title is generated once from its plan as it starts,
+ * and the developer may rename it; a rename is never overwritten, and an
+ * empty one clears the title so the tab falls back to the model's name.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -42,6 +44,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_MESSAGE_CHARS: 16_000,
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
+  /** The most characters an agent's title may spell, generated or renamed: a tab's width of words. */
+  MAX_TITLE_CHARS: 80,
 } as const;
 
 /** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
@@ -123,13 +127,25 @@ export const codingAgentMessageRequestSchema = EffectSchema.Struct({
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
 
-/** One agent as the tabs draw it: what it runs on, when it started, where it stands, and which turn that is. */
+/**
+ * Renaming an agent (PATCH): the title as the tab should show it, trimmed
+ * and bounded; empty clears it, so the tab falls back to the model's name.
+ */
+export const codingAgentRenameRequestSchema = EffectSchema.Struct({
+  title: EffectSchema.Trim.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+});
+
+export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Type;
+
+/** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, and which turn that is. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   planId: wireUuidSchema,
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
+  /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
+  title: EffectSchema.NullOr(EffectSchema.String),
   /** Epoch milliseconds the agent was started. */
   createdAt: countedNumber,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
@@ -307,11 +323,14 @@ export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
  * them, what the agent has cost over every turn it and its workers have
  * settled, and what its newest turn cost once settled; neither before a
  * turn has.
+ * The page carries the agent's title too, since the title generated as the
+ * agent starts lands a moment after the list that opened its tab was read.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
   cursor: codingAgentCursorSchema,
   status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),

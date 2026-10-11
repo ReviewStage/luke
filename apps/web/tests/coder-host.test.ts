@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { isReasoningUIPart, isTextUIPart, isToolUIPart } from "ai";
+import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
+import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import {
   Clock,
@@ -47,8 +48,10 @@ import {
 import {
   awaitingLinesOf,
   createCodingAgent,
+  fillCodingAgentTitle,
   latestTurnsOf,
   readCodingAgent,
+  renameCodingAgent,
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
@@ -105,22 +108,44 @@ const KEYS = {
   openAi: Redacted.make("sk-openai-fixture"),
 };
 
-/** The host over the test's own store, with the writer composed on the test's client. */
-const hostOverStore = Effect.gen(function* () {
-  const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
-  const seams: CoderHostSeams = {
-    writer: () => Effect.succeed(writer),
-    userInfo: () => Effect.succeed(undefined),
-    ownership: {
-      sessionOwner: () => Promise.resolve(undefined),
-      ownsConversation: () => Promise.resolve(false),
+/** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
+const hostOverStore = (titleModel?: LanguageModel) =>
+  Effect.gen(function* () {
+    const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+    const seams: CoderHostSeams = {
+      writer: () => Effect.succeed(writer),
+      userInfo: () => Effect.succeed(undefined),
+      ownership: {
+        sessionOwner: () => Promise.resolve(undefined),
+        ownsConversation: () => Promise.resolve(false),
+      },
+      keys: () => KEYS,
+      titleModel: () => titleModel,
+      scriptedModel: () => false,
+      now: () => NOW,
+    };
+    return coderHost(seams);
+  });
+
+/** A title model answering from a script, each call the next line; one that throws is the provider down. */
+function titleModelAnswering(answers: readonly (string | Error)[]): MockLanguageModelV4 {
+  const queue = [...answers];
+  return new MockLanguageModelV4({
+    doGenerate: async () => {
+      const answer = queue.shift() ?? "";
+      if (answer instanceof Error) throw answer;
+      return {
+        content: [{ type: "text" as const, text: answer }],
+        finishReason: { unified: "stop" as const, raw: "stop" },
+        usage: {
+          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+          outputTokens: { total: 1, text: 1, reasoning: 0 },
+        },
+        warnings: [],
+      };
     },
-    keys: () => KEYS,
-    scriptedModel: () => false,
-    now: () => NOW,
-  };
-  return coderHost(seams);
-});
+  });
+}
 
 function principal(
   id: string,
@@ -171,7 +196,15 @@ const openAgent = (host: CoderHost, model = "anthropic/claude-opus-5.5", effort 
     assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
     const admitted = yield* host.admit(auth, sessionId);
     assert.ok(Result.isSuccess(admitted));
-    return { userId, agent, target, auth, sessionId, admitted: admitted.success };
+    return {
+      userId,
+      agent,
+      target,
+      auth,
+      sessionId,
+      starting: starting.success,
+      admitted: admitted.success,
+    };
   });
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
@@ -378,7 +411,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { userId, agent, admitted } = yield* openAgent(host);
         let shown: ReturnType<CommandTable> = { exitCode: 0, stdout: "luke/invites\n", stderr: "" };
         const sandbox = sandboxDouble((command) =>
@@ -410,7 +443,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a step is told the model and effort the agent's row holds now, with the window the catalog lists, and the fallback where it lists none",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const opus = yield* openAgent(host);
         const selected = yield* host
           .model(opus.admitted, undefined)
@@ -441,7 +474,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a delegation that names nothing records the agent's own pair, which the worker's step is told; a worker no delegation stands for is refused by name",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, auth, sessionId, admitted } = yield* openAgent(host);
         const made = yield* host
           .delegate(admitted, "call-1", {})
@@ -486,7 +519,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a delegation on a pair of the agent's choosing runs the worker on that pair, and the worker's turn lands in the child conversation the call names, recording it",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { auth, sessionId, target, admitted } = yield* openAgent(host);
         const made = yield* host
           .delegate(admitted, "call-2", { model: "openai/gpt-6.1-sol", effort: "low" })
@@ -534,9 +567,49 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
       }),
   );
 
+  it.effect(
+    "the agent's title is generated from its plan as its first session starts, tidied of quotes and a full stop, and written once: a restarted session generates nothing, and a rename is never covered",
+    () =>
+      Effect.gen(function* () {
+        const model = titleModelAnswering(['"Teammate invitations by email."', "Second title"]);
+        const host = yield* hostOverStore(model);
+        const { userId, agent, auth, starting } = yield* openAgent(host);
+        yield* host.title(starting);
+        const titled = yield* readCodingAgent(userId, agent.id);
+        assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
+        const [asked] = model.doGenerateCalls;
+        assert.ok(asked !== undefined);
+        assert.match(
+          JSON.stringify(asked.prompt),
+          /Teammate invitations[\s\S]*Invite a teammate by email/u,
+        );
+
+        // A later session of the same conversation finds the first recorded, and is no start.
+        const restarted = yield* host.admitStarting(auth, mintSession());
+        assert.ok(Result.isSuccess(restarted));
+        yield* host.title(restarted.success);
+        assert.equal(model.doGenerateCalls.length, 1);
+
+        // The developer's own name is the last word: a generated title lands only where none stands.
+        yield* renameCodingAgent(userId, agent.id, "Sign-out button");
+        assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Late title"), false);
+        const renamed = yield* readCodingAgent(userId, agent.id);
+        assert.equal(Option.getOrThrow(renamed).title, "Sign-out button");
+      }),
+  );
+
+  it.effect("a title call that fails leaves the agent untitled", () =>
+    Effect.gen(function* () {
+      const host = yield* hostOverStore(titleModelAnswering([new Error("fixture: provider down")]));
+      const { userId, agent, starting } = yield* openAgent(host);
+      yield* host.title(starting);
+      assert.equal(Option.getOrThrow(yield* readCodingAgent(userId, agent.id)).title, null);
+    }),
+  );
+
   it.effect("a change of the agent's model and effort is what the next step is told", () =>
     Effect.gen(function* () {
-      const host = yield* hostOverStore;
+      const host = yield* hostOverStore();
       const { userId, agent, admitted } = yield* openAgent(host);
       const changed = yield* updateCodingAgentChoice(userId, agent.id, {
         model: "openai/gpt-6.1-sol",
@@ -558,7 +631,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a conversation that is no agent's is refused a model, an agent, and a prompt alike",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
@@ -584,7 +657,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const prompt = host.prompt(agent);
@@ -645,7 +718,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a failed turn and a cancelled turn read as failed and cancelled, and the agent is never rerun",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         for (const [end, status] of [
           ["turn.failed", CODING_AGENT_STATUS.FAILED],
           ["turn.cancelled", CODING_AGENT_STATUS.CANCELLED],
@@ -676,7 +749,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a transcript read past the cursor is held open while the agent is starting or the turn runs, answers the moment a message lands with the agent's status, hears an amended journal again, and lets go at the hold; an agent that ended answers at once",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
@@ -753,7 +826,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a starting agent whose first turn never lands reads as failed past the grace, and its read is not held",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, target } = yield* openAgent(host);
         yield* TestClock.adjust(CODER.STARTING_GRACE);
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
@@ -771,7 +844,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "a line the developer sent ahead of its turn is taken by the turn that receives it, in place: no second row is written, and the agent reads as running from the send until the turn opens on it",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
@@ -860,7 +933,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     "two awaiting lines with the same words are taken in the order sent, each by the turn that receives it, and a line sent again under its key is the one already standing: nothing is dispatched and no second row is written",
     () =>
       Effect.gen(function* () {
-        const host = yield* hostOverStore;
+        const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
@@ -936,6 +1009,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             ownsConversation: () => Promise.resolve(false),
           },
           keys: () => ({ anthropic: undefined, openAi: undefined }),
+          titleModel: () => undefined,
           scriptedModel: () => true,
           now: () => NOW,
         });

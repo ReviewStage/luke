@@ -1,5 +1,10 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import { CODING_AGENT_STATUS, type CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  type CodingAgentStatus,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_WORK_STATE,
   type PlanCode,
@@ -11,13 +16,14 @@ import {
   CodeIcon,
   CollapseIcon,
   ExpandIcon,
+  PencilIcon,
   PlusIcon,
   SidePanelIcon,
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
 import { BotIcon } from "lucide-react";
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -25,7 +31,7 @@ import { Shimmer } from "../ai-elements/shimmer";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
-import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
+import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
@@ -56,8 +62,9 @@ import {
 } from "../planning/work-model";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import { type MenuAction, MenuItem } from "./action-menu";
+import { ActionMenu, MENU_ALIGN, type MenuAction, MenuItem, type OpenMenu } from "./action-menu";
 import { paneTiming } from "./pane-motion";
+import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { Tab, TabStrip } from "./tab-strip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
@@ -371,6 +378,86 @@ function AddTabButton({
 }
 
 /**
+ * One coding agent's tab: named by its title, or its model until it has one,
+ * with the model in its hint, and dotted for where the agent stands. A
+ * right-click offers its actions where the pointer is, the way a plan in
+ * the sidebar offers its own, and Rename turns the tab into its name's
+ * field until the edit ends; a key that ends it hands focus back to the tab.
+ */
+function AgentPanelTab({
+  agent,
+  agents,
+  selected,
+  unread,
+  onSelect,
+  onClose,
+}: {
+  agent: CodingAgentSummary;
+  agents: CodingAgentsControl;
+  selected: boolean;
+  unread: boolean;
+  onSelect: () => void;
+  onClose: () => void;
+}): React.JSX.Element {
+  const rename = usePlanRename(agent.id, agents.onRename);
+  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
+  const tab = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (rename.editing || !refocus.current) return;
+    refocus.current = false;
+    tab.current?.focus();
+  }, [rename.editing]);
+  const close = useCallback((returnFocus: boolean) => {
+    setMenu(undefined);
+    if (returnFocus) tab.current?.focus();
+  }, []);
+  const label = agentTabLabel(agent, agents.models);
+  const editor = rename.editing ? (
+    <PlanNameField
+      name={label}
+      className="tab-field"
+      label="Agent name"
+      maxLength={CODING_AGENT_BOUNDS.MAX_TITLE_CHARS}
+      onEnd={(edit) => {
+        refocus.current = edit.byKey;
+        rename.end(edit);
+      }}
+    />
+  ) : undefined;
+  return (
+    <>
+      <Tab
+        icon={<AgentStatusDot status={agent.status} />}
+        label={label}
+        selected={selected}
+        unread={unread}
+        tooltip={modelLabel(agent.model, agents.models)}
+        editor={editor}
+        tabRef={tab}
+        onSelect={onSelect}
+        onClose={onClose}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          setMenu({
+            placement: { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START },
+            opener: event.currentTarget,
+          });
+        }}
+      />
+      {menu === undefined ? null : (
+        <ActionMenu
+          label="Agent actions"
+          menu={menu}
+          groups={[[{ label: "Rename", icon: <PencilIcon />, onSelect: rename.begin }]]}
+          onClose={close}
+        />
+      )}
+    </>
+  );
+}
+
+/**
  * The strip of tabs across the panel's top: the open fixed tabs, then one
  * per coding agent of the plan whose tab was not closed, then the "+". A tab's own word is all it
  * needs to say, so it hangs no pill; a fixed tab's chord is in the View
@@ -430,10 +517,10 @@ function PanelTabs({
         {(agents.agents ?? [])
           .filter((agent) => !panel.closedAgents.includes(agent.id))
           .map((agent) => (
-            <Tab
+            <AgentPanelTab
               key={agent.id}
-              icon={<AgentStatusDot status={agent.status} />}
-              label={agentTabLabel(agent, agents.models)}
+              agent={agent}
+              agents={agents}
               selected={chosen({ agent: agent.id })}
               unread={noted({ agent: agent.id })}
               onSelect={() => panel.onChoose({ agent: agent.id })}

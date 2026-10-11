@@ -40,8 +40,8 @@ import { modelLabel } from "#shared/model-label";
  * the window announces nothing twice, and an account that signs out takes
  * its agents with it.
  *
- * The notification says the plan's name, the model's name, and how the turn
- * ended, and nothing of the transcript. A turn that completed is announced
+ * The notification says the plan's name, the agent's title or else its
+ * model's name, and how the turn ended, and nothing of the transcript. A turn that completed is announced
  * as the pull request it opened where one is found: each end is queued
  * from the ledger's own synchronous path and a fiber on the notices' scope
  * takes it, reads what the agent published once, and posts; an end whose
@@ -124,6 +124,8 @@ export interface AgentNotices {
 interface HeldAgent {
   planId: string;
   model: string;
+  /** The agent's title, said in the model's place where it has one. */
+  title: string | null;
   status: CodingAgentStatus;
   /** The turn the status is read from; none before the first. */
   turnId: string | null;
@@ -145,13 +147,15 @@ function stillWriting(status: CodingAgentStatus): boolean {
 
 /**
  * What the notification says, built in one place: the plan's name over
- * the model's name and the word for how the turn ended, or the pull request
- * it opened once a reader of the agent's pull request hands one in. Nothing
- * for a status that is not a turn's end, or for a Stop.
+ * the agent's title, or its model's name until it has one, and the word for
+ * how the turn ended, or the pull request it opened once a reader of the
+ * agent's pull request hands one in. Nothing for a status that is not a
+ * turn's end, or for a Stop.
  */
 export function noticeText(input: {
   planName: string | undefined;
   model: string;
+  title: string | null;
   status: CodingAgentStatus;
   models: readonly CatalogModel[] | undefined;
   pullRequest?: number;
@@ -160,12 +164,12 @@ export function noticeText(input: {
   if (status !== CODING_AGENT_STATUS.COMPLETED && status !== CODING_AGENT_STATUS.FAILED) {
     return undefined;
   }
-  const model = modelLabel(input.model, input.models);
+  const name = input.title ?? modelLabel(input.model, input.models);
   const ended =
     input.pullRequest !== undefined && status === CODING_AGENT_STATUS.COMPLETED
       ? `opened #${input.pullRequest}`
       : ENDED_WORD[status];
-  return { title: input.planName ?? UNNAMED_PLAN_TITLE, body: `${model} ${ended}` };
+  return { title: input.planName ?? UNNAMED_PLAN_TITLE, body: `${name} ${ended}` };
 }
 
 /**
@@ -231,6 +235,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       const text = noticeText({
         planName: planName(end.agent.planId),
         model: end.agent.model,
+        title: end.agent.title,
         status: end.agent.status,
         models,
         ...(pullRequest === undefined ? undefined : { pullRequest }),
@@ -301,6 +306,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       return {
         planId: agent.planId,
         model: agent.model,
+        title: agent.title,
         status: agent.status,
         turnId: agent.turnId,
         awaiting: false,

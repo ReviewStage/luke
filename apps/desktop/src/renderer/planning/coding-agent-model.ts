@@ -222,9 +222,9 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
  */
 export { modelLabel };
 
-/** The agent's tab label: its model's name. */
+/** The agent's tab label: its title, or its model's name until it has one. */
 export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {
-  return modelLabel(agent.model, models);
+  return agent.title ?? modelLabel(agent.model, models);
 }
 
 /** The first run of digits and points in a model's own name, which is its version: `claude-opus-5.5` is 5.5, `gpt-6-astra` is 6. */

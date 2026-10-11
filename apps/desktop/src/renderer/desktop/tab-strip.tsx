@@ -287,6 +287,7 @@ export function TabStrip({
  * one that always stands. `editor`, while given, is drawn in the label's place
  * as a field of its own, outside the tab's role, so a reader reaches it.
  * A label cut short is said whole in the tab's hint, before what `tooltip` adds.
+ * `onContextMenu` is a right-click on the tab, for a tab with actions of its own.
  */
 export function Tab({
   icon,
@@ -299,6 +300,7 @@ export function Tab({
   tabRef,
   onSelect,
   onClose,
+  onContextMenu,
 }: {
   icon: React.JSX.Element;
   label: string;
@@ -312,6 +314,7 @@ export function Tab({
   tabRef?: React.Ref<HTMLButtonElement>;
   onSelect: () => void;
   onClose?: (() => void) | undefined;
+  onContextMenu?: ((event: React.MouseEvent<HTMLButtonElement>) => void) | undefined;
 }): React.JSX.Element {
   // Whether the label is cut short, measured whenever its box resizes: a
   // label renamed, or the plan's one tab giving way to its toolbar.
@@ -339,6 +342,7 @@ export function Tab({
       aria-keyshortcuts={keyshortcuts}
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
       onKeyDown={(event) => {
         if (onClose === undefined || !closesTab(event.key)) return;
         event.preventDefault();

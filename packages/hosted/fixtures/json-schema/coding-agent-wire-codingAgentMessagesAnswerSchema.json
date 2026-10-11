@@ -50,6 +50,16 @@
         "cancelled"
       ]
     },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "failureReason": {
       "type": "string",
       "enum": [
@@ -116,7 +126,8 @@
   "required": [
     "messages",
     "cursor",
-    "status"
+    "status",
+    "title"
   ],
   "additionalProperties": false
 }

@@ -135,6 +135,7 @@ export function codingAgentSummary(
     planId: agent.planId,
     model: agent.model,
     effort: agent.effort,
+    title: agent.title,
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {
       createdAt: agent.createdAt,

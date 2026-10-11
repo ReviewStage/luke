@@ -72,6 +72,7 @@ import { cursorOfWire } from "../server/hosted/coder-host/transcript";
 import {
   awaitingLinesOf,
   createCodingAgent,
+  fillCodingAgentTitle,
   listCodingAgents,
   readCodingAgent,
   updateCodingAgentBranch,
@@ -912,6 +913,52 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
           );
         }
+      }),
+  );
+
+  it.effect(
+    "a rename writes the title on the agent's row and answers the agent with it, which the list reads back, an empty title clears it, and a generated title never covers a name the developer gave; another account's agent is not found, and a title past the bound is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const { agent } = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        assert.equal(agent.title, null);
+        const renameAs = (bearer: string, body: WireBoundaryInput) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body }));
+
+        const renamed = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* renameAs(owner, { title: "  Sign-out button in account menu " }),
+        );
+        assert.equal(renamed.agent.title, "Sign-out button in account menu");
+        assert.equal(yield* fillCodingAgentTitle(owner, agent.id, "Teammate invitations"), false);
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+        );
+        assert.equal(listed.agents[0]?.title, "Sign-out button in account menu");
+
+        const cleared = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* renameAs(owner, { title: "" }),
+        );
+        assert.equal(cleared.agent.title, null);
+
+        assert.deepEqual(
+          yield* renameAs(other, { title: "Theirs" }),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* renameAs(owner, { title: "x".repeat(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS + 1) }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
       }),
   );
 

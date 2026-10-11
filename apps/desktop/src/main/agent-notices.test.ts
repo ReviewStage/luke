@@ -33,6 +33,7 @@ function agent(
     planId: PLAN_ID,
     model: MODEL,
     effort: "high",
+    title: null,
     createdAt: 1_800_000_000_000,
     status,
     turnId: TURN_ID,
@@ -348,16 +349,28 @@ it.effect("a pull request, once a reader hands one in, is the end the notice say
       noticeText({
         planName: PLAN_NAME,
         model: MODEL,
+        title: null,
         status: CODING_AGENT_STATUS.COMPLETED,
         models: undefined,
         pullRequest: 123,
       }),
       { title: PLAN_NAME, body: "Claude Opus 5.5 opened #123" },
     );
+    assert.deepEqual(
+      noticeText({
+        planName: PLAN_NAME,
+        model: MODEL,
+        title: "Sign-out button in account menu",
+        status: CODING_AGENT_STATUS.COMPLETED,
+        models: undefined,
+      }),
+      { title: PLAN_NAME, body: "Sign-out button in account menu finished" },
+    );
     assert.equal(
       noticeText({
         planName: PLAN_NAME,
         model: MODEL,
+        title: null,
         status: CODING_AGENT_STATUS.RUNNING,
         models: undefined,
       }),

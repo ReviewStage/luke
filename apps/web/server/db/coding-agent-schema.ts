@@ -17,7 +17,10 @@ import { conversations } from "./storage-schema.js";
  * exactly one of the two stands; the repository is `owner/name`; the branch
  * is the one checked out in the agent's sandbox as its last turn ended,
  * which is where its pull request is looked up, and null until a turn ends
- * or where the checkout stood detached. There is no commit column: the
+ * or where the checkout stood detached; the title is the agent's name on
+ * its tab, generated once from what it was handed as its first session
+ * starts and renamed by the developer, null until either and after a rename
+ * that cleared it. There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
@@ -50,6 +53,8 @@ export const codingAgent = pgTable(
     repository: text("repository").notNull(),
     /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
     branch: text("branch"),
+    /** The agent's title as its tab shows it; null falls back to the model's name. */
+    title: text("title"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },

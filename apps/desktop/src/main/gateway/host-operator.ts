@@ -28,6 +28,7 @@ import {
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
   type CodingAgentPullRequestParams,
+  type CodingAgentRenameParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
   codingAgentAgentAnswerSchema,
@@ -175,6 +176,8 @@ export interface HostOperator {
   codingAgentMessage(params: CodingAgentMessageParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent's model and effort changed for its next step; the agent as it then stands, or why it is unchanged. */
   codingAgentChoose(params: CodingAgentChooseParams): Effect.Effect<CodingAgentAgentAnswer>;
+  /** One agent renamed, or its title cleared; the agent as it then stands, or why it is unchanged. */
+  codingAgentRename(params: CodingAgentRenameParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** One agent stopped; the agent as it then stands, or why it was not. */
   codingAgentStop(params: CodingAgentStopParams): Effect.Effect<CodingAgentAgentAnswer>;
   /** What one agent published: its branch and pull request as GitHub holds them; or why there is no answer. */
@@ -477,6 +480,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           model: params.model,
           effort: params.effort,
+        }),
+        codingAgentAnswer(codingAgentAgentAnswerSchema),
+      ),
+    codingAgentRename: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_RENAME, {
+          agentId: params.agentId,
+          title: params.title,
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

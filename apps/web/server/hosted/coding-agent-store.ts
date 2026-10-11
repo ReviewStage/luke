@@ -45,7 +45,10 @@ import {
  * the pair under the child and the tabs read the worker's transcript under
  * the agent's. Note that nothing here reaches the brain host's modules,
  * because the routes bundle this module and the brain host's modules reach
- * eve, which runs in a service of its own (`function-bundles.ts`). Every function is an effect
+ * eve, which runs in a service of its own (`function-bundles.ts`). The
+ * title is written two ways: filled where none stands, which is how the
+ * one generated as the agent starts lands without ever covering a name the
+ * developer gave, and renamed, which replaces whatever stands. Every function is an effect
  * over the ambient `SqlClient` and names no database of its own.
  */
 
@@ -72,6 +75,8 @@ export interface CodingAgent {
   readonly repository: string;
   /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
   readonly branch: string | null;
+  /** The agent's title as its tab shows it; null falls back to the model's name. */
+  readonly title: string | null;
   readonly createdAt: Date;
 }
 
@@ -110,6 +115,7 @@ const CODING_AGENT_COLUMNS = {
   task: codingAgent.task,
   repository: codingAgent.repository,
   branch: codingAgent.branch,
+  title: codingAgent.title,
   createdAt: codingAgent.createdAt,
 };
 
@@ -123,6 +129,7 @@ const CodingAgentRowSchema = Schema.Struct({
   task: Schema.NullOr(Schema.String),
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
+  title: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
 });
 
@@ -223,6 +230,34 @@ const updateAgentBranch = SqlSchema.void({
       .update(codingAgent)
       .set({ branch })
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+});
+
+const updateAgentTitle = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    title: Schema.NullOr(Schema.String),
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId, title }) =>
+    db
+      .update(codingAgent)
+      .set({ title })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .returning(CODING_AGENT_COLUMNS),
+});
+
+const fillAgentTitle = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, title: Schema.String }),
+  Result: IdRowSchema,
+  execute: ({ userId, agentId, title }) =>
+    db
+      .update(codingAgent)
+      .set({ title })
+      .where(
+        and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId), isNull(codingAgent.title)),
+      )
+      .returning({ id: codingAgent.id }),
 });
 
 const findAgentsOfPlan = SqlSchema.findAll({
@@ -375,6 +410,24 @@ export function updateCodingAgentBranch(
   branch: string | null,
 ): CodingAgentStoreEffect<void> {
   return updateAgentBranch({ userId, agentId, branch });
+}
+
+/** The account's agent under another title, or none, which its tab shows in place of the model's name; nothing for an agent the account does not own. */
+export function renameCodingAgent(
+  userId: string,
+  agentId: string,
+  title: string | null,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return updateAgentTitle({ userId, agentId, title });
+}
+
+/** The title written where the agent has none yet, so a name the developer gave stands whatever this carries; answers whether it was written. */
+export function fillCodingAgentTitle(
+  userId: string,
+  agentId: string,
+  title: string,
+): CodingAgentStoreEffect<boolean> {
+  return Effect.map(fillAgentTitle({ userId, agentId, title }), (rows) => rows.length > 0);
 }
 
 /** The account's agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for another account's or no agent's. */

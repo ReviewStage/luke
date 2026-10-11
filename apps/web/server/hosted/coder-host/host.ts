@@ -20,11 +20,13 @@ import { childConversationId } from "../brain-host/ids.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
 import {
   type CodingAgent,
+  fillCodingAgentTitle,
   readCodingAgentOfConversation,
   readDelegation,
   updateCodingAgentBranch,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
+import { readPlan } from "../plan-store.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { promptHashOf } from "../store/index.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -39,6 +41,7 @@ import { type DelegationAsk, delegationChoice, recordDelegation } from "./delega
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
 import type { CoderHostSeams } from "./production.js";
+import { generateAgentTitle } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
 
 /**
@@ -54,7 +57,10 @@ import { CODER_TOOL } from "./tool-set.js";
  * step's model. The relay into the store is the shared one, composed here
  * with no ask record: a message to a coding agent is written as a line
  * awaiting its turn by the message route, and the relay takes that line
- * into the turn that receives it, so nothing needs binding here.
+ * into the turn that receives it, so nothing needs binding here. The
+ * agent's title is the host's one model call of its own: generated from the
+ * plan as the agent's first session starts, written where no title stands
+ * yet, and never again, so a name the developer gives is the last word.
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
@@ -154,6 +160,8 @@ export interface CoderHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+  /** The agent's title generated from its plan and written where none stands, for the first session of the conversation alone; a later session, a failed call, and a title already standing each leave the row as it is. */
+  title(starting: AdmittedConversation): HostEffect<void>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -342,6 +350,25 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           reasoningEffort: delegation.value.effort,
           state,
         });
+      }),
+
+    title: (starting) =>
+      Effect.gen(function* () {
+        // A session the conversation already ran one before is a restart, not the agent's start.
+        if (starting.runtimeSessionId !== undefined) return;
+        const model = seams.titleModel();
+        if (model === undefined) return;
+        const found = yield* agentOf(starting);
+        if (Result.isFailure(found)) return;
+        const agent = found.success;
+        const plan = yield* readPlan(starting.target.userId, agent.planId);
+        if (Option.isNone(plan)) return;
+        const title = yield* generateAgentTitle(model, {
+          planName: plan.value.plan.name,
+          handed: agent.task ?? agent.planSnapshot ?? "",
+        });
+        if (Option.isNone(title)) return;
+        yield* fillCodingAgentTitle(starting.target.userId, agent.id, title.value);
       }),
 
     relay: (event, admitted, session, state, prompt) =>

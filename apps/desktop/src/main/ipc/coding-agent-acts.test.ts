@@ -26,6 +26,7 @@ const STARTED: CodingAgentAgentAnswer = {
     planId: PLAN_ID,
     model: "anthropic/claude-opus-5.5",
     effort: "high",
+    title: null,
     createdAt: 1_800_000_000_000,
     status: CODING_AGENT_STATUS.STARTING,
     turnId: null,
@@ -86,7 +87,7 @@ function fixture() {
       codingAgentMessages: ({ agentId, after }) =>
         Effect.sync(() => {
           asked.push(`messages:${agentId}:${after}`);
-          return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING };
+          return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING, title: null };
         }),
       codingAgentMessage: ({ agentId, text, clientKey }) =>
         Effect.sync(() => {
@@ -96,6 +97,11 @@ function fixture() {
       codingAgentChoose: ({ agentId, model, effort }) =>
         Effect.sync(() => {
           asked.push(`choose:${agentId}:${model}:${effort}`);
+          return STARTED;
+        }),
+      codingAgentRename: ({ agentId, title }) =>
+        Effect.sync(() => {
+          asked.push(`rename:${agentId}:${title}`);
           return STARTED;
         }),
       codingAgentStop: ({ agentId }) =>
@@ -145,7 +151,7 @@ it.effect("a transcript read carries the agent and the cursor the panel stands a
 
     assert.deepEqual(outcome, {
       status: ACT_OUTCOME_STATUS.DONE,
-      value: { messages: [], cursor: "3:2", status: CODING_AGENT_STATUS.RUNNING },
+      value: { messages: [], cursor: "3:2", status: CODING_AGENT_STATUS.RUNNING, title: null },
     });
     assert.deepEqual(asked, [`messages:${AGENT_ID}:3:2`]);
   }),

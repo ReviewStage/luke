@@ -81,14 +81,16 @@ export function useAgentTranscript(input: {
   read: TranscriptReader;
   /** A page said where the agent stands now, which is newer than the list. */
   onStatus: (agentId: string, status: CodingAgentStatus) => void;
+  /** A page said what the agent is titled now, which the list may have read before the title landed. */
+  onTitle: (agentId: string, title: string | null) => void;
 }): AgentTranscriptControl {
-  const { agentId, status, shown, read, onStatus } = input;
+  const { agentId, status, shown, read, onStatus, onTitle } = input;
   const [held, setHeld] = useState<Held>(() => fresh(agentId));
   // Note that another agent's tab starts from nothing of this one's.
   if (held.agentId !== agentId) setHeld(fresh(agentId));
   const [attempt, setAttempt] = useState(0);
-  const latest = useRef({ read, onStatus });
-  latest.current = { read, onStatus };
+  const latest = useRef({ read, onStatus, onTitle });
+  latest.current = { read, onStatus, onTitle };
   const cursor = useRef(CODING_AGENT_CURSOR_START);
   if (held.agentId !== agentId) cursor.current = CODING_AGENT_CURSOR_START;
   // Whether this agent has been read through once: an ended agent is read
@@ -124,6 +126,7 @@ export function useAgentTranscript(input: {
           turnUsage: answer.turnUsage,
         }));
         latest.current.onStatus(agentId, answer.status);
+        latest.current.onTitle(agentId, answer.title);
         // A page with nothing on it from an agent that may still write is
         // the hold letting go: ask again. One from an agent that ended is
         // the end of the transcript.

@@ -685,6 +685,7 @@ const RUNNING_AGENT: CodingAgentSummary = {
   planId: PLAN.id,
   model: "anthropic/claude-opus-5.5",
   effort: "high",
+  title: null,
   createdAt: 3,
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
