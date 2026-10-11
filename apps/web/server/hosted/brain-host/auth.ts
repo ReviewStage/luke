@@ -112,7 +112,7 @@ export const DEPLOYMENT_PRESENCE = {
   ACCOUNT: "account",
 } as const;
 
-export type DeploymentPresence = (typeof DEPLOYMENT_PRESENCE)[keyof typeof DEPLOYMENT_PRESENCE];
+type DeploymentPresence = (typeof DEPLOYMENT_PRESENCE)[keyof typeof DEPLOYMENT_PRESENCE];
 
 /** The deployment acting for an account: which secret admits it, which kinds of turn a message under it may open, and whose identity it presents. */
 export interface DeploymentActor {
