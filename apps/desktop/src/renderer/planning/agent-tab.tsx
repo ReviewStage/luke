@@ -31,12 +31,10 @@ import {
   agentRows,
   agentStillWriting,
   agentTabLabel,
-  choiceLabel,
   endLine,
   isDelegation,
   messageWords,
   opensOnGitHub,
-  providerOfModel,
   settledPlanEdits,
   showsPublishedRow,
   workerLines,
@@ -195,12 +193,7 @@ function DelegationRow({
       callId={part.callId}
       job={cardTitle(view.task)}
       pair={
-        view.choice === undefined
-          ? undefined
-          : {
-              label: choiceLabel(view.choice, doors?.models ?? []),
-              provider: providerOfModel(doors?.models, view.choice.model),
-            }
+        view.choice === undefined ? undefined : { choice: view.choice, models: doors?.models ?? [] }
       }
       state={part.state}
       errorText={part.errorText}

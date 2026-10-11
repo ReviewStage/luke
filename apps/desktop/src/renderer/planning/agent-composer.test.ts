@@ -240,7 +240,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       await settle();
     },
     /** The model chip's words. */
-    chip: () => container.querySelector(".agent-model-chip .plan-compose-chip-name")?.textContent,
+    chip: () => container.querySelector(".agent-model-chip .model-label")?.textContent,
     /** Opens the chip's menu, reads the muted line at its foot, null where the menu has none, and closes it again. */
     footNote: async () => {
       const chip = container.querySelector<HTMLButtonElement>(".agent-model-chip button");
@@ -279,7 +279,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     control: () => {
       const buttons = [
         ...container.querySelectorAll<HTMLButtonElement>(".agent-composer button"),
-      ].filter((each) => !each.classList.contains("plan-compose-chip"));
+      ].filter((each) => !each.matches(".plan-compose-chip, .agent-model-button"));
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
       assert.equal(buttons.filter((each) => each.textContent !== "Retry").length, 1);
       if (one === undefined) return undefined;
@@ -488,12 +488,12 @@ test("the box takes focus as the tab opens unless the developer is typing elsewh
 
 test("the model chip names the agent's model and effort, with Fast where it runs the fast version; a pick is drawn at once and sent for this agent, the service's answer is what it then reads, and a refusal takes the pick off with why under the box and no Retry", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
-  assert.equal(tab.chip(), "Claude Opus 5.5 · High");
+  assert.equal(tab.chip(), "Opus 5.5 High");
   await tab.stand({ choice: { model: `${AGENT.model}-fast`, effort: "low" } });
-  assert.equal(tab.chip(), "Claude Opus 5.5 · Low · Fast");
+  assert.equal(tab.chip(), "Opus 5.5 Low Fast");
 
   await tab.pick(1);
-  assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "drawn before the service answers");
+  assert.equal(tab.chip(), "GPT-6.1 Sol Low", "drawn before the service answers");
   assert.deepEqual(
     tab.chooses.map(({ choice }) => choice),
     [{ model: "openai/gpt-6.1-sol", effort: "low" }],
@@ -501,14 +501,26 @@ test("the model chip names the agent's model and effort, with Fast where it runs
   const chosen = { model: "openai/gpt-6.1-sol", effort: "low" };
   await tab.chose(0, { agent: { ...AGENT, ...chosen } });
   await tab.stand({ choice: chosen });
-  assert.equal(tab.chip(), "GPT-6.1 Sol · Low");
+  assert.equal(tab.chip(), "GPT-6.1 Sol Low");
 
   await tab.pick(0);
-  assert.equal(tab.chip(), "Claude Opus 5.5 · High");
+  assert.equal(tab.chip(), "Opus 5.5 High");
   await tab.chose(1, { failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE });
-  assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "rolled back to what the agent runs on");
+  assert.equal(tab.chip(), "GPT-6.1 Sol Low", "rolled back to what the agent runs on");
   assert.match(tab.note() ?? "", /isn't offered any more/u);
   assert.equal(tab.retry(), null, "the chip is the retry");
+});
+
+test("the model button is the pair alone and a chevron: no mark before it, the effort dimmed after the model with no dot between them, and the chevron last", () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  const button = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  assert.ok(button);
+  assert.equal(button.textContent, "Opus 5.5 High");
+  assert.equal(button.querySelector(".model-label-detail")?.textContent, "High");
+  assert.equal(button.querySelector(".provider-mark"), null, "no mark");
+  assert.equal(button.firstElementChild?.matches(".model-label"), true, "the words come first");
+  assert.equal(button.lastElementChild?.matches("svg"), true, "the chevron comes last");
+  assert.equal(button.querySelectorAll("svg").length, 1, "the chevron is its one glyph");
 });
 
 test("the chip's menu ends on one muted line with what the agent has cost: tokens and dollars, tokens alone where the service priced none, and nothing before a turn settled", async () => {

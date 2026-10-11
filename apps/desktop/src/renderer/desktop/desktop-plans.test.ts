@@ -717,18 +717,11 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
     agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
   });
   press(page, '[aria-label="Show panel"]');
-  act(() => tabNamed(page, "Claude Opus 5.5").click());
+  act(() => tabNamed(page, "Opus 5.5").click());
   await settle();
 
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
-  assert.deepEqual(panelTabs(page), [
-    "Board",
-    "Code",
-    "Transcript",
-    "Work",
-    "Claude Opus 5.5",
-    job,
-  ]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5", job]);
   assert.equal(chosenTab(page), job);
   assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
@@ -750,22 +743,15 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   assert.equal(thought?.querySelector("summary")?.textContent, "Thought");
   assert.equal(thought?.open, false);
 
-  act(() => tabNamed(page, "Claude Opus 5.5").click());
+  act(() => tabNamed(page, "Opus 5.5").click());
   await settle();
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
-  assert.deepEqual(panelTabs(page), [
-    "Board",
-    "Code",
-    "Transcript",
-    "Work",
-    "Claude Opus 5.5",
-    job,
-  ]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5", job]);
   assert.equal(chosenTab(page), job);
 
   press(page, `[aria-label="Close ${job}"]`);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
-  assert.equal(chosenTab(page), "Claude Opus 5.5");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5"]);
+  assert.equal(chosenTab(page), "Opus 5.5");
 });
 
 test("a subagent's tab cuts a long job short and says the whole of it in its hint, while a tab shown whole hangs none", () => {
@@ -1599,7 +1585,7 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
   ]);
   assert.equal(chosenTab(container), "GPT 5.6 Sol");
   const claude = tabNamed(container, "Sign-out button in account menu");
-  assert.equal(hover(claude), "Claude Opus 5.5");
+  assert.equal(hover(claude), "Opus 5.5");
   assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
   assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
   assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
@@ -2055,22 +2041,22 @@ test("only the fixed tabs move: one dragged on among the agents' tabs lands last
   const page = mountOpenPlan({ agents });
   press(page, '[aria-label="Show panel"]');
   layOutTabs({ width: 6 * TAB_PITCH });
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5"]);
 
   // Let go at 480, past the agent's middle at 445.
   const moved = dragTab(tabNamed(page, "Board"), 45, [200, 480], DRAG_END.DROP);
   assert.deepEqual(moved, ["Board", "Code", "Transcript", "Work"], "the agent's tab stands still");
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
   assert.equal(movedSaid(page), "Board moved to position 4 of 5");
 
-  const claude = tabNamed(page, "Claude Opus 5.5");
+  const claude = tabNamed(page, "Opus 5.5");
   assert.deepEqual(dragTab(claude, 445, [300, 100], DRAG_END.DROP), []);
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
 
   const board = tabNamed(page, "Board");
   act(() => board.focus());
   keydown({ key: "ArrowRight", code: "ArrowRight", metaKey: true, shiftKey: true });
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Claude Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board", "Opus 5.5"]);
   assert.equal(movedSaid(page), "Board moved to position 4 of 5", "no move is said");
 });
 
@@ -2440,17 +2426,17 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
   act(() => addButton(page).click());
 
   assert.deepEqual(addSections(), [
-    ["Coding agents", ["New coding agent", "Claude Opus 5.5", "GPT 5.6 Sol"]],
+    ["Coding agents", ["New coding agent", "Opus 5.5", "GPT 5.6 Sol"]],
     ["Subagents", [job]],
   ]);
   assert.deepEqual(addRows().slice(4), [
     ["New coding agent", "", true],
-    ["Claude Opus 5.5", "", true],
+    ["Opus 5.5", "", true],
     ["GPT 5.6 Sol", "", true],
     [job, "", true],
   ]);
   // Neither an agent's row nor a subagent's says where it stands, by word or by dot.
-  for (const label of ["Claude Opus 5.5", "GPT 5.6 Sol", job]) {
+  for (const label of ["Opus 5.5", "GPT 5.6 Sol", job]) {
     const row = addRow(label);
     assert.equal(row.querySelector(".agent-status-dot"), null);
     assert.equal(row.querySelector(".plan-compose-menu-detail"), null);
@@ -2472,7 +2458,7 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
     "Code",
     "Transcript",
     "Work",
-    "Claude Opus 5.5",
+    "Opus 5.5",
     "GPT 5.6 Sol",
   ]);
 
@@ -2492,36 +2478,36 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
 
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();
-  act(() => tabNamed(page, "Claude Opus 5.5").click());
+  act(() => tabNamed(page, "Opus 5.5").click());
 
-  press(page, '[aria-label="Close Claude Opus 5.5"]');
+  press(page, '[aria-label="Close Opus 5.5"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "GPT 5.6 Sol"]);
   assert.equal(chosenTab(page), "GPT 5.6 Sol", "the agent after it");
   assert.deepEqual(stops, []);
 
   act(() => addButton(page).click());
-  act(() => addRow("Claude Opus 5.5").click());
+  act(() => addRow("Opus 5.5").click());
   assert.deepEqual(panelTabs(page), [
     "Board",
     "Code",
     "Transcript",
     "Work",
-    "Claude Opus 5.5",
+    "Opus 5.5",
     "GPT 5.6 Sol",
   ]);
-  assert.equal(chosenTab(page), "Claude Opus 5.5");
+  assert.equal(chosenTab(page), "Opus 5.5");
 
   const sol = tabNamed(page, "GPT 5.6 Sol");
   act(() => sol.focus());
   key(sol, "Delete");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
-  assert.equal(chosenTab(page), "Claude Opus 5.5", "closing another tab leaves the chosen one");
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5"]);
+  assert.equal(chosenTab(page), "Opus 5.5", "closing another tab leaves the chosen one");
   assert.deepEqual(stops, []);
 });
 
 test("the + reads the plan's agents again as it opens, so an agent no tab follows is named as it is now", () => {
   const page = mountAgents();
-  press(page, '[aria-label="Close Claude Opus 5.5"]');
+  press(page, '[aria-label="Close Opus 5.5"]');
 
   // The agent is named with its tab closed, where nothing follows it.
   listed = [{ ...RUNNING_AGENT, title: "Queue spike" }, DONE_AGENT];
@@ -2901,11 +2887,7 @@ test("a right-click on any of the panel's tabs offers Close, Close others, and P
   ];
   assert.deepEqual(tabMenu(tabNamed(page, "Board")), everyTab);
   closeMenu();
-  assert.deepEqual(tabMenu(tabNamed(page, "Claude Opus 5.5")), [
-    ...everyTab,
-    ["Rename", true],
-    ...copies,
-  ]);
+  assert.deepEqual(tabMenu(tabNamed(page, "Opus 5.5")), [...everyTab, ["Rename", true], ...copies]);
   closeMenu();
   assert.deepEqual(tabMenu(tabNamed(page, job)), [...everyTab, ...copies]);
   closeMenu();
@@ -2931,18 +2913,12 @@ test("Close in a tab's menu closes it as its × does, and Close others closes ev
     "Board",
     "Code",
     "Work",
-    "Claude Opus 5.5",
+    "Opus 5.5",
     "GPT 5.6 Sol",
   ]);
 
   chooseFromTab(tabNamed(page, "Work"), "Close");
-  assert.deepEqual(panelTabs(page), [
-    "Transcript",
-    "Board",
-    "Code",
-    "Claude Opus 5.5",
-    "GPT 5.6 Sol",
-  ]);
+  assert.deepEqual(panelTabs(page), ["Transcript", "Board", "Code", "Opus 5.5", "GPT 5.6 Sol"]);
 
   chooseFromTab(tabNamed(page, "Code"), "Close others");
   assert.deepEqual(panelTabs(page), ["Transcript", "Code"]);
@@ -3077,9 +3053,9 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
       ],
     ],
   ]);
-  chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+  chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy concise transcript");
   await settle();
-  chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy full transcript");
+  chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy full transcript");
   await settle();
   act(() => tabNamed(page, "Work").click());
   press(page, "[data-subagent-row]");
@@ -3087,9 +3063,9 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
   await settle();
 
   assert.deepEqual(words, [
-    "# Claude Opus 5.5\n\n## Plan\n\n# Teammate invitations\n\n## Agent\n\n- Ran `pnpm test`\n\nAll green.\n",
+    "# Opus 5.5\n\n## Plan\n\n# Teammate invitations\n\n## Agent\n\n- Ran `pnpm test`\n\nAll green.\n",
     [
-      "# Claude Opus 5.5",
+      "# Opus 5.5",
       "## Plan",
       "# Teammate invitations",
       "## Agent",
@@ -3122,9 +3098,9 @@ it.effect(
       const advance = (millis: number) =>
         Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
 
-      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+      chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy concise transcript");
       yield* landed;
-      assert.deepEqual(clipboard.copied, ["# Claude Opus 5.5\n\n## Agent\n\nAll green.\n"]);
+      assert.deepEqual(clipboard.copied, ["# Opus 5.5\n\n## Agent\n\nAll green.\n"]);
       assert.equal(toast(), "Transcript copied");
       yield* advance(1_499);
       assert.equal(toast(), "Transcript copied");
@@ -3132,7 +3108,7 @@ it.effect(
       assert.equal(toast(), undefined);
 
       clipboard.refuse(true);
-      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy full transcript");
+      chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy full transcript");
       yield* landed;
       assert.equal(toast(), "Could not copy to the clipboard. Try again.");
     }),
@@ -3142,13 +3118,7 @@ test("Command-W closes the panel's chosen tab as its menu's Close does, unpinnin
   const page = mountAgents();
   act(() => tabNamed(page, "Code").click());
   assert.equal(keydown({ key: "w", metaKey: true }), true);
-  assert.deepEqual(panelTabs(page), [
-    "Board",
-    "Transcript",
-    "Work",
-    "Claude Opus 5.5",
-    "GPT 5.6 Sol",
-  ]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Opus 5.5", "GPT 5.6 Sol"]);
   assert.equal(chosenTab(page), "Transcript");
 
   chooseFromTab(tabNamed(page, "Work"), "Pin tab");
@@ -3157,12 +3127,12 @@ test("Command-W closes the panel's chosen tab as its menu's Close does, unpinnin
   assert.equal(document.body.querySelector('[role="menuitem"] .plan-menu-end')?.textContent, "⌘W");
   closeMenu();
   keydown({ key: "w", metaKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Opus 5.5", "GPT 5.6 Sol"]);
   assert.equal(page.querySelector('.side-panel .tab[data-pinned="true"]'), null);
 
   act(() => tabNamed(page, "GPT 5.6 Sol").click());
   keydown({ key: "w", metaKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Claude Opus 5.5"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Opus 5.5"]);
   assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
 });
 

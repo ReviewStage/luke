@@ -1372,6 +1372,12 @@ body,
   flex: 0 0 auto;
 }
 
+/* A harness mark keeps its box in a row however tight the row is, the one
+   drawn as an image (`provider-marks.tsx`) as the traced one does. */
+.provider-mark {
+  flex: 0 0 auto;
+}
+
 /* The searchable menu, in the shape of a command menu: the search as the
    first row, flush and edge to edge over a hairline; under it the list,
    its rows inset by the list's own padding so a highlight never meets the

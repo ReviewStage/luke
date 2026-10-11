@@ -483,6 +483,46 @@ button.code-card-path:hover {
   min-width: 0;
 }
 
+/* A model and the effort it runs at, wherever the pair stands
+   (`model-label.tsx`): the name in the colour of its line, the effort after
+   it in the muted secondary colour. */
+.model-label {
+  white-space: nowrap;
+}
+
+.model-label-detail {
+  color: var(--text-secondary);
+}
+
+/* The model button is a toolbar button, quiet until the pointer is on it or
+   its menu is open, at the foot's own type and in the body's colour until
+   then: the pair it names (`.model-label`) cut short before the chevron
+   where the foot is narrow, and the chevron small and muted, as a menu's
+   own is. */
+.agent-model-chip .agent-model-button {
+  flex: 0 1 auto;
+  max-width: 100%;
+  padding: 0 var(--space-6) 0 var(--space-8);
+  color: var(--text-body);
+  font-weight: 560;
+}
+
+.agent-model-chip .agent-model-button:is(:hover, [aria-expanded="true"]) {
+  color: var(--text-primary);
+}
+
+.agent-model-chip .agent-model-button .model-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.agent-model-chip .agent-model-button svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-tertiary);
+}
+
 /* The menu hangs above the card from the card's own left edge, no wider
    than the card, so a panel at its narrowest never clips it at the
    window's edge; the composer's room is its containing block. */

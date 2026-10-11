@@ -18,12 +18,7 @@ import {
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
-import {
-  type CatalogModel,
-  MODEL_PROVIDER,
-  type ModelChoice,
-  type ModelProvider,
-} from "@sidecar/hosted/models-wire";
+import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
@@ -252,20 +247,6 @@ function compareVersions(a: readonly number[], b: readonly number[]): number {
 /** The providers in the order the menu groups them. */
 const PROVIDER_ORDER: readonly string[] = Object.values(MODEL_PROVIDER);
 
-const PROVIDER_WORDS: ReadonlySet<string> = new Set(PROVIDER_ORDER);
-
-/** The provider whose mark a model wears: the catalog's word where the model is listed, else the one its id is prefixed with, else none. */
-export function providerOfModel(
-  models: readonly CatalogModel[] | undefined,
-  modelId: string,
-): ModelProvider | undefined {
-  const listed = models?.find((model) => model.id === modelId)?.provider;
-  if (listed !== undefined) return listed;
-  const prefix = modelId.slice(0, modelId.indexOf(CATALOG_ID_SEPARATOR));
-  // SAFETY: membership in the set built from MODEL_PROVIDER's values is what the union names.
-  return PROVIDER_WORDS.has(prefix) ? (prefix as ModelProvider) : undefined;
-}
-
 /**
  * The models as the menus list them: grouped by provider, Anthropic's first,
  * and within each the newest version first, so a catalog that lists forty
@@ -291,8 +272,8 @@ const FAST_ID_SUFFIX = "-fast";
 /** The word a choice label and the Fast row say for the fast version. */
 export const FAST_WORD = "Fast";
 
-/** What separates the parts of a choice label: "Claude Opus 5.5 · High · Fast". */
-const CHOICE_LABEL_SEPARATOR = " · ";
+/** What separates the words of a choice: "Opus 5.5 High Fast", the model's name and then its detail. */
+const CHOICE_WORD_SEPARATOR = " ";
 
 /** A model as the menus offer it: the base model, and its fast version where the catalog lists one beside it. */
 export interface OfferedModel {
@@ -351,12 +332,26 @@ export function choiceModelId(offered: OfferedModel, fast: boolean): string {
   return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
 }
 
-/** A choice as one line: "Claude Opus 5.5 · High · Fast". */
-export function choiceLabel(choice: ModelChoice, models: readonly CatalogModel[]): string {
+/** What a choice says after its model's name: the effort, and Fast where the fast version is on. */
+export function choiceDetail(effort: string, fast: boolean): string {
+  return fast ? `${effortLabel(effort)}${CHOICE_WORD_SEPARATOR}${FAST_WORD}` : effortLabel(effort);
+}
+
+/** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */
+export interface ChoiceWords {
+  readonly model: string;
+  readonly detail: string;
+}
+
+export function choiceWords(choice: ModelChoice, models: readonly CatalogModel[]): ChoiceWords {
   const read = readModelChoice(models, choice.model);
-  const parts = [modelLabel(read.base, models), effortLabel(choice.effort)];
-  if (read.fast) parts.push(FAST_WORD);
-  return parts.join(CHOICE_LABEL_SEPARATOR);
+  return { model: modelLabel(read.base, models), detail: choiceDetail(choice.effort, read.fast) };
+}
+
+/** A choice as one line, for a hint that holds no markup: "Opus 5.5 High Fast". */
+export function choiceLabel(choice: ModelChoice, models: readonly CatalogModel[]): string {
+  const words = choiceWords(choice, models);
+  return `${words.model}${CHOICE_WORD_SEPARATOR}${words.detail}`;
 }
 
 /** The efforts a model lists, or nothing for a model the catalog does not offer now. */

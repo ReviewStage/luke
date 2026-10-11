@@ -1,20 +1,22 @@
 import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import { ChevronDownIcon } from "@sidecar/panel";
 import { useEffect, useId, useRef, useState } from "react";
-import { ModelProviderMark } from "../provider-marks";
-import { agentUsageLine, choiceLabel, providerOfModel } from "./coding-agent-model";
+import { agentUsageLine } from "./coding-agent-model";
+import { ModelLabel } from "./model-label";
 import { ModelMenu, settledChoice } from "./model-menu";
 import type { AgentModelControl } from "./use-agent-model";
 
 /**
  * agent-model-chip.tsx -- the chip at the agent box's foot that names what the agent runs on, and the menu that changes it.
  *
- * Drawn along the composer card's foot the way the New Plan page draws its
- * repository chip: the provider's mark and "Claude Opus 5.5 · High", with
- * "· Fast" where the fast version is on. A press opens the shared model
- * menu (`model-menu.tsx`) above the chip, the agent's choice checked; what
- * the menu chooses is the agent's model and effort for its next step,
- * drawn on the chip at once (`use-agent-model.ts`). The chip reads the
+ * Drawn along the composer card's foot as a toolbar's quiet button is, with
+ * no border and no fill until the pointer is on it or its menu is open:
+ * "Opus 5.5 High" (`model-label.tsx`), with "Fast" after the effort where
+ * the fast version is on, and a chevron saying it opens a menu. A press
+ * opens the shared model menu (`model-menu.tsx`) above the chip, the
+ * agent's choice checked; what the menu chooses is the agent's model and
+ * effort for its next step, drawn on the chip at once (`use-agent-model.ts`). The chip reads the
  * same whatever the agent is doing, since a change mid-turn applies from
  * the next step and an idle agent's next turn takes it. The models are
  * read as the chip mounts and again as the menu opens, so the menu shows
@@ -34,7 +36,7 @@ export function AgentModelChip({
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
-  /** Reads the catalog now, for the chip's mark and name and for a menu opening. */
+  /** Reads the catalog now, for the chip's name and for a menu opening. */
   readModels: () => void;
   /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
@@ -59,20 +61,19 @@ export function AgentModelChip({
     trigger.current?.focus();
   };
 
-  const provider = providerOfModel(models, model.choice.model);
   return (
     <div className="agent-model-chip" ref={root}>
       <button
         ref={trigger}
         type="button"
-        className="plan-compose-chip"
+        className="toolbar-button agent-model-button"
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         onClick={() => setOpen(!open)}
       >
-        {provider === undefined ? null : <ModelProviderMark provider={provider} />}
-        <span className="plan-compose-chip-name">{choiceLabel(model.choice, models ?? [])}</span>
+        <ModelLabel choice={model.choice} models={models ?? []} />
+        <ChevronDownIcon />
       </button>
       {open ? (
         <ModelMenu

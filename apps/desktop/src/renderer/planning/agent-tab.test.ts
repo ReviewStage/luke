@@ -277,7 +277,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model and effort with the provider's mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -309,13 +309,15 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.equal(container.querySelector("[data-turn-fold]"), null, "each on a row of its own");
   const [done, running] = rows;
   assert.ok(done && running);
-  assert.equal(done.textContent, "Count the routes.Claude Sonnet 5.5 · Medium");
-  assert.ok(done.querySelector("[data-subagent-pair] svg.provider-mark"), "the provider's mark");
-  assert.ok(done.querySelector('[data-tool-state="output-available"]'));
+  assert.equal(done.textContent, "Count the routes.Sonnet 5.5 Medium");
   assert.equal(
-    running.querySelector("[data-subagent-pair]")?.textContent,
-    "Claude Opus 5.5 · High",
+    done.querySelector("[data-subagent-pair] .model-label-detail")?.textContent,
+    "Medium",
+    "the effort dimmed after the model",
   );
+  assert.equal(done.querySelector("[data-subagent-pair] .provider-mark"), null, "no mark");
+  assert.ok(done.querySelector('[data-tool-state="output-available"]'));
+  assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
   assert.ok(running.querySelector('[data-tool-state="input-available"]'));
   assert.ok(running.querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
   for (const row of rows) {
@@ -539,7 +541,10 @@ test("the tab wears no head: it opens on the transcript, what the agent runs on 
   const running = tabMarkup(CODING_AGENT_STATUS.RUNNING);
   assert.doesNotMatch(running, /<header|agent-tab-header|agent-status-dot|agent-end-line/u);
   assert.match(running, /<section[^>]*class="agent-tab[^"]*"[^>]*><div[^>]*><div role="log"/u);
-  assert.match(running, /class="agent-model-chip">.*?Claude Opus 5\.5 · High<\/span>/u);
+  assert.match(
+    running,
+    /class="agent-model-chip">.*?<span class="model-label-name">Opus 5\.5<\/span> <span class="model-label-detail">High<\/span>/u,
+  );
   assert.match(
     tabMarkup(CODING_AGENT_STATUS.CANCELLED),
     /<p class="agent-end-line"[^>]*>Stopped</u,

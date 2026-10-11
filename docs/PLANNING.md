@@ -402,7 +402,8 @@ The model and effort a click on Start runs an agent on are the account's
 one default, kept on the service with the account preferences
 (`/api/account/preferences`'s `codingAgent` part) and shown on the Coding
 agents page of Settings (`settings/coding-agents-page.tsx`): a model menu
-with each provider's mark, and the efforts the chosen model lists. The page
+with each model under its harness's mark (Claude Code's for Anthropic's,
+Codex's for OpenAI's), and the efforts the chosen model lists. The page
 reads the default as it opens, so a model chosen from Start's chevron, which
 the service keeps as the default too, shows there next. A first-time
 account starts on Claude Opus 5.5 at high.

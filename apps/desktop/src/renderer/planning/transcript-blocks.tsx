@@ -1,4 +1,4 @@
-import type { ModelProvider } from "@sidecar/hosted/models-wire";
+import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   BotIcon,
   CircleStopIcon,
@@ -38,8 +38,8 @@ import {
   ToolStateMark,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
-import { ModelProviderMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
+import { ModelLabel } from "./model-label";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -164,10 +164,10 @@ export function TranscriptTool({
   );
 }
 
-/** What a subagent's row says it runs on: the pair as one line, and the mark of the provider whose model it is, where known. */
+/** What a subagent's row says it runs on: the model and effort, and the catalog the model is named from. */
 interface SubagentPair {
-  readonly label: string;
-  readonly provider: ModelProvider | undefined;
+  readonly choice: ModelChoice;
+  readonly models: readonly CatalogModel[];
 }
 
 export type TranscriptSubagentProps = {
@@ -188,7 +188,7 @@ export type TranscriptSubagentProps = {
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
  * or finished: one boxed line wearing the worker's glyph, lit while it
  * runs, the job, fading where the line cuts it, the model and effort it
- * runs on behind the provider's mark where known, and the mark a call's
+ * runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands. The whole line is the one button that
  * opens the subagent's tab, which is where its steps and its answer are
  * read, so it folds nothing open in place. Where it opens no tab it is the
@@ -215,12 +215,8 @@ export function TranscriptSubagent({
         {job}
       </span>
       {pair === undefined ? null : (
-        <span
-          className="flex shrink-0 items-center gap-1 text-muted-foreground [&>svg]:size-3"
-          data-subagent-pair=""
-        >
-          {pair.provider === undefined ? null : <ModelProviderMark provider={pair.provider} />}
-          <span>{pair.label}</span>
+        <span className="shrink-0 text-foreground" data-subagent-pair="">
+          <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
       <ToolStateMark state={state} />

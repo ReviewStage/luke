@@ -10,7 +10,7 @@ import { Tooltip } from "../tooltip";
  * start-agent-button.tsx -- the plan toolbar's Start: a split button that starts a coding agent on the plan.
  *
  * The main part starts one on the account's default model and effort, and
- * says which on hover: "Claude Opus 5.5 · High · Fast". The chevron drops
+ * says which on hover: "Opus 5.5 High Fast". The chevron drops
  * the shared model menu (`../planning/model-menu.tsx`), the default
  * checked; what the menu chooses is kept as the account's default, which
  * is what the main part then starts on. The models and the default are
