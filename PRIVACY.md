@@ -62,7 +62,7 @@ stored as written, bound to your account and readable by our own operators,
 the same way the conversation described below is. A save
 replaces the document and no earlier version is kept; deleting a plan removes
 it at once, with the record of each coding agent started on it and the copy
-of the plan that agent was handed, and marks the plan's conversation and each
+of the plan, or the task you wrote in its place, that agent was handed, and marks the plan's conversation and each
 agent's transcript deleted, removed thirty days later; deleting your account
 removes every plan.
 

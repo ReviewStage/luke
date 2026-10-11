@@ -616,7 +616,9 @@ cannot be reached, answer `rejected` with why, and nothing goes on screen.
 A plan with a repository can be handed to a coding agent: a cloud session of
 Luke's second eve service, which checks the repository out in a Vercel
 Sandbox of its own, implements the plan given as its first message, runs the
-repository's checks, and decides whether to open a pull request. The service,
+repository's checks, and decides whether to open a pull request. Started
+instead on a task the developer wrote, it is handed that task as its first
+message and never the plan, and works in the plan's repository the same way. The service,
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
 coding-agent routes"; the desktop's Start button ("The Plans tab" above),

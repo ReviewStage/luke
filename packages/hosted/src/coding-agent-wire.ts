@@ -8,9 +8,11 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  *
  * A coding agent is one cloud session the service runs over a plan: it
  * checks the plan's repository out, implements the plan, and decides on a
- * pull request. The desktop starts one with a key of its own, so a retry of
- * the same Start is the same agent, and names the model and effort it runs
- * on or leaves both to the account's default. What comes back is the
+ * pull request. Or, where the developer started it with words of their own,
+ * it is handed those as its task in the plan's place, and never the plan.
+ * The desktop starts one with a key of its own, so a retry of the same
+ * Start is the same agent, and names the model and effort it runs on or
+ * leaves both to the account's default. What comes back is the
  * agent's summary: its id, what it runs on, when it started, and where it
  * stands, which is the status of its newest turn. Its transcript is the
  * conversation's own `messages` rows, each an AI SDK `UIMessage`, read after
@@ -41,6 +43,14 @@ export const CODING_AGENT_BOUNDS = {
   /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
   MAX_CALL_ID_CHARS: 128,
 } as const;
+
+/** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
+export const CODING_AGENT_BRIEF = {
+  PLAN: "plan",
+  TASK: "task",
+} as const;
+
+export type CodingAgentBrief = (typeof CODING_AGENT_BRIEF)[keyof typeof CODING_AGENT_BRIEF];
 
 /** Where an agent stands, read from its newest turn: not yet started, at work, or how it ended. */
 export const CODING_AGENT_STATUS = {
@@ -83,12 +93,15 @@ function trimmedText(maximumChars: number) {
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
- * them; both or neither, since a choice is one thing.
+ * them; both or neither, since a choice is one thing. A task, where the
+ * developer wrote one, is the agent's first message in the plan's place,
+ * bounded as a message is; with none, the agent is handed the plan.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+  task: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
 });
 
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
@@ -129,6 +142,13 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * is running on the message's account.
    */
   turnId: EffectSchema.NullOr(wireUuidSchema),
+  /**
+   * What the agent was handed as its first message, so its tab draws a
+   * plan as the plan's card and a task as the developer's own message.
+   * Absent from a service older than the task, which handed every agent
+   * the plan.
+   */
+  brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

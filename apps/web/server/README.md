@@ -1758,7 +1758,9 @@ tell the agent to read `AGENTS.md` and `CLAUDE.md` first, reread the code the
 plan names and say where it no longer fits, run the repository's checks,
 work on a `luke/<slug>` branch and never push the default branch, and decide
 on a pull request and its draft state itself; the plan is the session's
-first message. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
+first message, or for an agent started on a developer's task, the task is,
+the agent is never handed the plan, and the instructions are worded for a
+task in the plan's place. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
 `DATABASE_URL`, the GitHub App's variables, and the Vercel Sandbox
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
 selects the scripted model for `coder/evals/coder.eval.ts`, which
@@ -1772,7 +1774,7 @@ delegation, so no sandbox opens there either.
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
 reads, messages, re-models, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
-`POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort? }`:
+`POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
 where neither, checked against the catalog with `acceptedModelChoice`, which
 also refuses a stored default that has since left the catalog. It refuses a
@@ -1783,14 +1785,20 @@ account that must sign in with GitHub again before the App can read for it
 plan's document as the Markdown Copy puts on the clipboard
 (`@sidecar/hosted/plan-markdown`), makes the agent and its conversation
 (`createCodingAgent`), and opens the eve session under the developer's own
-bearer with the snapshot as the first message of a typed turn; an eve that
+bearer with the snapshot as the first message of a typed turn. A Start
+naming a task, the developer's own words bounded as a message is, opens the
+session with the task as that first message instead: the agent is never
+handed the plan, its row keeps the task and no snapshot, and it still works
+in the plan's repository under the same checks; an eve that
 did not take it discards the agent again (`discardCodingAgent`) and answers
 `unavailable`, so a retry starts afresh. A retry under the same key answers
 the agent the first Start made, 200 rather than 201, and opens nothing. A
 Start that named a model writes it as the account's default.
 
 `GET /api/plans/{id}/agents` answers each agent's id, model, effort, start
-instant, status, and `turnId`, the newest turn the status is read from
+instant, status, `brief` (`plan` or `task`, what it was handed first, so its
+tab draws a plan as the plan's card and a task as the developer's message),
+and `turnId`, the newest turn the status is read from
 (null before the first), so a reader keying an agent's run by agent and
 turn sees the run a message opens as its own (`coder-host/status.ts`):
 `starting` before one, `running`, `completed`, `failed`, or `cancelled`,

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
 import { test } from "vitest";
 import agent from "../coder/agent";
 import worker from "../coder/subagents/worker/agent";
@@ -73,16 +74,20 @@ test("a follow-up steers the turn under way, and the walk is the account's beare
 });
 
 test("the session is told the checkout's commit identity is the developer's and never its own to change", () => {
-  const instructions = coderInstructions("Acme/Relay");
-  for (const kept of ["user.name", "user.email", "--author", "luke.commitTrailer"]) {
-    assert.ok(instructions.includes(kept), kept);
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief);
+    for (const kept of ["user.name", "user.email", "--author", "luke.commitTrailer"]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
   }
 });
 
 test("the session is told its shell starts in the checkout and its file tools take absolute paths under it", () => {
-  const instructions = coderInstructions("Acme/Relay");
-  for (const kept of ["never open a command with a `cd`", "absolute paths", "`root`"]) {
-    assert.ok(instructions.includes(kept), kept);
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief);
+    for (const kept of ["never open a command with a `cd`", "absolute paths", "`root`"]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
   }
 });
 
@@ -99,13 +104,24 @@ test("the worker is hidden behind the delegation tool, bounded per session, and 
 });
 
 test("the session is told when to delegate, how to choose a worker's model, and that a worker is read-only", () => {
-  const instructions = coderInstructions("Acme/Relay");
-  for (const kept of [
-    `\`${CODER_TOOL.DELEGATE}\``,
-    "run at once",
-    "cheaper or faster model",
-    "read-only",
-  ]) {
-    assert.ok(instructions.includes(kept), kept);
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief);
+    for (const kept of [
+      `\`${CODER_TOOL.DELEGATE}\``,
+      "run at once",
+      "cheaper or faster model",
+      "read-only",
+    ]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
   }
+});
+
+test("an agent handed a task is told its job is the developer's task, in the same repository, and is told of no plan", () => {
+  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN);
+  assert.ok(planned.includes("implement the plan given as the first message"));
+  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK);
+  assert.ok(tasked.includes("carry out the task the developer gave as the first message"));
+  assert.ok(tasked.includes("`Acme/Relay`"));
+  assert.doesNotMatch(tasked, /\bplan\b/iu);
 });

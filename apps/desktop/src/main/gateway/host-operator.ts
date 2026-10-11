@@ -450,6 +450,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
+          ...("task" in params ? { task: params.task } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),

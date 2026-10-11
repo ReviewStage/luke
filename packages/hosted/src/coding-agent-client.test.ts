@@ -160,6 +160,20 @@ it.effect(
     }),
 );
 
+it.effect("a Start naming a task carries it to the service as sent", () =>
+  Effect.gen(function* () {
+    const request = { idempotencyKey: "press-1", task: "Rename the invite email's subject." };
+    const api = fakeCloudApi({
+      [`POST /api/plans/${PLAN_ID}/agents`]: { answer: () => ({ agent: AGENT }), status: 201 },
+    });
+
+    const started = yield* Effect.provide(client().start(PLAN_ID, request), api.layer);
+
+    assert.deepEqual(started, { agent: AGENT });
+    assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), request);
+  }),
+);
+
 it.effect("a Start the service would refuse by shape travels nowhere", () =>
   Effect.gen(function* () {
     const api = fakeCloudApi({

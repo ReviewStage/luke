@@ -58,6 +58,7 @@ const openAgent = (repository: string) =>
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       planSnapshot: "# Teammate invitations\n",
+      task: null,
       repository,
     });
     assert.ok(Option.isSome(started));
