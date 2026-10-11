@@ -97,11 +97,48 @@ test("a finished turn folds everything ahead of its last words into one line say
       [
         [WORK_BLOCK.CALL, "ls"],
         [WORK_BLOCK.TEXT, "Looking at the invites."],
-        [TURN_ROW.GROUP, ["invite expiry", "example.com/docs"], false],
+        [WORK_BLOCK.CALL, "invite expiry"],
+        [WORK_BLOCK.CALL, "example.com/docs"],
       ],
     ],
     [WORK_BLOCK.TEXT, "Seven days is common."],
   ]);
+});
+
+test("a finished turn's calls ahead of its words are folded once, under the lead's line, never a group inside it, whether they ran in one step or across several", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.DONE, [
+      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
+      call("b", PLAN_WORK_TOOL.READ_AGENT, "agent-1"),
+      call("c", PLAN_WORK_TOOL.READ_AGENT, "agent-2"),
+      words("Both agents are done."),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [
+    [
+      TURN_ROW.FOLDED,
+      "3 tool calls",
+      [
+        [WORK_BLOCK.CALL, undefined],
+        [WORK_BLOCK.CALL, "agent-1"],
+        [WORK_BLOCK.CALL, "agent-2"],
+      ],
+    ],
+    [WORK_BLOCK.TEXT, "Both agents are done."],
+  ]);
+});
+
+test("the same calls while their turn still moves are one open group, and no lead is folded yet", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.RUNNING, [
+      call("a", PLAN_WORK_TOOL.LIST_AGENTS, undefined),
+      call("b", PLAN_WORK_TOOL.READ_AGENT, "agent-1"),
+      call("c", PLAN_WORK_TOOL.READ_AGENT, "agent-2", PLAN_WORK_STATE.RUNNING),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [[TURN_ROW.GROUP, [undefined, "agent-1", "agent-2"], true]]);
 });
 
 test("the worker stands on its own row, the one call still turning while its turn waits on it", () => {
