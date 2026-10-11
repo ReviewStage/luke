@@ -998,7 +998,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "an agent whose row holds no branch published nothing and asks GitHub nothing; one whose row holds a branch answers the newest pull request from it, else the branch alone where GitHub holds it, else nothing; a repository the developer no longer reaches is refused",
+    "an agent whose row holds no branch published nothing and asks GitHub nothing, and one still on the default branch published nothing; one whose row holds a branch answers the newest pull request from it, else the branch alone where GitHub holds it, else nothing; a repository the developer no longer reaches is refused",
     () =>
       Effect.gen(function* () {
         const repository: RepositoryFixture = { pullRequest: undefined, pushed: false };
@@ -1019,7 +1019,11 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
 
         const pushed = yield* startedAgent(owner, plan.id, ask);
+        // Still on the default branch, as an agent that only read leaves it: nothing.
+        yield* updateCodingAgentBranch(owner, pushed.agent.id, "main");
+        assert.deepEqual(yield* read(pushed.agent.id), nothing);
         yield* updateCodingAgentBranch(owner, pushed.agent.id, HEAD.ref);
+        yield* TestClock.adjust(CODER.PUBLISHED_TTL);
         // Never pushed, as GitHub has it: nothing.
         assert.deepEqual(yield* read(pushed.agent.id), nothing);
         // Pushed with no pull request: the branch alone.

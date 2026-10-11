@@ -1880,10 +1880,13 @@ its pull request is on, whatever it cut, switched, or deleted on the way:
 the service's hook (`coder/hooks/store.ts`) runs `git branch
 --show-current` in the checkout as each turn ends and writes the answer on
 the agent's row (`coding_agent.branch`, through `coder-host/host.ts`'s
-`recordBranch`), null for a detached HEAD, before it stops the sandbox; a
-read that fails is logged and the sandbox stops regardless, and a turn
-that opened no sandbox writes nothing. A row with no branch published
-nothing, and GitHub is not asked. GitHub then says what stands, once the
+`recordBranch`), null for a detached HEAD, ahead of relaying the end (a
+tab reads the pull request the moment it hears the agent ended, and the
+answer is then kept a while) and before it stops the sandbox; a read that
+fails is logged and the sandbox stops regardless, and a turn that opened
+no sandbox writes nothing. A row with no branch published nothing, and
+GitHub is not asked; a row still on the repository's default branch, as
+an agent that only read leaves it, published nothing either. GitHub then says what stands, once the
 developer's reach of the repository through the App is confirmed as a Start
 confirms it (`repository-not-reachable`, 403, otherwise), on the
 developer's own App token (`github/pull-requests.ts`): the newest pull

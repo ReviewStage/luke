@@ -28,9 +28,11 @@ import { CODER } from "./bounds.js";
  * A row with no branch, as before the first turn ends in the sandbox or
  * where the checkout stood detached, published nothing, and GitHub is not
  * asked. GitHub then says what stands, once the developer's reach of the
- * repository through the App is confirmed as a Start confirms it: the
- * newest pull request from the branch, else whether the branch was pushed
- * at all, with the pull request's head's checks. The answer is kept per
+ * repository through the App is confirmed as a Start confirms it: a row
+ * still on the repository's default branch, as an agent that only read
+ * leaves it, published nothing either; otherwise the newest pull request
+ * from the branch, else whether the branch was pushed at all, with the
+ * pull request's head's checks. The answer is kept per
  * agent for `CODER.PUBLISHED_TTL` so a tab reading it beside every page of
  * a held transcript asks GitHub a few times a minute at most, under a key
  * that says whether the agent had ended, so the first read after a turn
@@ -90,6 +92,8 @@ const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function*
   if (Option.isNone(reached)) {
     return yield* new RepositoryNotReachable({ repository: agent.repository });
   }
+  // The default branch is the checkout's own, not a branch the agent cut: nothing published from it.
+  if (agent.branch === reached.value.defaultBranch) return nothing(agent);
   const token = yield* app.userToken(userId);
   const ofBranch = yield* pullRequestOfBranch(token, agent.repository, agent.branch);
   if (Option.isSome(ofBranch)) return yield* withChecks(token, agent, ofBranch.value);

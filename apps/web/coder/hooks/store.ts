@@ -27,7 +27,10 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * writes the branch checked out in the sandbox on the agent's row, which
  * is where its pull request is read from, then stops the sandbox at once
  * rather than waiting out its timeout, with its filesystem kept for a later
- * turn to resume.
+ * turn to resume. Note that the branch is written before the end is
+ * relayed, because a tab reads the pull request the moment it hears the
+ * agent ended and the service keeps that answer a while: an end relayed
+ * first would be read against the row as it stood before the turn.
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
@@ -120,6 +123,12 @@ export default defineHook({
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         sandbox.update((held) => ({ ...held, openedAt: seams.now() }));
       }
+      // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay and it is stopped after.
+      const ending =
+        TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined
+          ? await ctx.getSandbox()
+          : undefined;
+      if (ending !== undefined) await recordBranch(ctx, ending);
       await runWeb(
         Effect.gen(function* () {
           if (event.type === "session.started") {
@@ -135,12 +144,7 @@ export default defineHook({
       if (event.type === "step.started" && sandbox.get().openedAt !== undefined) {
         await renewCredential(ctx, sandbox);
       }
-      // A turn's end records the branch and stops the sandbox a tool opened; a session whose turn ran no sandbox tool opened none to stop.
-      if (TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined) {
-        const standing = await ctx.getSandbox();
-        await recordBranch(ctx, standing);
-        await standing.stop();
-      }
+      if (ending !== undefined) await ending.stop();
     },
   },
 });
