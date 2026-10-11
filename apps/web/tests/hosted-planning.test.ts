@@ -56,12 +56,12 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { saveNotes } from "../server/hosted/plan-notes";
 import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
+import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
   deletePlan,
