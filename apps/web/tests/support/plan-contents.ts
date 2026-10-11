@@ -12,29 +12,24 @@ import {
  * plan-contents.ts -- synthetic plans in the fixed template, and the notes a notetaker would take to write each.
  *
  * Three plans, each a whole template: an incomplete draft of teammate
- * invitations, a small feature whose inapplicable fields say why in a
+ * invitations, a small feature whose inapplicable field says why in a
  * sentence, and a bulk import whose invalid row settles an all-or-nothing
  * write. They exercise how a plan's data moves through the notes, the store,
  * and the window; neither feature exists anywhere, and nothing here is an
  * evaluation of a model. Every name, path, and commit is invented.
  */
 
-/** Every field holding one Markdown answer, in the template's order, with where a plan's fields keep it. */
-const TEXT_FIELDS: readonly (readonly [PlanField, (fields: PlanFields) => string | null])[] = [
-  [PLAN_FIELD.PROBLEM, (fields) => fields.goal.problem],
-  [PLAN_FIELD.OUTCOME, (fields) => fields.goal.outcome],
-  [PLAN_FIELD.INCLUDED, (fields) => fields.scope.included],
-  [PLAN_FIELD.EXCLUDED, (fields) => fields.scope.excluded],
-  [PLAN_FIELD.CONSTRAINTS, (fields) => fields.scope.constraints],
-  [PLAN_FIELD.CHANGE_MAP, (fields) => fields.implementation.changeMap],
-  [PLAN_FIELD.CONTRACTS, (fields) => fields.implementation.contracts],
-  [PLAN_FIELD.PATTERNS, (fields) => fields.implementation.patterns],
-  [PLAN_FIELD.ORDER, (fields) => fields.implementation.order],
-  [PLAN_FIELD.DECISIONS, (fields) => fields.decisions],
-  [PLAN_FIELD.VERIFICATION, (fields) => fields.verification],
-  [PLAN_FIELD.LEFT_TO_AGENT, (fields) => fields.leftToAgent],
-  [PLAN_FIELD.DATA_AND_MIGRATION, (fields) => fields.dataAndMigration],
-];
+/** Every field holding one Markdown answer, in the template's order. */
+const TEXT_FIELDS = [
+  PLAN_FIELD.CONTEXT,
+  PLAN_FIELD.GOAL,
+  PLAN_FIELD.APPROACH,
+  PLAN_FIELD.ALTERNATIVES,
+  PLAN_FIELD.HARD_PARTS,
+  PLAN_FIELD.NOT_DOING,
+  PLAN_FIELD.PLAN_OF_ATTACK,
+  PLAN_FIELD.TESTING,
+] as const satisfies readonly (PlanField & keyof PlanFields)[];
 
 /** A note adding one point under a field. */
 export function added(field: PlanField, text: string): PlanNote {
@@ -43,25 +38,17 @@ export function added(field: PlanField, text: string): PlanNote {
 
 /**
  * A whole plan as the notes a notetaker would take to write it into an empty
- * one: each answered text field added whole, each rule added and then each
- * of its examples by the rule's number, and each open question and
+ * one: each answered text field added whole, and each open question and
  * assumption added as its own point.
  */
 export function notesFor(content: PlanContent): readonly PlanNote[] {
   const { fields, assumptions } = content;
-  const texts = TEXT_FIELDS.flatMap(([field, read]) => {
-    const text = read(fields);
+  const texts = TEXT_FIELDS.flatMap((field) => {
+    const text = fields[field];
     return text === null ? [] : [added(field, text)];
   });
-  const rules = (fields.rules ?? []).flatMap((rule, index): PlanNote[] => [
-    added(PLAN_FIELD.RULES, rule.statement),
-    ...(rule.examples ?? []).map(
-      (example): PlanNote => ({ kind: NOTE_KIND.ADD_EXAMPLE, rule: index + 1, ...example }),
-    ),
-  ]);
   return [
     ...texts,
-    ...rules,
     ...fields.openQuestions.map((question) => added(PLAN_FIELD.OPEN_QUESTIONS, question)),
     ...assumptions.map((assumption) => added(PLAN_FIELD.ASSUMPTIONS, assumption.text)),
   ];
@@ -69,33 +56,24 @@ export function notesFor(content: PlanContent): readonly PlanNote[] {
 
 /**
  * The headings every plan's body carries after its title, in order: the
- * fixed template's core sections and fields, which no answer may add to.
+ * fixed template's core sections, which no answer may add to.
  */
 export const TEMPLATE_HEADINGS = [
+  "## Context",
   "## Goal",
-  "### Problem",
-  "### Outcome",
-  "## Scope",
-  "### Included",
-  "### Excluded",
-  "### Constraints",
-  "## Rules",
-  "## Implementation",
-  "### Change map",
-  "### Contracts",
-  "### Patterns to follow",
-  "## Decisions",
-  "## Verification",
-  "## Left to the agent",
+  "## Approach",
+  "## Hard parts",
+  "## Not doing",
+  "## Testing",
   "## Open questions",
 ] as const;
 
-/** How many core answers the template holds, the rules among them; each reads "Unanswered" while null. */
-export const TEMPLATE_UNANSWERED_FIELDS = 12;
+/** How many core answers the template holds; each reads "Unanswered" while null. */
+export const TEMPLATE_UNANSWERED_FIELDS = 6;
 
-/** The section and field headings a body carries, in order, leaving out its title and each rule's heading. */
+/** The section headings a body carries, in order, leaving out its title. */
 export function templateHeadingsOf(body: string): readonly string[] {
-  return body.split("\n").filter((line) => /^#{2,3} (?!Rule \d)/u.test(line));
+  return body.split("\n").filter((line) => line.startsWith("## "));
 }
 
 /** Every line of a body that Markdown reads as a heading at the start of a line. */
@@ -104,31 +82,15 @@ export function headingLinesOf(body: string): readonly string[] {
 }
 
 /**
- * Teammate invitations, mid-conversation: the problem and one rule settled,
- * an example with no outcome yet, and everything else unanswered.
+ * Teammate invitations, mid-conversation: the context and two hard parts
+ * settled, an open question, and everything else unanswered.
  */
 export const INVITATIONS_DRAFT: PlanContent = {
   fields: {
     ...EMPTY_PLAN_FIELDS,
-    goal: {
-      problem:
-        "A workspace member cannot bring a teammate in without an admin creating the account.",
-      outcome: null,
-    },
-    rules: [
-      {
-        statement: "Any member may invite by email.",
-        examples: [
-          {
-            given: "A member sends an invite",
-            when: "the teammate opens it",
-            // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-            then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-          },
-        ],
-      },
-      { statement: "A withdrawn invite's link never grants access.", examples: null },
-    ],
+    context: "A workspace member cannot bring a teammate in without an admin creating the account.",
+    hardParts:
+      "- Any member may invite by email.\n- A withdrawn invite's link never grants access.",
     openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
   },
   assumptions: [
@@ -138,49 +100,28 @@ export const INVITATIONS_DRAFT: PlanContent = {
 };
 
 /**
- * A small feature, settled: every core field answered, the inapplicable ones
- * saying why in a sentence rather than inventing a contract or a decision to
- * fill them, and no optional field.
+ * A small feature, settled: every core field answered, the inapplicable one
+ * saying why in a sentence rather than inventing a hard part to fill it, and
+ * no optional field.
  */
 export const SMALL_FEATURE: PlanContent = {
   fields: {
     ...EMPTY_PLAN_FIELDS,
-    goal: {
-      problem:
-        "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.",
-      outcome: 'The empty list reads "No plans yet. Start one with New plan."',
-    },
-    scope: {
-      included: "The empty-list line in the Plans tab.",
-      excluded: "Any other copy in the panel.",
-      constraints: "Not applicable: a copy change has no material limits beyond the line itself.",
-    },
-    rules: [
-      {
-        statement: "The line shows only while the account holds no plan.",
-        examples: [
-          {
-            given: "An account with no plans",
-            when: "the developer opens the Plans tab",
-            // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-            then: 'the tab reads "No plans yet. Start one with New plan."', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-          },
-        ],
-      },
-    ],
-    implementation: {
-      changeMap: "- `src/renderer/planning/planning-parts.tsx`: the new line.",
-      contracts: "Not applicable: no type, schema, or signature changes.",
-      patterns: "Follow the other empty-state lines in `src/renderer/planning/planning-parts.tsx`.",
-      order: null,
-    },
-    decisions: "No consequential decision: the wording was agreed as stated.",
-    verification: "The panel's existing layout test proves the line shows only for an empty list.",
-    leftToAgent: "The test's name.",
+    context:
+      "Developers opening the Plans tab for the first time see an empty list that says nothing about how to start.",
+    goal: 'The empty list reads "No plans yet. Start one with New plan."',
+    approach:
+      "- `src/renderer/planning/planning-parts.tsx`: the new line, following the other " +
+      "empty-state lines there.\n- No type, schema, or signature changes.",
+    hardParts: "Not applicable: a copy change has no edge case beyond the line itself.",
+    notDoing: "Any other copy in the panel.",
+    testing:
+      "The panel's existing layout test proves the line shows only for an empty list: an " +
+      'account with no plans reads "No plans yet. Start one with New plan."',
   },
   assumptions: [
-    { text: "Constraints do not apply to a one-line copy change." },
-    { text: "No decision is worth recording for this change." },
+    { text: "Hard parts do not apply to a one-line copy change." },
+    { text: "No alternative is worth recording for this change." },
   ],
 };
 
@@ -188,65 +129,39 @@ export const SMALL_FEATURE: PlanContent = {
 export const BULK_IMPORT_AGREED = {
   RULE: "An import writes every row or none: a file with any invalid row leaves the contacts table exactly as it was.",
   DECISION:
-    "Validate every row, then write them in one transaction. Why: a half-imported file leaves " +
-    "the developer unable to tell which rows landed. Rejected: importing the valid rows and " +
-    "reporting the rest.",
+    "Validate every row, then write them in one transaction, because a half-imported file " +
+    "leaves the developer unable to tell which rows landed.",
   CONTRACT:
     "```ts\nexport function importContacts(file: ContactFile): Effect<ImportResult, InvalidRow>;\n```",
+  ALTERNATIVE:
+    "Importing the valid rows and reporting the rest: the developer could not tell which rows landed.",
   ORDER:
     "1. Show that `ContactStore.insertMany` rolls every row back on a failed insert; nothing " +
     "else starts until a test proves it.\n2. Add the validation pass.\n3. Wire the import " +
     "screen to show the first invalid row.",
-  VERIFICATION:
+  TESTING:
     "A store test imports a file whose last row is invalid and asserts the contacts table is " +
     "unchanged, which proves the all-or-nothing rule.",
-  DATA: "No column changes; the import writes existing `contacts` rows.",
 } as const;
 
 /** A bulk import that meets an invalid row: its rule, contract, decision, order, and check, with its optional sections filled. */
 export const BULK_IMPORT: PlanContent = {
   fields: {
     ...EMPTY_PLAN_FIELDS,
-    goal: {
-      problem: "Workspace admins moving from another tool enter contacts one at a time.",
-      outcome: "An admin imports a CSV of contacts in one step.",
-    },
-    scope: {
-      included: "CSV import of contacts from the contacts screen.",
-      excluded: "Other file formats, and updating contacts that already exist.",
-      constraints: "Files up to 50,000 rows.",
-    },
-    rules: [
-      {
-        statement: BULK_IMPORT_AGREED.RULE,
-        examples: [
-          {
-            given: "A CSV whose row 12 has no email address",
-            when: "the admin imports it",
-            // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-            then: "no contact is added and the screen names row 12", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-          },
-          {
-            given: "A valid CSV of 3 rows",
-            when: "the admin imports it",
-            // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-            then: "the 3 contacts are added", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-          },
-        ],
-      },
-    ],
-    implementation: {
-      changeMap:
-        "- `src/contacts/import.ts`: new, the validation pass and the import.\n" +
-        "- `src/contacts/store.ts`: `insertMany` runs in one transaction.",
-      contracts: BULK_IMPORT_AGREED.CONTRACT,
-      patterns: "Follow `src/contacts/export.ts` for reading a file in rows.",
-      order: BULK_IMPORT_AGREED.ORDER,
-    },
-    decisions: BULK_IMPORT_AGREED.DECISION,
-    verification: BULK_IMPORT_AGREED.VERIFICATION,
-    leftToAgent: "The wording of the invalid-row message, and internal helper names.",
-    dataAndMigration: BULK_IMPORT_AGREED.DATA,
+    context: "Workspace admins moving from another tool enter contacts one at a time.",
+    goal: "An admin imports a CSV of contacts in one step.",
+    approach:
+      `${BULK_IMPORT_AGREED.DECISION}\n\n${BULK_IMPORT_AGREED.CONTRACT}\n\n` +
+      "- `src/contacts/import.ts`: new, the validation pass and the import.\n" +
+      "- `src/contacts/store.ts`: `insertMany` runs in one transaction.\n" +
+      "- Follow `src/contacts/export.ts` for reading a file in rows.",
+    alternatives: BULK_IMPORT_AGREED.ALTERNATIVE,
+    hardParts:
+      `- ${BULK_IMPORT_AGREED.RULE} A CSV whose row 12 has no email address adds no contact ` +
+      "and the screen names row 12.\n- Files up to 50,000 rows.",
+    notDoing: "Other file formats, and updating contacts that already exist.",
+    planOfAttack: BULK_IMPORT_AGREED.ORDER,
+    testing: BULK_IMPORT_AGREED.TESTING,
   },
   assumptions: [
     { text: BULK_IMPORT_AGREED.RULE },

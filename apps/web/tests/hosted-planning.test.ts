@@ -594,10 +594,10 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         yield* saveNotes(
           binding,
           [
-            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "Invites expire." },
+            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "Invites expire." },
             {
               kind: NOTE_KIND.REPLACE,
-              field: PLAN_FIELD.DECISIONS,
+              field: PLAN_FIELD.APPROACH,
               find: "expire.",
               text: "expire after 7 days.",
             },
@@ -612,7 +612,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         assert.notEqual(at, -1);
         assert.match(
           lines[at + 1] ?? "",
-          /^- anthropic\/claude-opus-5\.5, .*: add decisions: "Invites expire\."; replace decisions: "expire\." → "expire after 7 days\."$/u,
+          /^- anthropic\/claude-opus-5\.5, .*: add approach: "Invites expire\."; replace approach: "expire\." → "expire after 7 days\."$/u,
         );
         assert.match(lines[at + 2] ?? "", /add openQuestions: "Who may withdraw\?"$/u);
       }),

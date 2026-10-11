@@ -18,8 +18,7 @@ import { logStoreFailure } from "./store-failure.js";
  * Its callers are a planning call's notetaker (`voice/plan-scribe.ts`) and a
  * coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models
  * answer with notes (`@sidecar/hosted/plan-template`): a point
- * added under a field, an example added to a rule, a phrase corrected, or a
- * line struck. They are taken in order over the fields the plan holds, the
+ * added under a field, a phrase corrected, or a line struck. They are taken in order over the fields the plan holds, the
  * fields are formatted into the canonical Markdown body under the plan's
  * name as it stands at the save, and the body, the list, and the
  * fields are saved together. A note that names a phrase the plan does not

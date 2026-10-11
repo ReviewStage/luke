@@ -43,52 +43,26 @@ import {
  */
 
 /**
- * The reference journey's plan partway through its conversation: the goal,
- * two rules with their examples, the change map, and a decision settled, an
- * example still without its outcome, and everything else unanswered, as the
- * fixed template shows a draft.
+ * The reference journey's plan partway through its conversation: the
+ * context, the goal, the approach with the alternative it beat, and one hard
+ * part settled, and everything else unanswered, as the fixed template shows
+ * a draft.
  */
 const FIXTURE_FIELDS: PlanFields = {
   ...EMPTY_PLAN_FIELDS,
-  goal: {
-    problem:
-      "Only an admin can add someone to a workspace, by creating their account by hand, so " +
-      "members wait on an admin to bring a teammate in.",
-    outcome: "A member invites a teammate by email; the teammate joins by opening the link.",
-  },
-  rules: [
-    {
-      statement: "Any member may invite by email.",
-      examples: [
-        {
-          given: "A member invites dana@example.com",
-          when: "Dana opens the link",
-          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-          then: null, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        },
-      ],
-    },
-    {
-      statement: "A withdrawn or accepted invite link never grants access again.",
-      examples: [
-        {
-          given: "An invite Dana already accepted",
-          when: "anyone opens its link again",
-          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-          then: 'the page reads "This invite is no longer valid"', // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-        },
-      ],
-    },
-  ],
-  implementation: {
-    ...EMPTY_PLAN_FIELDS.implementation,
-    changeMap:
-      "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
-      "- `src/members/invite.ts`: new, sending and accepting an invite.",
-  },
-  decisions:
-    "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
-    "invites and members alike. Rejected: a separate `invitations` table.",
+  context:
+    "Only an admin can add someone to a workspace, by creating their account by hand, so " +
+    "members wait on an admin to bring a teammate in.",
+  goal: "A member invites a teammate by email; the teammate joins by opening the link.",
+  approach:
+    "- Model an invite as a `memberships` row with `state = pending`, so removal covers " +
+    "invites and members alike.\n" +
+    "- `src/db/schema/memberships.ts`: a `pending` state.\n" +
+    "- `src/members/invite.ts`: new, sending and accepting an invite.",
+  alternatives: "- A separate `invitations` table: a second place removal has to reach.",
+  hardParts:
+    '- An accepted or withdrawn invite link never grants access again: the page reads "This ' +
+    'invite is no longer valid".',
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
 };
 

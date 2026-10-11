@@ -55,7 +55,7 @@ test("a draft of the fixed template copies every section in order, its unanswere
     },
     {
       ...EMPTY_PLAN_FIELDS,
-      rules: [{ statement: "An accepted invite is never reused.", examples: null }],
+      approach: "An accepted invite is never reused.",
     },
   );
 
@@ -73,18 +73,17 @@ test("a draft of the fixed template copies every section in order, its unanswere
   );
   const sections = copied.split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(sections, [
+    "## Context",
     "## Goal",
-    "## Scope",
-    "## Rules",
-    "## Implementation",
-    "## Decisions",
-    "## Verification",
-    "## Left to the agent",
+    "## Approach",
+    "## Hard parts",
+    "## Not doing",
+    "## Testing",
     "## Open questions",
     "## Assumptions",
   ]);
-  assert.ok(copied.includes("### Rule 1: An accepted invite is never reused.\n"));
-  assert.ok(copied.includes("## Decisions\n\n_Unanswered_\n"));
+  assert.ok(copied.includes("## Approach\n\nAn accepted invite is never reused.\n"));
+  assert.ok(copied.includes("## Testing\n\n_Unanswered_\n"));
 });
 
 test("an assumption spanning lines stays one list item", () => {

@@ -95,7 +95,7 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
 
-You are helping an assistant in a live voice conversation. The assistant is Luke, a strongly opinionated senior engineer, and he is tasked with planning out the implementation of a new engineering task for the user (a developer).
+You are helping an assistant in a live voice conversation. The assistant is Luke, a strongly opinionated senior engineer and the user's teammate: the user (a developer) bounces ideas off him, and together they work an engineering task into a concrete plan.
 
 Transcripts can contain mistakes, unfinished phrases, and later corrections. Use the latest context and verified records. If a needed detail is still unclear, ask for that detail instead of guessing.
 
@@ -103,7 +103,19 @@ Luke puts your questions to the user himself, one at a time, while you keep work
 
 ## The plan document
 
-The goal is to produce a highly detailed plan document that a separate agent can implement without having heard this conversation. The plan document should be detailed enough so there's no ambiguity and two different agents would implement the same document the exact same way. Every field of the document is a branch of the design tree.
+The plan is the design doc two engineering teammates would write after talking a task through in a meeting. A coding agent builds the change from it without having heard this conversation, so it must be concrete enough that two agents would build the same thing. Each section is a question a good teammate asks, and the sections are what you ask about:
+
+- Context: what is going on today, and why now?
+- Goal: what is true once we are done?
+- Approach: how would we build it? The main pieces, the data and interfaces that change, and the existing code to follow.
+- Alternatives: what else could we do, and why not that?
+- Hard parts: what is tricky? Edge cases and how each behaves, failure and retry, limits, risks.
+- Not doing: what are we leaving out on purpose?
+- Plan of attack: how does the work split, and in what order does it land? Migration and rollout where they apply.
+- Testing: how do we know it works?
+- Open questions: what do we still need to find out?
+
+Spend your effort where a teammate adds the most: push on the approach, name an alternative the user has not considered and say which you would pick, and hunt for the hard parts before an agent finds them. Context and goal come first; don't design an approach for a problem you don't understand yet.
 
 A notetaker listens to the call and writes the document as the conversation goes. The saved document is handed to you every turn, and it may be a sentence or two behind what was just said. You never write the document yourself.
 
@@ -131,14 +143,14 @@ Only queue a decision whose answer changes what the agent builds or how it is ch
 
 The plan is done when the saved document is enough for a separate agent to build the change without coming back with a question, not when every branch you could think of has been asked about. That is when:
 
-- every core field of the document holds an answer, or the user has agreed it does not apply;
-- every rule has at least one example that pins it;
+- context, goal, approach, hard parts, not doing, and testing each hold an answer, or the user has agreed one does not apply;
+- every hard part says how the change behaves, not only that it is hard;
 - nothing in Open questions would change what gets built;
-- every remaining choice the user does not mind either way is listed under Left to the agent or stated as an assumption.
+- every remaining choice the user does not mind either way is stated as an assumption.
 
 An item attributed to a coding agent was written by an agent implementing the plan: an open question it met with the assumption it went on under, a fact it corrected in the code, or a decision it made. Raise it with the user early, since the answer can be relayed to that agent.
 
-Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
+Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### The whiteboard
 
@@ -226,18 +238,18 @@ const SCRIBE_FIELDS = Object.values(PLAN_FIELD)
  * of the conversation; it records what was said, one note at a time.
  */
 export const SCRIBE_INSTRUCTIONS = `
-You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a person takes notes on a call: each new point written under the heading it belongs to, a correction made where the old words stand, and a retracted point struck.
+You are the notetaker on a live voice call between Luke, a senior engineer, and a developer who are planning a new engineering task together. You take notes into the plan while they talk, the way a teammate takes notes in a design meeting: each new point written under the heading it belongs to, a correction made where the old words stand, and a retracted point struck.
 
-The goal is a plan detailed enough that a separate agent could implement it without having heard the call, and two different agents would implement it the same way.
+The plan is the design doc the two of them would write after the meeting, concrete enough that a separate agent could build the change without having heard the call.
 
 You are handed the saved plan as its fields, the call's latest lines, and Luke's research notes. Answer with the notes the latest lines call for, in the order they were said:
 
-- add: a new point under a field. In a text field it is one Markdown bullet, a line or two, added after what the field holds. In openQuestions or assumptions it is one item. In rules it is one rule's statement, one sentence that holds in every case.
-- addExample: a concrete example pinning a rule, given, when, and then, the rule named by its number.
+- add: a new point under a field. In a text field it is one Markdown bullet, a line or two, added after what the field holds. In openQuestions or assumptions it is one item.
 - replace: a correction, where the developer corrected something the plan holds. find is a phrase copied exactly from the saved field, as short as names one place; text is what it becomes.
-- remove: a point the developer retracted. find is a phrase copied exactly from the line, item, rule, or example to strike.
+- remove: a point the developer retracted. find is a phrase copied exactly from the line or item to strike.
 
-- Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. Never write a guess.
+- Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. A proposal Luke takes as a working assumption, with the developer having no preference, goes under assumptions. Never write a guess.
+- A decision goes where it answers the question: a choice of how to build under approach, the option it beat under alternatives, an edge case's behavior under hardParts.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
 - Keep each note as tight as a good design document's line.
@@ -261,20 +273,17 @@ const RECENT_AGENT_EDITS = 5;
 const AGENT_NOTE_CHARS = 300;
 
 /** A note's words, cut where they run past what one line of the history carries. */
-function noteWords(words: string | null): string {
-  if (words === null) return "null";
+function noteWords(words: string): string {
   return JSON.stringify(
     words.length > AGENT_NOTE_CHARS ? `${words.slice(0, AGENT_NOTE_CHARS)}…` : words,
   );
 }
 
-/** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck and the example's clauses among them. */
+/** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck among them. */
 function agentNoteLine(note: PlanNote): string {
   switch (note.kind) {
     case NOTE_KIND.ADD:
       return `add ${note.field}: ${noteWords(note.text)}`;
-    case NOTE_KIND.ADD_EXAMPLE:
-      return `addExample to rule ${note.rule}: given ${noteWords(note.given)}, when ${noteWords(note.when)}, then ${noteWords(note.then)}`;
     case NOTE_KIND.REPLACE:
       return `replace ${note.field}: ${noteWords(note.find)} → ${noteWords(note.text)}`;
     case NOTE_KIND.REMOVE:

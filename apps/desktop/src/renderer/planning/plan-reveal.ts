@@ -11,10 +11,10 @@ import { diffHunks, type Hunk, isPlaceholder } from "./plan-diff";
  * struck. Every document is final or still growing at its end, so nothing
  * here guesses at what the stream means; it plays the difference.
  *
- * The body is cut into units at every section and field heading, which the
- * formatter alone writes. A unit is known from one document to the next by
- * its heading, and a rule by its statement, never by position, so a rule or
- * an optional field joining the document moves no other unit's words. A
+ * The body is cut into units at every section heading, which the formatter
+ * alone writes. A unit is known from one document to the next by its
+ * heading, never by position, so an optional section joining the document
+ * moves no other unit's words. A
  * unit the document no longer holds is erased where it stands before it
  * goes. One caret works through the differences an act at a time: it
  * travels to the next change, sweeps a selection over words to erase,
@@ -45,11 +45,8 @@ export const CHASE_PACE = {
   CATCH_UP_LAG_MS: 2_500,
 } as const;
 
-/** A line the formatter opens a section or a field with. */
-const UNIT_HEADING = /^#{2,3} /u;
-
-/** A rule's heading: its number, then its statement. */
-const RULE_HEADING = /^### Rule \d+: /u;
+/** A line the formatter opens a section with. */
+const UNIT_HEADING = /^## /u;
 
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
@@ -144,14 +141,11 @@ function closesFence(marker: string, fence: string): boolean {
   return marker[0] === fence[0] && marker.length >= fence.length;
 }
 
-/** A unit's heading as it is known: the line itself, or for a rule its statement with spaces collapsed, since its number moves with the rules before it. */
+/** A unit's heading as it is known: its first line. */
 function headingOf(words: string): string {
   const end = words.indexOf("\n");
   const line = end === -1 ? words : words.slice(0, end);
-  if (!UNIT_HEADING.test(line)) return "";
-  return RULE_HEADING.test(line)
-    ? line.replace(RULE_HEADING, "### Rule ").replace(/\s+/gu, " ")
-    : line;
+  return UNIT_HEADING.test(line) ? line : "";
 }
 
 /** Each unit's key, a heading borne twice told apart by which of them it is. */
@@ -374,7 +368,7 @@ function backlogMs(units: readonly ChaseUnit[]): number {
  * Where each newer unit stood before, and which older units are leaving.
  * Units are paired by key in document order. A run of older units the newer
  * document dropped, beside a run it added in the same place, is the same
- * units renamed, as when a rule's statement is corrected, and pairs one for
+ * units renamed, and pairs one for
  * one; what is left over on the older side is leaving, and stays where it
  * stood until it is erased.
  */
