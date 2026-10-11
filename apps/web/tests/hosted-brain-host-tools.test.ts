@@ -38,7 +38,10 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import {
+  createCodingAgent,
+  updateCodingAgentBranch,
+} from "../server/hosted/coding-agent-store";
 import {
   CODING_AGENT_TOOL_BOUNDS,
   CODING_AGENT_TOOL_REFUSAL,
@@ -382,11 +385,13 @@ test("the plan's coding agents are listed with their status, what each published
   const plan = await planConversation(undefined, RELAY_FULL_NAME);
   const working = await agentOn(plan.userId, plan.planId);
   const starting = await agentOn(plan.userId, plan.planId);
-  const commands = [
-    `git switch -c ${BRANCH}`,
-    ...Array.from({ length: CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES }, (_, index) => `ls ${index}`),
-  ];
+  const commands = Array.from(
+    { length: CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES + 1 },
+    (_, index) => `ls ${index}`,
+  );
   await agentRan(working, commands, AGENT_WORDS);
+  // The branch is the row's, written as a turn ends in the sandbox.
+  await database.run(updateCodingAgentBranch(working.userId, working.id, BRANCH));
   const call = await callerOn(brainHost(seams), plan);
 
   const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
@@ -399,7 +404,6 @@ test("the plan's coding agents are listed with their status, what each published
       status: CODING_AGENT_STATUS.RUNNING,
       repository: RELAY_FULL_NAME,
       branch: BRANCH,
-      pullRequestNumber: null,
       activity: `Said: ${AGENT_WORDS}`,
     },
     {
@@ -409,7 +413,6 @@ test("the plan's coding agents are listed with their status, what each published
       status: CODING_AGENT_STATUS.STARTING,
       repository: RELAY_FULL_NAME,
       branch: null,
-      pullRequestNumber: null,
       activity: null,
     },
   ]);
@@ -417,9 +420,9 @@ test("the plan's coding agents are listed with their status, what each published
   const read = await call(READ_CODING_AGENT_TOOL.name, { agentId: working.id });
   assert.equal(read.status, ACTION_RESULT_STATUS.ACCEPTED);
   assert.ok(Array.isArray(read.tail));
-  // The tail is the newest entries, the words last; the first command fell off its front.
+  // The tail is the newest entries, the words last; the first two commands fell off its front.
   assert.equal(read.tail.length, CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
-  assert.equal(read.tail[0], "Ran: ls 1");
+  assert.equal(read.tail[0], "Ran: ls 2");
   assert.equal(read.tail.at(-1), `Said: ${AGENT_WORDS}`);
 
   const otherPlan = await planConversation(plan.userId, RELAY_FULL_NAME);

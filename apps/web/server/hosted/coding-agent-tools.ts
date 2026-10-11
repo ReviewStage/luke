@@ -2,6 +2,7 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
+  type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
 import { describeWire } from "@sidecar/wire/effect";
@@ -24,7 +25,7 @@ import {
 } from "../core.js";
 import type { GitHubApp } from "../github/github-app.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
-import { publishedInRows } from "./coder-host/published.js";
+import { agentPublished } from "./coder-host/published.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -48,10 +49,12 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * asks how one is doing, or tells one what to do, and Luke answers or steers
  * the right agent. Each tool reads the same rows the agent tabs read: the
  * plan's agents and the newest turn each stands on (`coder-host/status.ts`),
- * what each published as its own transcript names it
- * (`coder-host/published.ts`), and the transcript's turn journals, rendered
+ * the branch each row holds, and the transcript's turn journals, rendered
  * as a short tail of what the agent said and did so Luke can summarise it
- * aloud rather than read it out. A message takes the one path the message
+ * aloud rather than read it out; a read of one agent also asks GitHub what
+ * that branch published, as the agent's tab does
+ * (`coder-host/published.ts`), and says nothing of it where GitHub could
+ * not be asked. A message takes the one path the message
  * box's does (`coder-host/steer.ts`), under the key eve gave the tool call,
  * so a call eve runs again after a lost answer sends once; the words reach
  * the agent's session as the deployment acting for the account, which the
@@ -135,17 +138,17 @@ export const LIST_CODING_AGENTS_TOOL = {
   name: "list_coding_agents",
   description:
     "List the coding agents working on this plan: each with its id, the model and effort it runs " +
-    "on, its status (starting, running, completed, failed, cancelled), the branch and pull " +
-    "request number its own transcript names if any, and one line of what it last did. Call it " +
-    "when the developer asks about or addresses an agent, to find which one they mean.",
+    "on, its status (starting, running, completed, failed, cancelled), the branch its sandbox " +
+    "is on if a turn has ended, and one line of what it last did. Call it when the developer " +
+    "asks about or addresses an agent, to find which one they mean.",
   inputSchema: Schema.Struct({}),
 } as const;
 
 export const READ_CODING_AGENT_TOOL = {
   name: "read_coding_agent",
   description:
-    "Read one coding agent's recent progress: its status, the branch and pull request its " +
-    "transcript names, and a short tail " +
+    "Read one coding agent's recent progress: its status, the branch it pushed and the pull " +
+    "request from it as GitHub holds them, and a short tail " +
     "of what it last said and did, newest last. Summarise it for the developer in a sentence or " +
     "two; never read it out.",
   inputSchema: READ_CODING_AGENT_INPUT,
@@ -232,7 +235,7 @@ function entriesOf(journal: StoredUIMessage, maximumChars: number): string[] {
   });
 }
 
-/** One agent as the model reads it: what it runs on, where it stands, what it published, and what it last did. */
+/** One agent as the model reads it: what it runs on, where it stands, the branch its row holds, and what it last did. */
 interface AgentReading {
   readonly id: string;
   readonly model: string;
@@ -241,7 +244,6 @@ interface AgentReading {
   readonly failureReason?: CodingAgentFailure;
   readonly repository: string;
   readonly branch: string | null;
-  readonly pullRequestNumber: number | null;
   readonly activity: string | null;
 }
 
@@ -283,7 +285,6 @@ const readAgent = (
   },
 ): Effect.Effect<AgentReading, StoreFailure, SqlClient.SqlClient> =>
   Effect.gen(function* () {
-    const published = yield* publishedInRows(userId, agent);
     const [newest] = yield* journalsOf(userId, agent, 1);
     const activity =
       newest === undefined
@@ -298,11 +299,23 @@ const readAgent = (
         ? undefined
         : { failureReason: standing.failureReason }),
       repository: agent.repository,
-      branch: published.branch ?? null,
-      pullRequestNumber: published.pullRequestNumber ?? null,
+      branch: agent.branch,
       activity: activity ?? null,
     };
   });
+
+/** What the agent published as GitHub holds it, or nothing where GitHub could not be asked, which is said as no publication rather than none. */
+const publishedOf = (
+  userId: string,
+  agent: CodingAgent,
+): Effect.Effect<
+  CodingAgentPullRequestAnswer | undefined,
+  never,
+  SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+> =>
+  Effect.map(Effect.result(agentPublished(userId, agent)), (read) =>
+    Result.isSuccess(read) ? read.success : undefined,
+  );
 
 /** The plan's agent under the id, or nothing: another plan's, another account's, or none. */
 const planAgent = (call: CodingAgentCall, agentId: string) =>
@@ -353,7 +366,7 @@ export function runListCodingAgents(
 export function runReadCodingAgent(
   call: CodingAgentCall,
   input: UnparsedWireValue,
-): Effect.Effect<WireRecord, never, SqlClient.SqlClient> {
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
   const asked = readAgentRef(input);
   if (Result.isFailure(asked)) {
     return Effect.succeed(rejected(CODING_AGENT_TOOL_REFUSAL.UNREADABLE));
@@ -366,11 +379,19 @@ export function runReadCodingAgent(
       const { userId } = call.plan;
       const standing = yield* standingsOf(userId, [agent]);
       const reading = yield* readAgent(userId, agent, standing(agent));
+      const published = yield* publishedOf(userId, agent);
       const journals = yield* journalsOf(userId, agent, CODING_AGENT_TOOL_BOUNDS.TAIL_TURNS);
       const tail = journals
         .flatMap((journal) => entriesOf(journal, CODING_AGENT_TOOL_BOUNDS.ENTRY_CHARS))
         .slice(-CODING_AGENT_TOOL_BOUNDS.TAIL_ENTRIES);
-      return { status: ACTION_RESULT_STATUS.ACCEPTED, agent: { ...reading }, tail };
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agent: { ...reading },
+        ...(published === undefined
+          ? undefined
+          : { published: { branch: published.branch, pullRequest: published.pullRequest } }),
+        tail,
+      };
     }),
   );
 }

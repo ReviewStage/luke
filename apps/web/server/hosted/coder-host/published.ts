@@ -79,9 +79,11 @@ function nothing(agent: CodingAgent): CodingAgentPullRequestAnswer {
 /**
  * What the agent published as GitHub holds it now: the newest pull request
  * from the branch its row holds, else the branch alone where GitHub holds
- * it, else nothing.
+ * it, else nothing. The routes read it through the cache below; the voice
+ * brain's read of one agent (`hosted/coding-agent-tools.ts`) reads it
+ * afresh, once per ask.
  */
-const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
+export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(function* (
   userId: string,
   agent: CodingAgent,
 ): Effect.fn.Return<CodingAgentPullRequestAnswer, PublishedReadFailure, PublishedServices> {
