@@ -55,10 +55,10 @@ import {
  * handed, a shimmering line at the end while the subagent runs, a quiet one
  * where it was stopped, and follows it while the subagent runs. The tab
  * holds the plan's newest turns first, and the turns before them are read a
- * page at a time as the developer scrolls up to the oldest
- * (`EarlierWork`). Everything here is the planning model's or the developer's repository's, a command's
- * output included, so the root is left out of the screen recording
- * (`ph-no-capture`) as a second line behind its text masking.
+ * page at a time as the developer scrolls up to the oldest (`EarlierWork`).
+ * Everything here is the planning model's or the developer's repository's,
+ * a command's output included, so the root is left out of the screen
+ * recording (`ph-no-capture`) as a second line behind its text masking.
  */
 
 /** What a turn's state says beside its time. */
