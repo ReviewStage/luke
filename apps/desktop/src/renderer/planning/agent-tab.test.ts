@@ -10,6 +10,7 @@ import {
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   type CodingAgentSummary,
+  type CodingAgentUsage,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { act, createElement } from "react";
@@ -153,7 +154,11 @@ function choose(container: HTMLElement, label: string): void {
 }
 
 /** The whole tab drawn once, with the agent in the status given and the transcript's last page saying why it failed. */
-function tabMarkup(status: CodingAgentSummary["status"], failure?: CodingAgentFailure): string {
+function tabMarkup(
+  status: CodingAgentSummary["status"],
+  failure?: CodingAgentFailure,
+  turnUsage?: CodingAgentUsage,
+): string {
   return renderToStaticMarkup(
     createElement(AgentTabView, {
       agent: { ...AGENT, status },
@@ -162,6 +167,8 @@ function tabMarkup(status: CodingAgentSummary["status"], failure?: CodingAgentFa
       transcript: {
         messages: [PLAN, TURN],
         failure,
+        usage: undefined,
+        turnUsage,
         reading: false,
         failed: false,
         onRetry: ignore,
@@ -402,6 +409,14 @@ test("the tab wears no head: it opens on the transcript, what the agent runs on 
     /<p class="agent-end-line"[^>]*>Failed: GitHub refused or could not be reached</u,
   );
   assert.match(tabMarkup(CODING_AGENT_STATUS.FAILED), /agent-end-line"[^>]*>Failed</u);
+  assert.match(
+    tabMarkup(CODING_AGENT_STATUS.CANCELLED, undefined, {
+      inputTokens: 9,
+      outputTokens: 1,
+      costUsd: 0.001,
+    }),
+    /agent-end-line"[^>]*>Stopped · &lt;\$0\.01</u,
+  );
   assert.doesNotMatch(tabMarkup(CODING_AGENT_STATUS.COMPLETED), /agent-end-line/u);
 });
 
@@ -594,12 +609,16 @@ test("a finished transcript ends on the row summing the pull request up, whose O
       onRetry: ignore,
       openGitHub: ignore,
       copyText: copyNothing,
-      footer: createElement(PublishedRow, { pullRequest: PULL_REQUEST, openGitHub: ignore }),
+      footer: createElement(PublishedRow, {
+        pullRequest: PULL_REQUEST,
+        turnUsage: { inputTokens: 1_000, outputTokens: 200, costUsd: 0.42 },
+        openGitHub: ignore,
+      }),
     }),
   );
   assert.match(
     markup,
-    /<\/div><div[^>]*data-published-row=""[^>]*data-state="open"[^>]*>[\s\S]*Opened #123 · \+210 −14 in 6 files<\/span><span class="agent-check-dot" data-checks="passing"/u,
+    /<\/div><div[^>]*data-published-row=""[^>]*data-state="open"[^>]*>[\s\S]*Opened #123 · \+210 −14 in 6 files · \$0\.42<\/span><span class="agent-check-dot" data-checks="passing"/u,
   );
 
   const container = document.createElement("div");

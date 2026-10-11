@@ -7,6 +7,7 @@ import {
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
+  type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { agentStillWriting, applyMessagesPage, followsAgent } from "./coding-agent-model";
@@ -38,6 +39,10 @@ export interface AgentTranscriptControl {
   messages: readonly CodingAgentMessage[];
   /** Why the agent's newest turn failed, as the last page said; nothing while it did not. */
   failure: CodingAgentFailure | undefined;
+  /** What the agent has cost over every turn it settled, its workers' included, as the last page said; nothing before one settled. */
+  usage: CodingAgentUsage | undefined;
+  /** What its newest turn cost, as the last page said; nothing until that turn settled. */
+  turnUsage: CodingAgentUsage | undefined;
   /** Whether a read is out, with nothing held yet to draw. */
   reading: boolean;
   /** Whether the last read did not answer, so the tab offers to try again. */
@@ -50,6 +55,8 @@ interface Held {
   messages: readonly CodingAgentMessage[];
   cursor: string;
   failure: CodingAgentFailure | undefined;
+  usage: CodingAgentUsage | undefined;
+  turnUsage: CodingAgentUsage | undefined;
   failed: boolean;
 }
 
@@ -59,6 +66,8 @@ function fresh(agentId: string): Held {
     messages: [],
     cursor: CODING_AGENT_CURSOR_START,
     failure: undefined,
+    usage: undefined,
+    turnUsage: undefined,
     failed: false,
   };
 }
@@ -111,6 +120,8 @@ export function useAgentTranscript(input: {
           messages: applyMessagesPage(was.messages, answer.messages),
           cursor: answer.cursor,
           failure: answer.failureReason,
+          usage: answer.usage,
+          turnUsage: answer.turnUsage,
         }));
         latest.current.onStatus(agentId, answer.status);
         // A page with nothing on it from an agent that may still write is
@@ -136,6 +147,8 @@ export function useAgentTranscript(input: {
   return {
     messages: held.messages,
     failure: held.failure,
+    usage: held.usage,
+    turnUsage: held.turnUsage,
     reading: active && held.messages.length === 0,
     failed: held.failed,
     onRetry,

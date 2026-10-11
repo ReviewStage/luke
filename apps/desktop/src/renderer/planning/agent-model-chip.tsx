@@ -1,7 +1,8 @@
+import type { CodingAgentUsage } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { useEffect, useId, useRef, useState } from "react";
 import { ModelProviderMark } from "../provider-marks";
-import { choiceLabel, providerOfModel } from "./coding-agent-model";
+import { agentUsageLine, choiceLabel, providerOfModel } from "./coding-agent-model";
 import { ModelMenu, settledChoice } from "./model-menu";
 import type { AgentModelControl } from "./use-agent-model";
 
@@ -17,7 +18,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * same whatever the agent is doing, since a change mid-turn applies from
  * the next step and an idle agent's next turn takes it. The models are
  * read as the chip mounts and again as the menu opens, so the menu shows
- * the catalog as it stands. The menu closes on a pick, on Escape, and on
+ * the catalog as it stands. Under the menu's pinned rows one muted line
+ * says what the agent has cost so far, tokens and dollars, once a turn has
+ * settled. The menu closes on a pick, on Escape, and on
  * focus leaving it; Escape stops there, so it closes the menu and not the
  * panel behind it.
  */
@@ -26,12 +29,15 @@ export function AgentModelChip({
   model,
   models,
   readModels,
+  usage,
 }: {
   model: AgentModelControl;
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
   /** Reads the catalog now, for the chip's mark and name and for a menu opening. */
   readModels: () => void;
+  /** What the agent has cost, as its transcript's last page said; nothing before a turn settled. */
+  usage: CodingAgentUsage | undefined;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -75,6 +81,7 @@ export function AgentModelChip({
           models={models}
           chosen={settledChoice(models, model.choice)}
           onChoose={model.choose}
+          footNote={agentUsageLine(usage)}
           onClose={close}
           onLeave={(left) => {
             if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);

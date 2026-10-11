@@ -30,7 +30,8 @@ import {
  *
  * A fixture catalog throughout: the ids are the catalog's own spellings,
  * and the entries beside the offered ones are each one way an entry is left
- * out.
+ * out. One offered entry lists its prices and the other none, which is the
+ * two ways a model's usage comes to be priced or told as tokens alone.
  */
 
 /** One catalog entry as AI Gateway shapes it, with only what the reader looks at and one field it does not. */
@@ -40,6 +41,8 @@ function entry(
   options: {
     readonly tags?: readonly string[];
     readonly reasoning?: readonly JsonValue[] | null;
+    /** The entry's prices as the catalog spells them, dollars per token as strings; an entry without lists none. */
+    readonly pricing?: JsonValue;
   } = {},
 ): JsonValue {
   const tags = options.tags ?? ["tool-use", "reasoning"];
@@ -54,6 +57,7 @@ function entry(
     tags: [...tags],
     context_window: 200_000,
     ...(reasoning === null ? undefined : { reasoning_options: [...reasoning] }),
+    ...(options.pricing === undefined ? undefined : { pricing: options.pricing }),
   };
 }
 
@@ -65,6 +69,13 @@ const CATALOG: JsonValue = {
     entry("alibaba/qwen-3-14b", "Qwen3-14B"),
     entry("anthropic/claude-opus-5.5", "Claude Opus 5.5", {
       reasoning: [{ type: "effort", values: OPUS_EFFORTS }],
+      pricing: {
+        input: "0.000004",
+        output: "0.00002",
+        input_cache_read: "0.0000002",
+        input_cache_write: "0.000005",
+        web_search: "10",
+      },
     }),
     entry("anthropic/claude-sonnet-4.5", "Claude Sonnet 4.5", {
       reasoning: [{ type: "toggle" }, { type: "budget_tokens", min: 1024 }],
@@ -89,6 +100,7 @@ const OFFERED: readonly OfferedModel[] = [
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: OPUS_EFFORTS,
     contextWindow: 200_000,
+    pricing: { inputUsd: 0.000004, outputUsd: 0.00002, cachedInputUsd: 0.0000002 },
   },
   {
     id: "openai/gpt-6.1-sol",

@@ -10,6 +10,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import { act, createElement, useState } from "react";
@@ -98,6 +99,7 @@ interface Standing {
   status: CodingAgentStatus;
   messages: readonly CodingAgentMessage[];
   choice: ModelChoice;
+  usage?: CodingAgentUsage;
 }
 
 /** One message sent, held until the test answers it. */
@@ -174,6 +176,8 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       transcript: {
         messages: held.messages,
         failure: undefined,
+        usage: held.usage,
+        turnUsage: undefined,
         reading: false,
         failed: false,
         onRetry: ignore,
@@ -236,6 +240,16 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     },
     /** The model chip's words. */
     chip: () => container.querySelector(".agent-model-chip .plan-compose-chip-name")?.textContent,
+    /** Opens the chip's menu, reads the muted line at its foot, null where the menu has none, and closes it again. */
+    footNote: async () => {
+      const chip = container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+      act(() => chip?.click());
+      await settle();
+      const note = container.querySelector(".agent-model-menu [data-foot-note]")?.textContent;
+      act(() => chip?.click());
+      await settle();
+      return note ?? null;
+    },
     /** Opens the chip's menu and picks the row at the index. */
     pick: async (index: number) => {
       act(() => container.querySelector<HTMLButtonElement>(".agent-model-chip button")?.click());
@@ -494,6 +508,15 @@ test("the model chip names the agent's model and effort, with Fast where it runs
   assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "rolled back to what the agent runs on");
   assert.match(tab.note() ?? "", /isn't offered any more/u);
   assert.equal(tab.retry(), null, "the chip is the retry");
+});
+
+test("the chip's menu ends on one muted line with what the agent has cost: tokens and dollars, tokens alone where the service priced none, and nothing before a turn settled", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  assert.equal(await tab.footNote(), null);
+  await tab.stand({ usage: { inputTokens: 1_180_000, outputTokens: 24_000, costUsd: 0.4213 } });
+  assert.equal(await tab.footNote(), "This agent: 1.2M tokens · $0.42");
+  await tab.stand({ usage: { inputTokens: 812, outputTokens: 40 } });
+  assert.equal(await tab.footNote(), "This agent: 852 tokens");
 });
 
 test("no bar stands between the transcript and the box: nothing that holds the card under the log draws a rule or a shadow", async () => {

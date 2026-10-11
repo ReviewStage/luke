@@ -19,9 +19,14 @@ import {
   WireValueSchema,
 } from "../../core.js";
 import { db } from "../../db/query.js";
-import { conversations, messages, turns } from "../../db/storage-schema.js";
+import { conversations, messages, type StoredTurnUsage, turns } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { EpochMillisColumnSchema, InstantColumnSchema, optionalField } from "./database.js";
+import {
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  optionalField,
+  TurnUsageColumnSchema,
+} from "./database.js";
 
 /**
  * The conversation reads the brain and the voice make: a turn's journal by
@@ -463,6 +468,9 @@ export interface LatestTurn {
   readonly failure: string | null;
   readonly failureDetail: string | null;
   readonly cancelRequestedAt: Date | null;
+  /** What the turn ran under and what it cost, as the row holds them; null where the row names no model, and until the turn settles. */
+  readonly model: string | null;
+  readonly usage: StoredTurnUsage | null;
 }
 
 const LatestTurnRowSchema = Schema.Struct({
@@ -473,6 +481,8 @@ const LatestTurnRowSchema = Schema.Struct({
   failure: Schema.NullOr(Schema.String),
   failureDetail: Schema.NullOr(Schema.String),
   cancelRequestedAt: Schema.NullOr(InstantColumnSchema),
+  model: Schema.NullOr(Schema.String),
+  usage: Schema.NullOr(TurnUsageColumnSchema),
 });
 
 /** The newest turn of each conversation named, by the order the turns were queued; a conversation with none answers no row. */
@@ -489,11 +499,59 @@ const findLatestTurns = SqlSchema.findAll({
         failure: turns.failure,
         failureDetail: turns.failureDetail,
         cancelRequestedAt: turns.cancelRequestedAt,
+        model: turns.model,
+        usage: turns.usage,
       })
       .from(turns)
       .where(and(eq(turns.userId, userId), inArray(turns.conversationId, [...conversationIds])))
       .orderBy(turns.conversationId, desc(turns.queuedAt), desc(turns.id)),
 });
+
+/** What one settled turn ran under and cost, as a conversation's total is summed from it. */
+export type TurnUsageRow = Pick<LatestTurn, "model"> & { readonly usage: StoredTurnUsage };
+
+const TurnUsageRowSchema = Schema.Struct({
+  model: Schema.NullOr(Schema.String),
+  usage: TurnUsageColumnSchema,
+});
+
+/**
+ * Every turn with a recorded usage of the conversation named and of each
+ * conversation delegated from it, which is where a coding agent's workers
+ * run, so the agent's total is its own turns' and its workers'.
+ */
+const findTurnUsages = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, conversationId: Schema.String }),
+  Result: TurnUsageRowSchema,
+  execute: ({ userId, conversationId }) =>
+    db
+      .select({ model: turns.model, usage: turns.usage })
+      .from(turns)
+      .where(
+        and(
+          eq(turns.userId, userId),
+          isNotNull(turns.usage),
+          or(
+            eq(turns.conversationId, conversationId),
+            inArray(
+              turns.conversationId,
+              db
+                .select({ id: conversations.id })
+                .from(conversations)
+                .where(eq(conversations.parentConversationId, conversationId)),
+            ),
+          ),
+        ),
+      ),
+});
+
+/** The usage of every settled turn of the account's conversation and of the conversations delegated from it. */
+export function turnUsagesOf(
+  userId: string,
+  conversationId: string,
+): Effect.Effect<readonly TurnUsageRow[], MessageReadFailure, SqlClient.SqlClient> {
+  return findTurnUsages({ userId, conversationId });
+}
 
 /** The newest turn of each of the account's conversations named, keyed by conversation; a conversation with no turn yet is absent. */
 export function latestTurnsOf(

@@ -567,7 +567,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.equal(turn.reasoningEffort, agent.effort);
         assert.equal(turn.promptHash, prompt.hash);
 
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
         assert.deepEqual(
           page.messages.map((message) => message.role),
           [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
@@ -649,7 +651,10 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
             host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
           );
-        const read = (after: MessageCursor) => transcriptPast(target, CODER_TOOL_SET, after, agent);
+        const read = (after: MessageCursor) =>
+          transcriptPast(target, CODER_TOOL_SET, after, agent).pipe(
+            Effect.provide(modelCatalogOf(CATALOG)),
+          );
 
         // Starting, before the first turn: the read holds rather than spinning, and lets go at the
         // hold with the status it stands at, so a tab on a starting agent costs one read per hold.
@@ -718,7 +723,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         yield* TestClock.adjust(CODER.STARTING_GRACE);
         yield* TestClock.adjust(CODER.MESSAGES_POLL);
 
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
 
         assert.deepEqual(page.messages, []);
         assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
@@ -776,7 +783,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           { text: PLAN_TEXT, taken: true },
           { text: "Use the shared helper.", taken: true },
         ]);
-        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent);
+        const page = yield* transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent).pipe(
+          Effect.provide(modelCatalogOf(CATALOG)),
+        );
         assert.equal(
           page.messages.filter((message) => message.role === MESSAGE_ROLE.USER).length,
           2,

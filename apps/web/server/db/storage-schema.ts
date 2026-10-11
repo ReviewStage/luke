@@ -1,4 +1,4 @@
-import type { BrainRunUsage } from "@sidecar/brain";
+import type { BrainModelUsage, BrainRunUsage } from "@sidecar/brain";
 import type { StoredUIMessage } from "@sidecar/session/ui-messages";
 import {
   CONVERSATION_EVENT_KIND,
@@ -200,10 +200,21 @@ export const messages = pgTable(
 );
 
 /**
+ * What a turn cost: the four counts the desktop's trace keeps, spelled the
+ * same way, and beside them the same counts by the model each step ran on,
+ * since the model can change between steps and each is priced at its own;
+ * absent on a row from before the breakdown was kept, whose every step is
+ * read as the row's `model`.
+ */
+export interface StoredTurnUsage extends BrainRunUsage {
+  readonly byModel?: readonly BrainModelUsage[];
+}
+
+/**
  * One run of the brain over a conversation: what opened it, where it stands,
- * what it ran under, and what it cost. `usage` holds the same four counts
- * the desktop's trace keeps, spelled the same way, and `response_ids` every
- * response OpenAI answered the turn with, in order.
+ * what it ran under, and what it cost. `usage` holds the counts
+ * `StoredTurnUsage` describes, and `response_ids` every response OpenAI
+ * answered the turn with, in order.
  */
 export const turns = pgTable(
   "turns",
@@ -229,7 +240,7 @@ export const turns = pgTable(
     /** The content address of the tool set the turn was offered; the table that held the schemas is gone, so this stands alone. */
     toolSetHash: text("tool_set_hash"),
     responseIds: text("response_ids").array(),
-    usage: jsonb("usage").$type<BrainRunUsage>(),
+    usage: jsonb("usage").$type<StoredTurnUsage>(),
     /** eve's own id for the turn, so a relay can name to eve the turn this row is. */
     eveTurnId: text("eve_turn_id"),
     queuedAt: instant("queued_at").notNull().defaultNow(),

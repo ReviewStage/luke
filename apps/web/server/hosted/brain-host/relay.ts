@@ -10,6 +10,7 @@ import {
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
   BRAIN_RUN_EVENT,
+  type BrainModelUsage,
   type BrainRequestFailure,
   type BrainRequestStatus,
   type BrainRunEvent,
@@ -134,6 +135,8 @@ interface RelayTurnState {
   readonly steps: Readonly<Record<string, RelayStep>>;
   /** Each step's usage under its index, so a step eve replays reports its usage once. */
   readonly usageBySteps: Readonly<Record<string, BrainRunUsage>>;
+  /** The model each step ran on under its index, the agent's row as it stood at the step's start; absent in state an earlier build kept. */
+  readonly modelBySteps?: Readonly<Record<string, string>>;
   /** Each step's words under its index while they form; absent in state an earlier build kept. */
   readonly drafts?: Readonly<Record<string, RelayDraft>>;
   /** Whether the store refused the ask that opened the turn: a turn with no ask on record settles no answer. */
@@ -379,6 +382,22 @@ function usageOf(turn: RelayTurnState): BrainRunUsage | undefined {
     (total, usage) => addModelUsage(total, usage),
     undefined,
   );
+}
+
+/**
+ * The turn's usage by the model each step ran on, in the order the models
+ * were first met. A step whose model the state did not keep is read as the
+ * session's model now; one with neither is in the totals and here nowhere,
+ * since there is no model to price it at.
+ */
+function usageByModelOf(turn: RelayTurnState, fallback: string | undefined): BrainModelUsage[] {
+  const byModel = new Map<string, BrainRunUsage>();
+  for (const [step, usage] of Object.entries(turn.usageBySteps)) {
+    const model = turn.modelBySteps?.[step] ?? fallback;
+    if (model === undefined) continue;
+    byModel.set(model, addModelUsage(byModel.get(model), usage));
+  }
+  return [...byModel].map(([model, usage]) => ({ model, ...usage }));
 }
 
 function withSettlement(
@@ -762,10 +781,15 @@ export class StreamRelay {
         step: stepOf(stepIndex),
       });
       if (!written) return;
+      // The row the host reads the step's model from is read again for this
+      // event, so what it names now is what the step runs on.
       standing.state.update((state) =>
         withTurn(state, eveTurnId, (held) => ({
           ...held,
           steps: { ...held.steps, [key]: held.steps[key] ?? { parts: [] } },
+          ...(standing.model !== undefined
+            ? { modelBySteps: { ...held.modelBySteps, [key]: standing.model } }
+            : undefined),
         })),
       );
     });
@@ -962,12 +986,14 @@ export class StreamRelay {
         }
       }
       const usage = usageOf(turn);
+      const usageByModel = usageByModelOf(turn, standing.model);
       const sealed = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.TURN_ENDED,
         status,
         ...(failure !== undefined ? { failure } : undefined),
         ...(failureDetail !== undefined ? { failureDetail } : undefined),
         ...(usage !== undefined ? { usage } : undefined),
+        ...(usageByModel.length > 0 ? { usageByModel } : undefined),
         responseIds: [],
         at: this.#seams.now(),
       });

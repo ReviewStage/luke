@@ -233,6 +233,8 @@ export function SearchableMenu(props: {
   onLeave: (left: EventTarget | null) => void;
   /** Pinned under the list, always on screen, reached by the arrows past the last match. */
   foot?: readonly FootRow[] | undefined;
+  /** One muted line under the pinned rows, pressed by nothing: what the agent has cost. */
+  footNote?: string | undefined;
   className?: string;
 }): React.JSX.Element {
   const { rows, value, onPick } = props;
@@ -456,7 +458,7 @@ export function SearchableMenu(props: {
           <p className="plan-compose-menu-note">{props.noMatch}</p>
         ) : null}
       </div>
-      {foot.length > 0 ? (
+      {foot.length > 0 || props.footNote !== undefined ? (
         <div className="plan-compose-menu-foot">
           {foot.map((row, index) => {
             // What every pinned row's button shares; a switch row adds its role on top.
@@ -544,6 +546,11 @@ export function SearchableMenu(props: {
               </div>
             );
           })}
+          {props.footNote === undefined ? null : (
+            <p className="plan-compose-menu-foot-note" data-foot-note="">
+              {props.footNote}
+            </p>
+          )}
         </div>
       ) : null}
     </div>

@@ -70,7 +70,8 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * transcript opens in the browser where it is a page on GitHub, which is
  * where the pull request the agent opened lives; every other address is
  * drawn and goes nowhere. A finished transcript ends on a row summing the
- * pull request up. Every word here is the agent's or the plan's, so the
+ * pull request up, with what the turn cost where the service priced it,
+ * as the stopped or failed line carries it too. Every word here is the agent's or the plan's, so the
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
@@ -353,13 +354,17 @@ export function AgentTabView({
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(agent.status)}
-        ended={endLine(agent.status, transcript.failure)}
+        ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
         openGitHub={openGitHub}
         copyText={copyText}
         footer={
           showsPublishedRow(agent.status, published) ? (
-            <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
+            <PublishedRow
+              pullRequest={published.pullRequest}
+              turnUsage={transcript.turnUsage}
+              openGitHub={openGitHub}
+            />
           ) : null
         }
       />
@@ -370,6 +375,7 @@ export function AgentTabView({
           model={model}
           models={models}
           readModels={readModels}
+          usage={transcript.usage}
           published={published}
           doors={doors}
           onStop={onStop}

@@ -1152,6 +1152,15 @@ body,
   background: var(--raised-strong);
 }
 
+/* One muted line under the pinned rows, inset as a row's words are: what
+   the agent has cost. */
+.plan-compose-menu-foot-note {
+  margin: 0;
+  padding: var(--space-4) var(--row-inset) 0;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
 /* What stands in the list's place: one quiet line, centred, at a row or
    two's height, so a menu with nothing to list never falls to a sliver. */
 .plan-compose-menu-note {

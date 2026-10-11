@@ -53,13 +53,34 @@ const ANTHROPIC_VERSION_POINT = "-";
 const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER));
 
 /**
+ * What a model's tokens cost, in dollars per token as the catalog lists
+ * them: the input the model read, the output it wrote, and the input its
+ * prefix cache answered, which the catalog prices for a model that caches
+ * and leaves unsaid for one that does not.
+ */
+export interface ModelPricing {
+  readonly inputUsd: number;
+  readonly outputUsd: number;
+  readonly cachedInputUsd?: number;
+}
+
+/** The counts a price is put on: a turn's, an agent's, as the brain keeps them. */
+export interface PricedTokens {
+  readonly inputTokens: number;
+  readonly outputTokens: number;
+  readonly cachedInputTokens: number;
+}
+
+/**
  * One model as the service offers it: the wire's model (`@sidecar/hosted/models-wire`),
  * which `/api/models` answers and a Start is checked against, and beside it
- * the context window the catalog lists, which a coding agent's session is
- * told and the wire does not carry; absent where the catalog says nothing.
+ * what the catalog lists and the wire does not carry: the context window a
+ * coding agent's session is told, and the prices its usage is costed at;
+ * each absent where the catalog says nothing.
  */
 export interface OfferedModel extends CatalogModel {
   readonly contextWindow?: number;
+  readonly pricing?: ModelPricing;
 }
 
 /** A model as its provider's own API names it. */
@@ -106,12 +127,22 @@ const ReasoningOptionSchema = Schema.Struct({
   values: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
+/** A price as the catalog spells it: dollars per token, as a decimal string. */
+const PriceSchema = Schema.optionalKey(Schema.NullOr(Schema.FiniteFromString));
+
+const PricingSchema = Schema.Struct({
+  input: PriceSchema,
+  output: PriceSchema,
+  input_cache_read: PriceSchema,
+});
+
 const CatalogEntrySchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   tags: Schema.optionalKey(Schema.Array(Schema.String)),
   reasoning_options: Schema.optionalKey(Schema.NullOr(Schema.Array(ReasoningOptionSchema))),
   context_window: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  pricing: Schema.optionalKey(Schema.NullOr(PricingSchema)),
 });
 
 const CatalogAnswerSchema = Schema.Struct({
@@ -135,6 +166,19 @@ function providerOf(name: string): ModelProvider | undefined {
   return name as ModelProvider;
 }
 
+/** The entry's prices where it lists both an input and an output price; nothing where it lists either not. */
+function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
+  const inputUsd = entry.pricing?.input ?? undefined;
+  const outputUsd = entry.pricing?.output ?? undefined;
+  if (inputUsd === undefined || outputUsd === undefined) return undefined;
+  const cachedInputUsd = entry.pricing?.input_cache_read ?? undefined;
+  return {
+    inputUsd,
+    outputUsd,
+    ...(cachedInputUsd === undefined ? undefined : { cachedInputUsd }),
+  };
+}
+
 /** The entry as an offered model, or nothing for one Luke does not offer. */
 function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
   const provider = providerOf(splitCatalogId(entry.id)?.provider ?? "");
@@ -145,13 +189,30 @@ function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
     (entry.reasoning_options ?? []).find((option) => option.type === EFFORT_OPTION)?.values ?? [];
   if (efforts.length === 0) return undefined;
   const contextWindow = entry.context_window ?? undefined;
+  const pricing = pricingOf(entry);
   return {
     id: entry.id,
     name: entry.name,
     provider,
     efforts,
     ...(contextWindow === undefined ? undefined : { contextWindow }),
+    ...(pricing === undefined ? undefined : { pricing }),
   };
+}
+
+/**
+ * What the tokens cost at the prices: the input read from the prefix cache
+ * at the cache price, or at the input price for a model that lists none,
+ * the rest of the input at the input price, and the output, reasoning
+ * included since the provider counts it there, at the output price.
+ */
+export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): number {
+  const cached = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
+  return (
+    (tokens.inputTokens - cached) * pricing.inputUsd +
+    cached * (pricing.cachedInputUsd ?? pricing.inputUsd) +
+    tokens.outputTokens * pricing.outputUsd
+  );
 }
 
 /** The catalog's answer filtered to what Luke offers, in the catalog's own order. */

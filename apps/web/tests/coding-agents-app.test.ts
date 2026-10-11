@@ -14,7 +14,7 @@ import {
   codingAgentPullRequestAnswerSchema,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -54,6 +54,7 @@ import {
 } from "../server/core";
 import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import {
   EVE_CANCEL_OUTCOME,
   EVE_SEND_OUTCOME,
@@ -74,7 +75,11 @@ import {
   readCodingAgent,
 } from "../server/hosted/coding-agent-store";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { CODING_AGENT_DEFAULT_CHOICE, modelCatalogOf } from "../server/hosted/model-catalog";
+import {
+  CODING_AGENT_DEFAULT_CHOICE,
+  modelCatalogOf,
+  type OfferedModel,
+} from "../server/hosted/model-catalog";
 import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
@@ -115,20 +120,30 @@ const SAVED = {
   assumptions: [{ text: "Invites expire after 7 days." }],
 };
 
-const CATALOG: readonly CatalogModel[] = [
+const SOL = "openai/gpt-6.1-sol";
+
+/** The two models offered, each with its prices in dollars per token. */
+const CATALOG: readonly OfferedModel[] = [
   {
     id: CODING_AGENT_DEFAULT_CHOICE.model,
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["low", "medium", "high", "max"],
+    pricing: { inputUsd: 0.000004, outputUsd: 0.00002, cachedInputUsd: 0.0000002 },
   },
   {
-    id: "openai/gpt-6.1-sol",
+    id: SOL,
     name: "GPT-6.1 Sol",
     provider: MODEL_PROVIDER.OPENAI,
     efforts: ["low", "high"],
+    pricing: { inputUsd: 0.000002, outputUsd: 0.00001, cachedInputUsd: 0.000001 },
   },
 ];
+
+/** A turn's counts with nothing cached and no reasoning, as the brain keeps them. */
+function counted(inputTokens: number, outputTokens: number) {
+  return { inputTokens, outputTokens, cachedInputTokens: 0, reasoningTokens: 0 };
+}
 
 interface Answer {
   readonly status: number;
@@ -1177,6 +1192,67 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
+
+  it.effect(
+    "a page carries what the agent has cost over its own turns and its workers', each step priced at the model it ran on, and what its newest turn cost",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, target, writer, turnId, ask } = yield* startedAgent(fakeEve(), {
+          running: true,
+        });
+        // The agent's turn ran a step on Opus ($0.006) and one on Sol ($0.0015).
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 3,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          usage: counted(1500, 150),
+          usageByModel: [
+            { model: CODING_AGENT_DEFAULT_CHOICE.model, ...counted(1000, 100) },
+            { model: SOL, ...counted(500, 50) },
+          ],
+          responseIds: [],
+          at: 0,
+        });
+        // A worker's turn, in the child conversation delegated from the agent's, on Sol ($0.0006).
+        const worker = { userId: owner, conversationId: randomUUID() };
+        yield* openChildConversation(target, worker.conversationId, "worker");
+        const workerTurnId = randomUUID();
+        yield* writer.enqueueTurn(worker, {
+          turnId: workerTurnId,
+          origin: TURN_ORIGIN.TYPED,
+          model: SOL,
+        });
+        yield* writer.consume(worker, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(worker.conversationId),
+          turnId: workerTurnId,
+          sequence: 1,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          usage: counted(200, 20),
+          responseIds: [],
+          at: 0,
+        });
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(page.usage, {
+          inputTokens: 1700,
+          outputTokens: 170,
+          cachedInputTokens: 0,
+          costUsd: 0.0081,
+        });
+        assert.deepEqual(page.turnUsage, {
+          inputTokens: 1500,
+          outputTokens: 150,
+          cachedInputTokens: 0,
+          costUsd: 0.0075,
+        });
+      }),
+  );
 
   it.effect(
     "a page read after the turn failed says why as the wire's word, read off the turn's failure and the host's words in its detail",

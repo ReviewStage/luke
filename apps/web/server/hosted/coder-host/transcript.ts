@@ -3,16 +3,19 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
   type CodingAgentStatus,
+  type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
 import { Clock, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { StoredUIMessage } from "../../core.js";
-import { awaitingLinesOf, latestTurnsOf } from "../coding-agent-store.js";
+import { awaitingLinesOf, latestTurnsOf, turnUsagesOf } from "../coding-agent-store.js";
+import { ModelCatalog } from "../model-catalog.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
 import { type AgentStanding, codingAgentFailureOf, codingAgentStatusOf } from "./status.js";
+import { usageOfTurn, usageOfTurns } from "./usage.js";
 
 /**
  * transcript.ts -- a coding agent's transcript past a cursor, held open while the agent runs.
@@ -32,7 +35,10 @@ import { type AgentStanding, codingAgentFailureOf, codingAgentStatusOf } from ".
  * will open, which reads as running and is held for. Every page carries the agent's status as it stood when
  * the page was read, and why where the newest turn failed, so the reader
  * learns the agent ended from the page that ends the hold and asks nothing
- * else. The wire spells the cursor as the two numbers joined by a colon.
+ * else, and what the agent has cost, its workers' turns included, and its
+ * newest turn, each read once with the page that is answered rather than
+ * on every look inside the hold. The wire spells the cursor as the two
+ * numbers joined by a colon.
  */
 
 const CURSOR_SEPARATOR = ":";
@@ -57,9 +63,20 @@ export interface TranscriptPage {
   readonly cursor: MessageCursor;
   readonly status: CodingAgentStatus;
   readonly failureReason?: CodingAgentFailure;
+  /** What the agent has cost over every turn it and its workers settled; absent before one has. */
+  readonly usage?: CodingAgentUsage;
+  /** What its newest turn cost; absent until that turn settles. */
+  readonly turnUsage?: CodingAgentUsage;
 }
 
-type TranscriptEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
+type TranscriptEffect<A, R = never> = Effect.Effect<
+  A,
+  SqlError | Schema.SchemaError,
+  SqlClient.SqlClient | R
+>;
+
+/** The newest turn as a page reads it: what it ran under and cost; nothing before the first. */
+type NewestTurn = Parameters<typeof usageOfTurn>[0];
 
 /** The statuses a read waits through: more may still land. */
 const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -81,7 +98,31 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
     });
     const failureReason =
       status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined;
-    return { status, failureReason };
+    return { status, failureReason, turn };
+  });
+
+/**
+ * The page with what the agent has cost: every settled turn of its
+ * conversation and its workers', and its newest turn, priced at the catalog
+ * as the instance holds it now; a catalog it cannot read prices nothing,
+ * so the tokens are told alone.
+ */
+const withUsage = (
+  target: ConversationTarget,
+  page: TranscriptPage,
+  turn: NewestTurn,
+): TranscriptEffect<TranscriptPage, ModelCatalog> =>
+  Effect.gen(function* () {
+    const rows = yield* turnUsagesOf(target.userId, target.conversationId);
+    const catalog = yield* ModelCatalog;
+    const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
+    const usage = usageOfTurns(rows, offered);
+    const turnUsage = usageOfTurn(turn, offered);
+    return {
+      ...page,
+      ...(usage === undefined ? undefined : { usage }),
+      ...(turnUsage === undefined ? undefined : { turnUsage }),
+    };
   });
 
 /** One read of the page past the cursor with the status beside it; a page the vocabulary refuses answers no messages, since nothing readable stands past the cursor. */
@@ -90,7 +131,7 @@ function pagePast(
   tools: ToolSet,
   after: MessageCursor,
   createdAt: Date,
-): TranscriptEffect<TranscriptPage> {
+): TranscriptEffect<{ readonly page: TranscriptPage; readonly turn: NewestTurn }> {
   return Effect.gen(function* () {
     const { read, cursor } = yield* listMessagesPast(
       target.userId,
@@ -98,12 +139,15 @@ function pagePast(
       tools,
       after,
     );
-    const { status, failureReason } = yield* statusNow(target, createdAt);
+    const { status, failureReason, turn } = yield* statusNow(target, createdAt);
     return {
-      messages: read.ok ? read.value.map((record) => record.message) : [],
-      cursor,
-      status,
-      ...(failureReason === undefined ? undefined : { failureReason }),
+      page: {
+        messages: read.ok ? read.value.map((record) => record.message) : [],
+        cursor,
+        status,
+        ...(failureReason === undefined ? undefined : { failureReason }),
+      },
+      turn,
     };
   });
 }
@@ -121,20 +165,21 @@ export function transcriptPast(
   tools: ToolSet,
   after: MessageCursor,
   agent: Pick<AgentStanding, "createdAt">,
-): TranscriptEffect<TranscriptPage> {
+): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
-    const page = yield* pagePast(target, tools, after, agent.createdAt);
-    if (page.messages.length > 0) return Option.some(page);
-    return WAITING_STATUSES.has(page.status) ? Option.none() : Option.some(page);
+    const read = yield* pagePast(target, tools, after, agent.createdAt);
+    if (read.page.messages.length > 0) return Option.some(read);
+    return WAITING_STATUSES.has(read.page.status) ? Option.none() : Option.some(read);
   });
   return once.pipe(
     Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),
     Effect.timeoutOption(CODER.MESSAGES_HOLD),
     Effect.flatMap((held) => {
-      const page = Option.flatten(held);
-      return Option.isSome(page)
-        ? Effect.succeed(page.value)
+      const read = Option.flatten(held);
+      return Option.isSome(read)
+        ? Effect.succeed(read.value)
         : pagePast(target, tools, after, agent.createdAt);
     }),
+    Effect.flatMap(({ page, turn }) => withUsage(target, page, turn)),
   );
 }
