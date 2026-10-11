@@ -485,7 +485,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           CODER_TOOL_SET,
           CURSOR_START,
           { createdAt: new Date(NOW) },
-        );
+        ).pipe(Effect.provide(modelCatalogOf(CATALOG)));
         assert.deepEqual(
           page.messages.map((message) => [message.role, message.parts.find(isTextUIPart)?.text]),
           [
