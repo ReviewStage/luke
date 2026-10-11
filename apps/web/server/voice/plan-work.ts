@@ -24,6 +24,7 @@ import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
+  START_CODING_AGENT_TOOL,
 } from "../hosted/coding-agent-tools.js";
 import { END_CALL_TOOL } from "../hosted/end-call.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
@@ -65,6 +66,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [LIST_CODING_AGENTS_TOOL.name, PLAN_WORK_TOOL.LIST_AGENTS],
   [READ_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.READ_AGENT],
   [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
+  [START_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.START_AGENT],
   [END_CALL_TOOL.name, PLAN_WORK_TOOL.END_CALL],
 ]);
 
@@ -76,6 +78,7 @@ const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
 const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
 const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
+const isAgentStartInput = Schema.is(START_CODING_AGENT_TOOL.inputSchema);
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -130,6 +133,7 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   if (tool === PLAN_WORK_TOOL.WORKER && isWorkerInput(input)) return input.message;
   if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
   if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
+  if (tool === PLAN_WORK_TOOL.START_AGENT && isAgentStartInput(input)) return input.task;
   if (tool === PLAN_WORK_TOOL.SHOW_CODE && isCodeInput(input)) {
     if (input.startLine === undefined) return input.path;
     const end = input.endLine ?? input.startLine;

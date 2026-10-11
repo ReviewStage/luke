@@ -9,8 +9,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentStartRequestSchema,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
-import { planMarkdown } from "@sidecar/hosted/plan-markdown";
+import { modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Cache, Clock, DateTime, Effect, Layer, Option, Redacted, Result } from "effect";
 import {
@@ -27,15 +26,12 @@ import {
   unparsedWire,
   wireUuidSchema,
 } from "./core.js";
-import { GitHubApp } from "./github/github-app.js";
+import type { GitHubApp } from "./github/github-app.js";
 import { githubUserReadOrRefusal } from "./github/github-refusal.js";
-import { readAccountPreferences, writeAccountPreferences } from "./hosted/account-store.js";
-import { BRAIN_HOST_TURN } from "./hosted/brain-host/bounds.js";
 import {
   describeUnreachable,
   EVE_CANCEL_OUTCOME,
   EVE_MOUNT,
-  EVE_SEND_OUTCOME,
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
@@ -46,6 +42,7 @@ import {
   PublishedKey,
   withPublishedCache,
 } from "./hosted/coder-host/published.js";
+import { acceptedAgentChoice, startCodingAgent } from "./hosted/coder-host/start.js";
 import { type AgentTurnStanding, codingAgentSummary } from "./hosted/coder-host/status.js";
 import { steerCodingAgent } from "./hosted/coder-host/steer.js";
 import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
@@ -60,8 +57,6 @@ import {
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentLatestTurn,
-  createCodingAgent,
-  discardCodingAgent,
   latestTurnsOf,
   listCodingAgents,
   RUNNING_TURN_STATUSES,
@@ -80,11 +75,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import {
-  acceptedModelChoice,
-  CODING_AGENT_DEFAULT_CHOICE,
-  type ModelCatalog,
-} from "./hosted/model-catalog.js";
+import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -95,16 +86,15 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * Every endpoint resolves the bearer before it touches a row, and every row
  * it touches is one the bearer's account owns: a plan or an agent another
  * account owns answers exactly as one that names nothing. A Start
- * (`POST /api/plans/{id}/agents`) checks the model and effort against the
- * catalog, the account's default where the request names none, confirms the
- * plan names a repository the account still reaches through the Luke GitHub
- * App, snapshots the plan's document as the Markdown Copy would put on the
- * clipboard, makes the agent and its conversation, and opens its eve session
- * with the snapshot as the first message, under the developer's own bearer
- * so eve's door admits it as the developer. A retry carrying the same key is
- * the same agent, and opens nothing again. A Start that named a model makes
- * it the account's default, so the menu's last choice and the default stay
- * one value. The list (`GET /api/plans/{id}/agents`) reads each agent's
+ * (`POST /api/plans/{id}/agents`) takes the one path a start takes
+ * (`hosted/coder-host/start.ts`), which the voice brain's tool shares: the
+ * model and effort checked against the catalog, the account's default where
+ * the request names none, the plan's repository confirmed reachable through
+ * the Luke GitHub App, the agent and its conversation made, and its eve
+ * session opened with the plan's document, or the task the request named in
+ * its place, as the first message, here under the developer's own bearer so
+ * eve's door admits it as the developer. A retry carrying the same key is
+ * the same agent, and opens nothing again. The list (`GET /api/plans/{id}/agents`) reads each agent's
  * status from its newest turn. The transcript
  * (`GET /api/agents/{id}/messages?after=`) is the conversation's rows past a
  * cursor, held open while the agent runs (`hosted/coder-host/transcript.ts`).
@@ -287,34 +277,16 @@ const summaryOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   return codingAgentSummary(agent, standing(agent.conversationId), yield* Clock.currentTimeMillis);
 });
 
-/**
- * The choice a Start runs on: the request's own where it names one, the
- * account's default otherwise, either checked against the catalog, which
- * also refuses a stored default that has since left the catalog.
- */
-const acceptedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
-  userId: string,
-  named: ModelChoice | undefined,
-): Effect.fn.Return<ModelChoice, HostedRefusal, SqlClient.SqlClient | ModelCatalog> {
-  const choice =
-    named ??
-    (yield* hostedStoreOrUnavailable(readAccountPreferences(userId)))?.codingAgent ??
-    CODING_AGENT_DEFAULT_CHOICE;
-  return yield* acceptedModelChoice(choice).pipe(
-    Effect.catchTag("ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST)),
-    Effect.catchTag("ModelCatalogUnavailable", (unavailable) =>
-      Effect.logWarning("the model catalog could not be read", unavailable.cause).pipe(
-        Effect.andThen(Effect.fail(HOSTED_REFUSAL.UNAVAILABLE)),
-      ),
-    ),
-  );
-});
+/** A choice the catalog refused is an invalid request, on the wire. */
+const choiceOrInvalid = <A, E, R>(
+  effect: Effect.Effect<A, E | ModelChoiceRefused, R>,
+): Effect.Effect<A, E | HostedRefusal, R> =>
+  Effect.catchTag(effect, "ModelChoiceRefused", () => Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST));
 
 /**
  * POST: an agent started on the plan, or the one a retry under the same key
- * already started. It is handed the plan's document as its first message,
- * or where the Start names a task, that task in the plan's place, and never
- * the plan; either way it works in the plan's repository.
+ * already started, on the one start path (`hosted/coder-host/start.ts`),
+ * reaching eve as the developer.
  */
 const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
@@ -330,59 +302,12 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if ((model === undefined) !== (effort === undefined)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  const named = model !== undefined && effort !== undefined ? { model, effort } : undefined;
-  const choice = yield* acceptedChoice(userId, named);
-  const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
-  if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const repository = plan.value.plan.repository;
-  if (repository === null) return yield* Effect.fail(HOSTED_REFUSAL.NO_REPOSITORY);
-  const app = yield* GitHubApp;
-  const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, repository));
-  if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  const brief =
-    task === undefined
-      ? { planSnapshot: planMarkdown(plan.value.plan.document), task: null }
-      : { planSnapshot: null, task };
-  const started = yield* hostedStoreOrUnavailable(
-    createCodingAgent(userId, {
-      planId,
-      idempotencyKey,
-      model: choice.model,
-      effort: choice.effort,
-      ...brief,
-      repository,
-    }),
+  const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
+  const { agent, created } = yield* choiceOrInvalid(
+    startCodingAgent(eveFor(seams, request), userId, { planId, idempotencyKey, choice, task }),
   );
-  if (Option.isNone(started)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const { agent, created } = started.value;
   if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
-  }
-  // The session opens as the developer, with the plan or the task as its first message; an eve
-  // that did not take it leaves no agent behind, so the retry under the same key starts afresh.
-  const eve = yield* eveFor(seams, request);
-  const opened = yield* eve
-    .open({
-      conversationId: agent.conversationId,
-      turn: BRAIN_HOST_TURN.TYPED,
-      message: brief.task ?? brief.planSnapshot,
-    })
-    .pipe(
-      Effect.catchTag("EveUnreachable", (failure) =>
-        Effect.as(
-          Effect.logWarning(
-            `eve could not be reached to start a coding agent: ${describeUnreachable(failure)}`,
-          ),
-          undefined,
-        ),
-      ),
-    );
-  if (opened === undefined || opened.outcome !== EVE_SEND_OUTCOME.ACCEPTED) {
-    yield* hostedStoreOrUnavailable(discardCodingAgent(userId, agent.id));
-    return yield* Effect.fail(HOSTED_REFUSAL.UNAVAILABLE);
-  }
-  if (named !== undefined) {
-    yield* hostedStoreOrUnavailable(writeAccountPreferences(userId, { codingAgent: choice }));
   }
   return hostedJsonResponse(HOSTED_HTTP_STATUS.CREATED, {
     agent: codingAgentSummary(
@@ -555,7 +480,7 @@ const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(func
   }
   const asked = readEither(modelChoiceSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const choice = yield* acceptedChoice(userId, asked.success);
+  const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, asked.success));
   const changed = yield* hostedStoreOrUnavailable(
     updateCodingAgentChoice(userId, agent.id, choice),
   );

@@ -33,6 +33,7 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
+  START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { readPlanWork } from "../server/hosted/plan-work-store";
@@ -213,6 +214,7 @@ const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>
   [EVE_DELEGATION_TOOL.TASK_CANCEL, { taskId: "task-1" }],
   [READ_CODING_AGENT_TOOL.name, { agentId: AGENT_ID }],
   [MESSAGE_CODING_AGENT_TOOL.name, { agentId: AGENT_ID, text: "Also add tests." }],
+  [START_CODING_AGENT_TOOL.name, { task: "Fix the invite email." }],
 ]);
 
 /** A part as a reader of the tab takes it in: its kind, and its words or its call's kind, subject, state, and output. */

@@ -765,13 +765,15 @@ and the tools are the planning list alone: `run_in_repository` bound to the
 plan the conversation belongs to (`readPlanOfConversation`), the two public
 research reads beside it, `queue_question`
 (`server/hosted/queue-question.ts`), which runs nothing: its journaled call is
-how a question reaches the voice while the turn still runs, and the three
+how a question reaches the voice while the turn still runs, and the four
 tools about the plan's coding agents (`server/hosted/coding-agent-tools.ts`):
 a list with each agent's status and what it published, one agent's recent
-progress as a bounded tail, and a message to one, which takes the message
-box's own steer path (`server/hosted/coder-host/steer.ts`) as the deployment
-acting for the account, the one row the coder channel's deployment table
-admits. A resumed session
+progress as a bounded tail, a message to one, which takes the message
+box's own steer path (`server/hosted/coder-host/steer.ts`), and a start of
+a new one on the call's plan, which takes the Start button's own path
+(`server/hosted/coder-host/start.ts`) under the tool call's id as its key;
+both reach eve as the deployment acting for the account, the two rows the
+coder channel's deployment table admits. A resumed session
 is seeded with the conversation so far. The writer holds rows to
 `HOSTED_TOOL_SET`, which is the planning tools and nothing else, so a turn's
 calls are written and read back under the same list it was offered.
@@ -1701,10 +1703,13 @@ A coding agent is one eve session over a `coding_agent` conversation
 (`server/hosted/coding-agent-store.ts`), and the host behind the authored
 files is `server/hosted/coder-host/`: the same door and conversation
 admission as the planning brain's (`brain-host/door.ts`,
-`brain-host/conversation.ts`), with the developer's own bearer the only
-caller the channel walks in (`coder-host/channel.ts`): a Start and a Stop
-come from a route still holding it, so no deployment actor acts here, and a
-follow-up steers. The agent (`coder/agent.ts`) runs none of eve's default
+`brain-host/conversation.ts`), with the developer's own bearer the caller
+the channel walks in for the desktop's routes (`coder-host/channel.ts`): a
+Start and a Stop come from a route still holding it, and a follow-up
+steers; the deployment acting for the account is admitted for the two things
+the voice brain does there on the developer's behalf, a typed opening that
+starts an agent and a typed line that steers one, each minted as the
+developer's own principal with the deployment named as its carrier. The agent (`coder/agent.ts`) runs none of eve's default
 tools and authors its own under `coder/tools/`, which is exactly the set the
 store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
 `write_file`, `glob`, `web_fetch`, and `web_search`, the code

@@ -25,8 +25,11 @@ import {
   runListCodingAgents,
   runMessageCodingAgent,
   runReadCodingAgent,
+  runStartCodingAgent,
+  START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
+import type { ModelCatalog } from "../model-catalog.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
@@ -164,11 +167,13 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 
 ### The plan's coding agents
 
-Coding agents may already be building this plan, each in a cloud session of its own. When the developer asks how an agent is doing, or tells an agent to do something ("how's the agent doing", "tell it to also add tests"), use the agent tools: list_coding_agents to see which agents there are and which one they mean, read_coding_agent to read one's recent progress, and message_coding_agent to tell one what to do.
+Coding agents may already be building this plan, each in a cloud session of its own. When the developer asks how an agent is doing, tells an agent to do something, or asks for a new one ("how's the agent doing", "tell it to also add tests", "start an agent on this"), use the agent tools: list_coding_agents to see which agents there are and which one they mean, read_coding_agent to read one's recent progress, message_coding_agent to tell one what to do, and start_coding_agent to start a new one.
 
 On a status question, read the agent and summarise its progress in a sentence or two in your return: what it is doing now, what it has published, and whether it is stuck. Never read its transcript out.
 
 On an instruction, send it when it is clear which agent is meant and what to say: message_coding_agent with the developer's words as a message to the agent, then say briefly in your return what you sent. When there are several agents and it is ambiguous which one the developer means, queue a question asking which, and send nothing until they answer. When there is one agent, it is the one they mean.
+
+On a request for a new agent, start it when the developer clearly asks for one ("start an agent on this", "kick off the plan", "start Sonnet on fixing the invite emails"): start_coding_agent with no task to build the plan, or with the task in the developer's words where they named one instead, and the model and effort where they named them, else neither. Then say in one sentence in your return what was started, naming the model ("Started Claude Opus 5.5 on the plan"), so Luke can say it. Queue a question first only when it is unclear whether they want an agent at all, or what it should work on; never start one the developer did not ask for, and never start a second one for the same ask. When the tool rejects the model or effort, pick the nearest of the choices it lists if the developer's intent is clear, and queue a question otherwise. The agent it started is one the other agent tools then read and message.
 
 Never put a credential, token, or key into a message to an agent, into any tool's input, or into your return, and never repeat one you see in an agent's transcript.
 
@@ -185,6 +190,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
+- start_coding_agent starts a new coding agent on this plan, on the plan itself or on a task, as the developer's Start button would.
 - end_call ends the voice call once the developer has clearly said they are done with it ("bye", "that's all", "thanks, I'm done", "let's stop here"). Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, or because the plan looks complete.
 
 ## Return the result
@@ -350,8 +356,8 @@ interface PlanningTool {
   ) => Effect.Effect<WireRecord, never, PlanningToolServices>;
 }
 
-/** What a planning call may reach: the store, the network for public research, and GitHub through the App for the checkout. */
-type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+/** What a planning call may reach: the store, the network for public research, GitHub through the App for the checkout, and the catalog a start's choice is checked against. */
+type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog;
 
 /**
  * The tools a planning turn is offered, in the order the model reads them.
@@ -363,8 +369,8 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * (`repository-shell.ts`); the public search and page read (`public-research.ts`)
  * answer what the repository cannot; `draw_on_board` draws on the plan's
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
- * hands back the board as the Mac draws it (`board-look.ts`); the three
- * agent tools read and message the plan's coding agents
+ * hands back the board as the Mac draws it (`board-look.ts`); the four
+ * agent tools read, message, and start the plan's coding agents
  * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
  * carried as `queue_question` is by its journaled call (`end-call.ts`).
  * Every read's result goes back to the model as data, a look's as an image.
@@ -414,6 +420,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...MESSAGE_CODING_AGENT_TOOL,
     run: (call, input) => runMessageCodingAgent(call.agents, input),
+  },
+  {
+    ...START_CODING_AGENT_TOOL,
+    run: (call, input) => runStartCodingAgent(call.agents, input),
   },
   {
     ...END_CALL_TOOL,

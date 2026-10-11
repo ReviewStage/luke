@@ -55,7 +55,7 @@ import {
   type SidePanelTab,
   useSidePanel,
 } from "./use-side-panel";
-import { workerCallIds } from "./work-model";
+import { startedAgentCallIds, workerCallIds } from "./work-model";
 
 /**
  * use-plans-tab.ts -- the panel's Plans tab as one control: which page shows, the presses each page makes, and the host's read of the plans as the tab shows.
@@ -270,6 +270,23 @@ export function usePlansTab(input: {
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
+  // An agent Luke started in the call is in the work before it is in the
+  // list, so the list is read again as its start answers, and the tab
+  // appears as it does after a Start; a start already in the work when the
+  // plan opens is read with the plan.
+  const startedByLuke = useMemo(() => startedAgentCallIds(viewed.work), [viewed.work]);
+  const startsSeen = useRef<{ planId: string | undefined; ids: ReadonlySet<string> }>({
+    planId: undefined,
+    ids: new Set(),
+  });
+  const readAgents = agents.onRetryList;
+  useEffect(() => {
+    const seen = startsSeen.current;
+    const planId = viewed.activePlanId;
+    const landed = seen.planId === planId && startedByLuke.some((callId) => !seen.ids.has(callId));
+    startsSeen.current = { planId, ids: new Set(startedByLuke) };
+    if (landed) readAgents();
+  }, [startedByLuke, viewed.activePlanId, readAgents]);
   // A file's tab is held to the files Luke showed on the plan the same way.
   const files = useMemo(
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),

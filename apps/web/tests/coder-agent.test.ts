@@ -99,7 +99,20 @@ function deploymentRequest(sessionId: string, turn: string | undefined, method =
   });
 }
 
-test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session is minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
+/** The deployment's opening of an agent's session under its secret, naming the account, the conversation, and the kind of turn given. */
+function deploymentOpening(turn: string): Request {
+  return new Request("https://luke.test/eve/v1/session", {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${SECRET}`,
+      [BRAIN_HOST_HEADER.ACCOUNT]: ACCOUNT,
+      [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
+      [BRAIN_HOST_HEADER.TURN]: turn,
+    },
+  });
+}
+
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session, and its typed opening of the account's own conversation, are minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
   const channel = coderChannelInput(
     async () => undefined,
     {
@@ -145,7 +158,18 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
     [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   });
 
+  // The start of an agent: the deployment opens the account's own conversation as the developer too.
+  const { admitted: opened } = await door(deploymentOpening(BRAIN_HOST_TURN.TYPED));
+  assert.ok(opened);
+  assert.deepEqual(
+    [opened.authenticator, opened.principalType, opened.principalId, opened.attributes],
+    [developer.authenticator, developer.principalType, developer.principalId, carried.attributes],
+  );
+
   assert.deepEqual(await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN)), {
+    refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  });
+  assert.deepEqual(await door(deploymentOpening(BRAIN_HOST_TURN.SPOKEN)), {
     refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
   });
   assert.deepEqual(
