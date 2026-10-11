@@ -80,7 +80,7 @@
   --shadow-soft: rgba(0, 0, 0, 0.4);
   --shadow: rgba(0, 0, 0, 0.5);
   --shadow-deep: rgba(0, 0, 0, 0.6);
-  /* The caption bar's ground, opaque because the document scrolls on beneath it. */
+  /* The caption strip's ground, opaque because the document scrolls on beneath it. */
   --surface-caption: #16161b;
   /* A hint is a dark pill in either appearance, as the system's own and every
      chat app's are, so it is the one surface these values hold for both. */
@@ -229,8 +229,6 @@
 }
 
 .app-stage {
-  /* The volume hint's row below the caption bar, 0 until the hint stands. */
-  --volume-hint-size: 0px;
   position: relative;
   width: 100%;
   height: 100%;
@@ -500,68 +498,87 @@ body,
 
 /* Voice caption ----------------------------------------------------------- */
 
-/* Luke's words while he says them: a floating bar over the work column, above
-   the call bar, one element in every state so both edges of its fade can run.
-   The bar grows with the words to `--caption-max`; past that the stack inside
-   rolls up (below) rather than the bar growing on. It takes no pointer, so the
-   document under it keeps answering. */
+/* The live captions (caption-strip.tsx): who is speaking, then at most two
+   lines of their words, the newest at the foot. One element in every state so
+   both edges of its fade can run; where it stands is the window's layout
+   (desktop.css). It takes no pointer but the volume hint's button, so the
+   document beneath it keeps answering. */
 .voice-caption {
   position: absolute;
   z-index: 6;
-  bottom: calc(96px + var(--volume-hint-size));
-  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
-  overflow: hidden;
-  width: var(--caption-width);
-  max-height: var(--caption-max);
-  padding: 12px 16px;
+  left: 50%;
+  padding: 8px 14px 10px;
   border: 1px solid var(--hairline);
-  border-radius: 16px;
+  border-radius: 12px;
   /* Opaque, because the document scrolls on beneath it. */
   background: var(--surface-caption);
-  box-shadow: 0 16px 40px var(--shadow);
-  font-size: 13.5px;
-  line-height: 1.5;
+  box-shadow: 0 8px 24px var(--shadow-soft);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-50%);
-  transition: opacity var(--duration-quick) var(--motion-exit);
+  transform: translate(-50%, 6px);
+  transition:
+    opacity var(--duration-exit) var(--motion-exit),
+    transform var(--duration-exit) var(--motion-exit);
 }
 
-.app-stage[data-caption="true"] .voice-caption {
+.voice-caption[data-shown="true"] {
   opacity: 1;
+  transform: translate(-50%, 0);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit),
+    transform var(--duration-shape) var(--spring);
 }
 
-/* The stack holds one block per response, oldest first, so responses spoken
-   back-to-back sit apart instead of running together. Past the room the bar
-   can grow to, the stack rolls up by `--caption-overflow`, the renderer's
-   measure of what will not fit, so the newest words stay at the bar's foot
-   and the oldest leave through its top edge — a transform on the spring,
-   never a scroll. */
-.voice-caption-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  width: 100%;
-  transform: translateY(calc(-1 * var(--caption-overflow, 0px)));
-  transition: transform var(--duration-shape) var(--spring) var(--duration-exit);
+/* Who is speaking, in the colour their meter wears in the sidebar. */
+.voice-caption-speaker {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  line-height: 16px;
 }
 
-.app-stage[data-caption="true"] .voice-caption-stack {
-  transition: transform var(--duration-shape) var(--spring);
+.voice-caption[data-tone="luke"] .voice-caption-speaker {
+  color: var(--voice-luke);
 }
 
+.voice-caption[data-tone="developer"] .voice-caption-speaker {
+  color: var(--voice-developer);
+}
+
+/* Two lines at most, clipped rather than scrolled by hand: the renderer keeps
+   the words scrolled to their foot, so the newest line is always the bottom
+   one, and once they outgrow the two lines their top edge fades as the older
+   lines leave through it. The fade rides a scroll timeline, so it stands only
+   while the words overflow and a caption that fits is left whole. */
+.voice-caption-words {
+  max-height: 44px;
+  overflow: hidden;
+  animation: caption-overflow-fade linear both;
+  animation-timeline: scroll(self block);
+}
+
+@keyframes caption-overflow-fade {
+  from {
+    mask-image: linear-gradient(to bottom, #000 0, #000 100%);
+  }
+
+  to {
+    mask-image: linear-gradient(to bottom, transparent 0, #000 16px);
+  }
+}
+
+/* Mirrors the 44px above: two of these lines. */
 .voice-caption-text {
   display: block;
-  width: 100%;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
-  letter-spacing: 0.1px;
-  line-height: 1.5;
+  line-height: 22px;
 }
 
-/* A voice failure borrows the caption's bar in the `.error-message` red,
-   because it is a fault being reported rather than words being spoken. */
+/* A voice failure borrows the strip in the `.error-message` red, because it
+   is a fault being reported rather than words being spoken. */
 .voice-caption[data-tone="error"] .voice-caption-text {
   color: var(--error-text);
 }
@@ -575,38 +592,17 @@ body,
 /* Volume hint ------------------------------------------------------------- */
 
 /* Why the words above are the only part of Luke arriving: the Mac's output is
-   muted or at zero. It stands in a row of its own directly below the caption
-   bar, which rises by `--volume-hint-size` to make the room: the inset above
-   the row plus the 20px row itself, mirroring VOLUME_HINT_BAND_HEIGHT in
-   volume-hint.ts. */
-.app-stage[data-volume-hint="true"] {
-  --volume-hint-size: calc(var(--voice-band-inset) + 20px);
-}
-
-/* The row's height mirrors VOLUME_HINT_HEIGHT in volume-hint.ts — the two
-   must agree — and is exactly what it draws: the sentence and a small pill
-   beside it. It takes the pointer only while it is drawn. */
+   muted or at zero. A row of its own at the strip's foot, under a hairline,
+   and the one part of the strip that takes the pointer. */
 .volume-hint {
-  position: absolute;
-  z-index: 6;
-  bottom: 88px;
-  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 9px;
-  width: var(--caption-width);
-  height: 20px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-50%);
-  transition: opacity var(--duration-exit) var(--motion-exit);
-}
-
-.app-stage[data-volume-hint="true"][data-caption="true"] .volume-hint {
-  opacity: 1;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
   pointer-events: auto;
-  transition: opacity var(--duration-quick) var(--motion-exit);
 }
 
 /* Attention's own orange, because this is the one line that asks the user to
@@ -614,8 +610,8 @@ body,
 .volume-hint-text {
   overflow: hidden;
   color: var(--state-attention);
-  font-size: 9.5px;
-  font-weight: 640;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0.2px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -630,8 +626,8 @@ body,
   border-radius: 10px;
   background: var(--raised);
   color: var(--text-primary);
-  font-size: 9.5px;
-  font-weight: 640;
+  font-size: 11px;
+  font-weight: 600;
   transition: background-color var(--duration-hover) ease;
   white-space: nowrap;
 }

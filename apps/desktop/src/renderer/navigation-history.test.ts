@@ -6,6 +6,7 @@ import { act, createElement, useEffect, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { captionStripProps } from "#testing/captions";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { runAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
@@ -124,6 +125,7 @@ function Window({
     plans,
     history,
     sidebar,
+    captions: captionStripProps(),
     settings: settingsPanelProps({ view, onViewChange: setView }),
   });
 }

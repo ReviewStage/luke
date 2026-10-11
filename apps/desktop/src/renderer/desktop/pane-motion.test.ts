@@ -6,6 +6,7 @@ import type { PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
+import { captionStripProps } from "#testing/captions";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl, usedPlan } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
@@ -213,6 +214,7 @@ function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): Re
     }),
     history: navigationHistory(),
     sidebar,
+    captions: captionStripProps(),
     settings: settingsPanelProps(),
   });
 }

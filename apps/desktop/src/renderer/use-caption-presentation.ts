@@ -1,43 +1,48 @@
-import { cssCustomProperties, SURFACE_PROPERTY } from "@sidecar/surface/react-css";
-import {
-  type CSSProperties,
-  type RefObject,
-  useEffect,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef, useState } from "react";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
-import { captionBlockSize, captionSegments, captionStackOverflow } from "./caption-layout";
-import { parsePixels } from "./motion-tokens";
-import {
-  CAPTION_TONE,
-  type CaptionTone,
-  pointOverStrip,
-  type SpokenStripContent,
-  stripHoldNext,
-} from "./strip-hold";
-import { useMeasuredHeight } from "./use-measured-height";
 import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
 
 /**
- * How far the caption's stack rolls up. The text wraps, so only a measurement
- * can say how tall it is; the bar grows to the stack until it meets the room
- * it may take, and past that the stack rolls up by the overflow instead, so
- * the newest words stay inside the bar while the oldest lines leave through
- * its top — `caption-layout.ts` says why the bound is spent that way. Padding
- * is the caption's own computed padding, not a restated number, so a retune
- * in the stylesheet moves the bound by exactly what the text is inset.
+ * use-caption-presentation.ts -- what the caption strip says this frame: whose words, in which tone, and the moment they stay once the speaker stops.
+ *
+ * The strip carries one speaker at a time. The session is full duplex, so
+ * both can carry words at once, and Luke's reply is the one worth reading
+ * over a read-back of what the developer just said. With neither speaking,
+ * a failure borrows the strip, and a notice borrows it more quietly.
  */
-function captionSizeStyle(
-  textHeight: number | undefined,
-  volumeHint: boolean,
-  padding: number,
-): CSSProperties {
-  if (!textHeight) return {};
-  return cssCustomProperties({
-    [SURFACE_PROPERTY.CAPTION_OVERFLOW]: `${captionStackOverflow(textHeight, volumeHint, padding)}px`,
-  });
+
+/**
+ * What the strip is carrying, which is what labels and colours it: Luke's
+ * words, the developer's own, a failure in the error red, or a notice in the
+ * attention orange for a temporary state rather than a fault.
+ */
+export const CAPTION_TONE = {
+  LUKE: "luke",
+  DEVELOPER: "developer",
+  ERROR: "error",
+  NOTICE: "notice",
+} as const;
+
+export type CaptionTone = (typeof CAPTION_TONE)[keyof typeof CAPTION_TONE];
+
+/**
+ * How long the last words stay once nobody is saying them: long enough to
+ * finish reading the line the voice ended on, short enough that the strip
+ * is gone before the next thing is said.
+ */
+export const CAPTION_LINGER_MS = 3_000;
+
+/** The strip's words and whose they are. */
+export interface CaptionContent {
+  tone: CaptionTone;
+  words: string;
+}
+
+export interface CaptionPresentation {
+  /** The words the strip holds: the live ones, or the last ones after they stop, so its exit has words to fade. */
+  content: CaptionContent | undefined;
+  /** Whether the strip is drawn: while words are live, and for the linger after. */
+  shown: boolean;
 }
 
 interface UseCaptionPresentationOptions {
@@ -50,161 +55,46 @@ interface UseCaptionPresentationOptions {
   /** Who is being heard, which decides what the strip may show over a fault or a notice. */
   speakers: VoiceSpeakers;
   fixtureSpeaking: boolean;
-  /** Whether the hint stands in its own band below the block. */
-  volumeHint: boolean;
-}
-
-interface CaptionPresentation {
-  /** The caption element itself, whose box the hover test measures. */
-  ref: RefObject<HTMLSpanElement | null>;
-  /** The wrapped stack inside it, which is what is measured. */
-  textRef: (element: HTMLElement | null) => void;
-  /** Everything the strip is showing, live words or a held snapshot. */
-  texts: readonly string[] | undefined;
-  tone: CaptionTone;
-  /** The segments already spoken, oldest first, each drawn only while it has words. */
-  settled: readonly string[];
-  /** The words still arriving, in the always-mounted slot. */
-  live: string | undefined;
-  /** The `--caption-size` the surface grows by, and the `--caption-overflow` the stack rolls by. */
-  style: CSSProperties;
 }
 
 /**
- * Luke's words in the caption bar: which of them are drawn, in whose tone,
- * how far the stack rolls up, and the pointer's hold that keeps a reply on
- * screen while someone is still reading it.
+ * What the strip is being handed live this frame. A speaker's segments, one
+ * per message spoken back to back, read as one run of speech, the way a
+ * caption reads.
+ */
+function liveContent(options: UseCaptionPresentationOptions): CaptionContent | undefined {
+  const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking } = options;
+  if (lukeCaptions !== undefined) return { tone: CAPTION_TONE.LUKE, words: lukeCaptions.join(" ") };
+  if (developerCaptions !== undefined) {
+    return { tone: CAPTION_TONE.DEVELOPER, words: developerCaptions.join(" ") };
+  }
+  const error = voiceErrorToShow({ fixtureSpeaking, speakers, error: options.voiceError });
+  if (error !== undefined) return { tone: CAPTION_TONE.ERROR, words: error };
+  const notice = voiceNoticeToShow({ fixtureSpeaking, speakers, notice: options.voiceNotice });
+  if (notice !== undefined) return { tone: CAPTION_TONE.NOTICE, words: notice };
+  return undefined;
+}
+
+/**
+ * The caption strip's words. Live words always win; once they stop, the last
+ * of them stay for {@link CAPTION_LINGER_MS} and then leave, and they stay
+ * held after that, undrawn, so the strip's fade has words to fade.
  */
 export function useCaptionPresentation(
   options: UseCaptionPresentationOptions,
 ): CaptionPresentation {
-  const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking, volumeHint } = options;
-  const [textElement, textHeight] = useMeasuredHeight();
-  const element = useRef<HTMLSpanElement>(null);
-  const [padding, setPadding] = useState(0);
-  // Before paint, not after: `--caption-size` is composed from this, and a
-  // padding that landed a frame later would size the first frame of a reply
-  // without it and then retarget the surface's height transition mid-travel.
-  useLayoutEffect(() => {
-    const node = element.current;
-    if (!node) return;
-    const style = getComputedStyle(node);
-    const next = parsePixels(style.paddingTop) + parsePixels(style.paddingBottom);
-    setPadding((previous) => (previous === next ? previous : next));
-  });
-
-  // A failed call is reported where its reply would have landed: on the
-  // caption strip, under the field or the key press that asked. It yields to
-  // live words, so it can never be drawn over a reply being spoken.
-  const errorNotice = voiceErrorToShow({
-    fixtureSpeaking,
-    speakers,
-    error: options.voiceError,
-  });
-  // A state notice borrows the strip on the failure's own terms — leaving on
-  // the same clock, in its quieter tone — but yields only to Luke's own voice:
-  // the developer's open microphone draws nothing on the strip, and the one
-  // refusal that happens during it belongs there. The failure outranks it: a
-  // fault is the more urgent thing to read.
-  const noticeShown = voiceNoticeToShow({
-    fixtureSpeaking,
-    speakers,
-    notice: options.voiceNotice,
-  });
-  // What the caption block is being handed live this frame: Luke's words, the
-  // developer's own words while nothing of Luke's is being said, a failure
-  // borrowing their strip, or a notice borrowing it more quietly. The session
-  // is full duplex, so both speakers can carry words at once; the strip is
-  // one block and Luke's reply is the one worth reading over a read-back.
-  const stripText = errorNotice ?? noticeShown;
-  const liveTexts =
-    lukeCaptions ?? developerCaptions ?? (stripText === undefined ? undefined : [stripText]);
-  // Words is the resting tone, kept even when nothing is drawn, so a frame
-  // with no words never snapshots a coloured tone into the strip hold.
-  const liveTone: CaptionTone =
-    lukeCaptions !== undefined || (developerCaptions === undefined && stripText === undefined)
-      ? CAPTION_TONE.WORDS
-      : developerCaptions !== undefined
-        ? CAPTION_TONE.ASK
-        : errorNotice !== undefined
-          ? CAPTION_TONE.ERROR
-          : CAPTION_TONE.NOTICE;
-
-  /**
-   * The pointer's hold on the strip. The words leave with the reply that
-   * earned them, and a failure leaves on its own clock — but never out from
-   * under a pointer resting on them, which is someone mid-read. The hold
-   * snapshots exactly what the strip was showing and keeps it drawn until the
-   * pointer moves away; it can start nothing, so nothing dismissed before the
-   * hover began is ever resurrected.
-   */
-  const [hovered, setHovered] = useState(false);
-  // Derived in the render, never advanced after paint: the frame that brings
-  // a new reply's content composes the hold against that same content, so a
-  // held snapshot can never paint one frame beside live words it should have
-  // yielded to. The ref carries the previous frame's answer.
-  const holdRef = useRef<SpokenStripContent | undefined>(undefined);
-  const hold = stripHoldNext({
-    hovered,
-    drawn: liveTexts === undefined ? undefined : { texts: liveTexts, tone: liveTone },
-    held: holdRef.current,
-  });
-  holdRef.current = hold;
-
-  /**
-   * The strip's hoverable box, kept current for the window's move listener:
-   * the caption block's visible height — zero while no words are drawn, so an
-   * invisible block holds nothing. A ref rather than state, because the
-   * listener reads it at each move and re-subscribing per frame would be work
-   * for nobody.
-   */
-  const hoverHeight = useRef(0);
+  const live = liveContent(options);
+  const last = useRef<CaptionContent | undefined>(undefined);
+  if (live !== undefined) last.current = live;
+  const held = last.current;
+  // The words whose linger ran out; drawn again only once live words replace them.
+  const [expired, setExpired] = useState<CaptionContent | undefined>(undefined);
+  const speaking = live !== undefined;
   useEffect(() => {
-    // Note that the window's moves are read rather than the caption's own,
-    // because the words take no pointer and would never hear one.
-    const handleMove = (event: MouseEvent) => {
-      const caption = element.current;
-      setHovered(
-        pointOverStrip({
-          x: event.clientX,
-          y: event.clientY,
-          caption:
-            caption && hoverHeight.current > 0
-              ? { box: caption.getBoundingClientRect(), visibleHeight: hoverHeight.current }
-              : undefined,
-        }),
-      );
-    };
-    const handleLeave = () => setHovered(false);
-    window.addEventListener("mousemove", handleMove, { passive: true });
-    document.documentElement.addEventListener("mouseleave", handleLeave);
-    return () => {
-      window.removeEventListener("mousemove", handleMove);
-      document.documentElement.removeEventListener("mouseleave", handleLeave);
-    };
-  }, []);
-
-  // Live words win; the held snapshot only ever finishes being read. A held
-  // caption is drawn exactly as it was, its tone included.
-  const texts = liveTexts ?? hold?.texts;
-  const tone: CaptionTone = liveTexts !== undefined ? liveTone : (hold?.tone ?? CAPTION_TONE.WORDS);
-  // What the hover test may match this frame, now that both are known.
-  hoverHeight.current =
-    texts === undefined || textHeight === undefined
-      ? 0
-      : captionBlockSize(textHeight, volumeHint, padding);
-
-  // Responses spoken back-to-back stack as captions in the order they were
-  // said: every settled one above, the one still arriving below, in the
-  // always-mounted slot the lone caption also uses.
-  const { settled, live } = captionSegments(texts);
-  return {
-    ref: element,
-    textRef: textElement,
-    texts,
-    tone,
-    settled,
-    live,
-    style: captionSizeStyle(textHeight, volumeHint, padding),
-  };
+    const lingering = last.current;
+    if (speaking || lingering === undefined) return;
+    const timer = window.setTimeout(() => setExpired(lingering), CAPTION_LINGER_MS);
+    return () => window.clearTimeout(timer);
+  }, [speaking]);
+  return { content: held, shown: speaking || (held !== undefined && held !== expired) };
 }

@@ -3,9 +3,7 @@
 //
 // Millisecond mirrors of the CSS duration tokens in motion-tokens.css, from the
 // same table. A main-process constant that waits on a CSS total names these
-// rather than restating the numbers. Pixel sizes follow the same rule: the
-// window and the drawing both name these, and the stylesheet spends the CSS
-// variables emitted beside them.
+// rather than restating the numbers.
 
 export const MOTION_DURATION_MS = {
   FAST: 280,
@@ -20,11 +18,3 @@ export const MOTION_DELAY_MS = {
   ROW_STAGGER: 32,
   HINT: 500,
 } as const;
-
-/** Tallest the caption bar grows to the words; a taller stack rolls up inside
- * it. CSS: `--caption-max`. */
-export const VOICE_CAPTION_MAX_HEIGHT = 210;
-
-/** The gap between the caption bar and the volume hint's row below it. CSS:
- * `--voice-band-inset`. */
-export const VOICE_BAND_INSET = 6;

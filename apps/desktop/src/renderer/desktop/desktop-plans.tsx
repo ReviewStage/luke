@@ -146,8 +146,18 @@ function ArchivedBanner({
   );
 }
 
-/** The open plan's region: its document, or the state standing in its place. */
-function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
+/**
+ * The open plan's region: its document, or the state standing in its place.
+ * The captions, handed in while the plan is drawn, stand just above the call
+ * bar.
+ */
+function PlanDocument({
+  plans,
+  captions,
+}: {
+  plans: PlansControl;
+  captions: React.ReactNode;
+}): React.JSX.Element {
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
@@ -252,6 +262,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           <PlanBody plan={plan} live={plans.live} />
         </section>
         <div className="desktop-call-bar">
+          {captions}
           <CallBar
             status={plans.status}
             microphone={plans.microphone}
@@ -279,10 +290,17 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
   );
 }
 
-export function DesktopPlans({ plans }: { plans: PlansControl }): React.JSX.Element {
+export function DesktopPlans({
+  plans,
+  captions,
+}: {
+  plans: PlansControl;
+  /** The live captions, while they ride the open plan's call bar. */
+  captions?: React.ReactNode;
+}): React.JSX.Element {
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
-      return <PlanDocument plans={plans} />;
+      return <PlanDocument plans={plans} captions={captions} />;
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (

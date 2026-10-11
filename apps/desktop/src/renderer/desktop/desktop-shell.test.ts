@@ -5,6 +5,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { captionStripProps } from "#testing/captions";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
@@ -44,6 +45,7 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW) }),
     history: navigationHistory(),
     sidebar,
+    captions: captionStripProps(),
     settings: settingsPanelProps(),
   });
 }
@@ -432,6 +434,7 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
     }),
     history: navigationHistory(),
     sidebar,
+    captions: captionStripProps(),
     settings: settingsPanelProps({ view, onViewChange: setView }),
   });
 }

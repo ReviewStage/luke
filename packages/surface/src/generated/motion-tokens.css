@@ -74,6 +74,4 @@
   --motion-pane: cubic-bezier(0.2, 0, 0, 1);
   --row-stagger: 32ms;
   --hint-delay: 500ms;
-  --caption-max: 210px;
-  --voice-band-inset: 6px;
 }

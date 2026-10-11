@@ -106,10 +106,11 @@ body,
 }
 
 .app-stage[data-surface="desktop"] {
-  /* Where the work column begins, which the captions centre on, and the
-     width they are drawn at over it. */
+  /* Where the work column begins, which floating captions centre on, and the
+     width they are drawn at over it: no wider than the call bar draws them. */
   --work-left: var(--sidebar-width);
-  --caption-width: min(640px, calc(100vw - var(--work-left) - 96px));
+  --caption-width-max: 560px;
+  --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
   position: absolute;
   inset: 0;
   color: var(--text-primary);
@@ -1069,7 +1070,7 @@ body,
 
 .desktop-document .plan-document-scroll {
   padding: var(--page-inset);
-  /* Room for the last line to scroll clear of Luke's floating caption. */
+  /* Room for the last line to scroll clear of the captions over the call bar. */
   padding-bottom: 140px; /* off-scale */
   /* Nothing in a plan is wider than the column (its code and tables scroll
      on their own), so a body gliding in from where a pane displaced it
@@ -1153,6 +1154,22 @@ body,
   bottom: 0;
   border-top: 1px solid var(--hairline);
   background: var(--desktop-well);
+}
+
+/* The live captions stand just above the call bar, centred on its row, so
+   they cover neither the call's controls nor the side panel beside the
+   column. */
+.desktop-call-bar .voice-caption {
+  bottom: calc(100% + var(--space-12));
+  width: min(var(--caption-width-max), 100% - 2 * var(--page-inset));
+}
+
+/* Anywhere no call bar is drawn (Settings, the new-plan page, a panel
+   filling the window) they float at the window's foot over the work column. */
+.desktop-shell > .voice-caption {
+  bottom: var(--space-24);
+  left: calc(var(--work-left) + (100% - var(--work-left)) / 2);
+  width: var(--caption-width);
 }
 
 /* The call bar's own row, laid out as a voice composer's controls are: at
