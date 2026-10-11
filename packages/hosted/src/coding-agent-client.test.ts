@@ -231,7 +231,12 @@ it.effect("reads a worker's transcript under the agent and the call that started
   Effect.gen(function* () {
     const api = fakeCloudApi({
       [`GET /api/agents/${AGENT_ID}/subagents/call-7/messages`]: {
-        answer: () => ({ messages: [], cursor: "1:0", status: CODING_AGENT_STATUS.COMPLETED }),
+        answer: () => ({
+          messages: [],
+          cursor: "1:0",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          title: null,
+        }),
       },
     });
 
@@ -240,7 +245,12 @@ it.effect("reads a worker's transcript under the agent and the call that started
       api.layer,
     );
 
-    assert.deepEqual(page, { messages: [], cursor: "1:0", status: CODING_AGENT_STATUS.COMPLETED });
+    assert.deepEqual(page, {
+      messages: [],
+      cursor: "1:0",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    });
     assert.equal(
       api.requests()[0]?.url,
       `https://tryluke.dev/api/agents/${AGENT_ID}/subagents/call-7/messages?after=${encodeURIComponent(CODING_AGENT_CURSOR_START)}`,

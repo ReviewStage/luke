@@ -585,11 +585,10 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
     const read = yield* hostedStoreOrUnavailable(delegationPast(target, conversationId, agent));
     if (read.delegation === undefined) {
       if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-      return transcriptResponse({
-        messages: [],
-        cursor: cursorOfWire(after),
-        status: CODING_AGENT_STATUS.STARTING,
-      });
+      return transcriptResponse(
+        { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
+        null,
+      );
     }
     const page = yield* hostedStoreOrUnavailable(
       transcriptPast({ userId, conversationId }, CODER_TOOL_SET, cursorOfWire(after), {

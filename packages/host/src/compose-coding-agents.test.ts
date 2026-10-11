@@ -193,6 +193,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
         messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
         cursor: "2:1",
         status: CODING_AGENT_STATUS.RUNNING,
+        title: null,
       },
     );
     assert.deepEqual(

@@ -316,10 +316,19 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** A forked ask driven to its answer, the clock moved a step at a time so each wait it holds elapses. */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
+/** How far a read asked ahead of its record is stepped: well inside the hold it must answer within. */
+const EARLY_READ_STEPS = 10;
+
+/**
+ * A forked ask driven to its answer, the clock moved a step at a time so
+ * each wait it holds elapses, then joined. The steps are bounded, because
+ * a step lands while a query of the ask's is still on its way, and an ask
+ * that is meant to answer inside its hold must not have the hold stepped
+ * out from under it: a bound under the hold leaves the join to the query.
+ */
+const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps = 1_000) =>
   Effect.gen(function* () {
-    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    for (let attempt = 0; attempt < steps; attempt += 1) {
       if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
       yield* TestClock.adjust(step);
       yield* Effect.yieldNow;
@@ -775,7 +784,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* driven(early, CODER.MESSAGES_POLL),
+          yield* driven(early, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
         );
         assert.equal(page.messages.length, 1);
         assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
