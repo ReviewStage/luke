@@ -163,7 +163,7 @@ test("a plan's card is titled by its first heading, or its first line of words",
   assert.equal(cardTitle("   "), "");
 });
 
-test("a card's title is plain words: the marks a markdown line opens on, strong emphasis, and code spans are left out, and an identifier keeps its underscores", () => {
+test("a card's title is plain words: the marks a markdown line opens on, strong emphasis, code spans, and a link's destination are left out, and an identifier keeps its underscores", () => {
   assert.equal(
     cardTitle("**Goal:** find where `planList` refreshes.\n\n- Read it"),
     "Goal: find where planList refreshes.",
@@ -172,6 +172,11 @@ test("a card's title is plain words: the marks a markdown line opens on, strong 
   assert.equal(cardTitle("1. Find the admin check"), "Find the admin check");
   assert.equal(cardTitle("> Find the admin check"), "Find the admin check");
   assert.equal(cardTitle("Read plan_list_store.ts"), "Read plan_list_store.ts");
+  assert.equal(cardTitle("Find who calls `__init__`"), "Find who calls __init__");
+  assert.equal(
+    cardTitle("Compare [the queue docs](https://example.com/queues) with ours"),
+    "Compare the queue docs with ours",
+  );
 });
 
 test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {
