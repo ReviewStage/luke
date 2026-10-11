@@ -21,7 +21,6 @@ import {
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
-import { Shimmer } from "../ai-elements/shimmer";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import {
@@ -57,6 +56,7 @@ import { type AgentModelControl, useAgentModel } from "./use-agent-model";
 import { useAgentPullRequest } from "./use-agent-pull-request";
 import { type AgentTranscriptControl, useAgentTranscript } from "./use-agent-transcript";
 import type { CodingAgentsControl } from "./use-coding-agents";
+import { WorkingLine } from "./working-time";
 
 /**
  * agent-tab.tsx -- one coding agent's tab in the side panel: its transcript live, and the message box under it wearing what it runs on and what it published.
@@ -77,7 +77,9 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
- * gone the moment it ends so a finished turn ends on its own last line; a
+ * counting how long the run has gone where the service said when it began
+ * (`working-time.tsx`), gone the moment it ends so a finished turn ends on
+ * its own last line; a
  * turn that was stopped or failed ends on one quiet line saying so, with
  * why where the service said. The list
  * keeps to its newest line while it is scrolled there. A link in the
@@ -157,9 +159,6 @@ function transcriptComponents(openGitHub: (url: string) => void): Components {
       ),
   };
 }
-
-/** What stands at the end of the transcript while the agent may still write. */
-const WORKING_LINE = "Working…";
 
 /** One tool call: its row, and its input and answer under it once opened. */
 function ToolCallView({
@@ -335,6 +334,7 @@ export function AgentTranscriptView({
   reading,
   failed,
   working,
+  startedAt,
   ended,
   onRetry,
   openGitHub,
@@ -352,6 +352,8 @@ export function AgentTranscriptView({
   failed: boolean;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
   working: boolean;
+  /** When the run under way began, which the working line counts from; none where unknown, when the line only shimmers. */
+  startedAt?: number | undefined;
   /** The line the transcript ends on once its turn was stopped or failed (`endLine`); nothing otherwise. */
   ended?: string | undefined;
   onRetry: () => void;
@@ -387,11 +389,7 @@ export function AgentTranscriptView({
               copyText={copyText}
             />
           ))}
-          {working ? (
-            <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
-              <Shimmer>{WORKING_LINE}</Shimmer>
-            </p>
-          ) : null}
+          {working ? <WorkingLine startedAt={startedAt} /> : null}
           {ended !== undefined ? (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
@@ -444,6 +442,7 @@ export function AgentTabView({
   model,
   published,
   doors,
+  startedAt,
   onStop,
   onOpenSubagent,
   openGitHub,
@@ -458,6 +457,8 @@ export function AgentTabView({
   /** What the agent published, once the service has said; nothing before. */
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
+  /** When the agent's run began, as the working line counts from it; none while the tab is off screen, so nothing counts unseen. */
+  startedAt: number | undefined;
   onStop: () => Promise<void>;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
@@ -477,6 +478,7 @@ export function AgentTabView({
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(agent.status)}
+        startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
         openGitHub={openGitHub}
@@ -564,6 +566,7 @@ export function AgentTab({
       model={model}
       published={published}
       doors={{ openGitHub, copy: (words) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words }) }}
+      startedAt={shown ? agent.runStartedAt : undefined}
       onStop={() => control.onStop(agent.id)}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}

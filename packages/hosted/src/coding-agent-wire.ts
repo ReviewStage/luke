@@ -137,7 +137,7 @@ export const codingAgentRenameRequestSchema = EffectSchema.Struct({
 
 export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Type;
 
-/** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, and which turn that is. */
+/** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
   planId: wireUuidSchema,
@@ -158,6 +158,14 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * is running on the message's account.
    */
   turnId: EffectSchema.NullOr(wireUuidSchema),
+  /**
+   * Epoch milliseconds the run the status is read from began, which is what
+   * a tab counts how long the agent has been working from: the newest
+   * turn's start, or its queueing where eve has not started it, and the
+   * agent's own start before its first turn. Absent while a message awaits
+   * its turn, whose run has not begun, and from a service older than it.
+   */
+  runStartedAt: EffectSchema.optionalKey(countedNumber),
   /**
    * What the agent was handed as its first message, so its tab draws a
    * plan as the plan's card and a task as the developer's own message.

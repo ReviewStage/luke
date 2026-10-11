@@ -37,6 +37,7 @@ import {
   workerJob,
   workRowsOf,
 } from "./work-model";
+import { WorkingLine, WorkingTime } from "./working-time";
 
 /**
  * plan-work.tsx -- the open plan's Work tab: what Luke's planning model wrote and ran on the plan's calls, turn by turn, read the way an agent's own transcript reads.
@@ -143,9 +144,9 @@ function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Elemen
 /** The word before a subagent's task card's title. */
 const TASK_CARD_LABEL = "Task";
 
-/** What stands at the end of a subagent's session while it runs, and where it was stopped. */
+/** What stands at the end of a subagent's session where it was stopped; one that runs ends on the working line. */
 const SUBAGENT_END_LINE = {
-  [PLAN_WORK_STATE.RUNNING]: "Working…",
+  [PLAN_WORK_STATE.RUNNING]: undefined,
   [PLAN_WORK_STATE.DONE]: undefined,
   [PLAN_WORK_STATE.FAILED]: "Stopped",
 } as const satisfies Record<PlanWorkState, string | undefined>;
@@ -180,11 +181,8 @@ export function SubagentTab({ worker }: { worker: WorkWorkerBlock }): React.JSX.
             </PlanContent>
           </Plan>
           <SubagentRows worker={worker} />
-          {call.running ? (
-            <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
-              <Shimmer>{SUBAGENT_END_LINE[PLAN_WORK_STATE.RUNNING]}</Shimmer>
-            </p>
-          ) : null}
+          {/* No start of a subagent's own reaches the window, so its line counts nothing. */}
+          {call.running ? <WorkingLine startedAt={undefined} /> : null}
           {ended === undefined ? null : (
             <p className="agent-end-line" data-ended="" aria-live="polite">
               {ended}
@@ -222,12 +220,27 @@ function WorkTurnRows({ rows }: { rows: readonly TurnRow<WorkBlock>[] }): React.
   );
 }
 
-/** A turn's state at the right of its checkpoint, a light sweeping it while the turn works. */
-function TurnState({ state }: { state: PlanWorkState }): React.JSX.Element {
+/**
+ * A turn's state at the right of its checkpoint, a light sweeping it while
+ * the turn works and how long it has worked beside it while the tab is on
+ * screen.
+ */
+function TurnState({
+  state,
+  startedAt,
+  counting,
+}: {
+  state: PlanWorkState;
+  startedAt: number;
+  counting: boolean;
+}): React.JSX.Element {
   return (
     <span data-state={state}>
       {state === PLAN_WORK_STATE.RUNNING ? (
-        <Shimmer>{TURN_STATE_WORD[state]}</Shimmer>
+        <>
+          <Shimmer>{TURN_STATE_WORD[state]}</Shimmer>
+          {counting ? <WorkingTime startedAt={startedAt} /> : null}
+        </>
       ) : (
         TURN_STATE_WORD[state]
       )}
@@ -236,10 +249,20 @@ function TurnState({ state }: { state: PlanWorkState }): React.JSX.Element {
 }
 
 /** One turn: the checkpoint saying when it began and how far it got, then its blocks. */
-function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.Element {
+function WorkTurn({
+  turn,
+  now,
+  counting,
+}: {
+  turn: WorkTurnRow;
+  now: number;
+  counting: boolean;
+}): React.JSX.Element {
   return (
     <>
-      <Checkpoint trailing={<TurnState state={turn.state} />}>
+      <Checkpoint
+        trailing={<TurnState state={turn.state} startedAt={turn.startedAt} counting={counting} />}
+      >
         {callHeading(turn.startedAt, now)}
       </Checkpoint>
       {turn.earlierOmitted ? <TranscriptNote>Earlier steps are not shown.</TranscriptNote> : null}
@@ -310,6 +333,7 @@ export function PlanWork({
   earlier,
   onLoadEarlier,
   onOpenSubagent,
+  shown,
 }: {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
@@ -319,6 +343,8 @@ export function PlanWork({
   onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
+  /** Whether the tab is on screen, which is when a running turn counts how long it has worked. */
+  shown: boolean;
 }): React.JSX.Element {
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
@@ -336,7 +362,7 @@ export function PlanWork({
               {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
               {earlier === undefined ? null : <EarlierWork key={earlier} onLoad={onLoadEarlier} />}
               {rows.map((turn) => (
-                <WorkTurn key={turn.key} turn={turn} now={now} />
+                <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
               ))}
             </ConversationContent>
             <ConversationScrollButton />

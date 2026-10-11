@@ -128,6 +128,8 @@ function turn(status: string, cancelRequestedAt: Date | null = null) {
     failure: null,
     failureDetail: null,
     cancelRequestedAt,
+    queuedAt: new Date(0),
+    startedAt: null,
     model: null,
     usage: null,
   };

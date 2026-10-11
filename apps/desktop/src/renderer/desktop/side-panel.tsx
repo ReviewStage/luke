@@ -68,6 +68,7 @@ import {
   workerOf,
   workRowsOf,
 } from "../planning/work-model";
+import { WorkingTime } from "../planning/working-time";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, MENU_ALIGN, type MenuAction, MenuItem, type OpenMenu } from "./action-menu";
@@ -238,6 +239,20 @@ function stateWords(word: string, live: boolean): React.ReactNode {
   return live ? <Shimmer>{word}</Shimmer> : word;
 }
 
+/** An agent's state on its "+" row: its word, shimmering while it works, then how long the run has gone where the service said when it began. */
+function agentStateWords(agent: CodingAgentSummary): React.ReactNode {
+  const live = agentStillWriting(agent.status);
+  const word = stateWords(AGENT_STATUS_WORD[agent.status], live);
+  return live && agent.runStartedAt !== undefined ? (
+    <>
+      {word}
+      <WorkingTime startedAt={agent.runStartedAt} />
+    </>
+  ) : (
+    word
+  );
+}
+
 /** One row of the "+" menu, and what picking it does. */
 interface AddEntry {
   row: MenuRow;
@@ -284,7 +299,7 @@ function addEntries(input: {
       id: agent.id,
       label: agentTabLabel(agent, agents.models),
       icon: <AgentStatusDot status={agent.status} />,
-      detail: stateWords(AGENT_STATUS_WORD[agent.status], agentStillWriting(agent.status)),
+      detail: agentStateWords(agent),
       terms: [AGENT_STATUS_WORD[agent.status]],
       section: ADD_SECTION.AGENTS,
       hint: panel.closedAgents.includes(agent.id) ? undefined : TAB_OPEN,
@@ -832,6 +847,7 @@ function TabContent({
           earlier={work.earlier}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
+          shown={shown}
         />
       );
   }

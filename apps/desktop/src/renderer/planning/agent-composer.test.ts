@@ -173,6 +173,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     return createElement(AgentTabView, {
       agent: { ...AGENT, ...held.choice, status: held.status },
       models: MODELS,
+      startedAt: undefined,
       readModels: ignore,
       transcript: {
         messages: held.messages,
