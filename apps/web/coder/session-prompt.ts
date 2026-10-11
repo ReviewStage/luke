@@ -23,3 +23,16 @@ export interface SandboxRecord {
 }
 
 export const sandboxRecord = defineState<SandboxRecord>("luke.coder.sandbox", () => ({}));
+
+/**
+ * What a worker's session knows of the delegation it runs: eve's id for the
+ * agent's call that started it, in the worker's own durable state. Every
+ * hook is handed the session's lineage and a resolver none, so the worker's
+ * hook pins the call here as the session starts and the model resolver
+ * reads it at every step (`subagents/worker/`).
+ */
+export interface DelegationRecord {
+  readonly parentCallId?: string;
+}
+
+export const delegationRecord = defineState<DelegationRecord>("luke.coder.delegation", () => ({}));

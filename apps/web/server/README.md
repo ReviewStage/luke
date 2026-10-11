@@ -1686,12 +1686,44 @@ come from a route still holding it, so no deployment actor acts here, and a
 follow-up steers. The agent (`coder/agent.ts`) runs none of eve's default
 tools and authors its own under `coder/tools/`, which is exactly the set the
 store writer registers (`coder-host/tool-set.ts`): eve's `bash`, `read_file`,
-`write_file`, `glob`, `web_fetch`, and `web_search`, and the code
-extension's `apply_patch` and `grep` from `eve/extensions/code/tools`; the
+`write_file`, `glob`, `web_fetch`, and `web_search`, the code
+extension's `apply_patch` and `grep` from `eve/extensions/code/tools`, and
+`delegate`, Luke's own hand-off to a worker (below); the
 extension itself is not mounted, since its `worker` subagent runs on an AI
 Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
 session's input tokens are uncapped and compaction is eve's default.
+
+The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
+the planning worker's shape (`eve/subagents/worker/`): read-only in the
+agent's own sandbox and checkout, uncommitted edits included
+(`defineParentSandbox`), authored exactly the agent's reads
+(`WORKER_TOOL_NAMES`: `bash`, `read_file`, `glob`, `grep`, `web_fetch`,
+`web_search`), told to change nothing, and bounded per session
+(`CODER.WORKER_INPUT_TOKENS`, `WORKER_OUTPUT_TOKENS`). It is declared
+hidden (`tool: false`), because eve's own subagent tool carries a message
+and nothing else, and the agent chooses each worker's model and effort: the
+model sees `delegate` (`coder/tools/delegate.ts`), a workflow tool whose
+input is `{ task, model?, effort? }` and whose `execute` blocks the agent's
+turn until the worker answers, several calls in one step running at once.
+Its step fills the pair in from the agent's own row, holds it to the same
+catalog a Start is held to (`coder-host/delegation.ts`, refusing with the
+models offered or the named model's efforts, which the body throws so the
+model reads it and tries again), opens the child conversation the call
+names (`childConversationId(agent conversation, callId)`, as the planning
+worker's is named) and writes the pair under it
+(`coding_agent_delegation`, migration 0066); then the body opens the worker
+through `ctx.agent("worker")`. eve hands a resolver no lineage, so the
+worker's hook (`subagents/worker/hooks/store.ts`) pins the parent call's id
+in the worker's own state as the session starts, the model resolver reads
+it at every step and is told the recorded pair (`host.delegatedModel`), and
+the hook relays the worker's stream into the child conversation as a child
+turn naming that pair (`host.relayChild`). The tool's output names the pair
+and the worker's answer; the tool part's `toolCallId` is what names the
+child. `delegate` is not among `SANDBOX_TOOLS`: a refused or web-only
+delegation opens no sandbox, and counting it would have the turn's end open
+one only to stop it, so a sandbox a worker opened is stopped at the end of
+the first turn in which the agent runs a sandbox tool of its own.
 
 The model is chosen at every step (`coder-host/model.ts`): the agent's row
 names the catalog id and effort, `providerModelOf` turns the id into the
@@ -1731,7 +1763,9 @@ first message. The service needs `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`,
 credentials its build prewarms under; `LUKE_CODER_MODEL_FIXTURE=scripted`
 selects the scripted model for `coder/evals/coder.eval.ts`, which
 `pnpm --filter @luke/web test:agent` runs beside the planning eval and which
-runs a turn under the scripted model with no tool call, so no sandbox opens.
+runs a turn under the scripted model with no tool call, so no sandbox opens,
+and a second turn that delegates to the worker, whose only call is the
+delegation, so no sandbox opens there either.
 
 ## The coding-agent routes
 
@@ -1809,6 +1843,12 @@ client's twenty-second loop, is `agent-not-ready` (409, tried again); a
 session eve no longer runs is `agent-retired` (409), since the agent's
 sandbox lives with its session; any other answer is `unavailable`, and none
 of them leaves a row behind.
+`GET /api/agents/{id}/subagents/{callId}/messages?after=` reads a worker's
+transcript the same way, under the agent and eve's id for the `delegate`
+call that started it, which the call's tool part carries as `toolCallId`:
+the child conversation is `childConversationId` of the two, and only a
+delegation recorded under the account's agent answers, so another account's
+agent, or a call that made no delegation, is `not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with

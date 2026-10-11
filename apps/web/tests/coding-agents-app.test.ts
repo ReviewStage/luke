@@ -61,9 +61,10 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
-import { sentLineId } from "../server/hosted/brain-host/ids";
+import { childConversationId, sentLineId } from "../server/hosted/brain-host/ids";
 import { claimRuntimeSession } from "../server/hosted/brain-host/recorded-session";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
+import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { cursorOfWire } from "../server/hosted/coder-host/transcript";
 import {
@@ -103,6 +104,7 @@ const AGENT_MESSAGES = "/api/agents/messages";
 const AGENT = "/api/agents/agent";
 const AGENT_STOP = "/api/agents/stop";
 const AGENT_PULL_REQUEST = "/api/agents/pull-request";
+const AGENT_SUBAGENT_MESSAGES = "/api/agents/subagent-messages";
 
 const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
@@ -262,11 +264,18 @@ const standing = (
 function request(
   path: string,
   bearer: string | undefined,
-  init: { method?: string; body?: WireBoundaryInput; id?: string; after?: string } = {},
+  init: {
+    method?: string;
+    body?: WireBoundaryInput;
+    id?: string;
+    after?: string;
+    call?: string;
+  } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
   if (init.id !== undefined) url.searchParams.set("id", init.id);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
+  if (init.call !== undefined) url.searchParams.set("call", init.call);
   return new Request(url, {
     method: init.method ?? "GET",
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
@@ -612,6 +621,78 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         );
         assert.deepEqual(
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a worker's transcript is read under the agent and the call that started it, by the owner alone; a call no delegation was recorded for reads as none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, ask } = yield* openPlan();
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        const parent = { userId: owner, conversationId: stored.value.conversationId };
+        const callId = "call-worker-1";
+        const child = {
+          userId: owner,
+          conversationId: childConversationId(parent.conversationId, callId),
+        };
+        yield* recordDelegation(
+          parent,
+          child.conversationId,
+          { model: "openai/gpt-6.1-sol", effort: "low" },
+          CODER_TOOL.DELEGATE,
+        );
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        const turnId = randomUUID();
+        yield* writer.enqueueTurn(child, {
+          turnId,
+          origin: TURN_ORIGIN.CHILD,
+          eveTurnId: "turn_0",
+        });
+        yield* writer.consume(child, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(child.conversationId),
+          turnId,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.CHILD,
+          trigger: BRAIN_TURN_TRIGGER.CHILD_TASK,
+          at: 0,
+        });
+        yield* writer.consume(child, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(child.conversationId),
+          turnId,
+          sequence: 2,
+          message: userMessage(
+            randomUUID(),
+            "Count the routes.",
+            userMetadataOf(BRAIN_TURN_TRIGGER.CHILD_TASK, undefined),
+          ),
+        });
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: callId })),
+        );
+        assert.equal(page.messages.length, 1);
+        assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
+        assert.equal(page.status, CODING_AGENT_STATUS.RUNNING);
+
+        assert.deepEqual(
+          yield* ask(request(AGENT_SUBAGENT_MESSAGES, other, { id: agent.id, call: callId })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-9" })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
       }),

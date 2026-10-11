@@ -9,7 +9,8 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
  * same conversation admission, the same relay into the store, under a
  * different agent. What differs is named here: how long its sandbox may
  * live, how often the repository credential at its firewall is renewed,
- * where its checkout stands, and how a transcript read waits.
+ * where its checkout stands, how a transcript read waits, and how much a
+ * worker it delegates to may spend.
  */
 export const CODER = {
   /** The most a Vercel Sandbox session may live: the platform's own maximum, so a long run is never cut off mid-turn. */
@@ -35,6 +36,9 @@ export const CODER = {
    * starting forever and no transcript read is held for it.
    */
   STARTING_GRACE: Duration.minutes(5),
+  /** Each worker session's own token budget, so one runaway worker costs a bounded amount; the planning worker's bounds (`brain-host/bounds.ts`). */
+  WORKER_INPUT_TOKENS: 600_000,
+  WORKER_OUTPUT_TOKENS: 40_000,
 } as const;
 
 /** The environment the coding-agent host reads beside the names every hosted route already honours. */
@@ -59,6 +63,9 @@ export const CODER_REFUSAL = {
   NOT_REACHABLE:
     "Not run: the agent's repository is not reachable for the developer through the Luke GitHub App.",
   GITHUB_UNAVAILABLE: "Not run: GitHub could not be asked for the repository's credential.",
+  NO_DELEGATION: "Not run: this session is no worker of a coding agent's.",
+  NO_DELEGATION_PINNED: "Not run: the worker's session was started by no call of a coding agent's.",
+  CATALOG_UNAVAILABLE: "Not run: the model catalog could not be read; delegate again in a moment.",
 } as const;
 
 export type CoderRefusal = (typeof CODER_REFUSAL)[keyof typeof CODER_REFUSAL];

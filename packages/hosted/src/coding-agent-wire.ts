@@ -38,6 +38,8 @@ export const CODING_AGENT_BOUNDS = {
   MAX_CHOICE_CHARS: 200,
   /** The most characters one message to an agent may spell, trimmed: room for a pasted failure and the words around it, well inside one model call. */
   MAX_MESSAGE_CHARS: 16_000,
+  /** The most characters eve's id for a tool call may spell, which is how a subagent's transcript is named on the path. */
+  MAX_CALL_ID_CHARS: 128,
 } as const;
 
 /** Where an agent stands, read from its newest turn: not yet started, at work, or how it ended. */
@@ -187,6 +189,38 @@ export const codingAgentPullRequestAnswerSchema = EffectSchema.Struct({
 });
 
 export type CodingAgentPullRequestAnswer = typeof codingAgentPullRequestAnswerSchema.Type;
+
+/**
+ * The tool an agent hands a slice of its work to a subagent with, by the
+ * name its tool part carries in the transcript (`tool-delegate`). The call
+ * blocks the agent's turn until the worker answers; the worker reads the
+ * agent's checkout and writes nothing. The part's `toolCallId` is eve's
+ * id for the call, and the worker's own transcript is read under it
+ * (`GET /api/agents/{id}/subagents/{callId}/messages`), so a tab can open the
+ * worker's session from the moment the call is requested.
+ */
+export const CODING_AGENT_DELEGATE_TOOL = "delegate";
+
+/** eve's id for a tool call, as the path names a subagent's transcript by it. */
+export const codingAgentCallIdSchema = trimmedText(CODING_AGENT_BOUNDS.MAX_CALL_ID_CHARS);
+
+/**
+ * What a delegation's tool part carries as its input: the task in the
+ * agent's words, and the model and effort the agent chose for the worker,
+ * each absent where the agent left it to its own.
+ */
+export const codingAgentDelegationInputSchema = EffectSchema.Struct({
+  task: EffectSchema.String,
+  model: EffectSchema.optionalKey(EffectSchema.String),
+  effort: EffectSchema.optionalKey(EffectSchema.String),
+});
+
+/** What a settled delegation's tool part carries as its output: the model and effort the worker ran on, and its answer. */
+export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
+  model: EffectSchema.String,
+  effort: EffectSchema.String,
+  result: EffectSchema.String,
+});
 
 /**
  * One JSON object as the row holds it, read whole: a message part or the

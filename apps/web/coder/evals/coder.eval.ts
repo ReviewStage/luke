@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { isTextUIPart } from "ai";
+import { isTextUIPart, isToolUIPart } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, ManagedRuntime, Option, Result, Schema } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
@@ -10,6 +10,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  TOOL_PART_STATE,
   TURN_ORIGIN,
   TURN_STATUS,
   unparsedWire,
@@ -19,12 +20,22 @@ import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../../server/hosted/brain-host/ids";
+import { childConversationId, hostTurnId } from "../../server/hosted/brain-host/ids";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
-import { createCodingAgent } from "../../server/hosted/coding-agent-store";
+import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
+import { type CodingAgent, createCodingAgent } from "../../server/hosted/coding-agent-store";
 import { createPlan } from "../../server/hosted/plan-store";
-import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
-import { SCRIPTED_CODER_REPLY } from "../scripted-model";
+import {
+  readMessagesByConversationTyped,
+  readTurnById,
+  readTurnsByConversation,
+} from "../../tests/support/store-rows";
+import {
+  SCRIPTED_CODER_REPLY,
+  SCRIPTED_DELEGATE,
+  SCRIPTED_DELEGATED_REPLY,
+  SCRIPTED_WORKER_CHOICE,
+} from "../scripted-model";
 
 /**
  * The whole coding-agent host under eve, end to end: eve's runtime runs a
@@ -32,7 +43,11 @@ import { SCRIPTED_CODER_REPLY } from "../scripted-model";
  * handed the plan as the session's first message and answers in words
  * without calling a tool, so no sandbox opens, no repository is checked
  * out, and no GitHub is reached; and the relay writes the turn into the
- * store through the writer, as the real providers' turns are written. The
+ * store through the writer, as the real providers' turns are written. Told
+ * to delegate, it hands the rest to a worker on a pair of its own choosing
+ * and waits: the call is a tool part of its answer naming the pair, the
+ * worker's session is recorded under the child conversation that call
+ * names, on that pair, and the worker's answer is read back. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -46,6 +61,11 @@ const DATABASE_ENVIRONMENT = { URL: "DATABASE_URL" } as const;
 const PLAN = { name: "Teammate invitations" } as const;
 const PLAN_SNAPSHOT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 const REPOSITORY = "acme/relay";
+const DELEGATED_TASK = "Count the invitation routes";
+
+/** How long the eval waits for a turn to settle, in polls of the interval below. */
+const SETTLE_POLLS = 120;
+const SETTLE_INTERVAL_MS = 500;
 
 /** What eve answers a session's opening with, read for the one field the eval continues from. */
 const ACCEPTED_SESSION = Schema.Struct({ sessionId: Schema.String });
@@ -84,6 +104,25 @@ function readConversationRuntimeSessionId(
   );
 }
 
+function startAgent(run: Run, planId: string): Promise<CodingAgent> {
+  return run(
+    Effect.map(
+      createCodingAgent(LOCAL_DEV_PRINCIPAL, {
+        planId,
+        idempotencyKey: `eval-${Date.now()}-${Math.random()}`,
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        planSnapshot: PLAN_SNAPSHOT,
+        repository: REPOSITORY,
+      }),
+      (started) => {
+        assert.ok(Option.isSome(started));
+        return started.value.agent;
+      },
+    ),
+  );
+}
+
 export default defineEval({
   description:
     "A coding agent's first turn runs through eve, the relay, and the writer into the store, under the scripted model.",
@@ -97,42 +136,35 @@ export default defineEval({
     try {
       await ensureLocalDevUser(run);
       const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
-      const started = await run(
-        createCodingAgent(LOCAL_DEV_PRINCIPAL, {
-          planId: plan.id,
-          idempotencyKey: `eval-${Date.now()}`,
-          model: "anthropic/claude-opus-5.5",
-          effort: "high",
-          planSnapshot: PLAN_SNAPSHOT,
-          repository: REPOSITORY,
-        }),
-      );
-      assert.ok(Option.isSome(started));
-      const { agent } = started.value;
+      const agent = await startAgent(run, plan.id);
 
-      // The Start as the route makes it: the plan as the first message of a typed turn on the agent's conversation.
-      const opened = await t.target.fetch("/eve/v1/session", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          [BRAIN_HOST_HEADER.CONVERSATION]: agent.conversationId,
-          [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
-        },
-        body: JSON.stringify({ message: agent.planSnapshot }),
-      });
-      assert.equal(opened.status, 202);
-      const accepted = Result.getOrUndefined(
-        readEither(ACCEPTED_SESSION, { excess: EXCESS_KEYS.DROP })(
-          unparsedWire(await opened.json()),
-        ),
-      );
-      assert.ok(accepted);
-      // The door admits a session once its first event has recorded it on the conversation row.
-      for (let waited = 0; waited < 40; waited += 1) {
-        const runtimeSessionId = await readConversationRuntimeSessionId(run, agent.conversationId);
-        if (runtimeSessionId === accepted.sessionId) break;
-        await t.sleep(250);
-      }
+      /** The Start as the route makes it: the first message of a typed turn on the agent's conversation, answered once the door has recorded the session on the conversation row. */
+      const openSession = async (conversationId: string, message: string) => {
+        const opened = await t.target.fetch("/eve/v1/session", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            [BRAIN_HOST_HEADER.CONVERSATION]: conversationId,
+            [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+          },
+          body: JSON.stringify({ message }),
+        });
+        assert.equal(opened.status, 202);
+        const accepted = Result.getOrUndefined(
+          readEither(ACCEPTED_SESSION, { excess: EXCESS_KEYS.DROP })(
+            unparsedWire(await opened.json()),
+          ),
+        );
+        assert.ok(accepted);
+        for (let waited = 0; waited < 40; waited += 1) {
+          const runtimeSessionId = await readConversationRuntimeSessionId(run, conversationId);
+          if (runtimeSessionId === accepted.sessionId) break;
+          await t.sleep(250);
+        }
+        return accepted;
+      };
+
+      const accepted = await openSession(agent.conversationId, agent.planSnapshot);
       const session = await t.target.attachSession(accepted.sessionId);
       session.succeeded();
 
@@ -164,6 +196,63 @@ export default defineEval({
       assert.equal(
         await readConversationRuntimeSessionId(run, agent.conversationId),
         accepted.sessionId,
+      );
+
+      // A delegation blocks the agent's turn until the worker answers: one
+      // turn on record, settled, holding the call as a tool part that names
+      // the pair asked and the worker's answer, and the worker's own session
+      // recorded under the child conversation the call names, on that pair.
+      const delegating = await startAgent(run, plan.id);
+      const delegation = await openSession(
+        delegating.conversationId,
+        `${SCRIPTED_DELEGATE}${DELEGATED_TASK}`,
+      );
+      const delegatingTurnId = hostTurnId(delegation.sessionId, "turn_0");
+      let held: Awaited<ReturnType<typeof readTurnById>> | undefined;
+      for (
+        let polled = 0;
+        polled < SETTLE_POLLS && held?.status !== TURN_STATUS.SETTLED;
+        polled += 1
+      ) {
+        held = await readTurnById(run, delegatingTurnId);
+        await t.sleep(SETTLE_INTERVAL_MS);
+      }
+      assert.ok(held);
+      assert.equal(held.status, TURN_STATUS.SETTLED);
+      const delegatingRows = await readMessagesByConversationTyped(run, delegating.conversationId);
+      const answer = delegatingRows.at(-1);
+      assert.ok(answer);
+      assert.equal(answer.role, MESSAGE_ROLE.ASSISTANT);
+      const call = answer.parts.find((part) => isToolUIPart(part));
+      assert.ok(call);
+      assert.equal(call.type, `tool-${CODER_TOOL.DELEGATE}`);
+      assert.equal(call.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.deepEqual(call.input, { task: DELEGATED_TASK, ...SCRIPTED_WORKER_CHOICE });
+      assert.deepEqual(call.output, {
+        ...SCRIPTED_WORKER_CHOICE,
+        result: `${SCRIPTED_CODER_REPLY} ${DELEGATED_TASK}`,
+      });
+      assert.ok(
+        answer.parts.some(
+          (part) => isTextUIPart(part) && part.text.startsWith(SCRIPTED_DELEGATED_REPLY),
+        ),
+      );
+      const childId = childConversationId(delegating.conversationId, call.toolCallId);
+      const [childTurn] = await readTurnsByConversation(run, childId);
+      assert.ok(childTurn);
+      assert.equal(childTurn.origin, TURN_ORIGIN.CHILD);
+      assert.equal(childTurn.status, TURN_STATUS.SETTLED);
+      assert.equal(childTurn.model, CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID);
+      assert.equal(childTurn.reasoningEffort, SCRIPTED_WORKER_CHOICE.effort);
+      const childRows = await readMessagesByConversationTyped(run, childId);
+      assert.deepEqual(
+        childRows.map((row) => row.role),
+        [MESSAGE_ROLE.USER, MESSAGE_ROLE.ASSISTANT],
+      );
+      assert.ok(
+        childRows[0]?.parts.some(
+          (part) => isTextUIPart(part) && part.text.includes(DELEGATED_TASK),
+        ),
       );
     } finally {
       await runtime.dispose();
