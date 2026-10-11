@@ -96,6 +96,8 @@ function turn(status: string, cancelRequestedAt: Date | null = null) {
     failure: null,
     failureDetail: null,
     cancelRequestedAt,
+    model: null,
+    usage: null,
   };
 }
 

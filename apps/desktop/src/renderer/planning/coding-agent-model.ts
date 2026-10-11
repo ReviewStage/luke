@@ -13,6 +13,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type CodingAgentUsage,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -38,8 +39,50 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * than in the transcript, when a line the developer sent has been read
  * back, what a Start or a message that did not land says, and what its
  * pull request pill, its branch chip, their menu, and the row that sums a
- * finished turn up say. Nothing here asks anything.
+ * finished turn up say, and how what an agent or a turn cost is told.
+ * Nothing here asks anything.
  */
+
+/** The words that separate the parts of a line: the summary row's, the chip menu's. */
+const LINE_SEPARATOR = " · ";
+
+/** How many tokens are a thousand and a million, as the compact count spells them. */
+const THOUSAND = 1_000;
+const MILLION = 1_000_000;
+
+/** The least dollars drawn as an amount; under it the cost reads as less than a cent. */
+const LEAST_CENTS = 0.005;
+
+/** A count of tokens compact enough for a line: 812, 12.3k, 1.2M. */
+function compactCount(count: number): string {
+  if (count >= MILLION) return `${(count / MILLION).toFixed(1)}M`;
+  if (count >= THOUSAND) return `${(count / THOUSAND).toFixed(1)}k`;
+  return String(count);
+}
+
+/** Dollars as a line draws them: to the cent, and under a cent "<$0.01". */
+function dollars(costUsd: number): string {
+  return costUsd > 0 && costUsd < LEAST_CENTS ? "<$0.01" : `$${costUsd.toFixed(2)}`;
+}
+
+/** The dollars some turns cost, where the service put a price on every step; nothing where it could not. */
+function costLabel(usage: CodingAgentUsage | undefined): string | undefined {
+  return usage?.costUsd === undefined ? undefined : dollars(usage.costUsd);
+}
+
+/** What the agent has cost, for the model menu's foot: "This agent: 1.2M tokens · $0.42", the dollars left off where unknown; nothing before a turn settled. */
+export function agentUsageLine(usage: CodingAgentUsage | undefined): string | undefined {
+  if (usage === undefined) return undefined;
+  const tokens = `${compactCount(usage.inputTokens + usage.outputTokens)} tokens`;
+  const cost = costLabel(usage);
+  return `This agent: ${cost === undefined ? tokens : `${tokens}${LINE_SEPARATOR}${cost}`}`;
+}
+
+/** The line with what the turn cost after it, where known. */
+function withCost(line: string, usage: CodingAgentUsage | undefined): string {
+  const cost = costLabel(usage);
+  return cost === undefined ? line : `${line}${LINE_SEPARATOR}${cost}`;
+}
 
 /** What a failed turn's end line says after "Failed", by the service's one word for why; nothing for a reason it has no words for. */
 const AGENT_FAILURE_WORDS = {
@@ -50,17 +93,18 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
-/** The quiet line a transcript ends on once its turn failed or was stopped; nothing for an agent still writing or one that completed. */
+/** The quiet line a transcript ends on once its turn failed or was stopped, with what the turn cost where known; nothing for an agent still writing or one that completed. */
 export function endLine(
   status: CodingAgentStatus,
   failure: CodingAgentFailure | undefined,
+  turnUsage?: CodingAgentUsage,
 ): string | undefined {
   switch (status) {
     case CODING_AGENT_STATUS.CANCELLED:
-      return "Stopped";
+      return withCost("Stopped", turnUsage);
     case CODING_AGENT_STATUS.FAILED: {
       const words = failure === undefined ? undefined : AGENT_FAILURE_WORDS[failure];
-      return words === undefined ? "Failed" : `Failed: ${words}`;
+      return withCost(words === undefined ? "Failed" : `Failed: ${words}`, turnUsage);
     }
     case CODING_AGENT_STATUS.STARTING:
     case CODING_AGENT_STATUS.RUNNING:
@@ -654,10 +698,16 @@ export function pullRequestNumberLabel(
   return `#${pullRequest.number}`;
 }
 
-/** One line summing a finished turn up: what was opened, and how much changed. */
-export function publishedSummary(pullRequest: CodingAgentPullRequest): string {
+/** One line summing a finished turn up: what was opened, how much changed, and what the turn cost where known. */
+export function publishedSummary(
+  pullRequest: CodingAgentPullRequest,
+  turnUsage?: CodingAgentUsage,
+): string {
   const files = pullRequest.changedFiles === 1 ? "1 file" : `${pullRequest.changedFiles} files`;
-  return `${PUBLISHED_VERB[pullRequest.state]} ${pullRequestNumberLabel(pullRequest)} · +${pullRequest.additions} −${pullRequest.deletions} in ${files}`;
+  return withCost(
+    `${PUBLISHED_VERB[pullRequest.state]} ${pullRequestNumberLabel(pullRequest)}${LINE_SEPARATOR}+${pullRequest.additions} −${pullRequest.deletions} in ${files}`,
+    turnUsage,
+  );
 }
 
 /** The pill's own words for a reader who cannot see it: the number, where it stands, and its checks. */

@@ -76,6 +76,11 @@ export interface BrainRunUsage {
   reasoningTokens: number;
 }
 
+/** One model's share of a run's usage: the counts of every step that ran on it, under the catalog id the step ran under. */
+export interface BrainModelUsage extends BrainRunUsage {
+  readonly model: string;
+}
+
 /** One answer's counts added onto a run's so far (nothing, before its first answer), each missing count counting as nothing. */
 export function addModelUsage(total: BrainRunUsage | undefined, usage: ModelUsage): BrainRunUsage {
   return {

@@ -48,3 +48,23 @@ export const EpochMillisColumnSchema = Schema.Union([
  * `Schema.Date`.
  */
 export const InstantColumnSchema = Schema.Union([Schema.DateFromMillis, Schema.Date]);
+
+const UsageCountsFields = {
+  inputTokens: Schema.Number,
+  outputTokens: Schema.Number,
+  cachedInputTokens: Schema.Number,
+  reasoningTokens: Schema.Number,
+};
+
+/**
+ * A turn's `usage` column: the brain's four counts, written by the writer
+ * and read by the store's reads, and beside them the same counts by the
+ * model each step ran on, absent on a row from before the breakdown was
+ * kept (`StoredTurnUsage`).
+ */
+export const TurnUsageColumnSchema = Schema.Struct({
+  ...UsageCountsFields,
+  byModel: Schema.optionalKey(
+    Schema.Array(Schema.Struct({ model: Schema.String, ...UsageCountsFields })),
+  ),
+});

@@ -11,7 +11,13 @@ import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";
-import { awaitingLinesOf, type LatestTurn, latestTurnsOf } from "./store/message-reads.js";
+import {
+  awaitingLinesOf,
+  type LatestTurn,
+  latestTurnsOf,
+  type TurnUsageRow,
+  turnUsagesOf,
+} from "./store/message-reads.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.
@@ -72,7 +78,7 @@ export interface CodingAgentStarted {
 
 /** The newest turn of an agent's conversation, as its status is read from it; nothing before the first turn. The read is the store's own (`store/message-reads.ts`), re-exported here beside the agents it is read for. */
 export type CodingAgentLatestTurn = LatestTurn;
-export { awaitingLinesOf, latestTurnsOf };
+export { awaitingLinesOf, latestTurnsOf, type TurnUsageRow, turnUsagesOf };
 
 /** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's task in its place. */
 export type CodingAgentBriefText =

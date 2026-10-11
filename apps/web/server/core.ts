@@ -13,6 +13,7 @@ export {
   BRAIN_RUN_EVENT,
   BRAIN_TURN_ORIGIN,
   BRAIN_TURN_TRIGGER,
+  type BrainModelUsage,
   type BrainRequestFailure,
   type BrainRequestStatus,
   type BrainRunEvent,

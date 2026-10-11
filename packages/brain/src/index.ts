@@ -4,6 +4,7 @@ export {
   BRAIN_REQUEST_FAILURE,
   BRAIN_REQUEST_ORIGIN,
   BRAIN_REQUEST_STATUS,
+  type BrainModelUsage,
   type BrainRequestFailure,
   type BrainRequestStatus,
   type BrainRunUsage,

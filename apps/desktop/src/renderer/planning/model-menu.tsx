@@ -28,7 +28,8 @@ import {
  * the catalog's own, the fast version's where Fast is on, so the service
  * checks it as it checks any. What the owner does with a choice is its
  * own: the Start button keeps it as the account's default, the chip
- * changes its agent.
+ * changes its agent, and under the pinned rows says what the agent has
+ * cost.
  */
 
 /** What the menu says in the list's place. */
@@ -93,6 +94,8 @@ export function ModelMenu(props: {
   onClose: () => void;
   /** Focus left the menu for `left`; the owner closes unless that is still its own. */
   onLeave: (left: EventTarget | null) => void;
+  /** One muted line under the pinned rows: what the agent has cost, on the chip's menu; nothing on the Start button's. */
+  footNote?: string | undefined;
 }): React.JSX.Element {
   const { models, chosen, onChoose, onClose } = props;
   const read =
@@ -177,6 +180,7 @@ export function ModelMenu(props: {
       onClose={onClose}
       onLeave={props.onLeave}
       foot={foot}
+      footNote={props.footNote}
     />
   );
 }

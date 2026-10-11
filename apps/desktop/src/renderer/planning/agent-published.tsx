@@ -1,6 +1,7 @@
 import type {
   CodingAgentPullRequest,
   CodingAgentPullRequestAnswer,
+  CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CopyIcon, ExternalIcon } from "@sidecar/panel";
 import { GitBranchIcon, TerminalIcon } from "lucide-react";
@@ -177,9 +178,12 @@ export function PublishedChip({
 /** The row at the end of a finished transcript: what was opened and how much changed, with Open. */
 export function PublishedRow({
   pullRequest,
+  turnUsage,
   openGitHub,
 }: {
   pullRequest: CodingAgentPullRequest;
+  /** What the turn cost, said after how much changed; nothing where the service put no price on it. */
+  turnUsage?: CodingAgentUsage | undefined;
   openGitHub: (url: string) => void;
 }): ReactNode {
   return (
@@ -189,7 +193,7 @@ export function PublishedRow({
       data-state={pullRequest.state}
     >
       <GitHubMark />
-      <span className="min-w-0 flex-1 truncate">{publishedSummary(pullRequest)}</span>
+      <span className="min-w-0 flex-1 truncate">{publishedSummary(pullRequest, turnUsage)}</span>
       <CheckDot checks={pullRequest.checks} />
       <button
         type="button"

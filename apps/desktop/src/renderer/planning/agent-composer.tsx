@@ -3,6 +3,7 @@ import {
   CODING_AGENT_STATUS,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
+  type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { useEffect, useRef, useState } from "react";
@@ -71,6 +72,7 @@ export function AgentComposer({
   model,
   models,
   readModels,
+  usage,
   published,
   doors,
   onStop,
@@ -81,6 +83,8 @@ export function AgentComposer({
   /** The catalog as last read; nothing before the first read lands. */
   models: readonly CatalogModel[] | undefined;
   readModels: () => void;
+  /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
+  usage: CodingAgentUsage | undefined;
   /** What the agent published, once the service has said; nothing before. */
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
@@ -133,7 +137,7 @@ export function AgentComposer({
         />
         <PromptInputFooter>
           <PromptInputTools>
-            <AgentModelChip model={model} models={models} readModels={readModels} />
+            <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
             <PublishedChip published={published} doors={doors} />
           </PromptInputTools>
           {showsStop ? (

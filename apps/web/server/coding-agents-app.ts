@@ -240,6 +240,8 @@ function transcriptResponse(page: TranscriptPage): HttpServerResponse.HttpServer
     cursor: cursorToWire(page.cursor),
     status: page.status,
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
+    ...(page.usage === undefined ? undefined : { usage: page.usage }),
+    ...(page.turnUsage === undefined ? undefined : { turnUsage: page.turnUsage }),
   });
 }
 

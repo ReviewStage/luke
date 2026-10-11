@@ -53,7 +53,12 @@ import { asks, conversations, messages, turns } from "../../db/storage-schema.js
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { voiceSessions } from "../../db/voice-schema.js";
 import { sentLineId } from "../brain-host/ids.js";
-import { EpochMillisColumnSchema, InstantColumnSchema, nullable } from "./database.js";
+import {
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  nullable,
+  TurnUsageColumnSchema,
+} from "./database.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -489,14 +494,6 @@ const StoredPartsColumnSchema: Schema.Codec<Parts> = Schema.declare((input): inp
 const MessageMetadataColumnSchema: Schema.Codec<StoredMessageMetadata> = Schema.declare(
   (input): input is StoredMessageMetadata => readsJsonObject(input),
 );
-
-/** What a turn's run cost, as the four counts the trace keeps; the brain's own shape, written here and read by the store's reads. */
-const TurnUsageColumnSchema = Schema.Struct({
-  inputTokens: Schema.Number,
-  outputTokens: Schema.Number,
-  cachedInputTokens: Schema.Number,
-  reasoningTokens: Schema.Number,
-});
 
 const MessageRoleSchema = Schema.Literals(Object.values(MESSAGE_ROLE));
 
@@ -1223,7 +1220,14 @@ const turnEnded = /* @__PURE__ */ Effect.fnUntraced(function* (
     settledAt,
     failure: nullable(failure),
     failureDetail: nullable(event.failureDetail?.slice(0, TURN_FAILURE_DETAIL.CHARS)),
-    usage: nullable(event.usage),
+    usage: nullable(
+      event.usage === undefined
+        ? undefined
+        : {
+            ...event.usage,
+            ...(event.usageByModel === undefined ? undefined : { byModel: event.usageByModel }),
+          },
+    ),
     responseIds: event.responseIds,
   });
   // A journal still open here belongs to a turn that answered nothing, so

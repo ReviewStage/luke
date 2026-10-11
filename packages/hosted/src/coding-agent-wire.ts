@@ -285,10 +285,28 @@ export const codingAgentCursorSchema = EffectSchema.String.check(
 export const CODING_AGENT_CURSOR_START = "0:0";
 
 /**
+ * What some turns cost: the tokens the model read and wrote, how many of
+ * those read its prefix cache answered, and the price in dollars where the
+ * service knows one for every model they ran on; tokens alone where it
+ * does not.
+ */
+export const codingAgentUsageSchema = EffectSchema.Struct({
+  inputTokens: countedNumber,
+  outputTokens: countedNumber,
+  cachedInputTokens: EffectSchema.optionalKey(countedNumber),
+  costUsd: EffectSchema.optionalKey(countedNumber),
+});
+
+export type CodingAgentUsage = typeof codingAgentUsageSchema.Type;
+
+/**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
  * learns from the page that ends the hold that there is nothing more to
- * wait for, and why, as one fixed word, where the newest turn failed.
+ * wait for, and why, as one fixed word, where the newest turn failed. With
+ * them, what the agent has cost over every turn it and its workers have
+ * settled, and what its newest turn cost once settled; neither before a
+ * turn has.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
@@ -297,4 +315,6 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),
   ),
+  usage: EffectSchema.optionalKey(codingAgentUsageSchema),
+  turnUsage: EffectSchema.optionalKey(codingAgentUsageSchema),
 });

@@ -104,6 +104,14 @@ const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =
 
 const STEP_START = "step-start";
 
+/** What `typedTurn`'s two steps cost together: the first 10 in, 3 out, 4 of them cached; the second 20 in, 5 out. */
+const TYPED_TURN_USAGE = {
+  inputTokens: 30,
+  outputTokens: 8,
+  cachedInputTokens: 4,
+  reasoningTokens: 0,
+};
+
 /** The events of one turn, in the order eve emits them, for one tool call and one answer. */
 function typedTurn(turnId: string, sequence: number): MessageStreamEvent[] {
   return [
@@ -244,10 +252,8 @@ it.effect(
       assert.equal(turn.model, "scripted-model");
       assert.equal(turn.reasoningEffort, null);
       assert.deepEqual(turn.usage, {
-        inputTokens: 30,
-        outputTokens: 8,
-        cachedInputTokens: 4,
-        reasoningTokens: 0,
+        ...TYPED_TURN_USAGE,
+        byModel: [{ model: "scripted-model", ...TYPED_TURN_USAGE }],
       });
       assert.deepEqual(turn.responseIds, []);
 
@@ -361,6 +367,61 @@ function lookTurn(turnId: string, sequence: number, image: string): MessageStrea
   ];
 }
 
+it.effect(
+  "a model changed between steps is kept by the step it ran: the turn's usage splits by model, the row still naming the model it started on",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const secondStep = events.findIndex(
+        (event) => event.type === "step.started" && event.data.stepIndex === 1,
+      );
+      await play(events.slice(0, secondStep), standing);
+      await play(events.slice(secondStep), { ...standing, model: "scripted-model-2" });
+
+      const { turnRows } = await rows(target);
+      assert.equal(turnRows[0]?.model, "scripted-model");
+      assert.deepEqual(turnRows[0]?.usage, {
+        ...TYPED_TURN_USAGE,
+        byModel: [
+          {
+            model: "scripted-model",
+            inputTokens: 10,
+            outputTokens: 3,
+            cachedInputTokens: 4,
+            reasoningTokens: 0,
+          },
+          {
+            model: "scripted-model-2",
+            inputTokens: 20,
+            outputTokens: 5,
+            cachedInputTokens: 0,
+            reasoningTokens: 0,
+          },
+        ],
+      });
+    }),
+);
+
+it.effect(
+  "a turn whose earlier steps' model the state did not keep records no breakdown, so its row prices every step at the model it started on rather than at the session's model now",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const secondStep = events.findIndex(
+        (event) => event.type === "step.started" && event.data.stepIndex === 1,
+      );
+      const { model: _unknown, ...unnamed } = standing;
+      await play(events.slice(0, secondStep), unnamed);
+      await play(events.slice(secondStep), { ...standing, model: "scripted-model-2" });
+
+      const { turnRows } = await rows(target);
+      assert.deepEqual(turnRows[0]?.usage, TYPED_TURN_USAGE);
+    }),
+);
 it.effect("a look at the board settles its call in the conversation without the image", () =>
   Effect.promise(async () => {
     const target = await conversation();
@@ -892,10 +953,8 @@ it.effect(
       const { turnRows, messageRows } = await rows(target);
       assert.equal(turnRows.length, 1);
       assert.deepEqual(turnRows[0]?.usage, {
-        inputTokens: 30,
-        outputTokens: 8,
-        cachedInputTokens: 4,
-        reasoningTokens: 0,
+        ...TYPED_TURN_USAGE,
+        byModel: [{ model: "scripted-model", ...TYPED_TURN_USAGE }],
       });
       assert.equal(messageRows.length, 2);
       const answer = messageRows[1];

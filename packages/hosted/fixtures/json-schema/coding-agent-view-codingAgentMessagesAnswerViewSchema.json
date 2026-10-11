@@ -61,6 +61,58 @@
             "abandoned",
             "other"
           ]
+        },
+        "usage": {
+          "type": "object",
+          "properties": {
+            "inputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "outputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cachedInputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "costUsd": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "inputTokens",
+            "outputTokens"
+          ],
+          "additionalProperties": false
+        },
+        "turnUsage": {
+          "type": "object",
+          "properties": {
+            "inputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "outputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cachedInputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "costUsd": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "inputTokens",
+            "outputTokens"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

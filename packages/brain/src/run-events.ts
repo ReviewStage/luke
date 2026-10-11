@@ -8,7 +8,12 @@ import {
   type WireRecord,
 } from "@sidecar/wire";
 import type { UIMessage } from "ai";
-import type { BrainRequestFailure, BrainRequestStatus, BrainRunUsage } from "./requests.js";
+import type {
+  BrainModelUsage,
+  BrainRequestFailure,
+  BrainRequestStatus,
+  BrainRunUsage,
+} from "./requests.js";
 import { spokenProse } from "./spoken-prose.js";
 import type { BrainTurnTrigger } from "./turn.js";
 
@@ -265,6 +270,8 @@ export type BrainRunEventBody =
       readonly failureDetail?: string;
       /** What the turn's inferences cost, split four ways, as the run kept them; absent when no inference answered. */
       readonly usage?: BrainRunUsage;
+      /** The same counts by the model each step ran on, since the model can change between steps; absent where no step's model was known. */
+      readonly usageByModel?: readonly BrainModelUsage[];
       /** The id of every response the turn was answered with, in order. */
       readonly responseIds: readonly string[];
       readonly at: number;
