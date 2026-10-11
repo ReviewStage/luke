@@ -39,6 +39,7 @@ function fixture() {
   const rows = planningActRows({
     host: {
       planningRefresh: () => Effect.sync(() => void asked.push("refresh")),
+      planningWorkEarlier: () => Effect.sync(() => void asked.push("earlier")),
       planningClose: () => Effect.sync(() => void asked.push("close")),
       planningOpen: (planId) =>
         Effect.sync(() => {
@@ -150,6 +151,24 @@ it.effect(
       assert.deepEqual(changed, { status: ACT_OUTCOME_STATUS.DONE, value: { repository: null } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
       assert.deepEqual(f.asked, ["repositories", `repository:${PLAN_ID}:null`]);
+    }),
+);
+
+it.effect(
+  "the Work tab's ask for earlier work reaches the host from a panel, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const read = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_WORK_EARLIER }, PANEL);
+      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_WORK_EARLIER }, VOICE);
+
+      assert.equal(read.status, ACT_OUTCOME_STATUS.DONE);
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_WORK_EARLIER].refusal,
+      });
+      assert.deepEqual(f.asked, ["earlier"]);
     }),
 );
 

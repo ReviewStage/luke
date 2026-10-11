@@ -1,5 +1,5 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -12,6 +12,7 @@ import {
   type StoredUIMessage,
   TURN_ORIGIN,
   TURN_STATUS,
+  toolPartType,
   UNREGISTERED_TOOL_PART,
   unparsedWire,
   type WireBoundaryInput,
@@ -655,4 +656,153 @@ export function turnsNamed(
       .orderBy(asc(TURN_CHANGED_AT), asc(turns.id)),
     (rows) => Schema.decodeUnknownEffect(TurnRowsSchema)(rows),
   );
+}
+
+const findTurnQueuedAt = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    turnId: Schema.String,
+  }),
+  Result: Schema.Struct({ queuedAt: InstantColumnSchema }),
+  execute: ({ userId, conversationId, turnId }) =>
+    db
+      .select({ queuedAt: turns.queuedAt })
+      .from(turns)
+      .where(
+        and(
+          eq(turns.userId, userId),
+          eq(turns.conversationId, conversationId),
+          eq(turns.id, turnId),
+        ),
+      ),
+});
+
+const findTurnsBefore = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    limit: Schema.Number,
+    before: Schema.optionalKey(Schema.Struct({ queuedAt: Schema.Date, id: Schema.String })),
+  }),
+  Result: TurnRowSchema,
+  execute: ({ userId, conversationId, limit, before }) =>
+    db
+      .select(TURN_FIELDS)
+      .from(turns)
+      .innerJoin(conversations, TURN_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(turns.userId, userId),
+          eq(turns.conversationId, conversationId),
+          before === undefined
+            ? undefined
+            : or(
+                lt(turns.queuedAt, before.queuedAt),
+                and(eq(turns.queuedAt, before.queuedAt), lt(turns.id, before.id)),
+              ),
+        ),
+      )
+      .orderBy(desc(turns.queuedAt), desc(turns.id))
+      .limit(limit),
+});
+
+/** A page of a conversation's turns, oldest first, and whether older ones stand. */
+export interface TurnPage {
+  readonly turns: readonly StoredTurnRecord[];
+  readonly earlier: boolean;
+}
+
+/**
+ * The newest turns of the account's standing conversation queued before the
+ * turn `before` names, or the newest of all with none, answered oldest
+ * first by when each was queued. A turn the conversation does not hold
+ * names no place, and answers an empty page.
+ */
+export function turnsBefore(
+  userId: string,
+  conversationId: string,
+  limit: number,
+  before: string | undefined,
+): Effect.Effect<TurnPage, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    let place: { queuedAt: Date; id: string } | undefined;
+    if (before !== undefined) {
+      const named = yield* findTurnQueuedAt({ userId, conversationId, turnId: before });
+      if (Option.isNone(named)) return { turns: [], earlier: false };
+      place = { queuedAt: named.value.queuedAt, id: before };
+    }
+    const size = pageLimit({ limit });
+    // One more than the page is asked for, so the read can tell whether older turns stand.
+    const newestFirst = yield* findTurnsBefore({
+      userId,
+      conversationId,
+      limit: size + 1,
+      ...(place === undefined ? undefined : { before: place }),
+    });
+    return { turns: newestFirst.slice(0, size).reverse(), earlier: newestFirst.length > size };
+  });
+}
+
+const findJournalsCalling = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    conversationId: Schema.String,
+    partType: Schema.String,
+    seq: Schema.Number,
+    limit: Schema.Number,
+  }),
+  Result: SelectedMessageRowSchema,
+  execute: (options) =>
+    db
+      .select(MESSAGE_FIELDS)
+      .from(messages)
+      .innerJoin(conversations, MESSAGE_CONVERSATION_STANDS)
+      .where(
+        and(
+          eq(messages.conversationId, options.conversationId),
+          eq(messages.userId, options.userId),
+          eq(messages.role, MESSAGE_ROLE.ASSISTANT),
+          gt(messages.seq, options.seq),
+          sql`${messages.parts} @> ${JSON.stringify([{ type: options.partType }])}::jsonb`,
+        ),
+      )
+      .orderBy(asc(messages.seq))
+      .limit(options.limit),
+});
+
+/**
+ * Every turn journal of the account's standing conversation that holds a
+ * call of the tool named, oldest first, read a page at a time. Note that the
+ * journals are picked by their parts in the statement, because a long
+ * conversation's other journals are most of its bytes and none of the
+ * answer. A page holding a row this build cannot read refuses the read, as
+ * every page here does.
+ */
+export function listJournalsCalling(
+  userId: string,
+  conversationId: string,
+  tools: ToolSet,
+  toolName: string,
+): Effect.Effect<MessageListRead, MessageReadFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const read: StoredMessageRecord[] = [];
+    let seq = -1;
+    let full = true;
+    while (full) {
+      const selected = yield* findJournalsCalling({
+        userId,
+        conversationId,
+        partType: toolPartType(toolName),
+        seq,
+        limit: MAXIMUM_READ_PAGE,
+      });
+      const page = yield* readSelected(selected, tools);
+      if (!page.ok) return page;
+      read.push(...page.value);
+      seq = selected.at(-1)?.seq ?? seq;
+      full = selected.length === MAXIMUM_READ_PAGE;
+    }
+    return { ok: true, value: read };
+  });
 }

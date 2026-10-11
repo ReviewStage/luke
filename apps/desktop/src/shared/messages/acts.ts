@@ -122,6 +122,8 @@ export const ACT_KIND = {
   PLANNING_TALK: "planning.talk",
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
+  PLANNING_WORK_EARLIER: "planning.workEarlier",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -440,6 +442,9 @@ export const ACT = {
     result: answersNothing,
     refusal: "Could not save the board on this system.",
   },
+  [ACT_KIND.PLANNING_WORK_EARLIER]: press(
+    "Could not read that plan's earlier work on this system.",
+  ),
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,
     result: wireResult<CodingAgentModelsAnswer>(isReadable(codingAgentModelsAnswerSchema)),

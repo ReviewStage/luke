@@ -29,6 +29,8 @@ import {
   type PlanActivity,
   type PlanCallFailure,
   type PlanningView,
+  type PlanShownCode,
+  type PlanWorkAnswer,
   type PlanWorkState,
   type PlanWorkTurn,
   planningViewSchema,
@@ -83,6 +85,12 @@ interface FakeService extends PlanningClient {
   readonly images: Record<string, string | undefined>;
   /** Each plan's transcript, by plan id; a plan with none answers no transcript, as a service that did not answer. */
   transcripts: Record<string, PlanTranscript>;
+  /** Each plan's newest page of work as the service keeps it, by plan id; a plan with none answers nothing, as a service that did not answer. */
+  works: Record<string, PlanWorkAnswer>;
+  /** The older pages of work, by the turn each is read before. */
+  olderWorks: Record<string, PlanWorkAnswer>;
+  /** Every page of work asked for, in order: the plan, and the turn it was read before where it was. */
+  readonly workReads: string[];
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -98,8 +106,16 @@ function fakeService(plans: Plan[]): FakeService {
     boards: {},
     images: {},
     transcripts: {},
+    works: {},
+    olderWorks: {},
+    workReads: [],
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
+    readWork: (planId, before) =>
+      Effect.sync(() => {
+        service.workReads.push(before === undefined ? planId : `${planId}:${before}`);
+        return before === undefined ? service.works[planId] : service.olderWorks[before];
+      }),
     // The service keeps the last scene written, beside whatever drawing it holds.
     saveBoard: (planId, elements, appliedDrawing, image) =>
       Effect.sync(() => {
@@ -463,7 +479,7 @@ it.effect(
     }),
 );
 
-it.effect("the open plan's call keeps only its newest turns' work", () =>
+it.effect("the open plan's call keeps every turn's work it tells, past a page of them", () =>
   Effect.gen(function* () {
     const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
     const { call, last, planning } = yield* subject(fakeService([invites]));
@@ -474,8 +490,8 @@ it.effect("the open plan's call keeps only its newest turns' work", () =>
       planning.showWork(INVITES, workTurn(`turn-${turn}`, PLAN_WORK_STATE.DONE, "ls"));
     }
     const kept = last()?.work ?? [];
-    assert.equal(kept.length, PLAN_WORK_BOUNDS.TURNS);
-    assert.equal(kept[0]?.turnId, "turn-2");
+    assert.equal(kept.length, PLAN_WORK_BOUNDS.TURNS + 2);
+    assert.equal(kept[0]?.turnId, "turn-0");
   }),
 );
 
@@ -1026,6 +1042,11 @@ function shownCode(ref: ShownCode["ref"]): ShownCode {
   };
 }
 
+/** One code the service keeps as shown on a plan, by the turn that showed it. */
+function shownOn(turnId: string, code: ShownCode): PlanShownCode {
+  return { callId: `${turnId}-show`, turnId, shownAt: 0, code };
+}
+
 /** The open plan with its code loop running. */
 function openPlan(service: FakeService) {
   return Effect.gen(function* () {
@@ -1058,22 +1079,164 @@ it.effect("code Luke names on the open plan's call is drawn as it arrived, colou
   }),
 );
 
-it.effect("the call's end clears the code it put on screen, and so does leaving the plan", () =>
+it.effect("the call's end keeps the code it put on screen, and leaving the plan clears it", () =>
   Effect.gen(function* () {
     const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
     const { call, planning, last } = yield* openPlan(service);
-    const code = shownCode({ path: "invite.ts" });
 
-    planning.showCode(INVITES, code);
-    assert.notEqual(last()?.code, undefined);
+    planning.showCode(INVITES, shownCode({ path: "invite.ts" }));
     planning.callEnded(INVITES);
-    assert.equal(last()?.code, undefined);
+    assert.equal(last()?.code?.ref.path, "invite.ts");
 
-    planning.showCode(INVITES, code);
-    assert.notEqual(last()?.code, undefined);
     yield* call(GATEWAY_METHOD.PLANNING_CLOSE);
     assert.equal(last()?.code, undefined);
   }),
+);
+
+it.effect(
+  "a plan opened after a restart or a switch draws its work and the code last shown as the service keeps them",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const billing = plan(BILLING, "Billing export", "# Billing export", 20);
+      const service = fakeService([billing, invites]);
+      const recorded = workTurn("turn-1", PLAN_WORK_STATE.DONE, "ls src", "invite.ts");
+      service.works[INVITES] = {
+        turns: [recorded],
+        code: [
+          shownOn("turn-0", shownCode({ path: "old.ts" })),
+          shownOn("turn-1", shownCode({ path: "invite.ts" })),
+        ],
+      };
+
+      // A fresh composer is a restart: nothing of the plan's calls is held until the plan opens.
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(last()?.work, [recorded]);
+      assert.equal(last()?.code?.ref.path, "invite.ts");
+      assert.ok(last()?.code?.lines[0]?.some((token) => token.color !== undefined));
+
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: BILLING });
+      assert.equal(last()?.work, undefined);
+      assert.equal(last()?.code, undefined);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(last()?.work, [recorded]);
+    }),
+);
+
+it.effect(
+  "the service's work read lands under what the open plan's call told: a turn still running on record stays as told, a settled one is the record's, and code the call shows while the read is out stands",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const told = workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts", "partial");
+      const settled = workTurn("turn-1", PLAN_WORK_STATE.DONE, "ls", "a.ts");
+      const fresh = workTurn("turn-3", PLAN_WORK_STATE.RUNNING, "cat b.ts");
+      planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls"));
+      planning.showWork(INVITES, told);
+      planning.showWork(INVITES, fresh);
+      service.works[INVITES] = {
+        turns: [settled, workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts")],
+        code: [shownOn("turn-2", shownCode({ path: "read-before.ts" }))],
+      };
+      // The call shows code after the read left and before its answer lands.
+      const read = service.readWork;
+      service.readWork = (planId, before) =>
+        Effect.tap(read(planId, before), () =>
+          Effect.sync(() => planning.showCode(INVITES, shownCode({ path: "on-screen.ts" }))),
+        );
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(last()?.work, [settled, told, fresh]);
+      assert.equal(last()?.code?.ref.path, "on-screen.ts");
+    }),
+);
+
+it.effect(
+  "a refresh after a call's code takes the newer code the service keeps, as another session showed it",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      planning.showCode(INVITES, shownCode({ path: "old.ts" }));
+      planning.callEnded(INVITES);
+      service.works[INVITES] = {
+        turns: [],
+        code: [
+          shownOn("turn-1", shownCode({ path: "old.ts" })),
+          shownOn("turn-2", shownCode({ path: "new.ts" })),
+        ],
+      };
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.equal(last()?.code?.ref.path, "new.ts");
+    }),
+);
+
+it.effect(
+  "a newest page whose oldest turn a call told stays as told takes the service's place for the page before it",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      planning.showWork(INVITES, workTurn("turn-5", PLAN_WORK_STATE.RUNNING, "ls", "a.ts"));
+      service.works[INVITES] = {
+        turns: [workTurn("turn-5", PLAN_WORK_STATE.RUNNING, "ls")],
+        earlier: "turn-5",
+      };
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.equal(last()?.workEarlier, "turn-5");
+    }),
+);
+
+it.effect(
+  "the Work tab's ask reads the page before the oldest turn held, until no older turn stands, and a later read of the newest page keeps the older pages",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const turn = (at: number) => ({
+        ...workTurn(`turn-${at}`, PLAN_WORK_STATE.DONE, "ls"),
+        startedAt: at,
+      });
+      service.works[INVITES] = { turns: [turn(3), turn(4)], earlier: "turn-3" };
+      service.olderWorks["turn-3"] = { turns: [turn(1), turn(2)], earlier: "turn-1" };
+      service.olderWorks["turn-1"] = { turns: [turn(0)] };
+      const { call, last } = yield* subject(service);
+      const turnIds = () => last()?.work?.map((each) => each.turnId);
+
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+      assert.deepEqual(turnIds(), ["turn-3", "turn-4"]);
+      assert.equal(last()?.workEarlier, "turn-3");
+
+      yield* call(GATEWAY_METHOD.PLANNING_WORK_EARLIER);
+      assert.deepEqual(turnIds(), ["turn-1", "turn-2", "turn-3", "turn-4"]);
+      yield* call(GATEWAY_METHOD.PLANNING_WORK_EARLIER);
+      assert.deepEqual(turnIds(), ["turn-0", "turn-1", "turn-2", "turn-3", "turn-4"]);
+      assert.equal(last()?.workEarlier, undefined);
+      yield* call(GATEWAY_METHOD.PLANNING_WORK_EARLIER);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      assert.deepEqual(turnIds(), ["turn-0", "turn-1", "turn-2", "turn-3", "turn-4"]);
+      assert.equal(last()?.workEarlier, undefined);
+      assert.deepEqual(service.workReads, [
+        INVITES,
+        `${INVITES}:turn-3`,
+        `${INVITES}:turn-1`,
+        INVITES,
+      ]);
+    }),
 );
 
 it.effect("code named about a plan that is not open is not drawn", () =>

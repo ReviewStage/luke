@@ -42,6 +42,9 @@ import type { StoredTurnRecord } from "../hosted/store/message-reads.js";
  * it to that developer's own Mac and nowhere else.
  */
 
+/** The most of a subagent's turns one read of its session takes, the newest: a worker's task is a turn, and each follow-up it was handed another. */
+export const SUBAGENT_JOURNALS = 10;
+
 const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [RUN_IN_REPOSITORY_TOOL.name, PLAN_WORK_TOOL.REPOSITORY],
   [SEARCH_WEB_TOOL.name, PLAN_WORK_TOOL.SEARCH_WEB],

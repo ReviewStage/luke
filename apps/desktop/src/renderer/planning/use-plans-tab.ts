@@ -109,12 +109,21 @@ export interface PlansControl {
   unreadTabs: readonly SidePanelTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
-  /** The code Luke has on screen, drawn only while the open plan's call is in progress. */
+  /** The code Luke last showed on the open plan: a call's as it shows it, and after the call, and after a restart, as the service keeps it. */
   code: PlanCode | undefined;
   /** What was said on the open plan's calls, the call standing now included, and the retry of a read that failed. */
   transcript: { region: TranscriptRegion; onRetry: () => void };
-  /** What Luke's planning model wrote and ran on the open plan's calls, and whether its call still stands. */
-  work: { turns: PlanningView["work"]; callLive: boolean };
+  /**
+   * What Luke's planning model wrote and ran on the open plan's calls,
+   * whether its call still stands, the turn the page before the oldest drawn
+   * is read before where an older one stands, and that read.
+   */
+  work: {
+    turns: PlanningView["work"];
+    callLive: boolean;
+    earlier: string | undefined;
+    onLoadEarlier: () => Promise<void>;
+  };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
   onSelect: (planId: string) => void;
@@ -333,14 +342,12 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.TALK) tell(ACT_KIND.PLANNING_TALK);
   };
 
-  // The code pane stands for the call alone; a fixture's for its drawn call.
-  const codeShown = live || fixture !== undefined;
-  const code = codeShown ? planning.code : undefined;
-  // A fixture's staged plan has nothing arriving on it.
+  // A fixture's staged plan has nothing arriving on it, and code arrives
+  // only on a call, since what a plan opens with it already held.
   const arrivedTabs = usePanelArrivals({
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
-    code,
+    code: live ? planning.code !== undefined : undefined,
     panel: sidePanel,
   });
   // An agent that ended unseen dots its tab the way an arrival does; main
@@ -451,7 +458,7 @@ export function usePlansTab(input: {
     sidePanel,
     unreadTabs,
     board: planning.board,
-    code,
+    code: planning.code,
     transcript: {
       region: transcriptRegion({ transcript: planning.transcript, heard }),
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
@@ -460,6 +467,8 @@ export function usePlansTab(input: {
     work: {
       turns: planning.work,
       callLive: fixture === undefined ? live : reported.callPlanId === planning.activePlanId,
+      earlier: planning.workEarlier,
+      onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
     },
     agents,
     onSelect: select,

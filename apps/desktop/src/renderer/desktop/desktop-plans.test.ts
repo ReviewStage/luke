@@ -248,6 +248,7 @@ afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "setPointerCapture");
   copies = 0;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   window.localStorage.clear();
 });
 
@@ -384,6 +385,8 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
           sidePanel: { ...plansControl().sidePanel, open: true, tab: SIDE_PANEL_TAB.WORK },
           work: {
             callLive: true,
+            earlier: undefined,
+            onLoadEarlier: () => Promise.resolve(),
             turns: [
               {
                 turnId: "turn-1",
@@ -446,6 +449,8 @@ test("a worker's line in the Work tab is one button saying where the subagent st
   const page = mountOpenPlan({
     work: {
       callLive: true,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
       turns: [
         {
           turnId: "turn-1",
@@ -494,6 +499,8 @@ test("a worker's line in the Work tab is one button saying where the subagent st
 function workerWork(job: string, task?: string): PlansControl["work"] {
   return {
     callLive: true,
+    earlier: undefined,
+    onLoadEarlier: () => Promise.resolve(),
     turns: [
       {
         turnId: "turn-1",
@@ -606,6 +613,76 @@ test("the Work tab with no turn says what will appear there", () => {
   );
 
   assert.match(markup, /When Luke works on a call, what he reads and runs appears here\./u);
+});
+
+/** The rows the page's observers watch, and a scroll that brings every one into view. */
+function watchedRows() {
+  const watching = new Set<{ callback: IntersectionObserverCallback; target?: Element }>();
+  class SeenObserver {
+    readonly #watch: { callback: IntersectionObserverCallback; target?: Element };
+    constructor(callback: IntersectionObserverCallback) {
+      this.#watch = { callback };
+    }
+    observe(target: Element): void {
+      this.#watch.target = target;
+      watching.add(this.#watch);
+    }
+    disconnect(): void {
+      watching.delete(this.#watch);
+    }
+  }
+  vi.stubGlobal("IntersectionObserver", SeenObserver);
+  return {
+    scrollIntoView: () =>
+      act(() => {
+        for (const { callback, target } of [...watching]) {
+          // SAFETY: the callback reads `isIntersecting` alone, which is all a scroll here says.
+          callback([{ isIntersecting: true, target } as IntersectionObserverEntry], {} as never);
+        }
+      }),
+  };
+}
+
+test("the Work tab reads the turns before its oldest as the row before them scrolls into view, and after a read that brought none waits for a press", async () => {
+  const rows = watchedRows();
+  const asked: string[] = [];
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
+    work: {
+      callLive: false,
+      earlier: "turn-2",
+      onLoadEarlier: () => {
+        asked.push("earlier");
+        return Promise.resolve();
+      },
+      turns: [
+        {
+          turnId: "turn-2",
+          startedAt: 1_000,
+          state: PLAN_WORK_STATE.DONE,
+          earlierOmitted: false,
+          parts: [{ type: PLAN_WORK_PART.TEXT, text: "Invites expire after seven days." }],
+        },
+      ],
+    },
+  });
+  const row = () =>
+    [...page.querySelectorAll<HTMLElement>("section[aria-label='Work'] button")].find((button) =>
+      button.textContent?.includes("earlier work"),
+    );
+
+  assert.equal(row()?.textContent, "Show earlier work");
+  rows.scrollIntoView();
+  assert.deepEqual(asked, ["earlier"]);
+  await act(async () => {
+    await Promise.resolve();
+  });
+  assert.equal(row()?.textContent, "Could not read earlier work. Try again");
+  rows.scrollIntoView();
+  assert.deepEqual(asked, ["earlier"]);
+
+  act(() => row()?.click());
+  assert.deepEqual(asked, ["earlier", "earlier"]);
 });
 
 test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {

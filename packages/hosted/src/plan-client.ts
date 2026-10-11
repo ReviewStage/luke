@@ -34,6 +34,8 @@ import {
 import {
   PLAN_CALL_FAILURE,
   type PlanCallFailure,
+  type PlanWorkAnswer,
+  planWorkAnswerSchema,
   type RepositoryCallFailure,
   type RepositoryListFailure,
 } from "./planning-view.js";
@@ -42,6 +44,7 @@ import {
   planBoardPath,
   planPath,
   planTranscriptPath,
+  planWorkPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
 import { type PlanTranscript, planTranscriptAnswerSchema } from "./transcript-wire.js";
@@ -216,6 +219,17 @@ export class HostedPlanClient {
         planTranscriptAnswerSchema,
       ),
       (answer) => answer?.transcript,
+    );
+  }
+
+  /** A page of one plan's work as the service keeps it, the newest or the one before a turn, with every code shown on the newest; nothing where the service did not answer it. */
+  readWork(
+    planId: string,
+    before?: string,
+  ): Effect.Effect<PlanWorkAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planWorkPath(planId, before) },
+      planWorkAnswerSchema,
     );
   }
 

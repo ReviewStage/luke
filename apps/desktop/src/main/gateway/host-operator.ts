@@ -136,6 +136,8 @@ export interface HostOperator {
   ): Effect.Effect<void>;
   /** The Plans tab shows: the host reads the plan list and the active document now and follows both until it is paused. */
   planningRefresh(): Effect.Effect<void>;
+  /** The Work tab scrolled back: the host reads the open plan's page of work before the oldest turn it holds, and the view takes it. */
+  planningWorkEarlier(): Effect.Effect<void>;
   /** The Plans tab stopped showing: the host follows nothing, and the open plan and its call stand. */
   /** One plan made the active one, replacing whichever was; answers whether the host took it. */
   planningOpen(planId: string): Effect.Effect<boolean>;
@@ -352,6 +354,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ),
       ),
     planningRefresh: () => fire(client.call(GATEWAY_METHOD.PLANNING_REFRESH)),
+    planningWorkEarlier: () => fire(client.call(GATEWAY_METHOD.PLANNING_WORK_EARLIER)),
     planningOpen: (planId) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_OPEN, { planId }),

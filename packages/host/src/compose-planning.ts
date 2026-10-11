@@ -12,7 +12,7 @@ import type { Plan, ShownCode } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
-  PLAN_WORK_BOUNDS,
+  PLAN_WORK_STATE,
   PLANNING_READ,
   type PlanningDocument,
   type PlanningRepositoriesAnswer,
@@ -57,7 +57,11 @@ import type { RunMode } from "./run-mode.js";
  * on screen during a call arrives on the call's socket with its lines, read
  * by the service from the plan's repository, and is coloured here
  * (`plan-code.ts`) and drawn in place; nothing of the repository is read on
- * this Mac. The repositories the account reaches, and a plan's repository
+ * this Mac. What the planning model wrote and ran on the plan's calls, and
+ * the code last shown, are read from the service with the document, so a
+ * plan opened after a restart or a switch shows them; its older work is read
+ * a page at a time as the Work tab asks, and each turn a call tells and
+ * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a plan's repository
  * given or taken away, are the service's too, asked through here.
  */
 
@@ -84,6 +88,7 @@ export type PlanningClient = Pick<
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
+  | "readWork"
   | "repositories"
   | "setRepository"
 >;
@@ -122,8 +127,8 @@ export interface PlanningComposer extends Composer {
   /**
    * Puts code on screen as Luke named it on the open plan's call, with the
    * lines the service read from the plan's repository: coloured here and
-   * drawn in place of whatever was on screen. Code about any other plan is
-   * dropped.
+   * drawn in place of whatever was on screen, where it stays past the
+   * call's end. Code about any other plan is dropped.
    */
   showCode: (planId: string, code: ShownCode) => void;
   /**
@@ -133,7 +138,7 @@ export interface PlanningComposer extends Composer {
    * call's end keeps it.
    */
   showWork: (planId: string, turn: PlanWorkTurn) => void;
-  /** The call about `planId` ended: the code it put on screen goes with it, and its words are read back from the record. */
+  /** The call about `planId` ended: its words are read back from the record. */
   callEnded: (planId: string) => void;
 }
 
@@ -177,17 +182,21 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     publish();
   }
 
-  /** The view with no activity, no board, no transcript, no code, and no work, as a plan left behind leaves it. */
+  /** The view with no activity, no board, no transcript, no code, and no work read or told, as a plan left behind leaves it. */
   function withoutActivity({
     activity: _activity,
     board: _board,
     transcript: _transcript,
     code: _code,
     work: _work,
+    workEarlier: _workEarlier,
     ...rest
   }: PlanningView): PlanningView {
     return rest;
   }
+
+  /** How many codes a call has put on screen, so a work read tells a showing made while it was out. */
+  let codeShowings = 0;
 
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
@@ -296,6 +305,74 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
 
+  /** Takes the active plan's work as it now stands, and where its next older page is read from, none where no older turn stands. */
+  function writeWork(next: Pick<PlanningView, "work" | "workEarlier" | "code">): void {
+    const { workEarlier: _was, ...rest } = view;
+    view = { ...rest, ...next };
+    publish();
+  }
+
+  /**
+   * The held turns with a page the service answered laid among them, in the
+   * order the turns began. Note that a turn a call told since the plan
+   * opened stands over the record's copy while that copy still runs,
+   * because the call is ahead of the record there.
+   */
+  function withPage(page: readonly PlanWorkTurn[]): PlanWorkTurn[] {
+    const told = new Map((view.work ?? []).map((turn) => [turn.turnId, turn]));
+    const recorded = page.map((turn) => {
+      const live = told.get(turn.turnId);
+      return live !== undefined && turn.state === PLAN_WORK_STATE.RUNNING ? live : turn;
+    });
+    const read = new Set(page.map((turn) => turn.turnId));
+    const unread = (view.work ?? []).filter((turn) => !read.has(turn.turnId));
+    return [...recorded, ...unread].sort((a, b) => a.startedAt - b.startedAt);
+  }
+
+  /**
+   * Reads the newest page of the active plan's work, and the code last shown
+   * on it, as the service keeps them. Older pages already read stay, with
+   * the place the next one is read from; a plan read for the first time
+   * takes the service's. The record's newest code replaces what is on
+   * screen, so a refresh shows code another session showed, except where a
+   * call showed code while the read was out, since the read left before it.
+   * A failed read keeps whatever is held.
+   */
+  function readWork(planId: string) {
+    return Effect.gen(function* () {
+      const showingsBefore = codeShowings;
+      const stored = yield* Effect.provide(client.readWork(planId), FetchHttpClient.layer);
+      if (stored === undefined || view.activePlanId !== planId) return;
+      const work = withPage(stored.turns);
+      const oldest = work[0]?.turnId;
+      const olderHeld =
+        oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
+      const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
+      const shown = stored.code?.at(-1)?.code;
+      const code =
+        codeShowings !== showingsBefore || shown === undefined ? view.code : highlightCode(shown);
+      writeWork({
+        ...(work.length === 0 ? undefined : { work }),
+        ...(workEarlier === undefined ? undefined : { workEarlier }),
+        ...(code === undefined ? undefined : { code }),
+      });
+    });
+  }
+
+  /** Reads the page of the active plan's work before the oldest turn held, where one stands; a failed read keeps what is held. */
+  function readEarlierWork(planId: string) {
+    return Effect.gen(function* () {
+      const before = view.workEarlier;
+      if (before === undefined) return;
+      const stored = yield* Effect.provide(client.readWork(planId, before), FetchHttpClient.layer);
+      if (stored === undefined || view.activePlanId !== planId) return;
+      writeWork({
+        work: withPage(stored.turns),
+        ...(stored.earlier === undefined ? undefined : { workEarlier: stored.earlier }),
+      });
+    });
+  }
+
   /**
    * Shows the call's activity, and asks for the board again where it says a
    * draw just settled: the planning model's pending call was a draw and is
@@ -318,6 +395,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function showCode(planId: string, code: ShownCode): void {
     if (view.activePlanId !== planId) return;
+    codeShowings += 1;
     write({ code: highlightCode(code) });
   }
 
@@ -328,16 +406,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     const turns = held.some((standing) => standing.turnId === turn.turnId)
       ? held.map((standing) => (standing.turnId === turn.turnId ? turn : standing))
       : [...held, turn];
-    write({ work: turns.slice(-PLAN_WORK_BOUNDS.TURNS) });
+    write({ work: turns });
   }
 
   function callEnded(planId: string): void {
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(transcriptReads, planId);
-    if (view.code === undefined) return;
-    const { code: _code, ...rest } = view;
-    view = rest;
-    publish();
   }
 
   /** Draws `plan` as the service answered it, in the list's row and in the open document where it is the one held. */
@@ -364,6 +438,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             if (planId !== undefined) yield* readDocument(planId);
             if (planId !== undefined) yield* readBoard(planId);
             if (planId !== undefined) yield* readTranscript(planId);
+            if (planId !== undefined) yield* readWork(planId);
           }),
         );
         return {};
@@ -392,9 +467,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             yield* readDocument(planId);
             yield* readBoard(planId);
             yield* readTranscript(planId);
+            yield* readWork(planId);
           }),
         );
         return { opened: true };
+      }),
+    [GATEWAY_METHOD.PLANNING_WORK_EARLIER]: () =>
+      Effect.gen(function* () {
+        const planId = view.activePlanId;
+        if (!gate() || planId === undefined) return {};
+        yield* serial(readEarlierWork(planId));
+        return {};
       }),
     // Leaving the plan returns to the list, which was read when the tab showed.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>

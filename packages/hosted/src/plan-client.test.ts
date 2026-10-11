@@ -297,3 +297,55 @@ it.effect("reads what was said on a plan's calls, and nothing from a service tha
     assert.equal(yield* Effect.provide(client().readTranscript(PLAN_ID), gone.layer), undefined);
   }),
 );
+
+it.effect(
+  "reads a plan's work a page at a time, with every code shown on it, and nothing from a service that refused it",
+  () =>
+    Effect.gen(function* () {
+      const turn = (turnId: string) => ({
+        turnId,
+        startedAt: 1_800_000_300_000,
+        state: "done",
+        earlierOmitted: false,
+        parts: [{ type: "text", text: "Invites expire after seven days." }],
+      });
+      const newest = {
+        turns: [turn("turn-2")],
+        earlier: "turn-2",
+        code: [
+          {
+            callId: "call-1",
+            turnId: "turn-1",
+            shownAt: 1_800_000_200_000,
+            code: {
+              ref: { path: "src/invites.ts", startLine: 2, endLine: 3 },
+              repository: "acme/web",
+              firstLine: 1,
+              lineCount: 3,
+              lines: ["// invites", "const DAYS = 7;", "export { DAYS };"],
+            },
+          },
+        ],
+      };
+      const older = { turns: [turn("turn-1")] };
+      // The service answers the page before the turn the query names, or the newest.
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/work`]: {
+          answer: (request) => (request.searchParams.get("before") === "turn-2" ? older : newest),
+        },
+      });
+      const gone = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/work`]: {
+          answer: () => ({ error: "not-found" }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      assert.deepEqual(yield* Effect.provide(client().readWork(PLAN_ID), api.layer), newest);
+      assert.deepEqual(
+        yield* Effect.provide(client().readWork(PLAN_ID, "turn-2"), api.layer),
+        older,
+      );
+      assert.equal(yield* Effect.provide(client().readWork(PLAN_ID), gone.layer), undefined);
+    }),
+);

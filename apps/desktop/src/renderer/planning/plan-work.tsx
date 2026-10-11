@@ -5,7 +5,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -53,10 +53,12 @@ import {
  * tab draws the session as an agent's tab draws its transcript: the task a
  * card at the top that opens onto the whole message the subagent was
  * handed, a shimmering line at the end while the subagent runs, a quiet one
- * where it was stopped, and follows it while the subagent runs. Everything
- * here is the planning model's or the developer's repository's, a command's
- * output included, so the root is left out of the screen recording
- * (`ph-no-capture`) as a second line behind its text masking.
+ * where it was stopped, and follows it while the subagent runs. The tab
+ * holds the plan's newest turns first, and the turns before them are read a
+ * page at a time as the developer scrolls up to the oldest (`EarlierWork`).
+ * Everything here is the planning model's or the developer's repository's,
+ * a command's output included, so the root is left out of the screen
+ * recording (`ph-no-capture`) as a second line behind its text masking.
  */
 
 /** What a turn's state says beside its time. */
@@ -246,13 +248,75 @@ function WorkTurn({ turn, now }: { turn: WorkTurnRow; now: number }): React.JSX.
   );
 }
 
+/** Where the read of the turns before the oldest one drawn stands. */
+const EARLIER_READ = {
+  IDLE: "idle",
+  READING: "reading",
+  FAILED: "failed",
+} as const;
+
+type EarlierRead = (typeof EARLIER_READ)[keyof typeof EARLIER_READ];
+
+/** What the row before the oldest turn drawn says, by where the read stands. */
+const EARLIER_LINE = {
+  [EARLIER_READ.IDLE]: "Show earlier work",
+  [EARLIER_READ.READING]: "Reading earlier work…",
+  [EARLIER_READ.FAILED]: "Could not read earlier work. Try again",
+} as const satisfies Record<EarlierRead, string>;
+
+/**
+ * The row standing before the oldest turn drawn while older turns stand:
+ * the page before it is read as the row scrolls into view, the way a long
+ * transcript reads back, or on its press. The row is drawn afresh for each
+ * page, so a read that settles while the same row stands left the same
+ * older turns standing and did not land; the row then waits for a press
+ * rather than asking again on its own.
+ */
+function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Element {
+  const row = useRef<HTMLButtonElement>(null);
+  const [read, setRead] = useState<EarlierRead>(EARLIER_READ.IDLE);
+  const load = useRef(() => {
+    setRead(EARLIER_READ.READING);
+    const failed = () => setRead(EARLIER_READ.FAILED);
+    onLoad().then(failed, failed);
+  });
+
+  useEffect(() => {
+    const target = row.current;
+    if (target === null || read !== EARLIER_READ.IDLE) return;
+    const seen = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) load.current();
+    });
+    seen.observe(target);
+    return () => seen.disconnect();
+  }, [read]);
+
+  return (
+    <button
+      ref={row}
+      type="button"
+      className="ai-trigger m-0 text-[11.5px] text-muted-foreground"
+      disabled={read === EARLIER_READ.READING}
+      onClick={() => load.current()}
+    >
+      {EARLIER_LINE[read]}
+    </button>
+  );
+}
+
 export function PlanWork({
   turns,
   callLive,
+  earlier,
+  onLoadEarlier,
   onOpenSubagent,
 }: {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
+  /** The turn the page before the oldest one drawn is read before; absent where no older turn stands. */
+  earlier: string | undefined;
+  /** Reads the page before the oldest turn drawn; the view brings it. */
+  onLoadEarlier: () => Promise<void>;
   /** Opens a subagent's session in a tab of the panel's own, or chooses the tab open on it, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
 }): React.JSX.Element {
@@ -261,7 +325,7 @@ export function PlanWork({
   return (
     <section className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
-        {rows.length === 0 ? (
+        {rows.length === 0 && earlier === undefined ? (
           <ConversationEmptyState>
             <p className="m-0">{WORK_EMPTY_LINE}</p>
           </ConversationEmptyState>
@@ -269,6 +333,8 @@ export function PlanWork({
           <Conversation>
             {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
             <ConversationContent className="pt-0">
+              {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
+              {earlier === undefined ? null : <EarlierWork key={earlier} onLoad={onLoadEarlier} />}
               {rows.map((turn) => (
                 <WorkTurn key={turn.key} turn={turn} now={now} />
               ))}

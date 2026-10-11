@@ -136,6 +136,8 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
     }),
     createElement(PlanWork, {
       callLive: true,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
       onOpenSubagent: () => undefined,
       turns: [
         {

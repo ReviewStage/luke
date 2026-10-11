@@ -1,5 +1,4 @@
 import type { Board } from "@sidecar/hosted/board-wire";
-import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { Option, Schema } from "effect";
 import { useEffect, useRef, useState } from "react";
 import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-side-panel";
@@ -8,8 +7,10 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  * use-panel-arrivals.ts -- opens the side panel on what Luke first draws on a plan's board or first shows of its code, once per plan and kind, kept across launches.
  *
  * An arrival is live: Luke drawing on the open plan's board where he had
- * not, or code coming on screen where there was none, while the developer
- * is on that plan. The developer's own strokes are not Luke's, so they
+ * not, or code coming on screen where there was none on a call about it,
+ * while the developer is on that plan. The code last shown stays on the
+ * plan past its call, so code is read only while a call stands, and what a
+ * call starts with is what the plan already held. The developer's own strokes are not Luke's, so they
  * arrive nothing. A plan opened with Luke's drawing already on its board, or
  * with code already on screen, has nothing arriving; what it holds counts as seen, which is
  * also how a plan drawn on before this existed is read. Each kind arrives
@@ -107,7 +108,8 @@ export function usePanelArrivals(input: {
   /** The open plan, or none where nothing may arrive: no plan open, or a fixture run's staged one. */
   planId: string | undefined;
   board: Board | undefined;
-  code: PlanCode | undefined;
+  /** Whether code is on screen, or nothing while no call about the plan stands, since only a call shows code. */
+  code: boolean | undefined;
   panel: SidePanelControl;
 }): readonly SidePanelTab[] {
   const { planId, panel } = input;
@@ -116,7 +118,7 @@ export function usePanelArrivals(input: {
   // Note that a board not yet read is unknown rather than empty, because the
   // read landing is the plan opening, not anything Luke drew.
   const board = input.board === undefined ? undefined : lukeDrew(input.board);
-  const code = input.code !== undefined;
+  const { code } = input;
 
   useEffect(() => {
     // Note that a plan left ends its visit, because the plan opened again
