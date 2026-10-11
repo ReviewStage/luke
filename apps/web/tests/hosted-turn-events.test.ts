@@ -354,7 +354,7 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
 function toolPart(
   name: string,
   callId: string,
-  input: Readonly<Record<string, string | number | CodeRef>> = {},
+  input: Readonly<Record<string, string | number | CodeRef | readonly string[]>> = {},
   state = "input-available",
 ): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
@@ -465,6 +465,32 @@ test("the projection: a queued question carries its code, a withdrawal is told b
         question: "Re-send it?",
       },
     ],
+  );
+});
+
+test("the projection: a queued question carries its options, and one past a breath long or offering more than three options is not told", () => {
+  const queued = {
+    question: "Where should expiry be checked?",
+    recommendation: "On accept.",
+    options: ["On accept", "In a nightly job"],
+  };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(QUEUE_QUESTION_TOOL.name, "c1", queued),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c2", {
+          question: "x".repeat(201),
+          recommendation: "Yes.",
+        }),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c3", {
+          question: "Which?",
+          recommendation: "A.",
+          options: ["A", "B", "C", "D"],
+        }),
+      ]),
+    ),
+    [{ turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued }],
   );
 });
 

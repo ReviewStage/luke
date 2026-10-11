@@ -1,6 +1,7 @@
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
+import { PLAN_REVIEW_OPENING } from "@sidecar/live";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -122,7 +123,7 @@ The plan is done when the saved document is enough for a separate agent to build
 - nothing in Open questions would change what gets built;
 - every remaining choice the user does not mind either way is listed under Left to the agent or stated as an assumption.
 
-Once it is, queue nothing more and withdraw every question still queued. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
+Once it is, queue nothing more and withdraw every question still queued. Open your return with "${PLAN_REVIEW_OPENING.COMPLETE}", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "${PLAN_REVIEW_OPENING.NOT_COMPLETE}", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### The whiteboard
 
@@ -163,7 +164,7 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 
 ## Return the result
 
-Return the relevant facts and the task's current status. Don't repeat the questions you queued: Luke already has them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
+Unless it opens the plan's review, lead your return with what Luke should say, in at most three sentences: he says no more of it aloud. Return the relevant facts and the task's current status. Don't repeat the questions you queued: Luke already has them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
 `;
 
 /** Each field a note may be taken under, and what it holds, one line apiece for the notetaker. */

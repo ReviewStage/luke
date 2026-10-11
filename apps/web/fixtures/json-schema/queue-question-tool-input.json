@@ -4,14 +4,25 @@
     "question": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 500,
+      "maxLength": 200,
       "description": "One decision to put to the developer, as Luke would ask it aloud, such as \"Should a withdrawn invite tell the invitee who withdrew it?\""
     },
     "recommendation": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 500,
+      "maxLength": 200,
       "description": "The answer you recommend, and why in a few words, such as \"No: just say the invite is no longer valid, so nobody learns who removed them.\""
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 60
+      },
+      "minItems": 2,
+      "maxItems": 3,
+      "description": "Where the developer chooses between directions, the two or three to choose from, a few words each."
     },
     "code": {
       "type": "object",

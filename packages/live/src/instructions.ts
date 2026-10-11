@@ -1,4 +1,14 @@
 /**
+ * How the planning model opens a return that is the plan's review: the
+ * voice service reads such a return out whole, since its lists are the
+ * point, where any other return is held to a few sentences.
+ */
+export const PLAN_REVIEW_OPENING = {
+  COMPLETE: "The plan is complete.",
+  NOT_COMPLETE: "The plan is not complete yet.",
+} as const;
+
+/**
  * A planning call's backend is the planning model, which holds the saved
  * document and reads the plan's repository; a notetaker beside the call
  * writes the plan, so there is no save to delegate. The guide's Delegation

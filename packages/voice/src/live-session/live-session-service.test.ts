@@ -837,6 +837,74 @@ it.effect(
     }),
 );
 
+/** Fires a completed run that says each sentence as its reply. */
+function replySaying(brain: FakeBrain, runId: string, sentences: readonly string[]) {
+  brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId });
+  for (const sentence of sentences)
+    brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE, runId, sentence });
+}
+
+it.effect(
+  "a reply is said aloud for its first three sentences, and the rest reach the voice as quiet context",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("What does the invite flow look like?", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      replySaying(f.brain, "run-1", ["One.", "Two.", "Three.", "Four.", "Five."]);
+      yield* acknowledgeAll(sideband);
+      assert.deepEqual(commentaryOf(sideband), ["One.", "Two.", "Three."]);
+      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+        "content" in event ? event.content : "",
+      );
+      assert.deepEqual(thinking, ["Four.", "Five."]);
+    }),
+);
+
+it.effect("a reply that opens the plan's review is said aloud whole", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("I think that's everything.", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    const review = [
+      "The plan is complete.",
+      "Invites expire after a week.",
+      "Admins can re-send.",
+      "The agent picks the email wording.",
+      "Nothing contradicts.",
+    ];
+    replySaying(f.brain, "run-1", review);
+    yield* acknowledgeAll(sideband);
+    assert.deepEqual(commentaryOf(sideband), review);
+  }),
+);
+
+it.effect("a queued question's options are read out with it", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Invites should expire.", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+      runId: "run-1",
+      question: "Where should expiry be checked?",
+      recommendation: "On accept.",
+      options: ["On accept", "In a nightly job"],
+    });
+    yield* acknowledgeAll(sideband);
+    assert.ok(commentaryOf(sideband)[0]?.includes("On accept; In a nightly job"));
+  }),
+);
+
 it.effect(
   "code the planning model shows waits for Luke's next words, then goes on screen with a note the voice keeps",
   () =>

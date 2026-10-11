@@ -13,6 +13,7 @@ import {
   type LiveServerEvent,
   liveErrorCommand,
   liveErrorFields,
+  PLAN_REVIEW_OPENING,
   renderAskContext,
   TRANSCRIPT_SPEAKER,
   TranscriptLedger,
@@ -90,6 +91,13 @@ import type { LiveRecord } from "./live-record.js";
  * to run, since how long a quit waits on the peer is its decision.
  */
 
+/**
+ * How many sentences of a reply are said aloud; the rest reach the voice as
+ * quiet context it can draw on if the developer asks. Note that a reply that
+ * opens the plan's review is said whole, because its lists are the point.
+ */
+const SPOKEN_REPLY_MAX_SENTENCES = 3;
+
 /** A run's end may precede its last sentence by a tick; the exchange is finalized once both have had their say. */
 const EXCHANGE_FINALIZE_MS = 250;
 
@@ -147,8 +155,9 @@ function progressNote(step: string | undefined, settled: number): string {
  * commentary, as the delegation guide has a result the voice should say.
  * The service hands one at a time, so the note asks for this one alone.
  */
-function queuedQuestionNote(question: string, recommendation: string): string {
-  return `Ask the developer this next, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
+function queuedQuestionNote(held: HeldQuestion): string {
+  const options = held.options === undefined ? "" : ` Options: ${held.options.join("; ")}.`;
+  return `Ask the developer this next, once they have answered anything you have already asked: ${held.question}${options} Recommended answer: ${held.recommendation}`;
 }
 
 /** Where code on screen is, as the voice is told it: the file and the lines lit, if any. */
@@ -237,11 +246,10 @@ interface RetainedDelegation {
 }
 
 /** A question the planning model queued, waiting in its session until the voice is handed it. */
-interface HeldQuestion {
-  readonly question: string;
-  readonly recommendation: string;
-  readonly code?: CodeRef;
-}
+type HeldQuestion = Omit<
+  Extract<LiveBrainRunEvent, { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED }>,
+  "kind" | "runId"
+>;
 
 interface StandingSession {
   sessionId: string;
@@ -363,6 +371,9 @@ interface Exchange {
   slowStepTold: boolean;
   /** How many progress notes the exchange has written, and when it last wrote any thinking note. */
   progressNotes: number;
+  /** How many sentences of the reply have come, and whether the first opened the plan's review. */
+  repliedSentences: number;
+  review: boolean;
   lastNoteAt: number | undefined;
   /** What the brain last said its run is doing, cleared when a run ends. */
   action: string | undefined;
@@ -392,6 +403,8 @@ function newExchange(
     spokenChunks: 0,
     slowStepTold: false,
     progressNotes: 0,
+    repliedSentences: 0,
+    review: false,
     lastNoteAt: undefined,
     action: undefined,
     finalize: undefined,
@@ -1411,7 +1424,7 @@ export class LiveSessionService {
   #releaseWoken(sessionId: string): void {
     for (const held of this.#exchanges.values()) {
       if (held.sessionId !== sessionId || !held.woken || !this.#mayReply(held)) continue;
-      for (const sentence of held.buffered.splice(0)) this.#speakSentence(held, sentence);
+      for (const sentence of held.buffered.splice(0)) this.#replySentence(held, sentence);
       // A woken run that ended while it waited was kept for this; it ends now.
       if (held.end !== undefined && held.finalize === undefined) this.#finalize(held);
     }
@@ -1445,10 +1458,8 @@ export class LiveSessionService {
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
         const session = this.#sessionOf(exchange);
         if (!session) return;
-        const { question, recommendation, code } = event;
-        session.questions.push(
-          code === undefined ? { question, recommendation } : { question, recommendation, code },
-        );
+        const { kind: _kind, runId: _runId, ...held } = event;
+        session.questions.push(held);
         if (!session.holdingQuestion) this.#handQuestion(session, this.#delegationOf(exchange));
         return;
       }
@@ -1471,10 +1482,10 @@ export class LiveSessionService {
       case LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED:
         exchange.settled = true;
         if (!this.#mayReply(exchange)) return;
-        for (const sentence of exchange.buffered.splice(0)) this.#speakSentence(exchange, sentence);
+        for (const sentence of exchange.buffered.splice(0)) this.#replySentence(exchange, sentence);
         return;
       case LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE:
-        if (this.#mayReply(exchange)) this.#speakSentence(exchange, event.sentence);
+        if (this.#mayReply(exchange)) this.#replySentence(exchange, event.sentence);
         else exchange.buffered.push(event.sentence);
         return;
       case LIVE_BRAIN_RUN_EVENT.ACTIVITY:
@@ -1551,7 +1562,7 @@ export class LiveSessionService {
     if (next === undefined) return;
     session.holdingQuestion = true;
     if (next.code !== undefined) session.pendingCode = { ref: next.code, delegationId };
-    this.#speakInto(session, delegationId, queuedQuestionNote(next.question, next.recommendation));
+    this.#speakInto(session, delegationId, queuedQuestionNote(next));
   }
 
   /**
@@ -1573,6 +1584,25 @@ export class LiveSessionService {
         ),
       ),
     );
+  }
+
+  /**
+   * One sentence of an exchange's reply, said aloud while the reply is still
+   * within `SPOKEN_REPLY_MAX_SENTENCES` or is the plan's review, and handed
+   * on as quiet context past it.
+   */
+  #replySentence(exchange: Exchange, sentence: string): void {
+    if (exchange.repliedSentences === 0) {
+      exchange.review = Object.values(PLAN_REVIEW_OPENING).some((opening) =>
+        sentence.startsWith(opening),
+      );
+    }
+    exchange.repliedSentences += 1;
+    if (exchange.review || exchange.repliedSentences <= SPOKEN_REPLY_MAX_SENTENCES) {
+      this.#speakSentence(exchange, sentence);
+    } else if (!exchange.silenced) {
+      this.#think(exchange, sentence);
+    }
   }
 
   /**
