@@ -1,0 +1,112 @@
+import { emitJsonSchema } from "@sidecar/wire/effect";
+import type { MessageStreamEvent } from "eve/client";
+import { serializeModelInputSchema, type ToolDefinition } from "eve/tools";
+import type { StoredAgentStep } from "../../db/coding-agent-schema.js";
+import { CODER } from "./bounds.js";
+import { DELEGATE_TOOL } from "./delegation.js";
+import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
+import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+import { bashStartingIn } from "./shell.js";
+import { CODER_TOOL } from "./tool-set.js";
+
+/**
+ * context-estimate.ts -- what a coding agent's newest step read: the counts its provider gave, and estimates of the parts no provider counts apart.
+ *
+ * A provider answers each step with the tokens it read, how many of those
+ * its prefix cache read or wrote, and the tokens it wrote, and nothing of
+ * how the read divides. Three parts of it are text the service composes,
+ * so they are estimated here the way eve's own compaction estimates a
+ * message, the bytes of its JSON over four: the instructions the session
+ * runs under, the definitions of the tools the coder project authors
+ * (`coder/tools/`), built from the same functions and words those files
+ * are, and the plan or task the agent was handed as its first message. The
+ * provider-run web tools are resolved by eve per provider as the step runs
+ * and are none of the service's text, so they are left in the remainder
+ * with whatever framing eve and the provider add. The tools are the same
+ * for every agent, so they are estimated once, as the module loads, which
+ * is in eve's service alone: this module reaches eve's tools, which no
+ * route may load.
+ */
+
+/** The bytes a token stands for in eve's own estimate. */
+const BYTES_PER_TOKEN = 4;
+
+/** The provider-run tools, which eve resolves as the step runs and the service writes no words of. */
+type ProviderRunTool = typeof CODER_TOOL.WEB_FETCH | typeof CODER_TOOL.WEB_SEARCH;
+
+/** A tool as the model is shown it: its words and its input's JSON Schema. */
+interface ShownTool {
+  readonly description: string;
+  readonly inputSchema: unknown;
+}
+
+/** An eve tool as the model is shown it, its input schema serialized as eve serializes it for the model. */
+function shown(tool: Pick<ToolDefinition, "description" | "inputSchema">): ShownTool {
+  return {
+    description: tool.description ?? "",
+    inputSchema: serializeModelInputSchema(tool.inputSchema),
+  };
+}
+
+/** Every tool the coder project authors, keyed so a tool added to the set without a definition here fails to compile. */
+const AUTHORED_TOOLS = {
+  [CODER_TOOL.BASH]: shown(bashStartingIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.READ_FILE]: shown(readFileIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.WRITE_FILE]: shown(writeFileIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.GLOB]: shown(globIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.GREP]: shown(grepIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.APPLY_PATCH]: shown(applyPatchIn(CODER.CHECKOUT_PATH)),
+  [CODER_TOOL.DELEGATE]: {
+    description: DELEGATE_TOOL.description,
+    inputSchema: emitJsonSchema(DELEGATE_TOOL.inputSchema),
+  },
+  [CODER_TOOL.EDIT_PLAN]: {
+    description: EDIT_PLAN_TOOL.description,
+    inputSchema: emitJsonSchema(EDIT_PLAN_TOOL.inputSchema),
+  },
+} as const satisfies Record<
+  Exclude<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ProviderRunTool>,
+  ShownTool
+>;
+
+/** What a step's end says its provider counted; nothing where it counted nothing. */
+type StepUsage = Extract<MessageStreamEvent, { type: "step.completed" }>["data"]["usage"];
+
+/** What the step read beside the conversation: the instructions and the first message, as the service composed them. */
+export interface StepText {
+  readonly instructions: string;
+  readonly brief: string;
+}
+
+/** The tokens of a value's JSON as eve's compaction estimates them: its bytes over four, rounded up. */
+function estimatedTokens(json: string): number {
+  return Math.ceil(new TextEncoder().encode(json).byteLength / BYTES_PER_TOKEN);
+}
+
+/** The definitions of the authored tools, estimated once: the same for every agent. */
+const TOOL_DEFINITION_TOKENS = estimatedTokens(
+  JSON.stringify(Object.entries(AUTHORED_TOOLS).map(([name, tool]) => ({ name, ...tool }))),
+);
+
+/** The step as the agent's row keeps it, at the instant given; nothing for a step whose provider counted no input, which leaves the last one standing. */
+export function agentStepOf(
+  usage: StepUsage,
+  text: StepText,
+  at: number,
+): StoredAgentStep | undefined {
+  if (usage?.inputTokens === undefined) return undefined;
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens ?? 0,
+    ...(usage.cacheReadTokens === undefined
+      ? undefined
+      : { cachedInputTokens: usage.cacheReadTokens }),
+    ...(usage.cacheWriteTokens === undefined
+      ? undefined
+      : { cacheWriteTokens: usage.cacheWriteTokens }),
+    systemPromptTokens: estimatedTokens(JSON.stringify(text.instructions)),
+    toolDefinitionTokens: TOOL_DEFINITION_TOKENS,
+    briefTokens: estimatedTokens(JSON.stringify(text.brief)),
+    at,
+  };
+}

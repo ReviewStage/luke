@@ -75,6 +75,8 @@ import {
   fillCodingAgentTitle,
   listCodingAgents,
   readCodingAgent,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
   updateCodingAgentBranch,
 } from "../server/hosted/coding-agent-store";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
@@ -1255,6 +1257,50 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
       return { ...opened, agent, target, sessionId, writer, turnId, transcript, sent };
     });
+
+  it.effect(
+    "a page carries what the agent's model's context holds as its newest step left it, read from its row on every page, against the window a step on its model is told and eve's threshold in it; the plan's estimate goes once eve compacted",
+    () =>
+      Effect.gen(function* () {
+        const { owner, agent, ask } = yield* startedAgent(fakeEve(), { running: false });
+        const context = () =>
+          Effect.map(
+            ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).context,
+          );
+        assert.equal(yield* context(), undefined);
+
+        yield* recordCodingAgentStep(owner, agent.id, {
+          inputTokens: 150_000,
+          outputTokens: 2_400,
+          cachedInputTokens: 140_000,
+          cacheWriteTokens: 9_000,
+          systemPromptTokens: 1_200,
+          toolDefinitionTokens: 2_800,
+          briefTokens: 600,
+          at: 1_800_000_000_000,
+        });
+        assert.deepEqual(yield* context(), {
+          windowTokens: CODER.FALLBACK_CONTEXT_WINDOW_TOKENS,
+          compactionThresholdTokens: 180_000,
+          inputTokens: 150_000,
+          outputTokens: 2_400,
+          cachedInputTokens: 140_000,
+          cacheWriteTokens: 9_000,
+          estimated: { systemPromptTokens: 1_200, toolDefinitionTokens: 2_800, briefTokens: 600 },
+          measuredAt: 1_800_000_000_000,
+        });
+
+        yield* recordCodingAgentCompaction(owner, agent.id, new Date(1_800_000_060_000));
+        const compacted = yield* context();
+        assert.equal(compacted?.compactedAt, 1_800_000_060_000);
+        assert.deepEqual(compacted?.estimated, {
+          systemPromptTokens: 1_200,
+          toolDefinitionTokens: 2_800,
+        });
+      }),
+  );
 
   it.effect(
     "a page carries what the agent has cost over its own turns and its workers', each step priced at the model it ran on, and what its newest turn cost",

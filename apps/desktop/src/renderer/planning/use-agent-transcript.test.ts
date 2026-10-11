@@ -9,6 +9,7 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  type CodingAgentContext,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentStatus,
@@ -40,6 +41,16 @@ function page(
     ...(failure === undefined ? undefined : { failureReason: failure }),
   };
 }
+
+/** What the model's context holds as a page says it: a step that read 64k of a 1M window. */
+const CONTEXT: CodingAgentContext = {
+  windowTokens: 1_000_000,
+  compactionThresholdTokens: 900_000,
+  inputTokens: 64_000,
+  outputTokens: 1_200,
+  estimated: { systemPromptTokens: 1_200, toolDefinitionTokens: 2_800, briefTokens: 600 },
+  measuredAt: 9_500,
+};
 
 interface Standing {
   status: CodingAgentStatus;
@@ -144,11 +155,15 @@ test("a running agent's tab reads from the start, reads on from each page's curs
   // The hold let go with nothing new: the next read starts where this one ended,
   // and the page carries the title the agent has since been given.
   // It also carries when the run under way began, which a turn opened since has moved.
+  // It also says what the model's context holds as the last step left it, which the box's ring draws.
+  assert.equal(tab.control().context, undefined);
   await tab.answer({
     ...page([], "1:1", CODING_AGENT_STATUS.RUNNING, undefined, "Sign-out button"),
     runStartedAt: 9_000,
+    context: CONTEXT,
   });
   assert.equal(tab.reads.length, 3);
+  assert.deepEqual(tab.control().context, CONTEXT);
 
   // A message heard again is redrawn in place, and a page saying the agent ended ends the loop, with why where it failed.
   assert.equal(tab.control().failure, undefined);

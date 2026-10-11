@@ -7,6 +7,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentContext,
   type CodingAgentMessage,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -101,6 +102,7 @@ interface Standing {
   messages: readonly CodingAgentMessage[];
   choice: ModelChoice;
   usage?: CodingAgentUsage;
+  context?: CodingAgentContext;
 }
 
 /** One message sent, held until the test answers it. */
@@ -180,6 +182,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         failure: undefined,
         usage: held.usage,
         turnUsage: undefined,
+        context: held.context,
         reading: false,
         failed: false,
         onRetry: ignore,
@@ -554,4 +557,68 @@ test("no bar stands between the transcript and the box: nothing that holds the c
       .map(({ selector, property, value }) => `${selector} { ${property}: ${value} }`),
   );
   assert.deepEqual(drawn, []);
+});
+
+/** A step that read 620k of a 1M window whose compaction is at 900k. */
+const CONTEXT: CodingAgentContext = {
+  windowTokens: 1_000_000,
+  compactionThresholdTokens: 900_000,
+  inputTokens: 620_000,
+  outputTokens: 2_400,
+  cachedInputTokens: 600_000,
+  estimated: { systemPromptTokens: 1_200, toolDefinitionTokens: 2_800, briefTokens: 600 },
+  measuredAt: 1,
+};
+
+test("once a step has ended, a ring stands beside the model chip, coloured by how near eve's compaction the context is, and its press opens what fills it, which Escape and the × close again", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  const ring = () =>
+    tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
+  const popover = () =>
+    tab.container.querySelector<HTMLElement>('[role="dialog"][aria-label="Context usage"]');
+  assert.equal(ring(), null, "no ring before a step ended");
+
+  await tab.stand({ context: CONTEXT });
+  const button = ring();
+  assert.ok(button);
+  assert.equal(
+    button
+      .closest(".agent-context")
+      ?.previousElementSibling?.classList.contains("agent-model-chip"),
+    true,
+    "the ring stands right after the model chip",
+  );
+  assert.equal(button.dataset.level, "room");
+  act(() => {
+    button.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.equal(document.body.querySelector('[role="tooltip"]')?.textContent, "62% of context used");
+
+  act(() => button.click());
+  const shown = popover();
+  assert.ok(shown);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  assert.equal(shown.querySelector(".agent-context-full")?.textContent, "62% full");
+  assert.equal(shown.querySelector(".agent-context-total")?.textContent, "~620.0k / 1M tokens");
+  assert.deepEqual(
+    [...shown.querySelectorAll(".agent-context-legend li")].map((row) => row.textContent),
+    ["System prompt~1.2k", "Tool definitions~2.8k", "Plan~600", "Conversation~615.4k"],
+  );
+  act(() => {
+    shown.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  assert.equal(popover(), null);
+  assert.equal(document.activeElement, button, "focus goes back to the ring");
+
+  // Near the compaction the ring turns amber, and at it red.
+  await tab.stand({ context: { ...CONTEXT, inputTokens: 880_000 } });
+  assert.equal(ring()?.dataset.level, "near");
+  await tab.stand({ context: { ...CONTEXT, inputTokens: 950_000 } });
+  assert.equal(ring()?.dataset.level, "over");
+
+  act(() => ring()?.click());
+  const close = popover()?.querySelector<HTMLButtonElement>('button[aria-label="Close"]');
+  assert.ok(close);
+  act(() => close.click());
+  assert.equal(popover(), null);
 });

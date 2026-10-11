@@ -237,6 +237,7 @@ function transcriptResponse(
     ...(page.failureReason === undefined ? undefined : { failureReason: page.failureReason }),
     ...(page.usage === undefined ? undefined : { usage: page.usage }),
     ...(page.turnUsage === undefined ? undefined : { turnUsage: page.turnUsage }),
+    ...(page.context === undefined ? undefined : { context: page.context }),
   });
 }
 
@@ -414,7 +415,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   const after = yield* cursorOf(request);
   const { agent, target } = yield* ownedAgent(seams, request);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent),
+    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent),
   );
   return transcriptResponse(page, agent.title);
 });

@@ -2,6 +2,7 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentContext,
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentUsage,
@@ -13,14 +14,17 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { StoredUIMessage } from "../../core.js";
 import {
   awaitingLinesOf,
+  type CodingAgent,
   type CodingAgentDelegation,
   latestTurnsOf,
+  readCodingAgentContext,
   readDelegation,
   turnUsagesOf,
 } from "../coding-agent-store.js";
-import { ModelCatalog } from "../model-catalog.js";
+import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import { type ConversationTarget, listMessagesPast, type MessageCursor } from "../store/index.js";
 import { CODER } from "./bounds.js";
+import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
   type AgentStanding,
   codingAgentFailureOf,
@@ -49,7 +53,11 @@ import { usageOfTurn, usageOfTurns } from "./usage.js";
  * learns the agent ended from the page that ends the hold and asks nothing
  * else, and what the agent has cost, its workers' turns included, and its
  * newest turn, each read once with the page that is answered rather than
- * on every look inside the hold. The wire spells the cursor as the two
+ * on every look inside the hold, and on the agent's own transcript what
+ * its model's context holds as its newest step left it (`context.ts`).
+ * Note that a step's end is written a moment before the next step starts
+ * and lands its parts in the journal, so the page that wakes on a step
+ * carries the step before it. The wire spells the cursor as the two
  * numbers joined by a colon.
  */
 
@@ -81,6 +89,8 @@ export interface TranscriptPage {
   readonly usage?: CodingAgentUsage;
   /** What its newest turn cost; absent until that turn settles. */
   readonly turnUsage?: CodingAgentUsage;
+  /** What the agent's model's context holds, on its own transcript; absent before its first step and on a worker's. */
+  readonly context?: CodingAgentContext;
 }
 
 type TranscriptEffect<A, R = never> = Effect.Effect<
@@ -91,6 +101,9 @@ type TranscriptEffect<A, R = never> = Effect.Effect<
 
 /** The newest turn as a page reads it: what it ran under and cost; nothing before the first. */
 type NewestTurn = Parameters<typeof usageOfTurn>[0];
+
+/** The agent whose own transcript a page is, as its context is read: its row. */
+type OwnAgent = Pick<CodingAgent, "id">;
 
 /** The statuses a read waits through: more may still land. */
 const WAITING_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
@@ -114,15 +127,31 @@ const statusNow = (target: ConversationTarget, createdAt: Date) =>
   });
 
 /**
+ * The agent's context as its row holds it, against the window the catalog
+ * lists for the model the same read says it runs on now; nothing before its
+ * first step. Note that the model is read here rather than taken from the
+ * agent the request read, because a change of model during the hold is
+ * what the step this page carries ran on.
+ */
+const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly OfferedModel[]) =>
+  Effect.map(readCodingAgentContext(target.userId, own.id), (held) =>
+    Option.isNone(held)
+      ? undefined
+      : codingAgentContextOf(held.value, contextWindowOf(offered, held.value.model)),
+  );
+
+/**
  * The page with what the agent has cost: every settled turn of its
  * conversation and its workers', and its newest turn, priced at the catalog
  * as the instance holds it now; a catalog it cannot read prices nothing,
- * so the tokens are told alone.
+ * so the tokens are told alone. On the agent's own transcript, with what
+ * its model's context holds, against the window the same catalog lists.
  */
 const withUsage = (
   target: ConversationTarget,
   page: TranscriptPage,
   turn: NewestTurn,
+  own: OwnAgent | undefined,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> =>
   Effect.gen(function* () {
     const rows = yield* turnUsagesOf(target.userId, target.conversationId);
@@ -130,10 +159,12 @@ const withUsage = (
     const offered = yield* catalog.read.pipe(Effect.orElseSucceed(() => []));
     const usage = usageOfTurns(rows, offered);
     const turnUsage = usageOfTurn(turn, offered);
+    const context = own === undefined ? undefined : yield* contextOf(target, own, offered);
     return {
       ...page,
       ...(usage === undefined ? undefined : { usage }),
       ...(turnUsage === undefined ? undefined : { turnUsage }),
+      ...(context === undefined ? undefined : { context }),
     };
   });
 
@@ -210,13 +241,15 @@ export function delegationPast(
  * something on it inside the hold, or the empty page and the cursor to
  * read on from once the hold is out. Note that the status on a page that
  * ends the hold is read with that page, so a hold that ran out on an agent
- * that ended meanwhile still says so.
+ * that ended meanwhile still says so. The agent's own transcript names the
+ * agent as `own`, whose context its pages carry; a worker's names none.
  */
 export function transcriptPast(
   target: ConversationTarget,
   tools: ToolSet,
   after: MessageCursor,
   agent: Pick<AgentStanding, "createdAt">,
+  own?: OwnAgent,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent.createdAt);
@@ -232,6 +265,6 @@ export function transcriptPast(
         ? Effect.succeed(read.value)
         : pagePast(target, tools, after, agent.createdAt);
     }),
-    Effect.flatMap(({ page, turn }) => withUsage(target, page, turn)),
+    Effect.flatMap(({ page, turn }) => withUsage(target, page, turn, own)),
   );
 }

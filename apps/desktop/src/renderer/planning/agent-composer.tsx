@@ -1,6 +1,8 @@
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
+  type CodingAgentBrief,
+  type CodingAgentContext,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentUsage,
@@ -16,6 +18,7 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { Tooltip } from "../tooltip";
+import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { PublishedChip, type PublishedDoors } from "./agent-published";
 import type { AgentComposerControl } from "./use-agent-composer";
@@ -28,7 +31,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * the one the New Plan page draws, at its default type. Along its foot's
  * left stand the chips: the model chip naming what the agent runs on,
  * which opens the menu that changes it for the next step
- * (`agent-model-chip.tsx`), and after it, once the agent has pushed, the
+ * (`agent-model-chip.tsx`), beside it, once a step has ended, the ring
+ * that shows how full the agent's model's context is and opens what fills
+ * it (`agent-context.tsx`), and after them, once the agent has pushed, the
  * pull request's or the branch's chip with its menu
  * (`agent-published.tsx`). The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
@@ -75,6 +80,8 @@ export function AgentComposer({
   models,
   readModels,
   usage,
+  context,
+  brief,
   published,
   doors,
   onStop,
@@ -89,6 +96,10 @@ export function AgentComposer({
   readModels: () => void;
   /** What the agent has cost, said at the chip's menu's foot; nothing before a turn settled. */
   usage: CodingAgentUsage | undefined;
+  /** What the agent's model's context holds, which the ring draws; nothing before a step ended, which draws no ring. */
+  context?: CodingAgentContext | undefined;
+  /** What the agent was handed, which names the brief's part of the context. */
+  brief?: CodingAgentBrief | undefined;
   /** What the agent published, once the service has said; nothing before. */
   published: CodingAgentPullRequestAnswer | undefined;
   doors: PublishedDoors;
@@ -146,6 +157,7 @@ export function AgentComposer({
             {model === undefined ? null : (
               <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
             )}
+            <AgentContextRing context={context} brief={brief} />
             <PublishedChip published={published} doors={doors} />
           </PromptInputTools>
           {showsStop ? (

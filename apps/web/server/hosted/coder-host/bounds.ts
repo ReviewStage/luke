@@ -9,8 +9,9 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
  * same conversation admission, the same relay into the store, under a
  * different agent. What differs is named here: how long its sandbox may
  * live, how often the repository credential at its firewall is renewed,
- * where its checkout stands, how a transcript read waits, and how much a
- * worker it delegates to may spend.
+ * where its checkout stands, how a transcript read waits, how full its
+ * context grows before eve compacts it, and how much a worker it delegates
+ * to may spend.
  */
 export const CODER = {
   /** The most a Vercel Sandbox session may live: the platform's own maximum, so a long run is never cut off mid-turn. */
@@ -19,6 +20,13 @@ export const CODER = {
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
   /** The context window the session is told where the catalog names none for the model. */
   FALLBACK_CONTEXT_WINDOW_TOKENS: 200_000,
+  /**
+   * The share of the context window past which eve compacts the session,
+   * told to eve as the agent's own setting (`coder/agent.ts`) and read by
+   * the agent's tab as the line its context ring turns red at. It is eve's
+   * own default, written down so the two cannot drift apart.
+   */
+  COMPACTION_THRESHOLD_SHARE: 0.9,
   /** Where the agent's checkout stands in its sandbox, which is where the planning checkout stands too. */
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */

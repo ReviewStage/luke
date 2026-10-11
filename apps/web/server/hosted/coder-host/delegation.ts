@@ -1,3 +1,4 @@
+import { codingAgentDelegationInputSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -19,6 +20,13 @@ import type { ConversationTarget } from "../store/index.js";
  * names, opened here ahead of the worker's session, so the worker's steps
  * read it there (`host.ts`).
  */
+
+/** The delegation tool as the model is shown it (`coder/tools/delegate.ts`): what it does, and its input, the task with the pair the agent chose. */
+export const DELEGATE_TOOL = {
+  description:
+    "Hand one scoped task to a read-only worker that reads your checkout, your uncommitted edits included, and wait for its complete answer. Name the model and effort it runs on, or leave either to your own. Several calls in one step run at once.",
+  inputSchema: codingAgentDelegationInputSchema,
+} as const;
 
 /** What the agent asked for a worker: a model and an effort, each absent where it left it to its own. */
 export interface DelegationAsk {
