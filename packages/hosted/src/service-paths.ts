@@ -81,6 +81,19 @@ export function planWorkPath(planId: string, before?: string): string {
   return `${path}?${query}`;
 }
 
+/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line. */
+export function planFilePath(
+  planId: string,
+  window: { readonly path: string; readonly firstLine: number; readonly lastLine: number },
+): string {
+  const query = new URLSearchParams({
+    path: window.path,
+    first: String(window.firstLine),
+    last: String(window.lastLine),
+  });
+  return `${planPath(planId)}/file?${query}`;
+}
+
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;

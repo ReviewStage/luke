@@ -1,5 +1,7 @@
 import type {
   PlanningBoardSaveParams,
+  PlanningFileAnswer,
+  PlanningFileParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
   PlanningSetRepositoryAnswer,
@@ -34,6 +36,7 @@ export interface PlanningActsDependencies {
     ): Effect.Effect<PlanningSetRepositoryAnswer>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
+    planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
   };
   /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
   openExternal: (url: string) => Promise<void>;
@@ -57,7 +60,8 @@ type PlanningActKind =
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
-  | typeof ACT_KIND.PLANNING_WORK_EARLIER;
+  | typeof ACT_KIND.PLANNING_WORK_EARLIER
+  | typeof ACT_KIND.PLANNING_FILE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -132,6 +136,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_WORK_EARLIER]: (_payload, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_WORK_EARLIER, sender);
       return host.planningWorkEarlier();
+    },
+    [ACT_KIND.PLANNING_FILE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);
+      return host.planningFile(params);
     },
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);

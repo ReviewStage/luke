@@ -116,6 +116,22 @@ planning conversation, by the same rules (nothing the service refused, and no `.
 and holds them in the panel's memory, never on disk, until you leave the
 plan or quit Luke. They are never part of the plan's document.
 
+**A whole file opened from a snippet.** Each snippet in the Code tab can
+open the whole file it came from in a File tab. Outside a call there is no
+checkout to read, so our service reads the file from GitHub instead, at the
+head of the repository's default branch, through the Luke GitHub App: it
+confirms you still reach the plan's repository, mints a token for that one
+repository with read access to its contents, and reads the file with it. The
+token stays on our service: it is used for that one read and never sent to
+your Mac, written to a log, or kept. The same rules apply as for code on
+screen: a `.env` file is never read, a link, a folder, a file over a
+megabyte, or one that is not text is refused, and each line is cut to 400
+characters. The file is read a window of at most 500 lines at a time as you
+scroll, is not stored by our service, and is held by Luke on your Mac only
+while its tab is open, never on disk. Because it is read from GitHub as it
+stands now, it may differ from the lines Luke showed if the file has changed
+since.
+
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a
 written summary of his own when it grows long — and it is kept where his

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -33,6 +34,7 @@ const CALLS: readonly CodeFeedCallSource[] = [
 
 const roots: Root[] = [];
 const copyNothing = () => Promise.resolve();
+const openNothing = () => undefined;
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -40,13 +42,16 @@ afterEach(() => {
 });
 
 /** The feed drawn into the document, redrawn by each `draw`. */
-function mounted(copyText: (words: string) => Promise<void> = copyNothing) {
+function mounted(
+  copyText: (words: string) => Promise<void> = copyNothing,
+  onOpenFile: (ref: CodeRef) => void = openNothing,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const draw = (shown: readonly PlanCodeShowing[], calls = CALLS) =>
-    act(() => root.render(createElement(CodePane, { shown, calls, copyText })));
+    act(() => root.render(createElement(CodePane, { shown, calls, copyText, onOpenFile })));
   return { container, draw };
 }
 
@@ -137,6 +142,7 @@ test("a card numbers its lines from where they sit in the file and lights the li
       shown: [showing("a", 2_000, code)],
       calls: CALLS,
       copyText: copyNothing,
+      onOpenFile: openNothing,
     }),
   );
 
@@ -161,6 +167,7 @@ test("a run carries its colour in both appearances, so the stylesheet picks one 
       shown: [showing("a", 2_000, code)],
       calls: CALLS,
       copyText: copyNothing,
+      onOpenFile: openNothing,
     }),
   );
 
@@ -185,6 +192,20 @@ test("a card's copy hands the clipboard the lines pointed at, and shows the chec
 
   assert.deepEqual(copied, ["line 11\nline 12"]);
   assert.ok(container.querySelector('button[aria-label="Copied"]'));
+});
+
+test("a card's Open file and its path each open the whole file, its lines lit", () => {
+  const opened: CodeRef[] = [];
+  const { container, draw } = mounted(copyNothing, (ref) => opened.push(ref));
+  draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+
+  act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
+  act(() =>
+    container.querySelector<HTMLButtonElement>('button[aria-label="Open src/invite.ts"]')?.click(),
+  );
+
+  const ref = { path: "src/invite.ts", startLine: 11, endLine: 12 };
+  assert.deepEqual(opened, [ref, ref]);
 });
 
 test("the heading names one line, a range, or nothing for a whole file", () => {

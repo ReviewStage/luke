@@ -285,16 +285,25 @@
 }
 
 /* The path is cut from its left, so the file's own name stays in sight;
-   the `bdi` inside keeps the path itself reading left to right. */
+   the `bdi` inside keeps the path itself reading left to right. On a card
+   it is also the button that opens the file, drawn as the words alone. */
 .code-card-path {
   min-width: 0;
+  padding: 0;
   overflow: hidden;
+  border: 0;
+  background: none;
   color: var(--text-primary);
   direction: rtl;
+  font: inherit;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+button.code-card-path:hover {
+  text-decoration: underline;
 }
 
 .code-card-range {
@@ -302,10 +311,59 @@
   color: var(--text-secondary);
 }
 
-/* The copy keeps to the header's right, a step smaller than a toolbar's. */
-.code-card-copy {
-  --control-height: 24px;
+/* A card's copy and its file's opening keep to the header's right, a step
+   smaller than a toolbar's. */
+.code-card-actions {
+  display: flex;
+  flex: 0 0 auto;
   margin-left: auto;
+}
+
+.code-card-action {
+  --control-height: 24px;
+}
+
+/* A File tab: the file's heading over its lines, which fill the tab and
+   scroll, with a row above and below them that reads more of the file. */
+.file-tab {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  background: var(--code-ground);
+}
+
+.file-tab-header {
+  min-height: calc(24px + 2 * var(--space-2));
+}
+
+.file-tab-source {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-right: var(--space-8);
+  color: var(--text-tertiary);
+}
+
+.file-tab-lines {
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.file-tab-edge {
+  display: block;
+  width: 100%;
+  padding: var(--space-4) 0 var(--space-4) 48px;
+  border: 0;
+  background: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  text-align: left;
+}
+
+.file-tab-edge:hover:not(:disabled) {
+  color: var(--text-secondary);
 }
 
 .code-lines {

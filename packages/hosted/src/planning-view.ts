@@ -6,7 +6,9 @@ import {
 } from "./github-repositories-wire.js";
 import {
   codeRefSchema,
+  PLAN_FILE_REFUSAL,
   planCreateRequestSchema,
+  planFileRequestSchema,
   planRenameRequestSchema,
   planSchema,
   planSummarySchema,
@@ -444,3 +446,31 @@ export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;
+
+/** A window of a file of a plan's repository, as the File tab asks the host for it: the plan, the path, and the window's first and last line. */
+export const planningFileParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...planFileRequestSchema.fields,
+});
+
+export type PlanningFileParams = typeof planningFileParamsSchema.Type;
+
+/** A window of a file as the File tab draws it: its place, how long the whole file is, and its lines as this Mac coloured them. */
+const planFileShownSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: EffectSchema.String,
+  firstLine: EffectSchema.Int,
+  lineCount: EffectSchema.Int,
+  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+});
+
+export type PlanFileShown = typeof planFileShownSchema.Type;
+
+/** The File tab's read, as the window hears it: the window coloured, why the file is not shown, or that the service did not answer. */
+export const planningFileAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ file: planFileShownSchema }),
+  EffectSchema.Struct({ refusal: EffectSchema.Literals(Object.values(PLAN_FILE_REFUSAL)) }),
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;

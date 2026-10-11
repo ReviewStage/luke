@@ -1,3 +1,4 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { Option, Schema } from "effect";
 import { useCallback, useEffect, useState } from "react";
 
@@ -31,7 +32,12 @@ import { useCallback, useEffect, useState } from "react";
  * kept nowhere, so a launch opens none. A draft
  * agent's tab, opened from the "+", stands after the agents while the open
  * plan holds the draft, and is kept nowhere either; closing it lets the
- * draft go, which is its owner's to do.
+ * draft go, which is its owner's to do. A file's tab, opened from a snippet
+ * in the Code tab or from the "+", is the first kind that stands many
+ * times, one per file: it follows the subagents, is held to the files Luke
+ * showed on the open plan the same way, closes, and is kept nowhere.
+ * Opening a file that already has a tab chooses that tab and moves its lit
+ * lines to the snippet opened.
  *
  * The panel holds tabs the way an editor's pane does: the developer closes
  * the ones they do not want, and the "+" or a tab's shortcut opens one again
@@ -86,12 +92,29 @@ export interface DraftSidePanelTab {
   readonly draft: string;
 }
 
-/** A tab of the panel: one of the fixed kinds, one agent's, one subagent's, or a draft agent's. */
+/** One file's tab, named by the file's path in the open plan's repository. */
+export interface FileSidePanelTab {
+  readonly file: string;
+}
+
+/** A tab of the panel: one of the fixed kinds, one agent's, one subagent's, a draft agent's, or one file's. */
 export type SidePanelTab =
   | FixedSidePanelTab
   | AgentSidePanelTab
   | SubagentSidePanelTab
-  | DraftSidePanelTab;
+  | DraftSidePanelTab
+  | FileSidePanelTab;
+
+/**
+ * A file's tab as the panel holds it: the file, the lines lit in it, none
+ * for a snippet of the whole file, and how many times it has been opened,
+ * so opening the same snippet again brings its lines back into view.
+ */
+export interface OpenFile {
+  readonly path: string;
+  readonly range: { readonly startLine: number; readonly endLine: number } | undefined;
+  readonly opened: number;
+}
 
 /** What the panel knows of a kind of tab. */
 export interface SidePanelTabKind {
@@ -137,6 +160,11 @@ export function isDraftTab(tab: SidePanelTab): tab is DraftSidePanelTab {
   return !isFixedTab(tab) && "draft" in tab;
 }
 
+/** Whether a tab is one file's. */
+export function isFileTab(tab: SidePanelTab): tab is FileSidePanelTab {
+  return !isFixedTab(tab) && "file" in tab;
+}
+
 /** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
 export function sameTab(a: SidePanelTab, b: SidePanelTab): boolean {
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
@@ -146,13 +174,15 @@ export function sameTab(a: SidePanelTab, b: SidePanelTab): boolean {
     );
   }
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
+  if (isFileTab(a)) return isFileTab(b) && a.file === b.file;
   return a === b;
 }
 
-/** A tab's key for a list that draws one element per tab: a fixed tab's word, or the agent's, call's, or draft's own id, which no fixed word spells. */
+/** A tab's key for a list that draws one element per tab: a fixed tab's word, the agent's, call's, or draft's own id, which no fixed word spells, or the file's path. */
 export function tabKey(tab: SidePanelTab): string {
   if (isAgentTab(tab)) return tab.agent;
   if (isDraftTab(tab)) return tab.draft;
+  if (isFileTab(tab)) return tab.file;
   return isSubagentTab(tab) ? tab.subagent : tab;
 }
 
@@ -197,14 +227,16 @@ const sidePanelStateSchema = Schema.Struct({
 export type SidePanelState = typeof sidePanelStateSchema.Type;
 
 /**
- * The state the hook holds: the kept one, and the subagent tabs open, by
- * the call that started each, in the order opened. They are this view's
- * rather than the preference's, so they are kept nowhere, and a subagent's
- * tab chosen is written as no tab, which the next launch reads as the first.
+ * The state the hook holds: the kept one, the subagent tabs open, by the
+ * call that started each, in the order opened, and the file tabs open, in
+ * the strip's order. Those are this view's rather than the preference's,
+ * so they are kept nowhere, and a subagent's or a file's tab chosen is
+ * written as no tab, which the next launch reads as the first.
  */
 interface HeldState extends Omit<SidePanelState, "tab" | "closedAgents"> {
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentSidePanelTab[];
+  readonly files: readonly OpenFile[];
   readonly closedAgents: readonly string[];
 }
 
@@ -239,6 +271,8 @@ export interface SidePanelControl {
   subagents: readonly SubagentSidePanelTab[];
   /** The agents whose tabs were closed, which the strip draws none for until one is opened again. */
   closedAgents: readonly string[];
+  /** The open file tabs, in the strip's order; they follow the subagent tabs, and only those of files shown on the open plan are drawn. */
+  files: readonly OpenFile[];
   /** The chosen tab, which is none only while no tab is open. */
   tab: SidePanelTab | undefined;
   /** The panel's width in CSS pixels, never under {@link SIDE_PANEL_WIDTH}'s least. */
@@ -254,6 +288,8 @@ export interface SidePanelControl {
   onClose: (tab: SidePanelTab) => void;
   /** Moves the open fixed tab to the place in the strip's order, leaving the chosen one chosen; the agent tabs keep their place after the fixed ones. */
   onMove: (tab: FixedSidePanelTab, to: number) => void;
+  /** Shows the panel on the file's tab, opening one at the strip's end where none stands, its lit lines the reference's. */
+  onOpenFile: (ref: CodeRef) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -280,6 +316,10 @@ function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState
   const open = isSubagentTab(tab) ? held.subagents.find((each) => sameTab(each, tab)) : undefined;
   const subagents =
     isSubagentTab(tab) && open === undefined ? [...held.subagents, tab] : held.subagents;
+  const files =
+    isFileTab(tab) && !held.files.some((each) => each.path === tab.file)
+      ? [...held.files, { path: tab.file, range: undefined, opened: 0 }]
+      : held.files;
   const closedAgents =
     isAgentTab(tab) && held.closedAgents.includes(tab.agent)
       ? held.closedAgents.filter((each) => each !== tab.agent)
@@ -287,10 +327,33 @@ function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState
   const chosen = choose || held.tab === undefined ? (open ?? tab) : held.tab;
   return tabs === held.tabs &&
     subagents === held.subagents &&
+    files === held.files &&
     closedAgents === held.closedAgents &&
     chosen === held.tab
     ? held
-    : { ...held, tabs, subagents, closedAgents, tab: chosen };
+    : { ...held, tabs, subagents, files, closedAgents, tab: chosen };
+}
+
+/** The range a reference lights, none for a whole file. */
+function rangeOf(ref: CodeRef): OpenFile["range"] {
+  return ref.startLine === undefined || ref.endLine === undefined
+    ? undefined
+    : { startLine: ref.startLine, endLine: ref.endLine };
+}
+
+/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more. */
+function withFileOpened(held: HeldState, ref: CodeRef): HeldState {
+  const standing = held.files.find((each) => each.path === ref.path);
+  const opened: OpenFile = {
+    path: ref.path,
+    range: rangeOf(ref),
+    opened: (standing?.opened ?? 0) + 1,
+  };
+  const files =
+    standing === undefined
+      ? [...held.files, opened]
+      : held.files.map((each) => (each === standing ? opened : each));
+  return { ...held, files, tab: { file: ref.path }, open: true };
 }
 
 /** What the plan holds for the tabs beside the fixed ones: its agents, or nothing while unread, the planning workers its work holds, by the call that started each, and its draft. */
@@ -298,6 +361,8 @@ export interface DrawnTabs {
   agents: readonly string[] | undefined;
   subagents: readonly string[];
   draft: string | undefined;
+  /** The files shown on the plan, by path, whose open tabs the strip draws. */
+  files: readonly string[];
 }
 
 /**
@@ -312,6 +377,11 @@ export function drawsSubagent(
 ): boolean {
   if (tab.delegation === undefined) return drawn.subagents.includes(tab.subagent);
   return drawn.agents === undefined || drawn.agents.includes(tab.delegation.agent);
+}
+
+/** The open file tabs of files shown on the plan, by path, in the strip's order. */
+function drawnFiles(held: HeldState, drawn: DrawnTabs): readonly string[] {
+  return held.files.flatMap((each) => (drawn.files.includes(each.path) ? [each.path] : []));
 }
 
 /** The plan's agents whose tabs are open, in the order started; nothing while the agents are unread. */
@@ -332,8 +402,8 @@ function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentSid
 
 /**
  * The tab chosen in place of the closed one: the next of its own run (the
- * fixed tabs, the open agents, the draft, the subagent tabs the plan
- * draws), or the one before it in the run, or where it was the run's last,
+ * fixed tabs, the open agents, the draft, the subagent tabs and the file
+ * tabs the plan draws), or the one before it in the run, or where it was the run's last,
  * the tab before it in the strip, or the one after. A tab another plan's
  * work holds is not a neighbour, since it is not in the strip.
  */
@@ -348,6 +418,7 @@ function neighbourOf(
     agents.map((agent) => ({ agent })),
     drawn.draft === undefined ? [] : [{ draft: drawn.draft }],
     drawnSubagents(held, drawn),
+    drawnFiles(held, drawn).map((file) => ({ file })),
   ];
   const run = runs.find((each) => each.some((other) => sameTab(other, tab))) ?? [];
   const strip = runs.flat();
@@ -374,7 +445,9 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
         ? held.subagents.some((each) => sameTab(each, tab))
           ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
           : undefined
-        : held;
+        : isFileTab(tab)
+          ? { ...held, files: held.files.filter((each) => each.path !== tab.file) }
+          : held;
   if (closed === undefined) return held;
   const chosen = held.tab !== undefined && sameTab(held.tab, tab);
   return chosen ? { ...closed, tab: neighbourOf(held, tab, drawn) } : closed;
@@ -406,11 +479,12 @@ function settled(state: SidePanelState): HeldState {
     tab,
     width: clampWidth(state.width),
     subagents: [],
+    files: [],
     closedAgents: state.closedAgents ?? [],
   };
 }
 
-/** What is kept of the state: the preference without the subagent tabs, and without a subagent's or a draft's tab chosen. */
+/** What is kept of the state: the preference without the subagent and file tabs, and without a subagent's, a draft's, or a file's tab chosen. */
 function stored(state: HeldState): SidePanelState {
   const kept = {
     open: state.open,
@@ -448,15 +522,15 @@ function readStored(): HeldState {
 
 /**
  * The tab the panel shows for the one kept: an agent tab whose agent the
- * open plan has none of, or a subagent tab the plan does not draw
- * (`drawsSubagent`), reads as the first open fixed tab, or as none where
- * every fixed tab is closed. With the plan's agents not yet read, the kept
- * agent tab stands, and a delegated worker's with it, so a tab kept across
- * a launch is not swapped for another and back while the list is on its
- * way; a planning worker's tab is kept across no launch, and a plan whose
- * work is unread or has no turn holds no subagent, so nothing is waited
- * for on its account. A draft's tab shows while the open plan holds that
- * draft.
+ * open plan has none of, a subagent tab the plan does not draw
+ * (`drawsSubagent`), or a file tab of a file not shown on the open plan,
+ * reads as the first open fixed tab, or as none where every fixed tab is
+ * closed. With the plan's agents not yet read, the kept agent tab stands,
+ * and a delegated worker's with it, so a tab kept across a launch is not
+ * swapped for another and back while the list is on its way; a planning
+ * worker's or a file's tab is kept across no launch, and a plan whose work
+ * is unread or has no turn holds no subagent, so nothing is waited for on
+ * its account. A draft's tab shows while the open plan holds that draft.
  */
 export function shownTab(
   kept: SidePanelTab | undefined,
@@ -464,18 +538,20 @@ export function shownTab(
   agents: readonly string[] | undefined,
   subagents: readonly string[] = [],
   draft: string | undefined = undefined,
+  files: readonly string[] = [],
 ): SidePanelTab | undefined {
   if (kept === undefined || isFixedTab(kept)) return kept;
   if (isAgentTab(kept)) {
     return agents === undefined || agents.includes(kept.agent) ? kept : tabs[0];
   }
   if (isDraftTab(kept)) return kept.draft === draft ? kept : tabs[0];
+  if (isFileTab(kept)) return files.includes(kept.file) ? kept : tabs[0];
   return drawsSubagent(kept, { agents, subagents }) ? kept : tabs[0];
 }
 
 /** A staged state as the hook holds it: no subagent tab open, and the agents it closed. */
 function heldOf(staged: SidePanelState): HeldState {
-  return { ...staged, subagents: [], closedAgents: staged.closedAgents ?? [] };
+  return { ...staged, subagents: [], files: [], closedAgents: staged.closedAgents ?? [] };
 }
 
 /**
@@ -484,15 +560,16 @@ function heldOf(staged: SidePanelState): HeldState {
  * it, which are kept nowhere. `agents` are the open plan's agent tabs, by
  * agent id, or nothing while they have not been read, and `subagents` the
  * planning workers its work holds, by the call that started each, none
- * where the work has none or is unread, and `draft` its draft agent's key,
- * if it holds one; the tab shown is held to them, a delegated worker's to
- * the open agent tabs.
+ * where the work has none or is unread, `draft` its draft agent's key, if
+ * it holds one, and `files` the files Luke showed on it, by path; the tab
+ * shown is held to them, a delegated worker's to the open agent tabs.
  */
 export function useSidePanel(
   staged: SidePanelState | undefined,
   agents?: readonly string[] | undefined,
   subagents: readonly string[] = [],
   draft: string | undefined = undefined,
+  files: readonly string[] = [],
 ): SidePanelControl {
   // Note that the fixture run's panel is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -534,8 +611,13 @@ export function useSidePanel(
     [update],
   );
   const onClose = useCallback(
-    (tab: SidePanelTab) => update((held) => withoutTab(held, tab, { agents, subagents, draft })),
-    [update, agents, subagents, draft],
+    (tab: SidePanelTab) =>
+      update((held) => withoutTab(held, tab, { agents, subagents, draft, files })),
+    [update, agents, subagents, draft, files],
+  );
+  const onOpenFile = useCallback(
+    (ref: CodeRef) => update((held) => withFileOpened(held, ref)),
+    [update],
   );
   const onMove = useCallback(
     (tab: FixedSidePanelTab, to: number) => update((held) => withTabAt(held, tab, to)),
@@ -550,7 +632,15 @@ export function useSidePanel(
     tabs: state.tabs,
     subagents: state.subagents,
     closedAgents: state.closedAgents,
-    tab: shownTab(state.tab, state.tabs, drawnAgents(agents, state.closedAgents), subagents, draft),
+    files: state.files,
+    tab: shownTab(
+      state.tab,
+      state.tabs,
+      drawnAgents(agents, state.closedAgents),
+      subagents,
+      draft,
+      files,
+    ),
     width: state.width,
     fullScreen: state.open && fullScreen,
     onToggle,
@@ -559,6 +649,7 @@ export function useSidePanel(
     onAdd,
     onClose,
     onMove,
+    onOpenFile,
     onResize,
   };
 }

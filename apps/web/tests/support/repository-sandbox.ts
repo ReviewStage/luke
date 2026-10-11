@@ -57,28 +57,27 @@ export type CommandTable = (command: string) => SandboxCommandResult | undefined
 /** The files the checkout holds, by path relative to its root, as `show_code`'s scripts read them. */
 export type CheckoutFiles = Readonly<Record<string, string>>;
 
-/** The exit codes `show_code`'s file probe answers with, as the shell script spells them. */
-const PROBE_EXIT = { MISSING: 3, NOT_TEXT: 4 } as const;
-
-/** The largest file the probe lets through, as the script bounds it. */
-const PROBE_MAX_FILE_BYTES = 1024 * 1024;
+/** The largest file the probe counts the lines of, and how many first bytes it looks for a NUL among, as the script bounds them. */
+const PROBE_BOUNDS = { MAX_FILE_BYTES: 1024 * 1024, TEXT_PROBE_BYTES: 8192 } as const;
 
 const EXIT = { OK: 0, FAILED: 1, NOT_FOUND: 127 } as const;
 
-/** Whether the probe would call the file text: no NUL among its first bytes, and under the bound. */
-function readsAsText(text: string): boolean {
-  return !text.includes("\u0000") && Buffer.byteLength(text) <= PROBE_MAX_FILE_BYTES;
-}
-
-/** The file probe's answer: the line count the screen counts, or the exit the script would take. */
+/**
+ * The file probe's answer, the facts the script prints on one line: whether
+ * the path is a regular file inside the checkout, its bytes, whether a NUL
+ * stands among its first bytes, and its line count where it is under the
+ * bound.
+ */
 function probeFile(files: CheckoutFiles, path: string): SandboxCommandResult {
   const text = files[path];
   // A path that leaves the checkout resolves to no file of it.
   if (text === undefined || path.startsWith("/") || path.split("/").includes("..")) {
-    return result(PROBE_EXIT.MISSING);
+    return result(EXIT.OK, "0 0 0 0\n");
   }
-  if (!readsAsText(text)) return result(PROBE_EXIT.NOT_TEXT);
-  return result(EXIT.OK, `${text.split("\n").length}\n`);
+  const bytes = Buffer.from(text);
+  const binary = bytes.subarray(0, PROBE_BOUNDS.TEXT_PROBE_BYTES).includes(0) ? 1 : 0;
+  const lines = bytes.length <= PROBE_BOUNDS.MAX_FILE_BYTES ? text.split("\n").length : 0;
+  return result(EXIT.OK, `1 ${bytes.length} ${binary} ${lines}\n`);
 }
 
 /** The window read's answer: the lines first to last as sed prints them, each with its newline. */

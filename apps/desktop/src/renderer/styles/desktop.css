@@ -1774,6 +1774,23 @@ body,
   left: auto;
 }
 
+/* A file's row keeps its name whole and cuts its folder short instead, so
+   a deep path never hides which file the row opens. */
+.tab-add-menu .plan-compose-menu-name {
+  flex: 0 0 auto;
+  max-width: 70%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-add-menu .plan-compose-menu-detail {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* With every tab closed, the panel offers what the "+" menu offers, as the
    same rows, at the top of its well. */
 .side-panel-no-tabs {

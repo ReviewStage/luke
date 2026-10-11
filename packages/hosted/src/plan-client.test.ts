@@ -3,6 +3,7 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
+import { PLAN_FILE_REFUSAL } from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -347,5 +348,54 @@ it.effect(
         older,
       );
       assert.equal(yield* Effect.provide(client().readWork(PLAN_ID), gone.layer), undefined);
+    }),
+);
+
+it.effect(
+  "a file's window is asked by path and lines and read as the service answers it, a refusal included, and a window the wire refuses is never sent",
+  () =>
+    Effect.gen(function* () {
+      const window = {
+        file: {
+          path: "src/invites.ts",
+          repository: "acme/web",
+          firstLine: 2,
+          lineCount: 3,
+          lines: ["const DAYS = 7;", "export { DAYS };"],
+        },
+      };
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/file`]: {
+          answer: (request) =>
+            request.searchParams.get("path") === ".env"
+              ? { refusal: PLAN_FILE_REFUSAL.SECRET }
+              : request.searchParams.get("first") === "2" &&
+                  request.searchParams.get("last") === "3"
+                ? window
+                : { error: "invalid-request" },
+        },
+      });
+
+      assert.deepEqual(
+        yield* Effect.provide(
+          client().readFile(PLAN_ID, { path: "src/invites.ts", firstLine: 2, lastLine: 3 }),
+          api.layer,
+        ),
+        window,
+      );
+      assert.deepEqual(
+        yield* Effect.provide(
+          client().readFile(PLAN_ID, { path: ".env", firstLine: 1, lastLine: 3 }),
+          api.layer,
+        ),
+        { refusal: PLAN_FILE_REFUSAL.SECRET },
+      );
+      assert.equal(
+        yield* Effect.provide(
+          client().readFile(PLAN_ID, { path: "src/invites.ts", firstLine: 3, lastLine: 2 }),
+          api.layer,
+        ),
+        undefined,
+      );
     }),
 );

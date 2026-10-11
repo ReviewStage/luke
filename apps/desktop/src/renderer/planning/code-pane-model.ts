@@ -97,3 +97,19 @@ export function codeFeedCalls(
   }
   return [...runs.values()].map(({ call, showings }) => ({ ...call, showings }));
 }
+
+/**
+ * Each file Luke showed on the plan, once, in the order first shown, under
+ * the newest reference to it: what the "+" offers to open, and what a
+ * file's tab is held to.
+ */
+export function shownFiles(shown: readonly PlanCodeShowing[]): readonly CodeRef[] {
+  const newest = new Map<string, CodeRef>();
+  for (const { code } of shown) newest.set(code.ref.path, code.ref);
+  return [...newest.values()];
+}
+
+/** A file's name, the last part of its path, as its tab is labelled. */
+export function fileName(path: string): string {
+  return path.split("/").at(-1) ?? path;
+}

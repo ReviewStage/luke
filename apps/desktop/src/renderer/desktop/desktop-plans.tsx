@@ -247,6 +247,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
           panel={drawing.panel}
           unread={plans.unreadTabs}
           planId={plan.id}
+          repository={plan.repository}
           board={plans.board}
           shownCode={plans.shownCode}
           transcript={plans.transcript}

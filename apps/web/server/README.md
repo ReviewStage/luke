@@ -707,6 +707,21 @@ through `shownCodeOf`, so what the call refused and a secret file are
 never read back. `packages/hosted/src/planning-view.ts` declares the
 answer (`planWorkAnswerSchema`).
 
+`GET /api/plans/{id}/file?path=&first=&last=` reads a window of one file of
+the plan's repository for the Mac's File tab (`server/hosted/plan-file.ts`),
+at most 500 lines a window. No sandbox stands outside a planning turn, so it
+reads GitHub's contents API at the head of the default branch, not the
+session's checkout, on a token `repositoryReadToken` mints for that one
+repository with contents read, after the same reach check the checkout
+makes. The token is used for the one read and enters no answer, log line,
+or trace. What is shown is decided by the rule `show_code` is held to
+(`server/hosted/shown-file.ts`): a secret file is refused before GitHub is
+asked, and so is a path with an empty, `.`, or `..` segment; a link, a
+directory, a missing file, a file past a megabyte, or one with a NUL among
+its first bytes is refused by name; and each line is cut to 400
+characters. `packages/hosted/src/plan-wire.ts` declares the request and
+the answer (`planFileRequestSchema`, `planFileAnswerSchema`).
+
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is

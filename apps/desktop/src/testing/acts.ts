@@ -25,6 +25,15 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.UPDATE_OPEN_CHANGELOG]: { kind: ACT_KIND.UPDATE_OPEN_CHANGELOG },
   [ACT_KIND.PLANNING_REFRESH]: { kind: ACT_KIND.PLANNING_REFRESH },
   [ACT_KIND.PLANNING_WORK_EARLIER]: { kind: ACT_KIND.PLANNING_WORK_EARLIER },
+  [ACT_KIND.PLANNING_FILE]: {
+    kind: ACT_KIND.PLANNING_FILE,
+    payload: {
+      planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+      path: "src/invite.ts",
+      firstLine: 1,
+      lastLine: 500,
+    },
+  },
   [ACT_KIND.PLANNING_CLOSE]: { kind: ACT_KIND.PLANNING_CLOSE },
   [ACT_KIND.PLANNING_SELECT]: {
     kind: ACT_KIND.PLANNING_SELECT,

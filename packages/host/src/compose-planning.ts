@@ -16,6 +16,7 @@ import {
   PLANNING_READ,
   type PlanCodeShowing,
   type PlanningDocument,
+  type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
@@ -23,6 +24,7 @@ import {
   type PlanShownCode,
   type PlanWorkTurn,
   planningBoardSaveParamsSchema,
+  planningFileParamsSchema,
   planningRenameParamsSchema,
   planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
@@ -35,7 +37,7 @@ import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
-import { codeExcerpt, highlightCode } from "./plan-code.js";
+import { codeExcerpt, highlightCode, highlightFile } from "./plan-code.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
@@ -91,6 +93,7 @@ export type PlanningClient = Pick<
   | "saveBoard"
   | "readTranscript"
   | "readWork"
+  | "readFile"
   | "repositories"
   | "setRepository"
 >;
@@ -493,6 +496,27 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         if (!gate() || planId === undefined) return {};
         yield* serial(readEarlierWork(planId));
         return {};
+      }),
+    // A file's window is answered to the File tab that asked, coloured here,
+    // and held nowhere: the tab keeps the windows it has scrolled through.
+    [GATEWAY_METHOD.PLANNING_FILE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningFileParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("reading a file names a plan, a path, and a window of its lines");
+        }
+        if (!gate()) return carried<PlanningFileAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        const { planId, ...window } = read.success;
+        const answer = yield* Effect.provide(
+          client.readFile(planId, window),
+          FetchHttpClient.layer,
+        );
+        if (answer === undefined) {
+          return carried<PlanningFileAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        return carried<PlanningFileAnswer>(
+          "file" in answer ? { file: highlightFile(answer.file) } : { refusal: answer.refusal },
+        );
       }),
     // Leaving the plan returns to the list, which was read when the tab showed.
     [GATEWAY_METHOD.PLANNING_CLOSE]: () =>

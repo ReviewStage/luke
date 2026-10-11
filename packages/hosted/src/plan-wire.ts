@@ -235,3 +235,74 @@ export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
   const first = Math.min(Math.max(1, ref.startLine - margin), latest);
   return { first, last: Math.min(lineCount, first + WINDOW_LINES - 1) };
 }
+
+export const PLAN_FILE_BOUNDS = {
+  /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
+  WINDOW_LINES: 500,
+} as const;
+
+/**
+ * Why a file of the plan's repository was not read for the File tab: a
+ * secret file, no regular file at the path, a file too large or not text,
+ * a plan with no repository, a repository the Luke GitHub App does not
+ * reach for the account, an account that must sign in with GitHub again,
+ * or GitHub not answering just now.
+ */
+export const PLAN_FILE_REFUSAL = {
+  SECRET: "secret",
+  MISSING: "missing",
+  NOT_TEXT: "not-text",
+  NO_REPOSITORY: "no-repository",
+  NOT_REACHABLE: "not-reachable",
+  SIGN_IN_REQUIRED: "sign-in-required",
+  UNAVAILABLE: "unavailable",
+} as const;
+
+export type PlanFileRefusal = (typeof PLAN_FILE_REFUSAL)[keyof typeof PLAN_FILE_REFUSAL];
+
+/** Whether a window names its lines in order and within the bound. */
+function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): boolean {
+  return (
+    window.lastLine >= window.firstLine &&
+    window.lastLine - window.firstLine < PLAN_FILE_BOUNDS.WINDOW_LINES
+  );
+}
+
+/** One window of a file of the plan's repository, as the File tab asks it (GET `/api/plans/{id}/file`): the path, and its first and last line. */
+export const planFileRequestSchema = EffectSchema.Struct({
+  path: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+  ),
+  firstLine: codeLineSchema,
+  lastLine: codeLineSchema,
+}).check(EffectSchema.makeFilter(fileWindowIsReadable));
+
+export type PlanFileRequest = typeof planFileRequestSchema.Type;
+
+/**
+ * A window of a file of the plan's repository as it stands now on its
+ * default branch, read through the Luke GitHub App: the path, the
+ * repository, the line the first carried line is, how many lines the whole
+ * file has, and the lines, each cut as `show_code` cuts it. A window past
+ * the file's end carries no lines.
+ */
+export const planFileWindowSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: githubRepositoryFullNameSchema,
+  firstLine: codeLineSchema,
+  lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  lines: EffectSchema.Array(
+    EffectSchema.String.check(EffectSchema.isMaxLength(SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)),
+  ).check(EffectSchema.isMaxLength(PLAN_FILE_BOUNDS.WINDOW_LINES)),
+});
+
+export type PlanFileWindow = typeof planFileWindowSchema.Type;
+
+/** The File tab's read answered: the window, or why the file is not shown. */
+export const planFileAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ file: planFileWindowSchema }),
+  EffectSchema.Struct({ refusal: EffectSchema.Literals(Object.values(PLAN_FILE_REFUSAL)) }),
+]);
+
+export type PlanFileAnswer = typeof planFileAnswerSchema.Type;

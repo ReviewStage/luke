@@ -1,6 +1,7 @@
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { CheckIcon, CopyIcon } from "lucide-react";
+import { CheckIcon, CopyIcon, FileInputIcon } from "lucide-react";
 import { type CSSProperties, memo, useRef, useState } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
@@ -45,6 +46,9 @@ const LIVE_LABEL = "Live";
 const COPY_LABEL = "Copy lines";
 const COPIED_LABEL = "Copied";
 
+/** What a card's button that opens the whole file in a tab is called. */
+const OPEN_FILE_LABEL = "Open file";
+
 /**
  * A run's colour in each appearance, as the properties `planning.css` picks
  * between, so the code follows the appearance without being drawn again;
@@ -58,18 +62,41 @@ function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined
   return cssCustomProperties(colours);
 }
 
-/** A card's lines, numbered from where they sit in the file, the lines pointed at lit. */
-function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+/**
+ * Scrolls `lines` alone until `target` stands in its middle, read from the
+ * lines' start, so lines pointed at are never left off to one side of a long
+ * line scrolled along. Note that this is not `scrollIntoView`, because that
+ * scrolls every box around the line as well, and the panel often arrives
+ * sliding in from past the window's edge, so the window's own layout would be
+ * scrolled sideways after it.
+ */
+export function centreWithin(lines: HTMLElement, target: HTMLElement): void {
+  const box = lines.getBoundingClientRect();
+  const line = target.getBoundingClientRect();
+  lines.scrollTop += line.top + line.height / 2 - (box.top + box.height / 2);
+  lines.scrollLeft = 0;
+}
+
+/** Lines of a file, numbered from where they sit in it, the lines `pointed` names lit: a card's, and a File tab's. */
+export function CodeLineRows({
+  firstLine,
+  lines,
+  pointed,
+}: {
+  firstLine: number;
+  lines: PlanCode["lines"];
+  pointed: CodeRef;
+}): React.JSX.Element {
   return (
-    <div className="code-lines">
-      {code.lines.map((tokens, index) => {
-        const line = code.firstLine + index;
+    <>
+      {lines.map((tokens, index) => {
+        const line = firstLine + index;
         return (
           <div
             // Note that a line's place in the file is its identity: the lines never reorder.
             key={line}
             className="code-line"
-            data-pointed={String(isPointed(code.ref, line))}
+            data-pointed={String(isPointed(pointed, line))}
           >
             <span className="code-line-number">{line}</span>
             <code className="code-line-text">
@@ -82,6 +109,15 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
           </div>
         );
       })}
+    </>
+  );
+}
+
+/** A card's lines. */
+function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+  return (
+    <div className="code-lines">
+      <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
     </div>
   );
 }
@@ -113,7 +149,7 @@ function CopyLinesButton({
     <Tooltip label={label}>
       <button
         type="button"
-        className="icon-button code-card-copy"
+        className="icon-button code-card-action"
         aria-label={label}
         onPointerEnter={() => {
           left.current = false;
@@ -139,17 +175,21 @@ function CopyLinesButton({
 /**
  * One snippet: its path, cut from the left so the file's own name stays in
  * sight, with the whole path in its hint; the lines pointed at; their copy;
+ * the whole file opened in a tab of its own, from the path or its button;
  * and the lines themselves.
  */
 function CodeCardContent({
   showing,
   copyText,
+  onOpenFile,
 }: {
   showing: PlanCodeShowing;
   copyText: (words: string) => Promise<void>;
+  onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   const { code } = showing;
   const label = rangeLabel(code.ref);
+  const open = () => onOpenFile(code.ref);
   return (
     <article
       className="code-card"
@@ -157,12 +197,29 @@ function CodeCardContent({
     >
       <header className="code-card-header">
         <Tooltip label={code.ref.path}>
-          <span className="code-card-path">
+          <button
+            type="button"
+            className="code-card-path"
+            aria-label={`Open ${code.ref.path}`}
+            onClick={open}
+          >
             <bdi>{code.ref.path}</bdi>
-          </span>
+          </button>
         </Tooltip>
         {label === undefined ? null : <span className="code-card-range">{label}</span>}
-        <CopyLinesButton lines={copiedLines(code)} copyText={copyText} />
+        <span className="code-card-actions">
+          <CopyLinesButton lines={copiedLines(code)} copyText={copyText} />
+          <Tooltip label={OPEN_FILE_LABEL}>
+            <button
+              type="button"
+              className="icon-button code-card-action"
+              aria-label={OPEN_FILE_LABEL}
+              onClick={open}
+            >
+              <FileInputIcon aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </span>
       </header>
       <CodeLines code={code} />
     </article>
@@ -176,7 +233,7 @@ function CodeCardContent({
  * word of the call's activity: a plan with hundreds of snippets would
  * otherwise redraw each of them several times a second. The copy it holds
  * is the window's clipboard, which is the same door from one draw to the
- * next.
+ * next, and so is its opening of a file, the panel's own.
  */
 const CodeCard = memo(CodeCardContent, (was, now) => was.showing.callId === now.showing.callId);
 
@@ -185,10 +242,12 @@ function CodeFeedRun({
   call,
   now,
   copyText,
+  onOpenFile,
 }: {
   call: CodeFeedCall;
   now: number;
   copyText: (words: string) => Promise<void>;
+  onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   return (
     <>
@@ -205,7 +264,12 @@ function CodeFeedRun({
         {callHeading(call.startedAt, now)}
       </Checkpoint>
       {call.showings.map((showing) => (
-        <CodeCard key={showing.callId} showing={showing} copyText={copyText} />
+        <CodeCard
+          key={showing.callId}
+          showing={showing}
+          copyText={copyText}
+          onOpenFile={onOpenFile}
+        />
       ))}
     </>
   );
@@ -216,12 +280,15 @@ export function CodePane({
   shown,
   calls,
   copyText,
+  onOpenFile,
 }: {
   shown: readonly PlanCodeShowing[];
   /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
   /** Puts a card's lines on the clipboard; a refusal rejects. */
   copyText: (words: string) => Promise<void>;
+  /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
+  onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   const now = Date.now();
   return (
@@ -230,7 +297,13 @@ export function CodePane({
         {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
         <ConversationContent className="pt-0">
           {codeFeedCalls(shown, calls).map((call) => (
-            <CodeFeedRun key={call.key} call={call} now={now} copyText={copyText} />
+            <CodeFeedRun
+              key={call.key}
+              call={call}
+              now={now}
+              copyText={copyText}
+              onOpenFile={onOpenFile}
+            />
           ))}
         </ConversationContent>
         <ConversationScrollButton />

@@ -33,6 +33,8 @@ interface Stood {
   agents: readonly string[] | undefined;
   subagents: readonly string[] | undefined;
   draft?: string | undefined;
+  /** The files Luke showed on the plan, by path. */
+  files?: readonly string[] | undefined;
 }
 
 /** Mounts the panel alone over the agents, subagents, and draft the plan has now, answering the control as it stands. */
@@ -40,11 +42,12 @@ function mount(
   agents: readonly string[] | undefined,
   subagents?: readonly string[],
   draft?: string,
+  files?: readonly string[],
 ) {
   let control: SidePanelControl | undefined;
   let restand: ((next: Stood) => void) | undefined;
   function Probe({ held }: { held: Stood }) {
-    control = useSidePanel(undefined, held.agents, held.subagents, held.draft);
+    control = useSidePanel(undefined, held.agents, held.subagents, held.draft, held.files);
     return null;
   }
   const container = document.createElement("div");
@@ -53,7 +56,7 @@ function mount(
   roots.push(root);
   const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
   restand = render;
-  render({ agents, subagents, draft });
+  render({ agents, subagents, draft, files });
   return {
     control: () => {
       assert.ok(control);
@@ -63,7 +66,8 @@ function mount(
       next: readonly string[] | undefined,
       nextSubagents?: readonly string[],
       nextDraft?: string,
-    ) => restand?.({ agents: next, subagents: nextSubagents, draft: nextDraft }),
+      nextFiles?: readonly string[],
+    ) => restand?.({ agents: next, subagents: nextSubagents, draft: nextDraft, files: nextFiles }),
   };
 }
 
@@ -240,4 +244,44 @@ test("a draft agent's tab shows while the plan holds the draft, closes to the op
     SIDE_PANEL_TAB.WORK,
     "a draft's tab closes to the tab before it",
   );
+});
+
+const INVITE = "src/invite.ts";
+const ROLES = "src/roles.ts";
+
+test("opening a file opens its tab at the strip's end and chooses it, its lines lit, and opening it again chooses the one tab and moves its lit lines", () => {
+  const panel = mount([], [], undefined, [INVITE, ROLES]);
+
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 4, endLine: 6 }));
+  assert.equal(panel.control().open, true);
+  assert.deepEqual(panel.control().tab, { file: INVITE });
+  act(() => panel.control().onOpenFile({ path: ROLES }));
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 40, endLine: 40 }));
+
+  assert.deepEqual(panel.control().files, [
+    { path: INVITE, range: { startLine: 40, endLine: 40 }, opened: 2 },
+    { path: ROLES, range: undefined, opened: 1 },
+  ]);
+  assert.deepEqual(panel.control().tab, { file: INVITE });
+});
+
+test("a file's tab closes to its neighbour, is held to the files shown on the open plan, and is kept across no launch", () => {
+  const first = mount([], [], undefined, [INVITE, ROLES]);
+  act(() => first.control().onOpenFile({ path: INVITE }));
+  act(() => first.control().onOpenFile({ path: ROLES }));
+
+  // Another plan, which showed neither file, draws neither tab.
+  first.stand([], [], undefined, ["README.md"]);
+  assert.equal(first.control().tab, first.control().tabs[0]);
+  first.stand([], [], undefined, [INVITE, ROLES]);
+  act(() => first.control().onChoose({ file: INVITE }));
+  act(() => first.control().onClose({ file: INVITE }));
+  assert.deepEqual(first.control().tab, { file: ROLES });
+  act(() => first.control().onClose({ file: ROLES }));
+  assert.equal(first.control().tab, SIDE_PANEL_TABS.at(-1));
+
+  act(() => first.control().onOpenFile({ path: INVITE }));
+  const second = mount([], [], undefined, [INVITE, ROLES]);
+  assert.deepEqual(second.control().files, []);
+  assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });

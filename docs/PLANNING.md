@@ -263,7 +263,15 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   each under the call it was shown on, a live call's code appending at the
   bottom; the record's copy of a live call's code is told apart by its
   `show_code` call, which the `plan.code` frame carries with its turn and
-  time, so it is drawn once. With no code ever shown, the Code tab says so
+  time, so it is drawn once. Each card opens its whole file in a File tab,
+  one per file, the snippet's lines lit; opening a file already open chooses
+  its tab and moves the lit lines, and the "+" lists every file shown under
+  Files. The file is read a window of 500 lines at a time as the tab scrolls
+  (`GET /api/plans/{id}/file`, `hosted/plan-file.ts`), from GitHub at the
+  head of the default branch through the Luke GitHub App, since no checkout
+  stands outside a call, under the rule `show_code` keeps
+  (`hosted/shown-file.ts`); a file changed since is drawn as it is now. File
+  tabs are kept nowhere. With no code ever shown, the Code tab says so
   quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.

@@ -22,8 +22,8 @@ import langTypescript from "@shikijs/langs/typescript";
 import langYaml from "@shikijs/langs/yaml";
 import githubDarkDefault from "@shikijs/themes/github-dark-default";
 import githubLightDefault from "@shikijs/themes/github-light-default";
-import type { ShownCode } from "@sidecar/hosted/plan-wire";
-import type { CodeToken, PlanCode } from "@sidecar/hosted/planning-view";
+import type { PlanFileWindow, ShownCode } from "@sidecar/hosted/plan-wire";
+import type { CodeToken, PlanCode, PlanFileShown } from "@sidecar/hosted/planning-view";
 import { createHighlighterCoreSync, type HighlighterCore } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
 
@@ -194,6 +194,11 @@ export function codeExcerpt(code: ShownCode): ShownCode {
     firstLine: from,
     lines: code.lines.slice(from - code.firstLine, to - code.firstLine + 1),
   };
+}
+
+/** A window of a whole file as the File tab draws it: the lines the service read from GitHub, coloured as the file's language. */
+export function highlightFile(window: PlanFileWindow): PlanFileShown {
+  return { ...window, lines: colouredLines(window.path, window.lines) };
 }
 
 /** The code as the screen draws it: the lines the service sent, coloured, under the place and the repository they came from. */
