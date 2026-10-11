@@ -16,6 +16,7 @@ import {
   UI_PART_STATE,
   UI_PART_TYPE,
 } from "../server/core";
+import { DRAW_ON_BOARD_STATUS, DRAW_ON_BOARD_TOOL } from "../server/hosted/board-tool";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
@@ -351,6 +352,18 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
   };
 }
 
+/** A settled draw_on_board part with the output its run answered. */
+function drawnPart(callId: string, output: Readonly<Record<string, string | number>>) {
+  // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one after its run.
+  return {
+    type: `tool-${DRAW_ON_BOARD_TOOL.name}`,
+    toolCallId: callId,
+    state: "output-available",
+    input: {},
+    output,
+  } as unknown as StoredUIMessage["parts"][number];
+}
+
 function toolPart(
   name: string,
   callId: string,
@@ -492,6 +505,29 @@ test("the projection: a queued question carries its options, and one past a brea
     ),
     [{ turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued }],
   );
+});
+
+test("the projection: a drawing is told once its call settles drawn, a draw still running holds back what follows it, and a refused draw tells nothing", () => {
+  const queued = { question: "Expiry in the API?", recommendation: "Yes." };
+  const running = journal([
+    toolPart(QUEUE_QUESTION_TOOL.name, "c1", queued),
+    toolPart(DRAW_ON_BOARD_TOOL.name, "c2"),
+    toolPart(QUEUE_QUESTION_TOOL.name, "c3", queued),
+  ]);
+  assert.deepEqual(projectTurnEvents(TURN, running), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+  ]);
+  const settled = journal([
+    toolPart(QUEUE_QUESTION_TOOL.name, "c1", queued),
+    drawnPart("c2", { status: DRAW_ON_BOARD_STATUS.DRAWN, drawing: 1 }),
+    drawnPart("c3", { status: DRAW_ON_BOARD_STATUS.NOT_DRAWN, reason: "No." }),
+    toolPart(QUEUE_QUESTION_TOOL.name, "c4", queued),
+  ]);
+  assert.deepEqual(projectTurnEvents(TURN, settled), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+    { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.BOARD_DRAWN },
+    { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+  ]);
 });
 
 test("the projection: a queued question still streaming in, or one that does not read, is not told", () => {

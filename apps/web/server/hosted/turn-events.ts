@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import {
   isSettledToolPartState,
   isStoredToolPart,
@@ -15,6 +16,7 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
+import { DRAW_ON_BOARD_STATUS, DRAW_ON_BOARD_TOOL } from "./board-tool.js";
 import {
   QUEUE_QUESTION_TOOL,
   queuedQuestionOf,
@@ -81,6 +83,9 @@ function replyTextOf(parts: readonly JournalPart[]): string {
   return parts.flatMap((part) => (part.type === UI_PART_TYPE.TEXT ? [part.text] : [])).join("\n");
 }
 
+/** Whether a draw's journaled output says the drawing landed. */
+const isDrawn = Schema.is(Schema.Struct({ status: Schema.Literal(DRAW_ON_BOARD_STATUS.DRAWN) }));
+
 /**
  * What one call tells while the turn runs: a question a planning call queued
  * or withdrew, code it showed, or a repository command, the one slow step. A
@@ -99,6 +104,11 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
       ? undefined
       : { kind: TURN_EVENT_KIND.QUESTION_WITHDRAWN, question };
   }
+  if (name === DRAW_ON_BOARD_TOOL.name) {
+    return isSettledToolPartState(part.state) && isDrawn(part.output)
+      ? { kind: TURN_EVENT_KIND.BOARD_DRAWN }
+      : undefined;
+  }
   if (name === SHOW_CODE_TOOL.name) {
     const shown = shownCodeOf(part);
     return shown === undefined ? undefined : { kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown };
@@ -113,7 +123,8 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
  * step by step: a step's sentences, then what its calls tell. The slow step,
  * once per run, every question a planning call queued, and all the code it
  * showed, are told the
- * moment their call is on the journal. A sentence is
+ * moment their call is on the journal; a drawing once its call has settled,
+ * and everything after a drawing still landing waits for it. A sentence is
  * told while the turn still runs once every call journaled ahead of its step
  * has settled, behind one settled mark, so nothing is said ahead of an action
  * whose result is not on record; the first sentence held back holds back
@@ -135,7 +146,9 @@ export function projectTurnEvents(
   let slowStepTold = false;
   let settledTold = false;
   let unsettled = false;
+  let drawing = false;
   for (const step of stepsOf(journal?.parts ?? [])) {
+    if (drawing) break;
     const sentences = speaks ? replySentences(replyTextOf(step)) : [];
     // A turn that completed has everything it did on record, whatever its calls' parts say.
     if (sentences.length > 0 && unsettled && end === undefined) break;
@@ -148,6 +161,13 @@ export function projectTurnEvents(
     for (const part of step) {
       if (!isStoredToolPart(part)) continue;
       if (!isSettledToolPartState(part.state)) unsettled = true;
+      // A drawing still landing holds back every event after it, because its own is told once it
+      // settles, and an event numbered ahead of it would be renumbered then.
+      drawing =
+        end === undefined &&
+        storedToolName(part) === DRAW_ON_BOARD_TOOL.name &&
+        !isSettledToolPartState(part.state);
+      if (drawing) break;
       const told = callEventOf(part);
       if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;

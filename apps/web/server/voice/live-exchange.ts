@@ -82,6 +82,8 @@ export interface HostedLiveExchangeOptions {
   readonly onActivity?: (activity: PlanActivity) => void;
   /** Code Luke is about to talk about, by place, told as he starts to speak; a planning call's device is shown it. */
   readonly onCode?: (ref: CodeRef) => void;
+  /** Luke's drawing is on the board, told as he starts to speak; a planning call's device is shown it. */
+  readonly onBoard?: () => void;
   /** Each planning turn's work, told whole on each change; a planning call's device is shown it. */
   readonly onWork?: (work: PlanWorkTurn) => void;
 }
@@ -102,6 +104,8 @@ export interface AttachedSession {
   readonly onActivity?: ((activity: PlanActivity) => void) | undefined;
   /** The device's door for code Luke puts on screen on the call; absent where the route sends it nothing of its own. */
   readonly onCode?: ((ref: CodeRef) => void) | undefined;
+  /** The device's door for Luke's drawing landing on the board; absent where the route sends it nothing of its own. */
+  readonly onBoard?: (() => void) | undefined;
   /** The device's door for each planning turn's work on the call; absent where the route sends it nothing of its own. */
   readonly onWork?: ((work: PlanWorkTurn) => void) | undefined;
 }
@@ -277,6 +281,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         tellActivity();
       },
       ...(options.onCode ? { onCode: options.onCode } : undefined),
+      ...(options.onBoard ? { onBoard: options.onBoard } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

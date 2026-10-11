@@ -163,6 +163,12 @@ export const VOICE_SERVICE_FRAME = {
    * tab's Work tab reads like an agent's own transcript.
    */
   PLAN_WORK: "plan.work",
+  /**
+   * The service's sixth frame to the desktop, on a planning call alone:
+   * Luke's drawing is on the plan's whiteboard, sent as he starts to speak,
+   * so the Plans tab reads the board again and draws it as he talks about it.
+   */
+  PLAN_BOARD: "plan.board",
 } as const;
 
 /**
@@ -379,6 +385,14 @@ export const planCodeFrameSchema = Schema.Struct({
 
 export type PlanCodeFrame = typeof planCodeFrameSchema.Type;
 
+/** Luke's drawing landed on the board of the plan named, as the service sends it to the desktop as he starts to speak. */
+export const planBoardFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_BOARD),
+  planId: wireUuidSchema,
+});
+
+export type PlanBoardFrame = typeof planBoardFrameSchema.Type;
+
 /** One planning turn's work on the call about the plan named, as the service sends it to the desktop. */
 export const planWorkFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_WORK),
@@ -467,6 +481,11 @@ export function planActivityFrameFromWire(value: UnparsedWireValue): PlanActivit
 /** The code Luke put on screen on a planning call, read the same answering way. */
 export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame | undefined {
   return admittedAnswer(planCodeFrameSchema, value);
+}
+
+/** Luke's drawing landing on a planning call's board, read the same answering way. */
+export function planBoardFrameFromWire(value: UnparsedWireValue): PlanBoardFrame | undefined {
+  return admittedAnswer(planBoardFrameSchema, value);
 }
 
 /** One planning turn's work on a planning call, read the same answering way. */

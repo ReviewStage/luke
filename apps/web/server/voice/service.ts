@@ -12,6 +12,7 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   type PlanActivityFrame,
+  type PlanBoardFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -547,6 +548,15 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.PLAN_CODE,
             planId: opened.planId,
             ref,
+          };
+          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+        },
+        // Luke's drawing landing on the board, sent the same way as he starts
+        // to speak, so the Plans tab reads the board again as he talks about it.
+        onBoard: () => {
+          const frame: PlanBoardFrame = {
+            type: VOICE_SERVICE_FRAME.PLAN_BOARD,
+            planId: opened.planId,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

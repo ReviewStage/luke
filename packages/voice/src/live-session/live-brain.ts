@@ -18,6 +18,7 @@ export const LIVE_BRAIN_RUN_EVENT = {
   QUESTION_QUEUED: "question_queued",
   QUESTION_WITHDRAWN: "question_withdrawn",
   CODE_SHOWN: "code_shown",
+  BOARD_DRAWN: "board_drawn",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -89,6 +90,8 @@ export type LiveBrainRunEvent =
       /** Code of the plan's folder the planning model put on screen, by place, for Luke's next words. */
       readonly ref: CodeRef;
     }
+  /** The planning model's drawing is on the plan's whiteboard, for Luke's next words. */
+  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.BOARD_DRAWN; readonly runId: string }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;

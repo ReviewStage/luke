@@ -21,6 +21,8 @@ export const TURN_EVENT_KIND = {
   QUESTION_WITHDRAWN: "question_withdrawn",
   /** A planning turn put code of the plan's folder on screen, by place; told as the call is journaled, before the turn ends. */
   CODE_SHOWN: "code_shown",
+  /** A planning turn's drawing landed on the plan's whiteboard; told once its call has settled, so the board holds it. */
+  BOARD_DRAWN: "board_drawn",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -74,6 +76,7 @@ export type TurnEventBody =
     }
   | { readonly kind: typeof TURN_EVENT_KIND.QUESTION_WITHDRAWN; readonly question: string }
   | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)
+  | { readonly kind: typeof TURN_EVENT_KIND.BOARD_DRAWN }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

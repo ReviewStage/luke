@@ -41,6 +41,8 @@ export const BRAIN_RUN_EVENT = {
   QUESTION_WITHDRAWN: "question_withdrawn",
   /** A planning run put code of the plan's folder on the developer's screen, by place; told as the call is journaled, before the run ends. */
   CODE_SHOWN: "code_shown",
+  /** A planning run's drawing landed on the plan's whiteboard; told once its call has settled. */
+  BOARD_DRAWN: "board_drawn",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -201,6 +203,7 @@ export type BrainRunEventBody =
       readonly startLine?: number;
       readonly endLine?: number;
     }
+  | { readonly kind: typeof BRAIN_RUN_EVENT.BOARD_DRAWN; readonly runId: string }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.REPLY_SENTENCE;

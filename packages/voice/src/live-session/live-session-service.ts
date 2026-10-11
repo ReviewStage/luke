@@ -180,6 +180,10 @@ function codeOnScreenNote(ref: CodeRef): string {
   return `The developer's screen now shows ${codePlace(ref)}, lit. Refer to it as on screen, by line number where it helps; don't read the code aloud.`;
 }
 
+/** What the voice is told, quietly, once the planning model's drawing is on the developer's whiteboard. */
+const BOARD_ON_SCREEN_NOTE =
+  "The developer's whiteboard now shows the drawing for what you are about to say. Talk them through it; don't describe every box.";
+
 /**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
@@ -220,6 +224,8 @@ export interface LiveSessionServiceOptions {
   onStatus?: (status: LiveSessionStatus) => void;
   /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
   onCode?: (ref: CodeRef) => void;
+  /** The planning model's drawing is to be shown on the whiteboard now, as Luke starts to speak. */
+  onBoard?: () => void;
 }
 
 /**
@@ -248,11 +254,14 @@ interface RetainedDelegation {
   offsetMs: number;
 }
 
-/** A question the planning model queued, waiting in its session until the voice is handed it. */
+/**
+ * A question the planning model queued, waiting in its session until the
+ * voice is handed it, and whether a drawing made for it waits with it.
+ */
 type HeldQuestion = Omit<
   Extract<LiveBrainRunEvent, { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED }>,
   "kind" | "runId"
->;
+> & { readonly board?: true };
 
 interface StandingSession {
   sessionId: string;
@@ -306,6 +315,8 @@ interface StandingSession {
    * replaces any still held.
    */
   pendingCode: { readonly ref: CodeRef; readonly delegationId: LiveDelegationId } | undefined;
+  /** A drawing the planning model made, held as code is until Luke next starts to say words queued for him. */
+  pendingBoard: { readonly delegationId: LiveDelegationId } | undefined;
   /**
    * The questions the planning model queued that the voice has not been
    * handed yet, oldest first, and whether the voice holds one the developer
@@ -899,6 +910,7 @@ export class LiveSessionService {
         openAsks: new Map(),
         voicePhase: undefined,
         pendingCode: undefined,
+        pendingBoard: undefined,
         questions: [],
         holdingQuestion: false,
         retained: [],
@@ -1009,7 +1021,7 @@ export class LiveSessionService {
         );
         if (session.voicePhase === VOICE_PHASE.ABOUT_TO_ANSWER) {
           this.#voiceIn(session, undefined);
-          this.#releaseCode(session);
+          this.#releaseVisuals(session);
         }
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
@@ -1461,8 +1473,11 @@ export class LiveSessionService {
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
         const session = this.#sessionOf(exchange);
         if (!session) return;
-        const { kind: _kind, runId: _runId, ...held } = event;
-        session.questions.push(held);
+        const { kind: _kind, runId: _runId, ...queued } = event;
+        // A drawing made while the voice still holds a question is for this one, so it waits with it.
+        const drawnFor = session.pendingBoard !== undefined && session.holdingQuestion;
+        if (drawnFor) session.pendingBoard = undefined;
+        session.questions.push(drawnFor ? { ...queued, board: true } : queued);
         if (!session.holdingQuestion) this.#handQuestion(session, this.#delegationOf(exchange));
         return;
       }
@@ -1470,6 +1485,12 @@ export class LiveSessionService {
         const session = this.#sessionOf(exchange);
         if (session)
           session.questions = session.questions.filter((held) => held.question !== event.question);
+        return;
+      }
+      // A drawing is held as code is, for the words it belongs to.
+      case LIVE_BRAIN_RUN_EVENT.BOARD_DRAWN: {
+        const session = this.#sessionOf(exchange);
+        if (session) session.pendingBoard = { delegationId: this.#delegationOf(exchange) };
         return;
       }
       // Code is held for the words it belongs to, which start with Luke's next answer.
@@ -1565,26 +1586,35 @@ export class LiveSessionService {
     if (next === undefined) return;
     session.holdingQuestion = true;
     if (next.code !== undefined) session.pendingCode = { ref: next.code, delegationId };
+    if (next.board) session.pendingBoard = { delegationId };
     this.#speakInto(session, delegationId, queuedQuestionNote(next));
   }
 
   /**
-   * Puts the held code on the developer's screen and tells the voice it is
-   * there, so the words Luke has just begun and the lines lit arrive
-   * together.
+   * Puts the held code and drawing on the developer's screen and tells the
+   * voice they are there, so the words Luke has just begun and what he is
+   * talking about arrive together.
    */
-  #releaseCode(session: StandingSession): void {
-    const held = session.pendingCode;
-    if (held === undefined) return;
+  #releaseVisuals(session: StandingSession): void {
+    const code = session.pendingCode;
+    const board = session.pendingBoard;
     session.pendingCode = undefined;
-    this.#options.onCode?.(held.ref);
+    session.pendingBoard = undefined;
+    if (code !== undefined) {
+      this.#options.onCode?.(code.ref);
+      this.#tellQuietly(session, code.delegationId, codeOnScreenNote(code.ref));
+    }
+    if (board !== undefined) {
+      this.#options.onBoard?.();
+      this.#tellQuietly(session, board.delegationId, BOARD_ON_SCREEN_NOTE);
+    }
+  }
+
+  /** A fact for the voice to keep without saying, under a delegation. */
+  #tellQuietly(session: StandingSession, delegationId: LiveDelegationId, note: string): void {
     session.channel.enqueue(
       Effect.suspend(() =>
-        Effect.asVoid(
-          session.channel.send(
-            thinkingAppend(this.#input(held.delegationId, codeOnScreenNote(held.ref))),
-          ),
-        ),
+        Effect.asVoid(session.channel.send(thinkingAppend(this.#input(delegationId, note)))),
       ),
     );
   }

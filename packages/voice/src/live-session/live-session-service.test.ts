@@ -330,6 +330,8 @@ interface Fixture {
   statuses: LiveSessionStatus[];
   /** Every place `onCode` put on screen, in order. */
   codes: CodeRef[];
+  /** How many times `onBoard` showed a drawing. */
+  boards: { shown: number };
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -342,6 +344,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
     const codes: CodeRef[] = [];
+    const boards = { shown: 0 };
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -349,6 +352,9 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
         onCode: (ref) => codes.push(ref),
+        onBoard: () => {
+          boards.shown += 1;
+        },
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -359,6 +365,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       reports,
       statuses,
       codes,
+      boards,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -927,6 +934,54 @@ it.effect("a queued question's options are read out with it", () =>
     yield* acknowledgeAll(sideband);
     assert.ok(commentaryOf(sideband)[0]?.includes("On accept; In a nightly job"));
   }),
+);
+
+it.effect(
+  "a drawing waits for Luke's next words, and one made while the voice holds a question waits for the question after it",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Draw the invite flow.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.BOARD_DRAWN, runId: "run-1" });
+      replySaying(f.brain, "run-1", ["Here is the flow."]);
+      yield* acknowledgeAll(sideband);
+      assert.equal(f.boards.shown, 0, "nothing is shown before Luke speaks");
+      sideband.output("Here is", 1000, 1100);
+      yield* settle();
+      assert.equal(f.boards.shown, 1);
+
+      sideband.input("Looks right.", 2000, 2400);
+      sideband.delegation("item_2", 2500);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-2",
+        question: "Should expiry live in the API?",
+        recommendation: "Yes.",
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.BOARD_DRAWN, runId: "run-2" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-2",
+        question: "Or in a nightly job?",
+        recommendation: "No.",
+      });
+      yield* acknowledgeAll(sideband);
+      sideband.output("Should expiry", 2600, 2700);
+      yield* settle();
+      assert.equal(f.boards.shown, 1, "the drawing is not shown with the question before it");
+
+      sideband.input("In the API.", 3000, 3400);
+      sideband.delegation("item_3", 3500);
+      yield* acknowledgeAll(sideband);
+      sideband.output("Or in", 3600, 3700);
+      yield* settle();
+      assert.equal(f.boards.shown, 2);
+    }),
 );
 
 it.effect(
