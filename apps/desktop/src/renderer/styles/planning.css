@@ -573,7 +573,7 @@ button.code-card-path:hover {
 
 /* The Work tab's own ----------------------------------------------------- */
 
-/* A quiet button-shaped line of the Work tab, a worker's line. Note that it is written here
+/* A quiet button-shaped line of the Work tab. Note that it is written here
    rather than as utilities, because base.css sets every button's font and
    colour outside the utilities' layer, and that rule wins over any utility. */
 .ai-trigger {
@@ -597,25 +597,33 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's call: a boxed line, on the Work tab the whole of it the
-   button that opens the subagent's tab, on an agent's tab the line that
-   opens onto the worker's answer with the tab's button at its end; its
-   hover fill on its own radius and its focus ring the one every button of
-   ours draws. */
-.work-worker-line,
-.transcript-subagent-line {
+/* A subagent's row, on the Work tab and an agent's tab alike: a boxed line,
+   the whole of it the button that opens the subagent's tab, its hover fill
+   on its own radius and its focus ring the one every button of ours draws.
+   Note that it is written here rather than as utilities, because base.css
+   sets every button's font and colour outside the utilities' layer. */
+.subagent-line {
   padding: 8px 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.5;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
 }
 
-.work-worker-line:hover,
-.transcript-subagent-line:hover {
+button.subagent-line:hover {
   background: var(--raised);
 }
 
-.work-worker-line:focus-visible,
-.transcript-subagent-line:focus-visible {
+button.subagent-line:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+.subagent-job {
+  overflow: hidden;
+  white-space: nowrap;
 }

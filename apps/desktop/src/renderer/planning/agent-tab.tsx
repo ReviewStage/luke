@@ -72,10 +72,9 @@ import { WorkingLine } from "./working-time";
  * input and the answer under the row once opened and a call that ended in
  * an error marked in red, each delegation to a worker a subagent's row on
  * a line of its own, as the Work tab draws its worker's, saying the task
- * and the model and effort the worker runs on, opening onto its answer,
- * and carrying the button that opens the worker's own tab
- * (`AgentSubagentTab`), and its runs of calls and its finished lead
- * folded as the Work tab folds Luke's; a message the developer sent it after the plan
+ * and the model and effort the worker runs on, the whole line the one
+ * button that opens the worker's own tab (`AgentSubagentTab`), and its
+ * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
  * counting how long the run has gone where the service said when it began
@@ -181,7 +180,7 @@ function ToolCallView({
   );
 }
 
-/** One delegation: a subagent's row saying the task and the pair, opening onto the worker's answer, with the button into its tab. */
+/** One delegation: a subagent's row saying the task and the pair, the one button into its tab. */
 function DelegationRow({
   part,
   doors,
@@ -193,8 +192,8 @@ function DelegationRow({
   const onOpen = doors?.onOpen;
   return (
     <TranscriptSubagent
-      data-call-id={part.callId}
-      task={cardTitle(view.task)}
+      callId={part.callId}
+      job={cardTitle(view.task)}
       pair={
         view.choice === undefined
           ? undefined
@@ -204,8 +203,6 @@ function DelegationRow({
             }
       }
       state={part.state}
-      result={view.result}
-      errorText={part.errorText}
       onOpen={
         onOpen === undefined
           ? undefined
