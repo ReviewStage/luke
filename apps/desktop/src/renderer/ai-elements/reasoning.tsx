@@ -1,9 +1,9 @@
+import { BrainIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
   Fold,
   FoldBody,
   type FoldBodyProps,
-  FoldChevron,
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
@@ -17,8 +17,10 @@ import { cn } from "./utils";
  * to Luke's tokens and folded on `fold.tsx` rather than the registry's
  * collapsible. Closed by default, as docs/PLANNING.md's rule for an
  * agent's transcript asks: the reasoning is there to be read, never in
- * the way. The line says "Thought" and no more, because the stored part
- * carries the words alone and no measure of how long they took.
+ * the way. The line leads with a brain in the 16px seat a call's icon
+ * stands in, so it lines up with the calls around it, then says
+ * "Thought" and no more, because the stored part carries the words alone
+ * and no measure of how long they took.
  */
 
 /** What the folded line says. */
@@ -45,12 +47,12 @@ export function ReasoningTrigger({
   return (
     <FoldSummary
       className={cn(
-        "flex h-7 items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground",
+        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground",
         className,
       )}
       {...props}
     >
-      <FoldChevron />
+      <BrainIcon className="size-4 shrink-0" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate">{children}</span>
     </FoldSummary>
   );
@@ -67,7 +69,7 @@ export function ReasoningContent({
   return (
     <FoldBody
       className={cn(
-        "mt-1 mb-1 ml-6 border-l-2 border-border pl-3 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        "mt-1 mb-1 ml-7 border-l-2 border-border pl-3 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className,
       )}
       {...props}

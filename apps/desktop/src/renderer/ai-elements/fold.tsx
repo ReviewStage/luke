@@ -20,7 +20,7 @@ import { cn } from "./utils";
  * with its input and its answer, and a body drawn only once its row is
  * opened keeps the closed ones out of the layout entirely. The summary
  * takes the click itself and stops the element's own toggle, so the two
- * cannot disagree.
+ * cannot disagree, and says whether it is open in `aria-expanded`.
  */
 
 interface FoldState {
@@ -62,7 +62,7 @@ export function FoldSummary({
   onClick,
   ...props
 }: FoldSummaryProps): ReactNode {
-  const { toggle } = useFold();
+  const { open, toggle } = useFold();
   const click = (event: MouseEvent<HTMLElement>) => {
     // Note that the element's own toggle is stopped, because the open state is React's.
     event.preventDefault();
@@ -71,11 +71,13 @@ export function FoldSummary({
   };
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: a summary is the platform's own disclosure control, focusable and opened by Enter and Space; the click it already takes is routed to React's state.
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: a summary is exposed as its details' disclosure button, which takes aria-expanded; the rule's table gives the element no role.
     <summary
       className={cn(
         "cursor-default list-none select-none [&::-webkit-details-marker]:hidden",
         className,
       )}
+      aria-expanded={open}
       onClick={click}
       {...props}
     >
@@ -85,10 +87,11 @@ export function FoldSummary({
 }
 
 /**
- * The chevron at a summary's head, turned down while the fold is open. Note
- * that it reads its own fold's state rather than the `details` element's
- * open state through a CSS group, because folds nest (a group of calls holds
- * each call's fold), and an ancestor's open would turn every chevron inside it.
+ * The chevron at a card's head, turned down while the fold is open; a
+ * transcript row wears none, its own icon leading and the whole line the
+ * target. Note that it reads its own fold's state rather than the
+ * `details` element's open state through a CSS group, because folds nest,
+ * and an ancestor's open would turn every chevron inside it.
  */
 export function FoldChevron({ className }: { className?: string }): ReactNode {
   const { open } = useFold();

@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
 import type { Components } from "streamdown";
-import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
@@ -195,9 +195,10 @@ export type TranscriptSubagentProps = Omit<ComponentProps<typeof Tool>, "childre
  * line, wearing the worker's glyph lit while it runs, the task cut to the
  * line, the model and effort the worker runs on in a muted word behind the
  * provider's mark, and the mark a call's row wears for where it stands;
- * closed until clicked, and open onto the worker's answer. The button at
- * its end opens the worker's tab and leaves the fold as it was, so the row
- * is one line that does two things rather than two rows.
+ * closed until clicked, and open onto the worker's answer set under the
+ * task. The button at its end opens the worker's tab and leaves the fold
+ * as it was, so the row is one line that does two things rather than two
+ * rows.
  */
 export function TranscriptSubagent({
   task,
@@ -212,8 +213,7 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   return (
     <Tool className={className} data-subagent-row="" {...props}>
-      <FoldSummary className="transcript-subagent-line flex min-w-0 items-center gap-2 rounded-lg transition-colors">
-        <FoldChevron />
+      <FoldSummary className="transcript-subagent-line flex min-w-0 cursor-pointer items-center gap-2 rounded-lg transition-colors">
         <BotIcon
           className={cn("size-4 shrink-0", running ? "text-luke" : "text-muted-foreground")}
           aria-hidden="true"
@@ -247,7 +247,8 @@ export function TranscriptSubagent({
           </Tooltip>
         )}
       </FoldSummary>
-      <FoldBody className="mt-1 mb-1 ml-6 text-[13px] leading-normal" data-subagent-result="">
+      {/* Note that the answer sits under the task, past the line's 1px border, 10px padding, icon, and gap. */}
+      <FoldBody className="mt-1 mb-1 ml-[35px] text-[13px] leading-normal" data-subagent-result="">
         {errorText !== undefined ? (
           <p className="m-0 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]" role="alert">
             {errorText}
@@ -278,8 +279,7 @@ function TurnFold({
 }): ReactNode {
   return (
     <Fold className="text-[12.5px]" defaultOpen={open} data-turn-fold="">
-      <FoldSummary className="flex h-7 items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:text-foreground">
-        <FoldChevron />
+      <FoldSummary className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground">
         <span
           className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
           aria-hidden="true"

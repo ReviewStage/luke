@@ -5,7 +5,6 @@ import {
   Fold,
   FoldBody,
   type FoldBodyProps,
-  FoldChevron,
   type FoldProps,
   FoldSummary,
   type FoldSummaryProps,
@@ -16,15 +15,17 @@ import { cn } from "./utils";
  * tool.tsx -- AI Elements' Tool: one tool call as a compact row, with its input and its answer under it once opened.
  *
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
- * to Luke's tokens and folded on `fold.tsx`. The row is one line: the
- * chevron, the tool's icon, what the call did in a few words, and where
- * it stands, a spinner while it runs and a quiet check or a red mark once
- * it has ended, each in the same 16px seat so the row never changes shape
- * as the answer lands. The body under it is the call's input and its
- * answer in two mono blocks of bounded height, the answer cut to its first
- * lines with the rest behind Show more. What the words say is the
- * caller's decision (`planning/tool-call-model.ts`); how a block of each
- * kind is drawn is this file's.
+ * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
+ * the whole of it opens the call: the tool's icon, what the call did in
+ * a few words, and where it stands, a spinner while it runs and a quiet
+ * check or a red mark once it has ended, each in the same 16px seat so
+ * the row never changes shape as the answer lands. There is no chevron:
+ * the icon leads, and a hover fill says the line opens. The body under
+ * it, set in under the words, is the call's input and its answer in two
+ * mono blocks of bounded height, the answer cut to its first lines with
+ * the rest behind Show more. What the words say is the caller's decision
+ * (`planning/tool-call-model.ts`); how a block of each kind is drawn is
+ * this file's.
  */
 
 /** The states a tool part may stand in, as the AI SDK spells them. */
@@ -161,12 +162,11 @@ export function ToolHeader({
   return (
     <FoldSummary
       className={cn(
-        "flex h-7 items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary",
+        "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary",
         className,
       )}
       {...props}
     >
-      <FoldChevron />
       <span
         className="flex size-4 shrink-0 items-center justify-center text-muted-foreground [&>svg]:size-4"
         aria-hidden="true"
@@ -191,7 +191,7 @@ export function ToolContent({ className, children, ...props }: ToolContentProps)
   return (
     <FoldBody
       className={cn(
-        "mt-1 mb-1 ml-6 overflow-hidden rounded-lg border border-border bg-muted [&>*+*]:border-t [&>*+*]:border-border",
+        "mt-1 mb-1 ml-7 overflow-hidden rounded-lg border border-border bg-muted [&>*+*]:border-t [&>*+*]:border-border",
         className,
       )}
       {...props}
