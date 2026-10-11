@@ -477,8 +477,7 @@ button.code-card-path:hover {
 /* The chips along the box's foot: the model chip, which hangs its menu
    above itself since the box stands at the panel's foot, and after it
    what the agent published, in the same chip style, the pull request's
-   wearing its state's colour with a dot for its checks, the branch's its
-   name in the code face. */
+   wearing its state's colour, the branch's its name in the code face. */
 .agent-model-chip {
   min-width: 0;
 }
@@ -709,7 +708,7 @@ button.code-card-path:hover {
 }
 
 .agent-published-chip[data-state]:hover,
-.agent-published-chip[data-state][aria-expanded="true"] {
+.agent-published-chip[data-state][data-menu-open="true"] {
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: var(--accent);
 }
@@ -737,41 +736,71 @@ button.code-card-path:hover {
   flex: 0 0 auto;
 }
 
-/* The one dot for the checks on the pull request's head, in the state colours. */
-.agent-check-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-}
-
-.agent-check-dot[data-checks="pending"] {
-  background: var(--state-attention);
-}
-
-.agent-check-dot[data-checks="passing"] {
-  background: var(--state-complete);
-}
-
-.agent-check-dot[data-checks="failing"] {
-  background: var(--danger);
-}
-
 .agent-branch-name {
   max-width: 180px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
   font-size: 11.5px;
 }
 
-/* The row summing a finished turn up, at the transcript's end. */
+/* The pull request's row at a finished transcript's end: a boxed line, the
+   whole of it the button that opens the pull request, drawn as the
+   subagent's row is and for the same reason written here. The lines it
+   adds and removes read in the success green and the danger red, in
+   tabular numerals so a count does not shift as it grows. */
 .agent-published-row {
-  color: var(--text-secondary);
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.agent-published-row:hover {
+  background: var(--raised);
+}
+
+.agent-published-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 
 .agent-published-row[data-state="merged"] .account-mark {
   color: var(--state-merged);
+}
+
+.agent-published-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.agent-published-state {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.agent-published-lines {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.agent-published-added {
+  color: var(--state-complete);
+}
+
+.agent-published-removed {
+  color: var(--danger-text);
 }
 
 /* The Work tab's own ----------------------------------------------------- */

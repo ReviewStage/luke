@@ -16,7 +16,6 @@ import {
   agentLines,
   agentParts,
   applyMessagesPage,
-  changesUrl,
   checkoutCommand,
   choiceLabel,
   choiceModelId,
@@ -30,8 +29,9 @@ import {
   offeredModels,
   opensOnGitHub,
   orderedModels,
-  publishedSummary,
+  publishedUrl,
   pullRequestPillLabel,
+  pullRequestStateWord,
   readModelChoice,
   type SentLine,
   START_NEEDS_REPOSITORY,
@@ -271,45 +271,42 @@ const PULL_REQUEST: CodingAgentPullRequest = {
   changedFiles: 6,
 };
 
-test("the checkout command fetches and switches to the branch, and the changes open on the pull request's Files tab, else as the branch compared, else nowhere", () => {
+test("the checkout command fetches and switches to the branch, and the chip opens the pull request, else the branch compared, else nowhere", () => {
   assert.equal(
     checkoutCommand("luke/teammate-invitations"),
     "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
   );
   const repository = "acme/relay";
   assert.equal(
-    changesUrl({ repository, branch: "luke/x", pullRequest: PULL_REQUEST }),
-    "https://github.com/acme/relay/pull/123/files",
+    publishedUrl({ repository, branch: "luke/x", pullRequest: PULL_REQUEST }),
+    "https://github.com/acme/relay/pull/123",
   );
   assert.equal(
-    changesUrl({ repository, branch: "luke/x", pullRequest: null }),
+    publishedUrl({ repository, branch: "luke/x", pullRequest: null }),
     "https://github.com/acme/relay/compare/luke/x?expand=1",
   );
-  assert.equal(changesUrl({ repository, branch: null, pullRequest: null }), undefined);
+  assert.equal(publishedUrl({ repository, branch: null, pullRequest: null }), undefined);
   // A branch a shell or an address would read into is quoted or encoded, never read.
   assert.equal(
     checkoutCommand("luke/$(touch pwned)'x"),
     "git fetch origin 'luke/$(touch pwned)'\\''x' && git switch 'luke/$(touch pwned)'\\''x'",
   );
   assert.equal(
-    changesUrl({ repository, branch: "luke/issue#12 fix", pullRequest: null }),
+    publishedUrl({ repository, branch: "luke/issue#12 fix", pullRequest: null }),
     "https://github.com/acme/relay/compare/luke/issue%2312%20fix?expand=1",
   );
 });
 
-test("the row sums a finished turn up by where the pull request stands and how much changed, and is drawn only once the agent has ended with one", () => {
-  assert.equal(publishedSummary(PULL_REQUEST), "Opened #123 · +210 −14 in 6 files");
+test("the row says where the pull request stands only once it is a draft, merged, or closed, the chip says it to a reader without its colour, and the row is drawn only once the agent has ended with one", () => {
+  assert.deepEqual(Object.values(PULL_REQUEST_STATE).map(pullRequestStateWord), [
+    undefined,
+    "Draft",
+    "Merged",
+    "Closed",
+  ]);
   assert.equal(
-    publishedSummary({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED, changedFiles: 1 }),
-    "Merged #123 · +210 −14 in 1 file",
-  );
-  assert.equal(
-    publishedSummary({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.DRAFT }),
-    "Opened draft #123 · +210 −14 in 6 files",
-  );
-  assert.equal(
-    pullRequestPillLabel({ ...PULL_REQUEST, checks: CHECK_SUMMARY.FAILING }),
-    "Pull request #123, open, checks failing",
+    pullRequestPillLabel({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
+    "Pull request #123, merged",
   );
   const published = { repository: "acme/relay", branch: "luke/x", pullRequest: PULL_REQUEST };
   assert.equal(showsPublishedRow(CODING_AGENT_STATUS.COMPLETED, published), true);

@@ -468,11 +468,7 @@ export function AgentTabView({
         openGitHub={openGitHub}
         footer={
           showsPublishedRow(agent.status, published) ? (
-            <PublishedRow
-              pullRequest={published.pullRequest}
-              turnUsage={transcript.turnUsage}
-              openGitHub={openGitHub}
-            />
+            <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
           ) : null
         }
       />

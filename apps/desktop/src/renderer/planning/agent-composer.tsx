@@ -34,7 +34,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * (`agent-model-chip.tsx`), beside it, once a step has ended, the ring
  * that shows how full the agent's model's context is and opens what fills
  * it (`agent-context.tsx`), and after them, once the agent has pushed, the
- * pull request's or the branch's chip with its menu
+ * pull request's or the branch's chip, which opens it on GitHub
  * (`agent-published.tsx`). The box takes a message to the agent:
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
  * message sent while a turn runs steers it, so the agent sees it at its

@@ -128,7 +128,7 @@ const AGENT = {
   turnId: null,
 } as const;
 
-/** The published chip mounted live, so its menu can be opened and its items pressed. */
+/** The published chip mounted live, so it can be pressed and its right-click menu's items chosen. */
 function mountedChip(
   published: CodingAgentPullRequestAnswer | undefined,
   doors: { openGitHub: (url: string) => void; copy: (words: string, label: string) => void },
@@ -150,11 +150,23 @@ function menuItems(): HTMLButtonElement[] {
 const chipOf = (container: HTMLElement) =>
   container.querySelector<HTMLButtonElement>(".agent-published-chip");
 
-/** Opens the chip's menu and presses the item named. */
+/** Right-clicks the chip, as the pointer would, and answers whether the page's own menu was kept from opening. */
+function rightClick(chip: HTMLElement): boolean {
+  const event = new MouseEvent("contextmenu", {
+    bubbles: true,
+    cancelable: true,
+    clientX: 40,
+    clientY: 300,
+  });
+  act(() => chip.dispatchEvent(event));
+  return event.defaultPrevented;
+}
+
+/** Right-clicks the chip and chooses the item named from its menu. */
 function choose(container: HTMLElement, label: string): void {
   const chip = chipOf(container);
   assert.ok(chip, "the chip stands");
-  act(() => chip.click());
+  rightClick(chip);
   const item = menuItems().find((candidate) => candidate.textContent === label);
   assert.ok(item, `the menu offers ${label}`);
   act(() => item.click());
@@ -704,34 +716,54 @@ it.effect(
     }),
 );
 
-test("the box's foot wears the pull request's chip in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said; the chip's menu offers opening the pull request, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
+test("the box's foot wears the pull request's chip in its state's colour with no dot, the branch's chip with no pull request, and nothing before the service has said", () => {
   const chip = (published: CodingAgentPullRequestAnswer | undefined) =>
     renderToStaticMarkup(createElement(PublishedChip, { published, doors: SHUT }));
+  const pullRequest = chip(PUBLISHED);
   assert.match(
-    chip(PUBLISHED),
-    /class="plan-compose-chip agent-published-chip" data-state="open" aria-label="Pull request #123, open, checks passing" aria-haspopup="menu"[\s\S]*agent-pr-number">#123<\/span><span class="agent-check-dot" data-checks="passing"/u,
+    pullRequest,
+    /class="plan-compose-chip agent-published-chip" data-state="open" data-menu-open="false" aria-label="Pull request #123, open">[\s\S]*agent-pr-number">#123<\/span><\/button>/u,
   );
+  assert.doesNotMatch(pullRequest, /aria-haspopup|agent-check-dot|data-checks/u);
   assert.match(
     chip({ ...PUBLISHED, pullRequest: null }),
-    /agent-published-chip" aria-label="luke\/teammate-invitations"[\s\S]*agent-branch-name">luke\/teammate-invitations</u,
+    /agent-published-chip" data-menu-open="false" aria-label="luke\/teammate-invitations"[\s\S]*agent-branch-name">luke\/teammate-invitations</u,
   );
   assert.equal(chip({ ...PUBLISHED, branch: null, pullRequest: null }), "");
   assert.equal(chip(undefined), "");
+});
 
+test("a press of the chip opens the pull request on GitHub, or the branch compared where there is none, with no menu", () => {
+  const opened: string[] = [];
+  const doors = { openGitHub: (url: string) => opened.push(url), copy: ignore };
+  for (const published of [PUBLISHED, { ...PUBLISHED, pullRequest: null }]) {
+    const chip = chipOf(mountedChip(published, doors));
+    assert.ok(chip);
+    act(() => chip.click());
+  }
+  assert.deepEqual(opened, [
+    "https://github.com/acme/relay/pull/123",
+    "https://github.com/acme/relay/compare/luke/teammate-invitations?expand=1",
+  ]);
+  assert.deepEqual(menuItems(), [], "a press drops no menu");
+});
+
+test("a right-click on the chip offers copying the branch and its checkout command word for word, each with its toast, and no menu where there is no branch", () => {
   const opened: string[] = [];
   const copied: string[][] = [];
   const container = mountedChip(PUBLISHED, {
     openGitHub: (url) => opened.push(url),
     copy: (words, label) => copied.push([words, label]),
   });
-  choose(container, "Open pull request");
+  const chip = chipOf(container);
+  assert.ok(chip);
+  assert.equal(rightClick(chip), true, "the page's own menu stays shut");
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    ["Copy branch name", "Copy checkout command"],
+  );
   choose(container, "Copy branch name");
   choose(container, "Copy checkout command");
-  choose(container, "View changes on GitHub");
-  assert.deepEqual(opened, [
-    "https://github.com/acme/relay/pull/123",
-    "https://github.com/acme/relay/pull/123/files",
-  ]);
   assert.deepEqual(copied, [
     ["luke/teammate-invitations", "Branch name copied"],
     [
@@ -739,52 +771,44 @@ test("the box's foot wears the pull request's chip in its state's colour with th
       "Checkout command copied",
     ],
   ]);
+  assert.deepEqual(opened, [], "a right-click opens nothing");
   assert.deepEqual(menuItems(), [], "the menu closes on a choice");
+
+  const branchless = chipOf(mountedChip({ ...PUBLISHED, branch: null }, SHUT));
+  assert.ok(branchless);
+  assert.equal(rightClick(branchless), false);
+  assert.deepEqual(menuItems(), []);
 });
 
-test("with a branch and no pull request the menu offers the copies and the compare page alone", () => {
-  const opened: string[] = [];
-  const container = mountedChip(
-    { ...PUBLISHED, pullRequest: null },
-    { openGitHub: (url) => opened.push(url), copy: ignore },
-  );
-  const more = chipOf(container);
-  assert.ok(more);
-  act(() => more.click());
-  assert.deepEqual(
-    menuItems().map((item) => item.textContent),
-    ["Copy branch name", "Copy checkout command", "View changes on GitHub"],
-  );
-  const changes = menuItems().find((item) => item.textContent === "View changes on GitHub");
-  assert.ok(changes);
-  act(() => changes.click());
-  assert.deepEqual(opened, [
-    "https://github.com/acme/relay/compare/luke/teammate-invitations?expand=1",
-  ]);
-});
-
-test("a finished transcript ends on the row summing the pull request up, whose Open opens it", () => {
-  const opened: string[] = [];
-  const markup = renderToStaticMarkup(
-    createElement(AgentTranscriptView, {
-      messages: [PLAN, TURN],
-      reading: false,
-      failed: false,
-      working: false,
-      onRetry: ignore,
-      openGitHub: ignore,
-      footer: createElement(PublishedRow, {
-        pullRequest: PULL_REQUEST,
-        turnUsage: { inputTokens: 1_000, outputTokens: 200, costUsd: 0.42 },
+test("a finished transcript ends on the pull request's row: its number and title, the lines added in green and removed in red, where it stands only once it is no longer open, and no dot; a press opens it", () => {
+  const row = (pullRequest: CodingAgentPullRequest) =>
+    renderToStaticMarkup(
+      createElement(AgentTranscriptView, {
+        messages: [PLAN, TURN],
+        reading: false,
+        failed: false,
+        working: false,
+        onRetry: ignore,
         openGitHub: ignore,
+        footer: createElement(PublishedRow, { pullRequest, openGitHub: ignore }),
       }),
-    }),
+    );
+  const open = row(PULL_REQUEST);
+  assert.match(
+    open,
+    /<\/div><button type="button" class="agent-published-row" data-published-row="" data-state="open">[\s\S]*agent-published-title" data-overflow="false">#123 · Teammate invitations<\/span><span class="agent-published-lines"><span class="agent-published-added">\+210<\/span> <span class="agent-published-removed">−14<\/span><\/span><\/button>/u,
+  );
+  assert.doesNotMatch(open, /agent-check-dot|data-checks|Pull request|Open<|files?</u);
+  assert.match(
+    row({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.MERGED }),
+    /Teammate invitations<\/span><span class="agent-published-state">Merged<\/span><span class="agent-published-lines">/u,
   );
   assert.match(
-    markup,
-    /<\/div><div[^>]*data-published-row=""[^>]*data-state="open"[^>]*>[\s\S]*Opened #123 · \+210 −14 in 6 files · \$0\.42<\/span><span class="agent-check-dot" data-checks="passing"/u,
+    row({ ...PULL_REQUEST, state: PULL_REQUEST_STATE.CLOSED }),
+    /agent-published-state">Closed</u,
   );
 
+  const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -797,9 +821,8 @@ test("a finished transcript ends on the row summing the pull request up, whose O
       }),
     );
   });
-  const open = container.querySelector<HTMLButtonElement>(".agent-published-open");
-  assert.ok(open);
-  assert.equal(open.textContent, "Open");
-  act(() => open.click());
+  const pressed = container.querySelector<HTMLButtonElement>("[data-published-row]");
+  assert.ok(pressed);
+  act(() => pressed.click());
   assert.deepEqual(opened, ["https://github.com/acme/relay/pull/123"]);
 });
