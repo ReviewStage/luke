@@ -190,7 +190,7 @@ test("the main part starts on the default, naming nothing, and says the default 
   const page = mount(control);
   await settle();
   assert.deepEqual(reads, ["models", "default"], "read as the button mounts, for its hover line");
-  assert.equal(hoverLine(page), "Claude Opus 5.5 · High");
+  assert.equal(hoverLine(page), "Opus 5.5 High");
 
   act(() => buttonNamed(page, "Start a coding agent").click());
   assert.deepEqual(presses, [undefined]);
@@ -204,9 +204,9 @@ test("the main part starts on the default, naming nothing, and says the default 
   const rows = [...menu.querySelectorAll<HTMLElement>('[role="option"]')];
   assert.deepEqual(
     rows.map((row) => row.querySelector(".plan-compose-menu-name")?.textContent),
-    ["Claude Opus 5.5", "Claude Fable 5", "GPT-6.1 Sol"],
+    ["Opus 5.5", "Fable 5", "GPT-6.1 Sol"],
   );
-  assert.ok(rows.every((row) => row.querySelector("svg.provider-mark")));
+  assert.ok(rows.every((row) => row.querySelector(".provider-mark")));
   assert.deepEqual(
     rows.map((row) => row.getAttribute("aria-current")),
     ["true", null, null],
@@ -237,7 +237,7 @@ test("the main part starts on the default, naming nothing, and says the default 
   type(search, "gpt");
   assert.deepEqual(rowsOf(menu), ["GPT-6.1 Sol"]);
   type(search, "anthropic");
-  assert.deepEqual(rowsOf(menu), ["Claude Opus 5.5High", "Claude Fable 5"]);
+  assert.deepEqual(rowsOf(menu), ["Opus 5.5High", "Fable 5"]);
   type(search, "fast");
   assert.deepEqual(rowsOf(menu), []);
   type(search, "zzz");
@@ -316,8 +316,8 @@ test("the Fast switch keeps the model's fast version as the default without clos
   assert.ok(page.querySelector(".plan-compose-menu"), "the menu stays open");
   assert.equal(fastRow(menu).getAttribute("aria-checked"), "true");
   const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
-  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Claude Opus 5.5");
-  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High · Fast");
+  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Opus 5.5");
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High Fast");
 
   // Enter on the highlighted switch turns it back; the menu still stands.
   press("ArrowUp");
@@ -336,11 +336,11 @@ test("a stored fast version shows its base model checked with Fast on, and a pic
   const { writes, control } = standing({ model: "anthropic/claude-opus-5.5-fast", effort: "high" });
   const page = mount(control);
   await settle();
-  assert.equal(hoverLine(page), "Claude Opus 5.5 · High · Fast");
+  assert.equal(hoverLine(page), "Opus 5.5 High Fast");
   const menu = await openMenu(page);
   const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
-  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Claude Opus 5.5");
-  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High · Fast");
+  assert.equal(checked?.querySelector(".plan-compose-menu-name")?.textContent, "Opus 5.5");
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High Fast");
   assert.equal(fastRow(menu).getAttribute("aria-checked"), "true");
   // The Effort row and its submenu list the fast version's own levels.
   hover(effortRow(menu));
@@ -445,7 +445,7 @@ test("an Extra high carried to a model listing low, medium, and high lands on Hi
   const page = mount({ ...control, models });
   const menu = await openMenu(page);
   const sonnet = [...menu.querySelectorAll<HTMLElement>('[role="option"]')].find(
-    (row) => row.textContent === "Claude Sonnet 5.5",
+    (row) => row.textContent === "Sonnet 5.5",
   );
   act(() => sonnet?.click());
   assert.deepEqual(writes, [{ model: "anthropic/claude-sonnet-5.5", effort: "high" }]);
@@ -472,5 +472,5 @@ test("a change the service refused gives way to the default it still holds, on t
   const checked = menu.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
   assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "High");
   press("Escape");
-  assert.equal(hoverLine(page), "Claude Opus 5.5 · High");
+  assert.equal(hoverLine(page), "Opus 5.5 High");
 });

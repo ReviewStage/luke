@@ -169,8 +169,8 @@ test("the page reads the default and the models as it opens, and draws the model
     sent.map((request) => request.kind),
     [ACT_KIND.CODING_AGENTS_DEFAULT_READ, ACT_KIND.CODING_AGENTS_MODELS],
   );
-  assert.equal(chip(page).textContent, "Claude Opus 5.5");
-  assert.ok(chip(page).querySelector("svg.provider-mark"));
+  assert.equal(chip(page).textContent, "Opus 5.5");
+  assert.ok(chip(page).querySelector("svg.provider-mark"), "Claude Code's mark");
   assert.equal(page.querySelector("select"), null);
   assert.deepEqual(efforts(page), [
     ["Low", "false"],
@@ -179,22 +179,22 @@ test("the page reads the default and the models as it opens, and draws the model
   ]);
 });
 
-test("the model menu opens on its search, lists every model under its mark newest first, and a pick keeps the effort the model lists, else its first", async () => {
+test("the model menu opens on its search, lists every model under its harness's mark newest first, and a pick keeps the effort the model lists, else its first", async () => {
   const page = await mount();
 
   open(page);
   const field = searchField();
   assert.equal(field.placeholder, "Search models");
-  assert.deepEqual(options(page), ["Claude Opus 5.5", "Claude Sonnet 5.5", "GPT-6.1 Sol"]);
-  assert.ok(
-    [...page.querySelectorAll('[role="option"]')].every((row) =>
-      row.querySelector("svg.provider-mark"),
-    ),
+  assert.deepEqual(options(page), ["Opus 5.5", "Sonnet 5.5", "GPT-6.1 Sol"]);
+  assert.deepEqual(
+    [...page.querySelectorAll('[role="option"]')].map((row) => {
+      const mark = row.querySelector(".provider-mark");
+      return mark instanceof HTMLImageElement ? mark.getAttribute("src") : mark?.tagName;
+    }),
+    ["svg", "svg", "marks/codex-16.png"],
+    "Claude Code's traced mark for Anthropic's models, Codex's own art for OpenAI's",
   );
-  assert.equal(
-    page.querySelector('[role="option"][aria-current="true"]')?.textContent,
-    "Claude Opus 5.5",
-  );
+  assert.equal(page.querySelector('[role="option"][aria-current="true"]')?.textContent, "Opus 5.5");
 
   act(() => {
     [...page.querySelectorAll<HTMLElement>('[role="option"]')]
@@ -212,12 +212,14 @@ test("the model menu opens on its search, lists every model under its mark newes
   ]);
 });
 
-test("the search filters the models by name and by provider", async () => {
+test("the search filters the models by name, by the catalog's own name, and by provider", async () => {
   const page = await mount();
   open(page);
 
   type(searchField(), "sonnet");
-  assert.deepEqual(options(page), ["Claude Sonnet 5.5"]);
+  assert.deepEqual(options(page), ["Sonnet 5.5"]);
+  type(searchField(), "claude");
+  assert.deepEqual(options(page), ["Opus 5.5", "Sonnet 5.5"], "by the catalog's own name");
   type(searchField(), "openai");
   assert.deepEqual(options(page), ["GPT-6.1 Sol"]);
   type(searchField(), "llama");
@@ -270,7 +272,7 @@ test("a models read that fails says so in the menu, and the stored effort still 
   refuseModels = true;
   const page = await mount();
 
-  assert.equal(chip(page).textContent, "Claude Opus 5.5");
+  assert.equal(chip(page).textContent, "Opus 5.5");
   assert.deepEqual(efforts(page), [["High", "true"]]);
   open(page);
   assert.equal(
@@ -306,7 +308,7 @@ test("a stored model the catalog has stopped offering keeps its effort drawn rat
   stored = { model: "anthropic/claude-opus-4.1", effort: "max" };
   const page = await mount();
 
-  assert.equal(chip(page).textContent, "Claude Opus 4.1");
+  assert.equal(chip(page).textContent, "Opus 4.1");
   assert.deepEqual(efforts(page), [["Max", "true"]]);
 });
 
@@ -338,7 +340,7 @@ test("with no account signed in the page asks nothing and says to sign in", asyn
 test("the model menu lists base models only, and the Fast switch under it stores the fast version's id and reads it back as its base with Fast on", async () => {
   const page = await mount();
   open(page);
-  assert.deepEqual(options(page), ["Claude Opus 5.5", "Claude Sonnet 5.5", "GPT-6.1 Sol"]);
+  assert.deepEqual(options(page), ["Opus 5.5", "Sonnet 5.5", "GPT-6.1 Sol"]);
   type(searchField(), "fast");
   assert.deepEqual(options(page), [], "a fast version is never listed on its own");
   press(searchField(), "Escape");
@@ -349,15 +351,15 @@ test("the model menu lists base models only, and the Fast switch under it stores
   await settle();
   assert.deepEqual(stored, { model: "anthropic/claude-opus-5.5-fast", effort: "high" });
   assert.equal(fastSwitch(page).getAttribute("aria-checked"), "true");
-  assert.equal(chip(page).textContent, "Claude Opus 5.5", "the chip names the base model");
+  assert.equal(chip(page).textContent, "Opus 5.5", "the chip names the base model");
 
   // Read back from the service as stored: the base checked, Fast on.
   const reopened = await mount();
-  assert.equal(chip(reopened).textContent, "Claude Opus 5.5");
+  assert.equal(chip(reopened).textContent, "Opus 5.5");
   assert.equal(fastSwitch(reopened).getAttribute("aria-checked"), "true");
   open(reopened);
   const checked = reopened.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
-  assert.equal(checked?.textContent, "Claude Opus 5.5");
+  assert.equal(checked?.textContent, "Opus 5.5");
   press(searchField(), "Escape");
 
   // Sonnet lists no fast version: the pick drops Fast, and the switch rests saying why.
@@ -369,6 +371,6 @@ test("the model menu lists base models only, and the Fast switch under it stores
   assert.equal(fastSwitch(reopened).disabled, true);
   assert.match(
     fastSwitch(reopened).closest(".settings-row")?.textContent ?? "",
-    /No fast version of Claude Sonnet 5\.5/u,
+    /No fast version of Sonnet 5\.5/u,
   );
 });

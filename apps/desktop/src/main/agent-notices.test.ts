@@ -124,7 +124,7 @@ it.effect(
       f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.COMPLETED)] });
 
       yield* TestClock.adjust(WATCH);
-      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Claude Opus 5.5 finished" }]);
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 finished" }]);
       assert.deepEqual(f.unseen, [[AGENT_ID]]);
 
       // The next ticks find nothing writing and list nothing; a list that
@@ -168,8 +168,8 @@ it.effect(
       assert.equal(f.posted.length, 1);
       yield* TestClock.adjust(WATCH);
       assert.deepEqual(f.said(), [
-        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
-        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Opus 5.5 finished" },
       ]);
       assert.deepEqual(f.listed, [PLAN_ID, PLAN_ID, PLAN_ID]);
 
@@ -341,7 +341,7 @@ it.effect("the model is named as the catalog names it once the catalog has been 
     notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { planId: OTHER_PLAN_ID })]);
     notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { planId: OTHER_PLAN_ID })]);
     yield* Effect.yieldNow;
-    assert.deepEqual(f.said(), [{ title: "Luke", body: "Claude Opus 5.5 (Anthropic) finished" }]);
+    assert.deepEqual(f.said(), [{ title: "Luke", body: "Opus 5.5 (Anthropic) finished" }]);
   }),
 );
 
@@ -356,7 +356,7 @@ it.effect("a pull request, once a reader hands one in, is the end the notice say
         models: undefined,
         pullRequest: 123,
       }),
-      { title: PLAN_NAME, body: "Claude Opus 5.5 opened #123" },
+      { title: PLAN_NAME, body: "Opus 5.5 opened #123" },
     );
     assert.deepEqual(
       noticeText({
@@ -475,10 +475,10 @@ it.effect(
 
       yield* Effect.yieldNow;
       assert.deepEqual(f.said(), [
-        { title: PLAN_NAME, body: "Claude Opus 5.5 opened #123" },
-        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
-        { title: PLAN_NAME, body: "Claude Opus 5.5 finished" },
-        { title: PLAN_NAME, body: "Claude Opus 5.5 failed" },
+        { title: PLAN_NAME, body: "Opus 5.5 opened #123" },
+        { title: PLAN_NAME, body: "Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Opus 5.5 finished" },
+        { title: PLAN_NAME, body: "Opus 5.5 failed" },
       ]);
       assert.deepEqual(f.readPullRequests, [opened, branchOnly, unanswered]);
       f.posted[0]?.onClick();

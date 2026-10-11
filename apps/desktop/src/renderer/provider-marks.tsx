@@ -1,42 +1,63 @@
 import { MODEL_PROVIDER, type ModelProvider } from "@sidecar/hosted/models-wire";
 
 /**
- * provider-marks.tsx -- the two model providers' own marks, beside each model a coding agent may run on.
+ * provider-marks.tsx -- the marks of the two harnesses a coding agent's model runs in: Claude Code for Anthropic's models, Codex for OpenAI's.
  *
  * Brand marks like the sign-in providers' in `account-marks.tsx`, not glyphs
- * of ours, drawn on `currentColor` the way each provider draws its mark on
- * a dark ground. The React that traces a mark stays in the app rather than
- * entering the shared surface vocabulary, as the account marks do.
+ * of ours, each the harness's own artwork at its own proportions and in its
+ * own colours, which read on a light ground and a dark one alike. The React
+ * that draws a mark stays in the app rather than entering the shared
+ * surface vocabulary, as the account marks do.
  */
-function AnthropicMark(): React.JSX.Element {
+
+/** Where the Codex mark's files are copied beside `renderer.js` by the build (`scripts/build.mjs`). */
+const CODEX_MARK_FILES = {
+  ONE_X: "marks/codex-16.png",
+  TWO_X: "marks/codex-32.png",
+  THREE_X: "marks/codex-48.png",
+} as const;
+
+/**
+ * Claude Code's Clawd, verbatim from `resources/clawd.svg` in Anthropic's own
+ * Claude Code extension for VS Code (publisher Anthropic, version 2.1.296),
+ * in its own clay. Anthropic's press kit carries the Claude Code wordmark
+ * but no mark of Clawd alone.
+ */
+function ClaudeCodeMark(): React.JSX.Element {
   return (
-    <svg
-      className="provider-mark"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M17.3041 3.541h-3.6718l6.696 16.918H24Zm-10.6082 0L0 20.459h3.7442l1.3693-3.5527h7.0052l1.3693 3.5528h3.7442L10.6082 3.5409Zm-.3712 10.2232 2.2914-5.9456 2.2914 5.9456Z" />
+    <svg className="provider-mark" viewBox="0 0 47 38" aria-hidden="true" focusable="false">
+      <path
+        fill="#D97757"
+        d="M5.08191 10.0769V0.938461H9.37422V10.0769H5.08191ZM9.23305 10.0769V0.938461H13.5254V10.0769H9.23305ZM13.3842 10.0769V0.938461H17.6765V10.0769H13.3842ZM17.5353 10.0769V0.938461H21.8276V10.0769H17.5353ZM21.6865 10.0769V0.938461H25.9788V10.0769H21.6865ZM25.8376 10.0769V0.938461H30.1299V10.0769H25.8376ZM29.9888 10.0769V0.938461H34.2811V10.0769H29.9888ZM34.1399 10.0769V0.938461H38.4322V10.0769H34.1399ZM38.291 10.0769V0.938461H42.5834V10.0769H38.291ZM0.930769 19.0769V9.93846H5.22308V19.0769H0.930769ZM5.08191 19.0769V9.93846H9.37422V19.0769H5.08191ZM9.23305 19.0769V14.5077H13.5254V19.0769H9.23305ZM13.3842 19.0769V9.93846H17.6765V19.0769H13.3842ZM17.5353 19.0769V9.93846H21.8276V19.0769H17.5353ZM21.6865 19.0769V9.93846H25.9788V19.0769H21.6865ZM25.8376 19.0769V9.93846H30.1299V19.0769H25.8376ZM29.9888 19.0769V9.93846H34.2811V19.0769H29.9888ZM34.1399 19.0769V14.5077H38.4322V19.0769H34.1399ZM38.291 19.0769V9.93846H42.5834V19.0769H38.291ZM42.4422 19.0769V9.93846H46.7345V19.0769H42.4422ZM5.08191 28.0769V18.9385H9.37422V28.0769H5.08191ZM9.23305 28.0769V18.9385H13.5254V28.0769H9.23305ZM13.3842 28.0769V18.9385H17.6765V28.0769H13.3842ZM17.5353 28.0769V18.9385H21.8276V28.0769H17.5353ZM21.6865 28.0769V18.9385H25.9788V28.0769H21.6865ZM25.8376 28.0769V18.9385H30.1299V28.0769H25.8376ZM29.9888 28.0769V18.9385H34.2811V28.0769H29.9888ZM34.1399 28.0769V18.9385H38.4322V28.0769H34.1399ZM38.291 28.0769V18.9385H42.5834V28.0769H38.291ZM5.08191 37.0769V27.9385H9.37422V37.0769H5.08191ZM13.3842 37.0769V27.9385H17.6765V37.0769H13.3842ZM29.9888 37.0769V27.9385H34.2811V37.0769H29.9888ZM38.291 37.0769V27.9385H42.5834V37.0769H38.291Z"
+      />
     </svg>
   );
 }
 
-function OpenAIMark(): React.JSX.Element {
+/**
+ * Codex's cloud, which OpenAI publishes in no vector form: the art is
+ * `webview/assets/codex-app-ga-logo-3e5209898ca3.png` (104 by 104) in
+ * OpenAI's own Codex extension for VS Code (publisher openai, version
+ * 26.51007.21434), scaled down whole to the 16-pixel box a mark is drawn
+ * in at one, two, and three device pixels to the pixel, and losslessly
+ * recompressed (`marks/`). Files beside the bundle rather than inlined, so
+ * the renderer bundle carries none of their bytes.
+ */
+function CodexMark(): React.JSX.Element {
   return (
-    <svg
+    <img
       className="provider-mark"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-      focusable="false"
-    >
-      <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365 2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
-    </svg>
+      src={CODEX_MARK_FILES.ONE_X}
+      srcSet={`${CODEX_MARK_FILES.ONE_X} 1x, ${CODEX_MARK_FILES.TWO_X} 2x, ${CODEX_MARK_FILES.THREE_X} 3x`}
+      width={16}
+      height={16}
+      alt=""
+      draggable={false}
+    />
   );
 }
 
-/** The provider's own mark, for the rows that name a model by its catalog entry. */
-export function ModelProviderMark({ provider }: { provider: ModelProvider }): React.JSX.Element {
-  return provider === MODEL_PROVIDER.ANTHROPIC ? <AnthropicMark /> : <OpenAIMark />;
+/** The mark of the harness a provider's models run in, for the rows that name a model by its catalog entry. */
+export function HarnessMark({ provider }: { provider: ModelProvider }): React.JSX.Element {
+  return provider === MODEL_PROVIDER.ANTHROPIC ? <ClaudeCodeMark /> : <CodexMark />;
 }

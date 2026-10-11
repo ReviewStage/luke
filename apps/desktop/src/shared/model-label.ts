@@ -18,20 +18,36 @@ const MODEL_NAME_SEPARATOR = "-";
 const GPT = "gpt";
 
 /**
+ * The maker's word Anthropic's names lead with, which a label leaves off:
+ * the harness mark beside a model already says whose it is, so "Claude Opus
+ * 5.5" reads "Opus 5.5". OpenAI's names carry no such word and stay whole.
+ */
+const MAKER_WORD = "Claude ";
+
+/** A name without the maker's word it leads with. */
+function withoutMaker(name: string): string {
+  return name.startsWith(MAKER_WORD) ? name.slice(MAKER_WORD.length) : name;
+}
+
+/**
  * A model as a tab or a menu names it: the catalog's own name where the
  * catalog has been read, else the id's own name past its provider with its
- * words capitalised, so a tab never shows a bare id.
+ * words capitalised, so a tab never shows a bare id; either way without the
+ * maker's word it leads with. This is the one name a person reads for a
+ * model; the id stays the catalog's.
  */
 export function modelLabel(modelId: string, models?: readonly CatalogModel[]): string {
   const listed = models?.find((model) => model.id === modelId);
-  if (listed !== undefined) return listed.name;
+  if (listed !== undefined) return withoutMaker(listed.name);
   const separator = modelId.indexOf(CATALOG_ID_SEPARATOR);
   const name = separator === -1 ? modelId : modelId.slice(separator + 1);
-  return name
-    .split(MODEL_NAME_SEPARATOR)
-    .filter((word) => word.length > 0)
-    .map((word) =>
-      word === GPT ? word.toUpperCase() : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
-    )
-    .join(" ");
+  return withoutMaker(
+    name
+      .split(MODEL_NAME_SEPARATOR)
+      .filter((word) => word.length > 0)
+      .map((word) =>
+        word === GPT ? word.toUpperCase() : `${word.charAt(0).toUpperCase()}${word.slice(1)}`,
+      )
+      .join(" "),
+  );
 }

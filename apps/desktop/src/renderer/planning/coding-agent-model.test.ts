@@ -74,7 +74,7 @@ test("the transcript is followed only while the tab shows and the agent may stil
   }
 });
 
-test("a model is named by the catalog where it has been read, else by its own id made readable", () => {
+test("a model is named by the catalog where it has been read, else by its own id made readable, either way without Claude before its name", () => {
   const models = [
     {
       id: "anthropic/claude-opus-5.5",
@@ -82,9 +82,16 @@ test("a model is named by the catalog where it has been read, else by its own id
       provider: MODEL_PROVIDER.ANTHROPIC,
       efforts: ["high"],
     },
+    {
+      id: "openai/gpt-5.6-terra",
+      name: "GPT-5.6 Terra",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["high"],
+    },
   ];
-  assert.equal(modelLabel("anthropic/claude-opus-5.5", models), "Claude Opus 5.5");
-  assert.equal(modelLabel("anthropic/claude-opus-5.5"), "Claude Opus 5.5");
+  assert.equal(modelLabel("anthropic/claude-opus-5.5", models), "Opus 5.5");
+  assert.equal(modelLabel("openai/gpt-5.6-terra", models), "GPT-5.6 Terra");
+  assert.equal(modelLabel("anthropic/claude-opus-5.5"), "Opus 5.5");
   assert.equal(modelLabel("openai/gpt-6.1-sol"), "GPT 6.1 Sol");
   assert.equal(modelLabel("openai/gpt-6.1-sol", models), "GPT 6.1 Sol");
 });
@@ -356,11 +363,11 @@ test("a fast version is folded into its base model by its id, read back as the b
   assert.equal(choiceModelId(fable, true), "anthropic/claude-fable-5", "no fast version to name");
   assert.equal(
     choiceLabel({ model: "anthropic/claude-opus-5.5-fast", effort: "high" }, models),
-    "Claude Opus 5.5 · High · Fast",
+    "Opus 5.5 High Fast",
   );
   assert.equal(
     choiceLabel({ model: "anthropic/claude-fable-5", effort: "xhigh" }, models),
-    "Claude Fable 5 · Extra high",
+    "Fable 5 Extra high",
   );
 });
 

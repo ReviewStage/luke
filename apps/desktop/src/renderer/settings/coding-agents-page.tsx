@@ -13,7 +13,7 @@ import {
   offeredModels,
   readModelChoice,
 } from "../planning/coding-agent-model";
-import { ModelProviderMark } from "../provider-marks";
+import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { PickerRow } from "./picker-row";
 
@@ -24,8 +24,8 @@ import { PickerRow } from "./picker-row";
  * preferences and written by this page and by a Start that named a model
  * alike, so the page reads it afresh as it opens and shows what the last
  * Start wrote. The model row is the same picker every settings row uses,
- * searched because the catalog is long: each base model under its
- * provider's mark, the newest first within each provider, every fast
+ * searched because the catalog is long: each base model under the mark
+ * of the harness that runs it, the newest first within each provider, every fast
  * version folded into its model, the chosen one checked. Under it a Fast
  * switch runs the model's fast version, resting where the model has none;
  * the stored id is the catalog's own, the fast version's where the switch
@@ -84,15 +84,15 @@ function DefaultRows({
         }
         value={read.base}
         valueLabel={modelLabel(read.base, models)}
-        valueIcon={listed !== undefined ? <ModelProviderMark provider={listed.provider} /> : null}
+        valueIcon={listed !== undefined ? <HarnessMark provider={listed.provider} /> : null}
         rows={
           models === undefined
             ? []
             : offeredModels(models).map(({ model }) => ({
                 id: model.id,
-                label: model.name,
-                icon: <ModelProviderMark provider={model.provider} />,
-                terms: [model.provider],
+                label: modelLabel(model.id, models),
+                icon: <HarnessMark provider={model.provider} />,
+                terms: [model.name, model.provider],
               }))
         }
         placeholder="Search models"
@@ -118,7 +118,7 @@ function DefaultRows({
           <strong>{FAST_WORD}</strong>
           <small>
             {base !== undefined && base.fast === undefined
-              ? `No fast version of ${base.model.name}.`
+              ? `No fast version of ${modelLabel(base.model.id, models)}.`
               : "Run the model's fast version."}
           </small>
         </span>

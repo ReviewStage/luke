@@ -1,7 +1,8 @@
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
-import { ModelProviderMark } from "../provider-marks";
+import { HarnessMark } from "../provider-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
 import {
+  choiceDetail,
   choiceModelId,
   effortFor,
   effortLabel,
@@ -16,7 +17,7 @@ import {
  * model-menu.tsx -- the one menu that picks a coding agent's model and effort: the Start button's and the agent box's chip's alike.
  *
  * The shared searchable menu over the base models the service offers,
- * newest first under their provider's mark, each fast version folded into
+ * newest first under their harness's mark, each fast version folded into
  * its model, the choice standing checked with its effort and Fast beside
  * its name; a pick of a model keeps the effort it was running or the
  * model's first where it lacks that one, and its fast version where Fast
@@ -45,22 +46,22 @@ const FOOT_ROW = {
   FAST: "fast",
 } as const;
 
-/** What the checked row says after its name: the effort, and Fast where the fast version is on. */
-function chosenDetail(effort: string, fast: boolean): string {
-  return fast ? `${effortLabel(effort)} · ${FAST_WORD}` : effortLabel(effort);
-}
-
-/** The menu's rows: each base model under its mark, found by its name or its provider, the chosen one saying its effort. */
+/**
+ * The menu's rows: each base model under the mark of the harness that runs
+ * it, found by its name, its catalog name, or its provider, so "claude"
+ * still finds the names that no longer say it; the chosen one says its
+ * effort after its name.
+ */
 function modelRows(models: readonly CatalogModel[], chosen: ModelChoice | undefined): MenuRow[] {
   const read = chosen === undefined ? undefined : readModelChoice(models, chosen.model);
   return offeredModels(models).map(({ model }) => ({
     id: model.id,
-    label: model.name,
-    icon: <ModelProviderMark provider={model.provider} />,
-    terms: [model.provider],
+    label: modelLabel(model.id, models),
+    icon: <HarnessMark provider={model.provider} />,
+    terms: [model.name, model.provider],
     detail:
       chosen !== undefined && model.id === read?.base
-        ? chosenDetail(chosen.effort, read.fast)
+        ? choiceDetail(chosen.effort, read.fast)
         : undefined,
   }));
 }
