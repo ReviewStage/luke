@@ -1278,10 +1278,13 @@ body,
   color: var(--text-tertiary);
 }
 
+/* The list scrolls down and never sideways: a row's words that outrun the
+   menu's width fade at their end inside the row instead. */
 .plan-compose-menu-list {
   display: block;
   max-height: 288px;
   padding: var(--space-6);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-width: thin;
@@ -1512,6 +1515,12 @@ body,
   min-width: 0;
   flex: 0 1 auto;
   font-weight: 500;
+}
+
+/* A searchable menu's words fade where they are cut rather than end in an
+   ellipsis, as a tab's label does. */
+.searchable-menu .plan-compose-menu-name {
+  text-overflow: clip;
 }
 
 /* The detail follows the name in the list, and stands at the row's end in
@@ -1921,32 +1930,29 @@ body,
   -webkit-app-region: no-drag;
 }
 
-/* An agent's dot stands in its row's glyph column, as it does in its tab's,
-   so its name starts where every other row's does. */
-.tab-add-menu .agent-status-dot {
-  margin: 5px; /* off-scale */
-}
-
 .tab-add-anchor[data-side="end"] .tab-add-menu {
   right: 0;
   left: auto;
 }
 
+/* Nothing in the "+" is ever the one chosen, so its rows draw no end slot
+   for a check and stand inset alike at both sides. */
+.tab-add-menu .plan-compose-menu-list .plan-compose-menu-end {
+  display: none;
+}
+
 /* A file's row keeps its name whole and cuts its folder short instead, so
-   a deep path never hides which file the row opens. */
-.tab-add-menu .plan-compose-menu-name {
+   a deep path never hides which file the row opens; either fades where it
+   is cut. A row with no folder gives its name the whole width. */
+.tab-add-menu .plan-compose-menu-name:has(+ .plan-compose-menu-detail) {
   flex: 0 0 auto;
   max-width: 70%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .tab-add-menu .plan-compose-menu-detail {
   min-width: 0;
   flex: 0 1 auto;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* With every tab closed, the panel offers what the "+" menu offers, as the
@@ -2175,11 +2181,14 @@ body,
 }
 
 /* A label cut short fades out over its last `--label-fade` rather than
-   ending in an ellipsis, as a browser's tab does. Only a label measured cut
-   short (tab-strip.tsx) fades, so a short one ends on its last letter. The
-   mask fades the words themselves, so it reads alike over every fill a tab
-   wears, at rest, hovered, chosen, or dragged. */
-.tab-label[data-overflow="true"] {
+   ending in an ellipsis, as a browser's tab does, and so do a searchable
+   menu's words. Only a label measured cut short (use-clipped.ts) fades, so
+   a short one ends on its last letter. The mask fades the words themselves,
+   so it reads alike over every fill a tab or a row wears, at rest, hovered,
+   chosen, or dragged. */
+.tab-label[data-overflow="true"],
+.searchable-menu .plan-compose-menu-name[data-overflow="true"],
+.searchable-menu .plan-compose-menu-detail[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
