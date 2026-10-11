@@ -41,14 +41,19 @@ const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
 /**
  * The kinds of turn the deployment may open for an account here: the typed
  * line alone, because a message the voice brain sends an agent is delivered
- * exactly as one the developer typed in the message box, and the principal
- * eve records on the turn is what says the deployment carried it. A coding
- * agent has no spoken turn, so the deployment opens none. Nothing of the
- * deployment's starts an agent: a Start is a developer's own request under
- * their own bearer, and what the row admits is a message on a session or a
+ * exactly as one the developer typed in the message box. A coding agent has
+ * no spoken turn, so the deployment opens none. Nothing of the deployment's
+ * starts an agent: a Start is a developer's own request under their own
+ * bearer, and what the row admits is a message on a session or a
  * conversation the named account owns, which the door's ownership check
- * bounds as it bounds every caller. A caller of another role adds its row
- * here and nowhere else.
+ * bounds as it bounds every caller. On this channel, and this one alone,
+ * the deployment presents the account's own identity
+ * (`DEPLOYMENT_PRESENCE.ACCOUNT`): eve steers a running turn only with a
+ * message whose principal is the turn's own, and an agent's turn runs under
+ * the developer's bearer, so the voice steer is minted as the developer's
+ * own tuple, authenticator, type, and id, and the record says the
+ * deployment carried it in the `luke:carrier` attribute rather than in the
+ * principal. A caller of another role adds its row here and nowhere else.
  */
 export const CODER_DEPLOYMENT_TURNS = {
   [BRAIN_HOST_TURN.TYPED]: true,

@@ -4,10 +4,13 @@ import { join } from "node:path";
 import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
 import { Redacted } from "effect";
 import { routeAuth } from "eve/channels/auth";
+import type { SessionAuthContext } from "eve/context";
 import { test } from "vitest";
 import agent from "../coder/agent";
 import worker from "../coder/subagents/worker/agent";
+import { DEPLOYMENT_PRESENCE, lukeAccount } from "../server/hosted/brain-host/auth";
 import {
+  BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
   BRAIN_HOST_HEADER,
   BRAIN_HOST_REFUSAL,
@@ -79,6 +82,11 @@ const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
 const OWN_SESSION = "wrun_01SESSIONOFACCOUNTA0000000";
 const OTHER_SESSION = "wrun_01SESSIONOFACCOUNTB0000000";
 
+/** What the door answered: the principal it admitted, or the word it refused with. */
+type DoorAnswer =
+  | { readonly admitted: SessionAuthContext; readonly refused?: undefined }
+  | { readonly refused: string; readonly admitted?: undefined };
+
 /** The deployment's request on an agent's session under its secret, naming the account, the conversation, and the kind of turn given. */
 function deploymentRequest(sessionId: string, turn: string | undefined, method = "POST"): Request {
   return new Request(`https://luke.test/eve/v1/session/${sessionId}`, {
@@ -92,7 +100,7 @@ function deploymentRequest(sessionId: string, turn: string | undefined, method =
   });
 }
 
-test("a follow-up steers the turn under way, and the deployment is admitted for a typed line on the named account's own agent session and refused for a spoken turn, a stream, and another account's session", async () => {
+test("a follow-up steers the turn under way; the deployment's typed line on the named account's own agent session is minted as the developer's own principal, authenticator, type, and id, which is what eve steers the running turn on, with the deployment named as its carrier; a spoken turn, a stream, and another account's session are refused", async () => {
   const channel = coderChannelInput(
     async () => undefined,
     {
@@ -100,33 +108,54 @@ test("a follow-up steers the turn under way, and the deployment is admitted for 
       ownsConversation: async (userId, conversationId) =>
         userId === ACCOUNT && conversationId === CONVERSATION,
     },
-    { secret: Redacted.make(SECRET), admits: CODER_DEPLOYMENT_TURNS },
+    {
+      secret: Redacted.make(SECRET),
+      admits: CODER_DEPLOYMENT_TURNS,
+      presents: DEPLOYMENT_PRESENCE.ACCOUNT,
+    },
   );
   assert.equal(channel.turnPolicy, BRAIN_HOST_TURN_POLICY.STEER);
-  const door = async (request: Request) => {
+  const door = async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);
-    if (!(answer instanceof Response)) return answer.principalId;
+    if (!(answer instanceof Response)) return { admitted: answer };
     // SAFETY: eve's own refusal body, whose `error` field is the word the door threw.
     const refusal = (await answer.json()) as { error: string };
-    return refusal.error;
+    return { refused: refusal.error };
   };
 
-  assert.equal(
-    await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.TYPED)),
-    BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  // The developer's own follow-up on the same session, as the agent's turn runs under it.
+  const developer = await lukeAccount(async () => ACCOUNT)(
+    new Request(`https://luke.test/eve/v1/session/${OWN_SESSION}`, {
+      method: "POST",
+      headers: {
+        authorization: "Bearer developer-token",
+        [BRAIN_HOST_HEADER.CONVERSATION]: CONVERSATION,
+        [BRAIN_HOST_HEADER.TURN]: BRAIN_HOST_TURN.TYPED,
+      },
+    }),
   );
-  assert.equal(
-    await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN)),
-    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  const { admitted: carried } = await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.TYPED));
+  assert.ok(developer);
+  assert.ok(carried);
+  assert.deepEqual(
+    [carried.authenticator, carried.principalType, carried.principalId],
+    [developer.authenticator, developer.principalType, developer.principalId],
   );
-  assert.equal(
+  assert.deepEqual(carried.attributes, {
+    ...developer.attributes,
+    [BRAIN_HOST_ATTRIBUTE.CARRIER]: BRAIN_HOST_DEPLOYMENT_PRINCIPAL,
+  });
+
+  assert.deepEqual(await door(deploymentRequest(OWN_SESSION, BRAIN_HOST_TURN.SPOKEN)), {
+    refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+  });
+  assert.deepEqual(
     await door(deploymentRequest(`${OWN_SESSION}/stream`, BRAIN_HOST_TURN.TYPED, "GET")),
-    BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT,
+    { refused: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT },
   );
-  assert.equal(
-    await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)),
-    BRAIN_HOST_REFUSAL.NOT_OWNER,
-  );
+  assert.deepEqual(await door(deploymentRequest(OTHER_SESSION, BRAIN_HOST_TURN.TYPED)), {
+    refused: BRAIN_HOST_REFUSAL.NOT_OWNER,
+  });
 });
 
 test("the session is told the checkout's commit identity is the developer's and never its own to change", () => {

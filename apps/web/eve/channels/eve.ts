@@ -1,6 +1,7 @@
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
 import { hostedUserId } from "../../server/hosted/bearer.js";
+import { DEPLOYMENT_PRESENCE } from "../../server/hosted/brain-host/auth.js";
 import { brainHostChannelInput, DEPLOYMENT_TURNS } from "../../server/hosted/brain-host/channel.js";
 import { runWeb } from "../../server/runtime.js";
 import { seams } from "../host.js";
@@ -19,5 +20,6 @@ export default eveChannel(
   brainHostChannelInput(resolveUserId, seams.ownership, {
     secret: seams.deploymentSecret(),
     admits: DEPLOYMENT_TURNS,
+    presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
   }),
 );

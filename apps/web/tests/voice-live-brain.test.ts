@@ -20,7 +20,7 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { ASK_ORIGIN, TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP } from "../server/core";
 import { ASK_REFUSAL, askStanding } from "../server/hosted/brain-ask";
-import { deploymentActor } from "../server/hosted/brain-host/auth";
+import { DEPLOYMENT_PRESENCE, deploymentActor } from "../server/hosted/brain-host/auth";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
@@ -791,7 +791,13 @@ interface DoorSeen {
 async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
   const seen: DoorSeen[] = [];
   const auth: AuthFn<Request> = ownedAuth(
-    [deploymentActor({ secret: Redacted.make(CRON_SECRET), admits: DEPLOYMENT_TURNS })],
+    [
+      deploymentActor({
+        secret: Redacted.make(CRON_SECRET),
+        admits: DEPLOYMENT_TURNS,
+        presents: DEPLOYMENT_PRESENCE.DEPLOYMENT,
+      }),
+    ],
     {
       sessionOwner: async (id) => (id === sessionId ? target.userId : undefined),
       ownsConversation: async (userId, conversationId) =>

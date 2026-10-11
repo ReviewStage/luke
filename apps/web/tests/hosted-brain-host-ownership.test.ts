@@ -6,6 +6,7 @@ import type { SessionAuth, SessionAuthContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import { ACTION_RESULT_STATUS, BRAIN_TURN_TRIGGER } from "../server/core";
+import { DEPLOYMENT_PRESENCE } from "../server/hosted/brain-host/auth";
 import {
   BRAIN_HOST_ATTRIBUTE,
   BRAIN_HOST_HEADER,
@@ -311,7 +312,7 @@ function channelAuth(accounts: readonly string[]) {
       return sub !== undefined && accounts.includes(sub) ? sub : undefined;
     },
     ownership,
-    { secret: undefined, admits: DEPLOYMENT_TURNS },
+    { secret: undefined, admits: DEPLOYMENT_TURNS, presents: DEPLOYMENT_PRESENCE.DEPLOYMENT },
   );
   return async (request: Request): Promise<DoorAnswer> => {
     const answer = await routeAuth(request, channel.auth);

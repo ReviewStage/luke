@@ -1,6 +1,7 @@
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
 import { hostedUserId } from "../../server/hosted/bearer.js";
+import { DEPLOYMENT_PRESENCE } from "../../server/hosted/brain-host/auth.js";
 import {
   CODER_DEPLOYMENT_TURNS,
   coderChannelInput,
@@ -22,5 +23,6 @@ export default eveChannel(
   coderChannelInput(resolveUserId, seams.ownership, {
     secret: seams.deploymentSecret(),
     admits: CODER_DEPLOYMENT_TURNS,
+    presents: DEPLOYMENT_PRESENCE.ACCOUNT,
   }),
 );

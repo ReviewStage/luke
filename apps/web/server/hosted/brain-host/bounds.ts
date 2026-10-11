@@ -49,13 +49,15 @@ export const ACCOUNT_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 /**
  * The attribute names the session's auth carries those under, for the
  * session's life: the conversation and the turn from any request's headers,
- * and the acted-for account only on a principal the deployment's own
- * credential minted, never laid over from a request.
+ * and the acted-for account, or the carrier, only on a principal the
+ * deployment's own credential minted, never laid over from a request.
  */
 export const BRAIN_HOST_ATTRIBUTE = {
   CONVERSATION: "luke:conversation",
   TURN: "luke:turn",
   ACCOUNT: "luke:account",
+  /** Who carried a message minted as the account's own principal: the deployment, named on the coder channel's voice steer and never laid over from a request. */
+  CARRIER: "luke:carrier",
 } as const;
 
 /**
