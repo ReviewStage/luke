@@ -12,9 +12,7 @@ import { ShortcutGlyphs } from "../tooltip";
  * the same way and an action can be drawn red. It behaves as a system menu
  * does: focus on its first item, the arrow keys
  * between items, and Escape, Tab, a press elsewhere, or the window losing
- * the keyboard closing it with focus back where it was. An item that cannot
- * be chosen now is drawn dimmed and skipped by the keys, the way a system
- * menu draws one.
+ * the keyboard closing it with focus back where it was.
  */
 
 /** Which way from the point it hangs at a menu grows: rightward from it, or leftward to it. */
@@ -29,7 +27,7 @@ type MenuAlign = (typeof MENU_ALIGN)[keyof typeof MENU_ALIGN];
 const MENU_MARGIN = 8;
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-const MENU_ITEM = '[role="menuitem"]:not(:disabled)';
+const MENU_ITEM = '[role="menuitem"]';
 
 /** Where a menu hangs: a point in the window, and which way from it the menu grows. */
 export interface MenuPlacement {
@@ -47,8 +45,6 @@ export interface MenuAction {
   danger?: boolean;
   /** The shortcut that takes the same action, printed muted at the item's end. */
   command?: KeyedCommand;
-  /** Why the item cannot be chosen now, printed muted at its end in the shortcut's place; the item is dimmed. */
-  unavailable?: string;
 }
 
 /** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
@@ -77,11 +73,8 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
   }
 }
 
-/** What an item prints at its end: why it cannot be chosen, or its shortcut, or nothing. */
+/** What an item prints at its end: its shortcut, or nothing. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
-  if (action.unavailable !== undefined) {
-    return <span className="plan-menu-end">{action.unavailable}</span>;
-  }
   if (action.command === undefined) return null;
   return <ShortcutGlyphs command={action.command} className="plan-menu-end" />;
 }
@@ -104,7 +97,6 @@ export function MenuItem({
       tabIndex={inMenu ? -1 : undefined}
       className="plan-menu-item"
       data-danger={action.danger ? "true" : undefined}
-      disabled={action.unavailable !== undefined}
       onClick={onChoose}
     >
       <span className="plan-menu-icon">{action.icon}</span>

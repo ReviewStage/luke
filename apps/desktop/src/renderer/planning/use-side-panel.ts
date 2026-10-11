@@ -116,23 +116,20 @@ export interface OpenFile {
   readonly opened: number;
 }
 
-/** What the panel knows of a kind of tab. */
+/**
+ * What the panel knows of a kind of tab. Note that the open tabs are kept
+ * as their kinds, so at most one tab of a kind stands, and opening one
+ * already open chooses it.
+ */
 export interface SidePanelTabKind {
   label: string;
-  /**
-   * Whether at most one tab of the kind stands, so a kind already open is
-   * not offered again. Note that the open tabs are kept as their kinds, so a
-   * kind that may stand twice also needs its tabs told apart, which none
-   * needs yet.
-   */
-  singleInstance: boolean;
 }
 
 export const SIDE_PANEL_TAB_KIND = {
-  [SIDE_PANEL_TAB.BOARD]: { label: "Board", singleInstance: true },
-  [SIDE_PANEL_TAB.CODE]: { label: "Code", singleInstance: true },
-  [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript", singleInstance: true },
-  [SIDE_PANEL_TAB.WORK]: { label: "Work", singleInstance: true },
+  [SIDE_PANEL_TAB.BOARD]: { label: "Board" },
+  [SIDE_PANEL_TAB.CODE]: { label: "Code" },
+  [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript" },
+  [SIDE_PANEL_TAB.WORK]: { label: "Work" },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order a first launch opens them and the "+" offers them; the agent tabs follow them. */
@@ -296,12 +293,6 @@ export interface SidePanelControl {
 
 function clampWidth(width: number): number {
   return Math.max(SIDE_PANEL_WIDTH.MIN, Math.round(width));
-}
-
-/** Whether a tab of the kind may be opened beside the tabs open now. */
-export function tabAddable(tab: FixedSidePanelTab, tabs: readonly FixedSidePanelTab[]): boolean {
-  const kind: SidePanelTabKind = SIDE_PANEL_TAB_KIND[tab];
-  return !kind.singleInstance || !tabs.includes(tab);
 }
 
 /**

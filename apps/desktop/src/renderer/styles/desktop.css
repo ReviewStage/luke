@@ -809,20 +809,11 @@ body,
   flex: 1;
 }
 
-/* An item's shortcut, or why it cannot be chosen now, at its end. */
+/* An item's shortcut at its end. */
 .plan-menu-end {
   margin-left: var(--space-24);
   color: var(--text-tertiary);
   font-size: 12px;
-}
-
-/* Dimmed, the way a system menu draws an item it cannot take now. */
-.plan-menu-item:disabled {
-  opacity: 0.45;
-}
-
-.plan-menu-item:disabled:hover {
-  background: none;
 }
 
 .plan-menu-rule {

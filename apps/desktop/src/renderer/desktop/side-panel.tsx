@@ -59,7 +59,6 @@ import {
   type SidePanelTab,
   type SubagentSidePanelTab,
   sameTab,
-  tabAddable,
 } from "../planning/use-side-panel";
 import {
   type WorkTurnRow,
@@ -163,7 +162,7 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** What a row of the "+" says at its end for a tab already open: a kind's, which is dimmed, or an agent's, which is chosen again. */
+/** What a row of the "+" says at its end for a tab already open, which picking it chooses rather than opens again. */
 const TAB_OPEN = "Open";
 
 /** The "+" menu's sections after the fixed kinds. */
@@ -209,26 +208,24 @@ type MenuSide = (typeof MENU_SIDE)[keyof typeof MENU_SIDE];
 /** The empty panel's row that opens a tab of the kind. */
 function kindAction(
   tab: FixedSidePanelTab,
-  tabs: readonly FixedSidePanelTab[],
   onChoose: (tab: FixedSidePanelTab) => void,
 ): MenuAction {
-  const action: MenuAction = {
+  return {
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
     command: TAB_COMMAND[tab],
     onSelect: () => onChoose(tab),
   };
-  return tabAddable(tab, tabs) ? action : { ...action, unavailable: TAB_OPEN };
 }
 
-/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, or dimmed where it is open and may not be again. */
+/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, or that it is open, where picking it chooses it. */
 function kindRow(tab: FixedSidePanelTab, tabs: readonly FixedSidePanelTab[]): MenuRow {
   return {
     id: tab,
     label: SIDE_PANEL_TAB_KIND[tab].label,
     icon: TAB_ICON[tab],
     command: TAB_COMMAND[tab],
-    disabled: tabAddable(tab, tabs) ? undefined : TAB_OPEN,
+    hint: tabs.includes(tab) ? TAB_OPEN : undefined,
   };
 }
 
@@ -251,9 +248,9 @@ interface AddEntry {
  * each subagent the plan's work holds; then, under Files, each file Luke
  * showed on the plan, by name with its folder beside it. An agent's and a
  * subagent's row wear the glyph its tab wears and say where it stands,
- * shimmering while it runs, and one whose tab is open says so and is chosen
- * again rather than dimmed, as is a file's; a file not open opens on the
- * newest snippet of it.
+ * shimmering while it runs. Any row whose tab is open says so, and picking
+ * it chooses that tab rather than opening another; a file not open opens on
+ * the newest snippet of it.
  */
 function addEntries(input: {
   panel: SidePanelControl;
@@ -625,7 +622,7 @@ function NoTabs({ onChoose }: { onChoose: (tab: FixedSidePanelTab) => void }): R
     <div className="side-panel-no-tabs">
       <p className="side-panel-no-tabs-line">No tabs open</p>
       {SIDE_PANEL_TABS.map((kind) => {
-        const action = kindAction(kind, [], onChoose);
+        const action = kindAction(kind, onChoose);
         return <MenuItem key={kind} action={action} inMenu={false} onChoose={action.onSelect} />;
       })}
     </div>
