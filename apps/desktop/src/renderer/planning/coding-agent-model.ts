@@ -165,6 +165,15 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
   }
 }
 
+/** What the toast says when a Start the developer left the plan behind did not start; the plan's own note says why. */
+export const START_FAILED_AWAY = "The coding agent could not be started.";
+
+/** What the toast says when the service did not stop an agent. */
+export const STOP_FAILED = "The agent could not be stopped. Try again.";
+
+/** What the toast says when the service did not rename an agent, whose old name is drawn again. */
+export const RENAME_FAILED = "The agent could not be renamed. Try again.";
+
 /** What a Start that did not start says beside the button. */
 export function startFailureNote(failure: CodingAgentCallFailure): string {
   switch (failure) {

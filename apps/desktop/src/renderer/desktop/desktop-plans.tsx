@@ -207,7 +207,6 @@ function PlanDocument({
   const { plan } = region;
   const { sidePanel } = plans;
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
-  const markNote = plans.markNotes.get(plan.id);
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;
     setRefusal(undefined);
@@ -235,11 +234,6 @@ function PlanDocument({
           {repositoryNote !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {repositoryNote}
-            </p>
-          ) : null}
-          {markNote !== undefined ? (
-            <p className="desktop-toolbar-note" role="alert">
-              {markNote}
             </p>
           ) : null}
           <CopyChord copy={plans.copy} />

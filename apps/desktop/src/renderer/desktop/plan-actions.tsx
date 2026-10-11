@@ -241,8 +241,7 @@ export function PlanActionsButton({
  * the row's end how long ago it was last updated, the full moment on hover.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
- * hands focus back to the row. A pin or an archive the service refused says
- * so under the row the plan went back to.
+ * hands focus back to the row.
  */
 export function SidebarPlan({
   plans,
@@ -264,7 +263,6 @@ export function SidebarPlan({
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
   const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
-  const markNote = plans.markNotes.get(plan.id);
   const row = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
@@ -325,11 +323,6 @@ export function SidebarPlan({
       {rename.note !== undefined ? (
         <p className="sidebar-note" role="alert">
           {rename.note}
-        </p>
-      ) : null}
-      {markNote !== undefined ? (
-        <p className="sidebar-note" role="alert">
-          {markNote}
         </p>
       ) : null}
       {actions.menu}

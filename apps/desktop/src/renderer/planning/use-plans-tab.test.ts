@@ -184,6 +184,14 @@ function toast(): string | undefined {
   return document.querySelector(".toast")?.textContent ?? undefined;
 }
 
+/** The standing toast's Undo. */
+function undoButton(): HTMLButtonElement {
+  const undo = document.querySelector<HTMLButtonElement>(".toast button");
+  assert.ok(undo, "no Undo on the toast");
+  assert.equal(undo.textContent, "Undo");
+  return undo;
+}
+
 it.effect(
   "Copy plan puts the plan drawn on the clipboard as Markdown and says so in a toast that leaves on its own, and a refused copy says so instead",
   () =>
@@ -420,6 +428,37 @@ test("deleting asks for the named plan's delete and answers a refusal, and a fix
   assert.deepEqual(fixture.told, []);
 });
 
+it.effect(
+  "a delete that lands says so in a toast, a refusal is left to the dialog that asked, and one landing after the tab went away says so in a toast instead",
+  () =>
+    Effect.gen(function* () {
+      const answers: boolean[] = [true, false];
+      const tab = mount(
+        { shown: true, planning: OPEN },
+        { [ACT_KIND.PLANNING_DELETE]: () => Promise.resolve(answers.shift() ?? false) },
+        yield* registryOnTestClock,
+      );
+
+      yield* Effect.promise(() => act(() => tab.control().onDeletePlan(PLAN.id)));
+      yield* landed;
+      assert.equal(toast(), "Plan deleted");
+      yield* advance(3_000 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+
+      const refused = yield* Effect.promise(() => act(() => tab.control().onDeletePlan(PLAN.id)));
+      yield* landed;
+      assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+      assert.equal(toast(), undefined, "the dialog says it");
+
+      answers.push(false);
+      const asked = tab.control().onDeletePlan(PLAN.id);
+      tab.stand({ shown: false });
+      yield* Effect.promise(() => act(() => asked));
+      yield* landed;
+      assert.equal(toast(), "The plan could not be deleted. Try again.");
+    }),
+);
+
 test("a rename draws the new name at once, keeps it until the view carries it, and puts the old one back when refused", async () => {
   const { document: _document, ...summary } = PLAN;
   const listed: PlanningView = { ...OPEN, plans: [summary] };
@@ -501,37 +540,45 @@ test("the sidebar lists the pinned plans first, newest pinned first, then the re
   );
 });
 
-test("a pin draws at once, stands until the view carries it, and goes back with a note on its plan when refused", async () => {
-  const answers: boolean[] = [false, true];
-  const plans = [row("b", 2), row("a", 1)];
-  const tab = mount(
-    { shown: true, planning: { ...OPEN, plans } },
-    { [ACT_KIND.PLANNING_PIN]: () => Promise.resolve(answers.shift() ?? false) },
-  );
-  const order = () => tab.control().plans.map((plan) => [plan.id, plan.pinnedAt !== undefined]);
+it.effect(
+  "a pin draws at once, stands until the view carries it, and goes back with a toast saying so when refused, a pin that lands saying nothing",
+  () =>
+    Effect.gen(function* () {
+      const answers: boolean[] = [false, true];
+      const plans = [row("b", 2), row("a", 1)];
+      const tab = mount(
+        { shown: true, planning: { ...OPEN, plans } },
+        { [ACT_KIND.PLANNING_PIN]: () => Promise.resolve(answers.shift() ?? false) },
+        yield* registryOnTestClock,
+      );
+      const order = () => tab.control().plans.map((plan) => [plan.id, plan.pinnedAt !== undefined]);
 
-  await act(async () => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
-  assert.deepEqual(order(), [
-    ["b", false],
-    ["a", false],
-  ]);
-  assert.equal(tab.control().markNotes.get("a"), "The plan could not be pinned. Try again.");
+      act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
+      yield* landed;
+      assert.deepEqual(order(), [
+        ["b", false],
+        ["a", false],
+      ]);
+      assert.equal(toast(), "The plan could not be pinned. Try again.");
+      yield* advance(4_000 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
 
-  act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
-  assert.deepEqual(order(), [
-    ["a", true],
-    ["b", false],
-  ]);
-  assert.equal(tab.control().markNotes.get("a"), undefined, "a new press lets the note go");
-  await act(async () => undefined);
-  tab.stand({ planning: { ...OPEN, plans: [row("b", 2), row("a", 1, { pinnedAt: 3 })] } });
-  // Carried by the view, the pin is the view's again: an unpin drawn there is drawn here.
-  tab.stand({ planning: { ...OPEN, plans } });
-  assert.deepEqual(order(), [
-    ["b", false],
-    ["a", false],
-  ]);
-});
+      act(() => tab.control().onMarkPlan("a", PLAN_MARK.PIN));
+      assert.deepEqual(order(), [
+        ["a", true],
+        ["b", false],
+      ]);
+      yield* landed;
+      assert.equal(toast(), undefined, "the row moving is answer enough");
+      tab.stand({ planning: { ...OPEN, plans: [row("b", 2), row("a", 1, { pinnedAt: 3 })] } });
+      // Carried by the view, the pin is the view's again: an unpin drawn there is drawn here.
+      tab.stand({ planning: { ...OPEN, plans } });
+      assert.deepEqual(order(), [
+        ["b", false],
+        ["a", false],
+      ]);
+    }),
+);
 
 test("archiving the open plan leaves it for the new-plan page once the service keeps it, and archiving another leaves the open one", async () => {
   const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1), row("other", 2)] };
@@ -559,23 +606,99 @@ test("archiving the open plan leaves it for the new-plan page once the service k
   ]);
 });
 
-test("an archive of the open plan the service refused leaves the plan open and its call standing", async () => {
-  const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1)] };
-  const tab = mount(
-    { shown: true, planning: listed },
-    { [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(false) },
-  );
+it.effect(
+  "an archive of the open plan the service refused leaves the plan open and its call standing, and says so in a toast",
+  () =>
+    Effect.gen(function* () {
+      const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1)] };
+      const tab = mount(
+        { shown: true, planning: listed },
+        { [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(false) },
+        yield* registryOnTestClock,
+      );
 
-  await act(async () => tab.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+      act(() => tab.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+      yield* landed;
 
-  assert.equal(tab.control().boundFor, PLAN.id);
-  assert.equal(tab.told.includes(ACT_KIND.PLANNING_CLOSE), false);
-  assert.deepEqual(
-    tab.control().plans.map((plan) => plan.id),
-    [PLAN.id],
-  );
-  assert.equal(tab.control().markNotes.get(PLAN.id), "The plan could not be archived. Try again.");
-});
+      assert.equal(tab.control().boundFor, PLAN.id);
+      assert.equal(tab.told.includes(ACT_KIND.PLANNING_CLOSE), false);
+      assert.deepEqual(
+        tab.control().plans.map((plan) => plan.id),
+        [PLAN.id],
+      );
+      assert.equal(toast(), "The plan could not be archived. Try again.");
+      assert.equal(document.querySelector(".toast button"), null, "nothing to undo");
+    }),
+);
+
+it.effect(
+  "an archive that lands says so with an Undo, which brings the plan back and opens it again where the archive left it, saying nothing more",
+  () =>
+    Effect.gen(function* () {
+      const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1)] };
+      const tab = mount(
+        { shown: true, planning: listed },
+        {
+          [ACT_KIND.PLANNING_CLOSE]: () => Promise.resolve(undefined),
+          [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(true),
+          [ACT_KIND.PLANNING_SELECT]: () => Promise.resolve(true),
+        },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+      yield* landed;
+      assert.equal(tab.control().boundFor, undefined);
+      assert.equal(toast(), "Plan archivedUndo");
+
+      act(() => undoButton().click());
+      assert.deepEqual(
+        tab.control().plans.map((plan) => plan.id),
+        [PLAN.id],
+        "back among the plans at once",
+      );
+      yield* landed;
+      assert.deepEqual(tab.told.slice(-3), [
+        ACT_KIND.PLANNING_CLOSE,
+        ACT_KIND.PLANNING_ARCHIVE,
+        ACT_KIND.PLANNING_SELECT,
+      ]);
+      yield* advance(MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined, "an undoing says nothing of its own");
+    }),
+);
+
+it.effect(
+  "an unarchive says so with an Undo, and an Undo the service refuses puts the plan back where the Undo found it and says so",
+  () =>
+    Effect.gen(function* () {
+      const answers: boolean[] = [true, false];
+      const listed: PlanningView = {
+        ...OPEN,
+        plans: [row(PLAN.id, 1), row("old", 2, { archivedAt: 3 })],
+      };
+      const tab = mount(
+        { shown: true, planning: listed },
+        { [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(answers.shift() ?? false) },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().onMarkPlan("old", PLAN_MARK.UNARCHIVE));
+      yield* landed;
+      assert.equal(toast(), "Plan unarchivedUndo");
+      tab.stand({ planning: { ...OPEN, plans: [row(PLAN.id, 1), row("old", 2)] } });
+      act(() => undoButton().click());
+      yield* landed;
+
+      assert.equal(toast(), "The plan could not be archived. Try again.");
+      assert.deepEqual(
+        tab.control().plans.map((plan) => plan.id),
+        [PLAN.id, "old"],
+        "still unarchived, as the refused Undo found it",
+      );
+      assert.equal(tab.control().boundFor, PLAN.id, "the open plan stays open");
+    }),
+);
 
 test("New plan in a repository leaves the open plan for the new-plan page with that repository chosen, and plain New plan chooses none", async () => {
   const tab = mount(

@@ -1,11 +1,60 @@
 import { ResetIcon } from "@sidecar/panel";
-import { settingsScopeChanged } from "@sidecar/settings";
-import type { AppSettingsView, SettingsResetScope } from "@sidecar/settings/wire";
+import { APP_SETTING_FIELDS, APP_SETTING_SCHEMA, settingsScopeChanged } from "@sidecar/settings";
+import type {
+  AppSettingField,
+  AppSettingsView,
+  AppSettingValue,
+  SettingsResetScope,
+} from "@sidecar/settings/wire";
 import { SETTINGS_RESET_SCOPE } from "@sidecar/settings/wire";
-import type { ActionResult } from "@sidecar/wire";
+import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { useSettingWrite } from "./use-setting-write";
 import type { SettingsWrites } from "./writes";
+
+/** What the toast says once a page's reset landed, by the group it reset. */
+const RESET_NOTES = {
+  [SETTINGS_RESET_SCOPE.VOICE]: "Voice settings reset",
+  [SETTINGS_RESET_SCOPE.APPEARANCE]: "Appearance settings reset",
+  [SETTINGS_RESET_SCOPE.SHORTCUTS]: "Shortcuts reset",
+} as const satisfies Record<SettingsResetScope, string>;
+
+/** What the toast says when an Undo could not write a setting back. */
+const UNDO_REFUSED_NOTE = "The settings could not be put back. Try again.";
+
+/** One setting as it stood, which an Undo writes back. */
+type HeldSetting = readonly [AppSettingField, AppSettingValue<AppSettingField>];
+
+/** The group's settings that stand off their defaults, as they stand: all a reset changes. */
+function heldOff(settings: AppSettingsView, scope: SettingsResetScope): readonly HeldSetting[] {
+  return APP_SETTING_FIELDS.flatMap((field): HeldSetting[] => {
+    const definition = APP_SETTING_SCHEMA[field];
+    if (definition.resetScope !== scope || settings[field] === definition.default) return [];
+    // SAFETY: the value is the one this field holds, read from the settings by the field.
+    return [[field, settings[field] as AppSettingValue<AppSettingField>]];
+  });
+}
+
+/**
+ * Writes each setting back as it stood, one after another so a chord
+ * written back is checked against the one before it, answering whether
+ * every write was taken.
+ */
+function writeBack(writes: SettingsWrites, held: readonly HeldSetting[]): Promise<boolean> {
+  return held.reduce<Promise<boolean>>(
+    (before, [field, value]) =>
+      before.then((taken) =>
+        taken
+          ? writes.setting(field, value).then(
+              (result) => result.status === ACTION_RESULT_STATUS.ACCEPTED,
+              () => false,
+            )
+          : false,
+      ),
+    Promise.resolve(true),
+  );
+}
 
 /**
  * The one control that returns a whole page to its defaults, drawn only
@@ -14,15 +63,37 @@ import type { SettingsWrites } from "./writes";
  * chord. It stands in the window's toolbar beside the page's title, which is
  * what names the group it resets. One press is one ask of the store; the
  * control rests until the store answers, and a refusal is worded beside it.
+ * A reset that landed takes the control away with what it reset, so it is
+ * said in a toast with an Undo, which writes back what the page held.
  */
 function ResetPageButton({
   scope,
-  onReset,
+  settings,
+  writes,
 }: {
   scope: SettingsResetScope;
-  onReset: (scope: SettingsResetScope) => Promise<ActionResult>;
+  settings: AppSettingsView;
+  writes: SettingsWrites;
 }): React.JSX.Element {
-  const { busy, rejection, run } = useSettingWrite(onReset);
+  const toast = useToast();
+  const reset = (asked: SettingsResetScope): Promise<ActionResult> => {
+    const held = heldOff(settings, asked);
+    return writes.reset(asked).then((result) => {
+      if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) return result;
+      const undo = () =>
+        writeBack(writes, held).then((taken) => {
+          if (taken) return;
+          toast({ words: UNDO_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+        });
+      toast({
+        words: RESET_NOTES[asked],
+        tone: TOAST_TONE.DONE,
+        action: { label: UNDO_LABEL, onPress: undo },
+      });
+      return result;
+    });
+  };
+  const { busy, rejection, run } = useSettingWrite(reset);
   return (
     <>
       {rejection ? (
@@ -61,5 +132,5 @@ export function pageResetControl(
   const scope = PAGE_RESET[view as keyof typeof PAGE_RESET];
   if (!settings || !settingsScopeChanged(settings, scope)) return undefined;
   // Keyed to the page, so a refusal said on one page is not carried to the next.
-  return <ResetPageButton key={scope} scope={scope} onReset={writes.reset} />;
+  return <ResetPageButton key={scope} scope={scope} settings={settings} writes={writes} />;
 }

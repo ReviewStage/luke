@@ -406,25 +406,6 @@ test("with every plan archived, the list says nothing of having none, and with n
   assert.match(empty.textContent ?? "", /No plans yet/u);
 });
 
-test("a refusal noted on an archived plan unfolds the archived list, so its note is seen", () => {
-  const old = listedPlan("Old", { archivedAt: 9 });
-  const container = mount(DEAN, {
-    plans: {
-      archived: [old],
-      markNotes: new Map([[old.id, "The plan could not be unarchived. Try again."]]),
-    },
-  });
-
-  assert.equal(
-    container.querySelector(".sidebar-archived-row")?.getAttribute("aria-expanded"),
-    "true",
-  );
-  assert.equal(
-    container.querySelector(".sidebar-archived [role='alert']")?.textContent,
-    "The plan could not be unarchived. Try again.",
-  );
-});
-
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
 function onRepository(name: string, repository: string | null, updatedAt = 1) {
   return { id: `plan-${name}`, name, createdAt: 1, updatedAt, repository };

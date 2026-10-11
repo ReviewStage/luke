@@ -8,6 +8,7 @@ import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import {
   FIXTURE_PLANNING_CALL,
@@ -22,6 +23,7 @@ import {
   type DocumentRegion,
   documentRegion,
   MARK_FAILED_NOTES,
+  MARK_UNDOS,
   MICROPHONE_PRESS,
   markedView,
   microphoneButton,
@@ -95,8 +97,6 @@ export interface PlansControl {
   plans: PlanningView["plans"];
   /** The archived plans, newest archived first, which the sidebar keeps under Archived. */
   archived: PlanningView["plans"];
-  /** The note a refused pin or archive leaves on a plan, by plan id, until the plan is next pinned or archived. */
-  markNotes: ReadonlyMap<string, string>;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -209,10 +209,16 @@ interface PlanAsk {
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
+/** What the toast says once a plan is deleted. */
+const PLAN_DELETED_NOTE = "Plan deleted";
+
+/** Why a delete the service did not carry was refused. */
+const DELETE_REFUSED_NOTE = "The plan could not be deleted. Try again.";
+
 /** What a delete the service did not carry answers, so the plan stays and says why. */
 const DELETE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
-  reason: "The plan could not be deleted. Try again.",
+  reason: DELETE_REFUSED_NOTE,
 };
 
 /** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
@@ -258,6 +264,7 @@ export function usePlansTab(input: {
   const { shown, voice } = input;
   const { act, tell } = input.acts;
   const copyWithToast = useCopyToast();
+  const toast = useToast();
   const [newPlanPresses, setNewPlanPresses] = useState(0);
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
@@ -356,7 +363,6 @@ export function usePlansTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  const [markNotes, setMarkNotes] = useState<ReadonlyMap<string, string>>(new Map());
   const planning = markedView(renamedView(viewed, renames), marks);
   const sidebar = sidebarPlans(planning.plans);
   const signedIn = fixture !== undefined || input.signedIn;
@@ -398,11 +404,23 @@ export function usePlansTab(input: {
     act(ACT_KIND.PLANNING_CLOSE).catch(() => setAsked((held) => (held === ask ? undefined : held)));
   }, [act, fixture, openPlanId]);
 
-  // A fixture's plans are deleted nowhere, as they are read from nowhere.
+  // A fixture's plans are deleted nowhere, as they are read from nowhere. A
+  // delete that landed says so in a toast, since its dialog has closed; a
+  // refusal is said in the dialog that asked, unless the tab went away while
+  // the delete was out and took the dialog with it.
+  const shownNow = useRef(shown);
+  shownNow.current = shown;
   const deletePlan = async (planId: string): Promise<ActionResult> => {
     if (fixture !== undefined) return DELETE_REFUSED;
     const deleted = await act(ACT_KIND.PLANNING_DELETE, { planId }).catch(() => false);
-    return deleted ? { status: ACTION_RESULT_STATUS.ACCEPTED } : DELETE_REFUSED;
+    if (deleted) {
+      toast({ words: PLAN_DELETED_NOTE, tone: TOAST_TONE.DONE, hold: TOAST_HOLD.DONE });
+      return { status: ACTION_RESULT_STATUS.ACCEPTED };
+    }
+    if (!shownNow.current) {
+      toast({ words: DELETE_REFUSED_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+    }
+    return DELETE_REFUSED;
   };
 
   // A fixture's plans are renamed nowhere, as they are read from nowhere.
@@ -426,14 +444,17 @@ export function usePlansTab(input: {
   openNow.current = openPlanId;
 
   // A fixture's plans are marked nowhere, as they are read from nowhere. A
-  // refusal puts back the mark it drew only while no later press replaced it.
-  // Note that the open plan is left only once its archive is answered,
-  // because leaving ends its call, which a refusal could not give back.
-  const markPlan = (planId: string, mark: PlanMark) => {
+  // refusal puts back the mark it drew only while no later press replaced it,
+  // and says so in a toast, since the menu that asked has closed. An archive
+  // that landed, or an unarchive, says so with an Undo, which marks the plan
+  // back and opens it again if the archive had left it; an undoing says
+  // nothing of its own unless it is refused. Note that the open plan is left
+  // only once its archive is answered, because leaving ends its call, which a
+  // refusal could not give back, nor can an Undo.
+  const markPlan = (planId: string, mark: PlanMark, undoing?: { reopen: boolean }) => {
     if (fixture !== undefined) return;
     const next = { ...marks.get(planId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(planId, next));
-    setMarkNotes((held) => new Map([...held].filter(([noted]) => noted !== planId)));
     const pinning = mark === PLAN_MARK.PIN || mark === PLAN_MARK.UNPIN;
     const asked = pinning
       ? act(ACT_KIND.PLANNING_PIN, { planId, pinned: mark === PLAN_MARK.PIN })
@@ -441,16 +462,40 @@ export function usePlansTab(input: {
     asked
       .catch(() => false)
       .then((changed) => {
-        if (changed && mark === PLAN_MARK.ARCHIVE && openNow.current === planId) leavePlan();
-        if (changed) return;
-        setMarks((held) =>
-          held.get(planId) === next
-            ? new Map([...held].filter(([pending]) => pending !== planId))
-            : held,
-        );
-        setMarkNotes((held) => new Map(held).set(planId, MARK_FAILED_NOTES[mark]));
+        if (!changed) {
+          setMarks((held) =>
+            held.get(planId) === next
+              ? new Map([...held].filter(([pending]) => pending !== planId))
+              : held,
+          );
+          toast({
+            words: MARK_FAILED_NOTES[mark],
+            tone: TOAST_TONE.FAILED,
+            hold: TOAST_HOLD.FAILED,
+          });
+          return;
+        }
+        const left = mark === PLAN_MARK.ARCHIVE && openNow.current === planId;
+        if (left) leavePlan();
+        if (undoing?.reopen) selectNow.current(planId);
+        if (pinning || undoing !== undefined) return;
+        const { note, undo } = MARK_UNDOS[mark];
+        toast({
+          words: note,
+          tone: TOAST_TONE.DONE,
+          action: {
+            label: UNDO_LABEL,
+            onPress: () => markNow.current(planId, undo, { reopen: left }),
+          },
+        });
       });
   };
+  // An Undo is pressed renders after its archive landed, so it marks, and
+  // opens, through the tab as it stands then rather than as it stood.
+  const markNow = useRef(markPlan);
+  markNow.current = markPlan;
+  const selectNow = useRef(select);
+  selectNow.current = select;
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
@@ -566,7 +611,6 @@ export function usePlansTab(input: {
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
-    markNotes,
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
@@ -644,7 +688,7 @@ export function usePlansTab(input: {
     },
     onLeavePlan: leavePlan,
     onRenamePlan: renamePlan,
-    onMarkPlan: markPlan,
+    onMarkPlan: (planId, mark) => markPlan(planId, mark),
     onDeletePlan: deletePlan,
     back,
   };

@@ -2332,14 +2332,19 @@ let listed: readonly CodingAgentSummary[] = [];
 /** Each agent's transcript as the service answers a read of it on the page below, by agent, one page whole. */
 let transcripts: ReadonlyMap<string, readonly CodingAgentMessage[]> = new Map();
 
+/** Whether the service answers no read of a transcript on the page below. */
+let transcriptsUnread = false;
+
 /** A read of a transcript on the page below: the agent's messages whole, or the delegated worker's under its call, as the service would answer. */
 const readListed: TranscriptReader = (params) =>
-  Promise.resolve({
-    messages: transcripts.get(params.callId ?? params.agentId) ?? [],
-    cursor: "1:1",
-    status: CODING_AGENT_STATUS.COMPLETED,
-    title: null,
-  });
+  transcriptsUnread
+    ? Promise.reject(new Error("Not answered."))
+    : Promise.resolve({
+        messages: transcripts.get(params.callId ?? params.agentId) ?? [],
+        cursor: "1:1",
+        status: CODING_AGENT_STATUS.COMPLETED,
+        title: null,
+      });
 
 /**
  * The open plan's page over the real side panel with the plan's coding
@@ -2389,6 +2394,7 @@ function mountAgents(work?: PlansControl["work"], registry?: AtomRegistry): HTML
   stops = [];
   listed = [RUNNING_AGENT, DONE_AGENT];
   transcripts = new Map();
+  transcriptsUnread = false;
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -3082,7 +3088,7 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
 });
 
 it.effect(
-  "Copy concise transcript says so in the window's toast, which leaves on its own, and a refused copy says so instead",
+  "Copy concise transcript says so in the window's toast, which leaves on its own, and a copy refused, or whose transcript could not be read, says so instead",
   () =>
     Effect.gen(function* () {
       const page = mountAgents(undefined, yield* registryOnTestClock);
@@ -3111,6 +3117,15 @@ it.effect(
       chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy full transcript");
       yield* landed;
       assert.equal(toast(), "Could not copy to the clipboard. Try again.");
+      yield* advance(1_500 + MOTION_DURATION_MS.EXIT);
+
+      // A transcript the service would not read says so too, though nothing reached the clipboard.
+      clipboard.refuse(false);
+      transcriptsUnread = true;
+      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+      yield* landed;
+      assert.equal(toast(), "The transcript could not be copied. Try again.");
+      assert.deepEqual(clipboard.copied, ["# Claude Opus 5.5\n\n## Agent\n\nAll green.\n"]);
     }),
 );
 

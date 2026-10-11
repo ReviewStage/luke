@@ -69,7 +69,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     signedIn: true,
     plans: [],
     archived: [],
-    markNotes: new Map(),
     activePlanId: undefined,
     boundFor: overrides.activePlanId,
     listFailed: false,

@@ -1,19 +1,24 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
-import { SETTINGS_RESET_SCOPE } from "@sidecar/settings";
+import { it } from "@effect/vitest";
+import { SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { act, createElement, useState } from "react";
+import { Effect } from "effect";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { SETTINGS_SEARCH_ANCHOR_ATTRIBUTE, SETTINGS_SEARCH_ROW } from "../settings-anchors";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
+import { ToastHost } from "../toast";
 import { DesktopSettings } from "./desktop-settings";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
 
@@ -50,13 +55,20 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
 /** Every root a test mounted, unmounted after it so nothing it started outlives it. */
 const mounted: Root[] = [];
 
-function mount(settings?: AppSettingsView): HTMLElement {
+/** Settings under the window's toast, its atoms on `registry` where given. */
+function mount(settings?: AppSettingsView, registry?: AtomRegistry): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   mounted.push(root);
+  const surface = createElement(
+    Fragment,
+    null,
+    createElement(Harness, settings ? { settings } : {}),
+    createElement(ToastHost),
+  );
   act(() => {
-    root.render(createElement(Harness, settings ? { settings } : {}));
+    root.render(registry === undefined ? surface : onRegistry(registry, surface));
   });
   return container;
 }
@@ -310,6 +322,68 @@ test("a page off its defaults offers Reset to defaults in the toolbar, not in th
     "The settings are busy.",
   );
 });
+
+it.effect(
+  "a reset that lands says so in a toast whose Undo writes back each setting the page held, and an Undo refused says so",
+  () =>
+    Effect.gen(function* () {
+      const sent: Act[] = [];
+      let refusing = false;
+      Object.defineProperty(window, "sidecar", {
+        configurable: true,
+        value: {
+          recordSurfaceEvent: ignore,
+          act: (request: Act) => {
+            sent.push(request);
+            return Promise.resolve({
+              status: ACT_OUTCOME_STATUS.DONE,
+              value:
+                refusing && request.kind === ACT_KIND.SETTING_UPDATE
+                  ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "The settings are busy." }
+                  : { status: ACTION_RESULT_STATUS.ACCEPTED },
+            });
+          },
+        },
+      });
+      const landed = Effect.promise(() =>
+        act(async () => {
+          for (let turn = 0; turn < 12; turn += 1) await Promise.resolve();
+        }),
+      );
+      const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
+      const undo = () => {
+        const button = document.querySelector<HTMLButtonElement>(".toast button");
+        assert.ok(button, "no Undo on the toast");
+        act(() => button.click());
+      };
+      const container = mount(
+        settingsView({ voiceAvailable: true, theme: THEME.DARK, openAtLogin: false }),
+        yield* registryOnTestClock,
+      );
+      act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+      const reset = toolbarButton(container, "Reset to defaults");
+      assert.ok(reset);
+
+      act(() => reset.click());
+      yield* landed;
+      assert.equal(toast(), "Appearance settings resetUndo");
+      undo();
+      yield* landed;
+      assert.deepEqual(sent, [
+        { kind: ACT_KIND.SETTINGS_RESET, payload: { scope: SETTINGS_RESET_SCOPE.APPEARANCE } },
+        { kind: ACT_KIND.SETTING_UPDATE, payload: { field: "theme", value: THEME.DARK } },
+        { kind: ACT_KIND.SETTING_UPDATE, payload: { field: "openAtLogin", value: false } },
+      ]);
+
+      refusing = true;
+      act(() => reset.click());
+      yield* landed;
+      undo();
+      yield* landed;
+      assert.equal(toast(), "The settings could not be put back. Try again.");
+      assert.equal(sent.length, 5, "the first refusal ends the Undo");
+    }),
+);
 
 test("a page at its defaults offers no reset", () => {
   const container = mount(settingsView({ voiceAvailable: true }));
