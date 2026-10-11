@@ -9,6 +9,8 @@ import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-mod
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
+import { VersionView } from "../planning/version-view";
 import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
@@ -253,7 +255,22 @@ function PlanDocument({
         </Toolbar>
         <ArchivedBanner plans={plans} plan={plan} />
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
-          <PlanBody plan={plan} live={plans.live} />
+          {/* A version chosen in the History tab is drawn in the document's
+              place, the way a version history shows it in the page itself. */}
+          {plans.history.viewing === undefined ? (
+            <PlanBody
+              plan={plan}
+              live={plans.live}
+              onShowHistory={() => sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY)}
+            />
+          ) : (
+            <VersionView
+              history={plans.history}
+              viewing={plans.history.viewing}
+              current={plan.document}
+              shown={plans.shown}
+            />
+          )}
         </section>
         <div className="desktop-call-bar">
           {captions}
@@ -277,6 +294,7 @@ function PlanDocument({
           transcript={plans.transcript}
           work={plans.work}
           agents={plans.agents}
+          history={plans.history}
           shown={plans.shown}
         />
       ) : null}

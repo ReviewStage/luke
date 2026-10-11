@@ -24,6 +24,18 @@
     "dest": "/api/default.js?route=plans/agents&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
+    "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
+  },
+  {
+    "src": "/api/plans/([^/]+)/revisions/([^/]+)",
+    "dest": "/api/default.js?route=plans/revision&id=$1&seq=$2"
+  },
+  {
+    "src": "/api/plans/([^/]+)/revisions",
+    "dest": "/api/default.js?route=plans/revisions&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)",
     "dest": "/api/default.js?route=plans/plan&id=$1"
   },

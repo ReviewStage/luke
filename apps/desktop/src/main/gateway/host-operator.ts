@@ -48,6 +48,10 @@ import {
   type PlanningPinParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
+  type PlanningRevisionAnswer,
+  type PlanningRevisionParams,
+  type PlanningRevisionsAnswer,
+  type PlanningRevisionsParams,
   type PlanningSetRepositoryAnswer,
   type PlanningSetRepositoryParams,
   type PlanningStartAnswer,
@@ -55,6 +59,8 @@ import {
   type PlanningView,
   planningFileAnswerSchema,
   planningRepositoriesAnswerSchema,
+  planningRevisionAnswerSchema,
+  planningRevisionsAnswerSchema,
   planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
   planningViewSchema,
@@ -169,6 +175,12 @@ export interface HostOperator {
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
   planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
+  /** A page of a plan's history; or that the service did not answer. */
+  planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
+  /** One revision of a plan beside the one before it; or that the service did not answer. */
+  planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
+  /** One revision of a plan restored as its content; answers whether the service restored it. */
+  planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -424,6 +436,38 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningRevisions: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REVISIONS, {
+          planId: params.planId,
+          ...(params.before === undefined ? undefined : { before: params.before }),
+        }),
+        (answer): PlanningRevisionsAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRevisionsAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningRevision: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_REVISION, { planId: params.planId, seq: params.seq }),
+        (answer): PlanningRevisionAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningRevisionAnswerSchema, { excess: EXCESS_KEYS.DROP })(
+                  answer.result,
+                ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningRestore: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
+        (answer) => record(answer)?.restored === true,
       ),
     planningSetRepository: (params) =>
       Effect.map(

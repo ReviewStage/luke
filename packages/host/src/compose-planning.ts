@@ -23,6 +23,8 @@ import {
   type PlanningDocument,
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
+  type PlanningRevisionAnswer,
+  type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   type PlanningView,
@@ -33,6 +35,8 @@ import {
   planningFileParamsSchema,
   planningPinParamsSchema,
   planningRenameParamsSchema,
+  planningRevisionParamsSchema,
+  planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
 } from "@sidecar/hosted/planning-view";
@@ -50,9 +54,9 @@ import type { RunMode } from "./run-mode.js";
 /**
  * compose-planning.ts -- the panel's named plans, read from the service: the list, the one active plan, and its document, drawn as the notetaker writes it during a call.
  *
- * Nothing here writes a document: the plan's notetaker is the one writer, on
- * the service. What this concern owes the panel is to show that write as it
- * happens. Every write happens during a planning call, and the notetaker's
+ * Nothing here writes a document but a restore the developer asks for: the
+ * plan's notetaker and coding agents are its writers, on the service. What
+ * this concern owes the panel is to show those writes as they happen. Every write happens during a planning call, and the notetaker's
  * drafts arrive on that call's own socket and are drawn in place: the list
  * and the open plan are read when the Plans tab shows, when a plan opens, and
  * when one starts, and never on a clock. The open plan's whiteboard is read
@@ -75,7 +79,10 @@ import type { RunMode } from "./run-mode.js";
  * each code it shows lands over those reads and stays past the call's end. The repositories the account reaches, and a plan's repository
  * given or taken away, are the service's too, asked through here, as are a
  * plan pinned or archived: the list holds the archived plans beside the
- * rest, each flagged, and which the window draws where is the window's.
+ * rest, each flagged, and which the window draws where is the window's. A
+ * plan's history is read for the History tab that asks and held nowhere
+ * here; a revision restored is the one write this concern carries to the
+ * service on the developer's word, and the view takes the plan it answers.
  */
 
 /**
@@ -107,6 +114,9 @@ export type PlanningClient = Pick<
   | "readTranscript"
   | "readWork"
   | "readFile"
+  | "readRevisions"
+  | "readRevision"
+  | "restore"
   | "repositories"
   | "setRepository"
 >;
@@ -591,6 +601,64 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }
         return carried<PlanningFileAnswer>(
           "file" in answer ? { file: highlightFile(answer.file) } : { refusal: answer.refusal },
+        );
+      }),
+    // A page of the history, and a revision beside the one before it, are
+    // answered to the History tab that asked and held nowhere: the tab keeps
+    // what it read, and reads again as the plan moves on.
+    [GATEWAY_METHOD.PLANNING_REVISIONS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningRevisionsParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid(
+            "reading a plan's history names the plan, and where an older page is read from",
+          );
+        }
+        if (!gate()) {
+          return carried<PlanningRevisionsAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const { planId, before } = read.success;
+        const page = yield* Effect.provide(
+          client.readRevisions(planId, before),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningRevisionsAnswer>(page ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      }),
+    [GATEWAY_METHOD.PLANNING_REVISION]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningRevisionParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("reading a revision names a plan and its number");
+        if (!gate()) {
+          return carried<PlanningRevisionAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        }
+        const revision = yield* Effect.provide(
+          client.readRevision(read.success.planId, read.success.seq),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningRevisionAnswer>(
+          revision === undefined ? { failure: PLAN_CALL_FAILURE.UNANSWERED } : { revision },
+        );
+      }),
+    // The service answers the plan as restored, so the list's row and the
+    // open document take it in place and nothing is read again.
+    [GATEWAY_METHOD.PLANNING_RESTORE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningRevisionParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("restoring a revision names a plan and its number");
+        if (!gate()) return { restored: false };
+        const { planId, seq } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const restored = yield* Effect.provide(
+              client.restore(planId, seq),
+              FetchHttpClient.layer,
+            );
+            if (restored === undefined) return { restored: false };
+            takeAnswered(restored);
+            return { restored: true };
+          }),
         );
       }),
     // Leaving the plan returns to the list, which was read when the tab showed.

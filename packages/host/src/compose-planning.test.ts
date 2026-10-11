@@ -23,6 +23,8 @@ import {
   PLAN_FILE_REFUSAL,
   type Plan,
   type PlanFileAnswer,
+  type PlanRevisionAnswer,
+  type PlanRevisionsAnswer,
   type PlanSummary,
   type ShownCode,
 } from "@sidecar/hosted/plan-wire";
@@ -104,6 +106,12 @@ interface FakeService extends PlanningClient {
   readonly workReads: string[];
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
   files: Record<string, PlanFileAnswer>;
+  /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
+  history: PlanRevisionsAnswer | undefined;
+  /** The older pages of the history, by the revision each is read before. */
+  olderHistory: Record<number, PlanRevisionsAnswer>;
+  /** Each revision the service holds, by its number, which a restore puts back as the plan's document. */
+  revisions: Record<number, PlanRevisionAnswer["revision"]>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -123,6 +131,29 @@ function fakeService(plans: Plan[]): FakeService {
     olderWorks: {},
     workReads: [],
     files: {},
+    history: undefined,
+    olderHistory: {},
+    revisions: {},
+    readRevisions: (_planId, before) =>
+      Effect.sync(() => (before === undefined ? service.history : service.olderHistory[before])),
+    readRevision: (_planId, seq) => Effect.sync(() => service.revisions[seq]),
+    // The service puts the revision's document back and names the developer its last editor.
+    restore: (planId, seq) =>
+      Effect.sync(() => {
+        const found = service.plans.find((candidate) => candidate.id === planId);
+        const revision = service.revisions[seq];
+        if (found === undefined || revision === undefined) return undefined;
+        const restored: Plan = {
+          ...found,
+          document: revision.document,
+          updatedAt: found.updatedAt + 1,
+          lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: found.updatedAt + 1, duringCall: false },
+        };
+        service.plans = service.plans.map((candidate) =>
+          candidate.id === planId ? restored : candidate,
+        );
+        return restored;
+      }),
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
@@ -1602,5 +1633,72 @@ it.effect(
       assert.deepEqual(lines[1], []);
       assert.deepEqual(yield* window(".env"), { refusal: PLAN_FILE_REFUSAL.SECRET });
       assert.deepEqual(yield* window("gone.ts"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a page of the history and a revision are answered to the tab that asked, and the view holds neither",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const line = (seq: number) => ({
+        seq,
+        lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 100 + seq, duringCall: true },
+        startedAt: 100,
+        changes: 2,
+      });
+      service.history = { revisions: [line(3), line(2)], earlier: 2 };
+      service.olderHistory[2] = { revisions: [line(1)] };
+      service.revisions[2] = {
+        seq: 2,
+        document: { body: "# Earlier draft", assumptions: [] },
+        previous: null,
+      };
+      const { call, told } = yield* openPlan(service);
+      const viewsTold = told.length;
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REVISIONS, { planId: INVITES }), {
+        revisions: [line(3), line(2)],
+        earlier: 2,
+      });
+      assert.deepEqual(
+        yield* call(GATEWAY_METHOD.PLANNING_REVISIONS, { planId: INVITES, before: 2 }),
+        { revisions: [line(1)] },
+      );
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REVISION, { planId: INVITES, seq: 2 }), {
+        revision: service.revisions[2],
+      });
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_REVISION, { planId: INVITES, seq: 9 }), {
+        failure: PLAN_CALL_FAILURE.UNANSWERED,
+      });
+      assert.equal(told.length, viewsTold);
+    }),
+);
+
+it.effect(
+  "a restore draws the plan as the service answered it in the open document, and a refused one leaves it as it was",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      service.revisions[1] = {
+        seq: 1,
+        document: { body: "# Earlier draft", assumptions: [] },
+        previous: null,
+      };
+      const { call, last } = yield* openPlan(service);
+
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: INVITES, seq: 9 }), {
+        restored: false,
+      });
+      assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
+      assert.deepEqual(yield* call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: INVITES, seq: 1 }), {
+        restored: true,
+      });
+      assert.deepEqual(last()?.document.plan?.document, {
+        body: "# Earlier draft",
+        assumptions: [],
+      });
+      assert.equal(last()?.document.plan?.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
     }),
 );

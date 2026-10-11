@@ -11,12 +11,17 @@ import { diffArrays } from "diff";
  * jsdiff's (`diffArrays`, over this file's words); what is here is how its
  * changes are cut for a hand. The notetaker changes one place at a time
  * (`notesInProgress` in `@sidecar/hosted/plan-template`), so the words
- * compared are always final or still growing at their end. Everything here
- * is pure.
+ * compared are always final or still growing at their end. The History tab's
+ * version view reads the same comparison over the same words whole
+ * (`wordChanges`), since a reader compares words rather than letters.
+ * Everything here is pure.
  */
 
 /** The most words and spaces a diff may change before the whole unit is taken as one replacement. */
 const MAX_EDIT_TOKENS = 400;
+
+/** The most words and spaces a version's unit may change before it is shown as struck whole and written whole again. */
+const MAX_READ_TOKENS = 4_000;
 
 /**
  * A word, a space, a line break, or a single mark: the units an edit is made
@@ -168,6 +173,37 @@ export function diffHunks(old: string, next: string): readonly Hunk[] {
   return cutHunks.map((hunk, index) =>
     lineAligned(old, hunk, cutHunks[index - 1]?.to ?? 0, cutHunks[index + 1]?.from ?? old.length),
   );
+}
+
+/** One run of words two texts compare as: the words, and whether the newer text added them, struck them, or keeps them. */
+export interface WordChange {
+  readonly words: string;
+  readonly added: boolean;
+  readonly removed: boolean;
+}
+
+/**
+ * The old words and the newer compared whole word by whole word, in reading
+ * order, every run of the old struck and of the newer added, where the struck
+ * words of a change come before the words that replace them. A unit changed
+ * past `MAX_READ_TOKENS` is one run struck and one added.
+ */
+export function wordChanges(old: string, next: string): readonly WordChange[] {
+  if (old === next) return old === "" ? [] : [{ words: old, added: false, removed: false }];
+  const changes = diffArrays([...tokens(old)], [...tokens(next)], {
+    maxEditLength: MAX_READ_TOKENS,
+  });
+  if (changes === undefined) {
+    return [
+      { words: old, added: false, removed: true },
+      { words: next, added: true, removed: false },
+    ].filter((change) => change.words !== "");
+  }
+  return changes.map((change) => ({
+    words: change.value.join(""),
+    added: change.added,
+    removed: change.removed,
+  }));
 }
 
 /** Whether a span of old words is a field's empty placeholder, which is cleared at once rather than kept or erased letter by letter. */

@@ -32,7 +32,8 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * the scrolled document and never the surface. A plan anyone has written
  * says who last did in one muted line above the document: the developer,
  * Luke (the notetaker), or a coding agent named as its row names it now,
- * whether it was on a call, and how long ago, moved on once a minute.
+ * whether it was on a call, and how long ago, moved on once a minute. The
+ * line opens the plan's History tab, where each earlier version is.
  */
 
 /** The document the chase was last aimed at, and where its typing stands. */
@@ -100,9 +101,29 @@ export function editedLine(edit: PlanLastEdit, now: number): string {
   return `${by}${call} · ${agoText(edit.at, now)}`;
 }
 
-function EditedLine({ edit }: { edit: PlanLastEdit }): React.JSX.Element {
+/** The line over the document, which opens the plan's history where the window offers it. */
+function EditedLine({
+  edit,
+  onShowHistory,
+}: {
+  edit: PlanLastEdit;
+  onShowHistory: (() => void) | undefined;
+}): React.JSX.Element {
   const now = useMinute();
-  return <p className="plan-edit-note">{editedLine(edit, now)}</p>;
+  const line = editedLine(edit, now);
+  if (onShowHistory === undefined) return <p className="plan-edit-note">{line}</p>;
+  return (
+    <p className="plan-edit-note">
+      <button
+        type="button"
+        className="plan-edit-link"
+        aria-label={`${line}. Show version history`}
+        onClick={onShowHistory}
+      >
+        {line}
+      </button>
+    </p>
+  );
 }
 
 /** The class of a unit or assumption lit as it settles. */
@@ -204,9 +225,18 @@ function AssumptionRow({
 /**
  * The plan's body and its assumptions, the assumptions' section standing even
  * while the list is empty. `live` is the plan's call in progress, which keeps
- * the caret waiting where the typing last stopped.
+ * the caret waiting where the typing last stopped; `onShowHistory` opens the
+ * plan's History tab from the "Edited by" line.
  */
-export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.JSX.Element {
+export function PlanBody({
+  plan,
+  live,
+  onShowHistory,
+}: {
+  plan: Plan;
+  live: boolean;
+  onShowHistory?: () => void;
+}): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
@@ -247,7 +277,7 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
   const edited = lastEditOf(plan);
   return (
     <div ref={scroller} className="plan-document-scroll">
-      {edited === undefined ? null : <EditedLine edit={edited} />}
+      {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <div className="plan-body">
         {views.map((view) => (
           <MarkdownMessage

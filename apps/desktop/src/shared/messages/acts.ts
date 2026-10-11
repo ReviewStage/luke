@@ -40,6 +40,8 @@ import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
+  type PlanningRevisionAnswer,
+  type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   planningArchiveParamsSchema,
@@ -49,6 +51,10 @@ import {
   planningPinParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
+  planningRevisionAnswerSchema,
+  planningRevisionParamsSchema,
+  planningRevisionsAnswerSchema,
+  planningRevisionsParamsSchema,
   planningSetRepositoryAnswerSchema,
   planningSetRepositoryParamsSchema,
   planningStartAnswerSchema,
@@ -134,6 +140,12 @@ export const ACT_KIND = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
+  /** The History tab's page of the open plan's history, read from the service; answered to the tab, never on the document. */
+  PLANNING_REVISIONS: "planning.revisions",
+  /** The History tab's revision of the open plan beside the one before it, read from the service; answered to the tab, never on the document. */
+  PLANNING_REVISION: "planning.revision",
+  /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
+  PLANNING_RESTORE: "planning.restore",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -467,6 +479,21 @@ export const ACT = {
     payload: actSchema(planningFileParamsSchema),
     result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
     refusal: "Could not read that file on this system.",
+  },
+  [ACT_KIND.PLANNING_REVISIONS]: {
+    payload: actSchema(planningRevisionsParamsSchema),
+    result: wireResult<PlanningRevisionsAnswer>(isReadable(planningRevisionsAnswerSchema)),
+    refusal: "Could not read that plan's history on this system.",
+  },
+  [ACT_KIND.PLANNING_REVISION]: {
+    payload: actSchema(planningRevisionParamsSchema),
+    result: wireResult<PlanningRevisionAnswer>(isReadable(planningRevisionAnswerSchema)),
+    refusal: "Could not read that version on this system.",
+  },
+  [ACT_KIND.PLANNING_RESTORE]: {
+    payload: actSchema(planningRevisionParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not restore that version on this system.",
   },
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",

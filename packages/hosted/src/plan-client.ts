@@ -27,6 +27,8 @@ import {
   type PlanFileAnswer,
   type PlanFileRequest,
   type PlanRenameRequest,
+  type PlanRevisionAnswer,
+  type PlanRevisionsAnswer,
   type PlanSummary,
   type PlanUpdateRequest,
   planAnswerSchema,
@@ -36,6 +38,8 @@ import {
   planFileRequestSchema,
   planListAnswerSchema,
   planRenameRequestSchema,
+  planRevisionAnswerSchema,
+  planRevisionsAnswerSchema,
   planUpdateRequestSchema,
 } from "./plan-wire.js";
 import {
@@ -51,6 +55,9 @@ import {
   planBoardPath,
   planFilePath,
   planPath,
+  planRestorePath,
+  planRevisionPath,
+  planRevisionsPath,
   planTranscriptPath,
   planWorkPath,
 } from "./service-paths.js";
@@ -263,6 +270,45 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planFilePath(planId, admitted) },
       planFileAnswerSchema,
+    );
+  }
+
+  /** A page of one plan's history, the newest or the one before a revision; nothing where the service did not answer it. */
+  readRevisions(
+    planId: string,
+    before?: number,
+  ): Effect.Effect<PlanRevisionsAnswer | undefined, never, HttpClient.HttpClient> {
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planRevisionsPath(planId, before) },
+      planRevisionsAnswerSchema,
+    );
+  }
+
+  /** One revision of one plan beside the one before it; nothing where the service did not answer it, or holds no such revision. */
+  readRevision(
+    planId: string,
+    seq: number,
+  ): Effect.Effect<PlanRevisionAnswer["revision"] | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: planRevisionPath(planId, seq) },
+        planRevisionAnswerSchema,
+      ),
+      (answer) => answer?.revision,
+    );
+  }
+
+  /** Puts one revision of a plan back as its content, answering the plan as it now stands, or nothing where the service did not restore it. */
+  restore(
+    planId: string,
+    seq: number,
+  ): Effect.Effect<Plan | undefined, never, HttpClient.HttpClient> {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.POST, path: planRestorePath(planId, seq) },
+        planAnswerSchema,
+      ),
+      (answer) => answer?.plan,
     );
   }
 

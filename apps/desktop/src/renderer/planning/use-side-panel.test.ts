@@ -308,7 +308,7 @@ test("a file's tab closes to its neighbour, is held to the files shown on the op
   act(() => first.control().onClose({ file: INVITE }));
   assert.deepEqual(first.control().tab, { file: ROLES });
   act(() => first.control().onClose({ file: ROLES }));
-  assert.equal(first.control().tab, SIDE_PANEL_TABS.at(-1));
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.WORK, "the last fixed tab the plan used");
 
   act(() => first.control().onOpenFile({ path: INVITE }));
   const second = mount([], [], undefined, [INVITE, ROLES]);

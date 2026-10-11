@@ -1,8 +1,19 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { EMPTY_PLAN_FIELDS, NOTE_KIND, PLAN_FIELD, planBody } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
+import {
+  EMPTY_PLAN_FIELDS,
+  NOTE_KIND,
+  PLAN_FIELD,
+  type PlanField,
+  planBody,
+} from "@sidecar/hosted/plan-template";
+import {
+  PLAN_ACTOR,
+  PLAN_HISTORY_BOUNDS,
+  type PlanLastEdit,
+  type PlanRevisionLine,
+} from "@sidecar/hosted/plan-wire";
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -10,13 +21,13 @@ import { user } from "../server/db/auth-schema";
 import { planRevision } from "../server/db/plan-revision-schema";
 import { db } from "../server/db/query";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { saveNotes } from "../server/hosted/plan-notes";
 import {
-  listRevisions,
-  PLAN_REVISION,
-  type PlanRevisionLine,
-  type PlanWriter,
-} from "../server/hosted/plan-revisions";
+  PLAN_SAVE_REFUSAL,
+  PLAN_SAVE_STATUS,
+  restoreRevision,
+  saveNotes,
+} from "../server/hosted/plan-notes";
+import { listRevisions, PLAN_REVISION, type PlanWriter } from "../server/hosted/plan-revisions";
 import { createPlan, deletePlan, readPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { added, INVITATIONS_DRAFT, notesFor, SMALL_FEATURE } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
@@ -54,6 +65,10 @@ const startAgent = (userId: string, planId: string) =>
     (started) => Option.getOrThrow(started).agent.id,
   );
 
+/** The newest page of the plan's history, which holds every revision a test here writes. */
+const revisionsOf = (userId: string, planId: string) =>
+  Effect.map(listRevisions(userId, planId), (page) => page.revisions);
+
 /** Each revision as the history lists it, without the instants a test's clock decides. */
 function shapeOf(revisions: readonly PlanRevisionLine[]) {
   return revisions.map(({ seq, lastEdit, changes }) => ({
@@ -83,7 +98,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         { actor: PLAN_ACTOR.AGENT, agentId },
       );
 
-      assert.deepEqual(shapeOf(yield* listRevisions(userId, planId)), [
+      assert.deepEqual(shapeOf(yield* revisionsOf(userId, planId)), [
         { seq: 2, actor: PLAN_ACTOR.AGENT, label: AGENT_MODEL, duringCall: false, changes: 1 },
         {
           seq: 1,
@@ -112,7 +127,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           [added(PLAN_FIELD.OUTCOME, "Members invite by email.")],
           ON_CALL,
         );
-        const joined = yield* listRevisions(userId, planId);
+        const joined = yield* revisionsOf(userId, planId);
         yield* TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1));
         yield* saveNotes(
           { userId, planId },
@@ -129,7 +144,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           [{ seq: 1, changes: 2, lasted: Duration.toMillis(Duration.minutes(5)) }],
         );
         assert.deepEqual(
-          (yield* listRevisions(userId, planId)).map(({ seq, changes }) => ({ seq, changes })),
+          (yield* revisionsOf(userId, planId)).map(({ seq, changes }) => ({ seq, changes })),
           [
             { seq: 2, changes: 1 },
             { seq: 1, changes: 2 },
@@ -160,7 +175,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         );
 
         assert.deepEqual(
-          (yield* listRevisions(userId, planId)).map(({ lastEdit }) => lastEdit.actor),
+          (yield* revisionsOf(userId, planId)).map(({ lastEdit }) => lastEdit.actor),
           [PLAN_ACTOR.NOTETAKER, PLAN_ACTOR.AGENT, PLAN_ACTOR.NOTETAKER],
         );
       }),
@@ -182,7 +197,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         ON_CALL,
       );
 
-      assert.deepEqual(yield* listRevisions(userId, planId), []);
+      assert.deepEqual(yield* revisionsOf(userId, planId), []);
       assert.equal(yield* lastEditOf(userId, planId), undefined);
     }),
   );
@@ -238,7 +253,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           ON_CALL,
         );
 
-        const revisions = yield* listRevisions(userId, planId);
+        const revisions = yield* revisionsOf(userId, planId);
         assert.deepEqual(
           revisions.map(({ seq, lastEdit, changes }) => ({ seq, actor: lastEdit.actor, changes })),
           [
@@ -256,7 +271,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
       yield* saveNotes({ userId, planId }, notesFor(SMALL_FEATURE), ON_CALL);
 
       assert.deepEqual(
-        (yield* listRevisions(userId, planId)).map(({ seq, lastEdit }) => [seq, lastEdit.actor]),
+        (yield* revisionsOf(userId, planId)).map(({ seq, lastEdit }) => [seq, lastEdit.actor]),
         [[1, PLAN_ACTOR.NOTETAKER]],
       );
     }),
@@ -328,8 +343,8 @@ it.layer(testSqlClient)("a plan's history", (it) => {
       const intruder = yield* openPlan;
       yield* saveNotes({ userId, planId }, notesFor(SMALL_FEATURE), ON_CALL);
 
-      assert.deepEqual(yield* listRevisions(intruder.userId, planId), []);
-      assert.equal((yield* listRevisions(userId, planId)).length, 1);
+      assert.deepEqual(yield* revisionsOf(intruder.userId, planId), []);
+      assert.equal((yield* revisionsOf(userId, planId)).length, 1);
     }),
   );
 
@@ -347,5 +362,150 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         .where(eq(planRevision.planId, planId));
       assert.deepEqual(left, []);
     }),
+  );
+  /** Notes on the call, each a revision of its own: the saves stand further apart than any join. */
+  const apart = (
+    userId: string,
+    planId: string,
+    notes: readonly (readonly [PlanField, string])[],
+  ) =>
+    Effect.forEach(
+      notes,
+      ([field, text]) =>
+        Effect.andThen(
+          saveNotes({ userId, planId }, [added(field, text)], ON_CALL),
+          TestClock.adjust(Duration.millis(PLAN_REVISION.JOIN_WITHIN_MS + 1)),
+        ),
+      { discard: true },
+    );
+
+  const contentOf = (userId: string, planId: string) =>
+    Effect.map(readPlan(userId, planId), (stored) => {
+      const { fields, plan } = Option.getOrThrow(stored);
+      return { fields, assumptions: plan.document.assumptions };
+    });
+
+  it.effect(
+    "restoring a revision puts its content back as a new revision of the developer's, counted by the fields it changes",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* apart(userId, planId, [[PLAN_FIELD.PROBLEM, "Only admins can invite."]]);
+        const first = yield* contentOf(userId, planId);
+        yield* apart(userId, planId, [
+          [PLAN_FIELD.OUTCOME, "Members invite by email."],
+          [PLAN_FIELD.DECISIONS, "Invites expire."],
+        ]);
+
+        const restored = yield* restoreRevision({ userId, planId }, 1);
+
+        assert.equal(restored.status, PLAN_SAVE_STATUS.SAVED);
+        assert.deepEqual(yield* contentOf(userId, planId), first);
+        const [newest] = yield* revisionsOf(userId, planId);
+        assert.deepEqual(
+          { seq: newest?.seq, actor: newest?.lastEdit.actor, changes: newest?.changes },
+          { seq: 4, actor: PLAN_ACTOR.DEVELOPER, changes: 2 },
+        );
+        assert.equal(newest?.restoredFrom?.seq, 1);
+      }),
+  );
+
+  it.effect("a restore joins no revision before it, and no save after it joins the restore", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* apart(userId, planId, [
+        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
+        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+      ]);
+
+      yield* restoreRevision({ userId, planId }, 1);
+      yield* restoreRevision({ userId, planId }, 2);
+      yield* saveNotes(
+        { userId, planId },
+        [added(PLAN_FIELD.DECISIONS, "Invites expire.")],
+        ON_CALL,
+      );
+
+      assert.deepEqual(
+        (yield* revisionsOf(userId, planId)).map(({ seq, lastEdit, restoredFrom }) => [
+          seq,
+          lastEdit.actor,
+          restoredFrom?.seq,
+        ]),
+        [
+          [5, PLAN_ACTOR.NOTETAKER, undefined],
+          [4, PLAN_ACTOR.DEVELOPER, 2],
+          [3, PLAN_ACTOR.DEVELOPER, 1],
+          [2, PLAN_ACTOR.NOTETAKER, undefined],
+          [1, PLAN_ACTOR.NOTETAKER, undefined],
+        ],
+      );
+    }),
+  );
+
+  it.effect("restoring the revision the plan already holds records nothing", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      yield* apart(userId, planId, [
+        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
+        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+      ]);
+
+      const restored = yield* restoreRevision({ userId, planId }, 2);
+
+      assert.equal(restored.status, PLAN_SAVE_STATUS.SAVED);
+      assert.deepEqual(
+        (yield* revisionsOf(userId, planId)).map(({ seq }) => seq),
+        [2, 1],
+      );
+    }),
+  );
+
+  it.effect("another account restores no revision of a plan it does not own", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      const intruder = yield* openPlan;
+      yield* apart(userId, planId, [
+        [PLAN_FIELD.PROBLEM, "Only admins can invite."],
+        [PLAN_FIELD.OUTCOME, "Members invite by email."],
+      ]);
+      const before = yield* contentOf(userId, planId);
+
+      assert.deepEqual(yield* restoreRevision({ userId: intruder.userId, planId }, 1), {
+        status: PLAN_SAVE_STATUS.NOT_SAVED,
+        reason: PLAN_SAVE_REFUSAL.NO_REVISION,
+      });
+      assert.deepEqual(yield* contentOf(userId, planId), before);
+      assert.equal((yield* revisionsOf(userId, planId)).length, 2);
+    }),
+  );
+
+  it.effect(
+    "the history reads a page at a time, the page before naming where it is read from",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const saves = PLAN_HISTORY_BOUNDS.PAGE + 1;
+        yield* apart(
+          userId,
+          planId,
+          Array.from(
+            { length: saves },
+            (_, at) => [PLAN_FIELD.DECISIONS, `Decision ${at + 1}.`] as const,
+          ),
+        );
+
+        const newest = yield* listRevisions(userId, planId);
+        const older = yield* listRevisions(userId, planId, newest.earlier);
+
+        assert.equal(newest.revisions.length, PLAN_HISTORY_BOUNDS.PAGE);
+        assert.equal(newest.revisions[0]?.seq, saves);
+        assert.equal(newest.earlier, 2);
+        assert.deepEqual(
+          older.revisions.map(({ seq }) => seq),
+          [1],
+        );
+        assert.equal(older.earlier, undefined);
+      }),
   );
 });

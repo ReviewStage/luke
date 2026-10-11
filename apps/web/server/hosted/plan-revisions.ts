@@ -1,6 +1,16 @@
-import { type PlanContent, planFieldsSchema } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, type PlanLastEdit, planAssumptionSchema } from "@sidecar/hosted/plan-wire";
-import { and, desc, eq } from "drizzle-orm";
+import { type PlanContent, planBody, planFieldsSchema } from "@sidecar/hosted/plan-template";
+import {
+  PLAN_ACTOR,
+  PLAN_HISTORY_BOUNDS,
+  type PlanDocument,
+  type PlanLastEdit,
+  type PlanRevisionAnswer,
+  type PlanRevisionLine,
+  type PlanRevisionsAnswer,
+  planAssumptionSchema,
+} from "@sidecar/hosted/plan-wire";
+import { and, desc, eq, inArray, lt } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -22,7 +32,11 @@ import { InstantColumnSchema } from "./store/database.js";
  * revision's latest save is a few minutes old at most. A plan
  * that was written before history began has no revision for that content, so
  * the first save that finds it records it first, under `earlier`, at the
- * plan's last save, and the save after it has something to differ from.
+ * plan's last save, and the save after it has something to differ from. The
+ * developer restoring a revision is a save like any other, kept as a revision
+ * of its own that names the one it brought back; it joins nothing before it,
+ * and nothing after it joins it, so each restore stands in the history, and
+ * a restore is undone by restoring the revision before it.
  *
  * A save is recorded for a plan id handed by a caller that already holds the
  * account's own row under its lock; the history is read under the account,
@@ -38,10 +52,15 @@ export const PLAN_REVISION = {
 /** How an agent whose row is gone is named: a discarded start, or a row from before the journal. */
 export const UNKNOWN_AGENT_LABEL = "a coding agent";
 
-/** Who made a save: the notetaker, on the call it listens to where it has one, or a coding agent. */
+/**
+ * Who made a save: the notetaker, on the call it listens to where it has
+ * one, a coding agent, or the developer, with the revision they restored
+ * where the save is that restore.
+ */
 export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.NOTETAKER; readonly liveSessionId?: string }
-  | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string };
+  | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
+  | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
 /** One save to record: the plan, its writer, its content before and after, and how many changes it made. */
 export interface PlanSaveRecord {
@@ -63,6 +82,7 @@ const RevisionRowSchema = Schema.Struct({
   liveSessionId: Schema.NullOr(Schema.String),
   changes: Schema.Number,
   at: InstantColumnSchema,
+  restoredFrom: Schema.NullOr(Schema.Number),
 });
 
 type RevisionRow = typeof RevisionRowSchema.Type;
@@ -79,6 +99,7 @@ const findNewestRevision = SqlSchema.findOneOption({
         liveSessionId: planRevision.liveSessionId,
         changes: planRevision.changes,
         at: planRevision.at,
+        restoredFrom: planRevision.restoredFrom,
       })
       .from(planRevision)
       .where(eq(planRevision.planId, planId))
@@ -98,6 +119,7 @@ const insertRevision = SqlSchema.void({
     changes: Schema.Number,
     startedAt: Schema.Date,
     at: Schema.Date,
+    restoredFrom: Schema.NullOr(Schema.Number),
   }),
   execute: (revision) => db.insert(planRevision).values(revision),
 });
@@ -145,28 +167,33 @@ const findLastEdit = SqlSchema.findOneOption({
       .limit(1),
 });
 
-/** One revision as the plan's history lists it, the newest first. */
-export interface PlanRevisionLine {
-  readonly seq: number;
-  readonly lastEdit: PlanLastEdit;
-  /** Epoch milliseconds of the revision's first save. */
-  readonly startedAt: number;
-  readonly changes: number;
-}
+/** The revision a restore brought back, read beside the restore that names it. */
+const restored = alias(planRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
   changes: Schema.Number,
+  restoredFrom: Schema.NullOr(Schema.Number),
+  restoredAt: Schema.NullOr(InstantColumnSchema),
 });
 
 type LastEditRow = typeof LastEditRowSchema.Type;
 
+/**
+ * A page of the account's plan's revisions, the newest first, before the one
+ * `before` names where it names one, with one past the page read to say
+ * whether an older page stands.
+ */
 const findRevisionLines = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planId: Schema.String,
+    before: Schema.NullOr(Schema.Number),
+  }),
   Result: RevisionLineRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, planId, before }) =>
     db
       .select({
         actor: planRevision.actor,
@@ -177,12 +204,59 @@ const findRevisionLines = SqlSchema.findAll({
         seq: planRevision.seq,
         startedAt: planRevision.startedAt,
         changes: planRevision.changes,
+        restoredFrom: planRevision.restoredFrom,
+        restoredAt: restored.at,
       })
       .from(planRevision)
       .innerJoin(plan, eq(plan.id, planRevision.planId))
       .leftJoin(codingAgent, eq(codingAgent.id, planRevision.agentId))
-      .where(and(eq(planRevision.planId, planId), eq(plan.userId, userId)))
-      .orderBy(desc(planRevision.seq)),
+      .leftJoin(
+        restored,
+        and(eq(restored.planId, planRevision.planId), eq(restored.seq, planRevision.restoredFrom)),
+      )
+      .where(
+        and(
+          eq(planRevision.planId, planId),
+          eq(plan.userId, userId),
+          before === null ? undefined : lt(planRevision.seq, before),
+        ),
+      )
+      .orderBy(desc(planRevision.seq))
+      .limit(PLAN_HISTORY_BOUNDS.PAGE + 1),
+});
+
+const RevisionContentRowSchema = Schema.Struct({
+  seq: Schema.Number,
+  name: Schema.String,
+  fields: planFieldsSchema,
+  assumptions: Schema.Array(planAssumptionSchema),
+});
+
+/** The content of the account's plan at each revision named, with the plan's name as it stands now. */
+const findRevisionContents = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planId: Schema.String,
+    seqs: Schema.Array(Schema.Number),
+  }),
+  Result: RevisionContentRowSchema,
+  execute: ({ userId, planId, seqs }) =>
+    db
+      .select({
+        seq: planRevision.seq,
+        name: plan.name,
+        fields: planRevision.fields,
+        assumptions: planRevision.assumptions,
+      })
+      .from(planRevision)
+      .innerJoin(plan, eq(plan.id, planRevision.planId))
+      .where(
+        and(
+          eq(planRevision.planId, planId),
+          eq(plan.userId, userId),
+          inArray(planRevision.seq, [...seqs]),
+        ),
+      ),
 });
 
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
@@ -207,9 +281,20 @@ function callOf(writer: PlanWriter): string | null {
   return writer.actor === PLAN_ACTOR.NOTETAKER ? (writer.liveSessionId ?? null) : null;
 }
 
-/** Whether a save by the writer, now, joins the newest revision rather than starting one. */
+/** The revision the writer restored, where the save is the developer's restore of one. */
+function restoredOf(writer: PlanWriter): number | null {
+  return writer.actor === PLAN_ACTOR.DEVELOPER ? (writer.restoredFrom ?? null) : null;
+}
+
+/**
+ * Whether a save by the writer, now, joins the newest revision rather than
+ * starting one. Note that a restore joins nothing and nothing joins it,
+ * because each is the one revision that undoes it.
+ */
 function joins(newest: RevisionRow, writer: PlanWriter, now: Date): boolean {
   return (
+    newest.restoredFrom === null &&
+    restoredOf(writer) === null &&
     newest.actor === writer.actor &&
     newest.agentId === agentOf(writer) &&
     newest.liveSessionId === callOf(writer) &&
@@ -241,6 +326,7 @@ function recordEarlier(
           changes: 0,
           startedAt: at,
           at,
+          restoredFrom: null,
         }),
         1,
       ),
@@ -282,6 +368,7 @@ export function recordRevision(
       changes: record.changes,
       startedAt: now,
       at: now,
+      restoredFrom: restoredOf(writer),
     });
   });
 }
@@ -298,19 +385,75 @@ export function readLastEdit(
 }
 
 /**
- * Every revision of the account's plan, the newest first; none for a plan
- * with no history yet, and for a plan id the account does not own.
+ * A page of the account's plan's revisions, the newest first, before the
+ * revision `before` names where it names one, and what the next older page
+ * is read before where one stands; no revision for a plan with no history
+ * yet, and for a plan id the account does not own.
  */
 export function listRevisions(
   userId: string,
   planId: string,
-): Effect.Effect<readonly PlanRevisionLine[], RevisionFailure, SqlClient.SqlClient> {
-  return Effect.map(findRevisionLines({ userId, planId }), (rows) =>
-    rows.map((row) => ({
-      seq: row.seq,
-      lastEdit: lastEditOf(row),
-      startedAt: row.startedAt.getTime(),
-      changes: row.changes,
+  before?: number,
+): Effect.Effect<PlanRevisionsAnswer, RevisionFailure, SqlClient.SqlClient> {
+  return Effect.map(findRevisionLines({ userId, planId, before: before ?? null }), (rows) => {
+    const page = rows.slice(0, PLAN_HISTORY_BOUNDS.PAGE);
+    const revisions = page.map(
+      (row): PlanRevisionLine => ({
+        seq: row.seq,
+        lastEdit: lastEditOf(row),
+        startedAt: row.startedAt.getTime(),
+        changes: row.changes,
+        ...(row.restoredFrom === null || row.restoredAt === null
+          ? undefined
+          : { restoredFrom: { seq: row.restoredFrom, at: row.restoredAt.getTime() } }),
+      }),
+    );
+    const oldest = page.at(-1);
+    return rows.length > page.length && oldest !== undefined
+      ? { revisions, earlier: oldest.seq }
+      : { revisions };
+  });
+}
+
+/** The account's plan's content at one revision; nothing where it has no such revision, or the account owns no such plan. */
+export function readRevisionContent(
+  userId: string,
+  planId: string,
+  seq: number,
+): Effect.Effect<Option.Option<PlanContent>, RevisionFailure, SqlClient.SqlClient> {
+  return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
+    Option.map(Option.fromNullishOr(rows[0]), ({ fields, assumptions }) => ({
+      fields,
+      assumptions,
     })),
   );
+}
+
+/**
+ * One revision of the account's plan as the History tab shows it: the plan
+ * after it and before it, the first revision having nothing before it, each
+ * formatted under the plan's name as it stands now; nothing where the plan
+ * has no such revision, or the account owns no such plan.
+ */
+export function readRevision(
+  userId: string,
+  planId: string,
+  seq: number,
+): Effect.Effect<
+  Option.Option<PlanRevisionAnswer["revision"]>,
+  RevisionFailure,
+  SqlClient.SqlClient
+> {
+  return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
+    const documentAt = (at: number): PlanDocument | null => {
+      const row = rows.find((each) => each.seq === at);
+      return row === undefined
+        ? null
+        : { body: planBody({ name: row.name }, row.fields), assumptions: row.assumptions };
+    };
+    const document = documentAt(seq);
+    return document === null
+      ? Option.none()
+      : Option.some({ seq, document, previous: documentAt(seq - 1) });
+  });
 }

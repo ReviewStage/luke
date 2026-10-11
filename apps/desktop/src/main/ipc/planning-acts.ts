@@ -6,6 +6,10 @@ import type {
   PlanningPinParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
+  PlanningRevisionAnswer,
+  PlanningRevisionParams,
+  PlanningRevisionsAnswer,
+  PlanningRevisionsParams,
   PlanningSetRepositoryAnswer,
   PlanningSetRepositoryParams,
   PlanningStartAnswer,
@@ -41,6 +45,9 @@ export interface PlanningActsDependencies {
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
+    planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
+    planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
+    planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
   };
   /** Opens an address in the browser; the act's own schema admits GitHub's addresses alone. */
   openExternal: (url: string) => Promise<void>;
@@ -67,7 +74,10 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
-  | typeof ACT_KIND.PLANNING_FILE;
+  | typeof ACT_KIND.PLANNING_FILE
+  | typeof ACT_KIND.PLANNING_REVISIONS
+  | typeof ACT_KIND.PLANNING_REVISION
+  | typeof ACT_KIND.PLANNING_RESTORE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
@@ -154,6 +164,18 @@ export function planningActRows(
     [ACT_KIND.PLANNING_FILE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);
       return host.planningFile(params);
+    },
+    [ACT_KIND.PLANNING_REVISIONS]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_REVISIONS, sender);
+      return host.planningRevisions(params);
+    },
+    [ACT_KIND.PLANNING_REVISION]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_REVISION, sender);
+      return host.planningRevision(params);
+    },
+    [ACT_KIND.PLANNING_RESTORE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_RESTORE, sender);
+      return host.planningRestore(params);
     },
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
