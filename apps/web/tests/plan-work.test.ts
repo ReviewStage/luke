@@ -27,7 +27,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -189,6 +189,7 @@ const VALID_INPUT: ReadonlyMap<string, WireRecord> = new Map<string, WireRecord>
   [READ_WEB_PAGE_TOOL.name, { url: "https://example.com/docs" }],
   [SHOW_CODE_TOOL.name, { path: "src/invite.ts" }],
   [QUEUE_QUESTION_TOOL.name, { question: "Who can invite?", recommendation: "Admins only." }],
+  [WITHDRAW_QUESTION_TOOL.name, { question: "Who can invite?" }],
   [
     DRAW_ON_BOARD_TOOL_NAME,
     { elements: [{ type: BOARD_ELEMENT_TYPE.RECTANGLE, id: "api", x: 0, y: 0, label: "API" }] },

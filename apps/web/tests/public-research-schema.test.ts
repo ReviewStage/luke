@@ -29,7 +29,7 @@ test("read_web_page offers exactly a bounded URL, with no header or credential t
   );
 });
 
-test("queue_question offers exactly a bounded question and recommendation, with nothing else to carry", async () => {
+test("queue_question offers exactly a bounded question and recommendation, and the code it is about", async () => {
   await settleJsonSchemaGolden(
     ROOT,
     "queue-question-tool-input",

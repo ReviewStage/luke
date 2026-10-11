@@ -144,12 +144,11 @@ function progressNote(step: string | undefined, settled: number): string {
 
 /**
  * A question the planning model queued, as the voice is handed it: spoken
- * commentary, as the delegation guide has a result the voice should say,
- * framed so the voice puts one question at a time and holds the rest until
- * the developer has answered what it already asked.
+ * commentary, as the delegation guide has a result the voice should say.
+ * The service hands one at a time, so the note asks for this one alone.
  */
 function queuedQuestionNote(question: string, recommendation: string): string {
-  return `Ask the developer this next, one question at a time, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
+  return `Ask the developer this next, once they have answered anything you have already asked: ${question} Recommended answer: ${recommendation}`;
 }
 
 /** Where code on screen is, as the voice is told it: the file and the lines lit, if any. */
@@ -237,6 +236,13 @@ interface RetainedDelegation {
   offsetMs: number;
 }
 
+/** A question the planning model queued, waiting in its session until the voice is handed it. */
+interface HeldQuestion {
+  readonly question: string;
+  readonly recommendation: string;
+  readonly code?: CodeRef;
+}
+
 interface StandingSession {
   sessionId: string;
   sideband: LiveSideband;
@@ -289,6 +295,15 @@ interface StandingSession {
    * replaces any still held.
    */
   pendingCode: { readonly ref: CodeRef; readonly delegationId: LiveDelegationId } | undefined;
+  /**
+   * The questions the planning model queued that the voice has not been
+   * handed yet, oldest first, and whether the voice holds one the developer
+   * has not answered. Note that the voice is handed one at a time and the
+   * next once the developer delegates again, because a voice handed the
+   * whole queue read several out in a row.
+   */
+  questions: HeldQuestion[];
+  holdingQuestion: boolean;
   /**
    * The session's last word, settled by its own reader: the `session.closed`
    * it read, or the close that ended the arrivals before one came. The
@@ -868,6 +883,8 @@ export class LiveSessionService {
         openAsks: new Map(),
         voicePhase: undefined,
         pendingCode: undefined,
+        questions: [],
+        holdingQuestion: false,
         retained: [],
         revisions: 0,
         stops: 0,
@@ -1227,6 +1244,8 @@ export class LiveSessionService {
       // ask is with the brain either way, and the developer is told nothing of
       // the record.
       const exchange = this.#registerExchange(session, submission.runId, delegationId, asked);
+      // The delegation is the developer's answer to the question the voice held, if any.
+      session.holdingQuestion = false;
       if (rowIds.length > 0) {
         exchange.pendingRecord = true;
         yield* this.#attachAsk(session, delegationId, rowIds);
@@ -1237,6 +1256,8 @@ export class LiveSessionService {
       // says next. A follow-up whose words joined the first ask's row has
       // none of its own.
       this.#replayDeferred(session.sessionId);
+      // The next question goes to the voice now, not after the brain has thought about the answer.
+      if (!exchange.silenced) this.#handQuestion(session, this.#delegationOf(exchange));
     });
   }
 
@@ -1419,11 +1440,24 @@ export class LiveSessionService {
         exchange.progressNotes += 1;
         this.#think(exchange, progressNote(event.step, event.settled));
         return;
-      // A queued question is no action's result, so it is spoken without waiting on the settle,
-      // and it is the plan's next question rather than the reply, so a silenced run still hands it on.
-      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
-        this.#speakFor(exchange, queuedQuestionNote(event.question, event.recommendation));
+      // A queued question is no action's result, so it waits on no settle, and it is the plan's next
+      // question rather than the reply, so a silenced run still queues it.
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
+        const session = this.#sessionOf(exchange);
+        if (!session) return;
+        const { question, recommendation, code } = event;
+        session.questions.push(
+          code === undefined ? { question, recommendation } : { question, recommendation, code },
+        );
+        if (!session.holdingQuestion) this.#handQuestion(session, this.#delegationOf(exchange));
         return;
+      }
+      case LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN: {
+        const session = this.#sessionOf(exchange);
+        if (session)
+          session.questions = session.questions.filter((held) => held.question !== event.question);
+        return;
+      }
       // Code is held for the words it belongs to, which start with Luke's next answer.
       case LIVE_BRAIN_RUN_EVENT.CODE_SHOWN: {
         const session = this.#sessionOf(exchange);
@@ -1506,6 +1540,18 @@ export class LiveSessionService {
     }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
     this.#reportStatus();
+  }
+
+  /**
+   * Hands the voice the session's next queued question, if one waits, under
+   * the delegation it answers now; its code is held for the words that ask it.
+   */
+  #handQuestion(session: StandingSession, delegationId: LiveDelegationId): void {
+    const next = session.questions.shift();
+    if (next === undefined) return;
+    session.holdingQuestion = true;
+    if (next.code !== undefined) session.pendingCode = { ref: next.code, delegationId };
+    this.#speakInto(session, delegationId, queuedQuestionNote(next.question, next.recommendation));
   }
 
   /**

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@sidecar/hosted";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -24,7 +25,7 @@ import {
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -353,7 +354,7 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
 function toolPart(
   name: string,
   callId: string,
-  input: Readonly<Record<string, string | number>> = {},
+  input: Readonly<Record<string, string | number | CodeRef>> = {},
   state = "input-available",
 ): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
@@ -434,6 +435,35 @@ test("the projection: code a planning call shows is told by place, in order with
     [
       { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, ...shown },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+    ],
+  );
+});
+
+test("the projection: a queued question carries its code, a withdrawal is told by the question's words, and a question whose code does not read is not told", () => {
+  const code = { path: "src/invite.ts", startLine: 40, endLine: 58 };
+  const queued = { question: "Move the check here?", recommendation: "Yes.", code };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(QUEUE_QUESTION_TOOL.name, "c1", queued),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c2", {
+          question: "And here?",
+          recommendation: "No.",
+          code: { path: "src/a.ts", startLine: 9, endLine: 2 },
+        }),
+        toolPart(WITHDRAW_QUESTION_TOOL.name, "c3", { question: "Re-send it?" }),
+        toolPart(WITHDRAW_QUESTION_TOOL.name, "c4", { question: "" }),
+      ]),
+    ),
+    [
+      { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
+      {
+        turnId: TURN.id,
+        seq: 2,
+        kind: TURN_EVENT_KIND.QUESTION_WITHDRAWN,
+        question: "Re-send it?",
+      },
     ],
   );
 });

@@ -17,6 +17,8 @@ export const TURN_EVENT_KIND = {
   SLOW_STEP: "slow_step",
   /** A planning turn queued one question for the voice to ask when it reaches it; told as the call is journaled, before the turn ends. */
   QUESTION_QUEUED: "question_queued",
+  /** A planning turn took back a question it queued that an answer made moot, by its words; told as the call is journaled. */
+  QUESTION_WITHDRAWN: "question_withdrawn",
   /** A planning turn put code of the plan's folder on screen, by place; told as the call is journaled, before the turn ends. */
   CODE_SHOWN: "code_shown",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
@@ -63,7 +65,10 @@ export type TurnEventBody =
       readonly kind: typeof TURN_EVENT_KIND.QUESTION_QUEUED;
       readonly question: string;
       readonly recommendation: string;
+      /** Code the question is about, shown as the voice asks it. */
+      readonly code?: CodeRef;
     }
+  | { readonly kind: typeof TURN_EVENT_KIND.QUESTION_WITHDRAWN; readonly question: string }
   | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
