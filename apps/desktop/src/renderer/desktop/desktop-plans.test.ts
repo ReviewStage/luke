@@ -3122,10 +3122,10 @@ it.effect(
       // A transcript the service would not read says so too, though nothing reached the clipboard.
       clipboard.refuse(false);
       transcriptsUnread = true;
-      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+      chooseFromTab(tabNamed(page, "Opus 5.5"), "Copy concise transcript");
       yield* landed;
       assert.equal(toast(), "The transcript could not be copied. Try again.");
-      assert.deepEqual(clipboard.copied, ["# Claude Opus 5.5\n\n## Agent\n\nAll green.\n"]);
+      assert.deepEqual(clipboard.copied, ["# Opus 5.5\n\n## Agent\n\nAll green.\n"]);
     }),
 );
 
