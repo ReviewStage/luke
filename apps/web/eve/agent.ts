@@ -12,7 +12,11 @@ import { scriptedModel } from "./scripted-model.js";
  * offered here, because every tool the brain has is one the planning model
  * declares. A session has no lifetime of eve's own:
  * the conversation's rows are the record, and a session rotates when the
- * host decides, never when a clock runs out. The model is chosen per
+ * host decides, never when a clock runs out. Nor has it a token budget of
+ * eve's: eve's default caps a root's input tokens and hands each subagent a
+ * share of what remains, and the worker's turns resend their whole context
+ * every step, so an ordinary call's worker reached a budget in minutes. An
+ * uncapped root delegates uncapped workers. The model is chosen per
  * inference, so the account's daily meter is spent once for each.
  */
 
@@ -49,7 +53,7 @@ export function brainModel(admit: Admission) {
 
 export default defineAgent({
   defaultTools: false,
-  limits: { sessionTimeoutMs: false },
+  limits: { maxInputTokensPerSession: false, sessionTimeoutMs: false },
   compaction: { thresholdPercent: BRAIN_HOST.COMPACTION_THRESHOLD },
   model: brainModel(host.admit),
 });

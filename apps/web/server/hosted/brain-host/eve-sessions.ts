@@ -222,9 +222,23 @@ export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
   cancel(sessionId: string, eveTurnId: string): Effect.Effect<EveCancelled, EveUnreachable>;
 }
 
-/** What the host posts to eve: the message a turn opens with, or the turn a cancel is scoped to. */
+/**
+ * What a session is opened able to do: never ask a human. eve opens a
+ * session that names no capabilities as one that can, and a session that
+ * can answers its token budget's end by parking on a prompt for an Approve
+ * or a Stop rather than failing, and every subagent it delegates to
+ * inherits that. Luke reads no such prompt and answers none, so a worker
+ * past its per-session budget parked on one for good and held the
+ * planning turn waiting on its result with it. Declared unable, the next
+ * model call past the budget fails as `SESSION_TOKEN_LIMIT_REACHED`, and
+ * the caller's task comes back failed, so the turn goes on without it.
+ */
+const SESSION_CAPABILITIES = { requestInput: false } as const;
+
+/** What the host posts to eve: the message a turn opens with and, on an open, what the session may do, or the turn a cancel is scoped to. */
 interface EvePostBody {
   readonly message?: string;
+  readonly capabilities?: typeof SESSION_CAPABILITIES;
   readonly turnId?: string;
 }
 
@@ -361,7 +375,10 @@ function sessionsOver<Turn extends BrainHostTurn>(
   return {
     open: (message) =>
       Effect.map(
-        post(sessionsPath(mount), turnHeaders(message), { message: message.message }),
+        post(sessionsPath(mount), turnHeaders(message), {
+          message: message.message,
+          capabilities: SESSION_CAPABILITIES,
+        }),
         readOpened,
       ),
     // The not-ready follow-up is tried again on the schedule above, and one still not ready past
