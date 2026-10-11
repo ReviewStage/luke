@@ -260,7 +260,8 @@ export function AgentTranscriptView({
     const plan = messages.find((message) => message.role === MESSAGE_ROLE.USER);
     return (
       <Conversation>
-        <ConversationContent>
+        {/* The plan's card stands off the tab row by the gap between a column's groups. */}
+        <ConversationContent className="pt-(--section-gap)">
           {messages.map((message, index) => (
             <AgentMessage
               key={message.id}

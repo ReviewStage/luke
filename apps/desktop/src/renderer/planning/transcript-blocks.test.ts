@@ -80,6 +80,7 @@ function agentCall(id: string, command: string): CodingAgentMessage["parts"][num
 function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement])[] {
   const work = createElement(PlanWork, {
     callLive: false,
+    onOpenSubagent: () => undefined,
     turns: [
       {
         turnId: "turn-1",

@@ -114,7 +114,7 @@ export function Tool({ className, children, ...props }: ToolProps): ReactNode {
 }
 
 /** Where the call stands, in a 16px seat of its own: a spinner, a quiet check, or a red mark. */
-function ToolStateMark({ state }: { state: ToolState }): ReactNode {
+export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   return (
     <span
       className="flex size-4 shrink-0 items-center justify-center"

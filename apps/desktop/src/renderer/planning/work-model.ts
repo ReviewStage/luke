@@ -63,6 +63,8 @@ export type WorkBlock =
   | {
       kind: typeof WORK_BLOCK.WORKER;
       call: WorkCallRow;
+      /** The whole message the subagent was handed, which its line cuts to its job; the job where the input carries none. */
+      task: string;
       /** The subagent's own session as rows, drawn the way a turn is; absent before any of it was read. */
       session?: WorkSessionRow;
     };
@@ -140,12 +142,24 @@ export function workerCallIds(turns: readonly PlanWorkTurn[] | undefined): reado
   );
 }
 
-/** The command a repository call's input carries, which its body draws behind a prompt; nothing where the text is not that JSON. */
-function commandOf(input: string): string | undefined {
+/** The fields of a call's input the tab reads apart from the rest. */
+const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message" } as const;
+
+type InputField = (typeof INPUT_FIELD)[keyof typeof INPUT_FIELD];
+
+/**
+ * One string field of a call's input: the command a repository call runs,
+ * which its body draws behind a prompt, or the message a subagent was
+ * handed, which the service cuts to a subject on its line but carries
+ * whole in the input. Nothing where the text is not that JSON.
+ */
+function inputField(input: string, field: InputField): string | undefined {
   try {
     // SAFETY: the text is the JSON the service rendered the call's input to, which is a wire value or nothing.
     const parsed = JSON.parse(input) as UnparsedWireValue;
-    return isRecord(parsed) && isWireString(parsed.command) ? parsed.command : undefined;
+    if (!isRecord(parsed)) return undefined;
+    const value = parsed[field];
+    return isWireString(value) ? value : undefined;
   } catch {
     return undefined;
   }
@@ -153,7 +167,7 @@ function commandOf(input: string): string | undefined {
 
 /** A call's input as its body draws it: a command behind its prompt, anything else as the words the frame carried. */
 function inputBlock(kind: CallKind, input: string): ToolBlock {
-  const command = kind === CALL_KIND.COMMAND ? commandOf(input) : undefined;
+  const command = kind === CALL_KIND.COMMAND ? inputField(input, INPUT_FIELD.COMMAND) : undefined;
   return command === undefined
     ? { kind: TOOL_BLOCK.TEXT, text: input }
     : { kind: TOOL_BLOCK.COMMAND, text: command };
@@ -204,6 +218,7 @@ function rowsOf(
     return {
       kind: WORK_BLOCK.WORKER,
       call,
+      task: inputField(part.input, INPUT_FIELD.MESSAGE) ?? workerJob(call),
       ...(part.session === undefined
         ? undefined
         : {
@@ -255,21 +270,16 @@ function workerNamed(
 }
 
 /**
- * The subagent the developer opened, by the calls that lead to it,
- * outermost first: the worker the first names in the turns, then the one the
- * next names in that worker's session, and so on. Nothing once the rows no
- * longer hold one of them, so the tab falls back to every turn.
+ * The worker a call id names among the turns, at a turn's level or inside
+ * a finished turn's fold; nothing once the turns no longer hold it, so a
+ * subagent's tab stands for a session the work has let go of.
  */
-export function openedWorker(
+export function workerOf(
   turns: readonly WorkTurnRow[],
-  opened: readonly string[],
+  callId: string,
 ): WorkWorkerBlock | undefined {
-  let rows: readonly TurnRow<WorkBlock>[] = turns.flatMap((turn) => turn.rows);
-  let worker: WorkWorkerBlock | undefined;
-  for (const callId of opened) {
-    worker = workerNamed(rows, callId);
-    if (worker === undefined) return undefined;
-    rows = worker.session?.rows ?? [];
-  }
-  return worker;
+  return workerNamed(
+    turns.flatMap((turn) => turn.rows),
+    callId,
+  );
 }

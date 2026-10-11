@@ -15,6 +15,7 @@ import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/ho
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { builtStylesheet, cssRules, ownDeclarations } from "#testing/css-rules";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentTabView } from "./agent-tab";
 import { useAgentComposer } from "./use-agent-composer";
@@ -74,6 +75,17 @@ const MODELS: readonly CatalogModel[] = [
 ];
 
 const PLACEHOLDER = "Message the agent…";
+
+/** What would draw a bar across the panel between the transcript and the box: a rule at a box's edge, or a shadow cast over the lines above. */
+const BAR_PROPERTIES: ReadonlySet<string> = new Set([
+  "border",
+  "border-top",
+  "border-top-width",
+  "border-block",
+  "border-block-start",
+  "border-width",
+  "box-shadow",
+]);
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
@@ -482,4 +494,28 @@ test("the model chip names the agent's model and effort, with Fast where it runs
   assert.equal(tab.chip(), "GPT-6.1 Sol · Low", "rolled back to what the agent runs on");
   assert.match(tab.note() ?? "", /isn't offered any more/u);
   assert.equal(tab.retry(), null, "the chip is the retry");
+});
+
+test("no bar stands between the transcript and the box: nothing that holds the card under the log draws a rule or a shadow", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  const section = tab.container.querySelector(".agent-tab");
+  assert.ok(section);
+  const holders: Element[] = [];
+  for (
+    let at = tab.container.querySelector(".agent-composer");
+    at !== null && at !== section;
+    at = at.parentElement
+  ) {
+    holders.push(at);
+  }
+  assert.ok(holders.length >= 2, "the box and the room it stands in");
+  const drawn = holders.flatMap((holder) =>
+    ownDeclarations(rules, holder)
+      .filter(
+        ({ property, value }) => BAR_PROPERTIES.has(property) && value !== "none" && value !== "0",
+      )
+      .map(({ selector, property, value }) => `${selector} { ${property}: ${value} }`),
+  );
+  assert.deepEqual(drawn, []);
 });

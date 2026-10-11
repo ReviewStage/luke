@@ -10,7 +10,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
 import { CALL_KIND, TURN_ROW, type TurnRow } from "./turn-rows";
-import { openedWorker, WORK_BLOCK, type WorkBlock, workRowsOf } from "./work-model";
+import { WORK_BLOCK, type WorkBlock, workerOf, workRowsOf } from "./work-model";
 
 /** A call of `tool` about `subject`, at `state`. */
 function call(
@@ -163,7 +163,7 @@ test("each call is its kind with its subject, a command's body the command itsel
   );
 });
 
-test("a worker's session is walked into blocks the way a turn is, each call on its own line, and opening it finds it inside a finished turn's fold", () => {
+test("a worker's session is walked into blocks the way a turn is, each call on its own line, and its tab finds it inside a finished turn's fold", () => {
   const worker = {
     ...call("w", PLAN_WORK_TOOL.WORKER, "Compare the queues."),
     session: {
@@ -180,13 +180,25 @@ test("a worker's session is walked into blocks the way a turn is, each call on i
     false,
   );
 
-  const opened = openedWorker(rows, ["w"]);
+  const opened = workerOf(rows, "w");
   assert.ok(opened?.session);
   assert.deepEqual(scanned(opened.session.rows), [
     [WORK_BLOCK.CALL, "queue revoke api"],
     [WORK_BLOCK.CALL, "example.com/queue-a"],
     [WORK_BLOCK.TEXT, "Queue A lets an admin revoke."],
   ]);
-  assert.equal(openedWorker(rows, ["w", "gone"]), undefined);
-  assert.equal(openedWorker(rows, ["gone"]), undefined);
+  assert.equal(workerOf(rows, "gone"), undefined);
+});
+
+test("a worker's task is the whole message it was handed, which its subject cuts, and its job where the input carries none", () => {
+  const message = `Compare the queues. ${"Read each README in full. ".repeat(20)}`;
+  const handed = {
+    ...call("w", PLAN_WORK_TOOL.WORKER, `${message.slice(0, 40)}…`),
+    input: JSON.stringify({ message }, null, 2),
+  };
+  const unread = call("v", PLAN_WORK_TOOL.WORKER, "Find the admin check.");
+  const rows = workRowsOf([turn(PLAN_WORK_STATE.RUNNING, [handed, unread])], true);
+
+  assert.equal(workerOf(rows, "w")?.task, message);
+  assert.equal(workerOf(rows, "v")?.task, "Find the admin check.");
 });
