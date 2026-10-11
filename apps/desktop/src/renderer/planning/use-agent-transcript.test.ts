@@ -83,7 +83,7 @@ function mount(initial: Standing) {
       agentId: AGENT,
       status: held.status,
       shown: held.shown,
-      read: (_agentId, after) =>
+      read: ({ after }) =>
         new Promise((answer) => {
           reads.push({ after, answer });
         }),

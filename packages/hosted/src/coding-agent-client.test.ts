@@ -227,6 +227,37 @@ it.effect("reads the transcript past the cursor at the agent's messages address"
   }),
 );
 
+it.effect("reads a worker's transcript under the agent and the call that started it", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`GET /api/agents/${AGENT_ID}/subagents/call-7/messages`]: {
+        answer: () => ({
+          messages: [],
+          cursor: "1:0",
+          status: CODING_AGENT_STATUS.COMPLETED,
+          title: null,
+        }),
+      },
+    });
+
+    const page = yield* Effect.provide(
+      client().messages(AGENT_ID, CODING_AGENT_CURSOR_START, "call-7"),
+      api.layer,
+    );
+
+    assert.deepEqual(page, {
+      messages: [],
+      cursor: "1:0",
+      status: CODING_AGENT_STATUS.COMPLETED,
+      title: null,
+    });
+    assert.equal(
+      api.requests()[0]?.url,
+      `https://tryluke.dev/api/agents/${AGENT_ID}/subagents/call-7/messages?after=${encodeURIComponent(CODING_AGENT_CURSOR_START)}`,
+    );
+  }),
+);
+
 it.effect(
   "messages an agent with its words under the send's key, and answers it running; each refusal the route names reads as its own failure",
   () =>

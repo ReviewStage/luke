@@ -116,12 +116,12 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   // Opened again, the one open is chosen rather than a second added.
   act(() => first.control().onChoose({ subagent: OTHER_CALL }));
   act(() => first.control().onChoose({ subagent: CALL }));
-  assert.deepEqual(first.control().subagents, [CALL, OTHER_CALL]);
+  assert.deepEqual(first.control().subagents, [{ subagent: CALL }, { subagent: OTHER_CALL }]);
   assert.deepEqual(first.control().tab, { subagent: CALL });
 
   // Closing the chosen one chooses the subagent after it; closing the last, the plan's last agent.
   act(() => first.control().onClose({ subagent: CALL }));
-  assert.deepEqual(first.control().subagents, [OTHER_CALL]);
+  assert.deepEqual(first.control().subagents, [{ subagent: OTHER_CALL }]);
   assert.deepEqual(first.control().tab, { subagent: OTHER_CALL });
 
   // Another plan, with no work read or no turn, shows the board; the call back shows the tab again.
@@ -138,6 +138,26 @@ test("a subagent's tab opens from its call once and is chosen, closes to its nei
   const second = mount(undefined);
   assert.deepEqual(second.control().subagents, []);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
+test("a delegated worker's tab is held to the plan's agents: it stands while they are unread or hold its agent, reads as the first tab on another plan's, and closes to its agent", () => {
+  const delegated = { subagent: CALL, delegation: { agent: AGENT, task: "Count the routes." } };
+  const panel = mount([AGENT]);
+  act(() => panel.control().onChoose(delegated));
+  assert.deepEqual(panel.control().tab, delegated);
+  // Chosen again it is the one tab open; the planning worker's call of the same name is another tab, as the service names the two apart.
+  act(() => panel.control().onChoose({ ...delegated }));
+  assert.deepEqual(panel.control().subagents, [delegated]);
+  assert.equal(sameTab(delegated, { subagent: CALL }), false);
+
+  panel.stand([OTHER]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.BOARD);
+  panel.stand(undefined);
+  assert.deepEqual(panel.control().tab, delegated);
+  panel.stand([AGENT]);
+  act(() => panel.control().onClose(delegated));
+  assert.deepEqual(panel.control().subagents, []);
+  assert.deepEqual(panel.control().tab, { agent: AGENT });
 });
 
 test("with no agent, closing the last fixed tab chooses a subagent tab the plan draws, and a closed subagent's neighbour is one the plan's work holds, never another plan's", () => {

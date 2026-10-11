@@ -462,6 +462,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
           agentId: params.agentId,
           after: params.after,
+          ...("callId" in params ? { callId: params.callId } : undefined),
         }),
         codingAgentAnswer(codingAgentMessagesAnswerViewSchema),
       ),

@@ -15,12 +15,13 @@ import {
   type CodingAgentUsage,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { PublishedChip, PublishedRow } from "./agent-published";
-import { AgentTabView, AgentTranscriptView } from "./agent-tab";
+import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
 const PLAN: CodingAgentMessage = {
   id: "m-plan",
@@ -244,6 +245,93 @@ function mounted(
   });
   return container;
 }
+
+const SONNET: CatalogModel = {
+  id: "anthropic/claude-sonnet-5.5",
+  name: "Claude Sonnet 5.5",
+  provider: MODEL_PROVIDER.ANTHROPIC,
+  efforts: ["low", "medium", "high"],
+};
+
+const TASK = "Count the routes.\n\nList every file under apps/web/server/routes.";
+
+/** A turn delegating twice: one worker answered on the pair the agent chose, one still at work on the agent's own. */
+const DELEGATING: CodingAgentMessage = {
+  id: "m-delegating",
+  role: "assistant",
+  parts: [
+    { type: "reasoning", text: "Two workers can read in parallel." },
+    {
+      type: "tool-delegate",
+      toolCallId: "call_d1",
+      state: "output-available",
+      input: { task: TASK, model: SONNET.id, effort: "medium" },
+      output: { model: SONNET.id, effort: "medium", result: "Three routes: plans, agents, sweep." },
+    },
+    {
+      type: "tool-delegate",
+      toolCallId: "call_d2",
+      state: "input-available",
+      input: { task: "Find the sweep's bound." },
+    },
+  ],
+};
+
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model and effort with the provider's mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; the row opens onto the answer, and Open in tab opens the worker without opening the row", () => {
+  const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => {
+    root.render(
+      createElement(AgentTranscriptView, {
+        messages: [PLAN, DELEGATING],
+        delegation: {
+          models: [SONNET],
+          own: { model: AGENT.model, effort: AGENT.effort },
+          onOpen: (...args) => opened.push(args),
+        },
+        reading: false,
+        failed: false,
+        working: true,
+        onRetry: ignore,
+        openGitHub: ignore,
+        copyText: copyNothing,
+      }),
+    );
+  });
+
+  const rows = [...container.querySelectorAll<HTMLDetailsElement>("[data-subagent-row]")];
+  assert.deepEqual(
+    rows.map((row) => row.getAttribute("data-call-id")),
+    ["call_d1", "call_d2"],
+  );
+  assert.equal(container.querySelector("[data-turn-fold]"), null, "each on a row of its own");
+  const [done, running] = rows;
+  assert.ok(done && running);
+  assert.equal(
+    done.querySelector("summary")?.textContent,
+    "Count the routes.Claude Sonnet 5.5 · Medium",
+  );
+  assert.ok(done.querySelector("[data-subagent-pair] svg.provider-mark"), "the provider's mark");
+  assert.ok(done.querySelector('[data-tool-state="output-available"]'));
+  assert.equal(
+    running.querySelector("[data-subagent-pair]")?.textContent,
+    "Claude Opus 5.5 · High",
+  );
+  assert.ok(running.querySelector('[data-tool-state="input-available"]'));
+  assert.ok(running.querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
+
+  assert.equal(done.open, false);
+  assert.equal(container.textContent?.includes("Three routes"), false);
+  act(() => done.querySelector<HTMLElement>('[aria-label="Open in tab"]')?.click());
+  assert.deepEqual(opened, [["call_d1", TASK, CODING_AGENT_STATUS.COMPLETED]]);
+  assert.equal(done.open, false, "the press is the button's, not the line's");
+  act(() => done.querySelector("summary")?.click());
+  assert.equal(done.open, true);
+  assert.ok(done.querySelector("[data-subagent-result]")?.textContent?.includes("Three routes"));
+});
 
 /** Opens the fold whose root the selector names, by the click a reader would make on its line. */
 function open(container: HTMLElement, selector: string): HTMLDetailsElement {

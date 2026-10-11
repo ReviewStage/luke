@@ -85,9 +85,13 @@ function fakeService() {
         asked.push(`start:${planId}:${request.idempotencyKey}:${request.model ?? "default"}`);
         return { agent: { ...AGENT, status: CODING_AGENT_STATUS.STARTING } };
       }),
-    messages: (agentId, after) =>
+    messages: (agentId, after, callId) =>
       Effect.sync(() => {
-        asked.push(`messages:${agentId}:${after}`);
+        asked.push(
+          callId === undefined
+            ? `messages:${agentId}:${after}`
+            : `worker:${agentId}:${callId}:${after}`,
+        );
         cursor = "2:1";
         return {
           messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
@@ -180,6 +184,19 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, {
+        agentId: AGENT_ID,
+        after: CODING_AGENT_CURSOR_START,
+        callId: "call-7",
+      }),
+      {
+        messages: [{ id: "m-1", role: "assistant", parts: [{ type: "text", text: "Hi" }] }],
+        cursor: "2:1",
+        status: CODING_AGENT_STATUS.RUNNING,
+        title: null,
+      },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_MESSAGE, {
         agentId: AGENT_ID,
         text: "Also expire them after a week.",
@@ -217,6 +234,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `list:${PLAN_ID}`,
       `start:${PLAN_ID}:press-1:default`,
       `messages:${AGENT_ID}:${CODING_AGENT_CURSOR_START}`,
+      `worker:${AGENT_ID}:call-7:${CODING_AGENT_CURSOR_START}`,
       `message:${AGENT_ID}:send-1:Also expire them after a week.`,
       `choose:${AGENT_ID}:openai/gpt-6.1-sol:low`,
       `rename:${AGENT_ID}:Sign-out button`,

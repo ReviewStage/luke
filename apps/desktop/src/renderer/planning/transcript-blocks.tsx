@@ -1,3 +1,5 @@
+import type { ModelProvider } from "@sidecar/hosted/models-wire";
+import { SidePanelIcon } from "@sidecar/panel";
 import {
   BotIcon,
   CircleStopIcon,
@@ -23,6 +25,7 @@ import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/messa
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
 import {
+  TOOL_STATE,
   Tool,
   type ToolBlock,
   ToolContent,
@@ -30,8 +33,12 @@ import {
   type ToolHeaderProps,
   ToolInput,
   ToolOutput,
+  type ToolState,
+  ToolStateMark,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
+import { ModelProviderMark } from "../provider-marks";
+import { Tooltip } from "../tooltip";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -52,9 +59,11 @@ import {
  * a tool call as one collapsible row wearing its kind's icon and verb
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
- * folded under what it holds, and a note between the rows. A tab that
- * drew one of these its own way would be a second transcript style, which
- * is what this file is here to refuse.
+ * folded under what it holds, a subagent's row as the Work tab draws its
+ * worker's line, boxed, with the model and effort it runs on and a way
+ * into its tab, opening onto its answer, and a note between the rows. A
+ * tab that drew one of these its own way would be a second transcript
+ * style, which is what this file is here to refuse.
  */
 
 /**
@@ -149,6 +158,102 @@ export function TranscriptTool({
         <ToolInput block={input} />
         <ToolOutput block={output} errorText={errorText} />
       </ToolContent>
+    </Tool>
+  );
+}
+
+/** What a subagent's row says it runs on: the pair as one line, and the mark of the provider whose model it is, where known. */
+interface SubagentPair {
+  readonly label: string;
+  readonly provider: ModelProvider | undefined;
+}
+
+/** What a subagent's row says in its body while the worker is still at work; one that ended without an answer says nothing. */
+const SUBAGENT_WORKING_LINE = "Working…";
+
+/** The word on the button that opens a subagent's tab, and its label for a reader who cannot see it. */
+const OPEN_IN_TAB_LABEL = "Open in tab";
+
+export type TranscriptSubagentProps = Omit<ComponentProps<typeof Tool>, "children"> & {
+  /** The task the subagent was handed, cut to the row's line. */
+  task: string;
+  pair: SubagentPair | undefined;
+  state: ToolState;
+  /** The worker's answer once it has one. */
+  result: string | undefined;
+  errorText: string | undefined;
+  /** Opens the subagent's session in a tab of the panel's own; none where the row stands in a tab that opens no tab. */
+  onOpen: (() => void) | undefined;
+};
+
+/**
+ * A subagent's call: one boxed row, as the Work tab draws its worker's
+ * line, wearing the worker's glyph lit while it runs, the task cut to the
+ * line, the model and effort the worker runs on in a muted word behind the
+ * provider's mark, and the mark a call's row wears for where it stands;
+ * closed until clicked, and open onto the worker's answer. The button at
+ * its end opens the worker's tab and leaves the fold as it was, so the row
+ * is one line that does two things rather than two rows.
+ */
+export function TranscriptSubagent({
+  task,
+  pair,
+  state,
+  result,
+  errorText,
+  onOpen,
+  className,
+  ...props
+}: TranscriptSubagentProps): ReactNode {
+  const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
+  return (
+    <Tool className={className} data-subagent-row="" {...props}>
+      <FoldSummary className="transcript-subagent-line flex min-w-0 items-center gap-2 rounded-lg transition-colors">
+        <FoldChevron />
+        <BotIcon
+          className={cn("size-4 shrink-0", running ? "text-luke" : "text-muted-foreground")}
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1 truncate text-foreground">{task}</span>
+        {pair === undefined ? null : (
+          <span
+            className="flex shrink-0 items-center gap-1 text-muted-foreground [&>svg]:size-3"
+            data-subagent-pair=""
+          >
+            {pair.provider === undefined ? null : <ModelProviderMark provider={pair.provider} />}
+            <span>{pair.label}</span>
+          </span>
+        )}
+        <ToolStateMark state={state} />
+        {onOpen === undefined ? null : (
+          <Tooltip label={OPEN_IN_TAB_LABEL}>
+            <button
+              type="button"
+              className="flex size-5 shrink-0 items-center justify-center rounded bg-transparent text-muted-foreground transition-colors hover:text-foreground [&>svg]:size-4"
+              aria-label={OPEN_IN_TAB_LABEL}
+              onClick={(event) => {
+                // The press is the button's, not the line's: the fold stays as it was.
+                event.preventDefault();
+                event.stopPropagation();
+                onOpen();
+              }}
+            >
+              <SidePanelIcon />
+            </button>
+          </Tooltip>
+        )}
+      </FoldSummary>
+      <FoldBody className="mt-1 mb-1 ml-6 text-[13px] leading-normal" data-subagent-result="">
+        {errorText !== undefined ? (
+          <p className="m-0 text-danger whitespace-pre-wrap [overflow-wrap:anywhere]" role="alert">
+            {errorText}
+          </p>
+        ) : result !== undefined ? (
+          <TranscriptWords text={result} />
+        ) : running ? (
+          <TranscriptNote>{SUBAGENT_WORKING_LINE}</TranscriptNote>
+        ) : null}
+      </FoldBody>
     </Tool>
   );
 }

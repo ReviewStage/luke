@@ -606,20 +606,25 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's call: a boxed line, the whole of it the button that opens
-   the subagent's tab, its hover fill on its own radius and its focus ring
-   the one every button of ours draws. */
-.work-worker-line {
+/* A subagent's call: a boxed line, on the Work tab the whole of it the
+   button that opens the subagent's tab, on an agent's tab the line that
+   opens onto the worker's answer with the tab's button at its end; its
+   hover fill on its own radius and its focus ring the one every button of
+   ours draws. */
+.work-worker-line,
+.transcript-subagent-line {
   padding: 8px 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
 }
 
-.work-worker-line:hover {
+.work-worker-line:hover,
+.transcript-subagent-line:hover {
   background: var(--raised);
 }
 
-.work-worker-line:focus-visible {
+.work-worker-line:focus-visible,
+.transcript-subagent-line:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }

@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import {
+  codingAgentCallIdSchema,
   codingAgentMessageRequestSchema,
   codingAgentMessagesAnswerSchema,
   codingAgentPullRequestAnswerSchema,
@@ -102,10 +103,11 @@ export const codingAgentAgentAnswerSchema = EffectSchema.Union([
 
 export type CodingAgentAgentAnswer = typeof codingAgentAgentAnswerSchema.Type;
 
-/** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands. */
+/** One agent's transcript past a cursor, as the window asks it: the agent, and where the window stands; or, naming the delegation call that started one, a worker's transcript under the agent. */
 export const codingAgentMessagesParamsSchema = EffectSchema.Struct({
   agentId: EffectSchema.NonEmptyString,
   after: EffectSchema.NonEmptyString,
+  callId: EffectSchema.optionalKey(codingAgentCallIdSchema),
 });
 
 export type CodingAgentMessagesParams = typeof codingAgentMessagesParamsSchema.Type;

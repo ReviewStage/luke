@@ -52,6 +52,7 @@ import { CODER_TOOL_SET } from "./hosted/coder-host/tool-set.js";
 import {
   cursorOfWire,
   cursorToWire,
+  delegationPast,
   type TranscriptPage,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
@@ -65,7 +66,6 @@ import {
   listCodingAgents,
   RUNNING_TURN_STATUSES,
   readCodingAgent,
-  readDelegation,
   renameCodingAgent,
   updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
@@ -493,7 +493,7 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   return transcriptResponse(page, agent.title);
 });
 
-/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. */
+/** GET reads a worker's transcript past the cursor, held open while the worker runs as the agent's own is: the child conversation of the delegation call named, where the account's agent recorded one. A call recorded nowhere yet while the agent runs is waited for (`delegationPast`), and past the wait answers the empty page of a worker still starting, so a tab opened the moment the call was requested keeps reading. */
 const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMessagesEndpoint")(
   function* (
     seams: CodingAgentsAppSeams,
@@ -507,11 +507,17 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
     const callId = yield* callIdOf(request);
     const { userId, agent, target } = yield* ownedAgent(seams, request);
     const conversationId = childConversationId(agent.conversationId, callId);
-    const delegation = yield* hostedStoreOrUnavailable(readDelegation(target, conversationId));
-    if (Option.isNone(delegation)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    const read = yield* hostedStoreOrUnavailable(delegationPast(target, conversationId, agent));
+    if (read.delegation === undefined) {
+      if (!read.agentRuns) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+      return transcriptResponse(
+        { messages: [], cursor: cursorOfWire(after), status: CODING_AGENT_STATUS.STARTING },
+        null,
+      );
+    }
     const page = yield* hostedStoreOrUnavailable(
       transcriptPast({ userId, conversationId }, CODER_TOOL_SET, cursorOfWire(after), {
-        createdAt: delegation.value.createdAt,
+        createdAt: read.delegation.createdAt,
       }),
     );
     return transcriptResponse(page, null);

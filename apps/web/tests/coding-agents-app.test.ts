@@ -316,10 +316,19 @@ function readAnswer<S extends Schema.ConstraintDecoder<unknown>>(
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
 
-/** A forked ask driven to its answer, the clock moved a step at a time so each wait it holds elapses. */
-const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
+/** How far a read asked ahead of its record is stepped: well inside the hold it must answer within. */
+const EARLY_READ_STEPS = 10;
+
+/**
+ * A forked ask driven to its answer, the clock moved a step at a time so
+ * each wait it holds elapses, then joined. The steps are bounded, because
+ * a step lands while a query of the ask's is still on its way, and an ask
+ * that is meant to answer inside its hold must not have the hold stepped
+ * out from under it: a bound under the hold leaves the join to the query.
+ */
+const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration, steps = 1_000) =>
   Effect.gen(function* () {
-    for (let attempt = 0; attempt < 1_000; attempt += 1) {
+    for (let attempt = 0; attempt < steps; attempt += 1) {
       if (fiber.pollUnsafe() !== undefined) return yield* Fiber.join(fiber);
       yield* TestClock.adjust(step);
       yield* Effect.yieldNow;
@@ -731,6 +740,13 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           userId: owner,
           conversationId: childConversationId(parent.conversationId, callId),
         };
+        // Asked a step ahead of the record, as a tab opened the moment the call was requested
+        // asks, the read holds and answers the transcript once the record lands.
+        const early = yield* Effect.forkChild(
+          ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: callId })),
+        );
+        yield* TestClock.adjust(CODER.MESSAGES_POLL);
+        assert.equal(early.pollUnsafe(), undefined);
         yield* recordDelegation(
           parent,
           child.conversationId,
@@ -768,7 +784,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         const page = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: callId })),
+          yield* driven(early, CODER.MESSAGES_POLL, EARLY_READ_STEPS),
         );
         assert.equal(page.messages.length, 1);
         assert.equal(page.messages[0]?.role, MESSAGE_ROLE.USER);
@@ -778,10 +794,18 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(request(AGENT_SUBAGENT_MESSAGES, other, { id: agent.id, call: callId })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
-        assert.deepEqual(
-          yield* ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-9" })),
-          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        // A call recorded nowhere while the agent still runs is held for, then read as a worker starting.
+        const unrecorded = yield* Effect.forkChild(
+          ask(request(AGENT_SUBAGENT_MESSAGES, owner, { id: agent.id, call: "call-9" })),
         );
+        yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+        const starting = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* driven(unrecorded, CODER.MESSAGES_POLL),
+        );
+        assert.deepEqual(starting.messages, []);
+        assert.equal(starting.status, CODING_AGENT_STATUS.STARTING);
       }),
   );
 
