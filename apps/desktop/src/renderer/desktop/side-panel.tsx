@@ -26,6 +26,7 @@ import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
 import { agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
+import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -34,6 +35,7 @@ import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
   type FixedSidePanelTab,
   isAgentTab,
+  isDraftTab,
   isSubagentTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
@@ -73,9 +75,11 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * panel's coming and going never moves it. The fixed tabs come first and
  * the plan's coding agents follow, one tab each, named by model with a dot
  * for where the agent stands; after them stand the subagents opened from
- * the Work tab or the "+", one tab each, named by job. Every tab closes,
- * and closing an agent's or a subagent's closes only the view: the agent
- * goes on as it was, and the "+" opens its tab again. The plan's own
+ * the Work tab or the "+", one tab each, named by job. A draft agent opened
+ * from the "+" stands after the agents until its first message starts it.
+ * Every tab closes, and closing an agent's or a subagent's closes only the
+ * view: the agent goes on as it was, and the "+" opens its tab again;
+ * closing a draft's lets the draft go, nothing of it having been started. The plan's own
  * actions stay in the plan's toolbar and never come into the panel.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
@@ -148,6 +152,12 @@ const ADD_SECTION = {
   SUBAGENTS: "Subagents",
 } as const;
 
+/** The "+" menu's row that opens a draft agent, which no tab's key spells. */
+const NEW_AGENT_ROW = "new-coding-agent";
+
+/** What the row that opens a draft says while a Start is out. */
+const NEW_AGENT_STARTING = "Starting…";
+
 /** Where a coding agent stands, as its row in the "+" menu says it. */
 const AGENT_STATUS_WORD = {
   [CODING_AGENT_STATUS.STARTING]: "Starting",
@@ -213,9 +223,11 @@ interface AddEntry {
 }
 
 /**
- * The "+" menu's rows: the fixed kinds; then, under Coding agents, each of
- * the plan's agents in the order started; then, under Subagents, each
- * subagent the plan's work holds. An agent's and a subagent's row wear the glyph its tab wears and
+ * The "+" menu's rows: the fixed kinds; then, under Coding agents, the row
+ * that opens a draft agent, or chooses the open plan's draft where it has
+ * one, unavailable with Start's own reason while Start could not run, and
+ * each of the plan's agents in the order started; then, under Subagents,
+ * each subagent the plan's work holds. An agent's and a subagent's row wear the glyph its tab wears and
  * say where it stands, shimmering while it runs, and one whose tab is open
  * says so and is chosen again rather than dimmed.
  */
@@ -225,10 +237,22 @@ function addEntries(input: {
   workers: readonly WorkWorkerBlock[];
 }): AddEntry[] {
   const { panel, agents, workers } = input;
+  const { start } = agents;
   const kinds = SIDE_PANEL_TABS.map((kind) => ({
     row: kindRow(kind, panel.tabs),
     onPick: () => panel.onChoose(kind),
   }));
+  const newAgent: AddEntry = {
+    row: {
+      id: NEW_AGENT_ROW,
+      label: "New coding agent",
+      icon: <PlusIcon />,
+      section: ADD_SECTION.AGENTS,
+      // Start's reason stands exactly while Start could not run on the open plan.
+      disabled: start.busy ? NEW_AGENT_STARTING : start.reason,
+    },
+    onPick: () => panel.onChoose({ draft: agents.onNewDraft() }),
+  };
   const agentRows = (agents.agents ?? []).map((agent) => ({
     row: {
       id: agent.id,
@@ -256,7 +280,7 @@ function addEntries(input: {
       onPick: () => panel.onChoose({ subagent: call.id }),
     };
   });
-  return [...kinds, ...agentRows, ...subagentRows];
+  return [...kinds, newAgent, ...agentRows, ...subagentRows];
 }
 
 /**
@@ -267,8 +291,8 @@ function addEntries(input: {
  * painted. Opening it asks `onOpen` to read what the rows say again, as the
  * Start menu reads its models, so an agent whose tab is not shown, which
  * nothing follows, says where it stands now rather than where it last did.
- * With no row to pick, every kind open and no agent or subagent to offer,
- * it is dimmed and says so.
+ * It always opens, since New coding agent always stands in it, and says
+ * why where it cannot be picked.
  */
 function AddTabButton({
   entries,
@@ -282,7 +306,6 @@ function AddTabButton({
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
-  const full = entries.every((entry) => entry.row.disabled !== undefined);
 
   useLayoutEffect(() => {
     const menu = root.current?.querySelector(".searchable-menu") ?? null;
@@ -305,7 +328,7 @@ function AddTabButton({
 
   return (
     <div ref={root} className="tab-add-anchor" data-side={side}>
-      <Tooltip label={full ? "Every tab is open" : "Open a tab"}>
+      <Tooltip label="Open a tab">
         <button
           ref={opener}
           type="button"
@@ -314,13 +337,11 @@ function AddTabButton({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
-          aria-disabled={full}
           onClick={() => {
             if (open) {
               close();
               return;
             }
-            if (full) return;
             setSide(MENU_SIDE.START);
             setOpen(true);
             onOpen();
@@ -381,6 +402,7 @@ function PanelTabs({
   workers: readonly WorkWorkerBlock[];
 }): React.JSX.Element {
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
+  const draft = agents.draft?.id;
   const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
   return (
     <div className="side-panel-tabs">
@@ -418,6 +440,19 @@ function PanelTabs({
               onClose={() => panel.onClose({ agent: agent.id })}
             />
           ))}
+        {draft === undefined ? null : (
+          <Tab
+            key={draft}
+            icon={<PlusIcon />}
+            label={DRAFT_TAB_LABEL}
+            selected={chosen({ draft })}
+            onSelect={() => panel.onChoose({ draft })}
+            onClose={() => {
+              panel.onClose({ draft });
+              agents.onDiscardDraft(draft);
+            }}
+          />
+        )}
         {subagents.map(({ call }) => (
           <Tab
             key={call.id}
@@ -496,6 +531,15 @@ function TabContent({
   onOpenSubagent: (callId: string) => void;
 }): React.JSX.Element {
   const { act } = useAct();
+  if (isDraftTab(tab)) {
+    // As an agent's: the tab stands for a draft the plan no longer holds
+    // only until the panel moves back to the board, a render away.
+    return agents.draft?.id === tab.draft ? (
+      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} />
+    ) : (
+      <p className="side-panel-empty">Reading the agent…</p>
+    );
+  }
   if (isAgentTab(tab)) {
     const agent = agents.agents?.find((each) => each.id === tab.agent);
     // The tab stands for an agent the list no longer holds only until the
@@ -816,7 +860,9 @@ export function SidePanel({
           ? shownSubagent === undefined
             ? undefined
             : workerJob(shownSubagent.call)
-          : SIDE_PANEL_TAB_KIND[tab].label;
+          : isDraftTab(tab)
+            ? DRAFT_TAB_LABEL
+            : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],

@@ -3,8 +3,10 @@
 import assert from "node:assert/strict";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  type CodingAgentBrief,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
@@ -197,10 +199,15 @@ function tabMarkup(
   );
 }
 
-function drawn(messages: readonly CodingAgentMessage[], working = false): string {
+function drawn(
+  messages: readonly CodingAgentMessage[],
+  working = false,
+  brief: CodingAgentBrief | undefined = undefined,
+): string {
   return renderToStaticMarkup(
     createElement(AgentTranscriptView, {
       messages,
+      brief,
       reading: false,
       failed: false,
       working,
@@ -503,6 +510,14 @@ test("a message the developer sent after the plan is the developer's bubble, and
     /<div class="[^"]*\bis-user\b[^"]*"[^>]*>.*?Also expire them after a week\./u,
   );
   assert.doesNotMatch(markup, /Plan · <\/span><span[^>]*>Also expire them/u);
+});
+
+test("an agent handed a task draws it as the developer's message, with no plan card, and an agent handed the plan still draws its card", () => {
+  const tasked = drawn([PLAN, TURN], false, CODING_AGENT_BRIEF.TASK);
+  assert.doesNotMatch(tasked, /data-plan-card=""/u);
+  assert.match(tasked, /<div class="[^"]*\bis-user\b[^"]*"[^>]*>.*?Teammate invitations/u);
+  const planned = drawn([PLAN, TURN], false, CODING_AGENT_BRIEF.PLAN);
+  assert.equal((planned.match(/data-plan-card=""/gu) ?? []).length, 1);
 });
 
 test("copying a turn hands the clipboard the agent's words alone, never its tool calls, and a turn of calls alone offers no copy", async () => {

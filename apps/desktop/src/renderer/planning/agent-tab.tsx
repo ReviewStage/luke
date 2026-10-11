@@ -1,7 +1,9 @@
-import type {
-  CodingAgentMessage,
-  CodingAgentPullRequestAnswer,
-  CodingAgentSummary,
+import {
+  CODING_AGENT_BRIEF,
+  type CodingAgentBrief,
+  type CodingAgentMessage,
+  type CodingAgentPullRequestAnswer,
+  type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { MESSAGE_ROLE } from "@sidecar/wire";
@@ -231,6 +233,7 @@ export function AgentStatusDot({ status }: { status: CodingAgentSummary["status"
 /** The transcript as the tab draws it: the messages, or what stands in their place. */
 export function AgentTranscriptView({
   messages,
+  brief,
   reading,
   failed,
   working,
@@ -241,6 +244,8 @@ export function AgentTranscriptView({
   footer,
 }: {
   messages: readonly CodingAgentMessage[];
+  /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
+  brief?: CodingAgentBrief | undefined;
   reading: boolean;
   failed: boolean;
   /** Whether the agent may still write, which is when the transcript ends on a working line. */
@@ -257,8 +262,13 @@ export function AgentTranscriptView({
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
-    // The plan is the first of the developer's messages; the rest the developer sent since.
-    const plan = messages.find((message) => message.role === MESSAGE_ROLE.USER);
+    // The plan is the first of the developer's messages, unless the agent
+    // was handed a task in its place, which is the developer's message as
+    // any other is; the rest the developer sent since.
+    const plan =
+      brief === CODING_AGENT_BRIEF.TASK
+        ? undefined
+        : messages.find((message) => message.role === MESSAGE_ROLE.USER);
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
@@ -351,6 +361,7 @@ export function AgentTabView({
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <AgentTranscriptView
         messages={agentLines(transcript.messages, composer.sent)}
+        brief={agent.brief}
         reading={transcript.reading}
         failed={transcript.failed}
         working={agentStillWriting(agent.status)}

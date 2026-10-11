@@ -282,6 +282,16 @@ Each coding agent started on the plan has a tab of its own
 (`planning/agent-tab.tsx`, `planning/use-coding-agents.ts`), opened and
 selected the moment its Start lands.
 
+- **A new agent from the "+".** The side panel's "+" offers New coding
+  agent, unavailable with Start's own reason while Start could not run. It
+  opens a draft tab (`planning/draft-agent-tab.tsx`): no transcript yet,
+  the composer focused, and the model chip on the account's default.
+  Nothing reaches the service until the first message, which starts the
+  agent with those words as its task, never the plan, in the plan's
+  repository; the agent's own tab then takes the draft's place. Closing
+  the draft lets it go with nothing left behind. An agent handed a task
+  draws it as the developer's first message rather than as the plan's card.
+
 - **The head.** The model · the effort · the status, with the dot the tab
   wears: starting or running (pulsing), completed, failed, or cancelled. A
   Stop stands while the agent may still write; it asks the service to cancel
@@ -621,7 +631,7 @@ message and never the plan, and works in the plan's repository the same way. The
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
 coding-agent routes"; the desktop's Start button ("The Plans tab" above),
-agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
+the side panel's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## The journey
