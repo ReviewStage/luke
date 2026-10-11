@@ -18,7 +18,7 @@ import {
 import { channels } from "#shared/bridge";
 import type { AppHotkeysSlice, AppStateSnapshot, AppWindowFacts } from "#shared/messages/app-state";
 import { WINDOW_ROLE } from "#shared/messages/session";
-import type { AgentPlace } from "../agent-notices";
+import type { AgentEndToast, AgentPlace } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { followDockIcon } from "../window/dock-icon";
@@ -76,6 +76,8 @@ export interface WindowService extends DesktopService {
   sendToVoice: <Payload>(channel: string, payload: Payload) => void;
   /** Asks the panels to open a plan on one agent's tab: a notification's click. */
   showAgent: (place: AgentPlace) => void;
+  /** Asks the panels to say an agent's turn ended in their toast: its end while the window is focused. */
+  toastAgentEnd: (end: AgentEndToast) => void;
   /**
    * The panel window coming forward or going behind, for as long as the
    * subscription stands. The hidden voice window is never the key window, so
@@ -203,6 +205,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     panels.broadcast(channels.onShowAgent, place);
   }
 
+  function toastAgentEnd({ place, words, failed }: AgentEndToast): void {
+    panels.broadcast(channels.onAgentEnded, { ...place, words, failed });
+  }
+
   function onPanelFocusChanged(listener: (focused: boolean) => void): () => void {
     const focused = (_event: Electron.Event, window: BrowserWindow) => {
       if (panels.owns(window.webContents)) listener(true);
@@ -322,6 +328,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     windowFactsFor,
     sendToVoice,
     showAgent,
+    toastAgentEnd,
     onPanelFocusChanged,
     reporterOf,
     trustedSender: (event) => {

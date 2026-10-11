@@ -268,6 +268,24 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * A coding agent's turn ended while the window was focused: the panel says
+   * so in its toast, whose View opens the plan on that agent's tab. An event,
+   * as a click is, because it is said once and never bootstrapped from.
+   */
+  onAgentEnded: entry({
+    kind: "subscribe",
+    channel: "app:agent-ended",
+    args: noArgs,
+    result: result<{ planId: string; agentId: string; words: string; failed: boolean }>(
+      (value) =>
+        isRecord(value) &&
+        isWireString(value.planId) &&
+        isWireString(value.agentId) &&
+        isWireString(value.words) &&
+        isWireBoolean(value.failed),
+    ),
+  }),
+  /**
    * A panel's validated command, forwarded by the main process to the voice
    * window alone, carrying the command and nothing else.
    */
