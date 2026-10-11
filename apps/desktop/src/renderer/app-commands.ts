@@ -48,6 +48,11 @@ export function runAppCommand(command: AppCommand): boolean {
   return true;
 }
 
+/** Whether a command's offer stands now, so running it would do something: what the command palette lists. */
+export function appCommandOffered(command: AppCommand): boolean {
+  return (offers.get(command)?.length ?? 0) > 0;
+}
+
 /**
  * Offers a command while `run` is given. The latest `run` is the one a press
  * calls, so a caller hands a fresh closure each render without re-offering.
