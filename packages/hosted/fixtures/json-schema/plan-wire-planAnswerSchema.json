@@ -37,6 +37,14 @@
           "type": "number",
           "minimum": 0
         },
+        "pinnedAt": {
+          "type": "number",
+          "minimum": 0
+        },
+        "archivedAt": {
+          "type": "number",
+          "minimum": 0
+        },
         "document": {
           "type": "object",
           "properties": {

@@ -331,6 +331,97 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     }),
   );
 
+  it.effect(
+    "a pin and an archive answer the plan stamped, and the plain list a build from before archiving reads leaves the archived plan out",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const relayId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* TestClock.adjust("1 minute");
+        const ledgerId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })),
+        );
+        const change = (planId: string, body: WireBoundaryInput) =>
+          ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
+        const listIds = (query?: Readonly<Record<string, string>>) =>
+          Effect.map(ask(request(PLANS, owner, query === undefined ? {} : { query })), (listed) =>
+            readAnswer(planListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).plans.map(
+              ({ id, pinnedAt, archivedAt }) => [
+                id,
+                pinnedAt !== undefined,
+                archivedAt !== undefined,
+              ],
+            ),
+          );
+
+        const pinned = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(ledgerId, { pinned: true }),
+        ).plan;
+        const archived = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change(relayId, { archived: true }),
+        ).plan;
+
+        assert.notEqual(pinned.pinnedAt, undefined);
+        assert.notEqual(archived.archivedAt, undefined);
+        assert.deepEqual(yield* listIds(), [[ledgerId, true, false]]);
+        assert.deepEqual(yield* listIds({ archived: "include" }), [
+          [ledgerId, true, false],
+          [relayId, false, true],
+        ]);
+        assert.deepEqual(yield* listIds({ archived: "everything" }), [[ledgerId, true, false]]);
+
+        yield* change(relayId, { archived: false });
+        yield* change(ledgerId, { pinned: false });
+        assert.deepEqual(yield* listIds(), [
+          [ledgerId, false, false],
+          [relayId, false, false],
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a pin or an archive that is not a yes or a no is refused, and another account's plan is none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const change = (userId: string, body: WireBoundaryInput) =>
+          ask(request(ONE_PLAN, userId, { id: planId, method: "PATCH", body }));
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        const notFound = refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND);
+
+        assert.deepEqual(
+          [
+            yield* change(owner, { pinned: "yes" }),
+            yield* change(owner, { archived: null }),
+            yield* change(owner, {}),
+          ],
+          [invalid, invalid, invalid],
+        );
+        assert.deepEqual(
+          [yield* change(other, { pinned: true }), yield* change(other, { archived: true })],
+          [notFound, notFound],
+        );
+        const listed = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+        assert.deepEqual(
+          listed.plans.map(({ id, pinnedAt, archivedAt }) => [id, pinnedAt, archivedAt]),
+          [[planId, undefined, undefined]],
+        );
+      }),
+  );
+
   it.effect("another account's plan answers as none on every route", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();

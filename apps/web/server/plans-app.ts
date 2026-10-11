@@ -10,6 +10,8 @@ import {
 } from "effect/unstable/http";
 import type { SqlClient } from "effect/unstable/sql";
 import {
+  PLAN_LIST_ARCHIVED,
+  PLAN_LIST_QUERY,
   planCreateRequestSchema,
   planUpdateRequestSchema,
   unparsedWire,
@@ -44,7 +46,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * about plans the caller does not hold. Nothing here writes a document; the
  * planning call's notetaker is the one writer (`hosted/plan-notes.ts`).
  * `GET /api/plans/{id}` is the window opening a plan, a read that moves
- * nothing: the list stands newest started first whatever is opened.
+ * nothing: the list stands newest started first whatever is opened. A pin
+ * and an archive are changes like a rename, and the list leaves the archived
+ * plans out unless `archived=include` asks for them, so a build from before
+ * archiving, which never asks, draws none of them rather than all of them.
  *
  * `/api/plans/{id}/board` is the plan's whiteboard: the Mac reads it, with
  * Luke's latest drawing, and writes the scene back whole, the last write
@@ -73,9 +78,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  */
 
 const PLANS_PATH = {
-  /** GET lists, POST starts. */
+  /** GET lists, the archived plans too where `archived=include` asks; POST starts. */
   COLLECTION: "/api/plans",
-  /** GET opens, PATCH changes the name or the repository, DELETE deletes; the rewrite moves the path's id into the `id` query. */
+  /** GET opens, PATCH changes the name, the repository, the pin, or the archive, DELETE deletes; the rewrite moves the path's id into the `id` query. */
   ONE: "/api/plans/plan",
   /** GET reads the plan's board, PUT writes it; the rewrite moves the path's id into the `id` query. */
   BOARD: "/api/plans/board",
@@ -172,6 +177,12 @@ const reachableRepository = /* @__PURE__ */ Effect.fnUntraced(function* (
   return reached.value.fullName;
 });
 
+/** Whether a list read asks for the archived plans too; a build from before archiving never does. */
+function listsArchived(request: Request): boolean {
+  const asked = new URL(request.url).searchParams.get(PLAN_LIST_QUERY.ARCHIVED);
+  return asked === PLAN_LIST_ARCHIVED.INCLUDE;
+}
+
 /** GET lists the account's plans; POST starts one with an empty document, and its repository confirmed first. */
 const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoint")(function* (
   seams: PlansAppSeams,
@@ -183,7 +194,9 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
   const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
   const userId = yield* resolvedUserId(seams, request);
   if (incoming.method === HTTP_METHOD.GET) {
-    const plans = yield* hostedStoreOrUnavailable(listPlans(userId));
+    const plans = yield* hostedStoreOrUnavailable(
+      listPlans(userId, { includeArchived: listsArchived(request) }),
+    );
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plans });
   }
   const body = yield* readJsonBodyEffect(MAXIMUM_NAME_BODY_BYTES);
@@ -197,9 +210,9 @@ const collectionEndpoint = /* @__PURE__ */ Effect.fn("web/plansCollectionEndpoin
 });
 
 /**
- * PATCH: the plan's name, its repository, or both changed, answered with its
- * document. A repository is confirmed before the row is touched, so a
- * refused one leaves the name unchanged too.
+ * PATCH: the plan's name, its repository, its pin, its archive, or any of
+ * them changed, answered with its document. A repository is confirmed before
+ * the row is touched, so a refused one leaves the rest unchanged too.
  */
 const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   userId: string,
@@ -215,6 +228,8 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
     updatePlan(userId, planId, {
       ...("name" in changes ? { name: changes.name } : undefined),
       ...(repository === undefined ? undefined : { repository }),
+      ...("pinned" in changes ? { pinned: changes.pinned } : undefined),
+      ...("archived" in changes ? { archived: changes.archived } : undefined),
     }),
   );
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);

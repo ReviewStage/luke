@@ -15,6 +15,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
  * plan with no repository yet, and every plan from before repositories.
+ * A plan may be pinned, which the sidebar lists first, and archived, which
+ * the list leaves out unless asked for it (`PLAN_LIST_QUERY`), so a build
+ * that knows nothing of archiving never sees an archived plan. Both are the
+ * account's, so they follow it to every Mac it signs in on.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -78,19 +82,41 @@ export const planRenameRequestSchema = EffectSchema.Struct({
 export type PlanRenameRequest = typeof planRenameRequestSchema.Type;
 
 /** Whether an update names anything to change: one that names nothing is refused rather than answered unchanged. */
-function updateNamesAChange(update: { name?: string; repository?: string | null }): boolean {
-  return "name" in update || "repository" in update;
+function updateNamesAChange(update: {
+  name?: string;
+  repository?: string | null;
+  pinned?: boolean;
+  archived?: boolean;
+}): boolean {
+  return Object.keys(update).length > 0;
 }
 
 /**
- * Changing a plan (PATCH): its name, its repository, or both. A rename is
- * one of these; a repository is confirmed reachable by the account before it
- * is kept, and null clears it.
+ * Changing a plan (PATCH): its name, its repository, whether it is pinned,
+ * whether it is archived, or any of them at once. A rename is one of these;
+ * a repository is confirmed reachable by the account before it is kept, and
+ * null clears it.
  */
 export const planUpdateRequestSchema = EffectSchema.Struct({
   name: EffectSchema.optionalKey(trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS)),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
+  pinned: EffectSchema.optionalKey(EffectSchema.Boolean),
+  archived: EffectSchema.optionalKey(EffectSchema.Boolean),
 }).check(EffectSchema.makeFilter(updateNamesAChange));
+
+/**
+ * The plan list's query (GET): `archived=include` lists the archived plans
+ * among the rest, each carrying its `archivedAt`. Without it they are left
+ * out, which is what a build from before archiving asks.
+ */
+export const PLAN_LIST_QUERY = {
+  ARCHIVED: "archived",
+} as const;
+
+/** What the list's `archived` query may say. */
+export const PLAN_LIST_ARCHIVED = {
+  INCLUDE: "include",
+} as const;
 
 const planSummaryFields = {
   id: wireUuidSchema,
@@ -109,6 +135,10 @@ const planSummaryFields = {
    * longer supported.
    */
   openedAt: EffectSchema.optionalKey(countedNumber),
+  /** Epoch milliseconds the plan was pinned; absent while it is not, and from a service before pinning. */
+  pinnedAt: EffectSchema.optionalKey(countedNumber),
+  /** Epoch milliseconds the plan was archived; absent while it is not, and from a service before archiving. */
+  archivedAt: EffectSchema.optionalKey(countedNumber),
 };
 
 /** One row of the plan list: everything but the document. */
@@ -140,7 +170,7 @@ export const planSchema = EffectSchema.Struct({
 
 export type Plan = typeof planSchema.Type;
 
-/** The plan list (GET): every plan the account owns, newest started first. */
+/** The plan list (GET): every plan the account owns, newest started first, the archived ones only where the query asks for them. */
 export const planListAnswerSchema = EffectSchema.Struct({
   plans: EffectSchema.Array(planSummarySchema),
 });

@@ -11,7 +11,7 @@ import { conversations } from "./storage-schema.js";
  * plan-schema.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it: its name and the one
+ * account that started it: its name, whether it is pinned or archived, and the one
  * document the planning model saves, a Markdown body and the assumptions list
  * beside it, with the template's fields the body was formatted from, and the
  * journal of the saves coding agents made on it. A save
@@ -55,6 +55,10 @@ export const plan = pgTable(
      * plan from before repositories stands and is no error.
      */
     repository: text("repository"),
+    /** When the plan was pinned, which the sidebar lists first, newest pin first; null while it is not. */
+    pinnedAt: instant("pinned_at"),
+    /** When the plan was archived, which the list leaves out unless asked for it; null while it is not. */
+    archivedAt: instant("archived_at"),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
