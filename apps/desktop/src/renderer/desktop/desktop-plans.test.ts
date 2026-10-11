@@ -781,6 +781,27 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   assert.equal(hover(tabNamed(page, job)), job);
 });
 
+test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
+  const job =
+    "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";
+  vi.spyOn(Element.prototype, "scrollWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("tab-label") && this.textContent === job ? 600 : 0;
+  });
+  vi.spyOn(Element.prototype, "clientWidth", "get").mockImplementation(function (this: Element) {
+    return this.classList.contains("tab-label") && this.textContent === job ? 160 : 0;
+  });
+  const page = mountOpenPlan({ work: workerWork(job) });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, ".work-worker-line");
+  act(() => relayout());
+  const faded = (label: string) =>
+    tabNamed(page, label).querySelector(".tab-label")?.getAttribute("data-overflow");
+
+  assert.equal(faded(job), "true");
+  assert.equal(faded("Work"), "false");
+});
+
 test("the Work tab with no turn says what will appear there", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
