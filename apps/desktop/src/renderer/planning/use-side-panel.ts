@@ -365,15 +365,6 @@ export interface SidePanelControl {
   onResize: (width: number) => void;
 }
 
-/**
- * Whether the panel is showing the plan's Transcript, which streams a call's
- * words as they are said. A Transcript tab standing behind another chosen
- * tab is not on screen.
- */
-export function transcriptOnScreen(panel: SidePanelControl): boolean {
-  return panel.open && panel.tab === SIDE_PANEL_TAB.TRANSCRIPT;
-}
-
 function clampWidth(width: number): number {
   return Math.max(SIDE_PANEL_WIDTH.MIN, Math.round(width));
 }

@@ -7,8 +7,9 @@ import { voiceErrorToShow, voiceNoticeToShow } from "./use-voice-view";
  *
  * The strip carries one speaker at a time. The session is full duplex, so
  * both can carry words at once, and Luke's reply is the one worth reading
- * over a read-back of what the developer just said. With neither speaking,
- * a failure borrows the strip, and a notice borrows it more quietly.
+ * over a read-back of what the developer just said. A failure borrows the
+ * strip, and a notice borrows it more quietly, each over the developer's
+ * own words but never over Luke's.
  */
 
 /**
@@ -65,14 +66,15 @@ interface UseCaptionPresentationOptions {
 function liveContent(options: UseCaptionPresentationOptions): CaptionContent | undefined {
   const { lukeCaptions, developerCaptions, speakers, fixtureSpeaking } = options;
   if (lukeCaptions !== undefined) return { tone: CAPTION_TONE.LUKE, words: lukeCaptions.join(" ") };
-  if (developerCaptions !== undefined) {
-    return { tone: CAPTION_TONE.DEVELOPER, words: developerCaptions.join(" ") };
-  }
+  // Note that a failure and a notice outrank the developer's own words,
+  // because those were just said and a refusal answered over them was not:
+  // each leaves on its own clock, and would otherwise leave unread.
   const error = voiceErrorToShow({ fixtureSpeaking, speakers, error: options.voiceError });
   if (error !== undefined) return { tone: CAPTION_TONE.ERROR, words: error };
   const notice = voiceNoticeToShow({ fixtureSpeaking, speakers, notice: options.voiceNotice });
   if (notice !== undefined) return { tone: CAPTION_TONE.NOTICE, words: notice };
-  return undefined;
+  if (developerCaptions === undefined) return undefined;
+  return { tone: CAPTION_TONE.DEVELOPER, words: developerCaptions.join(" ") };
 }
 
 /**

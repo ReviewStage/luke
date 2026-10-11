@@ -8,8 +8,9 @@ import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { transcriptOnScreen } from "../planning/use-side-panel";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
@@ -116,6 +117,20 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
+ * Whether the open plan's Transcript is on screen with its words, streaming
+ * a call's as they are said. A Transcript tab standing behind another chosen
+ * tab is not on screen, and one still reading, or failed, shows no words.
+ */
+function transcriptStreaming(plans: PlansControl): boolean {
+  const { sidePanel, transcript } = plans;
+  return (
+    sidePanel.open &&
+    sidePanel.tab === SIDE_PANEL_TAB.TRANSCRIPT &&
+    transcript.region.kind === TRANSCRIPT_REGION.READY
+  );
+}
+
+/**
  * Luke's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
@@ -194,7 +209,7 @@ export function DesktopShell({
   // and all, so the captions float in its place then.
   const captionsInColumn = planDrawn && !plans.sidePanel.fullScreen;
   const captionStrip = (
-    <CaptionStrip {...captions} speechHidden={planDrawn && transcriptOnScreen(plans.sidePanel)} />
+    <CaptionStrip {...captions} speechHidden={planDrawn && transcriptStreaming(plans)} />
   );
   return (
     <div

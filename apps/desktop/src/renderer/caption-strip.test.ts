@@ -9,6 +9,7 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { captionStripProps } from "#testing/captions";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl, usedPlan } from "#testing/plans-control";
+import { relayout } from "#testing/resize-observer";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "./app-commands";
 import { CaptionStrip, type CaptionStripProps } from "./caption-strip";
@@ -16,6 +17,7 @@ import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "./planning/planning-model";
+import { TRANSCRIPT_REGION, type TranscriptRegion } from "./planning/transcript-model";
 import {
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
@@ -45,6 +47,13 @@ const LUKE_WORDS = "The export runs nightly and writes one file per account.";
 
 const LUKE_SPEAKING: CaptionContent = { tone: CAPTION_TONE.LUKE, words: LUKE_WORDS };
 
+/** A transcript whose read landed, drawing the plan's calls. */
+const TRANSCRIPT_READY: TranscriptRegion = {
+  kind: TRANSCRIPT_REGION.READY,
+  calls: [],
+  earlierOmitted: false,
+};
+
 /** The panel open beside the plan on the tab given. */
 function panelOn(tab: SidePanelState["tab"]): SidePanelState {
   return { open: true, tabs: SIDE_PANEL_TABS, tab, width: SIDE_PANEL_WIDTH.DEFAULT };
@@ -55,10 +64,12 @@ function Window({
   tab,
   staged,
   captions,
+  transcript = TRANSCRIPT_READY,
 }: {
   tab: PanelTab;
   staged: SidePanelState | undefined;
   captions: CaptionStripProps;
+  transcript?: TranscriptRegion;
 }): React.JSX.Element {
   const sidebar = useSidebarCollapse(false);
   const sidePanel = useSidePanel(staged, usedPlan(PLAN.id));
@@ -83,6 +94,7 @@ function Window({
       activePlanId: PLAN.id,
       region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
       sidePanel,
+      transcript: { region: transcript, onRetry: ignore },
     }),
     history: navigationHistory(),
     sidebar,
@@ -96,18 +108,20 @@ function Strip({
   lukeCaptions,
   developerCaptions,
   voiceError,
+  voiceNotice,
   speakers,
 }: {
   lukeCaptions?: readonly string[];
   developerCaptions?: readonly string[];
   voiceError?: string;
+  voiceNotice?: string;
   speakers: VoiceSpeakers;
 }): React.JSX.Element {
   const caption = useCaptionPresentation({
     lukeCaptions,
     developerCaptions,
     voiceError,
-    voiceNotice: undefined,
+    voiceNotice,
     speakers,
     fixtureSpeaking: false,
   });
@@ -220,6 +234,23 @@ test("a Transcript tab standing behind the chosen one does not hold the captions
   assert.equal(reads(), `Luke${LUKE_WORDS}`);
 });
 
+test("a Transcript still reading, or whose read failed, shows no words, so the captions stay", () => {
+  for (const transcript of [
+    { kind: TRANSCRIPT_REGION.READING },
+    { kind: TRANSCRIPT_REGION.FAILED },
+  ] as const) {
+    render(
+      createElement(Window, {
+        tab: PANEL_TAB.PLANS,
+        staged: panelOn(SIDE_PANEL_TAB.TRANSCRIPT),
+        captions: captionStripProps(LUKE_SPEAKING),
+        transcript,
+      }),
+    );
+    assert.equal(reads(), `Luke${LUKE_WORDS}`, transcript.kind);
+  }
+});
+
 test("a voice failure is drawn over the Transcript, since nothing there says it", () => {
   const failure = "Luke's voice could not connect. Try again in a moment.";
   render(
@@ -262,6 +293,33 @@ test("the developer's own words are labelled as theirs, and Luke's take the stri
     }),
   );
   assert.equal(reads(), "LukeIt does, three times.");
+});
+
+test("a notice answered while the developer speaks takes the strip over their own words", () => {
+  const notice = "The microphone is open. Finish saying it.";
+  render(
+    createElement(Strip, {
+      developerCaptions: ["Can we also export credit notes"],
+      voiceNotice: notice,
+      speakers: { listening: true, lukeSpeaking: false },
+    }),
+  );
+  assert.equal(reads(), notice);
+});
+
+test("words rewrapped onto more lines by a resize keep the newest line in view", () => {
+  render(
+    createElement(Strip, {
+      lukeCaptions: [LUKE_WORDS],
+      speakers: { listening: false, lukeSpeaking: true },
+    }),
+  );
+  const words = strip().querySelector<HTMLElement>(".voice-caption-words");
+  assert.ok(words, "the words are drawn");
+  // A narrower window wraps the same words onto a third line.
+  Object.defineProperty(words, "scrollHeight", { configurable: true, value: 66 });
+  act(() => relayout());
+  assert.equal(words.scrollTop, 66);
 });
 
 test("Luke's last words stay a moment after he stops, then leave", () => {

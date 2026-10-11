@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef } from "react";
 import { MarkdownMessage } from "./markdown-message";
 import {
   CAPTION_TONE,
@@ -24,6 +23,22 @@ const SPEAKER_LABEL = {
   [CAPTION_TONE.ERROR]: undefined,
   [CAPTION_TONE.NOTICE]: undefined,
 } as const satisfies Record<CaptionTone, string | undefined>;
+
+/**
+ * Keeps the newest line in view by scrolling the clipped words to their foot
+ * whenever their wrapped height changes: a word that starts a line, or the
+ * same words rewrapped by a pane or the window resizing. Only the browser
+ * knows where the text wrapped, so its resize report is what asks.
+ */
+function keepNewestInView(element: HTMLElement | null): (() => void) | undefined {
+  const words = element?.firstElementChild;
+  if (!element || !words) return undefined;
+  const observer = new ResizeObserver(() => {
+    element.scrollTop = element.scrollHeight;
+  });
+  observer.observe(words);
+  return () => observer.disconnect();
+}
 
 /** The one reason Luke's words might be the only part of him arriving: the Mac's own output is off. */
 interface VolumeHint {
@@ -59,18 +74,11 @@ export function CaptionStrip({
   const speech = isSpeech(tone);
   const shown = caption.shown && !(speech && speechHidden);
   const label = SPEAKER_LABEL[tone];
-  const words = useRef<HTMLDivElement>(null);
-  // Note that the newest line is kept in view by scrolling the clipped words
-  // to their foot, because only the browser knows where the text wrapped.
-  useLayoutEffect(() => {
-    const node = words.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [content?.words]);
   return (
     <div className="voice-caption" data-shown={String(shown)} data-tone={tone} inert={!shown}>
       <div {...(speech ? { "aria-hidden": true } : { role: "status" })}>
         {label === undefined ? null : <p className="voice-caption-speaker">{label}</p>}
-        <div className="voice-caption-words" ref={words}>
+        <div className="voice-caption-words" ref={keepNewestInView}>
           <MarkdownMessage className="voice-caption-text" words={content?.words ?? ""} />
         </div>
       </div>
