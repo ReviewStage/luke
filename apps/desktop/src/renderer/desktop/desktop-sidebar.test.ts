@@ -402,3 +402,22 @@ test("with every plan archived, the list says nothing of having none, and with n
   assert.equal(none.querySelector(".sidebar-archived-row"), null);
   assert.match(empty.textContent ?? "", /No plans yet/u);
 });
+
+test("a refusal noted on an archived plan unfolds the archived list, so its note is seen", () => {
+  const old = listedPlan("Old", { archivedAt: 9 });
+  const container = mount(DEAN, {
+    plans: {
+      archived: [old],
+      markNotes: new Map([[old.id, "The plan could not be unarchived. Try again."]]),
+    },
+  });
+
+  assert.equal(
+    container.querySelector(".sidebar-archived-row")?.getAttribute("aria-expanded"),
+    "true",
+  );
+  assert.equal(
+    container.querySelector(".sidebar-archived [role='alert']")?.textContent,
+    "The plan could not be unarchived. Try again.",
+  );
+});

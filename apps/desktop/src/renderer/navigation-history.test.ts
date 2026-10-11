@@ -315,6 +315,18 @@ test("an archived plan opened from under Archived is passed over both ways", () 
   assert.equal(where(), EXPORTS.name, "and so does forward");
 });
 
+test("an archived plan deleted after it was opened is passed over too", () => {
+  show([INVITATIONS, EXPORTS], PANEL_TAB.PLANS, undefined, [BILLING]);
+  openPlan(INVITATIONS);
+  click(document.body.querySelector<HTMLButtonElement>(".sidebar-archived-row"));
+  openPlan(BILLING);
+  openPlan(EXPORTS);
+  show([INVITATIONS, EXPORTS], PANEL_TAB.PLANS, undefined, []);
+
+  command("[");
+  assert.equal(where(), INVITATIONS.name, "back skips the deleted plan");
+});
+
 test("a plan open before the account's list has landed is still a place to go back to", () => {
   show([], PANEL_TAB.PLANS, INVITATIONS.id);
   command(",");

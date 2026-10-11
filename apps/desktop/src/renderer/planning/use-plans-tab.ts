@@ -74,7 +74,8 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * place as the host brings its drafts and its reads. A rename, a pin, and an
  * archive are the presses drawn before the host answers them: each shows at
  * once, and goes back if the service refuses it, a pin or an archive with a
- * quiet note on the plan's row. The plan the host has open is the
+ * quiet note on the plan's row. The open plan archived leaves for the
+ * new-plan page once the service has kept the archive. The plan the host has open is the
  * document page in every panel, and it stays open through a tab switch or a
  * collapse; only Escape, another plan, New plan, archiving it, a delete, or a
  * sign-out leaves it. With none open, the tab is the new-plan page. The open plan's
@@ -409,14 +410,20 @@ export function usePlansTab(input: {
     return renamed;
   };
 
+  // The open plan as it stands when an archive is answered, which may be
+  // another than the one open when it was pressed.
+  const openNow = useRef(openPlanId);
+  openNow.current = openPlanId;
+
   // A fixture's plans are marked nowhere, as they are read from nowhere. A
   // refusal puts back the mark it drew only while no later press replaced it.
+  // Note that the open plan is left only once its archive is answered,
+  // because leaving ends its call, which a refusal could not give back.
   const markPlan = (planId: string, mark: PlanMark) => {
     if (fixture !== undefined) return;
     const next = { ...marks.get(planId), ...pendingMark(mark, Date.now()) };
     setMarks((held) => new Map(held).set(planId, next));
     setMarkNotes((held) => new Map([...held].filter(([noted]) => noted !== planId)));
-    if (mark === PLAN_MARK.ARCHIVE && planId === openPlanId) leavePlan();
     const pinning = mark === PLAN_MARK.PIN || mark === PLAN_MARK.UNPIN;
     const asked = pinning
       ? act(ACT_KIND.PLANNING_PIN, { planId, pinned: mark === PLAN_MARK.PIN })
@@ -424,6 +431,7 @@ export function usePlansTab(input: {
     asked
       .catch(() => false)
       .then((changed) => {
+        if (changed && mark === PLAN_MARK.ARCHIVE && openNow.current === planId) leavePlan();
         if (changed) return;
         setMarks((held) =>
           held.get(planId) === next

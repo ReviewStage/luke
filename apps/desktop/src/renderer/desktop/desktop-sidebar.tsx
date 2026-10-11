@@ -257,6 +257,14 @@ function ArchivedPlans({
   onOpen: (planId: string) => void;
 }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
+  // A refusal noted on an archived plan unfolds the list, so the note under
+  // its row is seen even where the list was folded while the ask was out.
+  const noted = plans.archived.some((plan) => plans.markNotes.has(plan.id));
+  const [notedBefore, setNotedBefore] = useState(false);
+  if (noted !== notedBefore) {
+    setNotedBefore(noted);
+    if (noted) setUnfolded(true);
+  }
   if (plans.archived.length === 0) return null;
   return (
     <div className="sidebar-archived">

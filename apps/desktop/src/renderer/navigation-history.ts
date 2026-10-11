@@ -173,7 +173,7 @@ export function useWindowHistory(input: {
   const { boundFor } = plans;
   // Only grows, so writing it as the list is drawn is the same on every render.
   const everListed = useRef(new Set<string>()).current;
-  for (const plan of plans.plans) everListed.add(plan.id);
+  for (const plan of [...plans.plans, ...plans.archived]) everListed.add(plan.id);
   const place = useMemo((): Place | undefined => {
     if (!known) return undefined;
     if (tab === PANEL_TAB.SETTINGS) return { kind: PLACE_KIND.SETTINGS, view: settingsView };

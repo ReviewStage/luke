@@ -460,7 +460,7 @@ test("a pin draws at once, stands until the view carries it, and goes back with 
   ]);
 });
 
-test("archiving the open plan leaves it for the new-plan page before the service answers, and archiving another leaves the open one", async () => {
+test("archiving the open plan leaves it for the new-plan page once the service keeps it, and archiving another leaves the open one", async () => {
   const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1), row("other", 2)] };
   const tab = mount(
     { shown: true, planning: listed },
@@ -481,9 +481,27 @@ test("archiving the open plan leaves it for the new-plan page before the service
   );
   assert.deepEqual(tab.told.slice(-3), [
     ACT_KIND.PLANNING_ARCHIVE,
-    ACT_KIND.PLANNING_CLOSE,
     ACT_KIND.PLANNING_ARCHIVE,
+    ACT_KIND.PLANNING_CLOSE,
   ]);
+});
+
+test("an archive of the open plan the service refused leaves the plan open and its call standing", async () => {
+  const listed: PlanningView = { ...OPEN, plans: [row(PLAN.id, 1)] };
+  const tab = mount(
+    { shown: true, planning: listed },
+    { [ACT_KIND.PLANNING_ARCHIVE]: () => Promise.resolve(false) },
+  );
+
+  await act(async () => tab.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+
+  assert.equal(tab.control().boundFor, PLAN.id);
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_CLOSE), false);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    [PLAN.id],
+  );
+  assert.equal(tab.control().markNotes.get(PLAN.id), "The plan could not be archived. Try again.");
 });
 
 test("a fixture's plan is pinned and archived nowhere", () => {
