@@ -1,5 +1,5 @@
 import type { LanguageModel } from "ai";
-import { Effect } from "effect";
+import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
@@ -29,6 +29,8 @@ export interface CoderHostSeams {
   readonly userInfo: UserInfoEndpoint;
   /** Who a session or a conversation belongs to, for the door. */
   readonly ownership: SessionOwnership;
+  /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
+  readonly deploymentSecret: () => Redacted.Redacted | undefined;
   /** Luke's own provider keys, each absent where the deployment holds none. */
   readonly keys: () => ProviderKeys;
   /** The model an agent's title is generated on; nothing leaves every agent untitled. */
@@ -60,6 +62,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
         ownsConversation: (userId, conversationId) =>
           run(conversationOwnedBy(userId, conversationId)),
       },
+      deploymentSecret: () => environment.cronSecret,
       userInfo: (input) =>
         Effect.tryPromise(async () => {
           // SAFETY: the auth service answers JSON; the read below is what holds it to the userinfo shape.

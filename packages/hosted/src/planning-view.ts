@@ -126,6 +126,9 @@ export const PLAN_WORK_TOOL = {
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
+  LIST_AGENTS: "list-agents",
+  READ_AGENT: "read-agent",
+  MESSAGE_AGENT: "message-agent",
   OTHER: "other",
 } as const;
 

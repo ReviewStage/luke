@@ -41,7 +41,9 @@ import {
  * a person, the attribute for the deployment. Ownership is checked on that
  * answer, so the deployment can open a turn only on a conversation the named
  * account owns, and the deployment's secret can open only the turns the
- * table admits: a spoken ask for the voice function, never a stream.
+ * table admits: a spoken ask for the voice function on the planning
+ * channel, a typed line the voice brain sends a coding agent on the coder
+ * channel (`coder-host/channel.ts`), never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
  * table's, decided before any principal exists. The one other thing the
  * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as

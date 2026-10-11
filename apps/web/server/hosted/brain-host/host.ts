@@ -40,7 +40,7 @@ import {
   openChildConversation,
   SESSION_STANDING,
 } from "./conversation.js";
-import { eveSessionsComposer } from "./eve-sessions.js";
+import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
 import { childConversationId, hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel, summarizedReasoningModel } from "./model.js";
 import {
@@ -334,6 +334,15 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
         // The plan is found again as the call runs, so a plan deleted mid-turn saves nothing.
         const { target } = standing.success;
         const plan = yield* planOf(target);
+        // A message to a coding agent reaches its session as the deployment acting for the
+        // account, as a Stop does above: the planning session holds no bearer of the account's.
+        const secret = seams.deploymentSecret();
+        const origin = seams.eveOrigin();
+        const eve = yield* eveSessionsComposer;
+        const coder =
+          secret === undefined || origin === undefined
+            ? undefined
+            : eve({ origin, caller: { secret, account: target.userId }, mount: EVE_MOUNT.CODER });
         return yield* runPlanningTool(
           name,
           plan === undefined
@@ -354,6 +363,12 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
                     try: () => seams.spend(target.userId),
                     catch: (cause) => new MeterUnavailable({ cause }),
                   }),
+                },
+                agents: {
+                  plan: { userId: target.userId, planId: plan.plan.id },
+                  eve: coder,
+                  writer: seams.writer(),
+                  clientKey: context.callId,
                 },
               },
           input,

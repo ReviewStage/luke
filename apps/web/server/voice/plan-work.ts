@@ -20,6 +20,11 @@ import {
   UI_PART_TYPE,
 } from "../core.js";
 import { EVE_DELEGATION_INPUT, EVE_DELEGATION_TOOL } from "../hosted/brain-host/planning.js";
+import {
+  LIST_CODING_AGENTS_TOOL,
+  MESSAGE_CODING_AGENT_TOOL,
+  READ_CODING_AGENT_TOOL,
+} from "../hosted/coding-agent-tools.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -56,6 +61,9 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [EVE_DELEGATION_TOOL.WORKER, PLAN_WORK_TOOL.WORKER],
   [EVE_DELEGATION_TOOL.TASK_WAIT, PLAN_WORK_TOOL.WORKER_WAIT],
   [EVE_DELEGATION_TOOL.TASK_CANCEL, PLAN_WORK_TOOL.WORKER_CANCEL],
+  [LIST_CODING_AGENTS_TOOL.name, PLAN_WORK_TOOL.LIST_AGENTS],
+  [READ_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.READ_AGENT],
+  [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);
@@ -64,6 +72,8 @@ const isPageInput = Schema.is(READ_WEB_PAGE_TOOL.inputSchema);
 const isCodeInput = Schema.is(SHOW_CODE_TOOL.inputSchema);
 const isQuestionInput = Schema.is(QUEUE_QUESTION_TOOL.inputSchema);
 const isWorkerInput = Schema.is(EVE_DELEGATION_INPUT[EVE_DELEGATION_TOOL.WORKER]);
+const isAgentInput = Schema.is(READ_CODING_AGENT_TOOL.inputSchema);
+const isAgentMessageInput = Schema.is(MESSAGE_CODING_AGENT_TOOL.inputSchema);
 
 /** What `run_in_repository` answers, as its call's output is journaled (`RepositoryShellResult`). */
 const isRepositoryOutput = Schema.is(
@@ -116,6 +126,8 @@ function subjectOf(tool: PlanWorkTool, part: StoredToolPart): string | undefined
   if (tool === PLAN_WORK_TOOL.READ_WEB_PAGE && isPageInput(input)) return input.url;
   if (tool === PLAN_WORK_TOOL.QUEUE_QUESTION && isQuestionInput(input)) return input.question;
   if (tool === PLAN_WORK_TOOL.WORKER && isWorkerInput(input)) return input.message;
+  if (tool === PLAN_WORK_TOOL.READ_AGENT && isAgentInput(input)) return input.agentId;
+  if (tool === PLAN_WORK_TOOL.MESSAGE_AGENT && isAgentMessageInput(input)) return input.text;
   if (tool === PLAN_WORK_TOOL.SHOW_CODE && isCodeInput(input)) {
     if (input.startLine === undefined) return input.path;
     const end = input.endLine ?? input.startLine;

@@ -62,7 +62,8 @@ export const BRAIN_HOST_ATTRIBUTE = {
  * The authenticator names the door admits a principal under: an account's
  * own bearer, or the deployment acting for an account it names under the
  * deployment's one secret. The deployment's name is one name whatever role
- * it acts in — today the voice service's — because one secret proves no more than that something holding it acted;
+ * it acts in — the voice service's, or the voice brain's messaging a coding
+ * agent — because one secret proves no more than that something holding it acted;
  * which role is the turn kind on the principal, recorded as such, and never
  * a name the credential cannot support.
  */

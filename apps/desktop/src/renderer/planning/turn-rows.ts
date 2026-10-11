@@ -30,6 +30,9 @@ export const CALL_KIND = {
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",
+  LIST_AGENTS: "list-agents",
+  READ_AGENT: "read-agent",
+  MESSAGE_AGENT: "message-agent",
   OTHER: "other",
 } as const;
 
@@ -52,6 +55,9 @@ export const CALL_WORDS = {
   [CALL_KIND.WORKER]: { verb: "Asked the worker", code: false },
   [CALL_KIND.WORKER_WAIT]: { verb: "Waited for the worker", code: false },
   [CALL_KIND.WORKER_CANCEL]: { verb: "Stopped the worker", code: false },
+  [CALL_KIND.LIST_AGENTS]: { verb: "Listed the coding agents", code: false },
+  [CALL_KIND.READ_AGENT]: { verb: "Read the coding agent", code: false },
+  [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 

@@ -1,7 +1,10 @@
 import { Effect, Option } from "effect";
 import { eveChannel } from "eve/channels/eve";
 import { hostedUserId } from "../../server/hosted/bearer.js";
-import { coderChannelInput } from "../../server/hosted/coder-host/channel.js";
+import {
+  CODER_DEPLOYMENT_TURNS,
+  coderChannelInput,
+} from "../../server/hosted/coder-host/channel.js";
 import { runWeb } from "../../server/runtime.js";
 import { seams } from "../host.js";
 
@@ -15,4 +18,9 @@ const resolveUserId = (request: Request): Promise<string | undefined> =>
   runWeb(Effect.map(hostedUserId(request, seams.userInfo), Option.getOrUndefined));
 
 /** The one door into the coding-agent service: eve's own HTTP API under the host's auth and steer policy. */
-export default eveChannel(coderChannelInput(resolveUserId, seams.ownership));
+export default eveChannel(
+  coderChannelInput(resolveUserId, seams.ownership, {
+    secret: seams.deploymentSecret(),
+    admits: CODER_DEPLOYMENT_TURNS,
+  }),
+);

@@ -1023,6 +1023,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             sessionOwner: () => Promise.resolve(undefined),
             ownsConversation: () => Promise.resolve(false),
           },
+          deploymentSecret: () => undefined,
           keys: () => ({ anthropic: undefined, openAi: undefined }),
           titleModel: () => undefined,
           scriptedModel: () => true,
