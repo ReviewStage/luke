@@ -1,6 +1,8 @@
 import {
   EMPTY_PLAN_FIELDS,
+  type PlanAgentEdit,
   type PlanFields,
+  planAgentEditSchema,
   planBody,
   planFieldsSchema,
 } from "@sidecar/hosted/plan-template";
@@ -45,12 +47,21 @@ type PlanStoreFailure = SqlError | Schema.SchemaError;
 /** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.SqlClient>;
 
-/** A plan as the service holds it: what the window reads, the fields its body was formatted from, and the conversation it resumes in, if one is attached. */
+/** One save a coding agent made, with the agent named as its row names it now. */
+export interface LabelledAgentEdit extends PlanAgentEdit {
+  readonly label: string;
+}
+
+/** A plan as the service holds it: what the window reads, the fields its body was formatted from, the saves coding agents made with their notes, and the conversation it resumes in, if one is attached. */
 export interface StoredPlan {
   readonly plan: Plan;
   readonly fields: PlanFields;
+  readonly agentEdits: readonly LabelledAgentEdit[];
   readonly conversationId: string | undefined;
 }
+
+/** How an agent whose row is gone is named in the journal: a discarded start, or a row from before the journal. */
+const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /** A plan to start: its name, and the repository it is about where one is chosen. */
 export interface NewPlan {
@@ -67,10 +78,12 @@ export interface PlanChanges {
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const PLAN_COLUMNS = {
   id: plan.id,
+  userId: plan.userId,
   name: plan.name,
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
+  agentEdits: plan.agentEdits,
   repository: plan.repository,
   conversationId: plan.conversationId,
   createdAt: plan.createdAt,
@@ -79,10 +92,12 @@ const PLAN_COLUMNS = {
 
 const PlanRowSchema = Schema.Struct({
   id: Schema.String,
+  userId: Schema.String,
   name: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
+  agentEdits: Schema.Array(planAgentEditSchema),
   repository: Schema.NullOr(Schema.String),
   conversationId: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
@@ -95,23 +110,65 @@ const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.Stri
 
 const PlanIdRowSchema = Schema.Struct({ id: Schema.String });
 
+/** The agents the journal names, as their rows name them now; a row that is gone names nothing. */
+const findAgentLabels = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, agentIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    id: Schema.String,
+    model: Schema.String,
+    title: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, agentIds }) =>
+    db
+      .select({ id: codingAgent.id, model: codingAgent.model, title: codingAgent.title })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.id, agentIds))),
+});
+
+/**
+ * The journal's agents named as their rows name them now, so a renamed agent
+ * reads renamed everywhere: the label is the row's title, or its model while
+ * it has none.
+ */
+function labelledEdits(
+  row: PlanRow,
+  userId: string,
+): PlanStoreEffect<readonly LabelledAgentEdit[]> {
+  const agentIds = [...new Set(row.agentEdits.map((edit) => edit.agentId))];
+  if (agentIds.length === 0) return Effect.succeed([]);
+  return Effect.map(findAgentLabels({ userId, agentIds }), (agents) => {
+    const labels = new Map(agents.map((agent) => [agent.id, agent.title ?? agent.model]));
+    return row.agentEdits.map((edit) => ({
+      ...edit,
+      label: labels.get(edit.agentId) ?? UNKNOWN_AGENT_LABEL,
+    }));
+  });
+}
+
 /**
  * The row's document, as the window and the model read it. Note that a plan
  * whose body is still empty, never saved or reset, reads as the untouched
  * template formatted here rather than stored, so it is always the current
- * template's.
+ * template's. The row's own account is the one its agents are read under.
  */
-function storedPlanOf(row: PlanRow): StoredPlan {
+function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   const summary = summaryOf(row);
   const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
-  return {
+  return Effect.map(labelledEdits(row, row.userId), (agentEdits) => ({
     plan: {
       ...summary,
       document: { body, assumptions: row.assumptions },
+      agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
     },
     fields: row.fields ?? EMPTY_PLAN_FIELDS,
+    agentEdits,
     conversationId: row.conversationId ?? undefined,
-  };
+  }));
+}
+
+/** The row's plan alone, for the writes that answer one. */
+function planOf(row: PlanRow): PlanStoreEffect<Plan> {
+  return Effect.map(storedPlanOf(row), (stored) => stored.plan);
 }
 
 /**
@@ -184,13 +241,20 @@ const replaceDocument = SqlSchema.findOneOption({
     body: Schema.String,
     assumptions: Schema.Array(planAssumptionSchema),
     fields: Schema.optionalKey(planFieldsSchema),
+    agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, body, assumptions, fields, now }) =>
+  execute: ({ userId, planId, body, assumptions, fields, agentEdits, now }) =>
     db
       .update(plan)
-      .set({ body, assumptions, ...(fields ? { fields } : undefined), updatedAt: now })
+      .set({
+        body,
+        assumptions,
+        ...(fields ? { fields } : undefined),
+        ...(agentEdits ? { agentEdits } : undefined),
+        updatedAt: now,
+      })
       .where(ownedPlan(userId, planId))
       .returning(PLAN_COLUMNS),
 });
@@ -353,7 +417,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
       // An insert that returned no row is the database breaking its own contract, not an outcome.
       Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
     );
-    return storedPlanOf(row).plan;
+    return yield* planOf(row);
   });
 }
 
@@ -375,7 +439,9 @@ export function readPlan(
   userId: string,
   planId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
-  return Effect.map(findPlan({ userId, planId }), Option.map(storedPlanOf));
+  return Effect.flatMap(findPlan({ userId, planId }), (found) =>
+    Effect.transposeOption(Option.map(found, storedPlanOf)),
+  );
 }
 
 /**
@@ -387,19 +453,23 @@ export function readPlanForUpdate(
   userId: string,
   planId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
-  return Effect.map(lockPlan({ userId, planId }), Option.map(storedPlanOf));
+  return Effect.flatMap(lockPlan({ userId, planId }), (locked) =>
+    Effect.transposeOption(Option.map(locked, storedPlanOf)),
+  );
 }
 
 /**
  * Replaces the plan's document whole, with the fields its body was formatted
- * from where they are handed, and answers it as saved, or nothing where the
- * account owns no such plan; nothing is ever created here.
+ * from and the agents' journal where they are handed, and answers it as
+ * saved, or nothing where the account owns no such plan; nothing is ever
+ * created here.
  */
 export function savePlanDocument(
   userId: string,
   planId: string,
   document: PlanDocument,
   fields?: PlanFields,
+  agentEdits?: readonly PlanAgentEdit[],
 ): PlanStoreEffect<Option.Option<Plan>> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
@@ -409,9 +479,10 @@ export function savePlanDocument(
       body: document.body,
       assumptions: document.assumptions,
       ...(fields ? { fields } : undefined),
+      ...(agentEdits ? { agentEdits } : undefined),
       now,
     });
-    return Option.map(row, (saved) => storedPlanOf(saved).plan);
+    return yield* Effect.transposeOption(Option.map(row, planOf));
   });
 }
 
@@ -458,7 +529,7 @@ export function updatePlan(
           // The row is held under this transaction's lock, so an update that missed it is the database breaking its own contract.
           Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)),
         );
-        return Option.some(storedPlanOf(row).plan);
+        return Option.some(yield* planOf(row));
       }),
     ),
   );
@@ -548,5 +619,7 @@ export function readPlanOfConversation(
   userId: string,
   conversationId: string,
 ): PlanStoreEffect<Option.Option<StoredPlan>> {
-  return Effect.map(findPlanOfConversation({ userId, conversationId }), Option.map(storedPlanOf));
+  return Effect.flatMap(findPlanOfConversation({ userId, conversationId }), (found) =>
+    Effect.transposeOption(Option.map(found, storedPlanOf)),
+  );
 }

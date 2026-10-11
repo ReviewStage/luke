@@ -1,6 +1,11 @@
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
-import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
+import {
+  NOTE_KIND,
+  PLAN_FIELD,
+  PLAN_FIELD_PURPOSE,
+  type PlanNote,
+} from "@sidecar/hosted/plan-template";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -13,7 +18,7 @@ import type { GitHubApp } from "../../github/github-app.js";
 import { LOOK_AT_BOARD_TOOL, runLookAtBoard } from "../board-look.js";
 import { DRAW_ON_BOARD_TOOL, runDrawOnBoard } from "../board-tool.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
-import type { StoredPlan } from "../plan-store.js";
+import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
   READ_WEB_PAGE_TOOL,
   type ResearchCall,
@@ -118,6 +123,8 @@ The plan is done when the saved document is enough for a separate agent to build
 - nothing in Open questions would change what gets built;
 - every remaining choice the user does not mind either way is listed under Left to the agent or stated as an assumption.
 
+An item attributed to a coding agent was written by an agent implementing the plan: an open question it met with the assumption it went on under, a fact it corrected in the code, or a decision it made. Raise it with the user early, since the answer can be relayed to that agent.
+
 Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### The whiteboard
@@ -215,13 +222,56 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
+const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
+
+/** The most agents' saves the model is told of, the newest; the journal keeps more. */
+const RECENT_AGENT_EDITS = 5;
+
+/** The most characters of one note's text the model is told; the document itself holds the whole. */
+const AGENT_NOTE_CHARS = 300;
+
+/** A note's words, cut where they run past what one line of the history carries. */
+function noteWords(words: string | null): string {
+  if (words === null) return "null";
+  return JSON.stringify(
+    words.length > AGENT_NOTE_CHARS ? `${words.slice(0, AGENT_NOTE_CHARS)}…` : words,
+  );
+}
+
+/** One note an agent took, in a line: what it did, where, and its words, the phrase it corrected or struck and the example's clauses among them. */
+function agentNoteLine(note: PlanNote): string {
+  switch (note.kind) {
+    case NOTE_KIND.ADD:
+      return `add ${note.field}: ${noteWords(note.text)}`;
+    case NOTE_KIND.ADD_EXAMPLE:
+      return `addExample to rule ${note.rule}: given ${noteWords(note.given)}, when ${noteWords(note.when)}, then ${noteWords(note.then)}`;
+    case NOTE_KIND.REPLACE:
+      return `replace ${note.field}: ${noteWords(note.find)} → ${noteWords(note.text)}`;
+    case NOTE_KIND.REMOVE:
+      return `remove ${note.field}: ${noteWords(note.find)}`;
+  }
+}
+
+/** The newest saves coding agents made, one line each, newest first; nothing where none has. */
+function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] {
+  if (edits.length === 0) return [];
+  const recent = edits.slice(-RECENT_AGENT_EDITS).reverse();
+  return [
+    AGENT_EDITS_MARKER,
+    ...recent.map(
+      (edit) =>
+        `- ${edit.label}, ${new Date(edit.at).toISOString()}: ${edit.notes.map(agentNoteLine).join("; ")}`,
+    ),
+  ];
+}
 
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, and the whiteboard as the model
- * reads it (`board-text.ts`), each read again every turn so what the
- * notetaker saved and what the developer drew is what the next turn reads. A
- * plan that no longer stands gets the heading alone.
+ * plan's name, the saved document as JSON, the newest saves coding agents
+ * made on it (so Luke can raise what an agent asked or decided), and the
+ * whiteboard as the model reads it (`board-text.ts`), each read again every
+ * turn so what the notetaker saved and what the developer drew is what the
+ * next turn reads. A plan that no longer stands gets the heading alone.
  */
 export function planningStandingContext(
   stored: StoredPlan | undefined,
@@ -236,6 +286,7 @@ export function planningStandingContext(
     `Name: ${plan.name}`,
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
+    ...agentEditsText(stored.agentEdits),
     boardText(board),
   ].join("\n");
 }

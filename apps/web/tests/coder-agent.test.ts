@@ -128,3 +128,8 @@ test("an agent handed a task is told its job is the developer's task, in the sam
   assert.ok(tasked.includes("`Acme/Relay`"));
   assert.doesNotMatch(tasked, /\bplan\b/iu);
 });
+
+test("an agent handed the plan is told how to update it, and one handed a task is not", () => {
+  assert.ok(coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN).includes("`edit_plan`"));
+  assert.ok(!coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK).includes("edit_plan"));
+});

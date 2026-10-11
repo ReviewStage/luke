@@ -4,7 +4,7 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { PlanBody } from "./plan-body";
+import { agoText, PlanBody } from "./plan-body";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 
 const PLAN: Plan = {
@@ -79,4 +79,27 @@ test("a new plan draws its whole template unanswered, and an assumptions section
       "u",
     ),
   );
+});
+
+test("a plan a coding agent has saved on says so above the document, naming the agent's newest save; one no agent touched says nothing", () => {
+  const edited: Plan = {
+    ...PLAN,
+    agentEdits: [
+      { agentId: "a3b1c2d4-0000-4000-8000-000000000001", label: "GPT-6.1 Sol", at: 1 },
+      { agentId: "a3b1c2d4-0000-4000-8000-000000000002", label: "Claude Opus 5.5", at: 2 },
+    ],
+  };
+
+  const note = /<p class="plan-edit-note">Updated by Claude Opus 5\.5 · \d+[mhd] ago<\/p>/u;
+  assert.match(bodyMarkup(edited), note);
+  assert.doesNotMatch(bodyMarkup(PLAN), /plan-edit-note/u);
+  assert.doesNotMatch(bodyMarkup(edited), /GPT-6\.1 Sol/u);
+});
+
+test("how long ago a save was reads in the shortest words", () => {
+  const now = 10 * 24 * 60 * 60_000;
+  assert.equal(agoText(now - 20_000, now), "just now");
+  assert.equal(agoText(now - 3 * 60_000, now), "3m ago");
+  assert.equal(agoText(now - 2 * 60 * 60_000, now), "2h ago");
+  assert.equal(agoText(now - 5 * 24 * 60 * 60_000, now), "5d ago");
 });

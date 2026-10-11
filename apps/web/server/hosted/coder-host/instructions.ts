@@ -4,6 +4,9 @@ import {
   type CodingAgentBrief,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CODER } from "./bounds.js";
+import { EDIT_PLAN_TOOL } from "./plan-edit.js";
+
+const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
 
 /**
  * instructions.ts -- what a coding agent's session runs under.
@@ -35,6 +38,11 @@ const BRIEF_WORDS = {
     whole: "implements the plan whole",
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
+    updating: `
+
+## Updating the plan
+
+\`${CODING_AGENT_EDIT_PLAN_TOOL}\` takes the same notes the plan's notetaker takes: add a point under a field, add an example to a rule, correct a phrase copied exactly from the saved text, or strike one. Use it to record a question the plan does not answer under its open questions together with the assumption you go on under, to correct a fact you verified in the code, and to record a decision you made. Every save is recorded in the plan as yours, and the developer reads the plan on their next planning call, so never wait for an answer; it reaches you as a later message. Say in your message what you assumed or decided, and name it in the pull request's description.`,
   },
   [CODING_AGENT_BRIEF.TASK]: {
     job: "carry out the task the developer gave as the first message of this conversation",
@@ -43,10 +51,12 @@ const BRIEF_WORDS = {
     whole: "does the task whole",
     none: "the task could not be done",
     describe: "say in its description what the task asked",
+    /** An agent handed a task never sees the plan, so it is told of no way to update it. */
+    updating: "",
   },
 } as const satisfies Record<
   CodingAgentBrief,
-  { job: string; reread: string; whole: string; none: string; describe: string }
+  { job: string; reread: string; whole: string; none: string; describe: string; updating: string }
 >;
 
 /** The instructions for one agent, on the repository its row names, worded for what it was handed. */
@@ -70,7 +80,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included, and answers when it is done; several calls in one step run at once. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only, so it never edits, commits, or pushes. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list.
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included, and answers when it is done; several calls in one step run at once. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only, so it never edits, commits, or pushes. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list.${words.updating}
 
 ## What your messages are
 

@@ -6,6 +6,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionContext } from "eve/context";
+import type { UnparsedWireValue } from "../../core.js";
 import { turnKindOf } from "../brain-host/auth.js";
 import { RELAY_TURN } from "../brain-host/bounds.js";
 import {
@@ -29,6 +30,7 @@ import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import { readPlan } from "../plan-store.js";
 import type { RepositorySandbox } from "../repository-shell.js";
 import { promptHashOf } from "../store/index.js";
+import { logStoreFailure } from "../store-failure.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 import {
   agentRepositoryToken,
@@ -40,6 +42,12 @@ import {
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
 import { coderInstructions } from "./instructions.js";
 import { type CoderModelSelection, coderModel } from "./model.js";
+import {
+  PLAN_EDIT_REFUSAL,
+  type PlanEditResult,
+  planEditRejected,
+  recordPlanEdit,
+} from "./plan-edit.js";
 import type { CoderHostSeams } from "./production.js";
 import { generateAgentTitle } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -162,6 +170,12 @@ export interface CoderHost {
   >;
   /** The agent's title generated from its plan and written where none stands, for the first session of the conversation alone; a later session, a failed call, and a title already standing each leave the row as it is. */
   title(starting: AdmittedConversation): HostEffect<void>;
+  /** Takes one `edit_plan` call's notes into the agent's plan, given how many notes the turn has taken already. */
+  editPlan(
+    admitted: AdmittedConversation,
+    input: UnparsedWireValue,
+    takenInTurn: number,
+  ): Effect.Effect<PlanEditResult, never, SqlClient.SqlClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -351,6 +365,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
           state,
         });
       }),
+    editPlan: (admitted, input, takenInTurn) =>
+      Effect.gen(function* () {
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return planEditRejected(found.failure);
+        // An agent handed a task never saw the plan, so it has none to take notes on.
+        if (found.success.task !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
+        const { id: agentId, planId } = found.success;
+        const binding = { userId: admitted.target.userId, planId };
+        return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.UNAVAILABLE))),
+      ),
 
     title: (starting) =>
       Effect.gen(function* () {

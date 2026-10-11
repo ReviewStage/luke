@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { NOTE_KIND, PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
@@ -54,6 +55,8 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState, type RelayStateStore } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
   deletePlan,
@@ -543,6 +546,62 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             LOOK_AT_BOARD_TOOL.name,
           ],
         );
+      }),
+  );
+
+  it.effect(
+    "a coding agent's saves reach the planning model as recent edits named by the agent, newest first; a plan no agent saved on names none",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        assert.doesNotMatch(
+          yield* host.standingContext(standing),
+          /recent edits by coding agents/u,
+        );
+        const started = Option.getOrThrow(
+          yield* createCodingAgent(userId, {
+            planId,
+            idempotencyKey: "start-1",
+            model: "anthropic/claude-opus-5.5",
+            effort: "high",
+            planSnapshot: "# Relay",
+            task: null,
+            repository: "acme/relay",
+          }),
+        );
+        const binding = { userId, planId };
+        const author = { agentId: started.agent.id };
+        yield* saveNotes(
+          binding,
+          [{ kind: NOTE_KIND.ADD, field: PLAN_FIELD.OPEN_QUESTIONS, text: "Who may withdraw?" }],
+          author,
+        );
+        yield* saveNotes(
+          binding,
+          [
+            { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "Invites expire." },
+            {
+              kind: NOTE_KIND.REPLACE,
+              field: PLAN_FIELD.DECISIONS,
+              find: "expire.",
+              text: "expire after 7 days.",
+            },
+          ],
+          author,
+        );
+
+        const context = yield* host.standingContext(standing);
+
+        const lines = context.split("\n");
+        const at = lines.indexOf("[recent edits by coding agents]");
+        assert.notEqual(at, -1);
+        assert.match(
+          lines[at + 1] ?? "",
+          /^- anthropic\/claude-opus-5\.5, .*: add decisions: "Invites expire\."; replace decisions: "expire\." → "expire after 7 days\."$/u,
+        );
+        assert.match(lines[at + 2] ?? "", /add openQuestions: "Who may withdraw\?"$/u);
       }),
   );
 

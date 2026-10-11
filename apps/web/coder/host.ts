@@ -1,9 +1,11 @@
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Result } from "effect";
 import type { SessionAuth } from "eve/context";
+import type { UnparsedWireValue } from "../server/core.js";
 import type { DelegationAsk } from "../server/hosted/coder-host/delegation.js";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host.js";
 import type { CoderModelSelection } from "../server/hosted/coder-host/model.js";
+import { type PlanEditResult, planEditRejected } from "../server/hosted/coder-host/plan-edit.js";
 import {
   type CoderHostSeams,
   productionCoderHostSeams,
@@ -76,4 +78,20 @@ export function relayChildEvent(
   state: Parameters<CoderHost["relayChild"]>[2],
 ): Promise<void> {
   return runWeb(host.relayChild(event, session, state));
+}
+
+/** One `edit_plan` call's notes taken into the agent's plan, for the tool, which runs here rather than at an edge of its own. */
+export function editPlanNotes(
+  auth: SessionAuth,
+  sessionId: string,
+  input: UnparsedWireValue,
+  takenInTurn: number,
+): Promise<PlanEditResult> {
+  return runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(auth, sessionId);
+      if (Result.isFailure(admitted)) return planEditRejected(admitted.failure);
+      return yield* host.editPlan(admitted.success, input, takenInTurn);
+    }),
+  );
 }

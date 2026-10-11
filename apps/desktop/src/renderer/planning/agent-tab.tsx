@@ -8,7 +8,7 @@ import {
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { FileTextIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import type { Components } from "streamdown";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
@@ -33,6 +33,7 @@ import {
   endLine,
   messageWords,
   opensOnGitHub,
+  settledPlanEdits,
   showsPublishedRow,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
@@ -415,6 +416,15 @@ export function AgentTab({
     onStatus: control.onStatus,
     onTitle: control.onTitle,
   });
+  // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
+  // the edits already on screen when the tab opened are the plan's as it was read.
+  const settledEdits = settledPlanEdits(transcript.messages);
+  const seenEdits = useRef(settledEdits);
+  useEffect(() => {
+    if (settledEdits <= seenEdits.current) return;
+    seenEdits.current = settledEdits;
+    tell(ACT_KIND.PLANNING_REFRESH);
+  }, [settledEdits, tell]);
   const composer = useAgentComposer({
     agentId: agent.id,
     messages: transcript.messages,

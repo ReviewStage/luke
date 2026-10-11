@@ -1,6 +1,6 @@
-import { applyNotes, type PlanNote, planBody } from "@sidecar/hosted/plan-template";
+import { applyNotes, type PlanNote, planBody, withAgentEdit } from "@sidecar/hosted/plan-template";
 import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
-import { Effect, Option } from "effect";
+import { Clock, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import { readPlanForUpdate, savePlanDocument } from "./plan-store.js";
 import { logStoreFailure } from "./store-failure.js";
@@ -8,15 +8,20 @@ import { logStoreFailure } from "./store-failure.js";
 /**
  * plan-notes.ts -- the plan's one write: take the notetaker's notes into a plan and read back what was saved.
  *
- * Its one caller is a planning call's notetaker (`voice/plan-scribe.ts`),
- * whose model answers with notes (`@sidecar/hosted/plan-template`): a point
+ * Its callers are a planning call's notetaker (`voice/plan-scribe.ts`) and a
+ * coding agent's `edit_plan` (`coder-host/plan-edit.ts`), whose models
+ * answer with notes (`@sidecar/hosted/plan-template`): a point
  * added under a field, an example added to a rule, a phrase corrected, or a
  * line struck. They are taken in order over the fields the plan holds, the
  * fields are formatted into the canonical Markdown body under the plan's
  * name as it stands at the save, and the body, the list, and the
  * fields are saved together. A note that names a phrase the plan does not
  * hold is passed over and the rest are saved; a body past its bound once
- * formatted is refused before anything is written.
+ * formatted is refused before anything is written. Notes a coding agent
+ * takes name their author, and the save that takes any of them is written
+ * into the plan's journal with the notes as taken, so the developer and the
+ * planning model can see which agent changed what; the notetaker's own
+ * saves name no author and leave the journal as it stands.
  *
  * Note that the notes are the plan's content and nothing else. Which account
  * and which plan they land in are the binding the service built from the
@@ -35,6 +40,11 @@ import { logStoreFailure } from "./store-failure.js";
 export interface PlanDocumentBinding {
   readonly userId: string;
   readonly planId: string;
+}
+
+/** Who took the notes where it was a coding agent: its row's id, which the service read and the model never names. */
+export interface PlanNoteAuthor {
+  readonly agentId: string;
 }
 
 export const PLAN_SAVE_STATUS = {
@@ -56,6 +66,8 @@ export type PlanSaveResult =
       readonly document: PlanDocument;
       /** Epoch milliseconds of the save. */
       readonly savedAt: number;
+      /** The notes that could not be taken, passed over while the rest were saved. */
+      readonly missed: readonly PlanNote[];
     }
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
@@ -68,28 +80,50 @@ const NO_PLAN_RESULT: PlanSaveResult = {
 };
 
 /** The notes taken over what the plan holds, formatted, and saved; a refusal where the plan is gone or the body too long. */
-function savedNotes(binding: PlanDocumentBinding, notes: readonly PlanNote[]) {
+function savedNotes(
+  binding: PlanDocumentBinding,
+  notes: readonly PlanNote[],
+  author: PlanNoteAuthor | undefined,
+) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(savedUnderLock(binding, notes)),
+    client.withTransaction(savedUnderLock(binding, notes, author)),
   );
 }
 
 /** The read and the save of `savedNotes`, run inside the transaction that holds the row. */
-function savedUnderLock(binding: PlanDocumentBinding, notes: readonly PlanNote[]) {
+function savedUnderLock(
+  binding: PlanDocumentBinding,
+  notes: readonly PlanNote[],
+  author: PlanNoteAuthor | undefined,
+) {
   return Effect.gen(function* () {
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
     const { fields, plan } = stored.value;
-    const { content } = applyNotes({ fields, assumptions: plan.document.assumptions }, notes);
+    const { content, missed } = applyNotes(
+      { fields, assumptions: plan.document.assumptions },
+      notes,
+    );
     const body = planBody({ name: plan.name }, content.fields);
     if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) {
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.TOO_LONG } as const;
     }
+    // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
+    const taken = notes.filter((note) => !missed.includes(note));
+    const journal =
+      author === undefined || taken.length === 0
+        ? undefined
+        : withAgentEdit(stored.value.agentEdits, {
+            agentId: author.agentId,
+            at: yield* Clock.currentTimeMillis,
+            notes: taken,
+          });
     const saved = yield* savePlanDocument(
       binding.userId,
       binding.planId,
       { body, assumptions: content.assumptions },
       content.fields,
+      journal,
     );
     return Option.match(saved, {
       onNone: () => NO_PLAN_RESULT,
@@ -97,17 +131,19 @@ function savedUnderLock(binding: PlanDocumentBinding, notes: readonly PlanNote[]
         status: PLAN_SAVE_STATUS.SAVED,
         document: savedPlan.document,
         savedAt: savedPlan.updatedAt,
+        missed,
       }),
     });
   });
 }
 
-/** Notes already read under the template's schema, taken into the plan the service bound. */
+/** Notes already read under the template's schema, taken into the plan the service bound, journaled under their author where a coding agent took them. */
 export function saveNotes(
   binding: PlanDocumentBinding,
   notes: readonly PlanNote[],
+  author?: PlanNoteAuthor,
 ): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
-  return savedNotes(binding, notes).pipe(
+  return savedNotes(binding, notes, author).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() =>
       Effect.succeed<PlanSaveResult>({

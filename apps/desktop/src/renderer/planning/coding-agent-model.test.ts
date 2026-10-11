@@ -8,6 +8,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { MESSAGE_ROLE } from "@sidecar/wire";
 import { test } from "vitest";
 import { TOOL_STATE } from "../ai-elements/tool";
 import {
@@ -34,6 +35,7 @@ import {
   readModelChoice,
   type SentLine,
   START_NEEDS_REPOSITORY,
+  settledPlanEdits,
   showsPublishedRow,
   startFailureNote,
   unreadSentLines,
@@ -380,4 +382,39 @@ test("an effort carried to a model that lacks it falls to the nearest the model 
     "names off the scale are passed over",
   );
   assert.equal(effortFor([], "high"), undefined);
+});
+
+test("the plan edits that have answered are counted, not the ones still out or the other calls", () => {
+  const messages: CodingAgentMessage[] = [
+    {
+      id: "m1",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-edit_plan",
+          toolCallId: "c1",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+        { type: "tool-edit_plan", toolCallId: "c2", state: "input-available", input: {} },
+        { type: "tool-bash", toolCallId: "c3", state: "output-available", input: {}, output: {} },
+      ],
+    },
+    {
+      id: "m2",
+      role: MESSAGE_ROLE.ASSISTANT,
+      parts: [
+        {
+          type: "tool-edit_plan",
+          toolCallId: "c4",
+          state: "output-available",
+          input: {},
+          output: {},
+        },
+      ],
+    },
+  ];
+  assert.equal(settledPlanEdits(messages), 2);
+  assert.equal(settledPlanEdits([]), 0);
 });

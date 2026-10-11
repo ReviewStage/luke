@@ -1,3 +1,4 @@
+import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
@@ -14,8 +15,8 @@ import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
  * agent, and as their JSON where it is not. Nothing here draws.
  */
 
-/** The tools eve gives a coding agent, by the names its parts carry. */
-const AGENT_TOOL = {
+/** The tools a coding agent has, eve's and Luke's own notes on the plan, by the names its parts carry. */
+export const AGENT_TOOL = {
   BASH: "bash",
   READ_FILE: "read_file",
   WRITE_FILE: "write_file",
@@ -24,6 +25,7 @@ const AGENT_TOOL = {
   GLOB: "glob",
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
+  EDIT_PLAN: "edit_plan",
 } as const;
 
 export interface ToolCallView {
@@ -128,6 +130,31 @@ function wordsOutput(output: WireValue, key: string): ToolBlock {
   return textBlock(truncated ? `${words.trimEnd()}\n${TRUNCATED_NOTE}` : words);
 }
 
+/**
+ * What a plan note of each kind did, in the row's words, keyed by the
+ * template's kinds. Note that the keys are held to the template's type and
+ * not read from its module, because the template reaches Effect's Schema,
+ * which the renderer bundle does not carry for one table of words.
+ */
+const NOTE_VERB = {
+  add: "added",
+  addExample: "added an example",
+  replace: "corrected",
+  remove: "struck",
+} as const satisfies Record<PlanNote["kind"], string>;
+
+/** The notes a plan edit took, summed by what each did: "2 added, 1 corrected". */
+function planEditSummary(input: WireValue | undefined): string {
+  const notes = isRecord(input) ? input.notes : undefined;
+  if (notes === undefined || !isWireArray(notes)) return "";
+  return Object.entries(NOTE_VERB)
+    .flatMap(([kind, verb]) => {
+      const count = notes.filter((note) => stringAt(note, "kind") === kind).length;
+      return count === 0 ? [] : [`${count} ${verb}`];
+    })
+    .join(", ");
+}
+
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
 function knownToolView(
   tool: string,
@@ -187,6 +214,13 @@ function knownToolView(
         kind: CALL_KIND.WEB_SEARCH,
         subject: stringAt(input, "query") ?? "",
         input: textBlock(stringAt(input, "query") ?? ""),
+        output: output === undefined ? undefined : jsonBlock(output),
+      };
+    case AGENT_TOOL.EDIT_PLAN:
+      return {
+        kind: CALL_KIND.EDIT_PLAN,
+        subject: planEditSummary(input),
+        input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : jsonBlock(output),
       };
     default:

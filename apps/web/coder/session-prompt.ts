@@ -1,5 +1,6 @@
 import { defineState } from "eve/context";
 import type { SessionPromptRecord } from "../server/hosted/brain-host/host.js";
+import { NO_NOTES_TAKEN, type NotesTaken } from "../server/hosted/coder-host/plan-edit.js";
 
 /**
  * The session's prompt as its content address, in eve's durable session
@@ -36,3 +37,14 @@ export interface DelegationRecord {
 }
 
 export const delegationRecord = defineState<DelegationRecord>("luke.coder.delegation", () => ({}));
+
+/**
+ * How many notes the turn under way has taken on the plan, in eve's durable
+ * session state, which is what holds a turn to its cap
+ * (`server/hosted/coder-host/plan-edit.ts`): the tool reads it before saving
+ * and counts what was taken once saved.
+ */
+export const planNotesTaken = defineState<NotesTaken>(
+  "luke.coder.plan-notes",
+  () => NO_NOTES_TAKEN,
+);

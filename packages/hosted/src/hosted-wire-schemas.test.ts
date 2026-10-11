@@ -100,6 +100,7 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDefaultWriteSchema: modelsWire.codingAgentDefaultWriteSchema,
   } satisfies RecordedEffectJsonSchemas<typeof modelsWire>,
   "plan-wire": {
+    agentEditLineSchema: planWire.agentEditLineSchema,
     planAssumptionSchema: planWire.planAssumptionSchema,
     planDocumentSchema: planWire.planDocumentSchema,
     planCreateRequestSchema: planWire.planCreateRequestSchema,
