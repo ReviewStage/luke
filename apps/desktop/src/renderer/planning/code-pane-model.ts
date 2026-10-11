@@ -39,6 +39,20 @@ export function copiedLines(code: PlanCode): string {
   return kept.map((tokens) => tokens.map((token) => token.text).join("")).join("\n");
 }
 
+/**
+ * How long before the call standing was first heard it is taken to have
+ * started, in milliseconds. Note that the Transcript tab dates a live call
+ * from when this window first heard its words, which can follow a turn the
+ * call began with, so the call claims code shown a little before it; the
+ * record's own start replaces the guess once the call is read back.
+ */
+const LIVE_CALL_SLACK_MS = 30_000;
+
+/** When a call started, as the feed reads it: a live call a little before it was first heard. */
+function callStart(call: CodeFeedCallSource): number {
+  return call.live ? call.startedAt - LIVE_CALL_SLACK_MS : call.startedAt;
+}
+
 /** The call a code was shown on: the latest to start at or before it, or none where no call started before it. */
 function callOf(
   showing: PlanCodeShowing,
@@ -46,8 +60,8 @@ function callOf(
 ): CodeFeedCallSource | undefined {
   let found: CodeFeedCallSource | undefined;
   for (const call of calls) {
-    if (call.startedAt > showing.shownAt) continue;
-    if (found === undefined || call.startedAt >= found.startedAt) found = call;
+    if (callStart(call) > showing.shownAt) continue;
+    if (found === undefined || callStart(call) >= callStart(found)) found = call;
   }
   return found;
 }

@@ -82,3 +82,15 @@ test("a card's part of a window is the lines pointed at with three of the file e
   assert.equal(head.firstLine, 40);
   assert.equal(head.lines.length, 24);
 });
+
+test("lines pointed at past the window, as past a short file's end, draw the window's head rather than nothing", () => {
+  const short = { ...shown("src/invite.ts", ["a", "b", "c"], 1), lineCount: 3 };
+
+  const past = codeExcerpt({
+    ...short,
+    ref: { path: "src/invite.ts", startLine: 100, endLine: 101 },
+  });
+
+  assert.equal(past.firstLine, 1);
+  assert.deepEqual(past.lines, ["a", "b", "c"]);
+});

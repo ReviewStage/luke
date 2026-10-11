@@ -28,7 +28,7 @@ function showing(callId: string, shownAt: number, code: PlanCode): PlanCodeShowi
 /** Two calls about the plan, the second standing. */
 const CALLS: readonly CodeFeedCallSource[] = [
   { key: "call-1", startedAt: 1_000, live: false },
-  { key: "call-2", startedAt: 5_000, live: true },
+  { key: "call-2", startedAt: 3_600_000, live: true },
 ];
 
 const roots: Root[] = [];
@@ -64,7 +64,7 @@ test("every code Luke showed is a card of its own in the order shown, two of one
   draw([
     showing("a", 2_000, windowOf("src/invite.ts", 11, 12)),
     showing("b", 3_000, windowOf("src/invite.ts", 20, 20)),
-    showing("c", 6_000, windowOf("src/roles.ts", 4, 6)),
+    showing("c", 3_660_000, windowOf("src/roles.ts", 4, 6)),
   ]);
 
   assert.deepEqual(feedOrder(container), [
@@ -79,14 +79,14 @@ test("every code Luke showed is a card of its own in the order shown, two of one
 
 test("code shown on the live call lands after every card before it, and the feed keeps to its newest card unless the developer scrolled up", () => {
   const { container, draw } = mounted();
-  const first = showing("a", 6_000, windowOf("src/invite.ts", 11, 12));
+  const first = showing("a", 3_660_000, windowOf("src/invite.ts", 11, 12));
   draw([first]);
   const log = container.querySelector<HTMLElement>('[role="log"]');
   assert.ok(log);
   Object.defineProperty(log, "clientHeight", { configurable: true, value: 400 });
   Object.defineProperty(log, "scrollHeight", { configurable: true, value: 1_000 });
 
-  draw([first, showing("b", 7_000, windowOf("src/roles.ts", 2, 2))]);
+  draw([first, showing("b", 3_670_000, windowOf("src/roles.ts", 2, 2))]);
   assert.deepEqual(feedOrder(container), [
     "live call",
     "src/invite.ts, Lines 11–12",
@@ -99,10 +99,24 @@ test("code shown on the live call lands after every card before it, and the feed
   Object.defineProperty(log, "scrollHeight", { configurable: true, value: 1_400 });
   draw([
     first,
-    showing("b", 7_000, windowOf("src/roles.ts", 2, 2)),
-    showing("c", 8_000, first.code),
+    showing("b", 3_670_000, windowOf("src/roles.ts", 2, 2)),
+    showing("c", 3_680_000, first.code),
   ]);
   assert.equal(log.scrollTop, 100, "left where the developer scrolled to");
+});
+
+test("code shown by a turn that began just before the live call was first heard stands under the live call", () => {
+  const { container, draw } = mounted();
+
+  draw(
+    [showing("a", 3_600_000, windowOf("src/invite.ts", 3, 3))],
+    [
+      { key: "call-1", startedAt: 1_000, live: false },
+      { key: "call-2", startedAt: 3_610_000, live: true },
+    ],
+  );
+
+  assert.deepEqual(feedOrder(container), ["live call", "src/invite.ts, Line 3"]);
 });
 
 test("code shown before any call the transcript holds stands under its own turn's divider", () => {

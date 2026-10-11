@@ -174,15 +174,21 @@ function colouredLines(path: string, lines: readonly string[]): CodeToken[][] {
   return tokens.slice(0, lines.length).map((line) => compactLine(line, foreground));
 }
 
-/** The part of a window the Code tab's card draws: the lines pointed at and a few either side, or the file's head. */
+/**
+ * The part of a window the Code tab's card draws: the lines pointed at and a
+ * few either side, or the window's head for a whole file. Note that lines
+ * pointed at past the window, as past a file's end, draw the window's head
+ * too, because the service answered real lines for them and a card with
+ * none would drop them.
+ */
 export function codeExcerpt(code: ShownCode): ShownCode {
   const { startLine, endLine } = code.ref;
-  if (startLine === undefined || endLine === undefined) {
-    return { ...code, lines: code.lines.slice(0, CODE_EXCERPT_LINES.HEAD) };
-  }
+  const head = { ...code, lines: code.lines.slice(0, CODE_EXCERPT_LINES.HEAD) };
+  if (startLine === undefined || endLine === undefined) return head;
   const lastLine = code.firstLine + code.lines.length - 1;
   const from = Math.max(code.firstLine, startLine - CODE_EXCERPT_LINES.CONTEXT);
   const to = Math.min(lastLine, endLine + CODE_EXCERPT_LINES.CONTEXT);
+  if (from > to) return head;
   return {
     ...code,
     firstLine: from,
