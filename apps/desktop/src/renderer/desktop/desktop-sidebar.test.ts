@@ -9,6 +9,7 @@ import {
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { useAppKeymap } from "../app-commands";
@@ -27,6 +28,20 @@ const DEAN: AccountSnapshot = {
   provider: ACCOUNT_PROVIDER.GITHUB,
 };
 
+const UP_TO_DATE: UpdateSnapshot = {
+  status: UPDATE_STATUS.IDLE,
+  currentVersion: "0.10.0",
+  installSupported: true,
+  upToDate: true,
+};
+
+const READY: UpdateSnapshot = {
+  status: UPDATE_STATUS.READY,
+  currentVersion: "0.10.0",
+  installSupported: true,
+  latestVersion: "0.11.0",
+};
+
 const roots: Root[] = [];
 
 /** Takes down every mounted sidebar, so no keymap outlives its test. */
@@ -40,7 +55,8 @@ function unmountAll(): void {
 function mount(
   account: AccountSnapshot,
   options: {
-    settingsNote?: string;
+    update?: UpdateSnapshot;
+    onInstall?: () => void;
     onTabChange?: (tab: PanelTab) => void;
     tab?: PanelTab;
     plans?: Partial<PlansControl>;
@@ -75,7 +91,12 @@ function mount(
         tab: options.tab ?? PANEL_TAB.PLANS,
         onTabChange: options.onTabChange ?? (() => undefined),
         account,
-        settingsNote: options.settingsNote,
+        updates: {
+          update: options.update ?? UP_TO_DATE,
+          onCheck: () => Promise.resolve(),
+          onInstall: options.onInstall ?? (() => undefined),
+          onOpenLatest: () => undefined,
+        },
       }),
     );
   });
@@ -83,7 +104,7 @@ function mount(
 }
 
 function accountButton(container: ParentNode): HTMLButtonElement {
-  const button = container.querySelector<HTMLButtonElement>(".sidebar-foot button");
+  const button = container.querySelector<HTMLButtonElement>(".sidebar-foot .sidebar-account");
   assert.ok(button, "the foot draws the account button");
   return button;
 }
@@ -153,11 +174,76 @@ test("signed out, the button still leads to Settings and says so", () => {
   assert.deepEqual(opened, [PANEL_TAB.SETTINGS]);
 });
 
-test("a waiting release marks the account button with its news", () => {
-  const button = accountButton(mount(DEAN, { settingsNote: "Update available" }));
+function updateControl(container: ParentNode): HTMLElement | null {
+  return container.querySelector<HTMLElement>(".sidebar-foot > :not(.sidebar-account)");
+}
 
-  assert.equal(button.querySelector(".tab-note")?.getAttribute("title"), "Update available");
-  assert.match(button.textContent ?? "", /\(Update available\)/u);
+test("a downloaded release puts Restart to update above the account row, and pressing it installs", () => {
+  let installs = 0;
+  const container = mount(DEAN, {
+    update: READY,
+    onInstall: () => {
+      installs += 1;
+    },
+  });
+  const control = updateControl(container);
+  assert.ok(control instanceof HTMLButtonElement, "the foot draws the update button");
+  assert.equal(control.textContent, "Restart to update");
+  assert.ok(
+    control.nextElementSibling === accountButton(container),
+    "it stands just above the account row",
+  );
+
+  act(() => control.click());
+
+  assert.equal(installs, 1);
+});
+
+test("a downloading release is a quiet line with how far along it is, and nothing to press", () => {
+  const container = mount(DEAN, {
+    update: {
+      status: UPDATE_STATUS.DOWNLOADING,
+      currentVersion: "0.10.0",
+      installSupported: true,
+      latestVersion: "0.11.0",
+      progress: { percent: 41.7, transferredBytes: 417, totalBytes: 1000 },
+    },
+  });
+  const control = updateControl(container);
+
+  assert.equal(control?.getAttribute("role"), "status");
+  assert.equal(control?.textContent, "Downloading update… 42%");
+  assert.equal(container.querySelectorAll(".sidebar-foot button").length, 1);
+});
+
+test("up to date, checking, or unable to install in place, the sidebar draws no update control", () => {
+  const unsupported: UpdateSnapshot = { ...READY, installSupported: false };
+  for (const update of [
+    UP_TO_DATE,
+    { status: UPDATE_STATUS.CHECKING, currentVersion: "0.10.0", installSupported: true },
+    unsupported,
+  ] as const) {
+    assert.equal(updateControl(mount(DEAN, { update })), null);
+  }
+});
+
+test("the gear's dot stands down while the sidebar carries the release, and marks a failed one", () => {
+  const ready = accountButton(mount(DEAN, { update: READY }));
+  assert.equal(ready.querySelector(".tab-note"), null);
+
+  const failed = accountButton(
+    mount(DEAN, {
+      update: {
+        status: UPDATE_STATUS.ERROR,
+        currentVersion: "0.10.0",
+        installSupported: true,
+        latestVersion: "0.11.0",
+      },
+    }),
+  );
+  const note = failed.querySelector(".tab-note")?.getAttribute("title");
+  assert.match(note ?? "", /could not be installed/u);
+  assert.match(failed.textContent ?? "", /could not be installed/u);
 });
 
 function newPlanButton(container: ParentNode): HTMLButtonElement {

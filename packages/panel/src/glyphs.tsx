@@ -209,6 +209,17 @@ export function DownloadIcon(): React.JSX.Element {
   );
 }
 
+/** An arrow rising in a circle: the sidebar's way into a newer release. */
+export function UpdateIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <circle cx="12" cy="12" r="8.4" />
+      <path d="M12 16.2V7.8" />
+      <path d="m8.4 11.4 3.6-3.6 3.6 3.6" />
+    </Glyph>
+  );
+}
+
 /** Drawn rather than typed: a ↗ character depends on a font having one. */
 export function ExternalIcon(): React.JSX.Element {
   return (

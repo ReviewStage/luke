@@ -1,13 +1,23 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ArrowLeftIcon, ArrowRightIcon, ComposeIcon, GearIcon, UserIcon } from "@sidecar/panel";
+import {
+  ArrowLeftIcon,
+  ArrowRightIcon,
+  ComposeIcon,
+  GearIcon,
+  UpdateIcon,
+  UserIcon,
+} from "@sidecar/panel";
 import { useState } from "react";
+import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
+import { updateAvailable, updateInSidebar, updateRow } from "../update-row";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
@@ -126,10 +136,43 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 }
 
 /**
+ * A newer release on its way in, just above the account row, where a desktop
+ * devtool keeps it: a quiet line while it downloads, then the restart that
+ * installs it, which is the very act Settings' Restart to update runs. It
+ * draws nothing in any other state, so the column carries no control with
+ * nothing to do.
+ */
+function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
+  const { update } = updates;
+  if (!updateInSidebar(update)) return null;
+  switch (update.status) {
+    case UPDATE_STATUS.READY:
+      return (
+        <Tooltip label={`Luke ${update.latestVersion} is ready`}>
+          <button type="button" className="sidebar-item sidebar-update" onClick={updates.onInstall}>
+            <UpdateIcon />
+            Restart to update
+          </button>
+        </Tooltip>
+      );
+    case UPDATE_STATUS.DOWNLOADING:
+      return (
+        <p className="sidebar-item sidebar-update-progress" role="status">
+          <UpdateIcon />
+          Downloading update…
+          {update.progress ? ` ${Math.round(update.progress.percent)}%` : null}
+        </p>
+      );
+    default:
+      return null;
+  }
+}
+
+/**
  * The foot of the column: one row that is who is signed in and the way to
  * Settings at once, the way every desktop devtool keeps it. Signed out it
  * names where it leads instead. The update dot rides on the gear, since
- * Settings is where the waiting release is installed.
+ * Settings is where a release the sidebar does not carry is fetched.
  */
 function AccountButton({
   account,
@@ -186,7 +229,7 @@ export function DesktopSidebar({
   tab,
   onTabChange,
   account,
-  settingsNote,
+  updates,
 }: {
   sidebar: SidebarCollapse;
   identity: LukeIdentityProps;
@@ -195,8 +238,7 @@ export function DesktopSidebar({
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   account: AccountSnapshot;
-  /** News Settings wears as a dot: a newer release waiting. */
-  settingsNote: string | undefined;
+  updates: UpdateControl;
 }): React.JSX.Element {
   const onPlans = tab === PANEL_TAB.PLANS;
   const composing = onPlans && plans.page === PLANS_PAGE.NEW;
@@ -222,6 +264,12 @@ export function DesktopSidebar({
     if (plan !== undefined) openPlan(plan.id);
   };
   const listed = plans.signedIn && plans.plans.length > 0;
+  // Note that the gear's dot wears the update row's own words, so its hover
+  // and the row it leads to tell one story, and that it stands down while the
+  // release has its own control above it, so the news is said once.
+  const { update } = updates;
+  const settingsNote =
+    updateAvailable(update) && !updateInSidebar(update) ? updateRow(update).detail : undefined;
   useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
   useAppCommand(
     APP_COMMAND.NEXT_PLAN,
@@ -275,6 +323,7 @@ export function DesktopSidebar({
       </nav>
 
       <div className="sidebar-foot">
+        <SidebarUpdate updates={updates} />
         <AccountButton
           account={account}
           current={tab === PANEL_TAB.SETTINGS}

@@ -12,7 +12,6 @@ import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
-import { updateAvailable, updateRow } from "../update-row";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -166,11 +165,6 @@ export function DesktopShell({
       </div>
     );
   }
-  // Settings wears the update row's own words, so the dot's hover and the
-  // row it leads to tell one story about the same release.
-  const settingsNote = updateAvailable(settings.updates.update)
-    ? updateRow(settings.updates.update).detail
-    : undefined;
   // Settings takes the whole window, its pages listed where the plans were.
   if (tab === PANEL_TAB.SETTINGS) {
     return (
@@ -202,7 +196,7 @@ export function DesktopShell({
         tab={tab}
         onTabChange={onTabChange}
         account={account}
-        settingsNote={settingsNote}
+        updates={settings.updates}
       />
       <main className="desktop-main">
         <DesktopPlans plans={plans} />
