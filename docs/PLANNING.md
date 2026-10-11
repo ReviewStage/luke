@@ -17,8 +17,9 @@ are not reopened here. The two that shape everything below:
   notes into it ("The notetaker" below). The body is always the one fixed
   template (LUKE-352, "The fixed template" below): the service takes each
   note into the plan's stored fields and formats the result into the body.
-  There are no versions, no
-  stale-revision rejection, no approval state, and no export record.
+  Every save that changes the plan is kept as a revision under the writer
+  who made it ("History" below); there is no stale-revision rejection, no
+  approval state, and no export record.
 - **The model drives the workflow.** Question choice, agreement, corrections,
   and the final review live in the planning model's instructions, and the
   planning model never writes the document: it is handed the saved document
@@ -222,6 +223,13 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 
 ### Document
 
+- Above the body, one muted line says who last edited the plan, from its
+  newest revision ("History" below): "Edited by Luke during your call · 2h
+  ago", or a coding agent by its row's name. The
+  notetaker is "Luke", because the developer talks to Luke and never meets a
+  notetaker. The time moves on once a minute, and a save the notetaker makes
+  on the open plan's call moves the line as it lands. A plan nobody has
+  written since it started shows no line.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
@@ -485,9 +493,29 @@ A coding agent takes the same notes through its `edit_plan` tool
 (`apps/web/server/hosted/coder-host/plan-edit.ts`). Its save is written into
 the plan's journal (`plan.agent_edits`, the last fifty) as the agent's id,
 the instant, and the notes as taken; the agent is named at read time from its
-row, so the window's "Updated by" line over the document and the "recent
+row, so the window's "Edited by" line over the document and the "recent
 edits by coding agents" the planning model is handed both say what the row
 says now.
+
+### History
+
+Every save that changes the plan is kept as a revision
+(`apps/web/server/hosted/plan-revisions.ts`, table `plan_revision`): the
+plan's fields and assumptions as they stood after it, who wrote it (the
+notetaker, on the call it listens to, or a coding agent by its row), when
+its first and latest saves were, and how many notes it took. It is written in
+the transaction that saves the plan, so the two never disagree. The same
+writer's saves one after another are one revision: the notetaker's on one
+call, or an agent's, while the revision's latest save is at most ten minutes
+old, so a call is about one revision rather than one per pause. Notes that
+change nothing are no revision, and a rename is none. A plan written before
+history began is found by its first later save, which first records what the
+plan held, at its last save, as the plan's first revision ("earlier"). History
+starts there: nothing before it is reconstructed. Revisions go when their plan
+is deleted, and there is no cap on how many a plan keeps.
+
+The plan names its newest revision as its last edit, which the document's
+"Edited by" line reads ("Document" above).
 
 The notes type in while they are written. The call streams its answer, and
 the notes so far are taken over the saved fields and formatted exactly as a

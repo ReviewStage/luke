@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
-import { agoText, PlanBody } from "./plan-body";
+import { agoText, editedLine, PlanBody } from "./plan-body";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 
 const PLAN: Plan = {
@@ -81,8 +81,19 @@ test("a new plan draws its whole template unanswered, and an assumptions section
   );
 });
 
-test("a plan a coding agent has saved on says so above the document, naming the agent's newest save; one no agent touched says nothing", () => {
+test("a plan says who last wrote it above the document; one nobody has written says nothing", () => {
   const edited: Plan = {
+    ...PLAN,
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: true },
+  };
+
+  const note = /<p class="plan-edit-note">Edited by Luke during your call · \d+[mhd] ago<\/p>/u;
+  assert.match(bodyMarkup(edited), note);
+  assert.doesNotMatch(bodyMarkup(PLAN), /plan-edit-note/u);
+});
+
+test("from a service before history, the newest save a coding agent made is the last edit", () => {
+  const journaled: Plan = {
     ...PLAN,
     agentEdits: [
       { agentId: "a3b1c2d4-0000-4000-8000-000000000001", label: "GPT-6.1 Sol", at: 1 },
@@ -90,10 +101,36 @@ test("a plan a coding agent has saved on says so above the document, naming the 
     ],
   };
 
-  const note = /<p class="plan-edit-note">Updated by Claude Opus 5\.5 · \d+[mhd] ago<\/p>/u;
-  assert.match(bodyMarkup(edited), note);
-  assert.doesNotMatch(bodyMarkup(PLAN), /plan-edit-note/u);
-  assert.doesNotMatch(bodyMarkup(edited), /GPT-6\.1 Sol/u);
+  assert.match(
+    bodyMarkup(journaled),
+    /<p class="plan-edit-note">Edited by Claude Opus 5\.5 · \d+[mhd] ago<\/p>/u,
+  );
+  assert.doesNotMatch(bodyMarkup(journaled), /GPT-6\.1 Sol/u);
+});
+
+test("the last edit names its writer in the developer's words, and says when it was on a call", () => {
+  const now = 3 * 60 * 60_000;
+  const at = now - 2 * 60 * 60_000;
+  assert.equal(
+    editedLine({ actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true }, now),
+    "Edited by Luke during your call · 2h ago",
+  );
+  assert.equal(
+    editedLine({ actor: PLAN_ACTOR.NOTETAKER, at, duringCall: false }, now),
+    "Edited by Luke · 2h ago",
+  );
+  assert.equal(
+    editedLine({ actor: PLAN_ACTOR.DEVELOPER, at: now, duringCall: false }, now),
+    "Edited by you · just now",
+  );
+  assert.equal(
+    editedLine({ actor: PLAN_ACTOR.AGENT, label: "Command K board", at, duringCall: false }, now),
+    "Edited by Command K board · 2h ago",
+  );
+  assert.equal(
+    editedLine({ actor: PLAN_ACTOR.EARLIER, at, duringCall: false }, now),
+    "Edited · 2h ago",
+  );
 });
 
 test("how long ago a save was reads in the shortest words", () => {

@@ -7,12 +7,14 @@ import {
   PLAN_FIELD,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { saveNotes } from "../server/hosted/plan-notes";
+import { listRevisions } from "../server/hosted/plan-revisions";
 import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
@@ -30,6 +32,9 @@ import { testSqlClient } from "./support/sql-client";
 const RELAY_PLAN: NewPlan = {
   name: "Teammate invitations",
 };
+
+/** The call the scribe listens to, as the voice service names it. */
+const CALL = "rtc-session-plan-scribe";
 
 const PROBLEM = "Only an admin can add someone to a workspace.";
 const OUTCOME = "A member invites a teammate by email.";
@@ -118,6 +123,7 @@ const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswe
     const scribe = yield* planScribe({
       userId,
       planId,
+      liveSessionId: CALL,
       model,
       onDraft: (draft) => drafts.push(draft),
       onWriting: (value) => writing.push(value),
@@ -146,6 +152,78 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           yield* quiet;
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
           assert.ok(body.includes(PROBLEM));
+        }),
+      ),
+  );
+
+  it.effect(
+    "a call's saves are one revision of the plan, written by the notetaker on the call",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          const { scribe } = yield* scribeFor(userId, planId, [
+            { notes: [added(PLAN_FIELD.PROBLEM, PROBLEM)] },
+            { notes: [added(PLAN_FIELD.OUTCOME, OUTCOME)] },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_500));
+          yield* quiet;
+          yield* savedBodyOnce(userId, planId, (saved) => saved.includes(PROBLEM));
+          scribe.observe(heard("Members should invite by email.", 2_000, 3_500));
+          yield* quiet;
+          yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
+
+          const revisions = yield* listRevisions(userId, planId);
+          assert.deepEqual(
+            revisions.map(({ seq, lastEdit, changes }) => ({
+              seq,
+              actor: lastEdit.actor,
+              duringCall: lastEdit.duringCall,
+              changes,
+            })),
+            [{ seq: 1, actor: PLAN_ACTOR.NOTETAKER, duringCall: true, changes: 2 }],
+          );
+        }),
+      ),
+  );
+
+  it.effect(
+    "a run whose notes all miss, the plan written meanwhile, sends the document back unsaved and names no edit of Luke's",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const find = "an admin";
+          const { scribe, asked, pace, drafts } = yield* scribeFor(userId, planId, [
+            {
+              paced: {
+                notes: [
+                  { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "an owner" },
+                ],
+              },
+            },
+          ]);
+
+          scribe.observe(heard("Owners add people, not admins.", 0, 1_000));
+          yield* TestClock.adjust(Duration.millis(PLAN_SCRIBE.QUIET_MS));
+          yield* settledRead(
+            Effect.sync(() => asked.length),
+            (count) => count > 0,
+          );
+          // The plan is written while the notetaker's answer is still streaming.
+          yield* saveNotes({ userId, planId }, [
+            { kind: NOTE_KIND.REPLACE, field: PLAN_FIELD.PROBLEM, find, text: "a manager" },
+          ]);
+          const written = yield* readPlan(userId, planId);
+          while (pace()) yield* settle;
+          const last = yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft !== undefined && !draft.document.body.includes(find),
+          );
+
+          assert.equal(last?.savedAt, undefined);
+          assert.equal(last?.document.body, Option.getOrThrow(written).plan.document.body);
         }),
       ),
   );

@@ -13,7 +13,7 @@ import type {
   PlanMarks,
 } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
@@ -319,11 +319,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   function showDraft(draft: PlanDraftFrame): void {
     const held = heldPlanOf(draft.planId);
     if (held === undefined || view.activePlanId !== draft.planId) return;
-    // A saved draft carries its save's instant, so the copy held is the save's.
+    // A saved draft carries its save's instant, so the copy held is the save's,
+    // written by the notetaker on this call.
     const plan = {
       ...held,
       document: draft.document,
-      ...(draft.savedAt === undefined ? undefined : { updatedAt: draft.savedAt }),
+      ...(draft.savedAt === undefined
+        ? undefined
+        : {
+            updatedAt: draft.savedAt,
+            lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: draft.savedAt, duringCall: true },
+          }),
     };
     write({ document: { status: PLANNING_READ.READY, plan } });
   }

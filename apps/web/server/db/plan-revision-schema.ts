@@ -1,0 +1,45 @@
+import type { PlanFields } from "@sidecar/hosted/plan-template";
+import type { PlanActor, PlanAssumption } from "@sidecar/hosted/plan-wire";
+import { integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
+import { codingAgent } from "./coding-agent-schema.js";
+import { instant } from "./instant.js";
+import { plan } from "./plan-schema.js";
+
+/**
+ * plan-revision-schema.ts -- a plan's history, one revision per row.
+ *
+ * One row per revision, each the plan's content as it
+ * stood after the revision, under the writer who made it. Saves the same
+ * writer makes one after another, on one call or within a few minutes, are
+ * one revision that each save moves on (`hosted/plan-revisions.ts`), so a
+ * call is about one row rather than one per pause in the speech. The content
+ * is the template's fields and the assumptions, from which the body is
+ * formatted again under whatever name the plan has now; a rename is not a
+ * revision. A plan from before history starts it with the one revision its
+ * first later save found, under `earlier`. Rows go with their plan, and
+ * outlive the coding agent that wrote them unnamed.
+ */
+export const planRevision = pgTable(
+  "plan_revision",
+  {
+    planId: uuid("plan_id")
+      .notNull()
+      .references(() => plan.id, { onDelete: "cascade" }),
+    /** The revision's number within its plan, from one. */
+    seq: integer("seq").notNull(),
+    actor: text("actor").$type<PlanActor>().notNull(),
+    /** The coding agent that wrote it; null for any other writer, and once the agent's row is gone. */
+    agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
+    /** The call the notetaker wrote it on, as `voice_sessions.live_session_id` names it; null for any other writer. */
+    liveSessionId: text("live_session_id"),
+    fields: jsonb("fields").$type<PlanFields>().notNull(),
+    assumptions: jsonb("assumptions").$type<readonly PlanAssumption[]>().notNull(),
+    /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
+    changes: integer("changes").notNull(),
+    /** The revision's first save. */
+    startedAt: instant("started_at").notNull(),
+    /** The revision's latest save. */
+    at: instant("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.planId, table.seq] })],
+);

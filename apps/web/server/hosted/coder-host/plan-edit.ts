@@ -1,4 +1,5 @@
 import { type PlanNote, planNotesSchema } from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Result } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
@@ -136,7 +137,8 @@ export function recordPlanEdit(
   if (takenInTurn + notes.length > PLAN_EDIT.MAX_NOTES_PER_TURN) {
     return Effect.succeed(planEditRejected(PLAN_EDIT_REFUSAL.TOO_MANY));
   }
-  return Effect.map(saveNotes(binding, notes, author), (saved): PlanEditResult => {
+  const writer = { actor: PLAN_ACTOR.AGENT, agentId: author.agentId } as const;
+  return Effect.map(saveNotes(binding, notes, writer), (saved): PlanEditResult => {
     if (saved.status !== PLAN_SAVE_STATUS.SAVED) return planEditRejected(saved.reason);
     return {
       status: ACTION_RESULT_STATUS.ACCEPTED,

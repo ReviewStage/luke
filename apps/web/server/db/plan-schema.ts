@@ -15,9 +15,10 @@ import { conversations } from "./storage-schema.js";
  * document the planning model saves, a Markdown body and the assumptions list
  * beside it, with the template's fields the body was formatted from, and the
  * journal of the saves coding agents made on it. A save
- * replaces the document's columns in one statement, so there is no
- * earlier document to fall back on and none half-written: a save that failed
- * left the row as it stood. The document is stored as written, like the
+ * replaces the document's columns in one statement, so none is left
+ * half-written: a save that failed left the row as it stood. What the
+ * document held before is kept beside it, in `plan_revision`
+ * (`plan-revision-schema.ts`). The document is stored as written, like the
  * conversation, readable by an operator and kept the developer's own by the
  * account it is keyed by.
  *

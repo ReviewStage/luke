@@ -1,7 +1,14 @@
-import { applyNotes, type PlanNote, planBody, withAgentEdit } from "@sidecar/hosted/plan-template";
-import { PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import {
+  applyNotes,
+  changedFields,
+  type PlanNote,
+  planBody,
+  withAgentEdit,
+} from "@sidecar/hosted/plan-template";
+import { PLAN_ACTOR, PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option } from "effect";
 import { SqlClient } from "effect/unstable/sql";
+import { type PlanWriter, recordRevision } from "./plan-revisions.js";
 import { readPlanForUpdate, savePlanDocument } from "./plan-store.js";
 import { logStoreFailure } from "./store-failure.js";
 
@@ -17,11 +24,13 @@ import { logStoreFailure } from "./store-failure.js";
  * name as it stands at the save, and the body, the list, and the
  * fields are saved together. A note that names a phrase the plan does not
  * hold is passed over and the rest are saved; a body past its bound once
- * formatted is refused before anything is written. Notes a coding agent
- * takes name their author, and the save that takes any of them is written
- * into the plan's journal with the notes as taken, so the developer and the
- * planning model can see which agent changed what; the notetaker's own
- * saves name no author and leave the journal as it stands.
+ * formatted is refused before anything is written. Every save names its
+ * writer, the notetaker on its call or a coding agent, and a save that
+ * changed the plan is kept as a revision under that writer
+ * (`plan-revisions.ts`), in the same transaction, so the plan and its history
+ * never disagree. A coding agent's save that took any note is also written
+ * into the plan's journal with the notes as taken, which is what the planning
+ * model is told of what each agent changed.
  *
  * Note that the notes are the plan's content and nothing else. Which account
  * and which plan they land in are the binding the service built from the
@@ -68,6 +77,8 @@ export type PlanSaveResult =
       readonly savedAt: number;
       /** The notes that could not be taken, passed over while the rest were saved. */
       readonly missed: readonly PlanNote[];
+      /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
+      readonly moved: boolean;
     }
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
@@ -80,13 +91,9 @@ const NO_PLAN_RESULT: PlanSaveResult = {
 };
 
 /** The notes taken over what the plan holds, formatted, and saved; a refusal where the plan is gone or the body too long. */
-function savedNotes(
-  binding: PlanDocumentBinding,
-  notes: readonly PlanNote[],
-  author: PlanNoteAuthor | undefined,
-) {
+function savedNotes(binding: PlanDocumentBinding, notes: readonly PlanNote[], writer: PlanWriter) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
-    client.withTransaction(savedUnderLock(binding, notes, author)),
+    client.withTransaction(savedUnderLock(binding, notes, writer)),
   );
 }
 
@@ -94,27 +101,37 @@ function savedNotes(
 function savedUnderLock(
   binding: PlanDocumentBinding,
   notes: readonly PlanNote[],
-  author: PlanNoteAuthor | undefined,
+  writer: PlanWriter,
 ) {
   return Effect.gen(function* () {
     const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
     if (Option.isNone(stored)) return NO_PLAN_RESULT;
-    const { fields, plan } = stored.value;
-    const { content, missed } = applyNotes(
-      { fields, assumptions: plan.document.assumptions },
-      notes,
-    );
+    const { fields, plan, saved: savedBefore } = stored.value;
+    const before = { fields, assumptions: plan.document.assumptions };
+    const { content, missed } = applyNotes(before, notes);
     const body = planBody({ name: plan.name }, content.fields);
     if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) {
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.TOO_LONG } as const;
     }
-    // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
     const taken = notes.filter((note) => !missed.includes(note));
+    // Notes that missed, or took a field to the words it held, leave the plan as it was: no revision.
+    const moved = changedFields(before, content).length > 0;
+    if (moved) {
+      yield* recordRevision({
+        planId: binding.planId,
+        writer,
+        before,
+        after: content,
+        changes: taken.length,
+        savedBefore: savedBefore ? Option.some(new Date(plan.updatedAt)) : Option.none(),
+      });
+    }
+    // An agent's save is journaled with the notes that were taken; one that took none changed nothing to journal.
     const journal =
-      author === undefined || taken.length === 0
+      writer.actor !== PLAN_ACTOR.AGENT || taken.length === 0
         ? undefined
         : withAgentEdit(stored.value.agentEdits, {
-            agentId: author.agentId,
+            agentId: writer.agentId,
             at: yield* Clock.currentTimeMillis,
             notes: taken,
           });
@@ -132,18 +149,22 @@ function savedUnderLock(
         document: savedPlan.document,
         savedAt: savedPlan.updatedAt,
         missed,
+        moved,
       }),
     });
   });
 }
 
-/** Notes already read under the template's schema, taken into the plan the service bound, journaled under their author where a coding agent took them. */
+/** The notetaker off any call: a writer a test, or a run with no call to name, saves as. */
+const NOTETAKER: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER };
+
+/** Notes already read under the template's schema, taken into the plan the service bound, kept as a revision under their writer, the notetaker where none is named. */
 export function saveNotes(
   binding: PlanDocumentBinding,
   notes: readonly PlanNote[],
-  author?: PlanNoteAuthor,
+  writer: PlanWriter = NOTETAKER,
 ): Effect.Effect<PlanSaveResult, never, SqlClient.SqlClient> {
-  return savedNotes(binding, notes, author).pipe(
+  return savedNotes(binding, notes, writer).pipe(
     Effect.tapError(logStoreFailure),
     Effect.catch(() =>
       Effect.succeed<PlanSaveResult>({

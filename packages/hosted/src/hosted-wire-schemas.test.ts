@@ -109,6 +109,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planRenameRequestSchema: planWire.planRenameRequestSchema,
     planUpdateRequestSchema: planWire.planUpdateRequestSchema,
     planSummarySchema: planWire.planSummarySchema,
+    planLastEditSchema: planWire.planLastEditSchema,
     planSchema: planWire.planSchema,
     planListAnswerSchema: planWire.planListAnswerSchema,
     planAnswerSchema: planWire.planAnswerSchema,

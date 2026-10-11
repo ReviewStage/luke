@@ -612,6 +612,35 @@ function isTextField(field: PlanField): field is TextField {
   return Object.hasOwn(TEXT_FIELD, field);
 }
 
+/** What one field of a plan's content holds: an answer, the rules, or a list. */
+type PlanFieldValue =
+  | string
+  | null
+  | PlanFields["rules"]
+  | PlanFields["openQuestions"]
+  | readonly PlanAssumption[];
+
+/** What one field of a plan's content holds, whatever its kind. */
+function planFieldValue(content: PlanContent, field: PlanField): PlanFieldValue {
+  if (isTextField(field)) return TEXT_FIELD[field].read(content.fields);
+  if (field === PLAN_FIELD.RULES) return content.fields.rules;
+  if (field === PLAN_FIELD.OPEN_QUESTIONS) return content.fields.openQuestions;
+  return content.assumptions;
+}
+
+/**
+ * The fields whose words differ from one content to another. Note that the
+ * words are compared rather than the objects, because a note taken into a
+ * field builds the field anew even where its words come out the same.
+ */
+export function changedFields(before: PlanContent, after: PlanContent): readonly PlanField[] {
+  return Object.values(PLAN_FIELD).filter(
+    (field) =>
+      JSON.stringify(planFieldValue(before, field)) !==
+      JSON.stringify(planFieldValue(after, field)),
+  );
+}
+
 function escapedPattern(word: string): string {
   return word.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

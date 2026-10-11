@@ -4,6 +4,7 @@ export * from "./auth-schema.js";
 export * from "./coding-agent-schema.js";
 export * from "./devices-schema.js";
 export * from "./favorite-schema.js";
+export * from "./plan-revision-schema.js";
 export * from "./plan-schema.js";
 export * from "./preferences-schema.js";
 export * from "./roster-schema.js";

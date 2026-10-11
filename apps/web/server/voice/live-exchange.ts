@@ -238,6 +238,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       : yield* planScribe({
           userId,
           planId: options.scribe.planId,
+          liveSessionId,
           model: options.scribe.model,
           ...(options.scribe.onDraft === undefined
             ? undefined

@@ -1,4 +1,9 @@
-import type { Plan, PlanAssumption } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_ACTOR,
+  type Plan,
+  type PlanAssumption,
+  type PlanLastEdit,
+} from "@sidecar/hosted/plan-wire";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
@@ -11,6 +16,7 @@ import {
   chaseView,
   type UnitView,
 } from "./plan-reveal";
+import { useMinute } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 
 /**
@@ -23,9 +29,10 @@ import { NO_ASSUMPTIONS_LINE } from "./planning-model";
  * developer has scrolled the document themselves, and lights each unit and new assumption as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
  * fixed template always runs past the panel's ceiling, so the typing grows
- * the scrolled document and never the surface. A plan a coding agent has
- * saved on says so in one muted line above the document, naming the agent
- * as its row names it now and how long ago its newest save was.
+ * the scrolled document and never the surface. A plan anyone has written
+ * says who last did in one muted line above the document: the developer,
+ * Luke (the notetaker), or a coding agent named as its row names it now,
+ * whether it was on a call, and how long ago, moved on once a minute.
  */
 
 /** The document the chase was last aimed at, and where its typing stands. */
@@ -52,11 +59,50 @@ const AGO_UNITS = [
   [60_000, "m"],
 ] as const;
 
-/** How long ago an agent's save was, in the shortest words: "just now", "3m ago", "2h ago", "5d ago". */
+/** How long ago a save was, in the shortest words: "just now", "3m ago", "2h ago", "5d ago". */
 export function agoText(at: number, now: number): string {
   const elapsed = Math.max(0, now - at);
   const unit = AGO_UNITS.find(([span]) => elapsed >= span);
   return unit === undefined ? "just now" : `${Math.floor(elapsed / unit[0])}${unit[1]} ago`;
+}
+
+/**
+ * The plan's last edit: its newest revision, or, from a service before
+ * history, the newest save a coding agent made, which was all it could name.
+ */
+function lastEditOf(plan: Plan): PlanLastEdit | undefined {
+  if (plan.lastEdit !== undefined) return plan.lastEdit;
+  // The journal is oldest first, so the newest save is its last.
+  const journaled = plan.agentEdits?.at(-1);
+  if (journaled === undefined) return undefined;
+  return { actor: PLAN_ACTOR.AGENT, label: journaled.label, at: journaled.at, duringCall: false };
+}
+
+/** Who wrote an edit, in the developer's words; nobody for a revision from before history. */
+function editorOf(edit: PlanLastEdit): string | undefined {
+  switch (edit.actor) {
+    case PLAN_ACTOR.DEVELOPER:
+      return "you";
+    case PLAN_ACTOR.NOTETAKER:
+      return "Luke";
+    case PLAN_ACTOR.AGENT:
+      return edit.label ?? "a coding agent";
+    case PLAN_ACTOR.EARLIER:
+      return undefined;
+  }
+}
+
+/** The line over the document: "Edited by Luke during your call · 2h ago". */
+export function editedLine(edit: PlanLastEdit, now: number): string {
+  const editor = editorOf(edit);
+  const by = editor === undefined ? "Edited" : `Edited by ${editor}`;
+  const call = edit.duringCall ? " during your call" : "";
+  return `${by}${call} · ${agoText(edit.at, now)}`;
+}
+
+function EditedLine({ edit }: { edit: PlanLastEdit }): React.JSX.Element {
+  const now = useMinute();
+  return <p className="plan-edit-note">{editedLine(edit, now)}</p>;
 }
 
 /** The class of a unit or assumption lit as it settles. */
@@ -198,15 +244,10 @@ export function PlanBody({ plan, live }: { plan: Plan; live: boolean }): React.J
   });
 
   const { assumptions } = plan.document;
-  // The journal is oldest first, so the newest save is its last.
-  const edited = plan.agentEdits?.at(-1);
+  const edited = lastEditOf(plan);
   return (
     <div ref={scroller} className="plan-document-scroll">
-      {edited === undefined ? null : (
-        <p className="plan-edit-note">
-          Updated by {edited.label} · {agoText(edited.at, Date.now())}
-        </p>
-      )}
+      {edited === undefined ? null : <EditedLine edit={edited} />}
       <div className="plan-body">
         {views.map((view) => (
           <MarkdownMessage

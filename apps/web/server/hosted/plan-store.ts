@@ -7,9 +7,11 @@ import {
   planFieldsSchema,
 } from "@sidecar/hosted/plan-template";
 import {
+  PLAN_ACTOR,
   PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
+  type PlanLastEdit,
   type PlanSummary,
   planAssumptionSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -22,6 +24,7 @@ import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
+import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -59,10 +62,9 @@ export interface StoredPlan {
   readonly fields: PlanFields;
   readonly agentEdits: readonly LabelledAgentEdit[];
   readonly conversationId: string | undefined;
+  /** Whether the document was ever saved: false for a plan untouched since it started, or since the template's reset. */
+  readonly saved: boolean;
 }
-
-/** How an agent whose row is gone is named in the journal: a discarded start, or a row from before the journal. */
-const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /** A plan to start: its name, and the repository it is about where one is chosen. */
 export interface NewPlan {
@@ -153,24 +155,43 @@ function labelledEdits(
 }
 
 /**
+ * A coding agent's save from the journal as a plan's last edit, for a plan
+ * whose history has not begun: an agent's save made before it is the newest
+ * thing the service can name a writer for.
+ */
+function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
+  return { actor: PLAN_ACTOR.AGENT, label: edit.label, at: edit.at, duringCall: false };
+}
+
+/**
  * The row's document, as the window and the model read it. Note that a plan
  * whose body is still empty, never saved or reset, reads as the untouched
  * template formatted here rather than stored, so it is always the current
  * template's. The row's own account is the one its agents are read under.
+ * Its last edit is its newest revision, or, before its history begins, the
+ * newest save a coding agent made.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
-  const summary = summaryOf(row);
-  const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
-  return Effect.map(labelledEdits(row, row.userId), (agentEdits) => ({
-    plan: {
-      ...summary,
-      document: { body, assumptions: row.assumptions },
-      agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
-    },
-    fields: row.fields ?? EMPTY_PLAN_FIELDS,
-    agentEdits,
-    conversationId: row.conversationId ?? undefined,
-  }));
+  return Effect.gen(function* () {
+    const summary = summaryOf(row);
+    const body = row.body === "" ? planBody({ name: summary.name }, EMPTY_PLAN_FIELDS) : row.body;
+    const agentEdits = yield* labelledEdits(row, row.userId);
+    const lastEdit = Option.orElse(yield* readLastEdit(row.id), () =>
+      Option.map(Option.fromUndefinedOr(agentEdits.at(-1)), journaledEdit),
+    );
+    return {
+      plan: {
+        ...summary,
+        document: { body, assumptions: row.assumptions },
+        agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
+        ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
+      },
+      fields: row.fields ?? EMPTY_PLAN_FIELDS,
+      agentEdits,
+      conversationId: row.conversationId ?? undefined,
+      saved: row.fields !== null,
+    };
+  });
 }
 
 /** The row's plan alone, for the writes that answer one. */
