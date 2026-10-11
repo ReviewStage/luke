@@ -436,15 +436,28 @@ export function withAgent(
   return agents.map((agent) => (agent.id === answered.id ? answered : agent));
 }
 
-/** The agents with one agent's status read from its own transcript page, where the page knows better than the list. */
-export function withAgentStatus(
+/** Where an agent stands as a page or an answer read it: its status, and when the run under way began where the service said. */
+export type AgentRun = Pick<CodingAgentSummary, "status" | "runStartedAt">;
+
+/**
+ * The agents with one agent's run read from its own transcript page or an
+ * answer about it, where that knows better than the list: its status, and
+ * the start a working line counts from, which moves with each turn and is
+ * none while a message awaits one.
+ */
+export function withAgentRun(
   agents: readonly CodingAgentSummary[],
   agentId: string,
-  status: CodingAgentStatus,
+  run: AgentRun,
 ): readonly CodingAgentSummary[] {
-  return agents.map((agent) =>
-    agent.id === agentId && agent.status !== status ? { ...agent, status } : agent,
-  );
+  return agents.map((agent) => {
+    if (agent.id !== agentId) return agent;
+    if (agent.status === run.status && agent.runStartedAt === run.runStartedAt) return agent;
+    const { runStartedAt: _was, ...held } = agent;
+    return run.runStartedAt === undefined
+      ? { ...held, status: run.status }
+      : { ...held, status: run.status, runStartedAt: run.runStartedAt };
+  });
 }
 
 /** The kinds of part a stored message holds that the tab draws apart. */

@@ -199,8 +199,8 @@ test("a second press before the first is answered starts nothing more", async ()
   assert.deepEqual(tab.started, [AGENT]);
 });
 
-test("a Stop reads the list again, a read that fails keeps the agents drawn, a page's status moves the agent's dot, and leaving the plan drops its agents", async () => {
-  const running = { ...STARTED, status: CODING_AGENT_STATUS.RUNNING };
+test("a Stop reads the list again, a read that fails keeps the agents drawn, a page's run moves the agent's dot and the start it counts from, and leaving the plan drops its agents", async () => {
+  const running = { ...STARTED, status: CODING_AGENT_STATUS.RUNNING, runStartedAt: 1_000 };
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [running] });
   tab.answer(ACT_KIND.CODING_AGENTS_STOP, {
@@ -208,7 +208,14 @@ test("a Stop reads the list again, a read that fails keeps the agents drawn, a p
   });
   await tab.mount();
 
-  act(() => tab.control().onStatus(AGENT, CODING_AGENT_STATUS.COMPLETED));
+  // A turn opened since the list was read is counted from its own start, and a message awaiting one from none.
+  act(() =>
+    tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.RUNNING, runStartedAt: 9_000 }),
+  );
+  assert.equal(tab.control().agents?.[0]?.runStartedAt, 9_000);
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.RUNNING }));
+  assert.equal(tab.control().agents?.[0]?.runStartedAt, undefined);
+  act(() => tab.control().onStatus(AGENT, { status: CODING_AGENT_STATUS.COMPLETED }));
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.COMPLETED);
 
   await act(async () => {

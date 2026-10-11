@@ -65,6 +65,7 @@ test("a worker's line and its task card name the task by its first line as plain
       earlier: undefined,
       onLoadEarlier: async () => undefined,
       onOpenSubagent: () => undefined,
+      shown: true,
     }),
   );
   const line = work.querySelector(".work-worker-line");

@@ -2,9 +2,10 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentMessage, CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import {
+  type AgentRun,
   closesComposer,
   knownDeveloperRows,
   messageFailureNote,
@@ -100,7 +101,7 @@ export function useAgentComposer(input: {
   messages: readonly CodingAgentMessage[];
   send: MessageSender;
   /** The service said where the agent stands now, which is newer than the list. */
-  onStatus: (agentId: string, status: CodingAgentStatus) => void;
+  onStatus: (agentId: string, run: AgentRun) => void;
 }): AgentComposerControl {
   const { agentId, messages } = input;
   const [held, setHeld] = useState<Held>(() => fresh(agentId));
@@ -164,7 +165,7 @@ export function useAgentComposer(input: {
           return;
         }
         setHeld((was) => ({ ...was, sending: false }));
-        latest.current.onStatus(agentId, answer.agent.status);
+        latest.current.onStatus(agentId, answer.agent);
       });
   };
 

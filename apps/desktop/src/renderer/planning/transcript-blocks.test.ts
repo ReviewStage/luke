@@ -83,6 +83,7 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
     earlier: undefined,
     onLoadEarlier: () => Promise.resolve(),
     onOpenSubagent: () => undefined,
+    shown: true,
     turns: [
       {
         turnId: "turn-1",

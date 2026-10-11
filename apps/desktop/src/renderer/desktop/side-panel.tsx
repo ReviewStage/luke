@@ -832,6 +832,7 @@ function TabContent({
           earlier={work.earlier}
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
+          shown={shown}
         />
       );
   }

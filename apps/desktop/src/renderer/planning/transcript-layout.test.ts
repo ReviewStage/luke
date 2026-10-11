@@ -139,6 +139,7 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       earlier: undefined,
       onLoadEarlier: () => Promise.resolve(),
       onOpenSubagent: () => undefined,
+      shown: true,
       turns: [
         {
           turnId: "turn-1",

@@ -60,6 +60,10 @@
                   }
                 ]
               },
+              "runStartedAt": {
+                "type": "number",
+                "minimum": 0
+              },
               "brief": {
                 "type": "string",
                 "enum": [

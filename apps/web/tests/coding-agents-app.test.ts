@@ -1462,6 +1462,88 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an agent's run is counted from its own start before any turn, from its newest turn's queueing and then its start, and from nowhere while a message awaits its turn, in the list and on the transcript's page alike",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, agent, ask, target, writer, sent } = yield* startedAgent(
+          fakeEve(),
+          undefined,
+        );
+        const listed = () =>
+          Effect.map(
+            ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents[0],
+          );
+        const paged = () =>
+          Effect.map(
+            ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+            (answered) =>
+              readAnswer(codingAgentMessagesAnswerSchema, HOSTED_HTTP_STATUS.OK, answered)
+                .runStartedAt,
+          );
+        assert.equal((yield* listed())?.runStartedAt, agent.createdAt);
+
+        const firstTurn = randomUUID();
+        yield* TestClock.adjust(Duration.seconds(5));
+        yield* writer.enqueueTurn(target, {
+          turnId: firstTurn,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_0",
+        });
+        assert.equal((yield* listed())?.runStartedAt, agent.createdAt + 5_000);
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(target.conversationId),
+          turnId: firstTurn,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: agent.createdAt + 7_000,
+        });
+        assert.equal((yield* listed())?.runStartedAt, agent.createdAt + 7_000);
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId: firstTurn,
+          sequence: 2,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: agent.createdAt + 60_000,
+        });
+
+        // A message reads the agent as running again, but its run begins only with its turn.
+        const answered = yield* sent("Now add the tests.");
+        assert.equal(answered.agent.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(answered.agent.runStartedAt, undefined);
+        assert.equal((yield* listed())?.runStartedAt, undefined);
+        assert.equal(yield* paged(), undefined);
+
+        const nextTurn = randomUUID();
+        yield* TestClock.adjust(Duration.minutes(2));
+        yield* writer.enqueueTurn(target, {
+          turnId: nextTurn,
+          origin: TURN_ORIGIN.TYPED,
+          eveTurnId: "turn_1",
+        });
+        yield* writer.takeAwaitingLine(target, { text: "Now add the tests.", turnId: nextTurn });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_STARTED,
+          conversationId: sessionKey(target.conversationId),
+          turnId: nextTurn,
+          sequence: 1,
+          origin: BRAIN_TURN_ORIGIN.TYPED,
+          trigger: BRAIN_TURN_TRIGGER.ASK,
+          at: agent.createdAt + 126_000,
+        });
+        const running = yield* listed();
+        assert.equal(running?.turnId, nextTurn);
+        assert.equal(running?.runStartedAt, agent.createdAt + 126_000);
+        assert.equal(yield* paged(), agent.createdAt + 126_000);
+      }),
+  );
+
+  it.effect(
     "a send repeated under its key answers what the first did and sends nothing again, once to eve and once in the transcript, and the same words under another key are a second message",
     () =>
       Effect.gen(function* () {

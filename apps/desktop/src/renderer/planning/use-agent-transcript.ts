@@ -11,7 +11,12 @@ import {
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { agentStillWriting, applyMessagesPage, followsAgent } from "./coding-agent-model";
+import {
+  type AgentRun,
+  agentStillWriting,
+  applyMessagesPage,
+  followsAgent,
+} from "./coding-agent-model";
 
 /**
  * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, read page by page on the service's held long-poll while the agent may still write.
@@ -83,8 +88,8 @@ export function useAgentTranscript(input: {
   /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
   shown: boolean;
   read: TranscriptReader;
-  /** A page said where the agent stands now, which is newer than the list. */
-  onStatus: (agentId: string, status: CodingAgentStatus) => void;
+  /** A page said where the agent stands now, and since when, which is newer than the list. */
+  onStatus: (agentId: string, run: AgentRun) => void;
   /** A page said what the agent is titled now, which the list may have read before the title landed. */
   onTitle: (agentId: string, title: string | null) => void;
 }): AgentTranscriptControl {
@@ -135,7 +140,7 @@ export function useAgentTranscript(input: {
           usage: answer.usage,
           turnUsage: answer.turnUsage,
         }));
-        latest.current.onStatus(agentId, answer.status);
+        latest.current.onStatus(agentId, answer);
         latest.current.onTitle(agentId, answer.title);
         // A page with nothing on it from an agent that may still write is
         // the hold letting go: ask again. One from an agent that ended is

@@ -50,6 +50,10 @@
         "cancelled"
       ]
     },
+    "runStartedAt": {
+      "type": "number",
+      "minimum": 0
+    },
     "title": {
       "anyOf": [
         {

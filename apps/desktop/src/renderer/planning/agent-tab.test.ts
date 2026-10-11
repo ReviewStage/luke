@@ -167,6 +167,7 @@ function tabMarkup(
     createElement(AgentTabView, {
       agent: { ...AGENT, status },
       models: undefined,
+      startedAt: undefined,
       readModels: ignore,
       transcript: {
         messages: [PLAN, TURN],
