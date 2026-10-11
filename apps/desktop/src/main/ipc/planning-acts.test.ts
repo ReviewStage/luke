@@ -85,7 +85,7 @@ function fixture() {
         }),
       planningEdit: (params) =>
         Effect.sync(() => {
-          asked.push(`edit:${params.planId}:${params.field}`);
+          asked.push(`edit:${params.planId}:${params.edit.field}`);
           return { saved: true } as const;
         }),
       planningBoardSave: (params) =>
@@ -212,9 +212,7 @@ it.effect(
         kind: ACT_KIND.PLANNING_EDIT,
         payload: {
           planId: PLAN_ID,
-          field: PLAN_FIELD.DECISIONS,
-          base: null,
-          value: "Invites expire.",
+          edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
         },
       } as const;
 

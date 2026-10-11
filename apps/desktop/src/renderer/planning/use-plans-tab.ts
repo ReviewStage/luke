@@ -591,7 +591,7 @@ export function usePlansTab(input: {
   // A fixture's plans are read from nowhere, so an edit of one is never saved.
   const edit = (planId: string, request: PlanEditRequest): Promise<PlanningEditAnswer> => {
     if (fixture !== undefined) return Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-    return act(ACT_KIND.PLANNING_EDIT, { planId, ...request });
+    return act(ACT_KIND.PLANNING_EDIT, { planId, edit: request });
   };
 
   // The chip's menu stands on the open plan's toolbar, so another plan's is

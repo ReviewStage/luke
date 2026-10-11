@@ -491,12 +491,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       ),
     planningEdit: (params) =>
       Effect.map(
-        client.call(GATEWAY_METHOD.PLANNING_EDIT, {
-          planId: params.planId,
-          field: params.field,
-          base: params.base,
-          value: params.value,
-        }),
+        client.call(GATEWAY_METHOD.PLANNING_EDIT, { planId: params.planId, edit: params.edit }),
         (answer): PlanningEditAnswer =>
           (answer.ok
             ? Result.getOrUndefined(

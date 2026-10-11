@@ -1,4 +1,8 @@
-import { applyDeveloperEdit, type PlanEditRequest } from "@sidecar/hosted/plan-edit";
+import {
+  applyDeveloperEdit,
+  type PlanEditRequest,
+  type PlanEditValue,
+} from "@sidecar/hosted/plan-edit";
 import {
   applyNotes,
   changedFields,
@@ -136,7 +140,7 @@ type LockedSave<T> =
 /** A developer's edit that no longer lands in the field as it stands, with what the field holds; nothing was saved. */
 interface PlanConflict {
   readonly status: typeof PLAN_SAVE_STATUS.CONFLICT;
-  readonly current: string | null;
+  readonly current: PlanEditValue;
 }
 
 /**

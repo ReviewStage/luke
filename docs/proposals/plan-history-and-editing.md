@@ -407,9 +407,10 @@ CREATE TABLE "plan_revision" (
   `recordRevision` (called only by the locked save), `readLastEdit`, and
   `listRevisions(userId, planId)`, the account-scoped list, newest first, that
   PR 2's History tab builds on.
-- **`agent_edits` stays** for the brain's notes context in the first PRs. The
-  brain's two "recent edits" blocks move onto revisions with PR 4, and the
-  column is dropped once nothing reads it.
+- **`agent_edits` stays.** It is the planning model's word-for-word record
+  of what each coding agent asked or decided (`[recent edits by coding
+  agents]`), which a snapshot cannot give, so PR 4 keeps it rather than
+  retiring it.
 - **Rename writes no revision.** It changes the heading, not the content.
 
 ### Wire (`packages/hosted/src/plan-wire.ts`)
@@ -511,7 +512,7 @@ ships once history can undo it.
 | 1 | Revisions and an honest header | M (~500) | `0073_plan_revision`, written by `savedUnderLock` with coalescing and the baseline; `liveSessionId` into the notetaker; `lastEdit` on the wire; header "Edited by Luke during your call · 2h ago" with a ticking time; PRIVACY "Feature plans"; PLANNING "History"; this document |
 | 2 | History tab | M-L (~800) | The 3 revision routes, gateway and act plumbing, the History side-panel tab, version view with diff, Restore; `ph-no-capture`; PLANNING.md "no version history, no diff view" amended |
 | 3 | Edit a text field | L (~900) | `applyDeveloperEdit` with rebase and conflict, `POST …/edit`, `PLANNING_EDIT`, the textarea editor, autosave and status, the draft hold (`readAt`), Esc/⌘↩/blur, `plan.field_writers`; **brain and notetaker told of developer edits** (it ships with editing, not after); PLANNING.md "read-only" amended; PRIVACY writer wording |
-| 4 | Edit rules, lists, assumptions | M (~600) | Rule statement and example rows, item editing, "Add section" for optional fields; the brain's recent-edits blocks read from revisions; `agent_edits` read path retired |
+| 4 | Edit rules, lists, assumptions | M (~600) | As shipped: the edit request becomes a union over every field kind, with list fields merged item by item (each item one JSON line in the patch); a rule edits as its statement and Given/When/Then rows, saved as the rules whole; the open questions and assumptions edit one to a line; the rules' plus adds a rule; "Add section" buttons for Order and Data and migration; editors stay where they opened. Assumptions are edited like any field, with nothing that confirms them (decision 5) |
 | 5 | Who wrote what | M (~400) | Per-field attribution on hover (C), and changes since you last looked (D) with the last-seen revision in desktop state |
 
 PR 2 and PR 3 each stack on PR 1, PR 4 stacks on PR 3, and PR 5 follows PRs

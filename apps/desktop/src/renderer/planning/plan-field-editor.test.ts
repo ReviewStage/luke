@@ -239,3 +239,147 @@ test("Esc and the box losing focus at once save the words once", async () => {
 
   assert.equal(sent.length, 1);
 });
+
+const RULE = { statement: "Any member may invite by email.", examples: null };
+
+const LISTED_FIELDS: PlanFields = {
+  ...FIELDS,
+  rules: [RULE],
+  openQuestions: ["Who can withdraw an invite?"],
+};
+
+/** A plan with a rule, a question, and an assumption, each a field the developer can edit. */
+const LISTED: Plan = {
+  ...PLAN,
+  document: {
+    body: planBody({ name: "Teammate invitations" }, LISTED_FIELDS),
+    assumptions: [{ text: "Invites reuse memberships." }],
+  },
+  fields: LISTED_FIELDS,
+};
+
+function input(container: HTMLElement, label: string): HTMLInputElement {
+  const found = container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`);
+  assert.ok(found, label);
+  return found;
+}
+
+/** Types into an input the way React hears a keystroke. */
+function typeIntoInput(field: HTMLInputElement, text: string): void {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+function pressOn(element: HTMLElement, key: string): void {
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+test("a rule opens as its statement and examples, and saves as the rules with it changed", async () => {
+  const { container, sent } = mount(LISTED);
+  act(() => pencil(container, "Rule 1").click());
+
+  const statement = input(container, "Rule 1 statement");
+  assert.equal(statement.value, RULE.statement);
+  typeIntoInput(statement, "Any member may invite by email or link.");
+  act(() => buttonText(container, "Add example").click());
+  typeIntoInput(input(container, "Example 1 Given"), "A member");
+  pressOn(statement, "Escape");
+  await settle();
+
+  assert.deepEqual(sent, [
+    {
+      field: PLAN_FIELD.RULES,
+      base: [RULE],
+      value: [
+        {
+          statement: "Any member may invite by email or link.",
+          // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+          examples: [{ given: "A member", when: null, then: null }], // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+        },
+      ],
+    },
+  ]);
+});
+
+test("the rules' plus adds a rule after the rules standing; Delete rule strikes one", async () => {
+  const added = mount(LISTED);
+  act(() => {
+    const plus = added.container.querySelector<HTMLButtonElement>('[aria-label="Add rule"]');
+    assert.ok(plus, "the rules' plus");
+    plus.click();
+  });
+  typeIntoInput(input(added.container, "New rule statement"), "Invites expire after 7 days.");
+  pressOn(input(added.container, "New rule statement"), "Escape");
+  await settle();
+
+  const struck = mount(LISTED);
+  act(() => pencil(struck.container, "Rule 1").click());
+  act(() => buttonText(struck.container, "Delete rule").click());
+  await settle();
+
+  assert.deepEqual(added.sent[0]?.value, [
+    RULE,
+    { statement: "Invites expire after 7 days.", examples: null },
+  ]);
+  assert.deepEqual(struck.sent[0]?.value, null);
+  assert.equal(struck.container.querySelector(".plan-field-editor"), null);
+});
+
+test("the open questions and the assumptions open one to a line, and save a line as an item", async () => {
+  const { container, sent } = mount(LISTED);
+  act(() => pencil(container, "Open questions").click());
+  assert.equal(box(container).value, "Who can withdraw an invite?");
+  typeInto(box(container), "Who can withdraw an invite?\nHow long is a link valid?");
+  press(box(container), "Escape");
+  await settle();
+
+  act(() => pencil(container, "Assumptions").click());
+  assert.equal(box(container).value, "Invites reuse memberships.");
+  typeInto(box(container), "");
+  press(box(container), "Escape");
+  await settle();
+
+  assert.deepEqual(
+    sent.map(({ field, value }) => ({ field, value })),
+    [
+      {
+        field: PLAN_FIELD.OPEN_QUESTIONS,
+        value: ["Who can withdraw an invite?", "How long is a link valid?"],
+      },
+      { field: PLAN_FIELD.ASSUMPTIONS, value: [] },
+    ],
+  );
+});
+
+test("a section the body leaves out while empty is offered to add, and opens its editor after the body", async () => {
+  const { container, sent } = mount(PLAN);
+
+  act(() => buttonText(container, "Data and migration").click());
+  assert.ok(container.querySelector('[aria-label="Editing Data and migration"]'));
+  typeInto(box(container), "No stored data changes.");
+  press(box(container), "Escape");
+  await settle();
+
+  assert.deepEqual(sent, [
+    { field: PLAN_FIELD.DATA_AND_MIGRATION, base: null, value: "No stored data changes." },
+  ]);
+});
+
+test("a rule only a notetaker's draft holds so far is drawn but not yet offered to edit", () => {
+  const drafted: PlanFields = {
+    ...LISTED_FIELDS,
+    rules: [RULE, { statement: "Invites expire after 7 days.", examples: null }],
+  };
+  const { container } = mount({
+    ...LISTED,
+    document: { ...LISTED.document, body: planBody({ name: "Teammate invitations" }, drafted) },
+  });
+
+  assert.ok(container.textContent?.includes("Invites expire after 7 days."));
+  assert.ok(container.querySelector('[aria-label="Edit Rule 1"]'));
+  assert.equal(container.querySelector('[aria-label="Edit Rule 2"]'), null);
+});
