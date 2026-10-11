@@ -136,15 +136,16 @@ export const LIST_CODING_AGENTS_TOOL = {
   description:
     "List the coding agents working on this plan: each with its id, the model and effort it runs " +
     "on, its status (starting, running, completed, failed, cancelled), the branch and pull " +
-    "request it published if any, and one line of what it last did. Call it when the developer " +
-    "asks about or addresses an agent, to find which one they mean.",
+    "request number its own transcript names if any, and one line of what it last did. Call it " +
+    "when the developer asks about or addresses an agent, to find which one they mean.",
   inputSchema: Schema.Struct({}),
 } as const;
 
 export const READ_CODING_AGENT_TOOL = {
   name: "read_coding_agent",
   description:
-    "Read one coding agent's recent progress: its status, what it published, and a short tail " +
+    "Read one coding agent's recent progress: its status, the branch and pull request its " +
+    "transcript names, and a short tail " +
     "of what it last said and did, newest last. Summarise it for the developer in a sentence or " +
     "two; never read it out.",
   inputSchema: READ_CODING_AGENT_INPUT,
@@ -264,7 +265,12 @@ const standingsOf = (userId: string, agents: readonly CodingAgent[]) =>
         now,
         lineAwaits: awaiting.has(agent.conversationId),
       });
-      return { status, failureReason: codingAgentFailureOf(turn) };
+      // Why the newest turn failed is said only while the agent reads as failed: a line awaiting the next turn makes it running again.
+      return {
+        status,
+        failureReason:
+          status === CODING_AGENT_STATUS.FAILED ? codingAgentFailureOf(turn) : undefined,
+      };
     };
   });
 
