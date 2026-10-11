@@ -344,3 +344,80 @@ test("New plan names its chord, which it shows at its end only while hovered or 
   assert.equal(hint?.textContent, "⌘N");
   assert.equal(hint?.getAttribute("aria-hidden"), "true");
 });
+
+/** A plan's row of the list, with whatever pin or archive it is given. */
+function listedPlan(name: string, marks: { pinnedAt?: number; archivedAt?: number } = {}) {
+  return { id: `plan-${name}`, name, createdAt: 1, updatedAt: 1, repository: null, ...marks };
+}
+
+/** Each section the sidebar draws, by its heading, with the names of the plans under it. */
+function sections(container: HTMLElement): [string, string[]][] {
+  return [...container.querySelectorAll<HTMLElement>(".sidebar-group")].map((group) => [
+    group.getAttribute("aria-label") ?? "",
+    [...group.querySelectorAll(".sidebar-plan-name")].map((name) => name.textContent ?? ""),
+  ]);
+}
+
+test("the pinned plans stand under Pinned above the rest only while any are pinned", () => {
+  const flat = mount(DEAN, { plans: { plans: [listedPlan("Billing"), listedPlan("Invites")] } });
+  const pinned = mount(DEAN, {
+    plans: { plans: [listedPlan("Invites", { pinnedAt: 5 }), listedPlan("Billing")] },
+  });
+
+  assert.deepEqual(sections(flat), [["Plans", ["Billing", "Invites"]]]);
+  assert.deepEqual(sections(pinned), [
+    ["Pinned", ["Invites"]],
+    ["Plans", ["Billing"]],
+  ]);
+});
+
+test("the archived plans fold away behind a row that counts them, which unfolds them under the rest", () => {
+  const opened: string[] = [];
+  const archived = [listedPlan("Old", { archivedAt: 9 }), listedPlan("Older", { archivedAt: 8 })];
+  const container = mount(DEAN, {
+    plans: { plans: [listedPlan("Billing")], archived, onSelect: (planId) => opened.push(planId) },
+  });
+  const row = container.querySelector<HTMLButtonElement>(".sidebar-archived-row");
+  assert.ok(row);
+
+  const folded = sections(container);
+  act(() => row.click());
+  const unfolded = sections(container);
+  const old = [...container.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].at(1);
+  act(() => old?.click());
+
+  assert.equal(row.textContent, "Archived (2)");
+  assert.deepEqual(folded, [["Plans", ["Billing"]]]);
+  assert.equal(row.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(unfolded, [["Plans", ["Billing", "Old", "Older"]]]);
+  assert.deepEqual(opened, ["plan-Old"]);
+});
+
+test("with every plan archived, the list says nothing of having none, and with none archived it draws no Archived row", () => {
+  const allArchived = mount(DEAN, { plans: { archived: [listedPlan("Old", { archivedAt: 9 })] } });
+  const none = mount(DEAN, { plans: { plans: [listedPlan("Billing")] } });
+  const empty = mount(DEAN);
+
+  assert.doesNotMatch(allArchived.textContent ?? "", /No plans yet/u);
+  assert.equal(none.querySelector(".sidebar-archived-row"), null);
+  assert.match(empty.textContent ?? "", /No plans yet/u);
+});
+
+test("a refusal noted on an archived plan unfolds the archived list, so its note is seen", () => {
+  const old = listedPlan("Old", { archivedAt: 9 });
+  const container = mount(DEAN, {
+    plans: {
+      archived: [old],
+      markNotes: new Map([[old.id, "The plan could not be unarchived. Try again."]]),
+    },
+  });
+
+  assert.equal(
+    container.querySelector(".sidebar-archived-row")?.getAttribute("aria-expanded"),
+    "true",
+  );
+  assert.equal(
+    container.querySelector(".sidebar-archived [role='alert']")?.textContent,
+    "The plan could not be unarchived. Try again.",
+  );
+});

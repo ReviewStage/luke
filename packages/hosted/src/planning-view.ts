@@ -378,6 +378,22 @@ export const planningRenameParamsSchema = EffectSchema.Struct({
 
 export type PlanningRenameParams = typeof planningRenameParamsSchema.Type;
 
+/** Pinning a plan, or unpinning it, as the window asks it. */
+export const planningPinParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  pinned: EffectSchema.Boolean,
+});
+
+export type PlanningPinParams = typeof planningPinParamsSchema.Type;
+
+/** Archiving a plan, or bringing it back, as the window asks it. */
+export const planningArchiveParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  archived: EffectSchema.Boolean,
+});
+
+export type PlanningArchiveParams = typeof planningArchiveParamsSchema.Type;
+
 /** Giving a plan its repository, or taking it away: the plan, and the repository's full name or null for none. */
 export const planningSetRepositoryParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,

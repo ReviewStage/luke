@@ -9,7 +9,13 @@ import { afterEach, beforeEach, test } from "vitest";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import {
+  DOCUMENT_REGION,
+  MARK_FAILED_NOTES,
+  PLAN_MARK,
+  PLANS_PAGE,
+  type PlanMark,
+} from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
@@ -43,6 +49,8 @@ interface Asked {
   deleted: string[];
   /** Each rename asked, as the plan and the name it was given. */
   renamed: string[][];
+  /** Each pin or archive asked, as the plan and what was asked of it. */
+  marked: [string, PlanMark][];
 }
 
 const roots: Root[] = [];
@@ -66,7 +74,14 @@ function openTab(
     Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
   renames: () => Promise<boolean> = () => Promise.resolve(true),
 ) {
-  const asked: Asked = { opened: [], openedOnGitHub: [], changed: [], deleted: [], renamed: [] };
+  const asked: Asked = {
+    opened: [],
+    openedOnGitHub: [],
+    changed: [],
+    deleted: [],
+    renamed: [],
+    marked: [],
+  };
   const onRepository = (plan: Plan | PlanSummary) => ({
     ...plan,
     repository: repositories[plan.id] ?? null,
@@ -87,6 +102,7 @@ function openTab(
       asked.renamed.push([planId, name]);
       return renames();
     },
+    onMarkPlan: (planId, mark) => asked.marked.push([planId, mark]),
   });
   return { plans, asked };
 }
@@ -178,17 +194,24 @@ function answer(words: string): HTMLButtonElement {
   return button;
 }
 
-/** Answers the question Delete asked, and lets the delete it starts settle. */
+/** Answers the question Permanently delete asked, and lets the delete it starts settle. */
 async function confirmDelete(): Promise<void> {
-  assert.equal(asking(), true, "Delete asks first");
-  const remove = answer("Delete");
+  assert.equal(asking(), true, "Permanently delete asks first");
+  const remove = answer("Permanently delete");
   await act(async () => remove.click());
 }
 
-test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last, and the toolbar keeps no close or delete of its own", () => {
+test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions, and Permanently delete last, and the toolbar keeps no close or delete of its own", () => {
   const unset = openTab();
   openMenu(mountToolbar(unset.plans));
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
+  assert.deepEqual(labels(), [
+    "Copy plan",
+    "Rename",
+    "Pin",
+    "Archive",
+    "Change repository…",
+    "Permanently delete",
+  ]);
   assert.equal(document.querySelector('[aria-label="Close plan"]'), null);
   // Copy plan is the menu's alone: the toolbar keeps Start and the ⋯.
   const toolbar = document.querySelector(".desktop-toolbar-actions");
@@ -213,9 +236,11 @@ test("the open plan's ⋯ offers Copy, its repository's actions, and Delete last
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Pin",
+    "Archive",
     "Change repository…",
     "Open on GitHub",
-    "Delete plan",
+    "Permanently delete",
   ]);
   for (const item of menuItems()) {
     assert.ok(item.querySelector(".plan-menu-icon svg"), `${item.textContent} leads with its icon`);
@@ -239,19 +264,113 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
 
   rightClick(other, 40, 60);
   // Copy formats the document drawn, which is the open plan's alone.
-  assert.deepEqual(labels(), ["Rename", "Change repository…", "Open on GitHub", "Delete plan"]);
+  assert.deepEqual(labels(), [
+    "Rename",
+    "Pin",
+    "Archive",
+    "Change repository…",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
   const menu = document.querySelector<HTMLElement>('[role="menu"]');
   assert.equal(menu?.style.left, "40px");
   assert.equal(menu?.style.top, "60px");
   choose("Change repository…");
 
   rightClick(open, 40, 120);
-  assert.deepEqual(labels(), ["Copy plan", "Rename", "Change repository…", "Delete plan"]);
+  assert.deepEqual(labels(), [
+    "Copy plan",
+    "Rename",
+    "Pin",
+    "Archive",
+    "Change repository…",
+    "Permanently delete",
+  ]);
   choose("Change repository…");
 
   assert.deepEqual(asked.changed, [OTHER.id, PLAN.id]);
   assert.deepEqual(asked.opened, []);
   assert.equal(other.textContent, "Billing exportacme/billing");
+});
+
+test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin", () => {
+  const { plans, asked } = openTab();
+  const pinned = { ...OTHER, pinnedAt: 7 };
+  const archived = { ...OTHER, pinnedAt: 7, archivedAt: 9 };
+  const marked = (row: PlanSummary) => ({ ...plans, plans: [PLAN, row] });
+
+  openMenu(mountToolbar(plans));
+  choose("Pin");
+  openMenu(mountToolbar(plans));
+  choose("Archive");
+  rightClick(mountSidebarPlan(marked(pinned), pinned, asked), 40, 60);
+  choose("Unpin");
+  unmountAll();
+  const archivedPlans = { ...plans, plans: [PLAN], archived: [archived] };
+  rightClick(mountSidebarPlan(archivedPlans, archived, asked), 40, 60);
+  const offered = labels();
+  choose("Unarchive");
+
+  assert.deepEqual(offered, ["Rename", "Unarchive", "Change repository…", "Permanently delete"]);
+  assert.deepEqual(asked.marked, [
+    [PLAN.id, PLAN_MARK.PIN],
+    [PLAN.id, PLAN_MARK.ARCHIVE],
+    [OTHER.id, PLAN_MARK.UNPIN],
+    [OTHER.id, PLAN_MARK.UNARCHIVE],
+  ]);
+  assert.deepEqual(asked.opened, []);
+});
+
+test("Permanently delete on an archived plan asks without pointing at Archive", () => {
+  const { plans, asked } = openTab();
+  const archived = { ...OTHER, archivedAt: 9 };
+
+  const archivedPlans = { ...plans, plans: [PLAN], archived: [archived] };
+  rightClick(mountSidebarPlan(archivedPlans, archived, asked), 40, 60);
+  choose("Permanently delete");
+
+  assert.equal(
+    dialog()?.querySelector("p")?.textContent,
+    "“Billing export” and its board and transcript will be deleted. This can’t be undone.",
+  );
+});
+
+test("a pin or an archive the service refused says so under the plan's row and beside the open plan's name", () => {
+  const { plans, asked } = openTab();
+  const noted = { ...plans, markNotes: new Map([[PLAN.id, MARK_FAILED_NOTES[PLAN_MARK.PIN]]]) };
+
+  const container = mount(createElement(DesktopPlans, { plans: noted }));
+  const open = mountSidebarPlan(noted, PLAN, asked);
+  const other = mountSidebarPlan(noted, OTHER, asked);
+
+  assert.equal(
+    container.querySelector('.desktop-toolbar [role="alert"]')?.textContent,
+    "The plan could not be pinned. Try again.",
+  );
+  assert.equal(
+    open.parentElement?.querySelector('[role="alert"]')?.textContent,
+    "The plan could not be pinned. Try again.",
+  );
+  assert.equal(other.parentElement?.querySelector('[role="alert"]'), null);
+});
+
+test("an archived plan's page says so quietly over its document, and Unarchive brings it back", () => {
+  const { plans, asked } = openTab();
+  const archived = { ...PLAN, archivedAt: 9 };
+  const open = { ...plans, region: { kind: DOCUMENT_REGION.READY, plan: archived } as const };
+
+  const listed = mount(createElement(DesktopPlans, { plans }));
+  assert.equal(listed.querySelector(".desktop-archived-banner"), null);
+  unmountAll();
+  const banner = mount(createElement(DesktopPlans, { plans: open })).querySelector(
+    ".desktop-archived-banner",
+  );
+  const unarchive = banner?.querySelector("button");
+  assert.ok(unarchive);
+  act(() => unarchive.click());
+
+  assert.equal(banner?.textContent, "This plan is archivedUnarchive");
+  assert.deepEqual(asked.marked, [[PLAN.id, PLAN_MARK.UNARCHIVE]]);
 });
 
 /** The plan's name field standing now, if one does. */
@@ -386,20 +505,23 @@ test("the refusal of a rename a newer edit replaced leaves no note beside the ne
   assert.equal(container.querySelector('.desktop-toolbar [role="alert"]')?.textContent, undefined);
 });
 
-test("Delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
+test("Permanently delete asks in a dialog naming the plan, from the ⋯ and from a sidebar plan alike, and deletes on its answer", async () => {
   const { plans, asked } = openTab();
 
   const more = mountToolbar(plans);
   openMenu(more);
   assert.equal(asking(), false);
-  choose("Delete plan");
+  choose("Permanently delete");
   const question = dialog();
   assert.ok(question);
   assert.equal(question.getAttribute("aria-modal"), "true");
   const title = document.getElementById(question.getAttribute("aria-labelledby") ?? "");
   const body = document.getElementById(question.getAttribute("aria-describedby") ?? "");
-  assert.equal(title?.textContent, "Delete plan?");
-  assert.match(body?.textContent ?? "", /^“Teammate invitations” will be permanently deleted/u);
+  assert.equal(title?.textContent, "Permanently delete plan?");
+  assert.equal(
+    body?.textContent,
+    "“Teammate invitations” and its board and transcript will be deleted. This can’t be undone. To keep it out of the way instead, archive it.",
+  );
   // A key already pressed lands on the answer that changes nothing.
   assert.equal(document.activeElement, answer("Cancel"));
   assert.deepEqual(asked.deleted, []);
@@ -408,7 +530,7 @@ test("Delete asks in a dialog naming the plan, from the ⋯ and from a sidebar p
 
   unmountAll();
   rightClick(mountSidebarPlan(plans, OTHER, asked), 40, 60);
-  choose("Delete plan");
+  choose("Permanently delete");
   assert.match(dialog()?.textContent ?? "", /“Billing export”/u);
   assert.deepEqual(asked.deleted, [PLAN.id]);
   await confirmDelete();
@@ -432,7 +554,7 @@ test("Cancel, Escape, and a press on the dimmed window each leave the plan, with
   ];
   for (const dismiss of dismissals) {
     openMenu(more);
-    choose("Delete plan");
+    choose("Permanently delete");
     assert.ok(asking());
     act(dismiss);
     assert.equal(asking(), false);
@@ -440,7 +562,7 @@ test("Cancel, Escape, and a press on the dimmed window each leave the plan, with
   }
   // A press inside the card is not a press on the window behind it.
   openMenu(more);
-  choose("Delete plan");
+  choose("Permanently delete");
   act(() => dialog()?.click());
   assert.equal(asking(), true);
   window.removeEventListener("keydown", listen);
@@ -453,7 +575,7 @@ test("Cancel, Escape, and a press on the dimmed window each leave the plan, with
 test("Tab keeps focus on the dialog's two answers, round and back", () => {
   const { plans } = openTab();
   openMenu(mountToolbar(plans));
-  choose("Delete plan");
+  choose("Permanently delete");
   const tab = (shiftKey: boolean) => {
     const press = new KeyboardEvent("keydown", {
       key: "Tab",
@@ -467,7 +589,7 @@ test("Tab keeps focus on the dialog's two answers, round and back", () => {
   };
 
   tab(true);
-  assert.equal(document.activeElement, answer("Delete"));
+  assert.equal(document.activeElement, answer("Permanently delete"));
   tab(false);
   assert.equal(document.activeElement, answer("Cancel"));
 });
@@ -480,9 +602,9 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
   const { plans, asked } = openTab({}, () => pending);
   const more = mountToolbar(plans);
   openMenu(more);
-  choose("Delete plan");
+  choose("Permanently delete");
 
-  act(() => answer("Delete").click());
+  act(() => answer("Permanently delete").click());
   assert.equal(answer("Deleting…").disabled, true);
   assert.equal(answer("Cancel").disabled, true);
   key("Escape");
@@ -498,7 +620,7 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
     dialog()?.querySelector('[role="alert"]')?.textContent,
     "The plan could not be deleted.",
   );
-  assert.equal(answer("Delete").disabled, false);
+  assert.equal(answer("Permanently delete").disabled, false);
   assert.deepEqual(asked.deleted, [PLAN.id]);
 
   act(() => answer("Cancel").click());
@@ -509,7 +631,7 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
 test("no key pressed in the dialog reaches the window's own chords", () => {
   const { plans } = openTab();
   openMenu(mountToolbar(plans));
-  choose("Delete plan");
+  choose("Permanently delete");
   const heard: string[] = [];
   const listen = (event: KeyboardEvent) => heard.push(event.key);
   window.addEventListener("keydown", listen);
@@ -542,8 +664,8 @@ test("a delete under way hides with the tab and still finishes, and its refusal 
   };
 
   rightClick(row, 40, 60);
-  choose("Delete plan");
-  act(() => answer("Delete").click());
+  choose("Permanently delete");
+  act(() => answer("Permanently delete").click());
   restand(false);
   assert.equal(asking(), false, "nothing is drawn over the surface standing in the tab's place");
   await act(async () => {
@@ -565,7 +687,7 @@ test("the dialog withdraws when its plan is deleted elsewhere, and the plan comi
   };
 
   rightClick(row, 40, 60);
-  choose("Delete plan");
+  choose("Permanently delete");
   assert.equal(asking(), true);
   restand([PLAN]);
   assert.equal(asking(), false);
@@ -577,7 +699,7 @@ test("the dialog withdraws when its plan is deleted elsewhere, and the plan comi
 test("the plan's name reaches the recording only as masked text, never in an attribute", () => {
   const { plans } = openTab();
   openMenu(mountToolbar(plans));
-  choose("Delete plan");
+  choose("Permanently delete");
   const drawn = dialog()?.closest(".confirm-dialog-backdrop");
   assert.ok(drawn);
   for (const element of [drawn, ...drawn.querySelectorAll("*")]) {
@@ -597,7 +719,8 @@ test("the menu answers the keyboard, and Escape closes it alone with focus back 
   window.addEventListener("keydown", listen);
 
   act(() => more.click());
-  const [copy, rename, , remove] = menuItems();
+  const [copy, rename] = menuItems();
+  const remove = menuItems().at(-1);
   assert.ok(copy && rename && remove);
   assert.equal(document.activeElement, copy);
   key("ArrowDown");
@@ -645,7 +768,7 @@ test("the tab going off screen closes an open menu and withdraws a Delete questi
   assert.deepEqual(menuItems(), []);
 
   rightClick(row, 40, 60);
-  choose("Delete plan");
+  choose("Permanently delete");
   assert.equal(asking(), true);
   restand(false);
   assert.equal(asking(), false);
@@ -727,6 +850,21 @@ test("Command-Delete asks before the open plan is deleted, and leaves a text fie
   assert.deepEqual(asked.deleted, [], "nothing is deleted before the answer");
   await confirmDelete();
   assert.deepEqual(asked.deleted, [PLAN.id]);
+});
+
+test("Command-Shift-A archives the open plan, and an archived plan leaves the chord unclaimed", () => {
+  const { plans, asked } = openTab();
+  mountToolbarWithKeys(plans);
+
+  assert.equal(chord(window, { key: "a", code: "KeyA", shiftKey: true }), true);
+  unmountAll();
+  mountToolbarWithKeys({
+    ...plans,
+    region: { kind: DOCUMENT_REGION.READY, plan: { ...PLAN, archivedAt: 9 } },
+  });
+
+  assert.equal(chord(window, { key: "a", code: "KeyA", shiftKey: true }), false);
+  assert.deepEqual(asked.marked, [[PLAN.id, PLAN_MARK.ARCHIVE]]);
 });
 
 test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {

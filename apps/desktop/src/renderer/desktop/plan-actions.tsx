@@ -1,10 +1,20 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { CopyIcon, EllipsisIcon, ExternalIcon, PencilIcon, TrashIcon } from "@sidecar/panel";
+import {
+  ArchiveIcon,
+  CopyIcon,
+  EllipsisIcon,
+  ExternalIcon,
+  PencilIcon,
+  PinIcon,
+  TrashIcon,
+  UnarchiveIcon,
+  UnpinIcon,
+} from "@sidecar/panel";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
-import { DOCUMENT_REGION } from "../planning/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
@@ -25,29 +35,52 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * Both doors open the same menu over the same plan, so a plan in the list can
  * be acted on without being opened first, and nothing in the menu moves the
  * window to another plan. The menu is the window's own (`action-menu.tsx`),
- * so both doors draw it the same way and Delete can be drawn red.
+ * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Rename edits the name where the door draws it: the sidebar's row turns
- * into a field, and the toolbar's ⋯ opens its title as one. Delete cannot be
- * undone, so choosing it asks first in a dialog over the window that names
- * the plan, whichever door it was chosen from.
+ * into a field, and the toolbar's ⋯ opens its title as one. Pin and Archive
+ * move the plan in the sidebar at once, and each is undone from the same
+ * menu. Permanently delete cannot be undone, so choosing it asks first in a
+ * dialog over the window that names the plan and offers Archive as the way
+ * to keep it, whichever door it was chosen from.
  */
 
-/** The repository a plan is about, read off the list or the open document; null for one with none. */
-function repositoryOf(plans: PlansControl, planId: string): string | null {
-  const listed = plans.plans.find((plan) => plan.id === planId);
-  if (listed !== undefined) return listed.repository;
+/** A plan as the list or the open document holds it, archived or not; nothing for a plan neither holds. */
+function planOf(plans: PlansControl, planId: string): PlanSummary | undefined {
+  const listed = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId);
+  if (listed !== undefined) return listed;
   const { region } = plans;
   return region.kind === DOCUMENT_REGION.READY && region.plan.id === planId
-    ? region.plan.repository
-    : null;
+    ? region.plan
+    : undefined;
+}
+
+/**
+ * Pin and Archive, each offered as whichever way the plan is not yet. An
+ * archived plan offers no pin, because the sidebar draws it among the
+ * archived whether or not it is pinned.
+ */
+function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuAction[] {
+  if (plan === undefined) return [];
+  const mark = (to: Parameters<PlansControl["onMarkPlan"]>[1]) => () =>
+    plans.onMarkPlan(plan.id, to);
+  if (plan.archivedAt !== undefined) {
+    return [{ label: "Unarchive", icon: <UnarchiveIcon />, onSelect: mark(PLAN_MARK.UNARCHIVE) }];
+  }
+  return [
+    plan.pinnedAt === undefined
+      ? { label: "Pin", icon: <PinIcon />, onSelect: mark(PLAN_MARK.PIN) }
+      : { label: "Unpin", icon: <UnpinIcon />, onSelect: mark(PLAN_MARK.UNPIN) },
+    { label: "Archive", icon: <ArchiveIcon />, onSelect: mark(PLAN_MARK.ARCHIVE) },
+  ];
 }
 
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename; the repository is changed from any plan and
- * opened on GitHub where there is one; Delete is last and alone.
+ * offers it, ahead of Rename; Pin and Archive follow; the repository is
+ * changed from any plan and opened on GitHub where there is one; Permanently
+ * delete is last and alone.
  */
 function planActionGroups(
   plans: PlansControl,
@@ -56,6 +89,7 @@ function planActionGroups(
 ): MenuAction[][] {
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
+  const plan = planOf(plans, planId);
   const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
   const change: MenuAction = {
     label: "Change repository…",
@@ -66,7 +100,8 @@ function planActionGroups(
     drawn
       ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename]
       : [rename],
-    repositoryOf(plans, planId) === null
+    placeActions(plans, plan),
+    (plan?.repository ?? null) === null
       ? [change]
       : [
           change,
@@ -76,33 +111,32 @@ function planActionGroups(
             onSelect: () => plans.onOpenOnGitHub(planId),
           },
         ],
-    [{ label: "Delete plan", icon: <TrashIcon />, onSelect: doors.askDelete, danger: true }],
+    [
+      {
+        label: "Permanently delete",
+        icon: <TrashIcon />,
+        onSelect: doors.askDelete,
+        danger: true,
+      },
+    ],
   ];
   return groups.filter((group) => group.length > 0);
 }
 
 /**
- * The question Delete asks, naming the plan. Deleting a plan removes its
- * document and its board and clears the conversation its transcript is read
- * from, which nothing in the app brings back.
+ * The question Permanently delete asks, naming the plan. Deleting a plan
+ * removes its document and its board and clears the conversation its
+ * transcript is read from, which nothing in the app brings back, so a plan
+ * not yet archived is pointed at Archive, which keeps all of it.
  */
-function deleteQuestion(name: string): DialogQuestion {
+function deleteQuestion(name: string, archived: boolean): DialogQuestion {
+  const lost = `“${name}” and its board and transcript will be deleted. This can’t be undone.`;
   return {
-    title: "Delete plan?",
-    body: `“${name}” will be permanently deleted, along with its board and transcript. This can’t be undone.`,
-    verb: "Delete",
+    title: "Permanently delete plan?",
+    body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
+    verb: "Permanently delete",
     running: "Deleting…",
   };
-}
-
-/**
- * Whether the plan is still there to delete: in the list, or drawn as the
- * open plan while the list has yet to catch up with it.
- */
-function planStands(plans: PlansControl, planId: string): boolean {
-  const { region } = plans;
-  if (region.kind === DOCUMENT_REGION.READY && region.plan.id === planId) return true;
-  return plans.plans.some((plan) => plan.id === planId);
 }
 
 /**
@@ -113,9 +147,9 @@ function planStands(plans: PlansControl, planId: string): boolean {
  * elsewhere, or waiting for the next time the panel opens.
  */
 function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: () => void) {
-  const deletion = useConfirmDialog(
-    { subject: planStands(plans, planId), surfaceOpen: plans.shown },
-    () => plans.onDeletePlan(planId),
+  const plan = planOf(plans, planId);
+  const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
+    plans.onDeletePlan(planId),
   );
   const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
   if (open !== undefined && !plans.shown) setOpen(undefined);
@@ -137,14 +171,20 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
         onClose={close}
       />
     );
-  const dialog = <ConfirmDialog confirm={deletion} question={deleteQuestion(name)} />;
+  const dialog = (
+    <ConfirmDialog
+      confirm={deletion}
+      question={deleteQuestion(name, plan?.archivedAt !== undefined)}
+    />
+  );
   return { deletion, open: open !== undefined, show, close, menu, dialog };
 }
 
 /**
  * The open plan's ⋯ button in the toolbar, and the menu it drops. It is also
- * what offers the open plan's Delete shortcut, so it asks exactly as its
- * menu item would: Delete still asks first.
+ * what offers the open plan's Archive and Permanently delete shortcuts, so
+ * each runs exactly as its menu item would: Permanently delete still asks
+ * first, and an archived plan has no Archive to offer.
  */
 export function PlanActionsButton({
   plans,
@@ -160,6 +200,10 @@ export function PlanActionsButton({
   const { deletion } = actions;
   const asking = confirmAsked(deletion.stage);
   useAppCommand(APP_COMMAND.DELETE_PLAN, asking || deletion.busy ? undefined : deletion.ask);
+  useAppCommand(
+    APP_COMMAND.ARCHIVE_PLAN,
+    plan.archivedAt === undefined ? () => plans.onMarkPlan(plan.id, PLAN_MARK.ARCHIVE) : undefined,
+  );
   return (
     <>
       <Tooltip label="Plan actions">
@@ -192,9 +236,11 @@ export function PlanActionsButton({
 }
 
 /**
- * A plan in the sidebar: a press opens it, and a right-click offers its
- * actions where the pointer is. Renamed, the row is its name's field until
- * the edit ends, and a key that ends it hands focus back to the row.
+ * A plan in the sidebar, pinned, listed, or archived alike: a press opens
+ * it, and a right-click offers its actions where the pointer is. Renamed,
+ * the row is its name's field until the edit ends, and a key that ends it
+ * hands focus back to the row. A pin or an archive the service refused says
+ * so under the row the plan went back to.
  */
 export function SidebarPlan({
   plans,
@@ -210,6 +256,7 @@ export function SidebarPlan({
 }): React.JSX.Element {
   const rename = usePlanRename(plan.id, plans.onRenamePlan);
   const actions = usePlanMenu(plans, plan.id, plan.name, rename.begin);
+  const markNote = plans.markNotes.get(plan.id);
   const row = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
   useEffect(() => {
@@ -262,6 +309,11 @@ export function SidebarPlan({
       {rename.note !== undefined ? (
         <p className="sidebar-note" role="alert">
           {rename.note}
+        </p>
+      ) : null}
+      {markNote !== undefined ? (
+        <p className="sidebar-note" role="alert">
+          {markNote}
         </p>
       ) : null}
       {actions.menu}

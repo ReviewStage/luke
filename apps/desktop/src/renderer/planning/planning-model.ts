@@ -1,5 +1,5 @@
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
-import type { Plan, PlanDocument } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanDocument, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLANNING_READ,
@@ -210,6 +210,141 @@ export function unsettledRenames(renames: PendingRenames, view: PlanningView): P
     return viewed !== undefined && viewed !== name;
   });
   return unsettled.length === renames.size ? renames : new Map(unsettled);
+}
+
+/** What a press of the plan menu does to a plan's place: pins it or unpins it, archives it or brings it back. */
+export const PLAN_MARK = {
+  PIN: "pin",
+  UNPIN: "unpin",
+  ARCHIVE: "archive",
+  UNARCHIVE: "unarchive",
+} as const;
+
+export type PlanMark = (typeof PLAN_MARK)[keyof typeof PLAN_MARK];
+
+/** What a plan's row says when the service refused a pin or an archive, by what was asked. */
+export const MARK_FAILED_NOTES = {
+  [PLAN_MARK.PIN]: "The plan could not be pinned. Try again.",
+  [PLAN_MARK.UNPIN]: "The plan could not be unpinned. Try again.",
+  [PLAN_MARK.ARCHIVE]: "The plan could not be archived. Try again.",
+  [PLAN_MARK.UNARCHIVE]: "The plan could not be unarchived. Try again.",
+} as const satisfies Record<PlanMark, string>;
+
+/** A plan's pin and archive as the list carries them, each only where it stands. */
+type MarkStamps = Pick<PlanSummary, "pinnedAt" | "archivedAt">;
+
+/** A pin or an archive given to a plan that main's view has yet to carry: the instant it was asked, or null for one taken away. */
+export interface PendingMark {
+  readonly pinnedAt?: number | null;
+  readonly archivedAt?: number | null;
+}
+
+/** The pins and archives given to plans that main's view has yet to carry, by plan id. */
+export type PendingMarks = ReadonlyMap<string, PendingMark>;
+
+/** The pending stamps a press asks for, made at `at`. */
+export function pendingMark(mark: PlanMark, at: number): PendingMark {
+  switch (mark) {
+    case PLAN_MARK.PIN:
+      return { pinnedAt: at };
+    case PLAN_MARK.UNPIN:
+      return { pinnedAt: null };
+    case PLAN_MARK.ARCHIVE:
+      return { archivedAt: at };
+    case PLAN_MARK.UNARCHIVE:
+      return { archivedAt: null };
+  }
+}
+
+/**
+ * A stamp after a pending change: none asked leaves the one standing, null
+ * takes it away, and an instant stands only where none already does, so a
+ * plan pinned twice keeps its place among the pinned.
+ */
+function stampAfter(standing: number | undefined, asked: number | null | undefined) {
+  if (asked === undefined) return standing;
+  if (asked === null) return undefined;
+  return standing ?? asked;
+}
+
+/** A row or the open document with its pending pin and archive drawn in place of what it carries. */
+function marked<Row extends PlanSummary>(
+  row: Row,
+  mark: PendingMark | undefined,
+): Omit<Row, keyof MarkStamps> & MarkStamps {
+  const { pinnedAt, archivedAt, ...rest } = row;
+  const pinned = stampAfter(pinnedAt, mark?.pinnedAt);
+  const archived = stampAfter(archivedAt, mark?.archivedAt);
+  return {
+    ...rest,
+    ...(pinned === undefined ? undefined : { pinnedAt: pinned }),
+    ...(archived === undefined ? undefined : { archivedAt: archived }),
+  };
+}
+
+/** The view with each pending pin and archive drawn in place, in the list and on the open document alike. */
+export function markedView(view: PlanningView, marks: PendingMarks): PlanningView {
+  if (marks.size === 0) return view;
+  const held = view.document.plan;
+  return {
+    ...view,
+    plans: view.plans.map((plan) => marked(plan, marks.get(plan.id))),
+    document:
+      held === undefined
+        ? view.document
+        : { ...view.document, plan: marked(held, marks.get(held.id)) },
+  };
+}
+
+/** Whether the view carries every stamp a pending mark asks for: each standing where it is asked, and gone where it is taken away. */
+function markLanded(row: MarkStamps, mark: PendingMark): boolean {
+  const pinLanded =
+    mark.pinnedAt === undefined || (mark.pinnedAt === null) === (row.pinnedAt === undefined);
+  const archiveLanded =
+    mark.archivedAt === undefined || (mark.archivedAt === null) === (row.archivedAt === undefined);
+  return pinLanded && archiveLanded;
+}
+
+/**
+ * The pending marks the view still contradicts. One the view now carries
+ * has landed, and one of a plan the view no longer holds has nothing left
+ * to mark, so both are let go.
+ */
+export function unsettledMarks(marks: PendingMarks, view: PlanningView): PendingMarks {
+  const unsettled = [...marks].filter(([planId, mark]) => {
+    const held = view.document.plan;
+    const viewed =
+      view.plans.find((plan) => plan.id === planId) ?? (held?.id === planId ? held : undefined);
+    return viewed !== undefined && !markLanded(viewed, mark);
+  });
+  return unsettled.length === marks.size ? marks : new Map(unsettled);
+}
+
+/** The plans the sidebar lists, each in its place. */
+export interface SidebarPlans {
+  /** The pinned plans, newest pinned first. */
+  readonly pinned: readonly PlanSummary[];
+  /** The rest, as the service lists them: newest started first. */
+  readonly rest: readonly PlanSummary[];
+  /** The archived plans, newest archived first, whether or not they are pinned. */
+  readonly archived: readonly PlanSummary[];
+}
+
+/**
+ * The account's plans sorted into the sidebar's places. Note that an
+ * archived plan is drawn only among the archived, pinned or not, because its
+ * pin is kept for when it is brought back rather than shown while it is away.
+ */
+export function sidebarPlans(plans: readonly PlanSummary[]): SidebarPlans {
+  const archived = plans
+    .filter((plan) => plan.archivedAt !== undefined)
+    .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0));
+  const standing = plans.filter((plan) => plan.archivedAt === undefined);
+  const pinned = standing
+    .filter((plan) => plan.pinnedAt !== undefined)
+    .sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+  const rest = standing.filter((plan) => plan.pinnedAt === undefined);
+  return { pinned, rest, archived };
 }
 
 /** The status word beside the microphone for a call, or nothing where none stands. */

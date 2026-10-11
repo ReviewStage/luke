@@ -46,13 +46,13 @@ function choose(
 
 test("an item clicked in the menu bar hands its command to the window it was chosen over", () => {
   const window = new FakeBrowserWindow();
-  choose("Delete Plan", window, false);
+  choose("Permanently Delete Plan", window, false);
   assert.deepEqual(window.sent, [[channels.onMenuCommand, APP_COMMAND.DELETE_PLAN]]);
 });
 
 test("a key the window left unclaimed runs no item: a text field's ⌘⌫ and the window's Escape stay theirs", () => {
   const window = new FakeBrowserWindow();
-  choose("Delete Plan", window, true);
+  choose("Permanently Delete Plan", window, true);
   choose("Exit Full Screen", window, true);
   assert.deepEqual(window.sent, []);
 });

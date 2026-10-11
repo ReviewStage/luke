@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
+import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
 import { PLAN_FILE_REFUSAL } from "./plan-wire.js";
@@ -34,13 +34,21 @@ function client(): HostedPlanClient {
   });
 }
 
-it.effect("lists the account's plans under its bearer", () =>
+it.effect("lists the account's plans under its bearer, the archived ones among them", () =>
   Effect.gen(function* () {
-    const api = fakeCloudApi({ "GET /api/plans": { answer: () => ({ plans: [SUMMARY] }) } });
+    const archived = {
+      ...SUMMARY,
+      id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40",
+      archivedAt: 1_800_000_300_000,
+    };
+    const api = fakeCloudApi({
+      "GET /api/plans": { answer: () => ({ plans: [SUMMARY, archived] }) },
+    });
 
     const listed = yield* Effect.provide(client().list(), api.layer);
 
-    assert.deepEqual(listed, { ok: true, answer: [SUMMARY] });
+    assert.deepEqual(listed, { ok: true, answer: [SUMMARY, archived] });
+    assert.deepEqual(recordedRoutes(api.requests()), ["GET /api/plans?archived=include"]);
     assert.deepEqual(api.credentials(), ["token-1"]);
   }),
 );
@@ -111,6 +119,43 @@ it.effect("renaming a plan sends the trimmed name and answers the plan as rename
       yield* Effect.provide(client().rename(PLAN_ID, { name: "Team invites" }), gone.layer),
       undefined,
     );
+  }),
+);
+
+it.effect("pinning or archiving a plan sends the change and answers the plan as changed", () =>
+  Effect.gen(function* () {
+    const pinned = { ...PLAN, pinnedAt: 1_800_000_300_000 };
+    const api = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: { answer: () => ({ plan: pinned }) },
+    });
+    const gone = fakeCloudApi({
+      [`PATCH /api/plans/${PLAN_ID}`]: {
+        answer: () => ({ error: "not-found" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const answered = yield* Effect.provide(client().mark(PLAN_ID, { pinned: true }), api.layer);
+    yield* Effect.provide(client().mark(PLAN_ID, { archived: false }), api.layer);
+
+    assert.deepEqual(answered, pinned);
+    assert.deepEqual(
+      api.requests().map((request) => JSON.parse(request.body ?? "{}")),
+      [{ pinned: true }, { archived: false }],
+    );
+    assert.equal(
+      yield* Effect.provide(client().mark(PLAN_ID, { archived: true }), gone.layer),
+      undefined,
+    );
+  }),
+);
+
+it.effect("a pin or archive change that names neither never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+
+    assert.equal(yield* Effect.provide(client().mark(PLAN_ID, {}), api.layer), undefined);
+    assert.deepEqual(api.requests(), []);
   }),
 );
 

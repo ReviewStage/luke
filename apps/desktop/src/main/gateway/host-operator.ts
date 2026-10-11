@@ -41,9 +41,11 @@ import {
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_CALL_FAILURE,
+  type PlanningArchiveParams,
   type PlanningBoardSaveParams,
   type PlanningFileAnswer,
   type PlanningFileParams,
+  type PlanningPinParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
@@ -153,6 +155,10 @@ export interface HostOperator {
   planningDelete(planId: string): Effect.Effect<boolean>;
   /** One plan renamed; answers whether the service renamed it. */
   planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
+  /** One plan pinned or unpinned; answers whether the service changed it. */
+  planningPin(params: PlanningPinParams): Effect.Effect<boolean>;
+  /** One plan archived or brought back; answers whether the service changed it. */
+  planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
   planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
   /** One plan given its repository, or none; the repository as kept, or why it is unchanged. */
@@ -378,6 +384,19 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_RENAME, { planId: params.planId, name: params.name }),
         (answer) => record(answer)?.renamed === true,
+      ),
+    planningPin: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PIN, { planId: params.planId, pinned: params.pinned }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    planningArchive: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_ARCHIVE, {
+          planId: params.planId,
+          archived: params.archived,
+        }),
+        (answer) => record(answer)?.changed === true,
       ),
     planningRepositories: () =>
       Effect.map(

@@ -172,7 +172,7 @@ test("each of the window's own shortcuts is found by its name, on the Keyboard s
   const entries = settingsSearchEntries(everythingDrawn());
 
   const remove = found(searchSettings(entries, "delete plan"));
-  assert.deepEqual(labels(remove), ["Delete plan"]);
+  assert.deepEqual(labels(remove), ["Permanently delete plan"]);
   assert.equal(remove[0]?.page, SETTINGS_VIEW.SHORTCUTS);
   // Removing is the two keys' own; no window chord offers it.
   assert.deepEqual(labels(found(searchSettings(entries, "shortcut remove"))), [

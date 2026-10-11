@@ -20,12 +20,15 @@ import {
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import {
+  PLAN_LIST_ARCHIVED,
+  PLAN_LIST_QUERY,
   type Plan,
   type PlanCreateRequest,
   type PlanFileAnswer,
   type PlanFileRequest,
   type PlanRenameRequest,
   type PlanSummary,
+  type PlanUpdateRequest,
   planAnswerSchema,
   planCreateRequestSchema,
   planDeleteAnswerSchema,
@@ -77,6 +80,14 @@ export interface HostedPlanClientOptions extends AccountToken {
 
 const UNANSWERED = { ok: false, failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
 
+/** The list with the archived plans among it, each flagged, which this build sorts into its own place. */
+const LIST_WITH_ARCHIVED_PATH = `${HOSTED_SERVICE_PATH.PLANS}?${new URLSearchParams({
+  [PLAN_LIST_QUERY.ARCHIVED]: PLAN_LIST_ARCHIVED.INCLUDE,
+})}`;
+
+/** What a plan's pin and archive change names: pinned or not, archived or not, or both. */
+export type PlanMarks = Pick<PlanUpdateRequest, "pinned" | "archived">;
+
 function succeeded<Answer>(answer: Answer) {
   return { ok: true, answer } as const;
 }
@@ -100,7 +111,7 @@ function refusedAs<Failure extends PlanCallFailure>(
 /**
  * The Plans tab's reads and its writes of the service: the list of plans,
  * one plan opened with its document, the repositories the account reaches,
- * and a plan started, renamed, given its repository, or deleted. Each
+ * and a plan started, renamed, given its repository, pinned, archived, or deleted. Each
  * resolves to a result rather than failing, because every caller does the
  * same thing with a failure: draws why, and offers to try again.
  */
@@ -115,7 +126,7 @@ export class HostedPlanClient {
     });
   }
 
-  /** Every plan the account owns, newest started first. */
+  /** Every plan the account owns, newest started first, the archived ones among them. */
   list(): Effect.Effect<
     PlanCallResult<readonly PlanSummary[], typeof PLAN_CALL_FAILURE.UNANSWERED>,
     never,
@@ -123,7 +134,7 @@ export class HostedPlanClient {
   > {
     return Effect.map(
       this.#call.ask(
-        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.PLANS },
+        { method: HTTP_METHOD.GET, path: LIST_WITH_ARCHIVED_PATH },
         planListAnswerSchema,
       ),
       (answer) => (answer === undefined ? UNANSWERED : succeeded(answer.plans)),
@@ -296,6 +307,26 @@ export class HostedPlanClient {
     request: PlanRenameRequest,
   ): Effect.Effect<Plan | undefined, never, HttpClient.HttpClient> {
     const admitted = Result.getOrUndefined(readEither(planRenameRequestSchema)(request));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.PATCH, path: planPath(planId), body: JSON.stringify(admitted) },
+        planAnswerSchema,
+      ),
+      (answer) => answer?.plan,
+    );
+  }
+
+  /**
+   * Pins or unpins one plan, archives it or brings it back, answering it as
+   * changed with its document, or nothing where the service did not change
+   * it; a change that names neither never travels.
+   */
+  mark(
+    planId: string,
+    marks: PlanMarks,
+  ): Effect.Effect<Plan | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planUpdateRequestSchema)(marks));
     if (admitted === undefined) return Effect.succeed(undefined);
     return Effect.map(
       this.#call.ask(
