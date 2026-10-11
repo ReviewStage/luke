@@ -38,10 +38,7 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import {
-  createCodingAgent,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
+import { createCodingAgent, updateCodingAgentBranch } from "../server/hosted/coding-agent-store";
 import {
   CODING_AGENT_TOOL_BOUNDS,
   CODING_AGENT_TOOL_REFUSAL,
