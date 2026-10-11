@@ -41,6 +41,7 @@ import type { RepositoryChooser } from "./repository-chip";
 import {
   type HeardCall,
   heardCalls,
+  TRANSCRIPT_REGION,
   type TranscriptRegion,
   transcriptRegion,
 } from "./transcript-model";
@@ -48,6 +49,8 @@ import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   isAgentTab,
+  type PlanHolds,
+  SIDE_PANEL_TAB,
   type SidePanelControl,
   type SidePanelTab,
   useSidePanel,
@@ -180,6 +183,28 @@ const DELETE_REFUSED: ActionResult = {
   reason: "The plan could not be deleted. Try again.",
 };
 
+/** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
+function planHolds(
+  view: Pick<PlanningView, "board" | "shownCode" | "work">,
+  transcript: TranscriptRegion,
+): PlanHolds {
+  const { board, shownCode, work } = view;
+  return {
+    [SIDE_PANEL_TAB.BOARD]:
+      board === undefined
+        ? undefined
+        : board.elements.length > 0 || (board.drawing?.elements.length ?? 0) > 0,
+    [SIDE_PANEL_TAB.CODE]: shownCode === undefined ? undefined : shownCode.length > 0,
+    [SIDE_PANEL_TAB.TRANSCRIPT]:
+      transcript.kind === TRANSCRIPT_REGION.READY
+        ? true
+        : transcript.kind === TRANSCRIPT_REGION.EMPTY
+          ? false
+          : undefined,
+    [SIDE_PANEL_TAB.WORK]: work === undefined ? undefined : work.length > 0,
+  };
+}
+
 export function usePlansTab(input: {
   acts: Pick<ActHandle, "act" | "tell">;
   /** The plans main holds, the account's; a fixture run's own stand in for them. */
@@ -221,6 +246,22 @@ export function usePlansTab(input: {
       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
   });
+  // The calls heard on the open plan, each held past its end until the
+  // record's copy catches up; a fixture's open plan is drawn with its own
+  // call's words.
+  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
+  const [heard, setHeard] = useState<readonly HeardCall[]>([]);
+  useEffect(() => {
+    setHeard((held) =>
+      heardCalls({
+        held,
+        voice: { callPlanId: reported.callPlanId, callTranscript: reported.callTranscript },
+        planId: viewed.activePlanId,
+        now: Date.now(),
+      }),
+    );
+  }, [reported.callPlanId, reported.callTranscript, viewed.activePlanId]);
+  const transcript = transcriptRegion({ transcript: viewed.transcript, heard });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
   // A file's tab is held to the files Luke showed on the plan the same way.
@@ -230,6 +271,7 @@ export function usePlansTab(input: {
   );
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
+    { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
     agents.agentIds,
     workers,
     agents.draft?.id,
@@ -398,22 +440,6 @@ export function usePlansTab(input: {
       ? region.plan.repository
       : null);
 
-  // The calls heard on the open plan, each held past its end until the
-  // record's copy catches up; a fixture's open plan is drawn with its own
-  // call's words.
-  const reported = fixture === undefined ? voice.view : FIXTURE_PLANNING_CALL;
-  const [heard, setHeard] = useState<readonly HeardCall[]>([]);
-  useEffect(() => {
-    setHeard((held) =>
-      heardCalls({
-        held,
-        voice: { callPlanId: reported.callPlanId, callTranscript: reported.callTranscript },
-        planId: planning.activePlanId,
-        now: Date.now(),
-      }),
-    );
-  }, [reported.callPlanId, reported.callTranscript, planning.activePlanId]);
-
   // A started plan becomes the host's open one, which turns the page to it.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
@@ -467,7 +493,7 @@ export function usePlansTab(input: {
     board: planning.board,
     shownCode: planning.shownCode,
     transcript: {
-      region: transcriptRegion({ transcript: planning.transcript, heard }),
+      region: transcript,
       onRetry: () => tell(ACT_KIND.PLANNING_REFRESH),
     },
     // A fixture's open plan is drawn mid-call, as its status and transcript are.

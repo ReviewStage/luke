@@ -6,12 +6,26 @@ import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
 import {
+  type OpenPlan,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
 } from "../renderer/planning/use-side-panel";
 
 const ignore = () => undefined;
+
+/** An open plan that has used every fixed tab, so its panel draws them all. */
+export function usedPlan(id: string): OpenPlan {
+  return {
+    id,
+    holds: {
+      [SIDE_PANEL_TAB.BOARD]: true,
+      [SIDE_PANEL_TAB.CODE]: true,
+      [SIDE_PANEL_TAB.TRANSCRIPT]: true,
+      [SIDE_PANEL_TAB.WORK]: true,
+    },
+  };
+}
 
 /** A plan with no agents and no repository, every press ignored. */
 export function codingAgentsControl(
@@ -67,6 +81,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       open: false,
       fullScreen: false,
       tabs: SIDE_PANEL_TABS,
+      closedTabs: [],
       subagents: [],
       files: [],
       closedAgents: [],
@@ -75,7 +90,6 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onToggle: ignore,
       onToggleFullScreen: ignore,
       onChoose: ignore,
-      onAdd: ignore,
       onClose: ignore,
       onMove: ignore,
       onOpenFile: ignore,

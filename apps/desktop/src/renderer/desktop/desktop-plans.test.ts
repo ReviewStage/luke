@@ -29,7 +29,7 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
-import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl, usedPlan } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
@@ -40,6 +40,7 @@ import type { TranscriptReader } from "../planning/use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
+  type PlanHolds,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   SIDE_PANEL_WIDTH,
@@ -94,16 +95,20 @@ function Page({
   agents,
   shownCode,
   plan = PLAN,
+  holds,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
   agents?: PlansControl["agents"] | undefined;
   shownCode?: PlansControl["shownCode"];
   plan?: Plan;
+  /** What the open plan holds; every fixed kind where absent. */
+  holds?: PlanHolds | undefined;
 }) {
   const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
   const sidePanel = useSidePanel(
     staged,
+    { id: plan.id, holds: holds ?? usedPlan(plan.id).holds },
     agents?.agentIds,
     workerCallIds(work?.turns),
     undefined,
@@ -151,6 +156,7 @@ function mountOpenPlan(
     work?: PlansControl["work"];
     agents?: PlansControl["agents"];
     shownCode?: PlansControl["shownCode"];
+    holds?: PlanHolds;
   } = {},
 ): HTMLElement {
   const container = document.createElement("div");
@@ -1363,7 +1369,7 @@ test("the menu bar's Exit Full Screen steps out of full screen, and does nothing
  * opening another draws the first plan's page reading again.
  */
 function Opening({ region }: { region: PlansControl["region"] }) {
-  const sidePanel = useSidePanel(undefined);
+  const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id));
   return createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
@@ -1656,6 +1662,25 @@ test("closing the chosen tab chooses its neighbour, and closing the last leaves 
   assert.equal(chosenTab(page), "Code");
 });
 
+test("the open panel on a plan that has used no tab says what will stand there, and the + opens any kind on it", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan({ holds: {} });
+  press(page, '[aria-label="Show panel"]');
+  assert.ok(panelShown(page));
+  assert.deepEqual(panelTabs(page), []);
+  assert.equal(
+    page.querySelector(".side-panel-content")?.textContent,
+    "Luke's board, code, transcript, and work appear here as you plan.",
+  );
+  assert.equal(page.querySelector(".side-panel-no-tabs"), null);
+
+  act(() => addButton(page).click());
+  typeSearch("board");
+  key(focused(), "Enter");
+  assert.deepEqual(panelTabs(page), ["Board"]);
+  assert.equal(chosenTab(page), "Board");
+});
+
 test("the panel's tabs are one stop for Tab that the arrow keys move along, and Delete closes the one focused and hands focus on", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1690,7 +1715,7 @@ function addButton(page: HTMLElement): HTMLElement {
   return button;
 }
 
-test("the + drops the searchable menu over every kind, an open one saying so and chosen by a pick, and a closed one opened at the strip's end", () => {
+test("the + drops the searchable menu over every kind, an open one saying so and chosen by a pick, and a closed one opened in its place", () => {
   installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -1720,7 +1745,7 @@ test("the + drops the searchable menu over every kind, an open one saying so and
   typeSearch("code");
   key(focused(), "Enter");
   assert.equal(document.querySelector(".tab-add-menu"), null);
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Code");
   assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
 
@@ -1763,12 +1788,12 @@ test("Option-Command-2 opens a closed Code tab again and chooses it, and no kind
   press(page, '[aria-label="Close Code"]');
 
   keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Code");
 
   keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
   keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
 });
 
 test("the next launch opens the panel with the tabs this one left open, in their order", () => {
@@ -1951,13 +1976,13 @@ test("a tab closed under a drag puts the drag back rather than dropping it at a 
   assert.equal(chosenTab(page), "Board");
   assert.deepEqual(tabsMoved(page), []);
 
-  // One closed and opened again at the end leaves as many tabs, and the
-  // dragged one where it was, but the places it passed have moved.
+  // One closed and opened again stands in its place again, and the drag
+  // that passed it is put back all the same.
   dragTab(tabNamed(page, "Board"), 45, [160], DRAG_END.DROP, () => {
     press(page, '[aria-label="Close Code"]');
     keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
   });
-  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
   assert.equal(chosenTab(page), "Code");
   assert.deepEqual(tabsMoved(page), []);
 });
@@ -2087,13 +2112,10 @@ test("a tab chosen, or opened, past the strip's shown room is scrolled into view
   assert.equal(document.activeElement, tabNamed(page, "Board"));
   assert.ok(tabInView(page, strip, "Board"), "the tab the keys reach is brought into view");
 
-  key(tabNamed(page, "Board"), "Delete");
-  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Code", "Transcript", "Work", "Board"]);
-  assert.ok(
-    tabInView(page, strip, "Board"),
-    "a tab opened at the strip's end is brought into view",
-  );
+  press(page, '[aria-label="Close Work"]');
+  keydown({ code: "Digit4", key: "¢", metaKey: true, altKey: true });
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.ok(tabInView(page, strip, "Work"), "a tab opened at the strip's end is brought into view");
 });
 
 /**
@@ -2302,7 +2324,12 @@ let listed: readonly CodingAgentSummary[] = [];
 function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
   const [agents, setAgents] = useState(listed);
   const agentIds = agents.map((agent) => agent.id);
-  const sidePanel = useSidePanel(undefined, agentIds, workerCallIds(work?.turns));
+  const sidePanel = useSidePanel(
+    undefined,
+    usedPlan(PLAN.id),
+    agentIds,
+    workerCallIds(work?.turns),
+  );
   const page = createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
@@ -2510,7 +2537,13 @@ function DraftPage({ repository }: { repository: string | null }) {
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });
-  const sidePanel = useSidePanel(undefined, agents.agentIds, [], agents.draft?.id);
+  const sidePanel = useSidePanel(
+    undefined,
+    usedPlan(PLAN.id),
+    agents.agentIds,
+    [],
+    agents.draft?.id,
+  );
   panelRef.current = sidePanel;
   const page = createElement(DesktopPlans, {
     plans: plansControl({
@@ -2699,6 +2732,7 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   });
   const page = mountOpenPlan({
     staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+    holds: { [SIDE_PANEL_TAB.CODE]: true },
     shownCode: [
       { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
       {
@@ -2725,6 +2759,7 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
     roots.at(-1)?.render(
       createElement(Page, {
         staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+        holds: { [SIDE_PANEL_TAB.CODE]: true },
         shownCode: [
           { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
           {

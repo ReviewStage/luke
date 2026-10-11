@@ -8,10 +8,12 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
+  PLAN_WORK_STATE,
   PLANNING_READ,
   type PlanCode,
   type PlanCodeShowing,
   type PlanningView,
+  type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
@@ -525,6 +527,108 @@ function panelOf(tab: ReturnType<typeof mount>) {
   return { open, tab: shown };
 }
 
+/** One turn of Luke's planning model on the open plan. */
+const TURN: PlanWorkTurn = {
+  turnId: "turn-1",
+  startedAt: 1,
+  state: PLAN_WORK_STATE.DONE,
+  earlierOmitted: false,
+  parts: [],
+};
+
+/** The open plan's calls read back: none, and one with a line said on it. */
+const NO_CALLS: PlanningView["transcript"] = {
+  status: PLANNING_READ.READY,
+  transcript: { calls: [], earlierOmitted: false },
+};
+const ONE_CALL: PlanningView["transcript"] = {
+  status: PLANNING_READ.READY,
+  transcript: {
+    calls: [
+      {
+        id: "5d7f9b1c-3e5a-4c7e-9a1b-3c5e7f9b1d3f",
+        startedAt: 1,
+        messages: [
+          { id: "0", role: "user", parts: [{ type: "text", text: "Invites should expire." }] },
+        ],
+      },
+    ],
+    earlierOmitted: false,
+  },
+};
+
+/** The open plan read with nothing on it yet: an empty board, no code, no call, no work. */
+const NOTHING_YET: PlanningView = {
+  ...OPEN,
+  board: EMPTY_BOARD,
+  shownCode: [],
+  transcript: NO_CALLS,
+  work: [],
+};
+
+test("a new plan has no tab, and each kind's first content adds its tab in its place", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  assert.deepEqual(tab.control().sidePanel.tabs, [], "nothing read draws nothing");
+  tab.stand({ planning: NOTHING_YET });
+  act(() => tab.control().sidePanel.onToggle());
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+  assert.deepEqual(tab.control().sidePanel.tabs, []);
+
+  tab.stand({ planning: { ...NOTHING_YET, transcript: ONE_CALL } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.TRANSCRIPT]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  tab.stand({ planning: { ...NOTHING_YET, transcript: ONE_CALL, work: [TURN] } });
+  tab.stand({ planning: { ...NOTHING_YET, transcript: ONE_CALL, work: [TURN], shownCode: SHOWN } });
+  tab.stand({
+    planning: {
+      ...NOTHING_YET,
+      transcript: ONE_CALL,
+      work: [TURN],
+      shownCode: SHOWN,
+      board: drawnBoard(1),
+    },
+  });
+  assert.deepEqual(tab.control().sidePanel.tabs, SIDE_PANEL_TABS);
+  assert.deepEqual(
+    panelOf(tab),
+    { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
+    "a tab added ahead of the one shown does not take its place",
+  );
+});
+
+test("a call's line heard live adds the Transcript tab before the record holds it", () => {
+  const tab = mount({ shown: true, planning: NOTHING_YET });
+  tab.stand({
+    voice: {
+      ...IDLE_VOICE_VIEW,
+      callPlanId: PLAN.id,
+      callTranscript: {
+        voiceSessionId: "9e4b1a2c-6d3f-4e8a-b7c5-1f2a3b4c5d6e",
+        lines: [{ rowId: "row-1", speaker: "user", words: "Invites should expire." }],
+      },
+    },
+  });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.TRANSCRIPT]);
+});
+
+test("each plan draws its own tabs, a tab closed on one stays open on another, and a tab chosen on one reads as the first another has", () => {
+  const OTHER = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+  const first: PlanningView = { ...NOTHING_YET, transcript: ONE_CALL, work: [TURN] };
+  const second: PlanningView = { ...NOTHING_YET, activePlanId: OTHER, work: [TURN] };
+  const tab = mount({ shown: true, planning: first });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.WORK));
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.TRANSCRIPT]);
+
+  tab.stand({ planning: second });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.WORK });
+
+  tab.stand({ planning: first });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.TRANSCRIPT]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+});
+
 test("Luke's first drawing on the open plan's board opens the panel on the board, and none after it does once closed", () => {
   const tab = mount({ shown: true, planning: OPEN });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
@@ -637,35 +741,31 @@ test("an arrival while the panel shows another tab leaves it there and dots the 
   assert.deepEqual(tab.control().unreadTabs, []);
 });
 
-test("Luke's first drawing opens a closed Board tab again at the strip's end, dotted while the panel shows another", () => {
-  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+test("Luke's first drawing adds the Board tab in its place, dotted while the panel shows another", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD, work: [TURN] } });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
 
-  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
-  assert.deepEqual(tab.control().sidePanel.tabs, [
-    SIDE_PANEL_TAB.CODE,
-    SIDE_PANEL_TAB.TRANSCRIPT,
-    SIDE_PANEL_TAB.WORK,
-    SIDE_PANEL_TAB.BOARD,
-  ]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1), work: [TURN] } });
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.WORK });
   assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
 });
 
-test("Luke's first code opens a shut panel on a Code tab the developer had closed", () => {
-  const tab = mount({ shown: true, planning: OPEN });
-  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
-  tab.stand({ voice: ON_CALL });
+test("a tab the developer closed on a plan stays closed as more arrives there, opens nothing, and opens again from the +", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+  act(() => tab.control().sidePanel.onToggle());
 
-  tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
-  assert.deepEqual(tab.control().sidePanel.tabs, [
-    SIDE_PANEL_TAB.BOARD,
-    SIDE_PANEL_TAB.TRANSCRIPT,
-    SIDE_PANEL_TAB.WORK,
-    SIDE_PANEL_TAB.CODE,
-  ]);
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+  assert.deepEqual(tab.control().sidePanel.tabs, []);
+  assert.deepEqual(tab.control().sidePanel.closedTabs, [SIDE_PANEL_TAB.BOARD]);
+
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+  assert.deepEqual(tab.control().sidePanel.closedTabs, []);
 });
 
 test("an arrival on an open panel with every tab closed shows the arrival's tab, with no dot", () => {

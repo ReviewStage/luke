@@ -7,13 +7,13 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { navigationHistory } from "#testing/navigation-history";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, usedPlan } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { usePanelArrivals } from "../planning/use-panel-arrivals";
-import { useSidePanel } from "../planning/use-side-panel";
+import { SIDE_PANEL_TAB, useSidePanel } from "../planning/use-side-panel";
 import { DesktopShell } from "./desktop-shell";
 import { useSidebarCollapse } from "./sidebar-collapse";
 
@@ -175,7 +175,11 @@ function scrolledSideways(page: HTMLElement): string[] {
 /** The window as `App` stands it, with a plan open and, on a call, the code Luke has on screen. */
 function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): React.JSX.Element {
   const sidebar = useSidebarCollapse(false);
-  const sidePanel = useSidePanel(undefined);
+  // The plan has used every tab but the code, which the call's first showing adds.
+  const sidePanel = useSidePanel(undefined, {
+    id: PLAN.id,
+    holds: { ...usedPlan(PLAN.id).holds, [SIDE_PANEL_TAB.CODE]: code !== undefined },
+  });
   const unreadTabs = usePanelArrivals({
     planId: PLAN.id,
     board: undefined,

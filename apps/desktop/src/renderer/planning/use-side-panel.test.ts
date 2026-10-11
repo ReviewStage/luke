@@ -4,8 +4,11 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { usedPlan } from "#testing/plans-control";
 import {
   isAgentTab,
+  type OpenPlan,
+  type PlanHolds,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TABS,
   type SidePanelControl,
@@ -15,6 +18,7 @@ import {
   useSidePanel,
 } from "./use-side-panel";
 
+const PLAN = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 const OTHER = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 const CALL = "call-worker-1";
@@ -35,19 +39,22 @@ interface Stood {
   draft?: string | undefined;
   /** The files Luke showed on the plan, by path. */
   files?: readonly string[] | undefined;
+  /** The open plan and what it holds; one that has used every fixed tab where absent. */
+  plan?: OpenPlan;
 }
 
-/** Mounts the panel alone over the agents, subagents, and draft the plan has now, answering the control as it stands. */
-function mount(
-  agents: readonly string[] | undefined,
-  subagents?: readonly string[],
-  draft?: string,
-  files?: readonly string[],
-) {
+/** Mounts the panel alone over the plan, agents, subagents, draft, and files the plan has now, answering the control as it stands. */
+function mountStood(stood: Stood) {
   let control: SidePanelControl | undefined;
-  let restand: ((next: Stood) => void) | undefined;
   function Probe({ held }: { held: Stood }) {
-    control = useSidePanel(undefined, held.agents, held.subagents, held.draft, held.files);
+    control = useSidePanel(
+      undefined,
+      held.plan ?? usedPlan(PLAN),
+      held.agents,
+      held.subagents,
+      held.draft,
+      held.files,
+    );
     return null;
   }
   const container = document.createElement("div");
@@ -55,19 +62,42 @@ function mount(
   const root = createRoot(container);
   roots.push(root);
   const render = (held: Stood) => act(() => root.render(createElement(Probe, { held })));
-  restand = render;
-  render({ agents, subagents, draft, files });
+  render(stood);
   return {
     control: () => {
       assert.ok(control);
       return control;
     },
+    render,
+  };
+}
+
+/** Mounts the panel alone over the agents, subagents, draft, and files a plan that has used every fixed tab has now. */
+function mount(
+  agents: readonly string[] | undefined,
+  subagents?: readonly string[],
+  draft?: string,
+  files?: readonly string[],
+) {
+  const { control, render } = mountStood({ agents, subagents, draft, files });
+  return {
+    control,
     stand: (
       next: readonly string[] | undefined,
       nextSubagents?: readonly string[],
       nextDraft?: string,
       nextFiles?: readonly string[],
-    ) => restand?.({ agents: next, subagents: nextSubagents, draft: nextDraft, files: nextFiles }),
+    ) => render({ agents: next, subagents: nextSubagents, draft: nextDraft, files: nextFiles }),
+  };
+}
+
+/** Mounts the panel alone over a plan holding the kinds given and the agents, and stands it on another. */
+function mountOn(holds: PlanHolds, agents: readonly string[] = [], id = PLAN) {
+  const { control, render } = mountStood({ plan: { id, holds }, agents, subagents: [] });
+  return {
+    control,
+    standOn: (next: PlanHolds, nextId = id) =>
+      render({ plan: { id: nextId, holds: next }, agents, subagents: [] }),
   };
 }
 
@@ -284,4 +314,83 @@ test("a file's tab closes to its neighbour, is held to the files shown on the op
   const second = mount([], [], undefined, [INVITE, ROLES]);
   assert.deepEqual(second.control().files, []);
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
+});
+
+test("what an earlier version kept loads as the order alone: the tabs it held open open none a plan has not used, and its chosen tab shows where a plan has it", () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.CODE, width: 420 }),
+  );
+  const nothing = mountOn({});
+  assert.equal(nothing.control().open, true);
+  assert.equal(nothing.control().width, 420);
+  assert.deepEqual(nothing.control().tabs, []);
+  assert.equal(nothing.control().tab, undefined);
+  nothing.standOn({ [SIDE_PANEL_TAB.BOARD]: true, [SIDE_PANEL_TAB.CODE]: true });
+  assert.deepEqual(nothing.control().tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE]);
+  assert.equal(nothing.control().tab, SIDE_PANEL_TAB.CODE);
+
+  // The fixed tabs it had closed stand last in the order, closed on no plan.
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.CODE],
+      tab: SIDE_PANEL_TAB.WORK,
+      width: 400,
+    }),
+  );
+  const closed = mountOn(usedPlan(PLAN).holds);
+  assert.deepEqual(closed.control().tabs, [
+    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+  ]);
+  assert.deepEqual(closed.control().closedTabs, []);
+
+  // Before the tabs could close, the version kept no tabs at all.
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({ open: true, tab: SIDE_PANEL_TAB.CODE, width: 500 }),
+  );
+  assert.deepEqual(mountOn({ [SIDE_PANEL_TAB.WORK]: true }).control().tabs, [SIDE_PANEL_TAB.WORK]);
+});
+
+test("a tab opened on a plan that holds nothing of it stands there across a launch, and on that plan alone", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const first = mountOn({});
+  act(() => first.control().onChoose(SIDE_PANEL_TAB.BOARD));
+  assert.deepEqual(first.control().tabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.equal(first.control().tab, SIDE_PANEL_TAB.BOARD);
+  first.standOn({}, OTHER_PLAN);
+  assert.deepEqual(first.control().tabs, []);
+  assert.equal(first.control().tab, undefined);
+
+  const second = mountOn({});
+  assert.deepEqual(second.control().tabs, [SIDE_PANEL_TAB.BOARD]);
+});
+
+test("a plan with no fixed tab shows its first open agent's, and its fixed tab once one arrives is added beside it", () => {
+  const panel = mountOn({ [SIDE_PANEL_TAB.WORK]: false }, [AGENT, OTHER]);
+  assert.deepEqual(panel.control().tabs, []);
+  assert.deepEqual(panel.control().tab, { agent: AGENT });
+
+  panel.standOn({ [SIDE_PANEL_TAB.WORK]: true });
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.WORK]);
+  assert.deepEqual(panel.control().tab, { agent: AGENT }, "the arrival takes no tab's place");
+});
+
+test("a fixed tab dragged among a plan's few keeps its place on a plan that has them all", () => {
+  const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: true, [SIDE_PANEL_TAB.WORK]: true });
+  act(() => panel.control().onMove(SIDE_PANEL_TAB.WORK, 0));
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.BOARD]);
+
+  panel.standOn(usedPlan(PLAN).holds);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.CODE,
+    SIDE_PANEL_TAB.TRANSCRIPT,
+  ]);
 });
