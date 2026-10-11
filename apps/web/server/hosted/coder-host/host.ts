@@ -22,6 +22,7 @@ import {
   type CodingAgent,
   readCodingAgentOfConversation,
   readDelegation,
+  updateCodingAgentBranch,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import type { RepositorySandbox } from "../repository-shell.js";
@@ -32,6 +33,7 @@ import {
   CheckoutRefused,
   type CheckoutServices,
   checkOutAgentRepository,
+  checkoutBranch,
 } from "./checkout.js";
 import { type DelegationAsk, delegationChoice, recordDelegation } from "./delegation.js";
 import { coderInstructions } from "./instructions.js";
@@ -124,6 +126,17 @@ export interface CoderHost {
   repositoryToken(
     admitted: AdmittedConversation,
   ): Effect.Effect<Redacted.Redacted, CheckoutFailure, CheckoutServices>;
+  /**
+   * The branch checked out in the sandbox as the turn ended, written on the
+   * agent's row for its pull request to be read from; null where the
+   * checkout stood detached. A read or write that fails is logged and
+   * nothing is written, so the caller's stop of the sandbox follows either
+   * way.
+   */
+  recordBranch(
+    admitted: AdmittedConversation,
+    sandbox: RepositorySandbox,
+  ): Effect.Effect<void, never, SqlClient.SqlClient>;
   /** Claims the conversation for the eve session now starting; answers whether the record is now this session's. */
   sessionStarted(admitted: AdmittedConversation, sessionId: string): HostEffect<boolean>;
   /**
@@ -153,6 +166,11 @@ export interface CoderHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+}
+
+/** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
+function describeFailure(failure: CheckoutFailure): string {
+  return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
 }
 
 /** The host over the deployment's seams. */
@@ -280,6 +298,19 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     repositoryToken: (admitted) =>
       Effect.flatMap(agentOrRefused(admitted), (agent) =>
         Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
+      ),
+
+    recordBranch: (admitted, sandbox) =>
+      Effect.gen(function* () {
+        const agent = yield* agentOrRefused(admitted);
+        const branch = yield* checkoutBranch(sandbox);
+        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
+      }).pipe(
+        Effect.catch((failure) =>
+          Effect.logWarning(
+            `The branch of conversation ${admitted.target.conversationId} was not recorded: ${describeFailure(failure)}`,
+          ),
+        ),
       ),
 
     sessionStarted: (admitted, sessionId) =>

@@ -8,6 +8,7 @@ import { EMPTY_RELAY_STATE, type RelayState } from "../../server/hosted/brain-ho
 import { CODER } from "../../server/hosted/coder-host/bounds.js";
 import type { CheckoutFailure } from "../../server/hosted/coder-host/host.js";
 import { SANDBOX_TOOLS } from "../../server/hosted/coder-host/tool-set.js";
+import type { RepositorySandbox } from "../../server/hosted/repository-shell.js";
 import { runWeb } from "../../server/runtime.js";
 import { host, seams } from "../host.js";
 import { environment } from "../sandbox.js";
@@ -23,8 +24,13 @@ import { type SandboxRecord, sandboxRecord, sessionPrompt } from "../session-pro
  * a sandbox tool is when the sandbox opened and its checkout set the
  * repository credential at the firewall, a step that starts past the
  * credential's age renews it there, and a turn's end, however it ended,
- * stops the sandbox at once rather than waiting out its timeout, with its
- * filesystem kept for a later turn to resume.
+ * writes the branch checked out in the sandbox on the agent's row, which
+ * is where its pull request is read from, then stops the sandbox at once
+ * rather than waiting out its timeout, with its filesystem kept for a later
+ * turn to resume. Note that the branch is written before the end is
+ * relayed, because a tab reads the pull request the moment it hears the
+ * agent ended and the service keeps that answer a while: an end relayed
+ * first would be read against the row as it stood before the turn.
  */
 
 const relayState = defineState<RelayState>("luke.coder.relay", () => EMPTY_RELAY_STATE);
@@ -55,6 +61,23 @@ function credentialIsOld(record: SandboxRecord, now: number): boolean {
 /** A refusal as a log line carries it: the checkout's reason, or a store failure's kind. */
 function describeRefusal(failure: CheckoutFailure): string {
   return failure._tag === "CheckoutRefused" ? failure.reason : failure._tag;
+}
+
+/** The branch checked out as the turn ends, written on the agent's row; an admission that fails is logged, and the host logs its own failures, so the stop that follows is never skipped. */
+async function recordBranch(ctx: HookContext, sandbox: RepositorySandbox): Promise<void> {
+  await runWeb(
+    Effect.gen(function* () {
+      const admitted = yield* host.admit(ctx.session.auth, ctx.session.id);
+      if (Result.isFailure(admitted)) return;
+      yield* host.recordBranch(admitted.success, sandbox);
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `The branch of session ${ctx.session.id} was not recorded: ${describeRefusal(failure)}`,
+        ),
+      ),
+    ),
+  );
 }
 
 /** A fresh token set at the firewall, where the standing one is old; a renewal that fails is logged and the next step tries again. */
@@ -100,6 +123,12 @@ export default defineHook({
       if (opensSandbox(event) && sandbox.get().openedAt === undefined) {
         sandbox.update((held) => ({ ...held, openedAt: seams.now() }));
       }
+      // The sandbox a tool opened, at the turn's end: its branch is read ahead of the relay and it is stopped after.
+      const ending =
+        TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined
+          ? await ctx.getSandbox()
+          : undefined;
+      if (ending !== undefined) await recordBranch(ctx, ending);
       await runWeb(
         Effect.gen(function* () {
           if (event.type === "session.started") {
@@ -115,11 +144,7 @@ export default defineHook({
       if (event.type === "step.started" && sandbox.get().openedAt !== undefined) {
         await renewCredential(ctx, sandbox);
       }
-      // A turn's end stops the sandbox a tool opened; a session whose turn ran no sandbox tool opened none to stop.
-      if (TURN_END_EVENTS.has(event.type) && sandbox.get().openedAt !== undefined) {
-        const standing = await ctx.getSandbox();
-        await standing.stop();
-      }
+      if (ending !== undefined) await ending.stop();
     },
   },
 });

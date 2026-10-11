@@ -35,7 +35,10 @@ import {
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
  * rather than finding an agent nothing runs. The model and effort on the
- * row are read at every step, so a change to them is the next step's. A
+ * row are read at every step, so a change to them is the next step's. The
+ * branch is what stood checked out in the agent's sandbox as its last turn
+ * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
+ * read where the agent's pull request is looked up (`coder-host/published.ts`). A
  * delegation is a child conversation under the agent's, opened ahead of the
  * worker's session (`coder-host/delegation.ts`) with the model and effort
  * the agent chose for it written beside it here, so the worker's steps read
@@ -67,6 +70,8 @@ export interface CodingAgent {
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
   readonly task: string | null;
   readonly repository: string;
+  /** The branch checked out in the sandbox as the last turn ended; null before one ends or where the checkout stood detached. */
+  readonly branch: string | null;
   readonly createdAt: Date;
 }
 
@@ -104,6 +109,7 @@ const CODING_AGENT_COLUMNS = {
   planSnapshot: codingAgent.planSnapshot,
   task: codingAgent.task,
   repository: codingAgent.repository,
+  branch: codingAgent.branch,
   createdAt: codingAgent.createdAt,
 };
 
@@ -116,6 +122,7 @@ const CodingAgentRowSchema = Schema.Struct({
   planSnapshot: Schema.NullOr(Schema.String),
   task: Schema.NullOr(Schema.String),
   repository: Schema.String,
+  branch: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
 });
 
@@ -203,6 +210,19 @@ const updateAgentChoice = SqlSchema.findOneOption({
       .set({ model, effort })
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
       .returning(CODING_AGENT_COLUMNS),
+});
+
+const updateAgentBranch = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    branch: Schema.NullOr(Schema.String),
+  }),
+  execute: ({ userId, agentId, branch }) =>
+    db
+      .update(codingAgent)
+      .set({ branch })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
 });
 
 const findAgentsOfPlan = SqlSchema.findAll({
@@ -346,6 +366,15 @@ export function updateCodingAgentChoice(
   choice: { readonly model: string; readonly effort: string },
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return updateAgentChoice({ userId, agentId, model: choice.model, effort: choice.effort });
+}
+
+/** The branch checked out in the account's agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent the account does not own. */
+export function updateCodingAgentBranch(
+  userId: string,
+  agentId: string,
+  branch: string | null,
+): CodingAgentStoreEffect<void> {
+  return updateAgentBranch({ userId, agentId, branch });
 }
 
 /** The account's agent whose conversation this is, which is what an eve session admitted for the conversation runs; nothing for another account's or no agent's. */

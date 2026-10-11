@@ -154,7 +154,7 @@ function pullRequestOf(record: typeof PullRequestSchema.Type): GitHubPullRequest
 }
 
 /** One pull request of the repository by number, whole; none where the repository has no such one. */
-export function pullRequestByNumber(
+function pullRequestByNumber(
   token: Redacted.Redacted,
   fullName: string,
   number: number,

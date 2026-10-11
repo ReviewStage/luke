@@ -532,7 +532,7 @@ function byMostRecentlyUpdated(left: GitHubRepository, right: GitHubRepository):
 }
 
 /** GitHub folds case in logins and repository names, so a name is the same name however it is spelled. */
-export function sameName(left: string, right: string): boolean {
+function sameName(left: string, right: string): boolean {
   return left.toLowerCase() === right.toLowerCase();
 }
 

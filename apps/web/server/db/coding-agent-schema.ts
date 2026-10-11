@@ -14,9 +14,12 @@ import { conversations } from "./storage-schema.js";
  * is the exact plan text the agent was handed, kept whole because the plan
  * keeps being edited after, or where the developer started it on a task of
  * their own, the snapshot is null and the task is what it was handed, so
- * exactly one of the two stands; the repository is `owner/name`. There is no
- * commit column: the checkout's own output is in the transcript, and the
- * pull request on GitHub records its base.
+ * exactly one of the two stands; the repository is `owner/name`; the branch
+ * is the one checked out in the agent's sandbox as its last turn ended,
+ * which is where its pull request is looked up, and null until a turn ends
+ * or where the checkout stood detached. There is no commit column: the
+ * checkout's own output is in the transcript, and the pull request on
+ * GitHub records its base.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
@@ -45,6 +48,8 @@ export const codingAgent = pgTable(
     task: text("task"),
     /** The GitHub repository the agent works in, as `owner/name`. */
     repository: text("repository").notNull(),
+    /** The branch checked out in the sandbox as the last turn ended; null before one ends or on a detached HEAD. */
+    branch: text("branch"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },
