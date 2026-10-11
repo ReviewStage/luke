@@ -59,8 +59,8 @@ function isRunProfile(profile: string): profile is RunProfile {
  * opens a call, so there are no words to draw unless the fixture supplies
  * them — and it must, or the caption strip ships unphotographed. Synthetic,
  * like every fixture, and shaped like a reply of several messages: the first
- * long enough to wrap, and two more behind it, so the wrapped form of the
- * strip and the stack of segments it draws are both in the frame.
+ * long enough to wrap, and two more behind it, so the strip reads them as one
+ * run and its older lines leave through the faded top edge in the frame.
  */
 export const FIXTURE_SPEAKING_CAPTIONS: readonly string[] = [
   "The plan now says the parser keeps its own cache, the migration runs once at launch, and the old reader stays until every install has moved over.",
@@ -75,9 +75,8 @@ export function fixtureVoice(profile: string): FixtureVoice | undefined {
 
 /**
  * The failure drawn in the same strip the captions use. A fault is worth
- * reading where the words it interrupted would have landed — at the shape's
- * foot, under the field that asked — not on a settings page nobody is
- * looking at. It yields to either speaker being heard, because words being
+ * reading where the words it interrupted would have landed — just above the
+ * call bar that asked — not on a settings page nobody is looking at. It yields to either speaker being heard, because words being
  * said are the thing to read over words that already failed, and a capture
  * run never draws one: a fixture has no call to fail.
  */

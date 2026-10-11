@@ -4,10 +4,13 @@ import type { FaceMotion } from "@sidecar/surface";
 import { useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { CaptionStrip, type CaptionStripProps } from "../caption-strip";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
@@ -114,6 +117,20 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
 }
 
 /**
+ * Whether the open plan's Transcript is on screen with its words, streaming
+ * a call's as they are said. A Transcript tab standing behind another chosen
+ * tab is not on screen, and one still reading, or failed, shows no words.
+ */
+function transcriptStreaming(plans: PlansControl): boolean {
+  const { sidePanel, transcript } = plans;
+  return (
+    sidePanel.open &&
+    sidePanel.tab === SIDE_PANEL_TAB.TRANSCRIPT &&
+    transcript.region.kind === TRANSCRIPT_REGION.READY
+  );
+}
+
+/**
  * Luke's window: the sidebar on the left and the chosen work on the right,
  * or the sign-in over the whole window while no account stands. Every
  * press is the control's it came from; this only lays them out. Settings
@@ -125,7 +142,10 @@ function TitleBarNewPlan({ plans }: { plans: PlansControl }): React.JSX.Element 
  * (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
- * stands behind it.
+ * stands behind it. The live captions ride the call bar while the plan's
+ * column is drawn, and float at the window's foot wherever else a call can
+ * still be heard; they hold back spoken words while the plan's Transcript
+ * is on screen streaming the same ones.
  */
 export function DesktopShell({
   gates,
@@ -135,6 +155,7 @@ export function DesktopShell({
   plans,
   history,
   sidebar,
+  captions,
   settings,
 }: {
   gates: DesktopGates;
@@ -144,6 +165,7 @@ export function DesktopShell({
   plans: PlansControl;
   history: NavigationHistory;
   sidebar: SidebarCollapse;
+  captions: CaptionStripProps;
   settings: SettingsPanelProps;
 }): React.JSX.Element {
   const { account } = settings;
@@ -175,12 +197,20 @@ export function DesktopShell({
           settings={settings}
           onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
         />
+        <CaptionStrip {...captions} />
       </div>
     );
   }
   // Note that the shell says whether the panel's toggle stands, because the
   // toolbar beneath it leaves the toggle room then and only then.
   const panelToggle = plans.page === PLANS_PAGE.DOCUMENT;
+  const planDrawn = panelToggle && plans.region.kind === DOCUMENT_REGION.READY;
+  // Note that a panel filling the window hides the plan's column, call bar
+  // and all, so the captions float in its place then.
+  const captionsInColumn = planDrawn && !plans.sidePanel.fullScreen;
+  const captionStrip = (
+    <CaptionStrip {...captions} speechHidden={planDrawn && transcriptStreaming(plans)} />
+  );
   return (
     <div
       ref={shell}
@@ -199,8 +229,9 @@ export function DesktopShell({
         updates={settings.updates}
       />
       <main className="desktop-main">
-        <DesktopPlans plans={plans} />
+        <DesktopPlans plans={plans} captions={captionsInColumn ? captionStrip : undefined} />
       </main>
+      {captionsInColumn ? null : captionStrip}
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
       <div className="title-bar-controls">
         <SidebarToggle sidebar={sidebar} />

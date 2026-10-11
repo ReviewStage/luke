@@ -77,7 +77,7 @@ sidebar, one page at a time:
  │  (●)  Listening                                              │
  │  "So when access is removed, the pending invite..."          │
  └──────────────────────────────────────────────────────────────┘
-          ^ the panel's own caption strip, at its foot
+          ^ the live captions, just above the call bar
 ```
 
 - **New plan page**: the tab's home, whenever no plan is open. The plan
@@ -96,7 +96,10 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
 - A plan stays open while the developer turns to Settings or closes the
   window, so a call about it goes on. The sidebar draws a planning call
   exactly as any call: Luke's face and the waveform beside it, with the
-  captions over the work column. They carry no plan name.
+  captions just above the plan's call bar, or at the window's foot where no
+  call bar is drawn. They carry no plan name, and hold back spoken words
+  while the side panel is showing the Transcript, which streams the same
+  ones.
 - A plan is left by Back (`‹`) or Escape on its document page, by opening
   another plan, or by a sign-out. Leaving ends the plan's call; opening
   another plan ends the old plan's call before the new one is active in any
@@ -620,7 +623,8 @@ evaluations are outside this work.
   and that is a bug to chase rather than a pause to wait out.
 - **Everything else is the panel's own.** The waveform is the wings', the
   captions (Luke's current words, and the developer's own under the captions
-  preference) ride the panel's caption strip at its foot, and a voice error
+  preference) ride the caption strip just above the call bar, labelled with
+  who is speaking, and a voice error
   or notice takes that strip exactly as it does for any call, with the button
   left able to try again. Nothing is kept here; what matters lands in the
   document.
@@ -931,7 +935,7 @@ the exact shape.
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
 | Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
-| Captions, levels, errors | The panel's caption strip (`useCaptionPresentation`, `caption-layout.ts`) and the sidebar's waveform (`desktop/luke-identity.tsx`), unchanged | None. |
+| Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
 | Start, agent tabs, Settings › Coding agents | The toolbar and the side panel (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |

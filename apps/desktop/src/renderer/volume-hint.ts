@@ -1,4 +1,3 @@
-import { VOICE_BAND_INSET } from "@sidecar/surface";
 import type { OutputAudioState } from "#shared/messages/audio";
 
 /**
@@ -28,22 +27,6 @@ const SILENT_OUTPUT_VOLUME = 0.01;
  */
 export const VOLUME_HINT_REARM_MS = 15 * 60_000;
 
-/**
- * The hint row's height, mirrored by `.volume-hint` in the stylesheet — the
- * two must agree. The row is exactly its content: the same pill a notice chip
- * is, with the sentence beside it, so the inset above and below the row is
- * the inset around what is actually drawn.
- */
-const VOLUME_HINT_HEIGHT = 20;
-
-/**
- * The room the hint takes below the caption bar: the row plus the inset
- * above it. Mirrored by `--volume-hint-size` in the stylesheet — the two must
- * agree. It is taken off the bar's maximum, so the words above roll up a row
- * sooner rather than the bar growing over the hint.
- */
-export const VOLUME_HINT_BAND_HEIGHT = VOICE_BAND_INSET + VOLUME_HINT_HEIGHT;
-
 /** A "Got it", remembered against the stretch of silence it was given in. */
 export interface VolumeHintDismissal {
   /** When the button was pressed. */
@@ -65,7 +48,7 @@ export function outputSilent(state: OutputAudioState | undefined): boolean {
 /**
  * What the hint says, matched to which switch is actually in the way — being
  * told to unmute a Mac whose volume is merely at zero is advice that fixes
- * nothing. Short enough to share one 20px row with its button. No state reads as muted: the words only
+ * nothing. Short enough to share one row with its button. No state reads as muted: the words only
  * appear over a silence the helper reported, but the fixture profile draws
  * them without one.
  */

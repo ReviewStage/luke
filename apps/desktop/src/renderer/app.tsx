@@ -17,7 +17,6 @@ import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./a
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
-import { MarkdownMessage } from "./markdown-message";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { usePlansTab } from "./planning/use-plans-tab";
@@ -25,7 +24,6 @@ import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
-import { CAPTION_TONE } from "./strip-hold";
 import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";
 import { useAppState } from "./use-app-state";
@@ -173,14 +171,12 @@ export function App(): React.JSX.Element {
   const lukeCaptions = fixtureSpeaking ? FIXTURE_SPEAKING_CAPTIONS : voiceView.lukeCaptions;
   const developerCaptions = fixtureSpeaking ? undefined : voiceView.developerCaptions;
 
-  // The hint rides the caption it explains, and only over a silence the
-  // helper actually reported. "Got it" quiets it for this stretch of silence
-  // and any that follows too soon; the captions above it stay either way.
-  const volumeHint =
+  // The hint rides Luke's caption, and only over a silence the helper
+  // actually reported. "Got it" quiets it for this stretch of silence and any
+  // that follows too soon; the captions above it stay either way.
+  const volumeHintWanted =
     fixtureMuted ||
-    (outputSilent(outputAudio) &&
-      lukeCaptions !== undefined &&
-      !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
+    (outputSilent(outputAudio) && !volumeHintDismissed(hintDismissal, silenceStretch, Date.now()));
   // The Plans tab, drawn from the same voice report the strip reads, so a
   // planning call's words and levels are the shape's as any call's are.
   const plans = usePlansTab({
@@ -228,7 +224,6 @@ export function App(): React.JSX.Element {
     voiceNotice,
     speakers,
     fixtureSpeaking,
-    volumeHint,
   });
 
   // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
@@ -370,22 +365,13 @@ export function App(): React.JSX.Element {
   return (
     <div
       className="app-stage"
-      // Whether there are words in the caption bar — Luke's, or a failure
-      // borrowing it — so the bar is drawn.
-      data-caption={String(Boolean(caption.texts))}
-      // Whether those words need the volume hint under them, in a row of its
-      // own below the bar.
-      data-volume-hint={String(volumeHint)}
       data-capture={String(state.run.captureMode)}
       // The panel is drawn as an ordinary app window's content; desktop.css
       // lays it out.
       data-surface="desktop"
-      style={{
-        ...caption.style,
-        // The sidebar's width lays out the shell and Settings' page list, and
-        // places the captions over the work column beside it.
-        ...cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` }),
-      }}
+      // The sidebar's width lays out the shell and Settings' page list, and
+      // places the captions over the work column beside it.
+      style={cssCustomProperties({ "--sidebar-width": `${sidebar.width}px` })}
     >
       {/* The window's content. */}
       <div className="desktop-stage">
@@ -410,6 +396,14 @@ export function App(): React.JSX.Element {
           plans={plans}
           history={history}
           sidebar={sidebar}
+          captions={{
+            caption,
+            volumeHint: {
+              wanted: volumeHintWanted,
+              text: volumeHintText(outputAudio),
+              onDismiss: dismissVolumeHint,
+            },
+          }}
           settings={{
             account: state.account,
             onSignOut: async () => {
@@ -449,51 +443,6 @@ export function App(): React.JSX.Element {
       {/* The window's passing notice: the thank-you after a note lands, and
           what came of a copy made from a menu. */}
       <ToastHost />
-
-      {/* Luke's words while he says them: one element in every state, always
-          mounted so both edges of its fade can run. The inner stack is what
-          is measured — responses spoken back-to-back are one block each in
-          it, oldest first, the settled words above the ones still arriving —
-          and past the room the bar may take it rolls up rather than growing,
-          as `caption-layout.ts` says. The newest block is always mounted like
-          the stack itself; a settled one mounts only while it has words, and
-          the blocks keep their order as keys so a segment that settles stays
-          the element it streamed into. Hidden from readers while it captions
-          speech — it duplicates what is already audible — and announced as a
-          status line when it carries a failure or a notice, which was never
-          audible at all. */}
-      <span
-        className="voice-caption"
-        ref={caption.ref}
-        data-tone={caption.tone}
-        {...(caption.tone === CAPTION_TONE.WORDS || caption.tone === CAPTION_TONE.ASK
-          ? { "aria-hidden": true }
-          : { role: "status" })}
-      >
-        <span className="voice-caption-stack" ref={caption.textRef}>
-          {caption.settled.map((words, index) => (
-            <MarkdownMessage key={index} className="voice-caption-text" words={words} />
-          ))}
-          <MarkdownMessage
-            key={caption.settled.length}
-            className="voice-caption-text"
-            words={caption.live ?? ""}
-          />
-        </span>
-      </span>
-
-      {/* The one reason the words above might be the only part of Luke
-          arriving: the Mac's own output is off. It stands in a row of its own
-          directly below the caption bar and is drawn only while Luke speaks
-          into a silence the helper reported. Always mounted, like the
-          caption, so both edges of its fade can run, and inert while hidden
-          so its button cannot be tabbed to. */}
-      <span className="volume-hint" role="status" inert={!volumeHint}>
-        <span className="volume-hint-text">{volumeHintText(outputAudio)}</span>
-        <button type="button" className="volume-hint-dismiss" onClick={dismissVolumeHint}>
-          Got it
-        </button>
-      </span>
     </div>
   );
 }
