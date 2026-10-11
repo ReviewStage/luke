@@ -82,10 +82,13 @@ test("the session is told the checkout's commit identity is the developer's and 
   }
 });
 
-test("the session is told its shell starts in the checkout and its file tools take absolute paths under it", () => {
+test("the session is told its shell and its file tools start in the checkout", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     const instructions = coderInstructions("Acme/Relay", brief);
-    for (const kept of ["never open a command with a `cd`", "absolute paths", "`root`"]) {
+    for (const kept of [
+      "never open a command with a `cd`",
+      "relative path is resolved from the checkout",
+    ]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
   }

@@ -1,2 +1,5 @@
-/** eve's own `write_file`, authored so the coding agent's tool set is exactly the files here (`agent.ts`). */
-export { default } from "eve/tools/write_file";
+/** eve's own `write_file`, its paths resolved from the agent's checkout (`server/hosted/coder-host/files.ts`). */
+import { CODER } from "../../server/hosted/coder-host/bounds.js";
+import { writeFileIn } from "../../server/hosted/coder-host/files.js";
+
+export default writeFileIn(CODER.CHECKOUT_PATH);

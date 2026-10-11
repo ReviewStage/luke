@@ -1,2 +1,5 @@
-/** The code extension's `apply_patch`: targeted hunks against a checkout, with the diagnostics the patch introduced; mounted on its own, since the extension's worker and `gh` are not. */
-export { apply_patch as default } from "eve/extensions/code/tools";
+/** The code extension's `apply_patch`, its paths resolved from the agent's checkout (`server/hosted/coder-host/files.ts`). */
+import { CODER } from "../../server/hosted/coder-host/bounds.js";
+import { applyPatchIn } from "../../server/hosted/coder-host/files.js";
+
+export default applyPatchIn(CODER.CHECKOUT_PATH);
