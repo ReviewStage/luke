@@ -8,7 +8,12 @@ import {
   planNotesSchema,
   readNotes,
 } from "@sidecar/hosted/plan-template";
-import { PLAN_ACTOR, PLAN_BOUNDS, type PlanDocument } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_ACTOR,
+  PLAN_BOUNDS,
+  type PlanDocument,
+  type PlanFields,
+} from "@sidecar/hosted/plan-wire";
 import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,
@@ -28,7 +33,7 @@ import { emitJsonSchema } from "@sidecar/wire/effect";
 import { jsonSchema, type LanguageModel, Output, streamText } from "ai";
 import { Cause, Clock, Data, Duration, Effect, Option, Queue, type Scope, Stream } from "effect";
 import { SqlClient } from "effect/unstable/sql";
-import { SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
+import { DEVELOPER_FIELDS_MARKER, SCRIBE_INSTRUCTIONS } from "../hosted/brain-host/planning.js";
 import { PLAN_SAVE_STATUS, saveNotes } from "../hosted/plan-notes.js";
 import { readPlan } from "../hosted/plan-store.js";
 import { spendHostedMeter } from "../hosted/quota.js";
@@ -102,10 +107,18 @@ export interface PlanScribeOptions {
   readonly report: (message: string) => void;
 }
 
-/** The plan's document as the notetaker has it now: a draft, or with the instant of its save once it is saved. */
+/**
+ * The plan's document as the notetaker has it now: a draft, or with the
+ * instant of its save and the fields it was formatted from once it is saved.
+ * Each names the save the run read before it wrote, so a window that saved an
+ * edit of its own since can tell a draft that does not hold it.
+ */
 export interface PlanDraft {
   readonly document: PlanDocument;
+  /** Epoch milliseconds of the save the run read. */
+  readonly readAt: number;
   readonly savedAt?: number;
+  readonly fields?: PlanFields;
 }
 
 export interface PlanScribe {
@@ -120,14 +133,18 @@ class ScribeModelError extends Data.TaggedError("ScribeModelError")<{
   readonly reason: string;
 }> {}
 
-/** What one run hands the model: the saved plan's fields, the lines around the cursor, and the notes since it. */
+/** What one run hands the model: the saved plan's fields, the fields the developer wrote, the lines around the cursor, and the notes since it. */
 function askText(input: {
   readonly plan: string;
+  readonly developerFields: readonly string[];
   readonly earlier: readonly TranscriptUtterance[];
   readonly latest: readonly TranscriptUtterance[];
   readonly notes: readonly string[];
 }): string {
   const parts = [ASK_MARKER.PLAN, input.plan];
+  if (input.developerFields.length > 0) {
+    parts.push(DEVELOPER_FIELDS_MARKER, input.developerFields.join(", "));
+  }
   if (input.earlier.length > 0) {
     parts.push(ASK_MARKER.EARLIER, renderAskContext({ turns: input.earlier, ask: undefined }));
   }
@@ -181,7 +198,10 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       .utterances()
       .filter((line) => line.endMs <= cursor.heardThrough)
       .slice(-PLAN_SCRIBE.CONTEXT_LINES);
-    const { plan, fields } = stored.value;
+    const { plan, fields, fieldWriters } = stored.value;
+    const developerFields = fieldWriters
+      .filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER)
+      .map((writer) => writer.field);
     const header = { name: plan.name };
     const content: PlanContent = { fields, assumptions: plan.document.assumptions };
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
@@ -200,7 +220,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         const document = documentOf(notesInProgress(content, partial));
         if (document === undefined) return;
         drafted.at = now;
-        options.onDraft?.({ document });
+        options.onDraft?.({ document, readAt: plan.updatedAt });
       });
 
     const written = Effect.gen(function* () {
@@ -211,6 +231,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
             system: SCRIBE_INSTRUCTIONS,
             prompt: askText({
               plan: JSON.stringify(content),
+              developerFields,
               earlier,
               latest,
               notes: notes.slice(cursor.notesRead),
@@ -268,8 +289,13 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
         // A save whose notes all missed under the lock, the plan written meanwhile, is no edit of Luke's.
         options.onDraft?.(
           saved.moved
-            ? { document: saved.document, savedAt: saved.savedAt }
-            : { document: saved.document },
+            ? {
+                document: saved.document,
+                readAt: plan.updatedAt,
+                savedAt: saved.savedAt,
+                fields: saved.fields,
+              }
+            : { document: saved.document, readAt: plan.updatedAt },
         );
       }
       cursor.heardThrough = heardThrough;
@@ -280,7 +306,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       landed,
       Effect.sync(() => {
         if (drafted.at > Number.NEGATIVE_INFINITY && !drafted.landed) {
-          options.onDraft?.({ document: plan.document });
+          options.onDraft?.({ document: plan.document, readAt: plan.updatedAt });
         }
       }),
     );

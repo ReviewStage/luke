@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
+import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
+  PLAN_FIELD_BOUNDS,
   PLAN_FILE_REFUSAL,
   planAnswerSchema,
   planFileAnswerSchema,
@@ -81,6 +83,7 @@ const FILE = "/api/plans/file";
 const REVISIONS = "/api/plans/revisions";
 const REVISION = "/api/plans/revision";
 const RESTORE = "/api/plans/restore";
+const EDIT = "/api/plans/edit";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -450,6 +453,101 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         HOSTED_HTTP_STATUS.OK,
       );
     }),
+  );
+
+  it.effect(
+    "the developer's edit of a field answers the plan as saved, written by them, and it opens that way",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+
+        const edited = yield* ask(
+          request(EDIT, owner, {
+            id: planId,
+            method: "POST",
+            body: {
+              field: PLAN_FIELD.DECISIONS,
+              base: null,
+              value: " Invites expire after 7 days. ",
+            },
+          }),
+        );
+
+        const answered = readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, edited);
+        assert.ok("plan" in answered);
+        assert.equal(answered.plan.fields?.decisions, "Invites expire after 7 days.");
+        assert.equal(answered.plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+        const { plan } = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        );
+        assert.deepEqual(plan.document, answered.plan.document);
+      }),
+  );
+
+  it.effect(
+    "an edit whose base the field no longer holds answers it as it stands; one past the plan's bound is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
+        const edit = (body: WireBoundaryInput) =>
+          ask(request(EDIT, owner, { id: planId, method: "POST", body }));
+
+        const conflicted = yield* edit({ field: PLAN_FIELD.PROBLEM, base: null, value: null });
+        const oversized = yield* edit({
+          field: PLAN_FIELD.DECISIONS,
+          base: null,
+          value: "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
+        });
+
+        assert.deepEqual(conflicted, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { conflict: { current: INVITATIONS_DRAFT.fields.goal.problem } },
+        });
+        assert.deepEqual(oversized, {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
+        });
+      }),
+  );
+
+  it.effect(
+    "an edit of another account's plan answers as none, and one that does not read is refused",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        const body = { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." };
+
+        assert.deepEqual(
+          yield* ask(request(EDIT, other, { id: planId, method: "POST", body })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(
+            request(EDIT, owner, {
+              id: planId,
+              method: "POST",
+              body: { field: PLAN_FIELD.RULES, base: null, value: "Not a text field." },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(request(EDIT, owner, { id: planId, method: "GET" })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
   );
 
   it.effect("a deleted plan no longer opens or lists", () =>

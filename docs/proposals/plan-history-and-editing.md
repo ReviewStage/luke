@@ -259,7 +259,7 @@ Edited by Luke during your call · 2h ago
 
 ### The write: one new developer edit, through the same locked save
 
-`POST /api/plans/{id}/edits` with `{ field, base, value }`:
+`POST /api/plans/{id}/edit` with `{ field, base, value }`:
 
 - `field` is a `PLAN_FIELD`, as today.
 - `base` is the field's value when the editor opened.
@@ -295,23 +295,26 @@ Refusals reuse `PLAN_SAVE_REFUSAL`, adding `TOO_LONG`, which is the body bound.
 - **No server-side section lock.** A lock would need a heartbeat from the Mac,
   and an expiry for when the Mac sleeps. Notes re-applied under the row lock,
   plus the base-checked set above, give a merge without one.
-- **Draft flicker is a renderer concern.** A notetaker run that read the
-  fields before the developer's save streams drafts built on the old text.
-  `compose-planning.ts`'s `showDraft` holds the developer's field on top of
-  incoming drafts while it is being edited or a save is in flight. It lets
-  go at the first saved frame or read whose `savedAt` ≥ the edit's save.
-  Saved frames are re-applied under the lock, so they carry the edit.
-  `plan-reveal.ts` must not chase a held unit.
+- **Draft flicker.** As shipped in PR 3: every `plan.draft` frame names the
+  save the notetaker read before it wrote (`readAt`), and saved frames carry
+  the fields they were formatted from. `compose-planning.ts`'s `showDraft`
+  drops a frame drawn over a save older than the developer's own newest
+  save, so an edit never flickers back out. Saved frames are re-applied under
+  the lock, so a saved frame after the edit carries it and is drawn.
 - **A unit open in an editor** is never re-typed underneath the caret. Changes
   to other units keep typing in as now.
-- **What Luke sees next turn:**
-  - The standing context gains `[recent edits by the developer]` beside
-    `[recent edits by coding agents]` (`planning.ts:255`): field, time, and
-    a before → after excerpt, read from revisions.
-  - The notetaker's `SCRIBE_INSTRUCTIONS` gains one fact plus a
-    `[fields the developer edited]` list: "The developer edits the plan
-    directly too. Never reword or strike what the developer wrote unless they
-    say so on the call."
+- **What Luke sees next turn.** As shipped in PR 3:
+  - Each plan keeps who last changed each field (`plan.field_writers`,
+    migration `0075`), set by the locked save for every field whose words a
+    save changed.
+  - The standing context names the fields the developer last wrote, by
+    heading and time, under `[fields the developer wrote]`, beside
+    `[recent edits by coding agents]`. The text itself is already in
+    `[saved document]`, so no excerpt is repeated.
+  - The notetaker's ask names the same fields, and `SCRIBE_INSTRUCTIONS`
+    gains one fact: never reword or strike the developer's words; add to
+    them, or change them only where the latest lines say to.
+  - A field the notetaker writes again leaves the list.
   - Model-facing words only add facts (`docs/DESIGN.md:214-219`). The changed
     instruction costs one prompt-cache prefix, once.
 - **What Luke doesn't see:** the live voice model's seed. Nothing is pushed
@@ -322,21 +325,28 @@ Refusals reuse `PLAN_SAVE_REFUSAL`, adding `TOO_LONG`, which is the body bound.
 
 ### Saving, undo, failure
 
-- **Autosave** fires after 1 s of idle typing and on blur. Each success moves
-  `base` forward.
-- **Esc** reverts to the text the editor opened with, then closes.
-- **Status sits in the header line:** "Saving…" → "Edited by you · just now";
-  on failure, "Not saved: the service could not reach its store. [Try again]".
+- **Autosave** fires after 1 s of idle typing and as the editor closes. Each
+  success moves `base` forward. One save is out at a time; words typed
+  meanwhile save once it answers.
+- **Esc, ⌘↩, or focus leaving** saves what stands and closes once the save
+  lands. (Shipped this way in PR 3, rather than Esc reverting: with
+  autosave, the words were already saving.)
+- **Status sits under the box:** "Saving…" while a save is out, then the
+  header line reads "Edited by you · just now". A failure says why ("Not
+  saved: the service did not answer.") with Try again.
 - **Undo:**
   - Inside an open editor: the textarea's own undo.
-  - After the editor closes: ⌘Z within the plan page undoes the developer's
-    last edit as a base-checked set back to its prior value.
-  - Further back: History → Restore.
+  - After the editor closes: History → Restore (PR 2). PR 3 ships no
+    plan-level ⌘Z, because Electron's Edit › Undo acts on the focused input,
+    and a second undo stack beside it would disagree with it.
 - **Offline or failed saves:**
   - Unsaved text stays in the editor and in the renderer's memory. It is
     **never written to disk** (the panel's privacy rule, `PRIVACY.md:43-44`).
-  - Leaving the plan with unsaved text asks first, through
-    `useConfirmDialog`.
+  - A failed save is tried again only when the developer asks or types on,
+    never on its own, so a refusing service is not asked in a loop. The
+    editor stays open until its words save.
+  - Leaving the plan blurs the editor, which saves before the plan changes.
+    PR 3 ships no confirm for this.
 - **Plumbing** follows the renderer's one write door
   (`apps/desktop/src/renderer/CLAUDE.md`): new act kinds `PLANNING_EDIT`
   and `PLANNING_RESTORE`, the gateway methods `planning.edit`,
@@ -421,7 +431,7 @@ CREATE TABLE "plan_revision" (
   shipped in PR 2 it takes no body and no base: what it replaced is the
   revision before it, so a restore over a save that landed meanwhile is
   undone by restoring that one.
-- `POST /api/plans/{id}/edits` (§3) answers
+- `POST /api/plans/{id}/edit` (§3) answers
   `{ status: "saved", plan } | { status: "conflict", current } | { status: "refused", reason }`.
 - **Value sets** are `as const` (`PLAN_ACTOR`, `PLAN_EDIT_STATUS`).
 - Every request refuses unknown keys, as the wire does. After the routes are
@@ -500,7 +510,7 @@ ships once history can undo it.
 | --- | --- | --- | --- |
 | 1 | Revisions and an honest header | M (~500) | `0073_plan_revision`, written by `savedUnderLock` with coalescing and the baseline; `liveSessionId` into the notetaker; `lastEdit` on the wire; header "Edited by Luke during your call · 2h ago" with a ticking time; PRIVACY "Feature plans"; PLANNING "History"; this document |
 | 2 | History tab | M-L (~800) | The 3 revision routes, gateway and act plumbing, the History side-panel tab, version view with diff, Restore; `ph-no-capture`; PLANNING.md "no version history, no diff view" amended |
-| 3 | Edit a text field | L (~900) | `applyDeveloperEdit` with rebase and conflict, `POST …/edits`, `PLANNING_EDIT`, the textarea editor, autosave and status, the draft hold, Esc and ⌘Z, the leave-with-unsaved confirm; **brain and notetaker told of developer edits** (it ships with editing, not after); PLANNING.md "read-only" amended; PRIVACY writer wording |
+| 3 | Edit a text field | L (~900) | `applyDeveloperEdit` with rebase and conflict, `POST …/edit`, `PLANNING_EDIT`, the textarea editor, autosave and status, the draft hold (`readAt`), Esc/⌘↩/blur, `plan.field_writers`; **brain and notetaker told of developer edits** (it ships with editing, not after); PLANNING.md "read-only" amended; PRIVACY writer wording |
 | 4 | Edit rules, lists, assumptions | M (~600) | Rule statement and example rows, item editing, "Add section" for optional fields; the brain's recent-edits blocks read from revisions; `agent_edits` read path retired |
 | 5 | Who wrote what | M (~400) | Per-field attribution on hover (C), and changes since you last looked (D) with the last-seen revision in desktop state |
 

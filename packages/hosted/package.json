@@ -11,6 +11,7 @@
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./models-wire": "./src/models-wire.js",
+    "./plan-edit": "./src/plan-edit.js",
     "./plan-markdown": "./src/plan-markdown.js",
     "./plan-template": "./src/plan-template.js",
     "./plan-wire": "./src/plan-wire.js",
@@ -25,6 +26,7 @@
   "dependencies": {
     "@sidecar/live": "workspace:*",
     "@sidecar/wire": "workspace:*",
+    "diff": "9.0.0",
     "effect": "catalog:"
   },
   "devDependencies": {

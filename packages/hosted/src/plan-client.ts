@@ -20,6 +20,12 @@ import {
   githubRepositoriesAnswerSchema,
 } from "./github-repositories-wire.js";
 import {
+  type PlanEditAnswer,
+  type PlanEditRequest,
+  planEditAnswerSchema,
+  planEditRequestSchema,
+} from "./plan-edit.js";
+import {
   PLAN_LIST_ARCHIVED,
   PLAN_LIST_QUERY,
   type Plan,
@@ -53,6 +59,7 @@ import {
 import {
   HOSTED_SERVICE_PATH,
   planBoardPath,
+  planEditPath,
   planFilePath,
   planPath,
   planRestorePath,
@@ -160,6 +167,43 @@ export class HostedPlanClient {
       if (answer.response.ok) {
         const opened = Result.getOrUndefined(readEither(planAnswerSchema)(payload));
         return opened === undefined ? UNANSWERED : succeeded(opened.plan);
+      }
+      return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND });
+    });
+  }
+
+  /**
+   * Saves the developer's edit of one field, answering the plan as saved,
+   * the field as it now stands where the edit no longer lands in it, or why
+   * it was refused; or why there is no answer: the service did not answer,
+   * or the plan is gone. An edit the service would refuse by shape is
+   * refused here without traveling at all.
+   */
+  edit(
+    planId: string,
+    edit: PlanEditRequest,
+  ): Effect.Effect<
+    PlanCallResult<
+      PlanEditAnswer,
+      typeof PLAN_CALL_FAILURE.UNANSWERED | typeof PLAN_CALL_FAILURE.NOT_FOUND
+    >,
+    never,
+    HttpClient.HttpClient
+  > {
+    const admitted = Result.getOrUndefined(readEither(planEditRequestSchema)(edit));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    const call = this.#call;
+    return Effect.gen(function* () {
+      const answer = yield* call.send({
+        method: HTTP_METHOD.POST,
+        path: planEditPath(planId),
+        body: JSON.stringify(admitted),
+      });
+      if (!callAnswered(answer)) return UNANSWERED;
+      const payload = unparsedWire(yield* jsonOf(answer.response));
+      if (answer.response.ok) {
+        const edited = Result.getOrUndefined(readEither(planEditAnswerSchema)(payload));
+        return edited === undefined ? UNANSWERED : succeeded(edited);
       }
       return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND });
     });

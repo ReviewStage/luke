@@ -93,6 +93,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     listFailed: false,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
+    edit: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
     microphone: { label: "Talk about this plan", enabled: true, muted: false, onPress: ignore },
     speaker: { muted: false, onPress: ignore },
     stop: { shown: false, onPress: ignore },

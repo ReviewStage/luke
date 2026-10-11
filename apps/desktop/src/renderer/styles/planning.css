@@ -142,10 +142,92 @@
   color: var(--text-secondary);
 }
 
-/* The newest save a coding agent made, over the document in the muted meta
-   weight, the same as an empty assumptions list. */
+/* Who last edited the plan, over the document in the muted meta weight, the
+   same as an empty assumptions list. */
 .plan-edit-note {
   margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* A field the developer can edit: its words take the text cursor, a quiet
+   wash says so on hover, and its pencil, the keyboard's way in, shows on
+   hover or focus. Nothing moves: the wash and the pencil fade on opacity. */
+.plan-unit-editable {
+  position: relative;
+  isolation: isolate;
+  border-radius: 6px;
+  cursor: text;
+}
+
+.plan-unit-editable::before {
+  position: absolute;
+  z-index: -1;
+  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
+  border-radius: 6px;
+  background: var(--raised);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-editable:hover::before {
+  opacity: 1;
+}
+
+.plan-unit-edit {
+  position: absolute;
+  top: 0;
+  right: calc(var(--space-6) * -1);
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-editable:hover .plan-unit-edit,
+.plan-unit-edit:focus-visible {
+  opacity: 1;
+}
+
+/* The field open in its editor: the heading as the document draws it, then
+   a box that grows with its words, in the document's own type, so the words
+   do not jump as it opens or closes. */
+.plan-field-editor {
+  margin: var(--space-4) 0;
+}
+
+.plan-field-input {
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--desktop-well);
+  color: var(--text-primary);
+  font: inherit;
+  line-height: inherit;
+  field-sizing: content;
+  resize: none;
+  transition: border-color var(--duration-hover) ease;
+}
+
+.plan-field-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.plan-field-input:focus {
+  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
+  outline: none;
+}
+
+/* What stands under the box: a save under way, a failed save, or Luke's
+   change and the choice it asks, in the muted meta weight. */
+.plan-field-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
+  margin: var(--space-6) 0 0;
   font-size: 12px;
   color: var(--text-secondary);
 }

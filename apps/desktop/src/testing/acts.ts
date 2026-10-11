@@ -1,3 +1,4 @@
+import { PLAN_FIELD } from "@sidecar/hosted/plan-template";
 import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 
 /**
@@ -75,6 +76,15 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.PLANNING_SET_REPOSITORY]: {
     kind: ACT_KIND.PLANNING_SET_REPOSITORY,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", repository: "acme/relay" },
+  },
+  [ACT_KIND.PLANNING_EDIT]: {
+    kind: ACT_KIND.PLANNING_EDIT,
+    payload: {
+      planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+      field: PLAN_FIELD.DECISIONS,
+      base: null,
+      value: "Invites expire after 7 days.",
+    },
   },
   [ACT_KIND.GITHUB_OPEN]: {
     kind: ACT_KIND.GITHUB_OPEN,

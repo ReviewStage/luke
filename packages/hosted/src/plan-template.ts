@@ -7,7 +7,16 @@ import {
 } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
-import { PLAN_BOUNDS, type PlanAssumption } from "./plan-wire.js";
+import {
+  PLAN_ACTOR,
+  PLAN_FIELD_BOUNDS,
+  type PlanActor,
+  type PlanAssumption,
+  type PlanExample,
+  type PlanFields,
+  type PlanRule,
+  planExamplePartSchema,
+} from "./plan-wire.js";
 
 /**
  * plan-template.ts -- the one fixed template every feature plan is written in: the notes the notetaker takes, the fields they land in, and the canonical Markdown body those become.
@@ -39,18 +48,6 @@ import { PLAN_BOUNDS, type PlanAssumption } from "./plan-wire.js";
  * it. The schema guarantees shape only; whether a note is understood or
  * agreed is the model's judgment.
  */
-
-/** Bounds on the fields and the notes; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
-const PLAN_TEMPLATE_BOUNDS = {
-  /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
-  MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
-  /** A rule's statement is its heading, so it is one sentence. */
-  MAX_RULE_CHARS: 500,
-  /** One part of an example is a clause drawn on one line. */
-  MAX_EXAMPLE_PART_CHARS: 1_000,
-  /** The most rules, examples of one rule, or open questions. */
-  MAX_ITEMS: 200,
-} as const;
 
 /** Every heading the formatter writes, section and field alike, in the words the developer reads. */
 export const PLAN_HEADING = {
@@ -96,55 +93,8 @@ function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
 
-/** A list that is present only once it holds something. */
-function nonEmptyList<S extends EffectSchema.Top>(item: S) {
-  return EffectSchema.Array(item).check(
-    EffectSchema.isMinLength(1),
-    EffectSchema.isMaxLength(PLAN_TEMPLATE_BOUNDS.MAX_ITEMS),
-  );
-}
-
-/** An ordinary answer: null while unanswered, otherwise nonblank text. */
-const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS));
-
-/** One clause of an example, null while unknown. */
-const EXAMPLE_PART = EffectSchema.NullOr(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_EXAMPLE_PART_CHARS));
-
-const exampleSchema = EffectSchema.Struct({
-  given: EXAMPLE_PART,
-  when: EXAMPLE_PART,
-  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: EXAMPLE_PART, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
-});
-
-const ruleSchema = EffectSchema.Struct({
-  statement: trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS),
-  examples: EffectSchema.NullOr(nonEmptyList(exampleSchema)),
-});
-
-/** Every section and field of the template, in its order: what the service keeps for a plan. */
-export const planFieldsSchema = EffectSchema.Struct({
-  goal: EffectSchema.Struct({ problem: ANSWER, outcome: ANSWER }),
-  scope: EffectSchema.Struct({ included: ANSWER, excluded: ANSWER, constraints: ANSWER }),
-  rules: EffectSchema.NullOr(nonEmptyList(ruleSchema)),
-  implementation: EffectSchema.Struct({
-    changeMap: ANSWER,
-    contracts: ANSWER,
-    patterns: ANSWER,
-    order: ANSWER,
-  }),
-  decisions: ANSWER,
-  verification: ANSWER,
-  leftToAgent: ANSWER,
-  openQuestions: EffectSchema.Array(trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS)).check(
-    EffectSchema.isMaxLength(PLAN_TEMPLATE_BOUNDS.MAX_ITEMS),
-  ),
-  dataAndMigration: ANSWER,
-});
-
-export type PlanFields = typeof planFieldsSchema.Type;
-type Rule = typeof ruleSchema.Type;
-type Example = typeof exampleSchema.Type;
+type Rule = PlanRule;
+type Example = PlanExample;
 
 /** What the document's header names: the plan, the service's and never the model's. */
 export interface PlanHeader {
@@ -376,10 +326,32 @@ export const PLAN_FIELD = {
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
 /** The fields that hold one Markdown answer, as against the rules and the two lists. */
-type TextField = Exclude<
+export type PlanTextField = Exclude<
   PlanField,
   typeof PLAN_FIELD.RULES | typeof PLAN_FIELD.OPEN_QUESTIONS | typeof PLAN_FIELD.ASSUMPTIONS
 >;
+
+type TextField = PlanTextField;
+
+/** The heading each field stands under in the body, in the words the developer reads. */
+export const PLAN_FIELD_HEADING = {
+  problem: PLAN_HEADING.PROBLEM,
+  outcome: PLAN_HEADING.OUTCOME,
+  included: PLAN_HEADING.INCLUDED,
+  excluded: PLAN_HEADING.EXCLUDED,
+  constraints: PLAN_HEADING.CONSTRAINTS,
+  rules: PLAN_HEADING.RULES,
+  changeMap: PLAN_HEADING.CHANGE_MAP,
+  contracts: PLAN_HEADING.CONTRACTS,
+  patterns: PLAN_HEADING.PATTERNS,
+  order: PLAN_HEADING.ORDER,
+  decisions: PLAN_HEADING.DECISIONS,
+  verification: PLAN_HEADING.VERIFICATION,
+  leftToAgent: PLAN_HEADING.LEFT_TO_AGENT,
+  openQuestions: PLAN_HEADING.OPEN_QUESTIONS,
+  dataAndMigration: PLAN_HEADING.DATA_AND_MIGRATION,
+  assumptions: PLAN_HEADING.ASSUMPTIONS,
+} as const satisfies Record<PlanField, string>;
 
 /** What each field holds, in the words the notetaker is told. */
 export const PLAN_FIELD_PURPOSE = {
@@ -439,7 +411,7 @@ const addNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.ADD),
   field: NOTE_FIELD,
   text: describeWire(
-    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS),
+    trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
     "The new point, added after what the field holds: a Markdown bullet in a text field, " +
       "one item in a list, one rule's statement in the rules.",
   ),
@@ -451,20 +423,20 @@ const addExampleNoteSchema = EffectSchema.Struct({
     EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
     "The rule's number as the document shows it.",
   ),
-  given: describeWire(EXAMPLE_PART, "The starting situation. One line. Null while unknown."),
-  when: describeWire(EXAMPLE_PART, "The action. One line. Null while unknown."),
+  given: describeWire(
+    planExamplePartSchema,
+    "The starting situation. One line. Null while unknown.",
+  ),
+  when: describeWire(planExamplePartSchema, "The action. One line. Null while unknown."),
   // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
-  then: describeWire(EXAMPLE_PART, "The observable result. One line. Null while unknown."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+  then: describeWire(planExamplePartSchema, "The observable result. One line. Null while unknown."), // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
 });
 
 const replaceNoteSchema = EffectSchema.Struct({
   kind: EffectSchema.Literal(NOTE_KIND.REPLACE),
   field: NOTE_FIELD,
   find: FIND,
-  text: describeWire(
-    trimmedText(PLAN_TEMPLATE_BOUNDS.MAX_ANSWER_CHARS),
-    "What the phrase becomes.",
-  ),
+  text: describeWire(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS), "What the phrase becomes."),
 });
 
 const removeNoteSchema = EffectSchema.Struct({
@@ -510,6 +482,38 @@ export const planAgentEditSchema = EffectSchema.Struct({
 });
 
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
+
+/**
+ * Who last changed one field of a plan, and when: kept for every field a save
+ * changes, so the planning model and the notetaker know which fields hold the
+ * developer's own words. A field no save has changed since this was first
+ * kept has none.
+ */
+export const planFieldWriterSchema = EffectSchema.Struct({
+  field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
+  actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
+  /** Epoch milliseconds of the save. */
+  at: EffectSchema.Number,
+});
+
+export type PlanFieldWriter = typeof planFieldWriterSchema.Type;
+
+/**
+ * The fields' writers after a save by `actor` at `at` that took the content
+ * from `before` to `after`: each field it changed now names it, and every
+ * other field keeps the writer it had.
+ */
+export function withFieldWriters(
+  writers: readonly PlanFieldWriter[],
+  change: { readonly before: PlanContent; readonly after: PlanContent },
+  actor: PlanActor,
+  at: number,
+): readonly PlanFieldWriter[] {
+  const changed = changedFields(change.before, change.after);
+  if (changed.length === 0) return writers;
+  const kept = writers.filter((writer) => !changed.includes(writer.field));
+  return [...kept, ...changed.map((field) => ({ field, actor, at }))];
+}
 
 /** The journal with one more save on its end, the oldest let go past the bound. */
 export function withAgentEdit(
@@ -610,6 +614,24 @@ function itemText(text: string): string {
 
 function isTextField(field: PlanField): field is TextField {
   return Object.hasOwn(TEXT_FIELD, field);
+}
+
+/** Every field holding one Markdown answer, in the template's order. */
+export const PLAN_TEXT_FIELDS: readonly PlanTextField[] =
+  Object.values(PLAN_FIELD).filter(isTextField);
+
+/** What a text field holds: its Markdown, or null while it is unanswered. */
+export function planTextFieldValue(fields: PlanFields, field: PlanTextField): string | null {
+  return TEXT_FIELD[field].read(fields);
+}
+
+/** The fields with one text field holding a new answer, or none. */
+export function withPlanTextField(
+  fields: PlanFields,
+  field: PlanTextField,
+  value: string | null,
+): PlanFields {
+  return TEXT_FIELD[field].write(fields, value);
 }
 
 /** What one field of a plan's content holds: an answer, the rules, or a list. */
@@ -751,9 +773,7 @@ function clausesOf(example: Example): readonly (string | null)[] {
 function correctedRule(rule: Rule, find: string, text: string): Rule | undefined {
   const statement = replacedIn(rule.statement, find, text);
   if (statement !== undefined) {
-    return statement.length > PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS
-      ? undefined
-      : { ...rule, statement };
+    return statement.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS ? undefined : { ...rule, statement };
   }
   const examples = rule.examples;
   if (examples === null) return undefined;
@@ -802,7 +822,7 @@ function rulesStruck(rules: readonly Rule[], find: string): readonly Rule[] | un
 function rulesNoted(rules: readonly Rule[], note: PlanNote): readonly Rule[] | undefined {
   switch (note.kind) {
     case NOTE_KIND.ADD:
-      if (note.text.length > PLAN_TEMPLATE_BOUNDS.MAX_RULE_CHARS) return undefined;
+      if (note.text.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS) return undefined;
       return [...rules, { statement: note.text, examples: null }];
     case NOTE_KIND.ADD_EXAMPLE: {
       const rule = rules[note.rule - 1];
@@ -871,7 +891,7 @@ function textNoted(current: string | null, note: PlanNote): string | null | unde
 
 /** Whether a list is still within the template's bound on items. */
 function withinItems(items: readonly unknown[]): boolean {
-  return items.length <= PLAN_TEMPLATE_BOUNDS.MAX_ITEMS;
+  return items.length <= PLAN_FIELD_BOUNDS.MAX_ITEMS;
 }
 
 /**

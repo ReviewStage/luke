@@ -1,4 +1,4 @@
-import { type PlanContent, planBody, planFieldsSchema } from "@sidecar/hosted/plan-template";
+import { type PlanContent, planBody } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -8,6 +8,7 @@ import {
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
   planAssumptionSchema,
+  planFieldsSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -28,8 +29,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * and its history never disagree. A revision is the plan's content after it,
  * whole, so reading one or going back to one is a read and never a replay.
  * Saves the same writer makes one after another are one revision, moved on
- * by each: the notetaker's on one call, or a coding agent's, each while the
- * revision's latest save is a few minutes old at most. A plan
+ * by each: the notetaker's on one call, a coding agent's, or the developer's,
+ * each while the revision's latest save is a few minutes old at most. A plan
  * that was written before history began has no revision for that content, so
  * the first save that finds it records it first, under `earlier`, at the
  * plan's last save, and the save after it has something to differ from. The
@@ -54,8 +55,8 @@ export const UNKNOWN_AGENT_LABEL = "a coding agent";
 
 /**
  * Who made a save: the notetaker, on the call it listens to where it has
- * one, a coding agent, or the developer, with the revision they restored
- * where the save is that restore.
+ * one, a coding agent, or the developer, editing a field or, with the
+ * revision they restored, restoring one.
  */
 export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.NOTETAKER; readonly liveSessionId?: string }

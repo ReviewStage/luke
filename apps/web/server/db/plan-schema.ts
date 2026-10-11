@@ -1,6 +1,6 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
-import type { PlanAgentEdit, PlanFields } from "@sidecar/hosted/plan-template";
-import type { PlanAssumption } from "@sidecar/hosted/plan-wire";
+import type { PlanAgentEdit, PlanFieldWriter } from "@sidecar/hosted/plan-template";
+import type { PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
@@ -13,8 +13,8 @@ import { conversations } from "./storage-schema.js";
  * One row per plan, keyed by a UUID of the service's own and owned by the
  * account that started it: its name, whether it is pinned or archived, and the one
  * document the planning model saves, a Markdown body and the assumptions list
- * beside it, with the template's fields the body was formatted from, and the
- * journal of the saves coding agents made on it. A save
+ * beside it, with the template's fields the body was formatted from, who last
+ * changed each field, and the journal of the saves coding agents made on it. A save
  * replaces the document's columns in one statement, so none is left
  * half-written: a save that failed left the row as it stood. What the
  * document held before is kept beside it, in `plan_revision`
@@ -47,6 +47,11 @@ export const plan = pgTable(
     /** The saves coding agents made on the document, oldest first, the last fifty kept; empty until an agent saves. */
     agentEdits: jsonb("agent_edits")
       .$type<readonly PlanAgentEdit[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** Who last changed each field and when, for the fields a save has changed since this was kept; empty until then. */
+    fieldWriters: jsonb("field_writers")
+      .$type<readonly PlanFieldWriter[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
     /**

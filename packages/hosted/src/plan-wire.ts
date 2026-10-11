@@ -52,6 +52,74 @@ export const planAssumptionSchema = EffectSchema.Struct({
 
 export type PlanAssumption = typeof planAssumptionSchema.Type;
 
+/** Bounds on a plan's fields; the formatted body is held to `PLAN_BOUNDS.MAX_BODY_CHARS` after formatting. */
+export const PLAN_FIELD_BOUNDS = {
+  /** One answer may be at most the whole body; the formatted total is what is held to the body bound. */
+  MAX_ANSWER_CHARS: PLAN_BOUNDS.MAX_BODY_CHARS,
+  /** A rule's statement is its heading, so it is one sentence. */
+  MAX_RULE_CHARS: 500,
+  /** One part of an example is a clause drawn on one line. */
+  MAX_EXAMPLE_PART_CHARS: 1_000,
+  /** The most rules, examples of one rule, or open questions. */
+  MAX_ITEMS: 200,
+} as const;
+
+/** A list that is present only once it holds something. */
+function nonEmptyList<S extends EffectSchema.Top>(item: S) {
+  return EffectSchema.Array(item).check(
+    EffectSchema.isMinLength(1),
+    EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
+  );
+}
+
+/** An ordinary answer: null while unanswered, otherwise nonblank text. */
+const ANSWER = EffectSchema.NullOr(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS));
+
+/** One clause of a rule's example, null while unknown. */
+export const planExamplePartSchema = EffectSchema.NullOr(
+  trimmedText(PLAN_FIELD_BOUNDS.MAX_EXAMPLE_PART_CHARS),
+);
+
+const exampleSchema = EffectSchema.Struct({
+  given: planExamplePartSchema,
+  when: planExamplePartSchema,
+  // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+  then: planExamplePartSchema, // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+});
+
+const ruleSchema = EffectSchema.Struct({
+  statement: trimmedText(PLAN_FIELD_BOUNDS.MAX_RULE_CHARS),
+  examples: EffectSchema.NullOr(nonEmptyList(exampleSchema)),
+});
+
+/**
+ * Every section and field of the fixed template, in its order: what the
+ * service keeps for a plan, and what the window edits a field of
+ * (`plan-template.ts` formats them into the body).
+ */
+export const planFieldsSchema = EffectSchema.Struct({
+  goal: EffectSchema.Struct({ problem: ANSWER, outcome: ANSWER }),
+  scope: EffectSchema.Struct({ included: ANSWER, excluded: ANSWER, constraints: ANSWER }),
+  rules: EffectSchema.NullOr(nonEmptyList(ruleSchema)),
+  implementation: EffectSchema.Struct({
+    changeMap: ANSWER,
+    contracts: ANSWER,
+    patterns: ANSWER,
+    order: ANSWER,
+  }),
+  decisions: ANSWER,
+  verification: ANSWER,
+  leftToAgent: ANSWER,
+  openQuestions: EffectSchema.Array(trimmedText(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS)).check(
+    EffectSchema.isMaxLength(PLAN_FIELD_BOUNDS.MAX_ITEMS),
+  ),
+  dataAndMigration: ANSWER,
+});
+
+export type PlanFields = typeof planFieldsSchema.Type;
+export type PlanRule = typeof ruleSchema.Type;
+export type PlanExample = typeof exampleSchema.Type;
+
 /** The one saved document of a plan, replaced whole by every save. */
 export const planDocumentSchema = EffectSchema.Struct({
   /** The fixed template's canonical Markdown, stored exactly as formatted. */
@@ -201,6 +269,8 @@ export const planSchema = EffectSchema.Struct({
   ),
   /** Absent for a plan nobody has written since history began, and from a service before it. */
   lastEdit: EffectSchema.optionalKey(planLastEditSchema),
+  /** The fields the body was formatted from, which the window edits a field of; absent from a service before editing. */
+  fields: EffectSchema.optionalKey(planFieldsSchema),
 });
 
 export type Plan = typeof planSchema.Type;

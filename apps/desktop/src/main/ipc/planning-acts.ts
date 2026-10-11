@@ -1,6 +1,8 @@
 import type {
   PlanningArchiveParams,
   PlanningBoardSaveParams,
+  PlanningEditAnswer,
+  PlanningEditParams,
   PlanningFileAnswer,
   PlanningFileParams,
   PlanningPinParams,
@@ -42,6 +44,7 @@ export interface PlanningActsDependencies {
     planningSetRepository(
       params: PlanningSetRepositoryParams,
     ): Effect.Effect<PlanningSetRepositoryAnswer>;
+    planningEdit(params: PlanningEditParams): Effect.Effect<PlanningEditAnswer>;
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
@@ -70,6 +73,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_ARCHIVE
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_SET_REPOSITORY
+  | typeof ACT_KIND.PLANNING_EDIT
   | typeof ACT_KIND.GITHUB_OPEN
   | typeof ACT_KIND.PLANNING_TALK
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
@@ -140,6 +144,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
       return host.planningSetRepository(params);
+    },
+    [ACT_KIND.PLANNING_EDIT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_EDIT, sender);
+      return host.planningEdit(params);
     },
     // The address is GitHub's by the act's own schema, so what opens is a
     // repository's page or the App's installation page and nothing else.

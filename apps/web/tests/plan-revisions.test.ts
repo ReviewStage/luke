@@ -243,7 +243,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
               body: planBody({ name: "Teammate invitations" }, SMALL_FEATURE.fields),
               assumptions: SMALL_FEATURE.assumptions,
             },
-            SMALL_FEATURE.fields,
+            { fields: SMALL_FEATURE.fields },
           ),
         );
         yield* TestClock.adjust(Duration.hours(1));
@@ -324,8 +324,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           userId,
           planId,
           { body: planBody({ name: "Teammate invitations" }, EMPTY_PLAN_FIELDS), assumptions: [] },
-          EMPTY_PLAN_FIELDS,
-          [{ agentId, at: journaledAt, notes: [] }],
+          { fields: EMPTY_PLAN_FIELDS, agentEdits: [{ agentId, at: journaledAt, notes: [] }] },
         );
 
         assert.deepEqual(yield* lastEditOf(userId, planId), {

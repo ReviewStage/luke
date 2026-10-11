@@ -1,6 +1,12 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
-import { PLAN_CALL_FAILURE, PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_CALL_FAILURE,
+  PLANNING_READ,
+  type PlanningEditAnswer,
+  type PlanningView,
+} from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -116,6 +122,8 @@ export interface PlansControl {
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
+  /** Saves the developer's edit of one field of the open plan: saved, a conflict with what the field holds now, or why not. */
+  edit: (planId: string, request: PlanEditRequest) => Promise<PlanningEditAnswer>;
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
   /** Silences Luke's voice on this Mac for the open plan's call, or plays it again; offered with the stop. */
   speaker: { muted: boolean; onPress: () => void };
@@ -580,6 +588,12 @@ export function usePlansTab(input: {
     );
   };
 
+  // A fixture's plans are read from nowhere, so an edit of one is never saved.
+  const edit = (planId: string, request: PlanEditRequest): Promise<PlanningEditAnswer> => {
+    if (fixture !== undefined) return Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+    return act(ACT_KIND.PLANNING_EDIT, { planId, ...request });
+  };
+
   // The chip's menu stands on the open plan's toolbar, so another plan's is
   // opened first; the ask is counted so each press opens it again.
   const changeRepository = (planId: string) => {
@@ -691,6 +705,7 @@ export function usePlansTab(input: {
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
     copy: { onPress: pressCopy },
+    edit,
     microphone: {
       label: microphone.label,
       enabled: microphone.press !== MICROPHONE_PRESS.NONE,

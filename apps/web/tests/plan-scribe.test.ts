@@ -13,7 +13,7 @@ import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
-import { saveNotes } from "../server/hosted/plan-notes";
+import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import { listRevisions } from "../server/hosted/plan-revisions";
 import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
@@ -224,6 +224,31 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           assert.equal(last?.savedAt, undefined);
           assert.equal(last?.document.body, Option.getOrThrow(written).plan.document.body);
+        }),
+      ),
+  );
+
+  it.effect(
+    "each draft names the save the run read, and the saved one carries the fields it was formatted from",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const read = Option.getOrThrow(yield* readPlan(userId, planId));
+          const { scribe, drafts } = yield* scribeFor(userId, planId, [
+            { notes: [added(PLAN_FIELD.OUTCOME, `- ${OUTCOME}`)] },
+          ]);
+
+          scribe.observe(heard("Members should invite by email.", 0, 1_500));
+          yield* quiet;
+          const saved = yield* settledRead(
+            Effect.sync(() => drafts.at(-1)),
+            (draft) => draft?.savedAt !== undefined,
+          );
+
+          const stored = Option.getOrThrow(yield* readPlan(userId, planId));
+          assert.ok(drafts.every((draft) => draft.readAt === read.plan.updatedAt));
+          assert.deepEqual(saved?.fields, stored.fields);
         }),
       ),
   );
@@ -606,6 +631,37 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           fields: INVITATIONS_DRAFT.fields,
           assumptions: INVITATIONS_DRAFT.assumptions,
         });
+        assert.ok(!lines.includes("[fields the developer wrote]"));
+      }),
+    ),
+  );
+
+  it.effect("the model is told which fields hold the developer's own words", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openDraftedPlan;
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire after 7 days." },
+        );
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.LEFT_TO_AGENT, base: null, value: "The email's wording." },
+        );
+        const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
+
+        scribe.observe(heard("Let's keep going.", 0, 1_000));
+        yield* quiet;
+        yield* settledRead(
+          Effect.sync(() => asked.length),
+          (count) => count > 0,
+        );
+
+        const lines = promptText(asked[0]).split("\n");
+        assert.equal(
+          lines[lines.indexOf("[fields the developer wrote]") + 1],
+          `${PLAN_FIELD.DECISIONS}, ${PLAN_FIELD.LEFT_TO_AGENT}`,
+        );
       }),
     ),
   );

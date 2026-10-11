@@ -64,7 +64,7 @@ import {
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { saveNotes } from "../server/hosted/plan-notes";
+import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
   deletePlan,
@@ -615,6 +615,39 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           /^- anthropic\/claude-opus-5\.5, .*: add decisions: "Invites expire\."; replace decisions: "expire\." → "expire after 7 days\."$/u,
         );
         assert.match(lines[at + 2] ?? "", /add openQuestions: "Who may withdraw\?"$/u);
+      }),
+  );
+
+  it.effect(
+    "the fields the developer wrote reach the planning model by heading, until Luke writes one again",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        assert.doesNotMatch(yield* host.standingContext(standing), /fields the developer wrote/u);
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire after 7 days." },
+        );
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { field: PLAN_FIELD.VERIFICATION, base: null, value: "An expired link says so." },
+        );
+
+        const written = (yield* host.standingContext(standing)).split("\n");
+        yield* saveNotes({ userId, planId }, [
+          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.DECISIONS, text: "- Owners can resend." },
+        ]);
+        const rewritten = (yield* host.standingContext(standing)).split("\n");
+
+        const at = written.indexOf("[fields the developer wrote]");
+        assert.notEqual(at, -1);
+        assert.match(written[at + 1] ?? "", /^- Decisions, \d{4}-\d{2}-\d{2}T/u);
+        assert.match(written[at + 2] ?? "", /^- Verification, \d{4}-\d{2}-\d{2}T/u);
+        const after = rewritten.indexOf("[fields the developer wrote]");
+        assert.match(rewritten[after + 1] ?? "", /^- Verification, /u);
+        assert.ok(!rewritten.some((line) => line.startsWith("- Decisions, ")));
       }),
   );
 

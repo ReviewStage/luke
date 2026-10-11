@@ -1,7 +1,7 @@
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
-import { EMPTY_PLAN_FIELDS, type PlanFields, planBody } from "@sidecar/hosted/plan-template";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
+import type { Plan, PlanFields, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_PART,
