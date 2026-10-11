@@ -15,8 +15,11 @@ import { host } from "./host.js";
  * its snapshot with the checkout and the agent's changes intact. Its timeout
  * is the platform's maximum, so a long run is never cut off mid-turn, and
  * the store hook stops it the moment a turn ends rather than waiting that
- * out. The network is eve's default, open internet. As the sandbox opens,
- * the agent's repository is checked out whole at its default branch with a
+ * out. Its size is enough memory for the repository's own lint
+ * (`CODER.SANDBOX_VCPUS`), and is chosen at open, so a stopped sandbox
+ * resumes at it, where a kernel setting made after open would not survive
+ * the resume. The network is eve's default, open internet. As the sandbox
+ * opens, the agent's repository is checked out whole at its default branch with a
  * write token at the firewall for the clone (`coder-host/checkout.ts`), and
  * the same token is then set at the firewall for the session's own `gh` and
  * `git` through eve's `authenticateGitHub`: it never enters the sandbox's
@@ -57,7 +60,10 @@ export const environment = VercelSandbox.environment({
 });
 
 export default defineSandbox(async ({ session }) => {
-  const sandbox = await environment.open({ timeout: CODER.SANDBOX_TIMEOUT_MS });
+  const sandbox = await environment.open({
+    timeout: CODER.SANDBOX_TIMEOUT_MS,
+    resources: { vcpus: CODER.SANDBOX_VCPUS },
+  });
   const token = await runWeb(
     Effect.gen(function* () {
       const admitted = yield* host.admit(session.auth, session.id);

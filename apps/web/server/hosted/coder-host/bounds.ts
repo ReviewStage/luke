@@ -8,14 +8,21 @@ import { REPOSITORY_SANDBOX_CONTRACT } from "../repository-shell.js";
  * by the second eve service beside the planning brain: the same door, the
  * same conversation admission, the same relay into the store, under a
  * different agent. What differs is named here: how long its sandbox may
- * live, how often the repository credential at its firewall is renewed,
- * where its checkout stands, how a transcript read waits, how full its
- * context grows before eve compacts it, and how much a worker it delegates
- * to may spend.
+ * live and how large it is, how often the repository credential at its
+ * firewall is renewed, where its checkout stands, how a transcript read
+ * waits, how full its context grows before eve compacts it, and how much
+ * a worker it delegates to may spend.
  */
 export const CODER = {
   /** The most a Vercel Sandbox session may live: the platform's own maximum, so a long run is never cut off mid-turn. */
   SANDBOX_TIMEOUT_MS: 24 * 60 * 60 * 1_000,
+  /**
+   * The sandbox's vCPUs, each with 2 GB of memory. Four, because oxlint with
+   * JS plugins reserves its arena as one mapping of about 6 GiB, which the
+   * kernel's default overcommit refuses where memory is the two-vCPU 4 GB, so
+   * the repository's lint panicked there at any thread count.
+   */
+  SANDBOX_VCPUS: 4,
   /** An installation token is good for an hour from its mint; the one at the firewall is renewed this long after, inside that hour. */
   GITHUB_TOKEN_REFRESH: Duration.minutes(50),
   /** The context window the session is told where the catalog names none for the model. */
