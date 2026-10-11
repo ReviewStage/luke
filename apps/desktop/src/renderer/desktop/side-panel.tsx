@@ -11,7 +11,7 @@ import {
   WorkIcon,
 } from "@sidecar/panel";
 import { BotIcon } from "lucide-react";
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -44,15 +44,9 @@ import {
   workerOf,
   workRowsOf,
 } from "../planning/work-model";
+import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
-import {
-  ActionMenu,
-  MENU_ALIGN,
-  MENU_DROP,
-  type MenuAction,
-  MenuItem,
-  type OpenMenu,
-} from "./action-menu";
+import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
 import { Tab, TabStrip } from "./tab-strip";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
@@ -136,7 +130,18 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** The menu entry, or the empty panel's row, that opens a tab of the kind. */
+/** Why a kind already open is not offered again, said where its shortcut would be. */
+const KIND_OPEN = "Open";
+
+/** Which edge of the "+" its menu hangs from: its left, or its right where the window leaves no room. */
+const MENU_SIDE = {
+  START: "start",
+  END: "end",
+} as const;
+
+type MenuSide = (typeof MENU_SIDE)[keyof typeof MENU_SIDE];
+
+/** The empty panel's row that opens a tab of the kind. */
 function kindAction(
   tab: FixedSidePanelTab,
   tabs: readonly FixedSidePanelTab[],
@@ -148,13 +153,27 @@ function kindAction(
     command: TAB_COMMAND[tab],
     onSelect: () => onChoose(tab),
   };
-  return tabAddable(tab, tabs) ? action : { ...action, unavailable: "Open" };
+  return tabAddable(tab, tabs) ? action : { ...action, unavailable: KIND_OPEN };
+}
+
+/** The "+" menu's row for a kind: its glyph, its name, and its shortcut, or dimmed where it is open and may not be again. */
+function kindRow(tab: FixedSidePanelTab, tabs: readonly FixedSidePanelTab[]): MenuRow {
+  return {
+    id: tab,
+    label: SIDE_PANEL_TAB_KIND[tab].label,
+    icon: TAB_ICON[tab],
+    command: TAB_COMMAND[tab],
+    disabled: tabAddable(tab, tabs) ? undefined : KIND_OPEN,
+  };
 }
 
 /**
- * The "+" after the last tab, and the menu it drops: every kind of tab, with
- * its shortcut, and those that may not be opened again dimmed. With every
- * kind open there is nothing to add, so it is dimmed and says so.
+ * The "+" after the last tab, and the menu it drops: the shared searchable
+ * one, as the repository and model pickers drop, over every kind of tab
+ * with its shortcut, those that may not be opened again dimmed. It hangs
+ * from the "+"'s left edge, or from its right where the window ends before
+ * the menu would, measured before it is painted. With every kind open there
+ * is nothing to add, so it is dimmed and says so.
  */
 function AddTabButton({
   tabs,
@@ -163,49 +182,74 @@ function AddTabButton({
   tabs: readonly FixedSidePanelTab[];
   onChoose: (tab: FixedSidePanelTab) => void;
 }): React.JSX.Element {
-  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
-  const opener = useRef<HTMLButtonElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setMenu(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
+  const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
+  const menuId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
   const full = SIDE_PANEL_TABS.every((kind) => !tabAddable(kind, tabs));
+
+  useLayoutEffect(() => {
+    const menu = root.current?.querySelector(".searchable-menu") ?? null;
+    if (!open || menu === null) return;
+    const room = document.documentElement.clientWidth;
+    setSide(menu.getBoundingClientRect().right > room ? MENU_SIDE.END : MENU_SIDE.START);
+  }, [open]);
+
+  // Note that we hand focus back to the "+", as a native menu returns it to
+  // its trigger, because closing takes the focused field away with it.
+  const close = () => {
+    setOpen(false);
+    opener.current?.focus();
+  };
+  const pick = (id: string) => {
+    const kind = SIDE_PANEL_TABS.find((each) => each === id);
+    close();
+    if (kind !== undefined) onChoose(kind);
+  };
+
   return (
-    <>
+    <div ref={root} className="tab-add-anchor" data-side={side}>
       <Tooltip label={full ? "Every tab is open" : "Open a tab"}>
         <button
           ref={opener}
           type="button"
           className="icon-button tab-add"
           aria-label="Open a tab"
-          aria-haspopup="menu"
-          aria-expanded={menu !== undefined}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? menuId : undefined}
           aria-disabled={full}
-          onClick={(event) => {
-            if (menu !== undefined) {
-              close(true);
+          onClick={() => {
+            if (open) {
+              close();
               return;
             }
             if (full) return;
-            const bounds = event.currentTarget.getBoundingClientRect();
-            setMenu({
-              placement: { x: bounds.left, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.START },
-              opener: event.currentTarget,
-            });
+            setSide(MENU_SIDE.START);
+            setOpen(true);
           }}
         >
           <PlusIcon />
         </button>
       </Tooltip>
-      {menu === undefined ? null : (
-        <ActionMenu
+      {open ? (
+        <SearchableMenu
+          id={menuId}
+          className="tab-add-menu"
           label="Open a tab"
-          menu={menu}
-          groups={[SIDE_PANEL_TABS.map((kind) => kindAction(kind, tabs, onChoose))]}
+          placeholder="Search tabs"
+          rows={SIDE_PANEL_TABS.map((kind) => kindRow(kind, tabs))}
+          value={undefined}
+          noMatch="No tabs match"
+          onPick={pick}
           onClose={close}
+          onLeave={(left) => {
+            if (!(left instanceof Node && root.current?.contains(left))) setOpen(false);
+          }}
         />
-      )}
-    </>
+      ) : null}
+    </div>
   );
 }
 

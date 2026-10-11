@@ -1,22 +1,25 @@
 import { CheckIcon, ChevronRightIcon, SearchIcon } from "@sidecar/panel";
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Tooltip } from "./tooltip";
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import type { KeyedCommand } from "#shared/shortcuts";
+import { ShortcutGlyphs, Tooltip } from "./tooltip";
 
 /**
- * searchable-menu.tsx -- the one picker menu the repository chip and the Start button drop, and Settings' menus may.
+ * searchable-menu.tsx -- the one picker menu the repository chip, the Start button, and the side panel's "+" drop, and Settings' menus may.
  *
  * A command menu: a search field as the first row, focused as the menu
  * opens and filtering as it is typed in; under it the rows, each an icon,
- * a name, a muted detail where the row has one, and an end slot the check
- * stands in where it is the one chosen, in a list that scrolls past a
- * bounded height; and under the list, pinned where the scrolling cannot
+ * a name, a muted detail where the row has one, the shortcut that does the
+ * same where there is one, and an end slot the check stands in where it is
+ * the one chosen, in a list that scrolls past a bounded height, the rows
+ * of a section under its heading; and under the list, pinned where the scrolling cannot
  * take them, the rows the owner wants always on screen, such as the page
  * on GitHub or the effort an agent will run at. A pinned row is a press of
  * its own, a switch the press turns without closing anything, or opens a
  * submenu of rows beside itself, anchored to the row and turned to the
  * other side where the window leaves no room. Focus
  * stays in the field the whole time: the arrows move one highlight
- * through the rows that match and on through the pinned rows, Enter picks
+ * through the rows that match and on through the pinned rows, past any
+ * that cannot be picked now, which are dimmed and say why, Enter picks
  * the highlighted one, Right opens its submenu and Left closes it, and
  * Escape closes the submenu where one is open and otherwise asks the
  * owner to close, which stops here so it closes the menu and not what is
@@ -40,6 +43,18 @@ export interface MenuRow {
   terms?: readonly string[];
   /** Muted words after the label: the effort a model runs at, an owner, "(Fast)". */
   detail?: string | undefined;
+  /** The heading the row stands under, with the rows beside it that share it; none stands under no heading. */
+  section?: string | undefined;
+  /** The shortcut that does what picking the row does, printed muted at the row's end. */
+  command?: KeyedCommand | undefined;
+  /** Why the row cannot be picked now, printed muted at its end in the shortcut's place; the row is dimmed and the arrows pass over it. */
+  disabled?: string | undefined;
+}
+
+/** A run of matching rows under one heading, or under none, each with its place among the matches. */
+interface Section<Row extends MenuRow> {
+  heading: string | undefined;
+  rows: { row: Row; index: number }[];
 }
 
 /** Rows a pinned row opens beside itself: the efforts a model lists. */
@@ -93,6 +108,22 @@ interface SubmenuPlace {
 
 const SUBMENU_FIRST_PLACE: SubmenuPlace = { side: SUBMENU_SIDE.RIGHT, stand: SUBMENU_STAND.DOWN };
 
+/** The matching rows cut into runs that share a heading, in their order. */
+function sectionsOf<Row extends MenuRow>(rows: readonly Row[]): Section<Row>[] {
+  const sections: Section<Row>[] = [];
+  rows.forEach((row, index) => {
+    const last = sections.at(-1);
+    if (last !== undefined && last.heading === row.section) last.rows.push({ row, index });
+    else sections.push({ heading: row.section, rows: [{ row, index }] });
+  });
+  return sections;
+}
+
+/** The first row that may be picked, or nowhere. */
+function firstOpen(rows: readonly MenuRow[]): number {
+  return rows.findIndex((row) => row.disabled === undefined);
+}
+
 /** The rows whose label or terms hold every word of the query, case aside; all of them for no query. */
 function matchingRows<Row extends MenuRow>(rows: readonly Row[], query: string): readonly Row[] {
   const words = query.toLowerCase().split(/\s+/u).filter(Boolean);
@@ -126,23 +157,33 @@ function stepped(
 /** Where no row is highlighted: nothing matches and the arrows have not moved on to a pinned row. */
 const NOWHERE = -1;
 
-/** The highlight over a set of rows: the one moved to, else the one chosen, else the first match, else nowhere. */
+/** The highlight over a set of rows: the one moved to, else the one chosen, else the first that may be picked, else nowhere. */
 function highlightOver(input: {
   moved: number | undefined;
   chosen: number;
-  matches: number;
+  first: number;
   count: number;
 }): number {
   if (input.moved !== undefined) return Math.min(input.moved, input.count - 1);
   if (input.chosen >= 0) return input.chosen;
-  return input.matches > 0 ? 0 : NOWHERE;
+  return input.first;
 }
 
-/** The inside of every row: the mark, the name, the detail, and the end slot, which is drawn whether or not it holds anything so the names line up. */
+/** What a row prints before its end slot: why it cannot be picked, or its shortcut, or nothing. */
+function RowHint({ row }: { row: MenuRow }): React.JSX.Element | null {
+  if (row.disabled !== undefined) {
+    return <span className="plan-compose-menu-hint">{row.disabled}</span>;
+  }
+  if (row.command === undefined) return null;
+  return <ShortcutGlyphs command={row.command} className="plan-compose-menu-hint" />;
+}
+
+/** The inside of every row: the mark, the name, the detail, the hint, and the end slot, which is drawn whether or not it holds anything so the names line up. */
 function RowBody(props: {
   icon: React.ReactNode;
   label: string;
   detail: string | undefined;
+  hint?: React.ReactNode;
   end: React.ReactNode;
 }): React.JSX.Element {
   return (
@@ -152,6 +193,7 @@ function RowBody(props: {
       {props.detail !== undefined ? (
         <span className="plan-compose-menu-detail">{props.detail}</span>
       ) : null}
+      {props.hint}
       <span className="plan-compose-menu-end">{props.end}</span>
     </>
   );
@@ -191,7 +233,7 @@ export function SearchableMenu(props: {
   const at = highlightOver({
     moved: highlight,
     chosen,
-    matches: matches.length,
+    first: firstOpen(matches),
     count: matches.length + foot.length,
   });
   const footAt = at - matches.length;
@@ -204,7 +246,7 @@ export function SearchableMenu(props: {
   const subAt = highlightOver({
     moved: submenu?.moved,
     chosen: subChosen,
-    matches: open?.rows.length ?? 0,
+    first: open === undefined || open.rows.length === 0 ? NOWHERE : 0,
     count: open?.rows.length ?? 0,
   });
   const listId = useId();
@@ -285,8 +327,9 @@ export function SearchableMenu(props: {
       }
       const row = at >= 0 ? matches[at] : undefined;
       const pinned = footAt >= 0 ? foot[footAt] : undefined;
-      if (row !== undefined) onPick(row.id);
-      else if (pinned !== undefined) pressFoot(pinned);
+      if (row !== undefined) {
+        if (row.disabled === undefined) onPick(row.id);
+      } else if (pinned !== undefined) pressFoot(pinned);
       return;
     }
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -296,13 +339,13 @@ export function SearchableMenu(props: {
       setSubmenu({ moved: stepped(subAt, open.rows.length, event.key) });
       return;
     }
-    // A pinned row that cannot be pressed is passed over, and never a dead stop.
+    // A row that cannot be picked is passed over, and never a dead stop.
     setHighlight(
       stepped(
         at,
         matches.length + foot.length,
         event.key,
-        (index) => foot[index - matches.length]?.disabled !== undefined,
+        (index) => (matches[index] ?? foot[index - matches.length])?.disabled !== undefined,
       ),
     );
   };
@@ -338,8 +381,10 @@ export function SearchableMenu(props: {
             onChange={(event) => {
               const typed = event.currentTarget.value;
               setQuery(typed);
-              // The first match takes the highlight; with none, nothing does, so Enter picks nothing.
-              moveTo(matchingRows(rows, typed).length > 0 ? 0 : undefined);
+              // The first match that may be picked takes the highlight; with
+              // none, nothing does, so Enter picks nothing.
+              const first = firstOpen(matchingRows(rows, typed));
+              moveTo(first === NOWHERE ? undefined : first);
             }}
           />
         </div>
@@ -355,26 +400,46 @@ export function SearchableMenu(props: {
         tabIndex={searching ? undefined : -1}
         onMouseDown={(event) => event.preventDefault()}
       >
-        {matches.map((row, index) => (
-          <button
-            key={row.id}
-            type="button"
-            role="option"
-            tabIndex={-1}
-            className="plan-compose-menu-row"
-            aria-selected={index === at}
-            aria-current={row.id === value ? "true" : undefined}
-            onMouseMove={() => moveTo(index)}
-            onClick={() => onPick(row.id)}
-          >
-            <RowBody
-              icon={row.icon}
-              label={row.label}
-              detail={row.detail}
-              end={row.id === value ? <CheckIcon /> : null}
-            />
-          </button>
-        ))}
+        {sectionsOf(matches).map((section) => {
+          const options = section.rows.map(({ row, index }) => (
+            <button
+              key={row.id}
+              type="button"
+              role="option"
+              tabIndex={-1}
+              className="plan-compose-menu-row"
+              aria-selected={index === at}
+              aria-disabled={row.disabled === undefined ? undefined : "true"}
+              aria-current={row.id === value ? "true" : undefined}
+              onMouseMove={() => {
+                if (row.disabled === undefined) moveTo(index);
+              }}
+              onClick={() => {
+                if (row.disabled === undefined) onPick(row.id);
+              }}
+            >
+              <RowBody
+                icon={row.icon}
+                label={row.label}
+                detail={row.detail}
+                hint={<RowHint row={row} />}
+                end={row.id === value ? <CheckIcon /> : null}
+              />
+            </button>
+          ));
+          const first = section.rows[0]?.row.id;
+          return section.heading === undefined ? (
+            <Fragment key={first}>{options}</Fragment>
+          ) : (
+            // biome-ignore lint/a11y/useSemanticElements: a listbox's section is a group of options, which a <fieldset> of form controls is not.
+            <div key={first} role="group" aria-label={section.heading}>
+              <div className="plan-compose-menu-section" aria-hidden="true">
+                {section.heading}
+              </div>
+              {options}
+            </div>
+          );
+        })}
         {props.note}
         {matches.length === 0 && props.note === undefined ? (
           <p className="plan-compose-menu-note">{props.noMatch}</p>

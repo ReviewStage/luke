@@ -107,8 +107,8 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
 /**
  * The strip of tabs. Note that focus follows a tab closed from the keyboard
  * to the tab that took its place a render later, because the tab it was on
- * is gone by then; with none left, it goes on to the control after the
- * strip, the side panel's "+". `onMove`, while given, lets the tabs be
+ * is gone by then; with none left, it goes on to the button after the
+ * strip, or the first in what follows it: the side panel's "+". `onMove`, while given, lets the tabs be
  * moved, and hears each move as the tab's place before and after it.
  */
 export function TabStrip({
@@ -136,7 +136,8 @@ export function TabStrip({
     if (at === undefined || strip.current === null) return;
     closedAt.current = undefined;
     const tabs = [...strip.current.querySelectorAll<HTMLElement>(TAB)];
-    const after = strip.current.nextElementSibling;
+    const beside = strip.current.nextElementSibling;
+    const after = beside?.matches("button") ? beside : beside?.querySelector("button");
     const next = tabs[Math.min(at, tabs.length - 1)];
     if (next === undefined && after instanceof HTMLElement) after.focus();
     else focusTab(strip.current, next);
