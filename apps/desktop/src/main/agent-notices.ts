@@ -110,6 +110,8 @@ export interface AgentNotices {
   observeAgents(agents: readonly CodingAgentSummary[]): void;
   /** One agent's status as a transcript page carried it; an agent no answer has named yet is left for the list. */
   observeStatus(agentId: string, status: CodingAgentStatus): void;
+  /** One agent's title as a transcript page carried it, which the list that named the agent may have read before the title landed; said whatever the agent's standing. */
+  observeTitle(agentId: string, title: string | null): void;
   /** The agent as the answer to a message carried it: running, and with a line awaiting the turn it opens, which keeps its plan watched for that turn. */
   observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
@@ -329,6 +331,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeStatus: (agentId, status) => {
         const held = ledger.get(agentId);
         if (held !== undefined) observe(agentId, { ...held, status });
+      },
+      observeTitle: (agentId, title) => {
+        const held = ledger.get(agentId);
+        if (held !== undefined && held.title !== title) ledger.set(agentId, { ...held, title });
       },
       observeModels: (next) => {
         models = next;

@@ -45,6 +45,9 @@ function fixture() {
       observeStatus: (agentId, status) => {
         noted.push(`status:${agentId}=${status}`);
       },
+      observeTitle: (agentId, title) => {
+        noted.push(`title:${agentId}=${title}`);
+      },
       observeMessaged: (agent) => {
         noted.push(`messaged:${agent.id}=${agent.status}`);
       },
@@ -258,6 +261,7 @@ it.effect(
 
       assert.deepEqual(noted, [
         `agents:${AGENT_ID}=${CODING_AGENT_STATUS.STARTING}`,
+        `title:${AGENT_ID}=null`,
         `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
         "agents:",
         `shown:${AGENT_ID}`,

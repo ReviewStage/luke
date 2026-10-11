@@ -389,16 +389,23 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  // A rename's field closes as the edit ends, so a second rename may be out before the first
+  // answers; as with a change of model, only the newest one's answer is taken into the list.
+  const renames = useRef(new Map<string, number>());
   const onRename = useCallback(
     async (agentId: string, title: string) => {
+      const rename = (renames.current.get(agentId) ?? 0) + 1;
+      renames.current.set(agentId, rename);
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_RENAME, {
         agentId,
         title,
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if ("failure" in answer) return false;
-      setList((was) =>
-        was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
-      );
+      if (renames.current.get(agentId) === rename) {
+        setList((was) =>
+          was.agents === undefined ? was : { ...was, agents: withAgent(was.agents, answer.agent) },
+        );
+      }
       return true;
     },
     [act],

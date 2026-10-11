@@ -343,6 +343,20 @@ test("a rename asks the service for that agent alone and the agent it answers ta
   assert.deepEqual(tab.control().agents, [
     { ...renamed, title: "Sign-out button in account menu" },
   ]);
+
+  // Two renames answered out of order: the one made last is what stands, whichever answers first.
+  let answerFirst: ((answer: CodingAgentAgentAnswer) => void) | undefined;
+  const first = new Promise<CodingAgentAgentAnswer>((resolve) => {
+    answerFirst = resolve;
+  });
+  const last = { ...renamed, title: "Second" };
+  tab.answer(ACT_KIND.CODING_AGENTS_RENAME, first, { agent: last });
+  const older = tab.control().onRename(AGENT, "First");
+  await tab.control().onRename(AGENT, "Second");
+  answerFirst?.({ agent: { ...renamed, title: "First" } });
+  await older;
+  await settle();
+  assert.deepEqual(tab.control().agents, [last]);
 });
 
 test("a change of an agent's model asks the service for that agent alone, and the agent it answers takes its place in the list", async () => {

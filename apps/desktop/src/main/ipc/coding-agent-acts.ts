@@ -54,6 +54,7 @@ export interface CodingAgentActsDependencies {
     AgentNotices,
     | "observeAgents"
     | "observeStatus"
+    | "observeTitle"
     | "observeMessaged"
     | "observeModels"
     | "observePlanGone"
@@ -127,7 +128,11 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_MESSAGES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGES, sender);
       return noted(host.codingAgentMessages(params), (answer) => {
-        if ("status" in answer) notices.observeStatus(params.agentId, answer.status);
+        if ("status" in answer) {
+          // The title first, so an end this page carries is announced under it.
+          notices.observeTitle(params.agentId, answer.title);
+          notices.observeStatus(params.agentId, answer.status);
+        }
       });
     },
     [ACT_KIND.CODING_AGENTS_MESSAGE]: (params, sender) => {

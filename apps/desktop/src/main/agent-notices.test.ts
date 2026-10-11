@@ -238,9 +238,11 @@ it.effect("a window focused on another tab, or a plan left behind, is told", () 
     f.focus(true);
     notices.shown(null);
     notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING)]);
+    // The page that says it failed carries the title generated since the list named the agent.
+    notices.observeTitle(AGENT_ID, "Fix invitations");
     notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.FAILED);
     yield* Effect.yieldNow;
-    assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Claude Opus 5.5 failed" }]);
+    assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Fix invitations failed" }]);
   }),
 );
 
