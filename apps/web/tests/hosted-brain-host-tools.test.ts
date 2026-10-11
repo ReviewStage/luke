@@ -201,6 +201,7 @@ async function agentOn(
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: "# Teammate invitations",
+        task: null,
         repository: RELAY_FULL_NAME,
       }),
     ),
