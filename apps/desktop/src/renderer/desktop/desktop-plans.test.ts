@@ -1814,10 +1814,14 @@ const STARTED_AGENT: CodingAgentSummary = {
 /** Every Stop an agent was asked for on the page below. */
 let stops: string[] = [];
 
+/** The agents the service answers a read of the list with on the page below, which it opens on. */
+let listed: readonly CodingAgentSummary[] = [];
+
 /**
  * The open plan's page over the real side panel with the plan's coding
- * agents, whose Start makes one as the service answers it and opens its
- * tab as the Plans tab does, and whose every Stop is recorded.
+ * agents, read again as the service lists them, whose Start makes one as
+ * the service answers it and opens its tab as the Plans tab does, and
+ * whose every Stop is recorded.
  */
 function AgentsPage({
   start,
@@ -1826,7 +1830,7 @@ function AgentsPage({
   start: Partial<CodingAgentsControl["start"]>;
   work?: PlansControl["work"] | undefined;
 }) {
-  const [agents, setAgents] = useState([RUNNING_AGENT, DONE_AGENT]);
+  const [agents, setAgents] = useState(listed);
   const agentIds = agents.map((agent) => agent.id);
   const sidePanel = useSidePanel(undefined, agentIds, workerCallIds(work?.turns));
   const page = createElement(DesktopPlans, {
@@ -1844,7 +1848,8 @@ function AgentsPage({
           busy: false,
           note: undefined,
           onPress: () => {
-            setAgents((was) => [...was, STARTED_AGENT]);
+            listed = [...listed, STARTED_AGENT];
+            setAgents(listed);
             sidePanel.onChoose({ agent: STARTED_AGENT.id });
           },
           ...start,
@@ -1853,6 +1858,7 @@ function AgentsPage({
           stops.push(agentId);
           return Promise.resolve();
         },
+        onRetryList: () => setAgents(listed),
       }),
       ...(work === undefined ? undefined : { work }),
     }),
@@ -1872,6 +1878,7 @@ function mountAgents(
 ): HTMLElement {
   installScrollIntoView();
   stops = [];
+  listed = [RUNNING_AGENT, DONE_AGENT];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -1991,6 +1998,19 @@ test("an agent's × or Delete closes its tab and nothing of the agent's: it is n
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
   assert.equal(chosenTab(page), "Claude Opus 5.5", "closing another tab leaves the chosen one");
   assert.deepEqual(stops, []);
+});
+
+test("the + reads the plan's agents again as it opens, so an agent no tab follows says where it stands now", () => {
+  const page = mountAgents();
+  press(page, '[aria-label="Close Claude Opus 5.5"]');
+
+  // The agent finishes with its tab closed, where no transcript follows it.
+  listed = [{ ...RUNNING_AGENT, status: CODING_AGENT_STATUS.COMPLETED }, DONE_AGENT];
+  act(() => addButton(page).click());
+  assert.equal(
+    addRow("Claude Opus 5.5").querySelector(".plan-compose-menu-detail")?.textContent,
+    "Done",
+  );
 });
 
 test("the + starts a coding agent as Start does, its tab opening chosen, and while Start cannot run the row says why and starts nothing", () => {

@@ -287,9 +287,17 @@ function addEntries(input: {
  * one, as the repository and model pickers drop, over the rows
  * `addEntries` lists. It hangs from the "+"'s left edge, or from its right
  * where the window ends before the menu would, measured before it is
- * painted.
+ * painted. Opening it asks `onOpen` to read what the rows say again, as the
+ * Start menu reads its models, so an agent whose tab is not shown, which
+ * nothing follows, says where it stands now rather than where it last did.
  */
-function AddTabButton({ entries }: { entries: readonly AddEntry[] }): React.JSX.Element {
+function AddTabButton({
+  entries,
+  onOpen,
+}: {
+  entries: readonly AddEntry[];
+  onOpen: () => void;
+}): React.JSX.Element {
   const [open, setOpen] = useState(false);
   const [side, setSide] = useState<MenuSide>(MENU_SIDE.START);
   const menuId = useId();
@@ -333,6 +341,7 @@ function AddTabButton({ entries }: { entries: readonly AddEntry[] }): React.JSX.
             }
             setSide(MENU_SIDE.START);
             setOpen(true);
+            onOpen();
           }}
         >
           <PlusIcon />
@@ -444,7 +453,7 @@ function PanelTabs({
           </button>
         ) : null}
       </TabStrip>
-      <AddTabButton entries={addEntries({ panel, agents, workers })} />
+      <AddTabButton entries={addEntries({ panel, agents, workers })} onOpen={agents.onRetryList} />
     </div>
   );
 }
