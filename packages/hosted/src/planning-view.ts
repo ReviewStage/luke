@@ -4,7 +4,7 @@ import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
 } from "./github-repositories-wire.js";
-import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "./plan-edit.js";
+import { PLAN_EDIT_REFUSAL, planEditRequestSchema, planEditValueSchema } from "./plan-edit.js";
 import {
   codeRefSchema,
   PLAN_FILE_REFUSAL,
@@ -471,10 +471,10 @@ export const planningSetRepositoryAnswerSchema = EffectSchema.Union([
 
 export type PlanningSetRepositoryAnswer = typeof planningSetRepositoryAnswerSchema.Type;
 
-/** The developer's edit of one field of a plan, as the window asks it saved: the plan, the field, the answer the editor opened on, and the developer's. */
+/** The developer's edit of one field of a plan, as the window asks it saved: the plan, and the edit as the service takes it. */
 export const planningEditParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
-  ...planEditRequestSchema.fields,
+  edit: planEditRequestSchema,
 });
 
 export type PlanningEditParams = typeof planningEditParamsSchema.Type;
@@ -495,9 +495,7 @@ export type PlanningEditFailure = (typeof EDIT_FAILURES)[number];
  */
 export const planningEditAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ saved: EffectSchema.Literal(true) }),
-  EffectSchema.Struct({
-    conflict: EffectSchema.Struct({ current: EffectSchema.NullOr(EffectSchema.String) }),
-  }),
+  EffectSchema.Struct({ conflict: EffectSchema.Struct({ current: planEditValueSchema }) }),
   EffectSchema.Struct({ failure: EffectSchema.Literals(EDIT_FAILURES) }),
 ]);
 

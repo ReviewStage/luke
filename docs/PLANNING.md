@@ -41,7 +41,8 @@ A reviewer can hold the build to these as easily as to the layout:
   no separate export or handoff screen. Earlier versions of the plan are
   read and restored from its History tab ("History" below), which is the one
   place a version is compared with another.
-- The assumption list is read-only: plain text, with nothing to click.
+- An assumption is edited like any other field, never confirmed or accepted:
+  there is no checkbox, no Accept, and nothing that moves one into a field.
 - The document is the record. What was said on the plan's calls can be read
   back in the side panel's Transcript tab, but nothing there is a second
   document: it is never copied, edited, or handed to an agent. The document
@@ -240,9 +241,9 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
   unanswered field as "Unanswered".
-- It is selectable, so a selection can be copied, and each text field opens
-  in an editor in place ("Editing" below). A rule, the open questions, and
-  the assumptions are not yet edited here.
+- It is selectable, so a selection can be copied, and each field opens in an
+  editor in place ("Editing" below): a text field, a rule, the open
+  questions, and the assumptions.
 - When a save lands, the document redraws in place and keeps its scroll
   position, the caret typing in what the notetaker changed; the developer's
   own edit lands at once.
@@ -515,13 +516,27 @@ body is the fixed template formatted from the fields, so every heading stays
 the formatter's and a field is the one unit the service stores, the notetaker
 writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
 
-- **Opening.** A click into a text field's words that selects nothing, or the
+- **Opening.** A click into a field's words that selects nothing, or the
   pencil that shows on hover and on focus (the keyboard's way in, named
-  "Edit Problem" and so on), opens the field's Markdown in a plain text box
-  in place of its answer, the heading still drawn above it. One field is open
-  at a time. An unanswered field opens empty, and leaving it empty keeps it
-  unanswered. A heading line typed into a field is escaped by the formatter,
-  so no edit can open a section of its own.
+  "Edit Problem", "Edit Rule 2", "Edit Assumptions", and so on), opens the
+  field in an editor in place of its answer, the heading still drawn above
+  it. One field is open at a time, and an editor stays where it opened while
+  it stands, so its inputs never move under the typing.
+  - A text field opens its Markdown in a plain text box. An unanswered field
+    opens empty, and leaving it empty keeps it unanswered. A heading line
+    typed into a field is escaped by the formatter, so no edit can open a
+    section of its own.
+  - The open questions and the assumptions open in one box, one item a line;
+    a line's list marker is dropped, a blank line is none, and an empty box
+    leaves the list empty.
+  - A rule opens as its statement and its examples, Given, When, and Then,
+    each its own input, with Add example, a remove per example, and Delete
+    rule. The rules' own heading carries a plus, "Add rule", which opens a
+    new rule that saves after the rules standing. A rule whose statement is
+    left blank is struck, and an example of blank clauses is dropped.
+  - Order and Data and migration, which the body leaves out while they hold
+    nothing, are offered after the body as buttons that open their editor
+    there.
 - **Saving.** The words save a second after the developer stops typing, and
   again as the editor closes, on Esc, ⌘↩, or focus leaving it; the editor
   waits for that save before it goes. Each save names the answer the words
@@ -531,8 +546,10 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
 - **During a call.** Luke may write the same field while the developer
   types. Where the field still holds what the words were written from, the
   edit replaces it. Where it does not, the developer's change is laid over
-  what it holds now as a patch, so a point Luke added elsewhere in the field
-  stays, and the editor's words stay. A change to a line Luke also changed is
+  what it holds now as a patch, line by line for a text field and item by
+  item for a list (a rule is saved as the rules whole, with that one
+  changed), so a point, a question, or a rule Luke added meanwhile stays, and
+  the editor's words stay. A change to a line Luke also changed is
   a conflict: nothing is saved, and under the box the editor says "Luke
   changed this section while you were editing." with **Keep mine**, which
   saves the developer's words over his, and **Use Luke's**, which closes the

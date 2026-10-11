@@ -458,9 +458,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        field: PLAN_FIELD.DECISIONS,
-        base: null,
-        value: "Invites expire.",
+        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
       });
 
       assert.deepEqual(answer, { saved: true });
@@ -484,9 +482,7 @@ it.effect(
 
       const answer = yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        field: PLAN_FIELD.PROBLEM,
-        base: null,
-        value: "- Mine.",
+        edit: { field: PLAN_FIELD.PROBLEM, base: null, value: "- Mine." },
       });
 
       assert.deepEqual(answer, { conflict: { current: "- Luke's words." } });
@@ -505,9 +501,7 @@ it.effect(
       yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
       yield* call(GATEWAY_METHOD.PLANNING_EDIT, {
         planId: INVITES,
-        field: PLAN_FIELD.DECISIONS,
-        base: null,
-        value: "Invites expire.",
+        edit: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
       });
       const edited = last()?.document;
 

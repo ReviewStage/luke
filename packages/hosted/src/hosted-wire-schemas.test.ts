@@ -105,6 +105,7 @@ const EFFECT_MODULE_SCHEMAS = {
   "plan-edit": {
     planEditRequestSchema: planEdit.planEditRequestSchema,
     planEditAnswerSchema: planEdit.planEditAnswerSchema,
+    planEditValueSchema: planEdit.planEditValueSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planEdit>,
   "plan-wire": {
     agentEditLineSchema: planWire.agentEditLineSchema,

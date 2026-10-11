@@ -868,7 +868,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           return yield* invalid("an edit names a plan, a field, its base, and its value");
         }
         if (!gate()) return carried<PlanningEditAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
-        const { planId, ...edit } = read.success;
+        const { planId, edit } = read.success;
         return yield* serial(
           Effect.gen(function* () {
             const edited = yield* Effect.provide(client.edit(planId, edit), FetchHttpClient.layer);

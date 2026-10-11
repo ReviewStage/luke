@@ -220,6 +220,40 @@
   outline: none;
 }
 
+/* A rule in its editor: the statement on its own line, each example's
+   Given, When, and Then side by side with its remove, then the buttons that
+   add an example or strike the rule. One-line inputs, so no box grows. */
+.plan-rule-fields {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.plan-rule-fields .plan-field-input {
+  min-height: 0;
+  padding: var(--space-6) var(--space-8);
+}
+
+.plan-rule-example {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.plan-rule-actions {
+  display: flex;
+  gap: var(--space-8);
+}
+
+/* The sections the body leaves out while they hold nothing, offered after
+   it as quiet buttons. */
+.plan-add-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-8);
+  margin-top: var(--space-16);
+}
+
 /* What stands under the box: a save under way, a failed save, or Luke's
    change and the choice it asks, in the muted meta weight. */
 .plan-field-note {

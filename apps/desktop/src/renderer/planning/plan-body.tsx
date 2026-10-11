@@ -1,19 +1,25 @@
+import { PLAN_FIELD, PLAN_FIELD_HEADING, planTextFieldValue } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanAssumption,
+  type PlanFields,
   type PlanLastEdit,
 } from "@sidecar/hosted/plan-wire";
+import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
+  EDITOR_PLACE,
   EditableUnit,
+  type FieldEditing,
   type PlanEditDoor,
   PlanFieldEditor,
+  targetLabel,
   useFieldEditing,
 } from "./plan-field-editor";
-import { textFieldOfUnit } from "./plan-field-editor-model";
+import { type EditTarget, editTargetOfUnit, sameTarget } from "./plan-field-editor-model";
 import {
   type ChaseState,
   chaseBehind,
@@ -242,12 +248,144 @@ function AssumptionRow({
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
 
+/** The text fields the body draws only once they hold something, which the document offers to add while they do not. */
+const OPTIONAL_FIELDS = [PLAN_FIELD.ORDER, PLAN_FIELD.DATA_AND_MIGRATION] as const;
+
+/** The heading an editor draws above its inputs: a rule's by its number, since its statement is being typed; the unit's own otherwise. */
+function editorHeading(target: EditTarget, words: string, ruleCount: number): string {
+  if ("rule" in target && target.rule < ruleCount) return `### Rule ${target.rule + 1}`;
+  return words.split("\n", 1)[0] ?? "";
+}
+
+/**
+ * One unit of the body: drawn as the chase has it, the editor where it is
+ * the one the editor opened from, nothing where it is the field an editor
+ * holds elsewhere, and the way into its editor where it can be edited.
+ */
+function BodyUnit({
+  view,
+  editable,
+  editing,
+  ruleCount,
+}: {
+  view: UnitView;
+  editable: boolean;
+  editing: FieldEditing;
+  ruleCount: number;
+}): React.JSX.Element | null {
+  const drawn = <MarkdownMessage words={view.words} className={unitClass(view)} edit={view.edit} />;
+  const target = editable ? editTargetOfUnit(view.words, ruleCount) : undefined;
+  if (target === undefined) return drawn;
+  const { editor, host } = editing;
+  if (editor !== undefined && host === view.id) {
+    const heading = editorHeading(editor.target, view.words, ruleCount);
+    return (
+      <PlanFieldEditor heading={heading} editor={editor} ruleCount={ruleCount} editing={editing} />
+    );
+  }
+  if (editor !== undefined && sameTarget(editor.target, target)) return null;
+  const adds = "rule" in target && target.rule >= ruleCount;
+  return (
+    <EditableUnit
+      target={target}
+      host={view.id}
+      label={targetLabel(target, ruleCount)}
+      adds={adds}
+      editing={editing}
+    >
+      {drawn}
+    </EditableUnit>
+  );
+}
+
+/** The sections the body does not draw while they hold nothing, each offered to add. */
+function AddSections({
+  fields,
+  editing,
+}: {
+  fields: PlanFields;
+  editing: FieldEditing;
+}): React.JSX.Element | null {
+  const absent = OPTIONAL_FIELDS.filter(
+    (field) => planTextFieldValue(fields, field) === null && editing.editor?.target.field !== field,
+  );
+  if (absent.length === 0) return null;
+  return (
+    <div className="plan-add-sections">
+      {absent.map((field) => (
+        <button
+          key={field}
+          type="button"
+          className="toolbar-button"
+          onClick={() => editing.open({ field }, EDITOR_PLACE.END)}
+        >
+          <PlusIcon />
+          {PLAN_FIELD_HEADING[field]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The assumptions' section, standing even while the list is empty: the
+ * list, the way into its editor where it can be edited, or the editor.
+ */
+function PlanAssumptions({
+  assumptions,
+  fresh,
+  editable,
+  editing,
+}: {
+  assumptions: readonly PlanAssumption[];
+  fresh: ReadonlySet<number>;
+  editable: boolean;
+  editing: FieldEditing;
+}): React.JSX.Element {
+  const list =
+    assumptions.length === 0 ? (
+      <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
+    ) : (
+      <ul>
+        {assumptions.map((assumption, index) => (
+          // An assumption has no id of its own: the list is replaced whole on every save.
+          // oxlint-disable-next-line react/no-array-index-key -- the saved list's order is its identity.
+          <AssumptionRow key={index} assumption={assumption} fresh={fresh.has(index)} />
+        ))}
+      </ul>
+    );
+  const target = { field: PLAN_FIELD.ASSUMPTIONS } as const;
+  const { editor, host } = editing;
+  const body =
+    editor !== undefined && host === EDITOR_PLACE.ASSUMPTIONS ? (
+      <PlanFieldEditor heading={undefined} editor={editor} ruleCount={0} editing={editing} />
+    ) : editable ? (
+      <EditableUnit
+        target={target}
+        host={EDITOR_PLACE.ASSUMPTIONS}
+        label={PLAN_FIELD_HEADING.assumptions}
+        adds={false}
+        editing={editing}
+      >
+        {list}
+      </EditableUnit>
+    ) : (
+      list
+    );
+  return (
+    <section className="plan-assumptions" aria-label="Assumptions">
+      <h2 className="plan-assumptions-heading">Assumptions</h2>
+      {body}
+    </section>
+  );
+}
+
 /**
  * The plan's body and its assumptions, the assumptions' section standing even
  * while the list is empty. `live` is the plan's call in progress, which keeps
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
  * plan's History tab from the "Edited by" line. With `onEdit`, and fields
- * from a service that sends them, each text field opens in an editor in place.
+ * from a service that sends them, each field opens in an editor in place.
  */
 export function PlanBody({
   plan,
@@ -261,8 +399,14 @@ export function PlanBody({
   onEdit?: PlanEditDoor;
 }): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
-  const editable = onEdit !== undefined && plan.fields !== undefined;
-  const editing = useFieldEditing(plan.id, editable ? plan.fields : undefined, onEdit ?? NO_EDIT);
+  const { fields } = plan;
+  const content =
+    onEdit === undefined || fields === undefined
+      ? undefined
+      : { fields, assumptions: plan.document.assumptions };
+  const editable = content !== undefined;
+  const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
+  const ruleCount = fields?.rules?.length ?? 0;
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */
   const scrolledAway = useRef(false);
@@ -304,52 +448,31 @@ export function PlanBody({
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <div className="plan-body">
-        {views.map((view) => {
-          const field = editable ? textFieldOfUnit(view.words) : undefined;
-          const drawn = (
-            <MarkdownMessage
-              key={view.id}
-              words={view.words}
-              className={unitClass(view)}
-              edit={view.edit}
-            />
-          );
-          if (field === undefined) return drawn;
-          if (editing.editor?.field === field) {
-            return (
-              <PlanFieldEditor
-                key={view.id}
-                words={view.words}
-                editor={editing.editor}
-                editing={editing}
-              />
-            );
-          }
-          return (
-            <EditableUnit key={view.id} field={field} editing={editing}>
-              {drawn}
-            </EditableUnit>
-          );
-        })}
+        {views.map((view) => (
+          <BodyUnit
+            key={view.id}
+            view={view}
+            editable={editable}
+            editing={editing}
+            ruleCount={ruleCount}
+          />
+        ))}
+        {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
+          <PlanFieldEditor
+            heading={`## ${targetLabel(editing.editor.target, ruleCount)}`}
+            editor={editing.editor}
+            ruleCount={ruleCount}
+            editing={editing}
+          />
+        ) : null}
+        {content === undefined ? null : <AddSections fields={content.fields} editing={editing} />}
       </div>
-      <section className="plan-assumptions" aria-label="Assumptions">
-        <h2 className="plan-assumptions-heading">Assumptions</h2>
-        {assumptions.length === 0 ? (
-          <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
-        ) : (
-          <ul>
-            {assumptions.map((assumption, index) => (
-              // An assumption has no id of its own: the list is replaced whole on every save.
-              // oxlint-disable-next-line react/no-array-index-key -- the saved list's order is its identity.
-              <AssumptionRow
-                key={index}
-                assumption={assumption}
-                fresh={freshAssumptions.has(index)}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
+      <PlanAssumptions
+        assumptions={assumptions}
+        fresh={freshAssumptions}
+        editable={editable}
+        editing={editing}
+      />
     </div>
   );
 }

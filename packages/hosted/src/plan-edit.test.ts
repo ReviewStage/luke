@@ -114,3 +114,92 @@ test("a heading the developer types into a field stays inside it once formatted"
   assert.equal(body.split("\n").filter((line) => line === "## Scope").length, 1);
   assert.ok(body.includes("\\## Scope\nNot a section."));
 });
+
+const RULE_ONE = { statement: "Any member may invite by email.", examples: null };
+const RULE_TWO = { statement: "Invites expire after 7 days.", examples: null };
+
+/** A plan holding two rules, two questions, and an assumption, as the editor opened on them. */
+const LISTED: PlanContent = {
+  fields: {
+    ...EMPTY_PLAN_CONTENT.fields,
+    rules: [RULE_ONE, RULE_TWO],
+    openQuestions: ["Who can withdraw an invite?", "How long is a link valid?"],
+  },
+  assumptions: [{ text: "Invites reuse memberships." }],
+};
+
+function appliedContent(outcome: PlanEditOutcome): PlanContent {
+  if (!("applied" in outcome)) return assert.fail("expected the edit to apply");
+  return outcome.applied;
+}
+
+test("an edit of one rule lands over a rule Luke added meanwhile, item by item", () => {
+  const added = { statement: "An owner can revoke any invite.", examples: null };
+  const now = { ...LISTED, fields: { ...LISTED.fields, rules: [RULE_ONE, RULE_TWO, added] } };
+  const edited = { ...RULE_ONE, statement: "Any member may invite by email or link." };
+
+  const outcome = applyDeveloperEdit(now, {
+    field: PLAN_FIELD.RULES,
+    base: [RULE_ONE, RULE_TWO],
+    value: [edited, RULE_TWO],
+  });
+
+  assert.deepEqual(appliedContent(outcome).fields.rules, [edited, RULE_TWO, added]);
+});
+
+test("an edit of a rule Luke changed meanwhile conflicts with the rules as they stand", () => {
+  const lukes = { ...RULE_ONE, statement: "Any admin may invite by email." };
+  const now = { ...LISTED, fields: { ...LISTED.fields, rules: [lukes, RULE_TWO] } };
+
+  const outcome = applyDeveloperEdit(now, {
+    field: PLAN_FIELD.RULES,
+    base: [RULE_ONE, RULE_TWO],
+    value: [{ ...RULE_ONE, statement: "Any owner may invite by email." }, RULE_TWO],
+  });
+
+  assert.deepEqual(outcome, { conflict: { current: [lukes, RULE_TWO] } });
+});
+
+test("striking every rule leaves the rules unanswered", () => {
+  const outcome = applyDeveloperEdit(LISTED, {
+    field: PLAN_FIELD.RULES,
+    base: [RULE_ONE, RULE_TWO],
+    value: null,
+  });
+
+  assert.equal(appliedContent(outcome).fields.rules, null);
+});
+
+test("an open question struck while Luke added another keeps his and drops the struck one", () => {
+  const now = {
+    ...LISTED,
+    fields: {
+      ...LISTED.fields,
+      openQuestions: [...LISTED.fields.openQuestions, "Can a guest invite?"],
+    },
+  };
+
+  const outcome = applyDeveloperEdit(now, {
+    field: PLAN_FIELD.OPEN_QUESTIONS,
+    base: LISTED.fields.openQuestions,
+    value: ["How long is a link valid?"],
+  });
+
+  assert.deepEqual(appliedContent(outcome).fields.openQuestions, [
+    "How long is a link valid?",
+    "Can a guest invite?",
+  ]);
+});
+
+test("the assumptions are edited like any other list, with no confirming of them", () => {
+  const outcome = applyDeveloperEdit(LISTED, {
+    field: PLAN_FIELD.ASSUMPTIONS,
+    base: LISTED.assumptions,
+    value: [{ text: "Invites reuse memberships, never accounts." }],
+  });
+
+  assert.deepEqual(appliedContent(outcome).assumptions, [
+    { text: "Invites reuse memberships, never accounts." },
+  ]);
+  assert.deepEqual(appliedContent(outcome).fields, LISTED.fields);
+});

@@ -170,6 +170,37 @@ it.layer(testSqlClient)("the developer's edits", (it) => {
       }),
   );
 
+  it.effect(
+    "an edit of the rules and of the assumptions saves each list whole, as the developer's",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const rule = { statement: "Any member may invite by email.", examples: null };
+
+        savedPlan(
+          yield* saveDeveloperEdit(
+            { userId, planId },
+            { field: PLAN_FIELD.RULES, base: null, value: [rule] },
+          ),
+        );
+        const plan = savedPlan(
+          yield* saveDeveloperEdit(
+            { userId, planId },
+            {
+              field: PLAN_FIELD.ASSUMPTIONS,
+              base: [],
+              value: [{ text: "Invites reuse memberships." }],
+            },
+          ),
+        );
+
+        assert.deepEqual(plan.fields?.rules, [rule]);
+        assert.ok(plan.document.body.includes("### Rule 1: Any member may invite by email."));
+        assert.deepEqual(plan.document.assumptions, [{ text: "Invites reuse memberships." }]);
+        assert.equal(plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
+      }),
+  );
+
   it.effect("the developer's edits a few minutes apart are one revision of theirs", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
