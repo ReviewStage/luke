@@ -295,7 +295,7 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
     <button
       ref={row}
       type="button"
-      className="ai-trigger m-0 self-center text-[11.5px] text-muted-foreground"
+      className="ai-trigger m-0 text-[11.5px] text-muted-foreground"
       disabled={read === EARLIER_READ.READING}
       onClick={() => load.current()}
     >
