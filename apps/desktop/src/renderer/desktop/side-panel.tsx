@@ -148,15 +148,6 @@ const ADD_SECTION = {
   SUBAGENTS: "Subagents",
 } as const;
 
-/** The "+" menu's row that starts a coding agent, which no tab's key spells. */
-const NEW_AGENT_ROW = "new-coding-agent";
-
-/** What the row that starts an agent says while a Start is out, and while one cannot run for no reason given. */
-const NEW_AGENT_WORD = {
-  STARTING: "Starting…",
-  UNAVAILABLE: "Unavailable",
-} as const;
-
 /** Where a coding agent stands, as its row in the "+" menu says it. */
 const AGENT_STATUS_WORD = {
   [CODING_AGENT_STATUS.STARTING]: "Starting",
@@ -222,11 +213,9 @@ interface AddEntry {
 }
 
 /**
- * The "+" menu's rows: the fixed kinds; then, under Coding agents, the row
- * that starts one, as the toolbar's Start does and with what keeps Start
- * from running said in its place, and each of the plan's agents in the
- * order started; then, under Subagents, each subagent the plan's work
- * holds. An agent's and a subagent's row wear the glyph its tab wears and
+ * The "+" menu's rows: the fixed kinds; then, under Coding agents, each of
+ * the plan's agents in the order started; then, under Subagents, each
+ * subagent the plan's work holds. An agent's and a subagent's row wear the glyph its tab wears and
  * say where it stands, shimmering while it runs, and one whose tab is open
  * says so and is chosen again rather than dimmed.
  */
@@ -236,22 +225,10 @@ function addEntries(input: {
   workers: readonly WorkWorkerBlock[];
 }): AddEntry[] {
   const { panel, agents, workers } = input;
-  const { start } = agents;
   const kinds = SIDE_PANEL_TABS.map((kind) => ({
     row: kindRow(kind, panel.tabs),
     onPick: () => panel.onChoose(kind),
   }));
-  const startWord = start.available ? undefined : (start.reason ?? NEW_AGENT_WORD.UNAVAILABLE);
-  const newAgent: AddEntry = {
-    row: {
-      id: NEW_AGENT_ROW,
-      label: "New coding agent",
-      icon: <PlusIcon />,
-      section: ADD_SECTION.AGENTS,
-      disabled: start.busy ? NEW_AGENT_WORD.STARTING : startWord,
-    },
-    onPick: () => start.onPress(),
-  };
   const agentRows = (agents.agents ?? []).map((agent) => ({
     row: {
       id: agent.id,
@@ -279,7 +256,7 @@ function addEntries(input: {
       onPick: () => panel.onChoose({ subagent: call.id }),
     };
   });
-  return [...kinds, newAgent, ...agentRows, ...subagentRows];
+  return [...kinds, ...agentRows, ...subagentRows];
 }
 
 /**
@@ -290,6 +267,8 @@ function addEntries(input: {
  * painted. Opening it asks `onOpen` to read what the rows say again, as the
  * Start menu reads its models, so an agent whose tab is not shown, which
  * nothing follows, says where it stands now rather than where it last did.
+ * With no row to pick, every kind open and no agent or subagent to offer,
+ * it is dimmed and says so.
  */
 function AddTabButton({
   entries,
@@ -303,6 +282,7 @@ function AddTabButton({
   const menuId = useId();
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
+  const full = entries.every((entry) => entry.row.disabled !== undefined);
 
   useLayoutEffect(() => {
     const menu = root.current?.querySelector(".searchable-menu") ?? null;
@@ -325,7 +305,7 @@ function AddTabButton({
 
   return (
     <div ref={root} className="tab-add-anchor" data-side={side}>
-      <Tooltip label="Open a tab">
+      <Tooltip label={full ? "Every tab is open" : "Open a tab"}>
         <button
           ref={opener}
           type="button"
@@ -334,11 +314,13 @@ function AddTabButton({
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
+          aria-disabled={full}
           onClick={() => {
             if (open) {
               close();
               return;
             }
+            if (full) return;
             setSide(MENU_SIDE.START);
             setOpen(true);
             onOpen();
