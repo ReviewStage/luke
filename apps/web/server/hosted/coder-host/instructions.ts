@@ -80,7 +80,7 @@ The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current defa
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included, and answers when it is done; several calls in one step run at once. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only, so it never edits, commits, or pushes. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list.${words.updating}
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included, and answers when it is done; several calls in one step run at once. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only, so it never edits, commits, or pushes. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its task says, and the developer reads the task too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${words.updating}
 
 ## What your messages are
 

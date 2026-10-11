@@ -9,6 +9,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
+import { cardTitle } from "./tool-call-model";
 import {
   CALL_KIND,
   CALL_WORDS,
@@ -63,7 +64,7 @@ export type WorkBlock =
   | {
       kind: typeof WORK_BLOCK.WORKER;
       call: WorkCallRow;
-      /** The whole message the subagent was handed, which its line cuts to its job; the job where the input carries none. */
+      /** The whole message the subagent was handed, which its line cuts to its job; the subject where the input carries none. */
       task: string;
       /** The subagent's own session as rows, drawn the way a turn is; absent before any of it was read. */
       session?: WorkSessionRow;
@@ -128,9 +129,10 @@ const WORK_READING: RowReading<WorkBlock> = {
     (block.kind === WORK_BLOCK.CALL || block.kind === WORK_BLOCK.WORKER) && block.call.running,
 };
 
-/** What a subagent is named by, on its line and on its tab: its job, or what was asked of it where no job was said. */
+/** What a subagent is named by, on its line, its task card, and its tab: its job, the first line of its task as plain words, or what was asked of it where no job was said. */
 export function workerJob(call: WorkCallRow): string {
-  return call.subject ?? CALL_WORDS[call.kind].verb;
+  const job = cardTitle(call.subject ?? "");
+  return job === "" ? CALL_WORDS[call.kind].verb : job;
 }
 
 /**
@@ -222,7 +224,7 @@ function rowsOf(
     return {
       kind: WORK_BLOCK.WORKER,
       call,
-      task: inputField(part.input, INPUT_FIELD.MESSAGE) ?? workerJob(call),
+      task: inputField(part.input, INPUT_FIELD.MESSAGE) ?? call.subject ?? workerJob(call),
       ...(part.session === undefined
         ? undefined
         : {
