@@ -364,7 +364,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
   act(() => {
     draft = tab.control().onNewDraft();
   });
-  assert.equal(tab.control().draft, draft);
+  assert.equal(tab.control().draft?.id, draft);
   let again = "";
   act(() => {
     again = tab.control().onNewDraft();
@@ -372,20 +372,27 @@ test("a draft asks nothing of the service, one per plan, until its first message
   assert.equal(again, draft, "the plan's one draft is answered again");
   assert.deepEqual(startPayloads(tab.asked), [], "a draft starts nothing");
 
-  // Another plan holds no draft of this one's, and this plan's is there on coming back.
-  await tab.stand({ planId: OTHER_PLAN });
-  assert.equal(tab.control().draft, undefined);
-  await tab.stand({ planId: PLAN });
-  assert.equal(tab.control().draft, draft);
-
+  // The words and the choice are the draft's, held while another plan opens a draft of its own.
   const task = "Rename the invite email's subject.";
   const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  act(() => tab.control().onDraftChange({ task }));
+  act(() => tab.control().onDraftChange({ choice }));
+  await tab.stand({ planId: OTHER_PLAN });
+  assert.equal(tab.control().draft, undefined);
+  let other = "";
+  act(() => {
+    other = tab.control().onNewDraft();
+  });
+  assert.notEqual(other, draft);
+  await tab.stand({ planId: PLAN });
+  assert.deepEqual(tab.control().draft, { id: draft, task, choice });
+
   let failed: string | undefined;
   await act(async () => {
     failed = await tab.control().startTask(draft, task, choice);
   });
   assert.equal(failed, "The agent could not be started. Try again.");
-  assert.equal(tab.control().draft, draft, "a send that did not start keeps the draft");
+  assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
   await act(async () => {
@@ -398,6 +405,8 @@ test("a draft asks nothing of the service, one per plan, until its first message
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
+  await tab.stand({ planId: OTHER_PLAN });
+  assert.equal(tab.control().draft?.id, other, "another plan's draft stands");
   assert.equal(tab.control().start.note, undefined, "the toolbar's Start says nothing of it");
 });
 

@@ -2282,7 +2282,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });
-  const sidePanel = useSidePanel(undefined, agents.agentIds, [], agents.draft);
+  const sidePanel = useSidePanel(undefined, agents.agentIds, [], agents.draft?.id);
   panelRef.current = sidePanel;
   const page = createElement(DesktopPlans, {
     plans: plansControl({
@@ -2373,6 +2373,11 @@ test("New coding agent opens a draft tab with nothing said and the box focused, 
     setValue?.call(box, task);
     box.dispatchEvent(new Event("input", { bubbles: true }));
   });
+  // The words are the draft's, so they wait while another tab is shown.
+  act(() => tabNamed(page, "Board").click());
+  act(() => tabNamed(page, "New agent").click());
+  await settled();
+  assert.equal(draftBox(page).value, task);
   // The first send is not answered: the words stay in the box with why, and Retry asks again under the draft's key.
   draftAnswers.set(ACT_KIND.CODING_AGENTS_START, [
     { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },

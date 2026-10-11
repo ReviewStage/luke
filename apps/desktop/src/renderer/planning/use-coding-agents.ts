@@ -44,8 +44,10 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * nothing behind on the service. Its first message starts the agent with
  * those words as its task, in the plan's place, under the draft's own key,
  * so a send asked again after the service did not answer is the same
- * agent; the agent's tab then opens as a Start's does. The open plan has
- * at most one draft, kept while the developer visits another plan.
+ * agent; the agent's tab then opens as a Start's does. Each plan has at
+ * most one draft, held with the words written in it and the choice made on
+ * its chip, so a draft keeps them while its tab is away and while the
+ * developer visits another plan.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
@@ -66,10 +68,12 @@ export interface CodingAgentsControl {
   readDefault: () => Promise<CodingAgentDefaultAnswer>;
   /** Keeps a choice as the account's default, which Start runs on; a write that did not take is said beside Start. */
   writeDefault: (choice: ModelChoice) => Promise<CodingAgentDefaultAnswer>;
-  /** The open plan's draft agent, by the key its first message will start it under; nothing while it has none. */
-  draft: string | undefined;
+  /** The open plan's draft agent; nothing while it has none. */
+  draft: AgentDraft | undefined;
   /** Opens a draft agent on the open plan, or answers the one it has, by its key. */
   onNewDraft: () => string;
+  /** Writes the open plan's draft: the words in its box, or the choice on its chip. */
+  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice">>) => void;
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
@@ -109,6 +113,13 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
 }
 
+/** An agent not yet started: the key its first message starts it under, the words written so far, and the choice made on its chip, none while it runs on the account's default. */
+export interface AgentDraft {
+  readonly id: string;
+  readonly task: string;
+  readonly choice: ModelChoice | undefined;
+}
+
 /** A Start on its way or asked again: the plan, the key the press minted, and the choice it was for. */
 interface PendingStart {
   planId: string;
@@ -141,7 +152,9 @@ export function useCodingAgents(input: {
   }>({ planId: undefined, agents: undefined, failed: false });
   const [models, setModels] = useState<readonly CatalogModel[] | undefined>(undefined);
   const [starting, setStarting] = useState(false);
-  const [draft, setDraft] = useState<{ planId: string; id: string } | undefined>(undefined);
+  // Each plan's draft, by the plan's id.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, AgentDraft>>(new Map());
+  const draft = planId === undefined ? undefined : drafts.get(planId);
   const [note, setNote] = useState<{ planId: string; note: string } | undefined>(undefined);
   const [reads, setReads] = useState(0);
   const pending = useRef<PendingStart | undefined>(undefined);
@@ -271,16 +284,29 @@ export function useCodingAgents(input: {
     });
   };
 
+  /** The drafts with the plan's set to `next`, or let go where it is nothing. */
+  const withDraft = (on: string, next: AgentDraft | undefined) =>
+    setDrafts((was) => {
+      const held = new Map(was);
+      if (next === undefined) held.delete(on);
+      else held.set(on, next);
+      return held;
+    });
+
   const onNewDraft = (): string => {
-    if (draft !== undefined && draft.planId === planId) return draft.id;
+    if (draft !== undefined) return draft.id;
     const id = mintKey();
-    if (planId !== undefined) setDraft({ planId, id });
+    if (planId !== undefined) withDraft(planId, { id, task: "", choice: undefined });
     return id;
   };
 
-  const onDiscardDraft = useCallback((draftId: string) => {
-    setDraft((was) => (was?.id === draftId ? undefined : was));
-  }, []);
+  const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice">>) => {
+    if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
+  };
+
+  const onDiscardDraft = (draftId: string) => {
+    for (const [on, held] of drafts) if (held.id === draftId) withDraft(on, undefined);
+  };
 
   // Note that the draft's key is the Start's every time it is sent, because
   // nothing a refused send asked was made, and a send whose answer was lost
@@ -297,7 +323,7 @@ export function useCodingAgents(input: {
       ...(choice === undefined ? undefined : { model: choice.model, effort: choice.effort }),
     });
     if ("failure" in answer) return startFailureNote(answer.failure);
-    onDiscardDraft(draftId);
+    withDraft(planId, undefined);
     landed(planId, answer.agent);
     return undefined;
   };
@@ -377,8 +403,9 @@ export function useCodingAgents(input: {
   return {
     agents,
     agentIds: agents?.map((agent) => agent.id),
-    draft: draft !== undefined && draft.planId === planId ? draft.id : undefined,
+    draft,
     onNewDraft,
+    onDraftChange,
     onDiscardDraft,
     startTask,
     listFailed,

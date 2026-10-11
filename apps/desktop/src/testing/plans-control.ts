@@ -22,6 +22,7 @@ export function codingAgentsControl(
     agentIds: [],
     draft: undefined,
     onNewDraft: () => "draft",
+    onDraftChange: ignore,
     onDiscardDraft: ignore,
     startTask: () => Promise.resolve(undefined),
     listFailed: false,

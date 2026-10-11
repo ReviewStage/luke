@@ -402,7 +402,7 @@ function PanelTabs({
   workers: readonly WorkWorkerBlock[];
 }): React.JSX.Element {
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
-  const { draft } = agents;
+  const draft = agents.draft?.id;
   const noted = (tab: SidePanelTab) => unread.some((each) => sameTab(each, tab));
   return (
     <div className="side-panel-tabs">
@@ -534,8 +534,8 @@ function TabContent({
   if (isDraftTab(tab)) {
     // As an agent's: the tab stands for a draft the plan no longer holds
     // only until the panel moves back to the board, a render away.
-    return agents.draft === tab.draft ? (
-      <DraftAgentTab key={tab.draft} draftId={tab.draft} control={agents} />
+    return agents.draft?.id === tab.draft ? (
+      <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} />
     ) : (
       <p className="side-panel-empty">Reading the agent…</p>
     );

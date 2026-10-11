@@ -1,10 +1,9 @@
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
 import { AgentComposer } from "./agent-composer";
 import type { AgentComposerControl } from "./use-agent-composer";
-import type { CodingAgentsControl } from "./use-coding-agents";
+import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
@@ -16,7 +15,9 @@ import type { CodingAgentsControl } from "./use-coding-agents";
  * service until the first send, which starts the agent with those words as
  * its task, never the plan, on the model the chip names where the developer
  * changed it and else on the account's default, in the plan's repository;
- * the tab then gives way to the agent's own. A send that did not start it
+ * the tab then gives way to the agent's own. The words and the choice are
+ * the draft's, held by its owner, so they wait while the tab is away. A
+ * send that did not start it
  * leaves the words in the box with why under it and Retry, which asks again
  * under the draft's own key. Closing the tab lets the draft go, and since
  * nothing was started, nothing is left behind.
@@ -36,18 +37,16 @@ const NOTHING_TO_STOP = () => Promise.resolve();
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
 
 export function DraftAgentTab({
-  draftId,
+  draft,
   control,
 }: {
-  draftId: string;
+  draft: AgentDraft;
   control: CodingAgentsControl;
 }): React.JSX.Element {
-  const [words, setWords] = useState("");
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState<string | undefined>(undefined);
-  // The choice the chip names: the developer's where they made one, else the account's default as read.
-  const [picked, setPicked] = useState<ModelChoice | undefined>(undefined);
-  const [fallback, setFallback] = useState<ModelChoice | undefined>(undefined);
+  // The account's default as read, which the chip names until the developer makes a choice of their own.
+  const [fallback, setFallback] = useState<AgentDraft["choice"]>(undefined);
   // Note that the control is read through a ref, because the panel hands a
   // new one on every render and an answer lands on whichever is current.
   const latest = useRef(control);
@@ -64,18 +63,18 @@ export function DraftAgentTab({
   }, []);
 
   const send = () => {
-    const task = words.trim();
+    const task = draft.task.trim();
     if (task === "" || sending) return;
     setSending(true);
     setNote(undefined);
-    latest.current.startTask(draftId, task, picked).then((failed) => {
+    latest.current.startTask(draft.id, task, draft.choice).then((failed) => {
       setSending(false);
       setNote(failed);
     });
   };
   const composer: AgentComposerControl = {
-    draft: words,
-    setDraft: setWords,
+    draft: draft.task,
+    setDraft: (task) => control.onDraftChange({ task }),
     sending: sending || control.start.busy,
     note,
     closed: undefined,
@@ -83,7 +82,7 @@ export function DraftAgentTab({
     retry: send,
     sent: [],
   };
-  const choice = picked ?? fallback;
+  const choice = draft.choice ?? fallback;
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
@@ -94,7 +93,15 @@ export function DraftAgentTab({
         <AgentComposer
           status={CODING_AGENT_STATUS.STARTING}
           composer={composer}
-          model={choice === undefined ? undefined : { choice, note: undefined, choose: setPicked }}
+          model={
+            choice === undefined
+              ? undefined
+              : {
+                  choice,
+                  note: undefined,
+                  choose: (next) => control.onDraftChange({ choice: next }),
+                }
+          }
           models={control.models}
           readModels={control.readModels}
           published={undefined}

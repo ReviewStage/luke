@@ -231,7 +231,7 @@ export function usePlansTab(input: {
     fixtureSidePanel(input.run),
     agents.agentIds,
     workers,
-    agents.draft,
+    agents.draft?.id,
   );
   panelRef.current = sidePanel;
   // Main hears which agent's tab is on screen, and none while the tab is
