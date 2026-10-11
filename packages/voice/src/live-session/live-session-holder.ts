@@ -9,6 +9,7 @@ import {
 import {
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanCallEndingFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -340,6 +341,7 @@ export class LiveSessionHolder {
       opened.onPlanActivity?.((activity) => this.#activity(session, activity));
       opened.onPlanCode?.((code) => this.#code(session, code));
       opened.onPlanWork?.((work) => this.#work(session, work));
+      opened.onPlanCallEnding?.((ending) => this.#ending(session, ending));
       yield* Effect.forkIn(this.#read(session), this.#sessions);
       this.#held = session;
       this.#options.onSessionCreated?.();
@@ -566,6 +568,16 @@ export class LiveSessionHolder {
   #work(session: HeldSession, work: PlanWorkFrame): void {
     if (session.ended || work.planId !== session.planId) return;
     this.#options.onPlanWork?.(work);
+  }
+
+  /**
+   * Luke ending the call about the plan the session is bound to, told to the
+   * peer while the session stands. The peer decides when, once his goodbye
+   * has played, and hangs up through its own hang-up, so nothing ends here.
+   */
+  #ending(session: HeldSession, ending: PlanCallEndingFrame): void {
+    if (session.ended || ending.planId !== session.planId) return;
+    this.#options.emit({ sessionId: session.sessionId, phase: LIVE_SESSION_PHASE.ENDING });
   }
 
   #onClosed(session: HeldSession, closed: LiveSessionClosed): Effect.Effect<void> {

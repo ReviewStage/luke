@@ -25,6 +25,12 @@ import type { VoiceView } from "#shared/messages/voice-view";
 export const TRANSCRIPT_EMPTY_LINE =
   "Nothing said yet — start a call and the transcript appears here.";
 
+/** The quiet line a call that has ended closes with, and the one for a call Luke ended himself. */
+export const CALL_ENDED_LINE = {
+  ENDED: "Call ended",
+  LUKE_ENDED: "Luke ended the call",
+} as const;
+
 /** Which state the tab draws. */
 export const TRANSCRIPT_REGION = {
   READING: "reading",
@@ -41,7 +47,15 @@ export interface TranscriptCallRow {
   /** Epoch milliseconds the call started; for the call standing, when this window first heard it. */
   readonly startedAt: number;
   readonly live: boolean;
+  /** Whether Luke ended the call himself, as far as this window saw it end. */
+  readonly lukeEnded: boolean;
   readonly messages: readonly UIMessage[];
+}
+
+/** The line a call closes with: none while it stands, and who ended it where this window saw Luke do it. */
+export function callEndedLine(call: TranscriptCallRow): string | undefined {
+  if (call.live) return undefined;
+  return call.lukeEnded ? CALL_ENDED_LINE.LUKE_ENDED : CALL_ENDED_LINE.ENDED;
 }
 
 export type TranscriptRegion =
@@ -173,6 +187,7 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
     key: heard.transcript.voiceSessionId ?? first.id,
     startedAt: heard.heardAt,
     live: heard.live,
+    lukeEnded: false,
     messages,
   };
 }
@@ -188,6 +203,8 @@ function heardRow(heard: HeardCall): TranscriptCallRow | undefined {
 export function transcriptRegion(input: {
   transcript: PlanningView["transcript"];
   heard: readonly HeardCall[];
+  /** The store's id for the session of the last call Luke ended himself, which closes with a line saying so. */
+  lukeEndedCall?: string | undefined;
 }): TranscriptRegion {
   const stored = input.transcript?.transcript;
   const heard = new Map<string, TranscriptCallRow>();
@@ -211,13 +228,13 @@ export function transcriptRegion(input: {
     if (ahead !== undefined && behind) return [{ ...ahead, startedAt: call.startedAt }];
     return messages.length === 0
       ? []
-      : [{ key: call.id, startedAt: call.startedAt, live: false, messages }];
+      : [{ key: call.id, startedAt: call.startedAt, live: false, lukeEnded: false, messages }];
   });
   calls.push(...unrecorded);
   if (calls.length > 0) {
     return {
       kind: TRANSCRIPT_REGION.READY,
-      calls,
+      calls: calls.map((call) => ({ ...call, lukeEnded: call.key === input.lukeEndedCall })),
       earlierOmitted: stored?.earlierOmitted ?? false,
     };
   }

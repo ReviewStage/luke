@@ -8,10 +8,12 @@ import {
   isHostedVoiceServiceAddress,
   type LiveSessionCreated,
   type PlanActivityFrame,
+  type PlanCallEndingFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
   planActivityFrameFromWire,
+  planCallEndingFrameFromWire,
   planCodeFrameFromWire,
   planDraftFrameFromWire,
   planWorkFrameFromWire,
@@ -160,6 +162,8 @@ export interface LiveSessionOpened extends LiveSessionCreated {
   onPlanCode?(listener: (code: PlanCodeFrame) => void): void;
   /** Tells the listener each planning turn's work as it changes on a planning call, on the same terms as `onPlanDraft`. */
   onPlanWork?(listener: (work: PlanWorkFrame) => void): void;
+  /** Tells the listener Luke is ending a planning call once his goodbye has played, on the same terms as `onPlanDraft`. */
+  onPlanCallEnding?(listener: (ending: PlanCallEndingFrame) => void): void;
 }
 
 export interface LiveSessionSource {
@@ -888,6 +892,7 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
       const activityListeners = new Set<(activity: PlanActivityFrame) => void>();
       const codeListeners = new Set<(code: PlanCodeFrame) => void>();
       const workListeners = new Set<(work: PlanWorkFrame) => void>();
+      const endingListeners = new Set<(ending: PlanCallEndingFrame) => void>();
       const sideband = this.holdSideband(
         withoutServiceFrames(socket, {
           onPlanDraft: (draft) => {
@@ -901,6 +906,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
           },
           onPlanWork: (work) => {
             for (const listener of [...workListeners]) listener(work);
+          },
+          onPlanCallEnding: (ending) => {
+            for (const listener of [...endingListeners]) listener(ending);
           },
         }),
       );
@@ -945,6 +953,9 @@ export class HostedLiveSessionSource extends ServiceLiveSessionSource implements
         onPlanWork: (listener) => {
           workListeners.add(listener);
         },
+        onPlanCallEnding: (listener) => {
+          endingListeners.add(listener);
+        },
       };
     });
   }
@@ -961,13 +972,14 @@ const isServiceFrame = Schema.is(
       VOICE_SERVICE_FRAME.PLAN_ACTIVITY,
       VOICE_SERVICE_FRAME.PLAN_CODE,
       VOICE_SERVICE_FRAME.PLAN_WORK,
+      VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
     ]),
   }),
 );
 
 /**
  * The socket with the service's own frames, `plan.draft`, `plan.activity`,
- * `plan.code`, and `plan.work`, taken off its arrivals and told to their
+ * `plan.code`, `plan.work`, and `plan.call_ending`, taken off its arrivals and told to their
  * listeners, so the sideband over it reads only what the session said. A
  * frame is routed by the type it decodes to and then checked by that type's
  * own schema. The substring test ahead of the decode only keeps a transcript
@@ -983,6 +995,7 @@ function withoutServiceFrames(
     readonly onPlanActivity: (activity: PlanActivityFrame) => void;
     readonly onPlanCode: (code: PlanCodeFrame) => void;
     readonly onPlanWork: (work: PlanWorkFrame) => void;
+    readonly onPlanCallEnding: (ending: PlanCallEndingFrame) => void;
   },
 ): LiveSocket {
   const routes = {
@@ -994,6 +1007,8 @@ function withoutServiceFrames(
       told(planCodeFrameFromWire(value), listeners.onPlanCode),
     [VOICE_SERVICE_FRAME.PLAN_WORK]: (value: UnparsedWireValue) =>
       told(planWorkFrameFromWire(value), listeners.onPlanWork),
+    [VOICE_SERVICE_FRAME.PLAN_CALL_ENDING]: (value: UnparsedWireValue) =>
+      told(planCallEndingFrameFromWire(value), listeners.onPlanCallEnding),
   };
   return {
     send: (data) => socket.send(data),

@@ -20,6 +20,7 @@ function said(count: number): TranscriptRegion {
         key: "call-1",
         startedAt: 1_000,
         live: true,
+        lukeEnded: false,
         messages: Array.from({ length: count }, (_, index) => ({
           id: String(index),
           role: TRANSCRIPT_SPEAKER.USER,
@@ -58,6 +59,7 @@ test("each line is drawn under its speaker, the developer's and Luke's told apar
             key: "call-1",
             startedAt: 1_000,
             live: false,
+            lukeEnded: false,
             messages: [
               {
                 id: "0",
@@ -96,6 +98,7 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
             key: "call-1",
             startedAt: 1_000,
             live: false,
+            lukeEnded: false,
             messages: [
               {
                 id: "0",
@@ -204,6 +207,7 @@ const TWO_CALLS: TranscriptRegion = {
       key: "call-1",
       startedAt: Date.UTC(2026, 9, 8, 15, 30),
       live: false,
+      lukeEnded: false,
       messages: [
         {
           id: "0",
@@ -226,6 +230,7 @@ const TWO_CALLS: TranscriptRegion = {
       key: "call-2",
       startedAt: Date.UTC(2026, 9, 9, 9, 5),
       live: true,
+      lukeEnded: false,
       messages: [
         {
           id: "3",

@@ -904,6 +904,7 @@ test("the Transcript tab draws each call's turns under their speakers, left out 
                 key: "call-1",
                 startedAt: 1_000,
                 live: true,
+                lukeEnded: false,
                 messages: [
                   {
                     id: "0",
