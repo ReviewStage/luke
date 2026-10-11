@@ -35,6 +35,10 @@ in for the missing job before the first release.
   (`apps/desktop/src/renderer/session-replay.ts`), so what leaves the machine is
   layout, not text; an unmasked attribute or a new way of drawing words is what
   would change that.
+- Never push PR media to a branch but `pr-assets`, under `pr-<number>/`
+  (`docs/WORKFLOW.md` step 7). A fresh `pr-assets-<topic>` branch mails a
+  failed Vercel Preview on every push; a push refused because another workspace
+  got there first is fetched, rebased, and pushed again.
 - Never add to this file (`AGENTS.md`, which `CLAUDE.md` links to) unless the
   user explicitly approved the addition.
 

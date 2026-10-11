@@ -34,12 +34,17 @@
    head commit; refresh screenshots whose UI has changed and drop claims that no
    longer hold. Leave the description alone when the new commits do not change
    what it says.
-7. When an agent must add inline PR media without the GitHub editor, store it on
-   the shared `pr-assets` branch, not the product branch. Use a per-PR path such
-   as `pr-<number>/landing-page.png`, then embed the raw GitHub URL in the PR
-   description. Keep `pr-assets` as the one durable media branch: deleting it
-   breaks PR images. Delete an old per-PR asset branch only after every PR URL
-   that uses it has moved to `pr-assets`.
+7. When an agent must add inline PR media without the GitHub editor, commit it
+   to the shared `pr-assets` branch, not the product branch. Use a per-PR path
+   such as `pr-<number>/landing-page.png`, then embed the raw GitHub URL in the
+   PR description. Never make another branch for media, a `pr-assets-<topic>`
+   included: one cut fresh lacks `pr-assets`'s `vercel.json`, so Vercel builds
+   it, fails, and mails the failure on every push. Commit from a
+   worktree of `origin/pr-assets`; when the push is refused because another
+   workspace pushed first, fetch, rebase onto `origin/pr-assets`, and push
+   again. Keep `pr-assets` as the one durable media branch: deleting it breaks
+   PR images. Delete an old per-PR asset branch only after every PR URL that
+   uses it has moved to `pr-assets`.
 
 Stop and report a genuine blocker when validation requires unavailable access,
 credentials, hardware, or a product decision. Agents prepare evidence and
