@@ -4,7 +4,7 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
-import { Context, Data, Duration, Effect, Exit, Layer, Result, Schema } from "effect";
+import { Context, Data, Duration, Effect, Exit, Layer, Option, Result, Schema } from "effect";
 import * as HttpClient from "effect/unstable/http/HttpClient";
 import * as HttpClientRequest from "effect/unstable/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
@@ -136,13 +136,21 @@ const PricingSchema = Schema.Struct({
   input_cache_read: PriceSchema,
 });
 
+/**
+ * The entry's prices are read on their own, after the entry: a price the
+ * catalog spells in a way this module does not read costs that model its
+ * price and nothing else, where a field of the entry's own would refuse
+ * the whole catalog.
+ */
+const readPricing = Schema.decodeUnknownOption(PricingSchema);
+
 const CatalogEntrySchema = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   tags: Schema.optionalKey(Schema.Array(Schema.String)),
   reasoning_options: Schema.optionalKey(Schema.NullOr(Schema.Array(ReasoningOptionSchema))),
   context_window: Schema.optionalKey(Schema.NullOr(Schema.Number)),
-  pricing: Schema.optionalKey(Schema.NullOr(PricingSchema)),
+  pricing: Schema.optionalKey(Schema.Unknown),
 });
 
 const CatalogAnswerSchema = Schema.Struct({
@@ -166,12 +174,13 @@ function providerOf(name: string): ModelProvider | undefined {
   return name as ModelProvider;
 }
 
-/** The entry's prices where it lists both an input and an output price; nothing where it lists either not. */
+/** The entry's prices where it lists both an input and an output price as this module reads them; nothing where it lists either not, or not readably. */
 function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
-  const inputUsd = entry.pricing?.input ?? undefined;
-  const outputUsd = entry.pricing?.output ?? undefined;
+  const pricing = Option.getOrUndefined(readPricing(entry.pricing));
+  const inputUsd = pricing?.input ?? undefined;
+  const outputUsd = pricing?.output ?? undefined;
   if (inputUsd === undefined || outputUsd === undefined) return undefined;
-  const cachedInputUsd = entry.pricing?.input_cache_read ?? undefined;
+  const cachedInputUsd = pricing?.input_cache_read ?? undefined;
   return {
     inputUsd,
     outputUsd,

@@ -403,6 +403,25 @@ it.effect(
       });
     }),
 );
+
+it.effect(
+  "a turn whose earlier steps' model the state did not keep records no breakdown, so its row prices every step at the model it started on rather than at the session's model now",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      const events = typedTurn("turn_0", 0);
+      const secondStep = events.findIndex(
+        (event) => event.type === "step.started" && event.data.stepIndex === 1,
+      );
+      const { model: _unknown, ...unnamed } = standing;
+      await play(events.slice(0, secondStep), unnamed);
+      await play(events.slice(secondStep), { ...standing, model: "scripted-model-2" });
+
+      const { turnRows } = await rows(target);
+      assert.deepEqual(turnRows[0]?.usage, TYPED_TURN_USAGE);
+    }),
+);
 it.effect("a look at the board settles its call in the conversation without the image", () =>
   Effect.promise(async () => {
     const target = await conversation();
