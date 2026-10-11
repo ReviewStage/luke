@@ -130,3 +130,31 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "a Start's task travels to the host with the Start, and a Start with none carries no task field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
+      yield* operator.codingAgentStart({
+        planId,
+        idempotencyKey: "press-1",
+        task: "Rename the invite email's subject.",
+      });
+      yield* operator.codingAgentStart({ planId, idempotencyKey: "press-2" });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { planId, idempotencyKey: "press-1", task: "Rename the invite email's subject." },
+          ],
+          [GATEWAY_METHOD.CODING_AGENTS_START, { planId, idempotencyKey: "press-2" }],
+        ],
+      );
+    }),
+);

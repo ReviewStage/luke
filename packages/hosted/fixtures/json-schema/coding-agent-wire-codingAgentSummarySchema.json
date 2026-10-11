@@ -42,6 +42,13 @@
           "type": "null"
         }
       ]
+    },
+    "brief": {
+      "type": "string",
+      "enum": [
+        "plan",
+        "task"
+      ]
     }
   },
   "required": [

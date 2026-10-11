@@ -1,3 +1,4 @@
+import { CODING_AGENT_BRIEF } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -266,7 +267,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }),
 
     prompt: (agent) => {
-      const text = coderInstructions(agent.repository);
+      const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
+      const text = coderInstructions(agent.repository, brief);
       return { text, hash: promptHashOf(text) };
     },
 

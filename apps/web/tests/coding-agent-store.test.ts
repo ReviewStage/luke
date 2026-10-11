@@ -11,6 +11,7 @@ import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   type CodingAgent,
+  type CodingAgentBriefText,
   type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
@@ -44,15 +45,25 @@ const openPlan = Effect.gen(function* () {
   return { userId, planId: plan.id };
 });
 
-function start(planId: string, overrides: Partial<NewCodingAgent> = {}): NewCodingAgent {
+/** What a Start hands the agent where the test names nothing: the plan's text. */
+const PLAN_BRIEF: CodingAgentBriefText = {
+  planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
+  task: null,
+};
+
+function start(
+  planId: string,
+  overrides: Partial<Omit<NewCodingAgent, keyof CodingAgentBriefText>> = {},
+  brief: CodingAgentBriefText = PLAN_BRIEF,
+): NewCodingAgent {
   return {
     planId,
     idempotencyKey: randomUUID(),
     model: "anthropic/claude-opus-5.5",
     effort: "high",
-    planSnapshot: "# Teammate invitations\n\nAny member may invite by email.\n",
     repository: "reviewstage/luke",
     ...overrides,
+    ...brief,
   };
 }
 
@@ -97,11 +108,27 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
       assert.equal(agent.model, asked.model);
       assert.equal(agent.effort, asked.effort);
       assert.equal(agent.planSnapshot, asked.planSnapshot);
+      assert.equal(agent.task, null);
       assert.equal(agent.repository, asked.repository);
       assert.deepEqual(yield* conversationKind(agent.conversationId), {
         kind: CONVERSATION_KIND.CODING_AGENT,
         deletedAt: null,
       });
+      assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.some(agent));
+    }),
+  );
+
+  it.effect("a Start on a task holds the task it was handed and no copy of the plan", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      const task = "Rename the invite email's subject to say who sent it.";
+
+      const agent = started(
+        yield* createCodingAgent(userId, start(planId, {}, { planSnapshot: null, task })),
+      );
+
+      assert.equal(agent.task, task);
+      assert.equal(agent.planSnapshot, null);
       assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.some(agent));
       assert.deepEqual(yield* listCodingAgents(userId, planId), [agent]);
     }),
@@ -115,11 +142,14 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
       const first = started(yield* createCodingAgent(userId, asked));
       yield* TestClock.adjust(Duration.minutes(1));
       const retried = found(
-        yield* createCodingAgent(userId, {
-          ...asked,
-          effort: "max",
-          planSnapshot: "# Teammate invitations\n\nEdited since.\n",
-        }),
+        yield* createCodingAgent(
+          userId,
+          start(
+            planId,
+            { idempotencyKey: asked.idempotencyKey, effort: "max" },
+            { planSnapshot: "# Teammate invitations\n\nEdited since.\n", task: null },
+          ),
+        ),
       );
 
       assert.deepEqual(retried, first);

@@ -56,7 +56,10 @@ export interface CodingAgent {
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
-  readonly planSnapshot: string;
+  /** The plan text the agent was handed; null where it was handed a task instead. */
+  readonly planSnapshot: string | null;
+  /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
+  readonly task: string | null;
   readonly repository: string;
   readonly createdAt: Date;
 }
@@ -71,15 +74,19 @@ export interface CodingAgentStarted {
 export type CodingAgentLatestTurn = LatestTurn;
 export { awaitingLinesOf, latestTurnsOf };
 
-/** A Start: the plan, the request's own key, what to run on, and the plan text and repository as they stand now. */
-export interface NewCodingAgent {
+/** What a Start hands the agent as its first message: the plan's text as it stands now, or the developer's task in its place. */
+export type CodingAgentBriefText =
+  | { readonly planSnapshot: string; readonly task: null }
+  | { readonly planSnapshot: null; readonly task: string };
+
+/** A Start: the plan, the request's own key, what to run on, what the agent is handed, and the repository as it stands now. */
+export type NewCodingAgent = CodingAgentBriefText & {
   readonly planId: string;
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
-  readonly planSnapshot: string;
   readonly repository: string;
-}
+};
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
 const CODING_AGENT_COLUMNS = {
@@ -89,6 +96,7 @@ const CODING_AGENT_COLUMNS = {
   model: codingAgent.model,
   effort: codingAgent.effort,
   planSnapshot: codingAgent.planSnapshot,
+  task: codingAgent.task,
   repository: codingAgent.repository,
   createdAt: codingAgent.createdAt,
 };
@@ -99,7 +107,8 @@ const CodingAgentRowSchema = Schema.Struct({
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
-  planSnapshot: Schema.String,
+  planSnapshot: Schema.NullOr(Schema.String),
+  task: Schema.NullOr(Schema.String),
   repository: Schema.String,
   createdAt: InstantColumnSchema,
 });
@@ -150,7 +159,8 @@ const insertAgent = SqlSchema.findOne({
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
-    planSnapshot: Schema.String,
+    planSnapshot: Schema.NullOr(Schema.String),
+    task: Schema.NullOr(Schema.String),
     repository: Schema.String,
     now: Schema.Date,
   }),
@@ -165,6 +175,7 @@ const insertAgent = SqlSchema.findOne({
         model: write.model,
         effort: write.effort,
         planSnapshot: write.planSnapshot,
+        task: write.task,
         repository: write.repository,
         idempotencyKey: write.idempotencyKey,
         createdAt: write.now,
@@ -241,8 +252,8 @@ const deleteConversationRow = SqlSchema.void({
 
 /**
  * Starts an agent on the account's plan: a `coding_agent` conversation and
- * the row that binds it to the plan, with the plan text and repository as
- * handed. A Start whose key the account has already used answers the agent
+ * the row that binds it to the plan, with the plan text or the task, and
+ * the repository, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
  * Nothing where the account owns no such plan.
  */
@@ -275,6 +286,7 @@ export function createCodingAgent(
           model: started.model,
           effort: started.effort,
           planSnapshot: started.planSnapshot,
+          task: started.task,
           repository: started.repository,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));

@@ -1,4 +1,5 @@
 import {
+  CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   type CodingAgentFailure,
@@ -141,5 +142,6 @@ export function codingAgentSummary(
       lineAwaits: standing.lineAwaits,
     }),
     turnId: standing.turn?.id ?? null,
+    brief: agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK,
   };
 }

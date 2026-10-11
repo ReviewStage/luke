@@ -156,6 +156,7 @@ const openAgent = (host: CoderHost, model = "anthropic/claude-opus-5.5", effort 
       model,
       effort,
       planSnapshot: PLAN_TEXT,
+      task: null,
       repository: "acme/relay",
     });
     assert.ok(Option.isSome(started));

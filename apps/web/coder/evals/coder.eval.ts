@@ -113,6 +113,7 @@ function startAgent(run: Run, planId: string): Promise<CodingAgent> {
         model: "anthropic/claude-opus-5.5",
         effort: "high",
         planSnapshot: PLAN_SNAPSHOT,
+        task: null,
         repository: REPOSITORY,
       }),
       (started) => {
@@ -164,7 +165,7 @@ export default defineEval({
         return accepted;
       };
 
-      const accepted = await openSession(agent.conversationId, agent.planSnapshot);
+      const accepted = await openSession(agent.conversationId, PLAN_SNAPSHOT);
       const session = await t.target.attachSession(accepted.sessionId);
       session.succeeded();
 

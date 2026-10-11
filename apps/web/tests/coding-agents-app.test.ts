@@ -5,6 +5,7 @@ import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_BOUNDS,
+  CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
   type CodingAgentMessage,
@@ -362,9 +363,11 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         assert.equal(agent.effort, CODING_AGENT_DEFAULT_CHOICE.effort);
         assert.equal(agent.status, CODING_AGENT_STATUS.STARTING);
         assert.equal(agent.turnId, null);
+        assert.equal(agent.brief, CODING_AGENT_BRIEF.PLAN);
         const stored = yield* readCodingAgent(owner, agent.id);
         assert.ok(Option.isSome(stored));
         assert.equal(stored.value.planSnapshot, planMarkdown(SAVED));
+        assert.equal(stored.value.task, null);
         assert.equal(stored.value.repository, RELAY_FULL_NAME);
         assert.deepEqual(eve.opened, [
           {
@@ -379,6 +382,73 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
         ]);
         // The default stands: nothing was chosen.
         assert.equal(yield* readAccountPreferences(owner), undefined);
+      }),
+  );
+
+  it.effect(
+    "a Start naming a task opens the session with the task as its first message and never the plan, keeps no copy of the plan, and works in the plan's repository",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const task = "Rename the invite email's subject to say who sent it.";
+
+        const started = yield* ask(
+          startAs(owner, plan.id, { idempotencyKey: randomUUID(), task: `  ${task}\n` }),
+        );
+
+        const { agent } = readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, started);
+        assert.equal(agent.brief, CODING_AGENT_BRIEF.TASK);
+        const stored = yield* readCodingAgent(owner, agent.id);
+        assert.ok(Option.isSome(stored));
+        assert.equal(stored.value.task, task);
+        assert.equal(stored.value.planSnapshot, null);
+        assert.equal(stored.value.repository, RELAY_FULL_NAME);
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [task],
+        );
+        // The agent reads as handed its task wherever it is listed.
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+            (each) => each.brief,
+          ),
+          [CODING_AGENT_BRIEF.TASK],
+        );
+      }),
+  );
+
+  it.effect(
+    "a task is bounded as a message is: one past the bound, or nothing but whitespace, is refused, and one at the bound at JSON's widest escape is taken",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              task: "x".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 1),
+            }),
+          ),
+          invalid,
+        );
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID(), task: " \n\t " })),
+          invalid,
+        );
+        assert.equal(eve.opened.length, 0, "no refused task opens a session");
+
+        // A control character is spelled as six bytes in JSON, the widest a character escapes to.
+        const widest = "\u0001".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        const taken = yield* ask(
+          startAs(owner, plan.id, { idempotencyKey: randomUUID(), task: widest }),
+        );
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, taken);
+        assert.deepEqual(
+          eve.opened.map((opened) => opened.message.message),
+          [widest],
+        );
       }),
   );
 
@@ -1066,6 +1136,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           model: CODING_AGENT_DEFAULT_CHOICE.model,
           effort: CODING_AGENT_DEFAULT_CHOICE.effort,
           planSnapshot: "# Ledger\n",
+          task: null,
           repository: "Acme/Ledger",
         });
         assert.ok(Option.isSome(away));
@@ -1525,6 +1596,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           model: CODING_AGENT_DEFAULT_CHOICE.model,
           effort: CODING_AGENT_DEFAULT_CHOICE.effort,
           planSnapshot: planMarkdown(SAVED),
+          task: null,
           repository: "Acme/Ledger",
         });
         assert.ok(Option.isSome(started));

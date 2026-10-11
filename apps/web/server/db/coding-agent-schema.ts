@@ -12,7 +12,9 @@ import { conversations } from "./storage-schema.js";
  * this row holds only what the conversation does not. The model and effort
  * are read on every step, so switching later is a row update; the snapshot
  * is the exact plan text the agent was handed, kept whole because the plan
- * keeps being edited after; the repository is `owner/name`. There is no
+ * keeps being edited after, or where the developer started it on a task of
+ * their own, the snapshot is null and the task is what it was handed, so
+ * exactly one of the two stands; the repository is `owner/name`. There is no
  * commit column: the checkout's own output is in the transcript, and the
  * pull request on GitHub records its base.
  *
@@ -37,8 +39,10 @@ export const codingAgent = pgTable(
     /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
     model: text("model").notNull(),
     effort: text("effort").notNull(),
-    /** The plan's document exactly as the agent was given it. */
-    planSnapshot: text("plan_snapshot").notNull(),
+    /** The plan's document exactly as the agent was given it; null for an agent handed a task instead. */
+    planSnapshot: text("plan_snapshot"),
+    /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
+    task: text("task"),
     /** The GitHub repository the agent works in, as `owner/name`. */
     repository: text("repository").notNull(),
     idempotencyKey: text("idempotency_key").notNull(),

@@ -162,8 +162,8 @@ const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
 
 const QUERY = { ID: "id", AFTER: "after", CALL: "call" } as const;
 
-/** A Start names a key and a choice at most, so a body past this is no Start. */
-const MAXIMUM_START_BODY_BYTES = 4_096;
+/** A Start names a key, a choice, and a task at most: the task's bound at JSON's widest escape, and room for the rest. */
+const MAXIMUM_START_BODY_BYTES = 6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + 4_096;
 
 /** A change of model names a model and an effort at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
@@ -304,7 +304,12 @@ const acceptedChoice = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
 });
 
-/** POST: an agent started on the plan, or the one a retry under the same key already started. */
+/**
+ * POST: an agent started on the plan, or the one a retry under the same key
+ * already started. It is handed the plan's document as its first message,
+ * or where the Start names a task, that task in the plan's place, and never
+ * the plan; either way it works in the plan's repository.
+ */
 const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   request: Request,
@@ -314,7 +319,7 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const body = yield* readJsonBodyEffect(MAXIMUM_START_BODY_BYTES);
   const asked = readEither(codingAgentStartRequestSchema)(body);
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const { idempotencyKey, model, effort } = asked.success;
+  const { idempotencyKey, model, effort, task } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on.
   if ((model === undefined) !== (effort === undefined)) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
@@ -328,14 +333,17 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const app = yield* GitHubApp;
   const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, repository));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
-  const planSnapshot = planMarkdown(plan.value.plan.document);
+  const brief =
+    task === undefined
+      ? { planSnapshot: planMarkdown(plan.value.plan.document), task: null }
+      : { planSnapshot: null, task };
   const started = yield* hostedStoreOrUnavailable(
     createCodingAgent(userId, {
       planId,
       idempotencyKey,
       model: choice.model,
       effort: choice.effort,
-      planSnapshot,
+      ...brief,
       repository,
     }),
   );
@@ -344,14 +352,14 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (!created) {
     return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
   }
-  // The session opens as the developer, with the plan as its first message; an eve that did not
-  // take it leaves no agent behind, so the retry under the same key starts afresh.
+  // The session opens as the developer, with the plan or the task as its first message; an eve
+  // that did not take it leaves no agent behind, so the retry under the same key starts afresh.
   const eve = yield* eveFor(seams, request);
   const opened = yield* eve
     .open({
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
-      message: planSnapshot,
+      message: brief.task ?? brief.planSnapshot,
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>

@@ -463,6 +463,13 @@
       "when": 1790825000000,
       "tag": "0066_coding_agent_delegation",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1790850000000,
+      "tag": "0067_coding_agent_task",
+      "breakpoints": true
     }
   ]
 }
