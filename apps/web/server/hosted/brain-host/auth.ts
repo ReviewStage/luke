@@ -41,10 +41,12 @@ import {
  * a person, the attribute for the deployment. Ownership is checked on that
  * answer, so the deployment can open a turn only on a conversation the named
  * account owns, and the deployment's secret can open only the turns the
- * table admits: a spoken ask for the voice function on the planning
- * channel, a typed line the voice brain sends a coding agent on the coder
- * channel (`coder-host/channel.ts`), where it presents the account's own
- * principal so the line steers the agent's running turn, never a stream.
+ * table admits, a row for each of the two things a message does, opening a
+ * session or following one up: a spoken ask for the voice function on the
+ * planning channel, and on the coder channel (`coder-host/channel.ts`) the
+ * typed line the voice brain sends a coding agent and the typed opening
+ * that starts one, where it presents the account's own principal so the
+ * line steers the agent's running turn, never a stream.
  * Ownership is not scope: the kinds of turn the credential may open are the
  * table's, decided before any principal exists. The one other thing the
  * secret may do is stop a turn: the Stop a spoken ask takes reaches eve as
@@ -114,16 +116,29 @@ export const DEPLOYMENT_PRESENCE = {
 
 type DeploymentPresence = (typeof DEPLOYMENT_PRESENCE)[keyof typeof DEPLOYMENT_PRESENCE];
 
-/** The deployment acting for an account: which secret admits it, which kinds of turn a message under it may open, and whose identity it presents. */
+/** The two things a message under the secret does: open a session, whose first turn is the message's, or follow one up. */
+export const DEPLOYMENT_ACT = {
+  OPEN: "open",
+  FOLLOW_UP: "follow-up",
+} as const;
+
+export type DeploymentAct = (typeof DEPLOYMENT_ACT)[keyof typeof DEPLOYMENT_ACT];
+
+/** A channel's table: for each act, every kind of turn and whether a message under the secret may do it; a cell admitted nowhere is refused outright. */
+export type DeploymentTurnTable = Readonly<
+  Record<DeploymentAct, Readonly<Record<BrainHostTurn, boolean>>>
+>;
+
+/** The deployment acting for an account: which secret admits it, which turns a message under it may open or follow up, and whose identity it presents. */
 export interface DeploymentActor {
   /** The deployment's own secret, sealed; nothing while the environment names none, which admits no request. */
   readonly secret: Redacted.Redacted | undefined;
-  /** Every kind of turn, and whether a message under the secret may open it; a kind admitted nowhere is refused outright. */
-  readonly admits: Readonly<Record<BrainHostTurn, boolean>>;
+  readonly admits: DeploymentTurnTable;
   readonly presents: DeploymentPresence;
 }
 
 /** The routes a deployment actor may reach: a message opening a session or following one up, and a cancel of a turn in a session; no other. */
+const OPEN_ROUTE = /^\/eve\/v1\/session\/?$/;
 const MESSAGE_ROUTE = /^\/eve\/v1\/session(?:\/[^/]+)?\/?$/;
 const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
 
@@ -135,7 +150,7 @@ const CANCEL_ROUTE = /^\/eve\/v1\/session\/[^/]+\/cancel\/?$/;
  * A request with another bearer is not this caller's and the walk moves on;
  * a request with this secret that names no account, reaches any route but a
  * message or a cancel, or is a message naming a kind of turn the table does
- * not admit is refused here, before any later authenticator could admit it
+ * not admit for what it does is refused here, before any later authenticator could admit it
  * as something else. An actor that presents the account mints the account's
  * own principal instead, the deployment named as its carrier, so the
  * ownership check reads the same account either way.
@@ -151,12 +166,13 @@ export function deploymentActor(actor: DeploymentActor): AuthFn<Request> {
     const turn = attributes[BRAIN_HOST_ATTRIBUTE.TURN];
     const pathname = new URL(request.url).pathname;
     const posted = request.method === "POST";
+    const act = OPEN_ROUTE.test(pathname) ? DEPLOYMENT_ACT.OPEN : DEPLOYMENT_ACT.FOLLOW_UP;
     const message =
       posted &&
       MESSAGE_ROUTE.test(pathname) &&
       isWireString(turn) &&
       isBrainHostTurn(turn) &&
-      actor.admits[turn];
+      actor.admits[act][turn];
     const cancel = posted && CANCEL_ROUTE.test(pathname);
     if (!message && !cancel) {
       throw new ForbiddenError({ message: BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT });

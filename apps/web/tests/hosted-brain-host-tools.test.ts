@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import { Effect, type Layer, Option, Redacted, Result } from "effect";
+import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -38,15 +39,26 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { createCodingAgent, updateCodingAgentBranch } from "../server/hosted/coding-agent-store";
+import {
+  createCodingAgent,
+  readCodingAgent,
+  updateCodingAgentBranch,
+} from "../server/hosted/coding-agent-store";
 import {
   CODING_AGENT_TOOL_BOUNDS,
   CODING_AGENT_TOOL_REFUSAL,
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
+  START_CODING_AGENT_REFUSAL,
+  START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
+import {
+  CODING_AGENT_DEFAULT_CHOICE,
+  modelCatalogOf,
+  type OfferedModel,
+} from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -90,6 +102,19 @@ const EVE_ORIGIN = "https://luke.test";
 const BRANCH = "luke/teammate-invitations";
 const AGENT_WORDS = "Pushed the branch.";
 const INSTRUCTION = "Also add tests for the expiry.";
+const TASK = "Rename the invite email's subject to say who sent it.";
+const SOL = "openai/gpt-6.1-sol";
+
+/** The two models offered a start, each with the efforts it lists. */
+const CATALOG: readonly OfferedModel[] = [
+  {
+    id: CODING_AGENT_DEFAULT_CHOICE.model,
+    name: "Claude Opus 5.5",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["low", "medium", "high", "max"],
+  },
+  { id: SOL, name: "GPT-6.1 Sol", provider: MODEL_PROVIDER.OPENAI, efforts: ["low", "high"] },
+];
 
 function unreached(name: string): () => never {
   return () => {
@@ -133,11 +158,16 @@ function seat(target: ConversationTarget): SessionAuth {
   return { current: own, initiator: own };
 }
 
-function toolContext(id: string, auth: SessionAuth, name: string): EveToolContext {
+function toolContext(
+  id: string,
+  auth: SessionAuth,
+  name: string,
+  callId = "call-1",
+): EveToolContext {
   return {
     session: { id, auth, turn: { id: "turn_0", sequence: 0 } },
     abortSignal: new AbortController().signal,
-    callId: "call-1",
+    callId,
     toolName: name,
     messages: [],
     getToken: unreached("getToken"),
@@ -146,12 +176,13 @@ function toolContext(id: string, auth: SessionAuth, name: string): EveToolContex
   };
 }
 
-/** A tool caller over one session claimed on the conversation, as the store hook claims it at the session's start; the services are what a call may reach. */
+/** A tool caller over one session claimed on the conversation, as the store hook claims it at the session's start; the services and the catalog are what a call may reach, and the call id is eve's for the call, `call-1` unless said. */
 async function callerOn(
   host: BrainHost,
   target: ConversationTarget,
   services: Layer.Layer<GitHubApp | HttpClient.HttpClient> = NO_GITHUB,
-): Promise<(name: string, input: WireRecord) => Promise<WireRecord>> {
+  catalog: readonly OfferedModel[] = [],
+): Promise<(name: string, input: WireRecord, callId?: string) => Promise<WireRecord>> {
   const id = sessionId();
   const auth = seat(target);
   const starting = await database.run(host.admitStarting(auth, id));
@@ -165,11 +196,11 @@ async function callerOn(
       turnId: hostTurnId(id, "turn_0"),
     },
   };
-  return (name, input) =>
+  return (name, input, callId) =>
     database.run(
       host
-        .runTool(name, binding, input, toolContext(id, auth, name))
-        .pipe(Effect.provide(services)),
+        .runTool(name, binding, input, toolContext(id, auth, name, callId))
+        .pipe(Effect.provide(Layer.merge(services, modelCatalogOf(catalog)))),
     );
 }
 
@@ -263,13 +294,16 @@ async function agentRan(
   );
 }
 
-/** eve's coding-agent service as a script beside the fake GitHub: every message to a session answered taken, and written down. */
+/** eve's coding-agent service as a script beside the fake GitHub: every opening answered with a session of its own, every message to a session answered taken, and each written down. */
 function fakeCoderEve() {
   const sent: { readonly path: string; readonly headers: Headers; readonly body: string }[] = [];
   const github = githubReaching([INSTALLATION], undefined, undefined, (request) => {
     const { pathname } = new URL(request.url);
-    if (!pathname.startsWith("/eve/coder/v1/session/")) return undefined;
+    if (!pathname.startsWith("/eve/coder/v1/session")) return undefined;
     sent.push({ path: pathname, headers: request.headers, body: request.body });
+    if (pathname === "/eve/coder/v1/session") {
+      return Response.json({ sessionId: sessionId() }, { status: 202 });
+    }
     return Response.json(
       { sessionId: pathname.slice("/eve/coder/v1/session/".length), deliveryId: "delivery-1" },
       { status: 202 },
@@ -494,4 +528,80 @@ test("a message to the plan's agent steers its session as the deployment acting 
     { status: ACTION_RESULT_STATUS.REJECTED, reason: CODING_AGENT_TOOL_REFUSAL.NO_SERVICE },
   );
   assert.equal(eve.sent.length, 1);
+});
+
+test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no task, on a task and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
+  const userId = await database.run(openGithubUser());
+  const plan = await planConversation(userId, RELAY_FULL_NAME);
+  const eve = fakeCoderEve();
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services, CATALOG);
+
+  const started = await call(START_CODING_AGENT_TOOL.name, {});
+  assert.equal(started.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(started));
+  const agent = started.agent as { readonly id: string };
+  assert.deepEqual(started.agent, {
+    id: agent.id,
+    model: CODING_AGENT_DEFAULT_CHOICE.model,
+    effort: CODING_AGENT_DEFAULT_CHOICE.effort,
+    status: CODING_AGENT_STATUS.STARTING,
+  });
+  const stored = Option.getOrThrow(await database.run(readCodingAgent(userId, agent.id)));
+  assert.equal(stored.planId, plan.planId);
+  assert.equal(stored.task, null);
+  // The session opened as the deployment for the account, on the agent's conversation, with the plan first.
+  assert.equal(eve.sent.length, 1);
+  const [opening] = eve.sent;
+  assert.equal(opening?.path, "/eve/coder/v1/session");
+  assert.equal(opening?.headers.get("authorization"), `Bearer ${CRON_SECRET}`);
+  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.ACCOUNT), userId);
+  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.CONVERSATION), stored.conversationId);
+  assert.equal(opening?.headers.get(BRAIN_HOST_HEADER.TURN), BRAIN_HOST_TURN.TYPED);
+  assert.match(JSON.parse(opening?.body ?? "").message, /^# Teammate invitations/u);
+
+  // The same call run again is the same agent, and opens nothing again.
+  const again = await call(START_CODING_AGENT_TOOL.name, {});
+  assert.equal((again.agent as { readonly id: string }).id, agent.id);
+  assert.equal(eve.sent.length, 1);
+
+  const tasked = await call(
+    START_CODING_AGENT_TOOL.name,
+    { task: TASK, model: SOL, effort: "low" },
+    "call-2",
+  );
+  assert.equal(tasked.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(tasked));
+  const second = tasked.agent as {
+    readonly id: string;
+    readonly model: string;
+    readonly effort: string;
+  };
+  assert.deepEqual([second.model, second.effort], [SOL, "low"]);
+  assert.equal(JSON.parse(eve.sent[1]?.body ?? "").message, TASK);
+  // The agents it started are the ones the other tools then read.
+  const listed = await call(LIST_CODING_AGENTS_TOOL.name, {});
+  assert.deepEqual(
+    (listed.agents as readonly { readonly id: string }[]).map((each) => each.id),
+    [agent.id, second.id],
+  );
+
+  const refused = await call(START_CODING_AGENT_TOOL.name, { model: SOL, effort: "max" }, "call-3");
+  assert.equal(refused.status, ACTION_RESULT_STATUS.REJECTED);
+  assert.match(String(refused.reason), /openai\/gpt-6\.1-sol \(low, high\)/u);
+  assert.match(String(refused.reason), /anthropic\/claude-opus-5\.5 \(low, medium, high, max\)/u);
+  assert.deepEqual(await call(START_CODING_AGENT_TOOL.name, { model: SOL }, "call-4"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.UNREADABLE,
+  });
+  assert.equal(eve.sent.length, 2);
+
+  const unsecured = await callerOn(brainHost(seams), plan, eve.services, CATALOG);
+  assert.deepEqual(await unsecured(START_CODING_AGENT_TOOL.name, {}, "call-5"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
+  });
+  assert.equal(eve.sent.length, 2);
 });

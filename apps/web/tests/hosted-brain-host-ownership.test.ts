@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Effect, Option, Result, Schema } from "effect";
+import { Effect, Layer, Option, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
@@ -25,6 +25,7 @@ import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -470,7 +471,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
           question,
           toolContext(sessionId, auth),
         )
-        .pipe(Effect.provide(NO_GITHUB)),
+        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);
@@ -524,7 +525,7 @@ test("a subagent's tool call is admitted through the root it was delegated from:
           question,
           toolContext(CHILD, auth, childOf),
         )
-        .pipe(Effect.provide(NO_GITHUB)),
+        .pipe(Effect.provide(Layer.merge(NO_GITHUB, modelCatalogOf([])))),
     );
 
   assert.equal(await start(host, seat, SESSION.OLDER), true);

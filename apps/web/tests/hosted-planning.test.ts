@@ -60,8 +60,10 @@ import {
   LIST_CODING_AGENTS_TOOL,
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
+  START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
+import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
@@ -431,7 +433,7 @@ const planningTurn = (
             unparsedWire(call.input as WireBoundaryInput),
             toolContext(session, call.toolName),
           )
-          .pipe(Effect.provide(services));
+          .pipe(Effect.provide(Layer.merge(services, modelCatalogOf([]))));
         yield* relay({
           type: "action.result",
           data: {
@@ -553,6 +555,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             LIST_CODING_AGENTS_TOOL.name,
             READ_CODING_AGENT_TOOL.name,
             MESSAGE_CODING_AGENT_TOOL.name,
+            START_CODING_AGENT_TOOL.name,
             END_CALL_TOOL.name,
           ],
         );

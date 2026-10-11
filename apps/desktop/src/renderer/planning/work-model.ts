@@ -102,6 +102,7 @@ const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.LIST_AGENTS]: CALL_KIND.LIST_AGENTS,
   [PLAN_WORK_TOOL.READ_AGENT]: CALL_KIND.READ_AGENT,
   [PLAN_WORK_TOOL.MESSAGE_AGENT]: CALL_KIND.MESSAGE_AGENT,
+  [PLAN_WORK_TOOL.START_AGENT]: CALL_KIND.START_AGENT,
   [PLAN_WORK_TOOL.END_CALL]: CALL_KIND.END_CALL,
   [PLAN_WORK_TOOL.OTHER]: CALL_KIND.OTHER,
 } as const satisfies Record<PlanWorkTool, CallKind>;
@@ -142,6 +143,24 @@ export function workerCallIds(turns: readonly PlanWorkTurn[] | undefined): reado
   return (turns ?? []).flatMap((turn) =>
     turn.parts.flatMap((part) =>
       part.type === PLAN_WORK_PART.TOOL && part.tool === PLAN_WORK_TOOL.WORKER ? [part.id] : [],
+    ),
+  );
+}
+
+/**
+ * The calls of the open plan's work by which Luke started a coding agent
+ * and which have answered, by call id, so the plan's agents are read again
+ * as one lands and the agent's tab appears as it does after a Start; none
+ * where the plan has had no turn or its work is unread.
+ */
+export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined): readonly string[] {
+  return (turns ?? []).flatMap((turn) =>
+    turn.parts.flatMap((part) =>
+      part.type === PLAN_WORK_PART.TOOL &&
+      part.tool === PLAN_WORK_TOOL.START_AGENT &&
+      part.state !== PLAN_WORK_STATE.RUNNING
+        ? [part.id]
+        : [],
     ),
   );
 }

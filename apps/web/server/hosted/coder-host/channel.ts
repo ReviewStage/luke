@@ -3,11 +3,13 @@ import { localDev } from "eve/channels/auth";
 import type { EveChannelInput } from "eve/channels/eve";
 import {
   type BearerAccount,
+  DEPLOYMENT_ACT,
   type DeploymentActor,
+  type DeploymentTurnTable,
   deploymentActor,
   lukeAccount,
 } from "../brain-host/auth.js";
-import { BRAIN_HOST_TURN, type BrainHostTurn } from "../brain-host/bounds.js";
+import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import { BRAIN_HOST_TURN_POLICY } from "../brain-host/channel.js";
 import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/door.js";
 
@@ -19,15 +21,16 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
  * theirs before any route runs, and every message carries the request's
  * conversation and turn kind into the session's auth. Who walks in is the
  * same walk too, in the same order: the deployment acting for an account
- * first, over the one-row table below, then the account's bearer, then,
+ * first, over the two-row table below, then the account's bearer, then,
  * where eve is a development server, the development principal. A coding
  * agent is started, messaged, and stopped by routes still holding the
- * developer's own bearer, which reach eve as that developer; the one thing
- * the deployment does here is carry a message the voice brain sends an
- * agent on the developer's behalf (`hosted/coding-agent-tools.ts`), since
- * the planning session holds no bearer of the account's, and it is admitted
- * only on a session the named account's agent recorded, as every other
- * caller is. The channel's policy for a message that
+ * developer's own bearer, which reach eve as that developer; what the
+ * deployment does here is carry the two things the voice brain does for the
+ * developer in a planning call (`hosted/coding-agent-tools.ts`), since the
+ * planning session holds no bearer of the account's: a message it sends an
+ * agent, admitted only on a session the named account's agent recorded, and
+ * the opening that starts an agent, admitted only on a conversation the
+ * named account owns, as every other caller is. The channel's policy for a message that
  * arrives while a turn is under way is `steer`: the message joins the turn
  * at its next step, and a model call still generating is cut short and run
  * again with it, because a message to a coding agent is the developer's
@@ -39,26 +42,36 @@ import { messageAuth, ownedAuth, type SessionOwnership } from "../brain-host/doo
 const TURN_POLICY: TurnPolicy = BRAIN_HOST_TURN_POLICY.STEER;
 
 /**
- * The kinds of turn the deployment may open for an account here: the typed
- * line alone, because a message the voice brain sends an agent is delivered
- * exactly as one the developer typed in the message box. A coding agent has
- * no spoken turn, so the deployment opens none. Nothing of the deployment's
- * starts an agent: a Start is a developer's own request under their own
- * bearer, and what the row admits is a message on a session or a
- * conversation the named account owns, which the door's ownership check
- * bounds as it bounds every caller. On this channel, and this one alone,
+ * The two rows the deployment is admitted for here, each the typed line
+ * alone, because a coding agent has no spoken turn. The follow-up is a
+ * message the voice brain sends an agent, delivered exactly as one the
+ * developer typed in the message box, on a session the named account's
+ * agent recorded. The opening is the start of an agent the voice brain
+ * makes for the developer (`coding-agent-tools.ts`'s `start_coding_agent`),
+ * on the one path a Start takes (`coder-host/start.ts`): the row the Start
+ * made stands before eve is asked, so the door's ownership check bounds the
+ * opening to a conversation the named account owns, as it bounds every
+ * caller. On this channel, and this one alone,
  * the deployment presents the account's own identity
  * (`DEPLOYMENT_PRESENCE.ACCOUNT`): eve steers a running turn only with a
  * message whose principal is the turn's own, and an agent's turn runs under
  * the developer's bearer, so the voice steer is minted as the developer's
  * own tuple, authenticator, type, and id, and the record says the
  * deployment carried it in the `luke:carrier` attribute rather than in the
- * principal. A caller of another role adds its row here and nowhere else.
+ * principal; the opening is minted the same way, so the agent's session
+ * runs as the developer whether the developer or Luke started it. A caller
+ * of another role adds its row here and nowhere else.
  */
 export const CODER_DEPLOYMENT_TURNS = {
-  [BRAIN_HOST_TURN.TYPED]: true,
-  [BRAIN_HOST_TURN.SPOKEN]: false,
-} as const satisfies Record<BrainHostTurn, boolean>;
+  [DEPLOYMENT_ACT.OPEN]: {
+    [BRAIN_HOST_TURN.TYPED]: true,
+    [BRAIN_HOST_TURN.SPOKEN]: false,
+  },
+  [DEPLOYMENT_ACT.FOLLOW_UP]: {
+    [BRAIN_HOST_TURN.TYPED]: true,
+    [BRAIN_HOST_TURN.SPOKEN]: false,
+  },
+} as const satisfies DeploymentTurnTable;
 
 export function coderChannelInput(
   resolveUserId: BearerAccount,

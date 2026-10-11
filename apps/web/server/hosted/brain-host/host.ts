@@ -18,6 +18,7 @@ import {
 import type { GitHubApp } from "../../github/github-app.js";
 import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
@@ -157,7 +158,7 @@ export interface BrainHost {
   ): Effect.Effect<
     WireRecord,
     SqlError | Schema.SchemaError,
-    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp
+    SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp | ModelCatalog
   >;
   /** The model one inference runs on, the meter spent for the account first; nothing when the deployment holds no key. */
   model(admitted: AdmittedConversation): LanguageModel | undefined;

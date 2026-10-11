@@ -8,7 +8,9 @@ import type { Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
   PLAN_CALL_FAILURE,
+  PLAN_WORK_PART,
   PLAN_WORK_STATE,
+  PLAN_WORK_TOOL,
   PLANNING_READ,
   type PlanCode,
   type PlanCodeShowing,
@@ -840,6 +842,57 @@ test("main is told which agent's tab is shown, and none once the panel moves off
   act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
   tab.stand({ shown: false });
   assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null]);
+});
+
+/** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */
+function startedAgent(
+  state: typeof PLAN_WORK_STATE.RUNNING | typeof PLAN_WORK_STATE.DONE,
+): PlanWorkTurn {
+  return {
+    ...TURN,
+    parts: [
+      {
+        type: PLAN_WORK_PART.TOOL,
+        id: "call-start-1",
+        name: "start_coding_agent",
+        tool: PLAN_WORK_TOOL.START_AGENT,
+        state,
+        input: "{}",
+      },
+    ],
+  };
+}
+
+/** How many times the plan's agents were read. */
+function listReads(tab: ReturnType<typeof mount>): number {
+  return tab.agentActs.filter((kind) => kind === ACT_KIND.CODING_AGENTS_LIST).length;
+}
+
+test("an agent Luke starts in the call is read into the list as its start answers, once, and a start already in the work as the plan opens is read with the plan", async () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await settle();
+  assert.equal(listReads(tab), 1);
+
+  tab.stand({ planning: { ...OPEN, work: [startedAgent(PLAN_WORK_STATE.RUNNING)] } });
+  await settle();
+  assert.equal(listReads(tab), 1, "a start still running is nothing to read");
+
+  tab.stand({ planning: { ...OPEN, work: [startedAgent(PLAN_WORK_STATE.DONE)] } });
+  await settle();
+  assert.equal(listReads(tab), 2);
+  tab.stand({ planning: { ...OPEN, work: [startedAgent(PLAN_WORK_STATE.DONE)], shownCode: [] } });
+  await settle();
+  assert.equal(listReads(tab), 2, "the same start seen again reads nothing more");
+
+  const reopened = mount(
+    { shown: true, planning: { ...OPEN, work: [startedAgent(PLAN_WORK_STATE.DONE)] } },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [] }) },
+  );
+  await settle();
+  assert.equal(listReads(reopened), 1);
 });
 
 test("a notification's click opens its plan on the agent's tab", () => {

@@ -5,6 +5,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
 } from "@sidecar/hosted/coding-agent-wire";
+import { type ModelChoice, modelChoiceSchema } from "@sidecar/hosted/models-wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { isTextUIPart } from "ai";
 import { Clock, Effect, Option, Result, Schema } from "effect";
@@ -26,6 +27,7 @@ import {
 import type { GitHubApp } from "../github/github-app.js";
 import type { EveSessions } from "./brain-host/eve-sessions.js";
 import { agentPublished } from "./coder-host/published.js";
+import { startCodingAgent } from "./coder-host/start.js";
 import { codingAgentFailureOf, codingAgentStatusOf } from "./coder-host/status.js";
 import { steerCodingAgent } from "./coder-host/steer.js";
 import { CODER_TOOL, CODER_TOOL_SET } from "./coder-host/tool-set.js";
@@ -37,17 +39,18 @@ import {
   readCodingAgent,
 } from "./coding-agent-store.js";
 import type { HostedRefusal } from "./http-effect.js";
+import { ModelCatalog, ModelChoiceRefused, type OfferedModel } from "./model-catalog.js";
 import type { PlanDocumentBinding } from "./plan-notes.js";
 import type { StoreWriter } from "./store/index.js";
 import { listJournals } from "./store/message-reads.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
- * coding-agent-tools.ts -- the planning model's three tools about the plan's coding agents: list them, read one's recent progress, message one.
+ * coding-agent-tools.ts -- the planning model's four tools about the plan's coding agents: list them, read one's recent progress, message one, start one.
  *
  * A planning call may turn to the agents working the plan: the developer
- * asks how one is doing, or tells one what to do, and Luke answers or steers
- * the right agent. Each tool reads the same rows the agent tabs read: the
+ * asks how one is doing, tells one what to do, or asks for a new one, and
+ * Luke answers, steers the right agent, or starts one. Each tool reads the same rows the agent tabs read: the
  * plan's agents and the newest turn each stands on (`coder-host/status.ts`),
  * the branch each row holds, and the transcript's turn journals, rendered
  * as a short tail of what the agent said and did so Luke can summarise it
@@ -59,6 +62,12 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * so a call eve runs again after a lost answer sends once; the words reach
  * the agent's session as the deployment acting for the account, which the
  * coder channel's table admits for exactly this (`coder-host/channel.ts`).
+ * A start takes the one path the Start button's does
+ * (`coder-host/start.ts`), on the call's plan and no other, under the same
+ * key, so a call run again starts no second agent: the plan's document as
+ * the agent's brief, or the developer's task in its place, on the model and
+ * effort the developer named or else the account's default, checked against
+ * the catalog, whose choices the refusal lists so Luke can ask or try again.
  * Every answer is data the model reads, never a credential: a call's input
  * is named and its output never, since a command's output is the
  * repository's own text and whatever the agent's shell printed.
@@ -93,6 +102,28 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   UNAVAILABLE: "Not sent: the service could not take the message just now.",
 } as const;
 
+/** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
+export const START_CODING_AGENT_REFUSAL = {
+  UNREADABLE:
+    "Not started: give a task as text of at most " +
+    `${CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS} characters, or none to start on the plan, and ` +
+    "a model with its effort, both or neither.",
+  NO_SERVICE: "Not started: this deployment cannot reach the coding agents' service.",
+  NO_REPOSITORY: "Not started: this plan names no GitHub repository yet.",
+  NOT_REACHABLE:
+    "Not started: the developer no longer reaches the plan's repository through the Luke GitHub App.",
+  SIGN_IN_REQUIRED: "Not started: the developer must sign in with GitHub again first.",
+  UNAVAILABLE:
+    "Not started: the service could not start an agent just now. The call may be made again.",
+} as const;
+
+/** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
+const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
+  [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
+  [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
+  [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED, START_CODING_AGENT_REFUSAL.SIGN_IN_REQUIRED],
+]);
+
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
 const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, CODING_AGENT_TOOL_REFUSAL.NOT_REACHABLE],
@@ -112,8 +143,12 @@ export interface CodingAgentCall {
   readonly clientKey: string;
 }
 
-/** What a message reaches: the store, GitHub through the App on the developer's standing, and the network to eve. */
-type CodingAgentToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHubApp;
+/** What a message or a start reaches: the store, GitHub through the App on the developer's standing, the network to eve, and the catalog a start's choice is checked against. */
+type CodingAgentToolServices =
+  | SqlClient.SqlClient
+  | HttpClient.HttpClient
+  | GitHubApp
+  | ModelCatalog;
 
 const AGENT_ID = describeWire(wireUuidSchema, "The agent's id, as list_coding_agents answered it.");
 
@@ -130,8 +165,36 @@ const MESSAGE_CODING_AGENT_INPUT = Schema.Struct({
   ),
 });
 
+/** A start names a task at most, and a model with its effort or neither; the catalog decides whether the two name anything. */
+const START_CODING_AGENT_INPUT = Schema.Struct({
+  task: Schema.optionalKey(
+    describeWire(
+      Schema.Trim.check(
+        Schema.isNonEmpty(),
+        Schema.isMaxLength(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
+      ),
+      "What the agent should do, in the developer's words, as a task typed to it; leave it out " +
+        "to start the agent on the plan itself.",
+    ),
+  ),
+  model: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.model,
+      "The model to run on, by its catalog id (such as anthropic/claude-opus-5.5); leave it out " +
+        "with the effort for the developer's default.",
+    ),
+  ),
+  effort: Schema.optionalKey(
+    describeWire(
+      modelChoiceSchema.fields.effort,
+      "The reasoning effort, as the model lists it (such as high); given with the model or not at all.",
+    ),
+  ),
+});
+
 const readAgentRef = Schema.decodeUnknownResult(READ_CODING_AGENT_INPUT);
 const readMessage = Schema.decodeUnknownResult(MESSAGE_CODING_AGENT_INPUT);
+const readStart = Schema.decodeUnknownResult(START_CODING_AGENT_INPUT);
 
 /** The tools as a planning model is offered them: each its name, its words, and its input schema. */
 export const LIST_CODING_AGENTS_TOOL = {
@@ -163,6 +226,17 @@ export const MESSAGE_CODING_AGENT_TOOL = {
     "the agent is idle. Answers `accepted` once the agent's session has taken it, or " +
     "`rejected` and why nothing was sent.",
   inputSchema: MESSAGE_CODING_AGENT_INPUT,
+} as const;
+
+export const START_CODING_AGENT_TOOL = {
+  name: "start_coding_agent",
+  description:
+    "Start a new coding agent on this plan, exactly as the developer's Start button would: " +
+    "on the plan itself with no task, or on the task given in the plan's place. It runs on the " +
+    "model and effort named, or on the developer's default with neither. Answers `accepted` " +
+    "with the agent's id, model, effort, and status once its session is open, or `rejected` " +
+    "and why nothing was started; a rejected model or effort lists the choices.",
+  inputSchema: START_CODING_AGENT_INPUT,
 } as const;
 
 /** How a call of one coding tool is said: its verb, and the one input field that names its subject. */
@@ -336,6 +410,30 @@ function refusalWords(refusal: HostedRefusal): string {
   return REFUSAL_WORDS.get(refusal.error) ?? CODING_AGENT_TOOL_REFUSAL.UNAVAILABLE;
 }
 
+/** A start's refusal in the model's words. */
+function startRefusalWords(refusal: HostedRefusal): string {
+  return START_REFUSAL_WORDS.get(refusal.error) ?? START_CODING_AGENT_REFUSAL.UNAVAILABLE;
+}
+
+/** A choice the catalog refused, the one named or the developer's stored default, said with every model offered and the efforts each lists, so the model can try again or ask. */
+function choiceRefusal(choice: ModelChoice | undefined, offered: readonly OfferedModel[]): string {
+  const refused =
+    choice === undefined
+      ? "the developer's default model is no longer offered"
+      : `no offered model is ${choice.model} at effort ${choice.effort}`;
+  const choices = offered.map((model) => `${model.id} (${model.efforts.join(", ")})`).join("; ");
+  return `Not started: ${refused}. The choices are: ${choices}.`;
+}
+
+/** The agent as a start answers it: its id, what it runs on, and where it stands now. */
+const startedReading = (userId: string, agent: CodingAgent) =>
+  Effect.map(standingsOf(userId, [agent]), (standing) => ({
+    id: agent.id,
+    model: agent.model,
+    effort: agent.effort,
+    status: standing(agent).status,
+  }));
+
 /** A store that could not be read is the one refusal, logged for the operator and said to the model. */
 const orStoreRefusal = <R>(
   effect: Effect.Effect<WireRecord, StoreFailure, R>,
@@ -425,6 +523,49 @@ export function runMessageCodingAgent(
         status: ACTION_RESULT_STATUS.ACCEPTED,
         delivery: sent.success,
         agent: { id: found.value.id, status: CODING_AGENT_STATUS.RUNNING },
+      };
+    }),
+  );
+}
+
+/** One call of `start_coding_agent`: an agent started on the call's plan under the call's own key, or why nothing was started. */
+export function runStartCodingAgent(
+  call: CodingAgentCall,
+  input: UnparsedWireValue,
+): Effect.Effect<WireRecord, never, CodingAgentToolServices> {
+  const asked = readStart(input);
+  // A choice is one thing: a model without its effort, or the reverse, names nothing to run on.
+  if (
+    Result.isFailure(asked) ||
+    (asked.success.model === undefined) !== (asked.success.effort === undefined)
+  ) {
+    return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.UNREADABLE));
+  }
+  const { task, model, effort } = asked.success;
+  const choice = model !== undefined && effort !== undefined ? { model, effort } : undefined;
+  const eve = call.eve;
+  if (eve === undefined) return Effect.succeed(rejected(START_CODING_AGENT_REFUSAL.NO_SERVICE));
+  return orStoreRefusal(
+    Effect.gen(function* () {
+      const { userId, planId } = call.plan;
+      const started = yield* startCodingAgent(Effect.succeed(eve), userId, {
+        planId,
+        idempotencyKey: call.clientKey,
+        choice,
+        task,
+      }).pipe(Effect.result);
+      if (Result.isFailure(started)) {
+        const refusal = started.failure;
+        if (refusal instanceof ModelChoiceRefused) {
+          const catalog = yield* ModelCatalog;
+          const offered = yield* Effect.orElseSucceed(catalog.read, () => []);
+          return rejected(choiceRefusal(choice, offered));
+        }
+        return rejected(startRefusalWords(refusal));
+      }
+      return {
+        status: ACTION_RESULT_STATUS.ACCEPTED,
+        agent: yield* startedReading(userId, started.success.agent),
       };
     }),
   );

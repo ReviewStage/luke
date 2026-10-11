@@ -104,6 +104,7 @@
                       "list-agents",
                       "read-agent",
                       "message-agent",
+                      "start-agent",
                       "end-call",
                       "other"
                     ]
@@ -210,6 +211,7 @@
                                     "list-agents",
                                     "read-agent",
                                     "message-agent",
+                                    "start-agent",
                                     "end-call",
                                     "other"
                                   ]
