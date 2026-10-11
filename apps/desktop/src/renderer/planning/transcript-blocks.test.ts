@@ -179,3 +179,29 @@ test.each(surfaces(true))(
     assert.ok(foldSaying(container, "cat src/invite.ts"));
   },
 );
+
+test.each(surfaces(true))(
+  "on %s every folded row starts with its own icon, not a chevron, and the whole line opens it and says so",
+  (_surface, element) => {
+    const container = mounted(element);
+    const closed = () => container.querySelector("details:not([open]) > summary");
+    for (let line = closed(); line instanceof HTMLElement; line = closed()) {
+      assert.equal(line.getAttribute("aria-expanded"), "false");
+      act(() => line.click());
+      assert.equal(line.getAttribute("aria-expanded"), "true");
+    }
+    const rows = [...container.querySelectorAll("summary")];
+    // The calls, the reasoning, and the lines folding them.
+    assert.ok(rows.length >= 4);
+    for (const row of rows) {
+      assert.equal(row.querySelector(".lucide-chevron-right"), null);
+      assert.ok(row.firstElementChild?.matches("svg, span:has(> svg)"));
+      // A summary is in the tab order, and Enter and Space press it as a click.
+      assert.equal(row.tabIndex, 0);
+    }
+    const call = foldSaying(container, COMMAND);
+    act(() => call.querySelector("summary")?.click());
+    assert.equal(call.querySelector("summary")?.getAttribute("aria-expanded"), "false");
+    assert.equal(call.open, false);
+  },
+);

@@ -380,7 +380,7 @@ test("a finished turn folds its calls under one line saying how many, as the Wor
   assert.equal(container.querySelectorAll("details[data-call-id]").length, 4);
 });
 
-test("each row says what the call did and where it stands, and the chevron, icon, and mark are 16px", () => {
+test("each row says what the call did and where it stands, and the icon and mark are 16px", () => {
   const markup = unfolded([TURN]).innerHTML;
   assert.match(
     markup,
