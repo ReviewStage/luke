@@ -79,11 +79,12 @@ export function LukeIdentity({
       </span>
       <span className="luke-identity-copy">
         <span className="luke-identity-name">Luke</span>
-        {status ? (
-          <span className="luke-identity-status" role="status">
-            {status}
-          </span>
-        ) : null}
+        {/* Note that the live region stands even at rest, empty, because a
+            screen reader announces a change to a region it already knows,
+            not one that arrives with its words in it. */}
+        <span className="luke-identity-status" role="status">
+          {status}
+        </span>
       </span>
       {meterVoice ? (
         <span className="wing-meter luke-identity-meter" data-turn={meterVoice}>

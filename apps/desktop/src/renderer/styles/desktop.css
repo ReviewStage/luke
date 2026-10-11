@@ -275,7 +275,13 @@ body,
   display: flex;
   min-width: 0;
   flex-direction: column;
-  gap: var(--space-2);
+}
+
+/* At rest the status line is an empty live region, still in the
+   accessibility tree but with no height, so its gap goes only with words and
+   the name sits centred beside the face. */
+.luke-identity-status:not(:empty) {
+  margin-top: var(--space-2);
 }
 
 .luke-identity-name {

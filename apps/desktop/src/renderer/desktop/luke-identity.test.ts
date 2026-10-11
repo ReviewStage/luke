@@ -35,11 +35,11 @@ beforeEach(() => {
   });
 });
 
-test("with no call the card is Luke's face and name, and no status line", () => {
+test("with no call the card is Luke's face and name, and its status line says nothing", () => {
   const card = identity(quiet);
 
   assert.equal(card.querySelector(".luke-identity-name")?.textContent, "Luke");
-  assert.equal(card.querySelector("[role=status]"), null);
+  assert.equal(card.querySelector("[role=status]")?.textContent, "");
   assert.equal(card.textContent, "Luke");
 });
 
