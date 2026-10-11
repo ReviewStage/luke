@@ -467,6 +467,19 @@ test("the open plan's call grows the transcript as it is said, and hanging up ke
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_REFRESH);
 });
 
+test("the Work tab reads the turns before its oldest through the host, while the view says older ones stand", async () => {
+  const tab = mount(
+    { shown: true, planning: { ...OPEN, workEarlier: "turn-2" } },
+    { [ACT_KIND.PLANNING_WORK_EARLIER]: () => Promise.resolve() },
+  );
+  assert.equal(tab.control().work.earlier, "turn-2");
+
+  await act(() => tab.control().work.onLoadEarlier());
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_WORK_EARLIER);
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().work.earlier, undefined);
+});
+
 const EMPTY_BOARD: Board = { elements: [], appliedDrawing: 0 };
 
 /** A board holding Luke's drawing of one box, numbered as his `number`th. */
@@ -530,6 +543,17 @@ test("the first code Luke shows on the open plan's call opens the panel on the c
   tab.stand({ voice: IDLE_VOICE_VIEW, planning: OPEN });
   tab.stand({ voice: ON_CALL });
   tab.stand({ planning: { ...OPEN, code: CODE } });
+  assert.equal(tab.control().sidePanel.open, false);
+});
+
+test("the code last shown on the open plan is drawn with no call standing, as after a restart, and a call that starts with it opens no panel", () => {
+  const tab = mount({ shown: true, planning: OPEN });
+  tab.stand({ planning: { ...OPEN, code: CODE } });
+  assert.deepEqual(tab.control().code, CODE);
+  assert.equal(tab.control().sidePanel.open, false);
+
+  tab.stand({ voice: ON_CALL });
+  assert.deepEqual(tab.control().code, CODE);
   assert.equal(tab.control().sidePanel.open, false);
 });
 

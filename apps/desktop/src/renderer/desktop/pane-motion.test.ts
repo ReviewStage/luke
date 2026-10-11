@@ -179,7 +179,8 @@ function Window({ code }: { code?: PlanCode | undefined }): React.JSX.Element {
   const unreadTabs = usePanelArrivals({
     planId: PLAN.id,
     board: undefined,
-    code,
+    // The window stands on a call, which is when code arrives.
+    code: code !== undefined,
     panel: sidePanel,
   });
   useAppKeymap(true);

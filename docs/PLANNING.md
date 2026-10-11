@@ -245,13 +245,22 @@ The open plan's supporting views stand in a panel at the window's right,
 beside the document and its microphone row, the way a devtool's secondary
 sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 
-- **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke has on
-  screen during a call, read by the service from the plan's repository ("How
-  the planning model reads code" below); `Transcript`, what was said on the
+- **Tabs.** `Board`, the plan's whiteboard; `Code`, the code Luke last
+  showed on the plan, read by the service from the plan's repository ("How
+  the planning model reads code" below), live during a call and read back
+  with the plan's work when the plan opens; `Transcript`, what was said on the
   plan's calls ("Transcript" below); and, after them, one tab per coding
   agent started on the plan, named by its model with a dot for where it
-  stands ("Agent tabs" below). With none on screen, the Code tab says so
-  quietly rather than going away. The strip scrolls where the agents
+  stands ("Agent tabs" below). The Work tab, what the planning model wrote
+  and ran on the plan's calls, is told live during a call and read back
+  from the plan's conversation when the plan opens
+  (`GET /api/plans/{id}/work`, `hosted/plan-work-store.ts`), so a restart
+  or a switch to another plan and back loses neither it nor the code. The
+  read answers twenty turns a page, the newest first; scrolling to the
+  oldest turn drawn reads the page before it (`?before=<turn>`), and the
+  newest page also carries every code shown on the plan, oldest first,
+  several of one file included, of which the Code tab draws the newest. With
+  no code ever shown, the Code tab says so quietly rather than going away. The strip scrolls where the agents
   overflow it, and no tab closes.
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for Luke's first drawing on the
@@ -594,7 +603,11 @@ answer, so they are journaled with the call, told to the voice as the
 `code_shown` turn event once the call has answered, held until Luke next
 starts to speak, and sent to the Mac on the `plan.code` frame with the
 repository they came from; the Mac colours and draws them and reads nothing
-of its own (`packages/host/src/plan-code.ts`). A file that is missing,
+of its own (`packages/host/src/plan-code.ts`). Every answered call's lines
+are read back from the journals with the plan's work when the plan opens,
+picked by their parts in the statement and read by the same reading
+(`shownCodeOf`), which holds to the secret-file rule again, so the Code tab
+keeps the last code shown after the call. A file that is missing,
 outside the checkout, binary, too large, or secret, and a checkout that
 cannot be reached, answer `rejected` with why, and nothing goes on screen.
 

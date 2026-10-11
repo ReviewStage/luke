@@ -29,6 +29,7 @@ import {
   type UserIdResolver,
 } from "./hosted/http-effect.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
+import { readPlanWork } from "./hosted/plan-work-store.js";
 import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 
@@ -47,7 +48,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * Luke's latest drawing, and writes the scene back whole, the last write
  * winning (`hosted/board-store.ts`). `/api/plans/{id}/transcript` is what was
  * said on the plan's calls, read and never written here
- * (`hosted/transcript-store.ts`).
+ * (`hosted/transcript-store.ts`). `/api/plans/{id}/work` is what Luke's
+ * planning model wrote and ran on them, a page at a time, and every code he
+ * showed, read back from the plan's conversation
+ * (`hosted/plan-work-store.ts`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -72,6 +76,8 @@ const PLANS_PATH = {
   BOARD: "/api/plans/board",
   /** GET reads what was said on the plan's calls; the rewrite moves the path's id into the `id` query. */
   TRANSCRIPT: "/api/plans/transcript",
+  /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
+  WORK: "/api/plans/work",
 } as const;
 
 const HTTP_METHOD = {
@@ -83,6 +89,9 @@ const HTTP_METHOD = {
 } as const;
 
 const PLAN_ID_QUERY = "id";
+
+/** The query naming the turn an older page of a plan's work is read before. */
+const BEFORE_TURN_QUERY = "before";
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
@@ -274,6 +283,41 @@ const transcriptEndpoint = /* @__PURE__ */ Effect.fn("web/planTranscriptEndpoint
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { transcript: transcript.value });
 });
 
+/**
+ * The turn an older page is read before, or nothing for the newest page.
+ * Two would leave the page ambiguous, and one that is not a UUID names no
+ * turn, so each is refused as a request that does not read.
+ */
+const beforeTurnOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<string | undefined, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(BEFORE_TURN_QUERY);
+  const [turnId] = named;
+  if (turnId === undefined) return undefined;
+  const read = readEither(wireUuidSchema)(unparsedWire(turnId));
+  if (named.length !== 1 || Result.isFailure(read)) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
+  return read.success;
+});
+
+/** GET reads a page of the plan's work, and on the newest page every code shown on it. */
+const workEndpoint = /* @__PURE__ */ Effect.fn("web/planWorkEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const before = yield* beforeTurnOf(request);
+  const work = yield* hostedStoreOrUnavailable(readPlanWork(userId, planId, before));
+  if (Option.isNone(work)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, work.value);
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
@@ -281,6 +325,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.ONE, hostedRefusing(oneEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

@@ -51,7 +51,7 @@ import { listJournals } from "../hosted/store/message-reads.js";
 import { logStoreFailure } from "../hosted/store-failure.js";
 import { projectTurnEvents } from "../hosted/turn-events.js";
 import { VOICE_DETACH_GRACE_MS } from "./orphan-sweep.js";
-import { planWorkOf, workerCallIdsOf } from "./plan-work.js";
+import { planWorkOf, SUBAGENT_JOURNALS, workerCallIdsOf } from "./plan-work.js";
 
 /**
  * The hosted implementation of the live brain: Luke's judgment reached in
@@ -89,9 +89,6 @@ import { planWorkOf, workerCallIdsOf } from "./plan-work.js";
  * built on provided to it where the ask door asks for one, exactly as
  * `runTool` provides it to the brain's seams.
  */
-
-/** The most of a subagent's turns one look reads, the newest: a worker's task is a turn, and each follow-up it was handed another. */
-const SUBAGENT_JOURNALS = 10;
 
 /** How long an ask is followed before it is given up as failed: past eve's own turn deadline, with room for one queued turn ahead of it. */
 const FOLLOW = Duration.minutes(10);

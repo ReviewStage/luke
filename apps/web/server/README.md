@@ -695,6 +695,18 @@ endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
 
+`GET /api/plans/{id}/work` reads back what the planning model wrote and
+ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
+conversation's turns, twenty a page newest first, each projected from its
+row and journal by the same `voice/plan-work.ts` a live call tells them
+through, and `?before=<turn id>` for the page before that turn; the answer
+names the turn the next older page is read before while one stands. The
+newest page also carries every answered `show_code` call in the
+conversation, oldest first, picked by its parts in the statement and read
+through `shownCodeOf`, so what the call refused and a secret file are
+never read back. `packages/hosted/src/planning-view.ts` declares the
+answer (`planWorkAnswerSchema`).
+
 A plan's repository is `plan.repository` (migration 0063), the full name
 `owner/name` as GitHub spells it, or null for a plan with none, which is
 where every plan from before repositories stands and is no error. It is

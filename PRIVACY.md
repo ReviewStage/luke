@@ -1,6 +1,6 @@
 # Privacy
 
-Last updated: 8 October 2026
+Last updated: 11 October 2026
 
 Luke is a macOS app for planning a feature by voice. This policy explains
 what we collect, who we send it to, and how to turn it off.
@@ -37,9 +37,12 @@ the turns of the worker it hands research to: what each wrote, the summary
 of its reasoning that OpenAI returns for each step, and each tool it called
 with the call's input and what the call answered, such as a command's output
 from the plan's repository in its sandbox or a public page's text, each cut
-short. Luke holds them in the panel's memory to show them, never in the
-voice window and never on disk, and they go when you leave the plan or quit
-Luke. The agent tabs and the Work tab, like the Transcript tab, are left out
+short. Our service keeps those turns with the plan's planning conversation,
+so when you open a plan, Luke on your Mac also reads them back from our
+service, the newest twenty first and older ones as you scroll back through
+the tab, and the tab shows them after a restart or a visit to another plan. Luke holds them in the panel's memory to show them, never in
+the voice window and never on disk, and they go when you leave the plan or
+quit Luke. The agent tabs and the Work tab, like the Transcript tab, are left out
 of the screen recording described under "Usage data and screen recordings"
 below. Your default model and effort for a coding agent are kept with your
 account preferences on our service, chosen in Settings › Coding agents or by
@@ -96,7 +99,7 @@ thirty days after its last use. Nothing written in the sandbox reaches your
 repository.
 
 **Code on screen during a planning call.** During a planning call, Luke shows
-code from the plan's GitHub repository in a small pane in the Plans tab. When
+code from the plan's GitHub repository in the plan's Code tab. When
 the planning model wants to show you code, it names a file and a range of
 lines, and our service reads those lines from its own checkout of the
 repository, in the same sandbox the planning model reads the repository in.
@@ -106,8 +109,12 @@ and our service sends them to your Mac, which draws them. Nothing is read
 from your Mac's disk. The service refuses a path outside the checkout and
 never reads a file named `.env` or starting with `.env`. Our service tells the
 voice model the file path and line numbers on screen, so Luke can refer to
-them. The pane and its code are cleared when the call ends. They are never
-part of the plan's document.
+them. After the call, the Code tab keeps showing the last code Luke showed
+on the plan: when you open the plan, Luke on your Mac reads back the code
+shown on it from what our service keeps with the plan's planning
+conversation, by the same rules (nothing the service refused, and no `.env` file, is read back),
+and holds them in the panel's memory, never on disk, until you leave the
+plan or quit Luke. They are never part of the plan's document.
 
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a

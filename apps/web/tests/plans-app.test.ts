@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
+import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
 import {
   planTranscriptAnswerSchema,
   TRANSCRIPT_BOUNDS,
@@ -63,6 +64,7 @@ const PLANS = "/api/plans";
 const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
+const WORK = "/api/plans/work";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -814,6 +816,41 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         );
         assert.deepEqual(
           yield* ask(request(TRANSCRIPT, owner, { method: "PUT", id: planId })),
+          refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan's work is read by the account that owns it alone, before a turn the query names by its id, and only read",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+
+        assert.deepEqual(
+          readAnswer(
+            planWorkAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(request(WORK, owner, { id: planId })),
+          ),
+          { turns: [], code: [] },
+        );
+        const older = new URL(WORK, ORIGIN);
+        older.searchParams.set("id", planId);
+        older.searchParams.set("before", "turn-1");
+        assert.deepEqual(
+          yield* ask(new Request(older, { headers: { authorization: `Bearer ${owner}` } })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(request(WORK, other, { id: planId })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(
+          yield* ask(request(WORK, owner, { method: "PUT", id: planId })),
           refusal(HOSTED_HTTP_STATUS.METHOD_NOT_ALLOWED, HOSTED_API_ERROR.METHOD_NOT_ALLOWED),
         );
       }),

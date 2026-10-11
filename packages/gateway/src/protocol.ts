@@ -29,6 +29,8 @@ export const GATEWAY_METHOD = {
   PLANNING_REPOSITORIES: "planning.repositories",
   /** One plan given its repository on the service, or none; the list and the open document take what it answered without reading either again. */
   PLANNING_SET_REPOSITORY: "planning.setRepository",
+  /** The page of the open plan's work before the oldest turn held, read from the service where an older one stands; the view takes it. */
+  PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** The models a coding agent may run on, read from the service's catalog now. */

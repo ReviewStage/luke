@@ -69,6 +69,18 @@ export function planTranscriptPath(planId: string): string {
   return `${planPath(planId)}/transcript`;
 }
 
+/**
+ * One plan's work (GET): a page of the planning turns of its calls, the
+ * newest of all or, with `before`, the newest queued before that turn, and
+ * on the newest page every code Luke showed on it.
+ */
+export function planWorkPath(planId: string, before?: string): string {
+  const path = `${planPath(planId)}/work`;
+  if (before === undefined) return path;
+  const query = new URLSearchParams({ before });
+  return `${path}?${query}`;
+}
+
 /** One plan's coding agents: list them with their status (GET), or start one (POST). `coding-agent-wire.ts` declares both. */
 export function planAgentsPath(planId: string): string {
   return `${planPath(planId)}/agents`;

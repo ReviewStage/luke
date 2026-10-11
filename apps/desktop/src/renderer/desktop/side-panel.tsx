@@ -360,6 +360,8 @@ interface SidePanelTranscript {
 interface SidePanelWork {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
+  earlier: string | undefined;
+  onLoadEarlier: () => Promise<void>;
 }
 
 /** What the chosen tab shows. */
@@ -429,7 +431,13 @@ function TabContent({
       );
     case SIDE_PANEL_TAB.WORK:
       return (
-        <PlanWork turns={work.turns} callLive={work.callLive} onOpenSubagent={onOpenSubagent} />
+        <PlanWork
+          turns={work.turns}
+          callLive={work.callLive}
+          earlier={work.earlier}
+          onLoadEarlier={work.onLoadEarlier}
+          onOpenSubagent={onOpenSubagent}
+        />
       );
   }
 }

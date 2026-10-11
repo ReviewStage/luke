@@ -6,13 +6,17 @@ import {
   PLAN_WORK_PART,
   PLAN_WORK_STATE,
   PLAN_WORK_TOOL,
+  type PlanWorkAnswer,
   type PlanWorkPart,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import type { WireRecord } from "@sidecar/wire";
-import { Effect, Schema } from "effect";
+import { eq } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
+import { db } from "../server/db/query";
+import { turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";
@@ -26,6 +30,8 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { readPlanWork } from "../server/hosted/plan-work-store";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
@@ -495,4 +501,213 @@ test("a worker's call carries the worker's own session, read from its child conv
   );
   const findings = await projected();
   assert.deepEqual(findings?.at(-1), [PLAN_WORK_PART.TEXT, "Both libraries let an admin revoke."]);
+});
+
+/** Lines a `show_code` call answered with, as its journal keeps them. */
+function shownAt(path: string, line: string) {
+  return {
+    ref: { path, startLine: 1, endLine: 1 },
+    repository: "acme/web",
+    firstLine: 1,
+    lineCount: 1,
+    lines: [line],
+  };
+}
+
+/** A plan of a new account, with the conversation its planning model runs in. */
+async function planConversation(): Promise<ConversationTarget & { planId: string }> {
+  const userId = await database.createUser();
+  const plan = await database.run(createPlan(userId, { name: "Teammate invitations" }));
+  const opened = await database.run(openPlanConversation(userId, plan.id));
+  assert.ok(Option.isSome(opened));
+  return { userId, conversationId: opened.value, planId: plan.id };
+}
+
+/**
+ * Stamps a played turn as asked and started at `at`, so the turns of a plan
+ * read in the order they were asked; the row's own queue stamp is the
+ * database's clock, which a test does not hold.
+ */
+async function askedAt(standing: RelayStanding, at: number): Promise<void> {
+  await database.run(
+    db
+      .update(turns)
+      .set({ queuedAt: new Date(at), startedAt: new Date(at) })
+      .where(eq(turns.id, hostTurnId(standing.sessionId, FIRST_EVE_TURN))),
+  );
+}
+
+/** The code a read answered, by the call and turn that showed it, as the tab would tell them apart. */
+function shownBy(read: Option.Option<PlanWorkAnswer>) {
+  assert.ok(Option.isSome(read));
+  return (read.value.code ?? []).map(({ callId, turnId, code }) => [callId, turnId, code]);
+}
+
+test("a plan's work reads back from its conversation after the call: its turns oldest first and every code shown, several of one file included, for the account that owns it alone", async () => {
+  const target = await planConversation();
+  const first = standingFor(target);
+  const second = standingFor(target);
+  const old = shownAt("src/old.ts", "old");
+  const invite = shownAt("src/invite.ts", "export function invite() {}");
+  const revoke = shownAt("src/invite.ts", "export function revoke() {}");
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: "src/old.ts" },
+          output: { status: "accepted", code: old },
+        },
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: "src/invite.ts" },
+          output: { status: "accepted", code: invite },
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "Invites live in one file."),
+    ],
+    first,
+  );
+  await askedAt(first, NOW - 60_000);
+  // A showing that was refused shows nothing, and the one after it shows the same file again.
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: "src/missing.ts" },
+          output: { status: "rejected", reason: "Not shown: no such file in the repository." },
+        },
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: "src/invite.ts" },
+          output: { status: "accepted", code: revoke },
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "Expiry is seven days."),
+    ],
+    second,
+  );
+  await askedAt(second, NOW);
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => [turn.state, turn.parts.at(-1)]),
+    [
+      [PLAN_WORK_STATE.DONE, { type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+      [PLAN_WORK_STATE.DONE, { type: PLAN_WORK_PART.TEXT, text: "Expiry is seven days." }],
+    ],
+  );
+  assert.equal(read.value.earlier, undefined);
+  const firstTurn = hostTurnId(first.sessionId, FIRST_EVE_TURN);
+  const secondTurn = hostTurnId(second.sessionId, FIRST_EVE_TURN);
+  assert.deepEqual(shownBy(read), [
+    ["call-0-0", firstTurn, old],
+    ["call-0-1", firstTurn, invite],
+    ["call-0-1", secondTurn, revoke],
+  ]);
+  const stranger = await database.createUser();
+  assert.ok(Option.isNone(await database.run(readPlanWork(stranger, target.planId, undefined))));
+});
+
+test("a plan of more turns than a page reads its newest first, then each older page before the oldest turn read, every code coming with the newest", async () => {
+  const target = await planConversation();
+  const count = PLAN_WORK_BOUNDS.TURNS + 2;
+  const standings = Array.from({ length: count }, () => standingFor(target));
+  for (const [index, standing] of standings.entries()) {
+    await play(
+      [
+        ...opening(FIRST_EVE_TURN),
+        ...callingStep(FIRST_EVE_TURN, 0, [
+          {
+            toolName: SHOW_CODE_TOOL.name,
+            input: { path: "src/invite.ts" },
+            output: { status: "accepted", code: shownAt("src/invite.ts", `line ${index}`) },
+          },
+        ]),
+        ...answeringStep(FIRST_EVE_TURN, 1, `Turn ${index}.`),
+      ],
+      standing,
+    );
+    await askedAt(standing, NOW + index * 1_000);
+  }
+  const words = (read: Option.Option<PlanWorkAnswer>) => {
+    assert.ok(Option.isSome(read));
+    return read.value.turns.map((turn) => {
+      const last = turn.parts.at(-1);
+      return last?.type === PLAN_WORK_PART.TEXT ? last.text : undefined;
+    });
+  };
+
+  const newest = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(newest));
+  assert.deepEqual(
+    words(newest),
+    Array.from({ length: PLAN_WORK_BOUNDS.TURNS }, (_, at) => `Turn ${at + 2}.`),
+  );
+  assert.equal(shownBy(newest).length, count);
+  const older = await database.run(
+    readPlanWork(target.userId, target.planId, newest.value.earlier),
+  );
+  assert.deepEqual(words(older), ["Turn 0.", "Turn 1."]);
+  assert.ok(Option.isSome(older));
+  assert.equal(older.value.earlier, undefined);
+  assert.equal(older.value.code, undefined);
+});
+
+test("a plan never planned on reads as no work, and a secret file a journal holds is not read back as code", async () => {
+  const userId = await database.createUser();
+  const fresh = await database.run(createPlan(userId, { name: "Billing export" }));
+  assert.deepEqual(
+    await database.run(readPlanWork(userId, fresh.id, undefined)),
+    Option.some({ turns: [], code: [] }),
+  );
+
+  const target = await planConversation();
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: ".env.local" },
+          output: { status: "accepted", code: shownAt(".env.local", "SECRET=synthetic") },
+        },
+      ]),
+    ],
+    standingFor(target),
+  );
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.equal(read.value.turns.length, 1);
+  assert.deepEqual(read.value.code, []);
+});
+
+test("a plan's work read back carries each worker's own session from its child conversation", async () => {
+  const target = await planConversation();
+  const standing = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), standing);
+  const [worker] = (await worked(target, standing)).parts;
+  assert.ok(worker?.type === PLAN_WORK_PART.TOOL);
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, worker.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Both libraries revoke.")],
+    { ...standingFor(child), turn: RELAY_TURN.CHILD },
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  const [drawn] = read.value.turns[0]?.parts ?? [];
+  assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+  assert.deepEqual(drawn.session?.parts.at(-1), {
+    type: PLAN_WORK_PART.TEXT,
+    text: "Both libraries revoke.",
+  });
 });

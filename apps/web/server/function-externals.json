@@ -8,6 +8,7 @@
     "node:async_hooks",
     "node:buffer",
     "node:crypto",
+    "node:dns/promises",
     "node:fs",
     "node:fs/promises",
     "node:net",

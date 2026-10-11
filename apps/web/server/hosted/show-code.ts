@@ -139,11 +139,16 @@ export const SHOW_CODE_TOOL = {
 /**
  * The code a journaled call put on screen, or nothing for a call still
  * running, refused, or whose answer does not read; code is told once its
- * lines are on the journal.
+ * lines are on the journal. Only an accepted answer reads, so what the
+ * checkout refused (a path that leaves it, a missing, binary, or oversized
+ * file) is never shown. Note that the secret rule is held to again here,
+ * because a plan's work is read back from its journal for as long as the
+ * journal stands, under whatever rule this build keeps.
  */
 export function shownCodeOf(part: StoredToolPart): ShownCode | undefined {
   if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return undefined;
-  return Result.getOrUndefined(readShownCode(part.output))?.code;
+  const code = Result.getOrUndefined(readShownCode(part.output))?.code;
+  return code === undefined || SECRET_FILE.test(code.ref.path) ? undefined : code;
 }
 
 function rejected(reason: string): WireRecord {
