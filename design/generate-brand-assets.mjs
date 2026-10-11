@@ -1282,9 +1282,10 @@ for (const [mode, tile] of Object.entries(TILES)) {
 // Square mark: the face's own tight fill — its bounding box padded by the
 // same 6 units, squared by its larger side — with the corners left square,
 // one per mode, tiled and transparent. The tiled pair carries
-// the icon's gradient full-bleed and is the avatar shape for surfaces that
-// round their own tiles — GitHub among them, where a pre-rounded tile would
-// show seams in the corners. The transparent pair is the same crop with no
+// the icon's gradient full-bleed and is the shape for surfaces that only
+// round the corners of a square — GitHub's organization avatar among them,
+// where a pre-rounded tile would show seams in the corners. A profile photo
+// cut to a circle takes the avatar below instead. The transparent pair is the same crop with no
 // tile: the see-through version of the icon and the tiled mark alike, since
 // the tile is all they do not share. A transparent avatar shows GitHub's
 // badge background color instead of a tile: pair the dark set with #1c1c1e,
@@ -1316,6 +1317,33 @@ const squareBlack =
 emit(
   "mark/luke-mark-square-black.svg",
   squareBlack.replaceAll("currentColor", TILES.dark.ink),
+  "Luke",
+);
+
+// Avatar: the face with room around it, for profile photos. The square marks
+// are cropped to the face itself, so the circle GitHub, X, Slack, and LinkedIn
+// cut from a profile photo takes the eyes and the end of the smile. Here the
+// face's bounding box is set so its diagonal spans 80% of the canvas, which
+// keeps every corner of the artwork inside the inscribed circle with air to
+// spare. The tiles are opaque, because a profile photo rarely shows through.
+const AVATAR = { diagonalFill: 0.8 };
+const avatarSide = Math.hypot(bbox.w, bbox.h) / AVATAR.diagonalFill;
+const avatarX = bbox.cx - avatarSide / 2;
+const avatarY = bbox.cy - avatarSide / 2;
+const avatarRect = `x="${fmt(avatarX)}" y="${fmt(avatarY)}" width="${fmt(avatarSide)}" height="${fmt(avatarSide)}"`;
+for (const [mode, tile] of Object.entries(TILES)) {
+  const avatar =
+    `${svgOpenAt(avatarX, avatarY, avatarSide, avatarSide)}<defs><linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${tile.gradient[0]}"/><stop offset="1" stop-color="${tile.gradient[1]}"/></linearGradient></defs>` +
+    `<rect ${avatarRect} fill="url(#tile)"/>${face()}</svg>`;
+  emit(`avatar/luke-avatar-${mode}.svg`, avatar.replaceAll("currentColor", tile.ink), "Luke");
+}
+emit(
+  "avatar/luke-avatar-black.svg",
+  `${svgOpenAt(avatarX, avatarY, avatarSide, avatarSide)}<rect ${avatarRect} fill="#000000"/>${face()}</svg>`.replaceAll(
+    "currentColor",
+    TILES.dark.ink,
+  ),
   "Luke",
 );
 
