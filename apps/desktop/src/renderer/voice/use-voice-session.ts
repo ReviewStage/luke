@@ -68,14 +68,30 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
   const remote = useAtomValue(remoteStreamAtom);
   const callRef = useRef<LiveCall | undefined>(undefined);
   const orchestratorRef = useRef<LiveVoiceOrchestrator | undefined>(undefined);
+  /**
+   * Why Luke's voice is not played: the stop silencing the utterance it cut
+   * short, and the developer's speaker toggle. The element is muted while
+   * either stands, and never the stream, which the meter reads.
+   */
+  const outputSilenced = useRef(false);
+  const speakerMuted = useRef(false);
+  const playRemoteAudio = () => {
+    if (remoteAudio.current) {
+      remoteAudio.current.muted = outputSilenced.current || speakerMuted.current;
+    }
+  };
   /** Everything the policy asks of the main process, over the one bridge this window has. */
   const bridge: LiveVoiceBridge = {
     // Every exchange is a spoken one: a call is only ever opened by a press.
-    reportView: (view, exchangeOpened) =>
+    // The speaker toggle is the view's, so it is played as reported.
+    reportView: (view, exchangeOpened) => {
+      speakerMuted.current = view.speakerMuted;
+      playRemoteAudio();
       window.sidecar.reportVoiceView(
         view,
         exchangeOpened ? PRODUCT_EXCHANGE_KIND.SPOKEN : undefined,
-      ),
+      );
+    },
     requestMicrophone: () =>
       Effect.promise(
         async () => (await act(ACT_KIND.MICROPHONE_REQUEST)) === MICROPHONE_STATUS.GRANTED,
@@ -119,7 +135,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
         // The element alone is muted, never the stream: the meter reads the
         // stream, and is what tells the call when the silenced utterance ends.
         onOutputSilenced: (silenced) => {
-          if (remoteAudio.current) remoteAudio.current.muted = silenced;
+          outputSilenced.current = silenced;
+          playRemoteAudio();
         },
         services: rendererServicesNow(),
         // The development trace's tap, checked at each event rather than at
@@ -244,6 +261,8 @@ export function useVoiceSession(remoteAudio: RefObject<HTMLAudioElement | null>)
       window.sidecar.onVoiceCommand(({ command }) => {
         if (command === VOICE_COMMAND.STOP_SPEAKING) drive(orchestrator.stopSpeaking());
         else if (command === VOICE_COMMAND.END_CALL) drive(orchestrator.stopCall());
+        else if (command === VOICE_COMMAND.MUTE_SPEAKER) drive(orchestrator.muteSpeaker(true));
+        else if (command === VOICE_COMMAND.UNMUTE_SPEAKER) drive(orchestrator.muteSpeaker(false));
         else if (command === VOICE_COMMAND.REQUEST_MICROPHONE_ACCESS) {
           drive(orchestrator.requestMicrophoneAccess());
         }

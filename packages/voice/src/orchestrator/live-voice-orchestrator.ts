@@ -69,6 +69,8 @@ export interface LiveVoiceView extends LiveVoiceSpeakers {
   callTranscript: LiveCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself, so the transcript can say so; none before he has. */
   lukeEndedCall: string | undefined;
+  /** Whether Luke's voice is silenced on this device for the standing call; never while none stands. */
+  speakerMuted: boolean;
 }
 
 /** Everything the policy asks of the process that hosts it. */
@@ -157,6 +159,7 @@ function sameView(left: LiveVoiceView, right: LiveVoiceView): boolean {
     left.callPlanId === right.callPlanId &&
     left.callTranscript === right.callTranscript &&
     left.lukeEndedCall === right.lukeEndedCall &&
+    left.speakerMuted === right.speakerMuted &&
     left.listening === right.listening &&
     left.lukeSpeaking === right.lukeSpeaking
   );
@@ -207,6 +210,8 @@ export class LiveVoiceOrchestrator {
   #developerCaptions: readonly string[] | undefined;
   #callTranscript: LiveCallTranscript | undefined;
   #talkOpening = false;
+  /** Whether the developer silenced Luke's voice on this device for the call standing, which its end lets go of. */
+  #speakerMuted = false;
   /** The plan the call standing or opening is about. */
   #callPlan: string | undefined;
   /** The open still negotiating: a second ask reads its answer rather than building a second call. */
@@ -428,6 +433,22 @@ export class LiveVoiceOrchestrator {
     });
   }
 
+  /**
+   * The panel's speaker toggle: Luke's voice silenced on this device, or
+   * heard again, for the call standing. It is playback alone, so the session
+   * is told nothing and Luke goes on speaking: his words still caption and
+   * transcribe, and his speaking status, read off his track rather than off
+   * what plays, still says when he is done. The call's end lets it go, so
+   * the next call is heard; a press over no call does nothing.
+   */
+  muteSpeaker(muted: boolean): Effect.Effect<void> {
+    return Effect.sync(() => {
+      if (this.#call === undefined) return;
+      this.#speakerMuted = muted;
+      this.#touch();
+    });
+  }
+
   /** The panel asking for the microphone from its own row. */
   requestMicrophoneAccess(): Effect.Effect<void> {
     return Effect.asVoid(this.#bridge.requestMicrophone());
@@ -627,6 +648,7 @@ export class LiveVoiceOrchestrator {
   #letGo(): void {
     this.#call = undefined;
     this.#lukeEnding = undefined;
+    this.#speakerMuted = false;
     const closing = this.#closing;
     this.#closing = undefined;
     if (closing) Deferred.doneUnsafe(closing, Exit.void);
@@ -778,6 +800,7 @@ export class LiveVoiceOrchestrator {
       callPlanId: this.#call === undefined ? undefined : this.#callPlan,
       callTranscript: this.#call === undefined ? undefined : this.#callTranscript,
       lukeEndedCall: this.#lukeEndedCall,
+      speakerMuted: this.#speakerMuted,
     };
   }
 

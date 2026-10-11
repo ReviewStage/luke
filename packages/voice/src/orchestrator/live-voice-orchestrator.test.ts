@@ -178,6 +178,7 @@ function fixture(surroundings: Partial<LiveVoiceSurroundings> = {}) {
     endTalk: () => orchestrator.endTalk(),
     stopSpeaking: () => orchestrator.stopSpeaking(),
     stopCall: () => orchestrator.stopCall(),
+    muteSpeaker: (muted: boolean) => orchestrator.muteSpeaker(muted),
     stop: () => orchestrator.stop(),
     /** The host's word, started on its own fiber the way the window's subscription starts it. */
     obey: (change: VoiceLiveSessionChanged) =>
@@ -518,6 +519,44 @@ it.effect(
       call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.ASK, "what needs me", true)]);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.developerCaptions, undefined);
+    }),
+);
+
+it.effect(
+  "the speaker mutes for the call standing alone: Luke still speaks and captions under it, the session is told nothing, and the next call is heard",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.muteSpeaker(true);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.speakerMuted, false);
+
+      const pressed = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), {
+        startImmediately: true,
+      });
+      const call = f.latest();
+      assert.ok(call);
+      call.started();
+      yield* Fiber.join(pressed);
+      yield* f.muteSpeaker(true);
+      call.settle(LIVE_STATUS.SPEAKING);
+      call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions", false)]);
+      yield* settleFibers();
+      const muted = f.views.at(-1);
+      assert.deepEqual(
+        [muted?.speakerMuted, muted?.voiceStatus, muted?.lukeSpeaking, muted?.lukeCaptions],
+        [true, LIVE_STATUS.SPEAKING, true, ["Two sessions"]],
+      );
+      assert.deepEqual([call.silences, f.stops.length], [0, 0]);
+
+      yield* f.stopCall();
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.speakerMuted, false);
+      const again = yield* Effect.forkChild(f.beginTalk(INVITES_PLAN), { startImmediately: true });
+      f.latest()?.started();
+      yield* Fiber.join(again);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.speakerMuted, false);
     }),
 );
 

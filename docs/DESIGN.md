@@ -143,8 +143,9 @@ never the glyph its button. A button floating over something that moves
 beneath it, the title bar over a sliding pane or the transcript's way back to
 its newest line, sets `--button-ground` and fills over that rather than over
 what passes. What is not one of these is a row, a tab, or a call control and
-says why where it is drawn: the round microphone and stop, the new-plan
-composer's round start, and a tab's ×, which brightens without a fill.
+says why where it is drawn: the call bar's round mutes, its solid End call
+disc, and its start pill, the new-plan composer's round start, and a tab's ×,
+which brightens without a fill.
 
 ## The keys Luke takes from the machine
 

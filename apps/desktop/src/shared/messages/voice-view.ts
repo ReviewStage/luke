@@ -63,6 +63,8 @@ export interface VoiceView extends VoiceSpeakers {
   callTranscript: VoiceCallTranscript | undefined;
   /** The store's id for the session of the last call Luke ended himself; none before he has. */
   lukeEndedCall: string | undefined;
+  /** Whether Luke's voice is silenced on this Mac for the standing call, his words still captioned; never while none stands. */
+  speakerMuted: boolean;
 }
 
 /**
@@ -90,6 +92,9 @@ export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & 
 export const VOICE_COMMAND = {
   STOP_SPEAKING: "stop-speaking",
   END_CALL: "end-call",
+  /** Luke's voice silenced on this Mac for the call standing, and heard again; the session is told nothing. */
+  MUTE_SPEAKER: "mute-speaker",
+  UNMUTE_SPEAKER: "unmute-speaker",
   REQUEST_MICROPHONE_ACCESS: "request-microphone-access",
 } as const;
 
@@ -112,6 +117,7 @@ export const IDLE_VOICE_VIEW: VoiceView = {
   callPlanId: undefined,
   callTranscript: undefined,
   lukeEndedCall: undefined,
+  speakerMuted: false,
 };
 
 const LIVE_STATUSES: ReadonlySet<string> = new Set(Object.values(LIVE_STATUS));
@@ -161,6 +167,7 @@ export function isVoiceView(value: UnparsedWireValue): value is VoiceView & Wire
   if (!isOptionalWireString(value.callPlanId)) return false;
   if (!isOptionalCallTranscript(value.callTranscript)) return false;
   if (!isOptionalWireString(value.lukeEndedCall)) return false;
+  if (!isWireBoolean(value.speakerMuted)) return false;
   if (!isWireBoolean(value.listening) || !isWireBoolean(value.lukeSpeaking)) return false;
   return (
     isOptionalWireStrings(value.lukeCaptions) && isOptionalWireStrings(value.developerCaptions)

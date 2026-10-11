@@ -74,6 +74,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { shown: COPY_SHOWN.IDLE, onPress: ignore },
     microphone: { label: "Talk about this plan", enabled: true, muted: false, onPress: ignore },
+    speaker: { muted: false, onPress: ignore },
     stop: { shown: false, onPress: ignore },
     status: undefined,
     live: false,

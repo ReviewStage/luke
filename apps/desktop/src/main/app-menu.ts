@@ -68,7 +68,7 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, the window's
- * columns are View's, back and forward are Go's as Finder and Safari keep
+ * columns are View's, the call's microphone and speaker are Call's, back and forward are Go's as Finder and Safari keep
  * them, and the shortcuts and the notes to the people who make Luke are
  * Help's.
  */
@@ -118,6 +118,13 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         SEPARATOR,
         commandItem(APP_COMMAND.PREVIOUS_PLAN),
         commandItem(APP_COMMAND.NEXT_PLAN),
+      ],
+    },
+    {
+      label: "Call",
+      submenu: [
+        commandItem(APP_COMMAND.TOGGLE_MICROPHONE),
+        commandItem(APP_COMMAND.TOGGLE_SPEAKER),
       ],
     },
     { label: "Go", submenu: [commandItem(APP_COMMAND.BACK), commandItem(APP_COMMAND.FORWARD)] },

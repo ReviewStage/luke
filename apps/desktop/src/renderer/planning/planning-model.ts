@@ -219,7 +219,7 @@ const STATUS_WORD = {
   [LIVE_STATUS.CONNECTING]: "Connecting",
   [LIVE_STATUS.MUTED]: "Muted",
   [LIVE_STATUS.LISTENING]: "Listening",
-  [LIVE_STATUS.SPEAKING]: "Speaking",
+  [LIVE_STATUS.SPEAKING]: "Luke speaking",
   [LIVE_STATUS.CLOSING]: "Closing",
   [LIVE_STATUS.FAILED]: undefined,
 } as const satisfies Record<LiveStatus, string | undefined>;

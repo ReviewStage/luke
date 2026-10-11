@@ -11,7 +11,7 @@ import {
   DOCUMENT_REGION,
   PLANS_PAGE,
 } from "../planning/planning-model";
-import { MicrophoneRow } from "../planning/planning-parts";
+import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { PlanActionsButton } from "./plan-actions";
@@ -237,8 +237,13 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
           <PlanBody plan={plan} live={plans.live} />
         </section>
-        <div className="desktop-call-bar" data-live={String(plans.status !== undefined)}>
-          <MicrophoneRow status={plans.status} microphone={plans.microphone} stop={plans.stop} />
+        <div className="desktop-call-bar">
+          <CallBar
+            status={plans.status}
+            microphone={plans.microphone}
+            speaker={plans.speaker}
+            stop={plans.stop}
+          />
         </div>
       </div>
       {drawing.panel ? (

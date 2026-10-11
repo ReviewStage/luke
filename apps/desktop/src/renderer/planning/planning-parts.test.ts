@@ -1,75 +1,163 @@
+// @vitest-environment jsdom
+
 import assert from "node:assert/strict";
-import { createElement } from "react";
+import { MicrophoneIcon, MicrophoneOffIcon, SpeakerIcon, SpeakerOffIcon } from "@sidecar/panel";
+import { act, createElement } from "react";
+import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
+import { runAppCommand } from "../app-commands";
 import type { CallStatus } from "./planning-model";
-import { MicrophoneRow } from "./planning-parts";
+import { CallBar } from "./planning-parts";
 
-const ignore = () => undefined;
+const roots: Root[] = [];
 
-function microphoneRowMarkup(
-  status: CallStatus,
-  call: { muted: boolean; stop: boolean } = { muted: false, stop: false },
-): string {
-  return renderToStaticMarkup(
-    createElement(MicrophoneRow, {
-      status,
-      microphone: {
-        label: call.muted ? "Unmute the microphone" : "Mute the microphone",
-        enabled: true,
-        muted: call.muted,
-        onPress: ignore,
-      },
-      stop: { shown: call.stop, onPress: ignore },
-    }),
-  );
-}
+afterEach(() => {
+  for (const root of roots.splice(0)) act(() => root.unmount());
+  document.body.replaceChildren();
+});
 
 const IDLE_BACKEND = { planner: undefined, notes: false };
 
-test("a muted call presses the microphone and offers a stop apart from it, and no call offers no stop", () => {
-  const muted = microphoneRowMarkup(
-    { voiceWord: "Muted", backend: IDLE_BACKEND },
-    { muted: true, stop: true },
+interface Call {
+  status?: CallStatus;
+  live?: boolean;
+  label?: string;
+  enabled?: boolean;
+  muted?: boolean;
+  speakerMuted?: boolean;
+}
+
+/** A bar mounted for a test, and every press it handed down. */
+interface MountedBar {
+  bar: HTMLElement;
+  pressed: string[];
+}
+
+/** The bar as the tab draws it, and every press it handed down, in the order they landed. */
+function callBar(call: Call = {}): MountedBar {
+  const pressed: string[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(CallBar, {
+        status: call.status,
+        microphone: {
+          label: call.label ?? "Talk about this plan",
+          enabled: call.enabled ?? true,
+          muted: call.muted ?? false,
+          onPress: () => pressed.push("microphone"),
+        },
+        speaker: { muted: call.speakerMuted ?? false, onPress: () => pressed.push("speaker") },
+        stop: { shown: call.live ?? false, onPress: () => pressed.push("stop") },
+      }),
+    ),
   );
-  assert.match(muted, /aria-label="Unmute the microphone"[^>]*aria-pressed="true"/u);
-  assert.match(muted, /<button[^>]*class="plan-stop"[^>]*aria-label="End the call"/u);
+  return { bar: container, pressed };
+}
 
-  const heard = microphoneRowMarkup({ voiceWord: "Listening", backend: IDLE_BACKEND });
-  assert.match(heard, /aria-pressed="false"/u);
-  assert.doesNotMatch(heard, /plan-stop/u);
+function button(bar: HTMLElement, name: string): HTMLButtonElement {
+  const found = bar.querySelector(`button[aria-label="${name}"]`);
+  assert.ok(found instanceof HTMLButtonElement, `no ${name} button`);
+  return found;
+}
+
+function glyph(icon: () => React.JSX.Element): string {
+  return renderToStaticMarkup(createElement(icon));
+}
+
+const LISTENING: Call = { live: true, status: { voiceWord: "Listening", backend: IDLE_BACKEND } };
+
+test("at rest the bar is one start press named for what the microphone needs, which the microphone's press answers", () => {
+  const { bar, pressed } = callBar();
+  const buttons = bar.querySelectorAll("button");
+  assert.equal(buttons.length, 1);
+  const [start] = buttons;
+  assert.ok(start);
+  assert.equal(start.textContent, "Talk about this plan");
+  assert.equal(start.disabled, false);
+  act(() => start.click());
+  assert.deepEqual(pressed, ["microphone"]);
+
+  const keyless = callBar({ label: "Voice is off: sign in to turn it on.", enabled: false });
+  const [off] = keyless.bar.querySelectorAll("button");
+  assert.equal(off?.textContent, "Voice is off: sign in to turn it on.");
+  assert.equal(off?.disabled, true);
 });
 
-test("the microphone row's second line names the planning model's command and the notetaker, with the dots and a reader's status line", () => {
-  const markup = microphoneRowMarkup({
-    voiceWord: "Listening",
-    backend: { planner: { action: "grep -rn invite src" }, notes: true },
+test("in a call the microphone and speaker are mutes, pressed and struck through while on, apart from End call", () => {
+  const live = callBar(LISTENING);
+  assert.equal(live.bar.querySelector(".call-start"), null);
+  const mute = button(live.bar, "Mute microphone");
+  assert.equal(mute.getAttribute("aria-pressed"), "false");
+  assert.equal(mute.innerHTML, glyph(MicrophoneIcon));
+  const speaker = button(live.bar, "Mute speaker");
+  assert.equal(speaker.getAttribute("aria-pressed"), "false");
+  assert.equal(speaker.innerHTML, glyph(SpeakerIcon));
+
+  const muted = callBar({ ...LISTENING, muted: true, speakerMuted: true });
+  const unmute = button(muted.bar, "Unmute microphone");
+  assert.equal(unmute.getAttribute("aria-pressed"), "true");
+  assert.equal(unmute.innerHTML, glyph(MicrophoneOffIcon));
+  const unsilence = button(muted.bar, "Unmute speaker");
+  assert.equal(unsilence.getAttribute("aria-pressed"), "true");
+  assert.equal(unsilence.innerHTML, glyph(SpeakerOffIcon));
+
+  act(() => unmute.click());
+  act(() => unsilence.click());
+  act(() => button(muted.bar, "End call").click());
+  assert.deepEqual(muted.pressed, ["microphone", "speaker", "stop"]);
+});
+
+test("the call's chords reach its two mutes only while the call stands", () => {
+  const rest = callBar();
+  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), false);
+  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_SPEAKER), false);
+  assert.deepEqual(rest.pressed, []);
+  act(() => {
+    for (const root of roots.splice(0)) root.unmount();
   });
-  assert.match(markup, /class="plan-voice-word">Listening</u);
-  assert.match(markup, /class="thinking-dots" aria-hidden="true"/u);
-  assert.match(
-    markup,
-    /Planning model · <span class="plan-backend-action">grep -rn invite src<\/span>/u,
+
+  const live = callBar(LISTENING);
+  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), true);
+  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_SPEAKER), true);
+  assert.deepEqual(live.pressed, ["microphone", "speaker"]);
+});
+
+test("the call's second line names the planning model's command and the notetaker, with the dots and a reader's status line", () => {
+  const { bar } = callBar({
+    live: true,
+    status: {
+      voiceWord: "Listening",
+      backend: { planner: { action: "grep -rn invite src" }, notes: true },
+    },
+  });
+  assert.equal(bar.querySelector(".call-status-word")?.textContent, "Listening");
+  assert.ok(bar.querySelector('.thinking-dots[aria-hidden="true"]'));
+  assert.deepEqual(
+    [...bar.querySelectorAll(".call-backend-part")].map((part) => part.textContent),
+    ["Planning model · grep -rn invite src", "Notetaker · Writing notes"],
   );
-  assert.match(markup, />Notetaker · Writing notes</u);
-  assert.match(markup, /role="status">Luke is working on it</u);
+  assert.equal(bar.querySelector(".call-backend-action")?.textContent, "grep -rn invite src");
+  assert.equal(bar.querySelector('[role="status"]')?.textContent, "Luke is working on it");
 });
 
-test("the planning model with no command pending reads Thinking", () => {
-  const markup = microphoneRowMarkup({
-    voiceWord: "Handing off",
-    backend: { planner: { action: undefined }, notes: false },
+test("the planning model with no command pending reads Thinking, and an idle backend draws the voice's word alone", () => {
+  const thinking = callBar({
+    live: true,
+    status: { voiceWord: "Handing off", backend: { planner: { action: undefined }, notes: false } },
   });
-  assert.match(markup, />Planning model · Thinking</u);
-  assert.doesNotMatch(markup, /Notetaker/u);
-});
+  assert.deepEqual(
+    [...thinking.bar.querySelectorAll(".call-backend-part")].map((part) => part.textContent),
+    ["Planning model · Thinking"],
+  );
 
-test("an idle backend draws the voice's word alone, with no dots and no status line", () => {
-  const markup = microphoneRowMarkup({
-    voiceWord: "Listening",
-    backend: { planner: undefined, notes: false },
-  });
-  assert.match(markup, /class="plan-voice-word">Listening</u);
-  assert.doesNotMatch(markup, /thinking-dots/u);
-  assert.doesNotMatch(markup, /role="status"/u);
+  const idle = callBar(LISTENING);
+  assert.equal(idle.bar.querySelector(".call-status")?.textContent, "Listening");
+  assert.equal(idle.bar.querySelector(".thinking-dots"), null);
+  assert.equal(idle.bar.querySelector('[role="status"]'), null);
 });
