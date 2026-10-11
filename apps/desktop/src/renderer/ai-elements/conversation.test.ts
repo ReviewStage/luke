@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { relayout } from "#testing/resize-observer";
 import {
   Conversation,
   ConversationContent,
@@ -75,4 +76,33 @@ test("the way back to the newest line appears once the reader scrolls away, and 
   act(() => button()?.click());
   assert.equal(box.scrollTop, 1_200);
   assert.equal(button(), null);
+});
+
+test("the way back to the newest line goes once a line closes and nothing is left below", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() =>
+    root.render(
+      createElement(
+        Conversation,
+        null,
+        createElement(ConversationContent, null, createElement("p", null, "An opened card")),
+        createElement(ConversationScrollButton),
+      ),
+    ),
+  );
+  const button = () => container.querySelector<HTMLButtonElement>("button");
+
+  // The reader scrolls back to the top of an opened card.
+  const box = scrollBox(container, 1_000);
+  box.scrollTop = 0;
+  act(() => box.dispatchEvent(new Event("scroll")));
+  assert.ok(button());
+
+  // The card closes, so the log fits its box again without ever scrolling.
+  scrollBox(container, 400);
+  act(() => relayout());
+  assert.ok(button() === null, "the way back is still offered");
 });
