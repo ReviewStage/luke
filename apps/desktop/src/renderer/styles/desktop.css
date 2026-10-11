@@ -1839,11 +1839,12 @@ body,
    it. Every tab stands whole at its own width, up to a most past which its
    label ends in an ellipsis; past holding them all, the strip scrolls along
    with no bar drawn, as a browser's does, and the end it has hidden tabs
-   beyond dissolves over `--scroll-fade`. The fades ride a scroll timeline,
-   as the panel's lists' do, so a strip with nothing to scroll is left
-   whole without asking JavaScript whether it overflows. The tab the strip
-   brings into view (tab-strip.tsx) stops clear of the fade, at its scroll
-   padding, and glides there unless motion is held still. */
+   beyond dissolves over `--scroll-fade`. The strip measures which edges
+   those are (tab-strip.tsx) as it scrolls and resizes, rather than riding a
+   scroll timeline, because a timeline is active over any overflow at all and
+   left a fade on a strip that holds every tab. The tab the strip brings into
+   view stops clear of the fade, at its scroll padding, and glides there
+   unless motion is held still. */
 .tab-strip {
   display: flex;
   min-width: 0;
@@ -1865,12 +1866,21 @@ body,
     #000 calc(100% - var(--tab-strip-fade-end)),
     transparent
   );
-  animation: tab-strip-edge-fade linear both;
-  animation-timeline: scroll(self inline);
+  transition:
+    --tab-strip-fade-start var(--duration-hover) ease,
+    --tab-strip-fade-end var(--duration-hover) ease;
 }
 
-/* Registered so the fades interpolate as lengths, and stand at none while
-   the strip has nothing to scroll and its timeline is inactive. */
+.tab-strip[data-overflow-start="true"] {
+  --tab-strip-fade-start: var(--scroll-fade);
+}
+
+.tab-strip[data-overflow-end="true"] {
+  --tab-strip-fade-end: var(--scroll-fade);
+}
+
+/* Registered so a fade comes and goes as a length eased, and stands at none
+   on an edge that hides nothing. */
 @property --tab-strip-fade-start {
   syntax: "<length>";
   inherits: false;
@@ -1881,28 +1891,6 @@ body,
   syntax: "<length>";
   inherits: false;
   initial-value: 0px;
-}
-
-/* A fade comes up within the first stretch of scrolling away from its end
-   and goes within the last stretch of scrolling back to it. */
-@keyframes tab-strip-edge-fade {
-  0% {
-    --tab-strip-fade-start: 0px;
-    --tab-strip-fade-end: var(--scroll-fade);
-  }
-
-  5% {
-    --tab-strip-fade-start: var(--scroll-fade);
-  }
-
-  95% {
-    --tab-strip-fade-end: var(--scroll-fade);
-  }
-
-  100% {
-    --tab-strip-fade-start: var(--scroll-fade);
-    --tab-strip-fade-end: 0px;
-  }
 }
 
 .tab {

@@ -264,9 +264,9 @@ function AddTabButton({
  * tabs are dragged or stepped into the order the panel keeps; the agent
  * tabs stand after them in the order the agents started, and the subagent
  * tabs after those in the order opened, each wearing the worker's glyph,
- * lit while it runs, so a drop among them, or of one of them, changes
- * nothing, and the "+" stands after all of them, apart from the strip, so
- * it is never dragged nor dropped before.
+ * lit while it runs, so neither is dragged, and a fixed tab dragged toward
+ * them goes no further than the last fixed place. The "+" stands after all
+ * of them, apart from the strip, so it is never dragged nor dropped before.
  */
 function PanelTabs({
   panel,
@@ -286,10 +286,11 @@ function PanelTabs({
     <div className="side-panel-tabs">
       <TabStrip
         label="Panel"
+        movable={panel.tabs.length}
         onMove={(from, to) => {
           // Only the fixed tabs move, and only among themselves.
           const tab = panel.tabs[from];
-          if (tab !== undefined && to < panel.tabs.length) panel.onMove(tab, to);
+          if (tab !== undefined) panel.onMove(tab, to);
         }}
       >
         {panel.tabs.map((tab) => (
