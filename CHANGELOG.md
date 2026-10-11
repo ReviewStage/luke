@@ -36,6 +36,55 @@
 Notable changes to Luke, newest first. Each heading is a released version and
 the date its release was published.
 
+## 0.11.0 — 2026-10-11
+
+### Coding agents work alongside you
+
+Ask Luke in a planning call how a coding agent is doing, or tell one what to
+do, and Luke answers or steers the right agent. A coding agent can now edit
+the plan the way Luke's notetaker does, and the plan says which agent made
+each edit. New coding agent in the side panel's + opens a draft agent whose
+first message is its task, so it starts on your task instead of the plan.
+Each agent gets a generated title, and you can rename it from its tab's
+right-click menu.
+
+### Subagents
+
+A coding agent hands scoped work to read-only workers and picks each one's
+model and effort. Each worker draws as a subagent row in the agent's
+transcript, and the row opens the worker's own tab in the side panel.
+
+### Improvements
+
+- Each coding agent shows what it costs in tokens and dollars
+- The pull request pill shows the pull request of the branch checked out in
+  the agent's sandbox, whatever branches it moved through
+- The Code tab shows every snippet Luke showed on the plan, and a snippet
+  opens its whole file in a File tab
+- The side panel's + opens and closes coding agent and subagent tabs, with
+  the same searchable menu the pickers use
+- Side panel tabs scroll sideways instead of shrinking to icons, and the tab
+  strip fades only an edge that hides a tab
+- Every transcript uses the Work tab's style
+- The agent's model shows in the message box
+- Luke starts reading the plan's repository the moment a call starts, while
+  he greets you
+- Luke always shows in the Dock and ⌘Tab
+- The theme defaults to System
+
+### Fixes
+
+- Fixed the Code tab jittering as it scrolled
+- Fixed the Work and Code tabs losing a plan's work after a restart
+- Fixed a dragged tab stopping short of either end of the tab strip
+- Fixed a coding agent's shell starting outside its checkout
+- Fixed a shadow behind the composer's card
+
+### Misc
+
+- Removed the Show Luke in the Dock setting
+- Removed the PostHog extensions Luke never used from the app bundle
+
 ## 0.10.0 — 2026-10-10
 
 ### Coding agents

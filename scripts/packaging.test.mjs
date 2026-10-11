@@ -124,7 +124,7 @@ test("workspace package versions agree on v0.10.0", () => {
 
   assert.deepEqual(
     versions.map(({ version }) => version),
-    packagePaths.map(() => "0.10.0"),
+    packagePaths.map(() => "0.11.0"),
   );
 });
 
