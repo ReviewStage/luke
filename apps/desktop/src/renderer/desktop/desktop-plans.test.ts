@@ -93,11 +93,13 @@ function Page({
   work,
   agents,
   shownCode,
+  plan = PLAN,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
   agents?: PlansControl["agents"] | undefined;
   shownCode?: PlansControl["shownCode"];
+  plan?: Plan;
 }) {
   const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
   const sidePanel = useSidePanel(
@@ -112,8 +114,8 @@ function Page({
   const page = createElement(DesktopPlans, {
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
-      activePlanId: PLAN.id,
-      region: { kind: DOCUMENT_REGION.READY, plan: PLAN },
+      activePlanId: plan.id,
+      region: { kind: DOCUMENT_REGION.READY, plan },
       sidePanel,
       copy: {
         shown: COPY_SHOWN.IDLE,
@@ -2707,6 +2709,26 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   const tab = tabNamed(page, "roles.ts");
   assert.equal(tab.getAttribute("aria-selected"), "true");
   assert.deepEqual(asked, [{ planId: PLAN.id, path: "src/roles.ts", firstLine: 1, lastLine: 500 }]);
+  // The plan given another repository reads the open file afresh from it.
+  await act(async () => {
+    roots.at(-1)?.render(
+      createElement(Page, {
+        staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+        shownCode: [
+          { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+          {
+            callId: "show-2",
+            turnId: "turn-1",
+            shownAt: 2,
+            code: { ...CODE, ref: { path: "src/roles.ts", startLine: 2, endLine: 2 } },
+          },
+        ],
+        plan: { ...PLAN, repository: "acme/other" },
+      }),
+    );
+    await Promise.resolve();
+  });
+  assert.equal(asked.length, 2, "read again from the plan's new repository");
   const lit = [...page.querySelectorAll('.file-tab [data-pointed="true"]')].map(
     (line) => line.querySelector(".code-line-number")?.textContent,
   );

@@ -24,7 +24,7 @@ import {
   WorkIcon,
 } from "@sidecar/panel";
 import { BotIcon, FileCodeIcon } from "lucide-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -688,6 +688,7 @@ function drawnSubagents(
 function TabContent({
   tab,
   planId,
+  repository,
   board,
   shownCode,
   files,
@@ -704,6 +705,8 @@ function TabContent({
 }: {
   tab: SidePanelTab;
   planId: string;
+  /** The plan's repository, which a file's tab is read from as it stands now. */
+  repository: string | null;
   board: Board | undefined;
   shownCode: readonly PlanCodeShowing[] | undefined;
   /** The open file tabs, which a file's tab reads its lit lines from. */
@@ -735,14 +738,18 @@ function TabContent({
     const file = files.find((each) => each.path === tab.file);
     // As a subagent's: the tab stands for a file no longer open only until
     // the panel moves on, a render away.
+    // Note that the plan given another repository draws the file afresh,
+    // because the lines held were read from the one before.
     return file === undefined ? (
       <p className="side-panel-empty">Opening the file…</p>
     ) : (
-      <FileTab
-        key={file.path}
-        file={file}
-        readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
-      />
+      <Fragment key={repository ?? undefined}>
+        <FileTab
+          key={file.path}
+          file={file}
+          readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
+        />
+      </Fragment>
     );
   }
   if (isDraftTab(tab)) {
@@ -1049,6 +1056,7 @@ export function SidePanel({
   edge,
   unread,
   planId,
+  repository,
   board,
   shownCode,
   transcript,
@@ -1060,6 +1068,8 @@ export function SidePanel({
   /** The tabs holding something that arrived while another was shown, each dotted until it is shown. */
   unread: readonly SidePanelTab[];
   planId: string;
+  /** The plan's repository, `owner/name`, or none before one is chosen. */
+  repository: string | null;
   board: Board | undefined;
   /** Every code Luke showed on the plan, oldest first. */
   shownCode: readonly PlanCodeShowing[] | undefined;
@@ -1172,6 +1182,7 @@ export function SidePanel({
             <TabContent
               tab={tab}
               planId={planId}
+              repository={repository}
               board={board}
               shownCode={shownCode}
               files={files}

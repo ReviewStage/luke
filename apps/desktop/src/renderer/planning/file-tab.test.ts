@@ -76,9 +76,10 @@ function mounted(answer: (window: PlanFileRequest) => PlanningFileAnswer | Promi
     asked.push(`${window.firstLine}-${window.lastLine}`);
     return Promise.resolve().then(() => answer(window));
   };
+  // Each draw hands the tab a fresh door, as a parent drawing again does.
   const draw = async (file: OpenFile) => {
     await act(async () => {
-      root.render(createElement(FileTab, { file, readFile }));
+      root.render(createElement(FileTab, { file, readFile: (window) => readFile(window) }));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -156,4 +157,40 @@ test("a refusal says why in the file's place, and one that may pass, or a read t
   });
   assert.deepEqual(flaky.asked, ["1-500", "1-500"]);
   assert.deepEqual(drawnLines(flaky.container), ["1", "2 lit", "3"]);
+});
+
+test("a parent drawing the tab again with a fresh door asks nothing more, a refusal and a file read alike", async () => {
+  const gone = mounted(() => ({ refusal: PLAN_FILE_REFUSAL.MISSING }));
+  const file = { path: "src/gone.ts", range: { startLine: 2, endLine: 2 }, opened: 1 };
+  await gone.draw(file);
+  await gone.draw(file);
+  await gone.draw({ ...file });
+  assert.deepEqual(gone.asked, ["1-500"]);
+  assert.equal(
+    gone.container.querySelector("[role='alert']")?.textContent,
+    "This file is no longer in the repository.",
+  );
+
+  const read = mounted(numberedFile(3));
+  await read.draw(file);
+  await read.draw({ ...file });
+  assert.deepEqual(read.asked, ["1-500"]);
+});
+
+test("a file shortened since its snippet opens on the window holding its last line", async () => {
+  const tab = mounted(numberedFile(20));
+
+  await tab.draw({ path: "src/invite.ts", range: { startLine: 1_100, endLine: 1_100 }, opened: 1 });
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  assert.deepEqual(tab.asked, ["1001-1500", "1-500"]);
+  const lines = drawnLines(tab.container);
+  assert.equal(lines.length, 20);
+  assert.equal(
+    lines.some((line) => line.endsWith("lit")),
+    false,
+  );
 });

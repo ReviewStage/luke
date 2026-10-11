@@ -182,53 +182,65 @@ export function FileTab({
   const label =
     file.range === undefined ? undefined : rangeLabel({ path: file.path, ...file.range });
 
+  // Note that the reads go through refs to the latest file and door, so
+  // they ask again only when the file is opened again, never because a
+  // parent drew a fresh door.
+  const latest = useRef({ file, readFile });
+  latest.current = { file, readFile };
+  const asked = useRef<number | undefined>(undefined);
+
   // One window read and laid beside what is held, answering whether it
   // landed. Note that a read of more lines that did not land leaves the
   // lines drawn as they were, because only its own row has failed.
-  const readWindow = useCallback(
-    (window: FileWindow) => {
-      const missed = () => {
-        if (held.current.kind !== FILE_READ.READY) setRead({ kind: FILE_READ.FAILED });
-        return false;
-      };
-      return readFile({ path: file.path, ...window }).then((answer) => {
-        if ("failure" in answer) return missed();
-        // Note that what is held moves at once, because the windows above and
-        // below may answer in one tick, each to be laid beside the other.
-        const next = afterAnswer(held.current, answer);
-        held.current = next;
-        setRead(next);
-        return next.kind === FILE_READ.READY;
-      }, missed);
-    },
-    [readFile, file.path],
-  );
+  const readWindow = useCallback((window: FileWindow) => {
+    const missed = () => {
+      if (held.current.kind !== FILE_READ.READY) setRead({ kind: FILE_READ.FAILED });
+      return false;
+    };
+    const { file: open, readFile: read } = latest.current;
+    return read({ path: open.path, ...window }).then((answer) => {
+      if ("failure" in answer) return missed();
+      // Note that what is held moves at once, because the windows above and
+      // below may answer in one tick, each to be laid beside the other.
+      const next = afterAnswer(held.current, answer);
+      held.current = next;
+      setRead(next);
+      return next.kind === FILE_READ.READY;
+    }, missed);
+  }, []);
 
   // The window holding the lit lines, read when the tab opens and whenever
-  // the file is opened again on lines not yet drawn; a range that runs on
-  // into the next window reads that one too.
+  // the file is opened again on lines not yet drawn: a range that runs on
+  // into the next window reads that one too, and lit lines past the file's
+  // end, as in a file shortened since, read the window holding its last.
   const readLit = useCallback(() => {
     // Lines already drawn stay drawn until the window holding the lit ones lands.
     if (held.current.kind !== FILE_READ.READY) setRead({ kind: FILE_READ.READING });
-    const window = firstWindow(file);
-    const end = file.range?.endLine ?? window.firstLine;
+    const open = latest.current.file;
+    const window = firstWindow(open);
+    const end = open.range?.endLine ?? window.firstLine;
     readWindow(window).then(
       (landed) => {
+        const standing = held.current;
+        if (landed && standing.kind === FILE_READ.READY && standing.lines.length === 0) {
+          return readWindow(windowAt(standing.lineCount));
+        }
         if (landed && end > window.lastLine) return readWindow(windowAt(end));
         return landed;
       },
       () => false,
     );
-  }, [file, readWindow]);
+  }, [readWindow]);
 
   useEffect(() => {
+    if (asked.current === file.opened) return;
+    asked.current = file.opened;
     const standing = held.current;
-    const range = file.range ?? { startLine: 1, endLine: 1 };
+    const range = latest.current.file.range ?? { startLine: 1, endLine: 1 };
     if (standing.kind === FILE_READ.READY && holdsLines(standing, range.startLine, range.endLine)) {
       return;
     }
     readLit();
-    // Note that the file opened again is what asks, so `opened` is the dependency.
   }, [file.opened, readLit]);
 
   return (
