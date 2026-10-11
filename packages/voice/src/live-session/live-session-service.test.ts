@@ -885,6 +885,30 @@ it.effect("a reply that opens the plan's review is said aloud whole", () =>
   }),
 );
 
+it.effect("a queued question's orientation is said before the question it opens", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.input("Scope is done.", 0, 800);
+    sideband.delegation("item_1", 900);
+    yield* settle();
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+      runId: "run-1",
+      question: "What happens when an invite expires?",
+      recommendation: "It stops working.",
+      orientation: "Scope is settled; rules and verification are left.",
+    });
+    yield* acknowledgeAll(sideband);
+    const note = commentaryOf(sideband)[0] ?? "";
+    const orientedAt = note.indexOf("Scope is settled; rules and verification are left.");
+    assert.ok(
+      orientedAt !== -1 && orientedAt < note.indexOf("What happens when an invite expires?"),
+    );
+  }),
+);
+
 it.effect("a queued question's options are read out with it", () =>
   Effect.gen(function* () {
     const f = yield* fixture();

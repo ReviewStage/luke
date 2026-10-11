@@ -35,6 +35,7 @@ import { SHOW_CODE_INPUT } from "./show-code.js";
  */
 const QUEUED_QUESTION_BOUNDS = {
   TEXT_CHARS: 200,
+  ORIENTATION_CHARS: 140,
   OPTIONS: 3,
   OPTION_CHARS: 60,
 } as const;
@@ -42,6 +43,11 @@ const QUEUED_QUESTION_BOUNDS = {
 const QUEUED_TEXT = Schema.Trim.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(QUEUED_QUESTION_BOUNDS.TEXT_CHARS),
+);
+
+const QUEUED_ORIENTATION = Schema.Trim.check(
+  Schema.isMinLength(1),
+  Schema.isMaxLength(QUEUED_QUESTION_BOUNDS.ORIENTATION_CHARS),
 );
 
 const QUEUED_OPTIONS = Schema.Array(
@@ -60,6 +66,12 @@ const QUEUE_QUESTION_INPUT = Schema.Struct({
     QUEUED_TEXT,
     'The answer you recommend, and why in a few words, such as "No: just say the invite is ' +
       'no longer valid, so nobody learns who removed them."',
+  ),
+  orientation: Schema.optionalKey(
+    describeWire(
+      QUEUED_ORIENTATION,
+      'On the first question of a new part of the plan, one sentence of where the plan stands, such as "Scope is settled; rules and verification are left."',
+    ),
   ),
   options: Schema.optionalKey(
     describeWire(
@@ -80,6 +92,7 @@ const QUEUE_QUESTION_INPUT = Schema.Struct({
 const QUEUED_QUESTION = Schema.Struct({
   question: QUEUED_TEXT,
   recommendation: QUEUED_TEXT,
+  orientation: Schema.optionalKey(QUEUED_ORIENTATION),
   options: Schema.optionalKey(QUEUED_OPTIONS),
   code: Schema.optionalKey(codeRefSchema),
 });
@@ -121,7 +134,7 @@ export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
     ? {
         status: ACTION_RESULT_STATUS.REJECTED,
         reason:
-          "Not queued: give a question and a recommendation of at most 200 characters each, two or three options of at most 60 characters if any, and code with both lines or neither, the first no later than the last and at most 200 apart.",
+          "Not queued: give a question and a recommendation of at most 200 characters each, an orientation of at most 140 characters if any, two or three options of at most 60 characters if any, and code with both lines or neither, the first no later than the last and at most 200 apart.",
       }
     : { status: ACTION_RESULT_STATUS.ACCEPTED };
 }

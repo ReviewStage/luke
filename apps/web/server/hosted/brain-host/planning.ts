@@ -1,6 +1,6 @@
 import { boardText } from "@sidecar/hosted/board-text";
 import type { Board } from "@sidecar/hosted/board-wire";
-import { PLAN_FIELD, PLAN_FIELD_PURPOSE } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD, PLAN_FIELD_PURPOSE, planProgress } from "@sidecar/hosted/plan-template";
 import { PLAN_REVIEW_OPENING } from "@sidecar/live";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
 import { emitJsonSchema } from "@sidecar/wire/effect";
@@ -100,7 +100,7 @@ Help the user turn what is in their head into a plan an agent can build. Map thi
 
 Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke asks the questions you queue one at a time, in the order you queued them, the next once the user has answered, so never queue a question twice.
 
-Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked that is still worth asking (below). A question whose answer depends on another question still open stays off the queue until that one is answered. When an answer makes a queued question moot, take it back with withdraw_question.
+Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked that is still worth asking (below). A question whose answer depends on another question still open stays off the queue until that one is answered. When a question opens a new part of the plan, give it an orientation from [progress]: one sentence of what is settled and what is left, so the user knows where they are. When an answer makes a queued question moot, take it back with withdraw_question.
 
 ### When the user is still working out what they want
 
@@ -205,11 +205,21 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
+const PROGRESS_MARKER = "[progress]";
+
+/** Where the plan stands as the model reads it: the core fields settled and those left. */
+function progressLine(stored: StoredPlan): string {
+  const { settled, left } = planProgress(stored.fields);
+  const named = (headings: readonly string[]) =>
+    headings.length === 0 ? "none" : headings.join(", ");
+  return `${PROGRESS_MARKER} Settled: ${named(settled)}. Left: ${named(left)}.`;
+}
 
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, and the whiteboard as the model
- * reads it (`board-text.ts`), each read again every turn so what the
+ * plan's name, the saved document as JSON, where the plan stands
+ * (`planProgress`), and the whiteboard as the model reads it
+ * (`board-text.ts`), each read again every turn so what the
  * notetaker saved and what the developer drew is what the next turn reads. A
  * plan that no longer stands gets the heading alone.
  */
@@ -226,6 +236,7 @@ export function planningStandingContext(
     `Name: ${plan.name}`,
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
+    progressLine(stored),
     boardText(board),
   ].join("\n");
 }

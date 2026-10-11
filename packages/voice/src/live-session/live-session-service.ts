@@ -157,7 +157,10 @@ function progressNote(step: string | undefined, settled: number): string {
  */
 function queuedQuestionNote(held: HeldQuestion): string {
   const options = held.options === undefined ? "" : ` Options: ${held.options.join("; ")}.`;
-  return `Ask the developer this next, once they have answered anything you have already asked: ${held.question}${options} Recommended answer: ${held.recommendation}`;
+  const ask = `Ask the developer this next, once they have answered anything you have already asked: ${held.question}${options} Recommended answer: ${held.recommendation}`;
+  return held.orientation === undefined
+    ? ask
+    : `First say in one sentence where the plan stands: ${held.orientation} Then: ${ask}`;
 }
 
 /** Where code on screen is, as the voice is told it: the file and the lines lit, if any. */

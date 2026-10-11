@@ -13,6 +13,12 @@
       "maxLength": 200,
       "description": "The answer you recommend, and why in a few words, such as \"No: just say the invite is no longer valid, so nobody learns who removed them.\""
     },
+    "orientation": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 140,
+      "description": "On the first question of a new part of the plan, one sentence of where the plan stands, such as \"Scope is settled; rules and verification are left.\""
+    },
     "options": {
       "type": "array",
       "items": {

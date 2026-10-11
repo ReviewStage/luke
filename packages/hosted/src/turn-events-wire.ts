@@ -65,6 +65,8 @@ export type TurnEventBody =
       readonly kind: typeof TURN_EVENT_KIND.QUESTION_QUEUED;
       readonly question: string;
       readonly recommendation: string;
+      /** One sentence of where the plan stands, on the first question of a new part of it. */
+      readonly orientation?: string;
       /** The two or three directions to choose between, where the question offers them. */
       readonly options?: readonly string[];
       /** Code the question is about, shown as the voice asks it. */

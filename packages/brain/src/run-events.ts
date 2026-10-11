@@ -181,6 +181,7 @@ export type BrainRunEventBody =
       readonly runId: string;
       readonly question: string;
       readonly recommendation: string;
+      readonly orientation?: string;
       readonly options?: readonly string[];
       readonly code?: {
         readonly path: string;

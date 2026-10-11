@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { jsonResponse, recordingHttpClient } from "@sidecar/wire/testing";
@@ -498,6 +499,27 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           SAVED,
         );
       }),
+  );
+
+  it.effect("the model is handed where the plan stands every turn, read off its saved fields", () =>
+    Effect.gen(function* () {
+      const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+      const session = yield* startSession(host, userId, conversationId);
+      yield* savePlanDocument(userId, planId, SAVED, {
+        ...EMPTY_PLAN_FIELDS,
+        goal: { problem: "Admins are a bottleneck.", outcome: null },
+      });
+
+      const context = yield* host.standingContext(yield* admitted(host, session));
+
+      assert.ok(
+        context
+          .split("\n")
+          .includes(
+            "[progress] Settled: Problem. Left: Outcome, Included, Excluded, Rules, Change map, Verification.",
+          ),
+      );
+    }),
   );
 
   it.effect(

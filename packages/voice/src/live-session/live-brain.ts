@@ -70,6 +70,8 @@ export type LiveBrainRunEvent =
       /** A question the planning model queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
+      /** One sentence of where the plan stands, said before the question that opens a new part of it. */
+      readonly orientation?: string;
       /** The two or three directions the developer chooses between, where the question offers them. */
       readonly options?: readonly string[];
       /** Code the question is about, put on screen as the voice asks it. */

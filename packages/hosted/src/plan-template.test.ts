@@ -13,6 +13,7 @@ import {
   type PlanField,
   type PlanNote,
   planBody,
+  planProgress,
 } from "./plan-template.js";
 
 const HEADER = { name: "Teammate invitations" } as const;
@@ -293,4 +294,36 @@ test("a phrase standing in more than one place names no place, so the note is mi
     text: "an owner",
   });
   assert.equal(named?.fields.goal.problem, PROBLEM.replace("an admin", "an owner"));
+});
+
+test("where a plan stands: a new plan has every core field left, an answered field is settled, and a rule is settled only once every rule has an example", () => {
+  assert.deepEqual(planProgress(EMPTY_PLAN_CONTENT.fields), {
+    settled: [],
+    left: ["Problem", "Outcome", "Included", "Excluded", "Rules", "Change map", "Verification"],
+  });
+  const { content } = applyNotes(EMPTY_PLAN_CONTENT, [
+    add(PLAN_FIELD.PROBLEM, "Admins are a bottleneck."),
+    add(PLAN_FIELD.RULES, "An invite expires after seven days."),
+    add(PLAN_FIELD.RULES, "An admin may re-send an invite."),
+    {
+      kind: NOTE_KIND.ADD_EXAMPLE,
+      rule: 1,
+      given: "An invite",
+      when: "a week passes",
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+      then: "it expires", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+    },
+  ]);
+  assert.deepEqual(planProgress(content.fields).settled, ["Problem"]);
+  const pinned = applyNotes(content, [
+    {
+      kind: NOTE_KIND.ADD_EXAMPLE,
+      rule: 2,
+      given: "An invite",
+      when: "re-sent",
+      // biome-ignore lint/suspicious/noThenProperty: `then` is the example's key in the fixed template's contract, and an example is data that is never awaited.
+      then: "a new email goes", // oxlint-disable-line unicorn/no-thenable -- the same key, for the same reason.
+    },
+  ]).content;
+  assert.deepEqual(planProgress(pinned.fields).settled, ["Problem", "Rules"]);
 });

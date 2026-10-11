@@ -353,6 +353,36 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
   return `${blocks.join("\n\n")}\n`;
 }
 
+/** Where a plan stands: the core fields it has settled and those still left, by heading, in the template's order. */
+export interface PlanProgress {
+  readonly settled: readonly string[];
+  readonly left: readonly string[];
+}
+
+/**
+ * Where the plan stands, read off its fields: a core field is settled once
+ * it holds an answer, and the rules once there is at least one and each has
+ * an example that pins it. The core fields are those without which an agent
+ * could not build the change; the rest are optional or filled as they come.
+ */
+export function planProgress(fields: PlanFields): PlanProgress {
+  const rulesPinned =
+    fields.rules !== null && fields.rules.every((rule) => (rule.examples?.length ?? 0) > 0);
+  const core: readonly (readonly [string, boolean])[] = [
+    [PLAN_HEADING.PROBLEM, fields.goal.problem !== null],
+    [PLAN_HEADING.OUTCOME, fields.goal.outcome !== null],
+    [PLAN_HEADING.INCLUDED, fields.scope.included !== null],
+    [PLAN_HEADING.EXCLUDED, fields.scope.excluded !== null],
+    [PLAN_HEADING.RULES, rulesPinned],
+    [PLAN_HEADING.CHANGE_MAP, fields.implementation.changeMap !== null],
+    [PLAN_HEADING.VERIFICATION, fields.verification !== null],
+  ];
+  return {
+    settled: core.filter(([, done]) => done).map(([heading]) => heading),
+    left: core.filter(([, done]) => !done).map(([heading]) => heading),
+  };
+}
+
 /** Every field a note may be taken under, in the template's order. */
 export const PLAN_FIELD = {
   PROBLEM: "problem",
