@@ -58,6 +58,8 @@ export interface SidebarCollapse {
   onToggle: () => void;
   /** Asks for a width; it is clamped to the bounds before it is kept. */
   onResize: (width: number) => void;
+  /** Whether the run keeps none of the sidebar's preferences: a fixture run, whose frames wear no developer's own. */
+  staged: boolean;
 }
 
 /**
@@ -105,5 +107,5 @@ export function useSidebarCollapse(fixtureMode: boolean): SidebarCollapse {
     }
   }, [keptWidth]);
 
-  return { collapsed, width, onToggle, onResize };
+  return { collapsed, width, onToggle, onResize, staged: fixtureMode };
 }

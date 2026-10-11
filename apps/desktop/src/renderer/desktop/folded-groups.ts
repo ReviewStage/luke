@@ -9,7 +9,8 @@ import { useState } from "react";
  * one Mac stays open on another. A group is kept by its repository's full
  * name, and the plans with no repository by null. A repository whose last
  * plan goes leaves its entry behind: it is a few bytes, and a plan on it
- * later comes back folded as it was left.
+ * later comes back folded as it was left. A fixture run starts with every
+ * group open and keeps nothing, so its frames never wear a developer's folds.
  */
 
 /** Where the folded groups are kept in the renderer's storage. */
@@ -45,14 +46,23 @@ export interface FoldedGroups {
   toggle: (repository: string | null) => void;
 }
 
-/** The sidebar's folds, each kept as it is pressed. */
-export function useFoldedGroups(): FoldedGroups {
-  const [folds, setFolds] = useState(readFolds);
+/** The sidebar's folds, each kept as it is pressed, unless the run is `staged`. */
+export function useFoldedGroups(staged: boolean): FoldedGroups {
+  // Note that the fixture run's folds are a state of their own rather than
+  // the kept ones reset, because the run is only known a render after the
+  // kept folds were read, as `sidebar-collapse.ts` says of its own.
+  const [kept, setKept] = useState(readFolds);
+  const [stagedFolds, setStagedFolds] = useState<readonly (string | null)[]>([]);
+  const folds = staged ? stagedFolds : kept;
   const toggle = (repository: string | null) => {
     const next = folds.includes(repository)
-      ? folds.filter((kept) => kept !== repository)
+      ? folds.filter((held) => held !== repository)
       : [...folds, repository];
-    setFolds(next);
+    if (staged) {
+      setStagedFolds(next);
+      return;
+    }
+    setKept(next);
     writeFolds(next);
   };
   return { folded: (repository) => folds.includes(repository), toggle };

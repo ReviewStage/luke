@@ -35,6 +35,7 @@ function Harness({ settings }: { settings?: AppSettingsView }): React.JSX.Elemen
       width: SIDEBAR_WIDTH.DEFAULT,
       onToggle: ignore,
       onResize: ignore,
+      staged: false,
     },
     history: navigationHistory(),
     settings: settingsPanelProps({

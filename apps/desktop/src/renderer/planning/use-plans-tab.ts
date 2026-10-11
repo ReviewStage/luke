@@ -540,6 +540,12 @@ export function usePlansTab(input: {
       (refused: Error) => refused.message,
     );
 
+  // A preset is for the visit it was pressed for: once a plan opens, a later
+  // visit to the new-plan page starts on the composer's own choice again.
+  useEffect(() => {
+    if (page === PLANS_PAGE.DOCUMENT) setNewPlanPreset(undefined);
+  }, [page]);
+
   // Each press of New plan is counted, so the page focuses its name field
   // again, and hands the repository it chose, if any, to the composer.
   const newPlanWith = (preset: PlansControl["newPlan"]["preset"]) => {

@@ -521,6 +521,18 @@ test("New plan in a repository leaves the open plan for the new-plan page with t
   assert.ok(tab.told.includes(ACT_KIND.PLANNING_CLOSE));
 });
 
+test("a repository chosen by New plan is let go once a plan opens, so a later visit starts on the composer's own choice", async () => {
+  const home: PlanningView = { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READY };
+  const tab = mount({ shown: true, planning: home });
+
+  act(() => tab.control().onNewPlanIn("acme/ledger"));
+  const chosen = tab.control().newPlan.preset;
+  tab.stand({ planning: OPEN });
+
+  assert.deepEqual(chosen, { repository: "acme/ledger" });
+  assert.equal(tab.control().newPlan.preset, undefined);
+});
+
 test("a fixture's plan is pinned and archived nowhere", () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
   act(() => fixture.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));

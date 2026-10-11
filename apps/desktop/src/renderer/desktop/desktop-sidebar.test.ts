@@ -60,6 +60,8 @@ function mount(
     onTabChange?: (tab: PanelTab) => void;
     tab?: PanelTab;
     plans?: Partial<PlansControl>;
+    /** Whether the run keeps none of the sidebar's preferences, as a fixture run does. */
+    staged?: boolean;
   } = {},
 ): HTMLElement {
   const container = document.createElement("div");
@@ -79,6 +81,7 @@ function mount(
           width: SIDEBAR_WIDTH.DEFAULT,
           onToggle: () => undefined,
           onResize: () => undefined,
+          staged: options.staged ?? false,
         },
         identity: {
           speakers: { listening: false, lukeSpeaking: false },
@@ -524,4 +527,61 @@ test("a repository's + asks for a new plan on it and folds nothing, and No repos
   assert.deepEqual(asked, ["acme/ledger"]);
   assert.deepEqual(groups(container)[0], ["ledger", ["Billing"]]);
   assert.equal(header(container, "No repository").querySelector(".sidebar-repository-new"), null);
+});
+
+/** Option-Command and an arrow pressed in the window, answering whether the window claimed it. */
+function walk(key: "ArrowUp" | "ArrowDown"): boolean {
+  const event = new KeyboardEvent("keydown", {
+    key,
+    code: key,
+    metaKey: true,
+    altKey: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(event);
+  });
+  return event.defaultPrevented;
+}
+
+test("the open plan under a folded group still walks to its neighbours", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/relay"]));
+  const opened: string[] = [];
+  mount(DEAN, {
+    plans: {
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: "plan-Search",
+      plans: [
+        onRepository("Billing", "acme/ledger", 9),
+        onRepository("Search", "acme/relay", 5),
+        onRepository("Notes", null),
+      ],
+      onSelect: (planId) => opened.push(planId),
+    },
+  });
+
+  assert.equal(walk("ArrowUp"), true);
+  assert.equal(walk("ArrowDown"), true);
+  assert.deepEqual(opened, ["plan-Billing", "plan-Notes"]);
+  window.localStorage.clear();
+});
+
+test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps none of its own", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
+  const container = mount(DEAN, {
+    staged: true,
+    plans: { plans: [onRepository("Billing", "acme/ledger")] },
+  });
+  const toggle = header(container, "ledger").querySelector<HTMLButtonElement>(
+    ".sidebar-repository-toggle",
+  );
+  assert.ok(toggle);
+
+  const unfolded = groups(container);
+  act(() => toggle.click());
+
+  assert.deepEqual(unfolded, [["ledger", ["Billing"]]]);
+  assert.deepEqual(groups(container), [["ledger", []]]);
+  assert.equal(window.localStorage.getItem("luke.sidebarFoldedGroups"), '["acme/ledger"]');
+  window.localStorage.clear();
 });

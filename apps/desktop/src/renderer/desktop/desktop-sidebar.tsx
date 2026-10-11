@@ -404,17 +404,23 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
   };
-  const folds = useFoldedGroups();
+  const folds = useFoldedGroups(sidebar.staged);
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
   const context: RowContext = { plans, current, onOpen: openPlan, now };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const groups = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
-  // The rows as the list draws them: the pinned, then each group not folded away.
+  // The rows as the list draws them: the pinned, then each group not folded
+  // away, the open plan standing in its place even under a fold, so walking
+  // the list still moves from it.
   const drawn = [
     ...pinned,
-    ...groups.flatMap((group) => (folds.folded(group.repository) ? [] : group.plans)),
+    ...groups.flatMap((group) =>
+      folds.folded(group.repository)
+        ? group.plans.filter((plan) => plan.id === plans.activePlanId)
+        : group.plans,
+    ),
   ];
   // Moving up and down the list as it reads, New plan at its head: up from
   // the first plan is the new-plan page, and down from that page is the
