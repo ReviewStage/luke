@@ -162,16 +162,19 @@ test.each(surfaces(false))(
 );
 
 test.each(surfaces(true))(
-  "on %s a finished turn folds what came before its last words under one line, its calls grouped under another",
+  "on %s a finished turn folds what came before its last words under one line, its calls on rows of their own inside it, never grouped a second time",
   (_surface, element) => {
     const container = mounted(element);
     const lead = foldSaying(container, "2 tool calls");
     assert.equal(lead.open, false);
     assert.equal(container.querySelector("details[data-turn-fold] details"), null);
     act(() => lead.querySelector("summary")?.click());
-    const group = foldSaying(container, "2 tools called");
-    assert.equal(group.open, false);
-    act(() => group.querySelector("summary")?.click());
+    assert.equal(
+      container.querySelectorAll("[data-turn-fold]").length,
+      1,
+      "one fold, no group in it",
+    );
+    assert.equal(container.textContent?.includes("tools called"), false);
     assert.ok(foldSaying(container, COMMAND));
     assert.ok(foldSaying(container, "cat src/invite.ts"));
   },

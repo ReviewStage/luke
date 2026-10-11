@@ -372,10 +372,11 @@ test("a finished turn folds its calls under one line saying how many, as the Wor
   assert.doesNotMatch(markup, /data-call-id/u);
   assert.doesNotMatch(markup, /<details[^>]*\sopen/u);
   const container = unfolded([TURN]);
-  const group = [...container.querySelectorAll("[data-turn-fold] summary")].find((line) =>
-    line.textContent?.includes("4 tools called"),
+  assert.equal(
+    container.querySelectorAll("[data-turn-fold]").length,
+    1,
+    "no group inside the lead",
   );
-  assert.ok(group, "the four calls are one group inside the lead");
   assert.equal(container.querySelectorAll("details[data-call-id]").length, 4);
 });
 

@@ -10,7 +10,9 @@
  * panel): calls next to one another are one group that is open while it is
  * the turn's latest work on a turn that moves and folded once the model
  * moved on, and a finished turn folds everything ahead of its last words
- * into one line saying how much it holds, so it reads as its answer.
+ * into one line saying how much it holds, so it reads as its answer. That
+ * fold is the one grouping its calls get: a run of calls is folded once,
+ * never a group inside the fold that already holds it.
  */
 
 /** The kinds of call a row can be, across both wires. */
@@ -134,22 +136,29 @@ function foldedSummary(calls: number, messages: number): string {
   return said.join(", ");
 }
 
+/** A block with the key its row is drawn under. */
+interface Keyed<B> {
+  readonly key: string;
+  readonly block: B;
+}
+
 /**
  * A turn's blocks as rows: the words, reasoning, and lone calls as they
  * are, and calls next to one another grouped, the group open while it is
  * the turn's latest work on a turn that moves. A lone call is its own row,
  * unless it is that latest work, which is drawn as a group so the calls
  * after it join it rather than redraw it. Not grouped, every call stands
- * on a row of its own, for a session read for its detail.
+ * on a row of its own, for a session read for its detail and for a lead
+ * the fold already holds.
  */
 function groupedRows<B>(
-  blocks: readonly B[],
+  blocks: readonly Keyed<B>[],
   read: RowReading<B>,
   moving: boolean,
   grouped: boolean,
 ): TurnRow<B>[] {
   const rows: TurnRow<B>[] = [];
-  let group: { key: string; block: B }[] = [];
+  let group: Keyed<B>[] = [];
   const flush = (trailing: boolean) => {
     const [first] = group;
     if (first === undefined) return;
@@ -169,27 +178,24 @@ function groupedRows<B>(
     }
     group = [];
   };
-  blocks.forEach((block, index) => {
-    const key = read.key(block, index);
-    if (read.part(block) === ROW_PART.CALL) {
-      group.push({ key, block });
-      return;
+  for (const each of blocks) {
+    if (read.part(each.block) === ROW_PART.CALL) {
+      group.push(each);
+      continue;
     }
     flush(false);
-    rows.push({ kind: TURN_ROW.BLOCK, key, block });
-  });
+    rows.push({ kind: TURN_ROW.BLOCK, key: each.key, block: each.block });
+  }
   flush(true);
   return rows;
 }
 
-/** How many calls and how many of the model's messages the rows hold. */
-function counted<B>(rows: readonly TurnRow<B>[], read: RowReading<B>): [number, number] {
+/** How many calls and how many of the model's messages a lead's blocks hold. */
+function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): [number, number] {
   let calls = 0;
   let messages = 0;
-  for (const row of rows) {
-    if (row.kind === TURN_ROW.GROUP) calls += row.blocks.length;
-    if (row.kind !== TURN_ROW.BLOCK) continue;
-    const part = read.part(row.block);
+  for (const { block } of blocks) {
+    const part = read.part(block);
     if (part === ROW_PART.CALL || part === ROW_PART.LONE_CALL) calls += 1;
     if (part === ROW_PART.WORDS) messages += 1;
   }
@@ -199,7 +205,8 @@ function counted<B>(rows: readonly TurnRow<B>[], read: RowReading<B>): [number, 
 /**
  * A turn's blocks as the rows a tab draws, folded the Work tab's way:
  * calls grouped, and, once the turn is done, everything ahead of its last
- * words folded into one line saying what it holds.
+ * words folded into one line saying what it holds, each call inside it on
+ * a row of its own.
  */
 export function turnRows<B>(
   blocks: readonly B[],
@@ -213,20 +220,19 @@ export function turnRows<B>(
     readonly grouped: boolean;
   },
 ): readonly TurnRow<B>[] {
-  const rows = groupedRows(blocks, read, turn.moving, turn.grouped);
-  const last = rows.findLastIndex(
-    (row) => row.kind === TURN_ROW.BLOCK && read.part(row.block) === ROW_PART.WORDS,
-  );
-  if (!turn.done || last < 1) return rows;
-  const lead = rows.slice(0, last);
+  const keyed = blocks.map((block, index) => ({ key: read.key(block, index), block }));
+  const last = blocks.findLastIndex((block) => read.part(block) === ROW_PART.WORDS);
+  if (!turn.done || last < 1) return groupedRows(keyed, read, turn.moving, turn.grouped);
+  // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
+  const lead = keyed.slice(0, last);
   const [calls, messages] = counted(lead, read);
   return [
     {
       kind: TURN_ROW.FOLDED,
       key: `${turn.key}-folded`,
       summary: foldedSummary(calls, messages),
-      rows: lead,
+      rows: groupedRows(lead, read, false, false),
     },
-    ...rows.slice(last),
+    ...groupedRows(keyed.slice(last), read, turn.moving, turn.grouped),
   ];
 }
