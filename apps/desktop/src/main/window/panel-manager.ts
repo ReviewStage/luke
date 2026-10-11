@@ -84,7 +84,11 @@ export class PanelManager {
   readonly #windows = new Map<number, BrowserWindow>();
   /** Set once a quit begins, so closing the window then destroys it rather than hiding it. */
   #quitting = false;
-  /** Whether the app draws dark, as the window service last said; dark is the default theme. */
+  /**
+   * Whether the app draws dark, as the window service last said. The launch
+   * paints from the resolved appearance before it opens the first window, so
+   * this initial value is never what a window is created on.
+   */
   #dark = true;
 
   constructor(options: PanelManagerOptions) {

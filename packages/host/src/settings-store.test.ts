@@ -288,9 +288,9 @@ test("a failed first load is retried before a later write", async (t) => {
  * than going quietly untested.
  */
 const SAMPLE_VALUE = {
-  // System is stored as itself rather than as what the Mac resolves to now,
-  // so it is the choice that has to survive a reopen.
-  theme: THEME.SYSTEM,
+  // System is what an absent theme falls back to, so Dark is the explicit
+  // choice that has to survive a reopen as itself.
+  theme: THEME.DARK,
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
@@ -846,14 +846,15 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const directory = await temporaryDirectory(t, "luke-settings-");
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
-  await store.set(APP_SETTING_SCHEMA.theme.field, THEME.LIGHT);
+  await store.set(APP_SETTING_SCHEMA.theme.field, THEME.DARK);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
 
   assert.equal(reason, undefined);
   assert.equal(appSettingsView(settings).openAtLogin, true);
-  assert.equal(appSettingsView(settings).theme, THEME.DARK);
+  // The reset forgets the choice, so the windows follow the Mac again.
+  assert.equal(appSettingsView(settings).theme, THEME.SYSTEM);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
   // One scope's reset is that scope's alone.
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
