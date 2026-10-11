@@ -1493,6 +1493,56 @@ it.effect(
 );
 
 it.effect(
+  "a call's end reads the open plan's work again, and a turn still running on record, parked on a worker, is then the record's rather than the call's last word",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        const { call, planning, last } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+        // The call's last word on the turn, then the record going on after the call ended.
+        planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls"));
+        const recorded = workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls", "invite.ts");
+        service.works[INVITES] = { turns: [recorded] };
+        planning.callEnded(INVITES);
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+
+        assert.deepEqual(last()?.work, [recorded]);
+      }),
+    ),
+);
+
+it.effect(
+  "a later call's turns stand over the record's while it tells, but a turn an earlier call told and left running on record is the record's",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+        const { call, planning, last } = yield* subject(service);
+        yield* planning.lifetime;
+        yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+        // The first call leaves its turn parked on a worker; a second call tells a turn of its own.
+        planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls"));
+        planning.callEnded(INVITES);
+        for (let tick = 0; tick < 200; tick += 1) yield* Effect.yieldNow;
+        const toldNow = workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts", "partial");
+        planning.showWork(INVITES, toldNow);
+
+        const recorded = workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls", "invite.ts");
+        service.works[INVITES] = {
+          turns: [recorded, workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts")],
+        };
+        yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+        assert.deepEqual(last()?.work, [recorded, toldNow]);
+      }),
+    ),
+);
+
+it.effect(
   "leaving the open plan drops its transcript, and a plan just started has said nothing",
   () =>
     Effect.gen(function* () {

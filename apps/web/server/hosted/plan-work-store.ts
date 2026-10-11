@@ -5,8 +5,14 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { Effect, Option } from "effect";
 import { isStoredToolPart, type StoredUIMessage, storedToolName } from "../core.js";
-import { planWorkOf, SUBAGENT_JOURNALS, workerCallIdsOf } from "../voice/plan-work.js";
+import {
+  callsSendingToEarlierTasks,
+  planWorkOf,
+  SUBAGENT_JOURNALS,
+  workerSessionCallsOf,
+} from "../voice/plan-work.js";
 import { childConversationId } from "./brain-host/ids.js";
+import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { type PlanStoreEffect, readPlan } from "./plan-store.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
@@ -35,16 +41,31 @@ import {
  * `plan-store.ts`. Nothing is written here.
  */
 
-/** One turn's journal and the sessions of the subagents it started, or nothing where the turn wrote none or it does not read. */
+/** The conversation's journals that call the worker, where a task a later turn sent work to was started; none where they do not read. */
+const workerJournalsOf = Effect.fnUntraced(function* (userId: string, conversationId: string) {
+  const read = yield* listJournalsCalling(
+    userId,
+    conversationId,
+    HOSTED_TOOL_SET,
+    EVE_DELEGATION_TOOL.WORKER,
+  );
+  return read.ok ? read.value.map((row) => row.message) : [];
+});
+
+/** One turn's journal and the sessions of the subagents it started or sent work to, or nothing where the turn wrote none or it does not read. */
 const journalOf = Effect.fnUntraced(function* (userId: string, turn: StoredTurnRecord) {
   const read = yield* readMessageByClientId(userId, turn.conversationId, HOSTED_TOOL_SET, turn.id);
   const message = read.ok ? read.value[0]?.message : undefined;
   if (message === undefined) return undefined;
+  const earlier =
+    callsSendingToEarlierTasks(message).length === 0
+      ? []
+      : yield* workerJournalsOf(userId, turn.conversationId);
   const subagents = new Map<string, readonly StoredUIMessage[]>();
-  for (const callId of workerCallIdsOf(message)) {
+  for (const [callId, sessionCallId] of workerSessionCallsOf(message, earlier)) {
     const session = yield* listJournals(
       userId,
-      childConversationId(turn.conversationId, callId),
+      childConversationId(turn.conversationId, sessionCallId),
       HOSTED_TOOL_SET,
       SUBAGENT_JOURNALS,
     );

@@ -46,7 +46,7 @@ import { askRecord } from "../server/hosted/store/asks";
 import { listJournals } from "../server/hosted/store/message-reads";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
-import { FIRST_EVE_TURN, parkedTurn, resumedTurn } from "./support/eve-turns";
+import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 
@@ -721,5 +721,44 @@ test("a plan's work read back carries each worker's own session from its child c
   assert.deepEqual(drawn.session?.parts.at(-1), {
     type: PLAN_WORK_PART.TEXT,
     text: "Both libraries revoke.",
+  });
+});
+
+test("a worker sent more work in a later turn reads the session of the call that started its task, where eve records that work", async () => {
+  const target = await planConversation();
+  const first = standingFor(target);
+  await play(parkedTurn(FIRST_EVE_TURN, SEQUENCE, NOW), first);
+  await askedAt(first, NOW - 1_000);
+  const [starter] = (await worked(target, first)).parts;
+  assert.ok(starter?.type === PLAN_WORK_PART.TOOL);
+
+  // A later turn steers the same task, and eve hands the work to the task's standing session.
+  const later = standingFor(target);
+  await play(steeredTurn(FIRST_EVE_TURN, SEQUENCE, NOW), later);
+  await askedAt(later, NOW);
+  const child = {
+    userId: target.userId,
+    conversationId: childConversationId(target.conversationId, starter.id),
+  };
+  await database.run(openChildConversation(target, child.conversationId, "worker"));
+  const childStanding: RelayStanding = { ...standingFor(child), turn: RELAY_TURN.CHILD };
+  await play(
+    [...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Both libraries revoke.")],
+    childStanding,
+  );
+  await play(
+    [...opening("turn_1"), ...answeringStep("turn_1", 0, "Only the second one batches.")],
+    childStanding,
+  );
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  const [, steered] = read.value.turns;
+  const [drawn] = steered?.parts ?? [];
+  assert.ok(drawn?.type === PLAN_WORK_PART.TOOL);
+  assert.equal(drawn.tool, PLAN_WORK_TOOL.WORKER);
+  assert.deepEqual(drawn.session?.parts.at(-1), {
+    type: PLAN_WORK_PART.TEXT,
+    text: "Only the second one batches.",
   });
 });
