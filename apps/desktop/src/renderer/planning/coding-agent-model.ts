@@ -3,8 +3,6 @@ import {
   type CodingAgentCallFailure,
 } from "@sidecar/hosted/coding-agent-view";
 import {
-  CHECK_SUMMARY,
-  type CheckSummary,
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
@@ -35,12 +33,12 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * are read for drawing, which of its rows wait above the composer rather
  * than in the transcript, when a line the developer sent has been read
  * back, what a Start or a message that did not land says, and what its
- * pull request pill, its branch chip, their menu, and the row that sums a
- * finished turn up say, and how what an agent or a turn cost is told.
+ * pull request chip, its branch chip, and the pull request's row say and
+ * open, and how what an agent or a turn cost is told.
  * Nothing here asks anything.
  */
 
-/** The words that separate the parts of a line: the summary row's, the chip menu's. */
+/** The words that separate the parts of a line. */
 const LINE_SEPARATOR = " · ";
 
 /** How many tokens are a thousand and a million, as the compact count spells them. */
@@ -711,32 +709,13 @@ export function opensOnGitHub(href: string): boolean {
   return GITHUB_ADDRESS.test(href);
 }
 
-/** What each pull request state is called, on the pill's label and beside the summary's number. */
+/** What each pull request state is called, on the chip's label and, where it changes what the developer would do, on the row. */
 const PULL_REQUEST_STATE_LABEL = {
   [PULL_REQUEST_STATE.OPEN]: "Open",
   [PULL_REQUEST_STATE.DRAFT]: "Draft",
   [PULL_REQUEST_STATE.MERGED]: "Merged",
   [PULL_REQUEST_STATE.CLOSED]: "Closed",
 } as const satisfies Record<PullRequestState, string>;
-
-/** What the check dot says to a reader who cannot see its colour. */
-export const CHECK_SUMMARY_LABEL = {
-  [CHECK_SUMMARY.PENDING]: "Checks pending",
-  [CHECK_SUMMARY.PASSING]: "Checks passing",
-  [CHECK_SUMMARY.FAILING]: "Checks failing",
-  [CHECK_SUMMARY.NONE]: "No checks",
-} as const satisfies Record<CheckSummary, string>;
-
-/** The verb the summary row opens with, by where the pull request stands. */
-const PUBLISHED_VERB = {
-  [PULL_REQUEST_STATE.OPEN]: "Opened",
-  [PULL_REQUEST_STATE.DRAFT]: "Opened draft",
-  [PULL_REQUEST_STATE.MERGED]: "Merged",
-  [PULL_REQUEST_STATE.CLOSED]: "Closed",
-} as const satisfies Record<PullRequestState, string>;
-
-/** GitHub's own page of a pull request's changes: its Files tab. */
-const FILES_TAB = "/files";
 
 /** The characters a branch name may hold and still stand bare in a shell; anything else is quoted. */
 const BARE_SHELL_WORD = /^[\w./-]+$/u;
@@ -757,35 +736,28 @@ function branchPath(branch: string): string {
   return encodeURIComponent(branch).replaceAll("%2F", "/");
 }
 
-/** Where the agent's changes are read on GitHub: the pull request's Files tab, or the branch compared against the repository's default where there is no pull request yet. */
-export function changesUrl(published: CodingAgentPullRequestAnswer): string | undefined {
-  if (published.pullRequest !== null) return `${published.pullRequest.url}${FILES_TAB}`;
+/** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
+export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
+  if (published.pullRequest !== null) return published.pullRequest.url;
   if (published.branch === null) return undefined;
   return `https://github.com/${published.repository}/compare/${branchPath(published.branch)}?expand=1`;
 }
 
-/** The number as the pill and the summary spell it. */
+/** The number as the chip and the row spell it. */
 export function pullRequestNumberLabel(
   pullRequest: Pick<CodingAgentPullRequest, "number">,
 ): string {
   return `#${pullRequest.number}`;
 }
 
-/** One line summing a finished turn up: what was opened, how much changed, and what the turn cost where known. */
-export function publishedSummary(
-  pullRequest: CodingAgentPullRequest,
-  turnUsage?: CodingAgentUsage,
-): string {
-  const files = pullRequest.changedFiles === 1 ? "1 file" : `${pullRequest.changedFiles} files`;
-  return withCost(
-    `${PUBLISHED_VERB[pullRequest.state]} ${pullRequestNumberLabel(pullRequest)}${LINE_SEPARATOR}+${pullRequest.additions} −${pullRequest.deletions} in ${files}`,
-    turnUsage,
-  );
+/** The word the row says where the pull request stands, only where that changes what the developer would do: a draft, merged, or closed; nothing for one open. */
+export function pullRequestStateWord(state: PullRequestState): string | undefined {
+  return state === PULL_REQUEST_STATE.OPEN ? undefined : PULL_REQUEST_STATE_LABEL[state];
 }
 
-/** The pill's own words for a reader who cannot see it: the number, where it stands, and its checks. */
+/** The chip's own words for a reader who cannot see it: the number and where it stands. */
 export function pullRequestPillLabel(pullRequest: CodingAgentPullRequest): string {
-  return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}, ${CHECK_SUMMARY_LABEL[pullRequest.checks].toLowerCase()}`;
+  return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}`;
 }
 
 /** How long a tab lets pass between two reads of what the agent published while its transcript keeps landing pages, the service keeping its own answer about as long. */

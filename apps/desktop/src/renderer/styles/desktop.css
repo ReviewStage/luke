@@ -2331,14 +2331,15 @@ body,
 
 /* A label cut short fades out over its last `--label-fade` rather than
    ending in an ellipsis, as a browser's tab does, and so do a searchable
-   menu's words and a subagent's job. Only a label measured cut short (use-clipped.ts) fades, so
+   menu's words, a subagent's job, and a pull request's title. Only a label measured cut short (use-clipped.ts) fades, so
    a short one ends on its last letter. The mask fades the words themselves,
    so it reads alike over every fill a tab or a row wears, at rest, hovered,
    chosen, or dragged. */
 .tab-label[data-overflow="true"],
 .searchable-menu .plan-compose-menu-name[data-overflow="true"],
 .searchable-menu .plan-compose-menu-detail[data-overflow="true"],
-.subagent-job[data-overflow="true"] {
+.subagent-job[data-overflow="true"],
+.agent-published-title[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
 }
 
