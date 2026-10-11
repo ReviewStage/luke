@@ -157,14 +157,21 @@ function stepped(
 /** Where no row is highlighted: nothing matches and the arrows have not moved on to a pinned row. */
 const NOWHERE = -1;
 
-/** The highlight over a set of rows: the one moved to, else the one chosen, else the first that may be picked, else nowhere. */
+/**
+ * The highlight over a set of rows: the one moved to while it may still be
+ * picked, else the one chosen, else the first that may be picked, else
+ * nowhere. Note that the row moved to is asked again on every render,
+ * because the owner may hand rows anew with it now cut off.
+ */
 function highlightOver(input: {
   moved: number | undefined;
   chosen: number;
   first: number;
   count: number;
+  blocked: (index: number) => boolean;
 }): number {
-  if (input.moved !== undefined) return Math.min(input.moved, input.count - 1);
+  const moved = input.moved === undefined ? undefined : Math.min(input.moved, input.count - 1);
+  if (moved !== undefined && !input.blocked(moved)) return moved;
   if (input.chosen >= 0) return input.chosen;
   return input.first;
 }
@@ -230,11 +237,15 @@ export function SearchableMenu(props: {
   // row, which may arrive after the menu opened, so Enter keeps what stands.
   const [highlight, setHighlight] = useState<number | undefined>(undefined);
   const chosen = matches.findIndex((row) => row.id === value);
+  // A row that cannot be picked takes no highlight, from the arrows or from a moment ago.
+  const blocked = (index: number) =>
+    (matches[index] ?? foot[index - matches.length])?.disabled !== undefined;
   const at = highlightOver({
     moved: highlight,
     chosen,
     first: firstOpen(matches),
     count: matches.length + foot.length,
+    blocked,
   });
   const footAt = at - matches.length;
   const branch = footAt >= 0 ? foot[footAt]?.submenu : undefined;
@@ -248,6 +259,7 @@ export function SearchableMenu(props: {
     chosen: subChosen,
     first: open === undefined || open.rows.length === 0 ? NOWHERE : 0,
     count: open?.rows.length ?? 0,
+    blocked: () => false,
   });
   const listId = useId();
   const field = useRef<HTMLInputElement>(null);
@@ -340,14 +352,7 @@ export function SearchableMenu(props: {
       return;
     }
     // A row that cannot be picked is passed over, and never a dead stop.
-    setHighlight(
-      stepped(
-        at,
-        matches.length + foot.length,
-        event.key,
-        (index) => (matches[index] ?? foot[index - matches.length])?.disabled !== undefined,
-      ),
-    );
+    setHighlight(stepped(at, matches.length + foot.length, event.key, blocked));
   };
 
   const root =

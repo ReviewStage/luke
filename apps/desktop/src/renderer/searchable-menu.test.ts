@@ -617,3 +617,15 @@ test("a row's shortcut is printed at its end, and rows sharing a section stand u
   type(menu.find<HTMLInputElement>("input[role=combobox]"), "site");
   assert.deepEqual(groups(), [["Everything", "Everything", ["acme/site"]]]);
 });
+
+test("a row the highlight was moved to gives it up once it can no longer be picked, to the first that can", () => {
+  const menu = mount({ value: undefined });
+  press("ArrowDown");
+  assert.equal(menu.highlighted(), "acme/billing");
+  menu.restand({
+    rows: ROWS.map((row) => (row.id === "acme/billing" ? { ...row, disabled: "Open" } : row)),
+  });
+  assert.equal(menu.highlighted(), "acme/relay");
+  press("Enter");
+  assert.deepEqual(menu.picked, ["acme/relay"]);
+});
