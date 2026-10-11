@@ -131,6 +131,7 @@ export const PLAN_WORK_TOOL = {
   LIST_AGENTS: "list-agents",
   READ_AGENT: "read-agent",
   MESSAGE_AGENT: "message-agent",
+  END_CALL: "end-call",
   OTHER: "other",
 } as const;
 

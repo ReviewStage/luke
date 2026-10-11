@@ -26,6 +26,7 @@ import {
   runMessageCodingAgent,
   runReadCodingAgent,
 } from "../coding-agent-tools.js";
+import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
 import type { LabelledAgentEdit, StoredPlan } from "../plan-store.js";
 import {
@@ -184,6 +185,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
+- end_call ends the voice call once the developer has clearly said they are done with it ("bye", "that's all", "thanks, I'm done", "let's stop here"). Luke is already saying goodbye: call it first and add nothing to your return. Never call it on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, or because the plan looks complete.
 
 ## Return the result
 
@@ -363,8 +365,9 @@ type PlanningToolServices = SqlClient.SqlClient | HttpClient.HttpClient | GitHub
  * whiteboard under the same binding (`board-tool.ts`), and `look_at_board`
  * hands back the board as the Mac draws it (`board-look.ts`); the three
  * agent tools read and message the plan's coding agents
- * (`coding-agent-tools.ts`). Every read's result goes back to the model as
- * data, a look's as an image.
+ * (`coding-agent-tools.ts`); `end_call` hangs up once the developer is done,
+ * carried as `queue_question` is by its journaled call (`end-call.ts`).
+ * Every read's result goes back to the model as data, a look's as an image.
  */
 const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
@@ -411,6 +414,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...MESSAGE_CODING_AGENT_TOOL,
     run: (call, input) => runMessageCodingAgent(call.agents, input),
+  },
+  {
+    ...END_CALL_TOOL,
+    run: (_call, input) => Effect.succeed(runEndCall(input)),
   },
 ];
 

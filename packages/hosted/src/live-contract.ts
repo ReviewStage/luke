@@ -164,6 +164,13 @@ export const VOICE_SERVICE_FRAME = {
    * tab's Work tab reads like an agent's own transcript.
    */
   PLAN_WORK: "plan.work",
+  /**
+   * The service's sixth frame to the desktop, on a planning call alone: the
+   * developer said they are done and Luke is saying goodbye, so the desktop
+   * hangs up through its own hang-up once that goodbye has played, and keeps
+   * the call up if the developer speaks first. It carries no words.
+   */
+  PLAN_CALL_ENDING: "plan.call_ending",
 } as const;
 
 /**
@@ -394,6 +401,14 @@ export const planWorkFrameSchema = Schema.Struct({
 
 export type PlanWorkFrame = typeof planWorkFrameSchema.Type;
 
+/** Luke is ending the call about the plan named, once his goodbye has played. */
+export const planCallEndingFrameSchema = Schema.Struct({
+  type: Schema.Literal(VOICE_SERVICE_FRAME.PLAN_CALL_ENDING),
+  planId: wireUuidSchema,
+});
+
+export type PlanCallEndingFrame = typeof planCallEndingFrameSchema.Type;
+
 /** The service's answer: the sideband stands again on the session named. */
 export const sessionAttachedFrameSchema = Schema.Struct({
   type: Schema.Literal(VOICE_SERVICE_FRAME.SESSION_ATTACHED),
@@ -478,6 +493,13 @@ export function planCodeFrameFromWire(value: UnparsedWireValue): PlanCodeFrame |
 /** One planning turn's work on a planning call, read the same answering way. */
 export function planWorkFrameFromWire(value: UnparsedWireValue): PlanWorkFrame | undefined {
   return admittedAnswer(planWorkFrameSchema, value);
+}
+
+/** Luke ending a planning call, read the same answering way. */
+export function planCallEndingFrameFromWire(
+  value: UnparsedWireValue,
+): PlanCallEndingFrame | undefined {
+  return admittedAnswer(planCallEndingFrameSchema, value);
 }
 
 export function sessionAttachedFrameFromWire(

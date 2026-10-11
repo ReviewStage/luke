@@ -15,6 +15,7 @@ import {
   type TurnStatus,
   UI_PART_TYPE,
 } from "../core.js";
+import { END_CALL_TOOL, endsCall } from "./end-call.js";
 import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
@@ -78,8 +79,9 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 
 /**
  * What one call tells while the turn runs: a question a planning call queued,
- * code it showed, or a repository command, the one slow step. A queued
- * question is told once its input is whole, never while it streams, and
+ * code it showed, its ask to end the call, or a repository command, the one
+ * slow step. A queued question or an end is told once its input is whole,
+ * never while it streams, and
  * shown code once its call has answered with the lines, so neither is told
  * twice.
  */
@@ -88,6 +90,9 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   if (name === QUEUE_QUESTION_TOOL.name) {
     const queued = queuedQuestionOf(part);
     return queued === undefined ? undefined : { kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued };
+  }
+  if (name === END_CALL_TOOL.name) {
+    return endsCall(part) ? { kind: TURN_EVENT_KIND.CALL_ENDING } : undefined;
   }
   if (name === SHOW_CODE_TOOL.name) {
     const shown = shownCodeOf(part);
@@ -102,9 +107,9 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
 
 /**
  * The turn's events as the record now stands, numbered from one, walked
- * step by step: a step's sentences, then what its calls tell. The slow step,
- * once per run, every question a planning call queued, and all the code it
- * showed, are told the
+ * step by step: a step's sentences, then what its calls tell. The slow step
+ * and the end of the call, once per run each, every question a planning call
+ * queued, and all the code it showed, are told the
  * moment their call is on the journal, the code once its call has answered. A sentence is
  * told while the turn still runs once every call journaled ahead of its step
  * has settled, behind one settled mark, so nothing is said ahead of an action
@@ -125,6 +130,7 @@ export function projectTurnEvents(
   const speaks = end === undefined || end === TURN_END.COMPLETED;
   const bodies: TurnEventBody[] = [];
   let slowStepTold = false;
+  let endTold = false;
   let settledTold = false;
   let unsettled = false;
   for (const step of stepsOf(journal?.parts ?? [])) {
@@ -142,7 +148,9 @@ export function projectTurnEvents(
       if (!isSettledToolPartState(part.state)) unsettled = true;
       const told = callEventOf(part);
       if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
+      if (told.kind === TURN_EVENT_KIND.CALL_ENDING && endTold) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
+      endTold ||= told.kind === TURN_EVENT_KIND.CALL_ENDING;
       bodies.push(told);
     }
   }

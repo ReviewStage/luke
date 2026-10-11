@@ -170,6 +170,17 @@ function codeOnScreenNote(ref: CodeRef): string {
 }
 
 /**
+ * How long after its delegation a run may still end the call. The voice
+ * says its goodbye and delegates in the same breath, so the planning model's
+ * `end_call` lands while the goodbye plays; one that comes later than this
+ * answers a goodbye the developer has had time to talk past, and the call
+ * stays up rather than hanging up on whatever came since.
+ */
+export const END_CALL_BOUNDS = {
+  WITHIN_MS: 30_000,
+} as const;
+
+/**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
  * and silence arms nothing: a row whose write has landed owes the record
@@ -209,6 +220,12 @@ export interface LiveSessionServiceOptions {
   onStatus?: (status: LiveSessionStatus) => void;
   /** Code the planning model named is to go on the developer's screen now, as Luke starts to speak. */
   onCode?: (shown: PlanShownCode) => void;
+  /**
+   * The developer said they are done and the planning model asked to end
+   * the call: the peer hangs up once Luke's goodbye has played, through the
+   * developer's own hang-up. Told at most once per run.
+   */
+  onCallEnding?: () => void;
 }
 
 /**
@@ -338,6 +355,10 @@ interface Exchange {
   silenced: boolean;
   /** Whether the brain has been asked to cancel the run, so the stop key asks once. */
   cancelAsked: boolean;
+  /** When the exchange was asked, by the session's clock, which bounds how late its run may still end the call. */
+  readonly askedAt: number;
+  /** Whether the run's end of the call was passed on, so a repeated one is not. */
+  endAsked: boolean;
   /** Whether this exchange's record write is still out; while any of its session's is, run events are deferred rather than spoken. */
   pendingRecord: boolean;
   /** Run events held while a record write is out, replayed in order once it lands. */
@@ -362,6 +383,7 @@ function newExchange(
   delegationId: LiveDelegationId,
   revision: number,
   sessionId: string,
+  askedAt: number,
   woken = false,
 ): Exchange {
   return {
@@ -371,6 +393,8 @@ function newExchange(
     revision,
     silenced: false,
     cancelAsked: false,
+    askedAt,
+    endAsked: false,
     pendingRecord: false,
     deferred: [],
     sessionId,
@@ -658,7 +682,13 @@ export class LiveSessionService {
       session.revisions = Math.max(session.revisions, recovery.revision);
       for (const run of recovery.runs) {
         session.claimedDelegations.add(run.delegationId);
-        const exchange = newExchange(run.runId, run.delegationId, run.revision, session.sessionId);
+        const exchange = newExchange(
+          run.runId,
+          run.delegationId,
+          run.revision,
+          session.sessionId,
+          this.#now(),
+        );
         if (run.revision < recovery.revision || run.stopped || run.stale) this.#silence(exchange);
         exchange.cancelAsked = run.stopped;
         this.#exchanges.set(run.runId, exchange);
@@ -1209,7 +1239,7 @@ export class LiveSessionService {
     // The ask's place among the session's revisions, and the stops it was delegated under, are
     // taken as it arrives: the brain may accept an older ask after a newer one or after a stop.
     session.revisions += 1;
-    const asked = { revision: session.revisions, stops: session.stops };
+    const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
     const question = [
       renderAskContext(askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs)),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
@@ -1274,11 +1304,11 @@ export class LiveSessionService {
     session: StandingSession,
     runId: string,
     delegationId: string,
-    asked: { readonly revision: number; readonly stops: number },
+    asked: { readonly revision: number; readonly stops: number; readonly at: number },
   ): Exchange {
     // The brain has the ask, so the hand-off is over; words already queued for Luke are still owed.
     if (session.voicePhase === VOICE_PHASE.HANDING_OFF) session.voicePhase = undefined;
-    const exchange = newExchange(runId, delegationId, asked.revision, session.sessionId);
+    const exchange = newExchange(runId, delegationId, asked.revision, session.sessionId, asked.at);
     for (const held of this.#exchanges.values()) {
       if (held.sessionId !== session.sessionId) continue;
       if (held.revision < asked.revision) this.#silence(held);
@@ -1392,7 +1422,7 @@ export class LiveSessionService {
     if (!session || this.#exchanges.has(runId)) return;
     this.#exchanges.set(
       runId,
-      newExchange(runId, null, session.revisions, session.sessionId, true),
+      newExchange(runId, null, session.revisions, session.sessionId, this.#now(), true),
     );
     this.#reportStatus();
   }
@@ -1447,6 +1477,9 @@ export class LiveSessionService {
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED:
         this.#speakFor(exchange, queuedQuestionNote(event.question, event.recommendation));
         return;
+      case LIVE_BRAIN_RUN_EVENT.CALL_ENDING:
+        this.#endCall(exchange);
+        return;
       // Code is held for the words it belongs to, which start with Luke's next answer.
       case LIVE_BRAIN_RUN_EVENT.CODE_SHOWN: {
         const session = this.#sessionOf(exchange);
@@ -1483,6 +1516,28 @@ export class LiveSessionService {
       default:
         return;
     }
+  }
+
+  /**
+   * A run's ask to end the call, passed to the peer once: only for a run the
+   * developer asked, still the newest and not stopped, and inside
+   * `END_CALL_BOUNDS` of its delegation. A run silenced by a later
+   * delegation or the stop key answers a goodbye the developer has since
+   * talked past, and a run the brain opened of its own answers no goodbye
+   * at all, so either leaves the call up. Note that we silence the run once
+   * its end is passed on, because Luke is already saying goodbye and
+   * whatever the run returns after would be said over the hang-up.
+   */
+  #endCall(exchange: Exchange): void {
+    if (exchange.woken || exchange.silenced || exchange.endAsked) return;
+    if (this.#sessionOf(exchange) === undefined) return;
+    if (this.#now() - exchange.askedAt > END_CALL_BOUNDS.WITHIN_MS) {
+      this.#options.report("An end of the call came past its bound, and the call stays up");
+      return;
+    }
+    exchange.endAsked = true;
+    this.#silence(exchange);
+    this.#options.onCallEnding?.();
   }
 
   /** Whether a settled step may be told now, by `PROGRESS_NOTE_BOUNDS`; a silenced or ended exchange tells none. */
