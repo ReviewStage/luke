@@ -115,7 +115,10 @@ function CallToggle({
  * microphone's press is the same toggle at rest and in the call, so the talk
  * key, the permission asks, and a call about another plan all answer as they
  * always have. The speaker silences Luke on this Mac alone; the call goes on.
- * The two mutes' chords are offered for exactly as long as the mutes are drawn.
+ * A call the tab reports a status for is drawn as the call even where it
+ * offers no stop, a fixture's staged call or one closing, since the press
+ * on each control is the one it always was; the two mutes' chords are
+ * offered only while the call is in progress.
  */
 export function CallBar({
   status,
@@ -130,13 +133,13 @@ export function CallBar({
   /** Ends the call; shown is whether the open plan's call is in progress. */
   stop: { shown: boolean; onPress: () => void };
 }): React.JSX.Element {
-  const inCall = stop.shown;
+  const inProgress = stop.shown;
   useAppCommand(
     APP_COMMAND.TOGGLE_MICROPHONE,
-    inCall && microphone.enabled ? microphone.onPress : undefined,
+    inProgress && microphone.enabled ? microphone.onPress : undefined,
   );
-  useAppCommand(APP_COMMAND.TOGGLE_SPEAKER, inCall ? speaker.onPress : undefined);
-  if (!inCall) {
+  useAppCommand(APP_COMMAND.TOGGLE_SPEAKER, inProgress ? speaker.onPress : undefined);
+  if (!inProgress && status === undefined) {
     return (
       <footer className="call-bar" data-call="false">
         <button

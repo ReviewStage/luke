@@ -523,10 +523,10 @@ it.effect(
 );
 
 it.effect(
-  "the speaker mutes for the call standing alone: Luke still speaks and captions under it, the session is told nothing, and the next call is heard",
+  "the speaker mutes for the call standing alone: Luke still speaks, captioned whatever the preference, the session is told nothing, and the next call is heard",
   () =>
     Effect.gen(function* () {
-      const f = fixture();
+      const f = fixture({ captionsEnabled: false });
       yield* f.muteSpeaker(true);
       yield* settleFibers();
       assert.equal(f.views.at(-1)?.speakerMuted, false);
@@ -538,9 +538,11 @@ it.effect(
       assert.ok(call);
       call.started();
       yield* Fiber.join(pressed);
-      yield* f.muteSpeaker(true);
       call.settle(LIVE_STATUS.SPEAKING);
       call.events.onCaptions([row("row-1", CONVERSATION_ENTRY_KIND.REPLY, "Two sessions", false)]);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
+      yield* f.muteSpeaker(true);
       yield* settleFibers();
       const muted = f.views.at(-1);
       assert.deepEqual(
@@ -548,6 +550,9 @@ it.effect(
         [true, LIVE_STATUS.SPEAKING, true, ["Two sessions"]],
       );
       assert.deepEqual([call.silences, f.stops.length], [0, 0]);
+      yield* f.muteSpeaker(false);
+      yield* settleFibers();
+      assert.equal(f.views.at(-1)?.lukeCaptions, undefined);
 
       yield* f.stopCall();
       yield* settleFibers();

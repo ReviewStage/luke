@@ -113,6 +113,17 @@ test("in a call the microphone and speaker are mutes, pressed and struck through
   assert.deepEqual(muted.pressed, ["microphone", "speaker", "stop"]);
 });
 
+test("a call reported with no stop, as a fixture stages one, is still drawn as the call", () => {
+  const { bar } = callBar({
+    live: false,
+    status: { voiceWord: "Listening", backend: { planner: { action: undefined }, notes: false } },
+  });
+  assert.equal(bar.querySelector(".call-start"), null);
+  assert.equal(bar.querySelector(".call-status-word")?.textContent, "Listening");
+  assert.ok(bar.querySelector('button[aria-label="Mute microphone"]'));
+  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), false);
+});
+
 test("the call's chords reach its two mutes only while the call stands", () => {
   const rest = callBar();
   assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), false);
