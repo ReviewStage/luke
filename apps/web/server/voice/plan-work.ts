@@ -25,6 +25,7 @@ import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
 } from "../hosted/coding-agent-tools.js";
+import { END_CALL_TOOL } from "../hosted/end-call.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
@@ -64,6 +65,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [LIST_CODING_AGENTS_TOOL.name, PLAN_WORK_TOOL.LIST_AGENTS],
   [READ_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.READ_AGENT],
   [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
+  [END_CALL_TOOL.name, PLAN_WORK_TOOL.END_CALL],
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);

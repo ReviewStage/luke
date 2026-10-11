@@ -1,5 +1,6 @@
 import type { MessageStreamEvent } from "eve/client";
 import { EVE_DELEGATION_TOOL } from "../../server/hosted/brain-host/planning";
+import { END_CALL_TOOL } from "../../server/hosted/end-call";
 import {
   REPOSITORY_SHELL_STATUS,
   RUN_IN_REPOSITORY_TOOL,
@@ -79,6 +80,58 @@ export function spokenTurn(
         finishReason: "stop",
         message: "One agent finished. Another is waiting on you.",
       },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop" },
+    }),
+    stamped({ type: "turn.completed", data: { turnId, sequence } }),
+  ];
+}
+
+/** A goodbye's turn: the planning model ends the call first, then returns a line Luke is not to say over the goodbye. */
+export function goodbyeTurn(turnId: string, now: number): readonly MessageStreamEvent[] {
+  const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
+    stampedEveEvent(event, now);
+  const sequence = 0;
+  return [
+    stamped({ type: "turn.started", data: { turnId, sequence } }),
+    stamped({ type: "message.received", data: { turnId, sequence, message: "bye!" } }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "actions.requested",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        actions: [
+          { kind: "tool-call", callId: "call-end", toolName: END_CALL_TOOL.name, input: {} },
+        ],
+      },
+    }),
+    stamped({
+      type: "action.result",
+      data: {
+        turnId,
+        sequence,
+        stepIndex: 0,
+        status: "completed",
+        result: {
+          kind: "tool-result",
+          callId: "call-end",
+          toolName: END_CALL_TOOL.name,
+          output: { status: "accepted" },
+        },
+      },
+    }),
+    stamped({
+      type: "step.completed",
+      data: { turnId, sequence, stepIndex: 0, finishReason: "tool-calls" },
+    }),
+    stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 1, modelId: "m" } }),
+    stamped({
+      type: "message.completed",
+      data: { turnId, sequence, stepIndex: 1, finishReason: "stop", message: "Call ended." },
     }),
     stamped({
       type: "step.completed",

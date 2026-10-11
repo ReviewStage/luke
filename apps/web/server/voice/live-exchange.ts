@@ -83,6 +83,8 @@ export interface HostedLiveExchangeOptions {
   readonly onCode?: (shown: PlanShownCode) => void;
   /** Each planning turn's work, told whole on each change; a planning call's device is shown it. */
   readonly onWork?: (work: PlanWorkTurn) => void;
+  /** The developer said they are done and Luke is saying goodbye; a planning call's device hangs up once it has played. */
+  readonly onCallEnding?: () => void;
 }
 
 /** One signed-in session the voice service created or re-attached, as an exchange is offered it. */
@@ -103,6 +105,8 @@ export interface AttachedSession {
   readonly onCode?: ((shown: PlanShownCode) => void) | undefined;
   /** The device's door for each planning turn's work on the call; absent where the route sends it nothing of its own. */
   readonly onWork?: ((work: PlanWorkTurn) => void) | undefined;
+  /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
+  readonly onCallEnding?: (() => void) | undefined;
 }
 
 /**
@@ -276,6 +280,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
         tellActivity();
       },
       ...(options.onCode ? { onCode: options.onCode } : undefined),
+      ...(options.onCallEnding ? { onCallEnding: options.onCallEnding } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

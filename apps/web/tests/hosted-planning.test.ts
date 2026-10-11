@@ -61,6 +61,7 @@ import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
+import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
@@ -532,7 +533,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, and the plan's coding agents, and no write to the plan",
+    "a planning turn is offered the question queue, the code it shows, the repository and research reads, the board, the plan's coding agents, and the end of the call, and no write to the plan",
     () =>
       Effect.gen(function* () {
         const { host } = yield* savedPlanWithConversation();
@@ -552,6 +553,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
             LIST_CODING_AGENTS_TOOL.name,
             READ_CODING_AGENT_TOOL.name,
             MESSAGE_CODING_AGENT_TOOL.name,
+            END_CALL_TOOL.name,
           ],
         );
       }),

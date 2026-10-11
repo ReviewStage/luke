@@ -17,6 +17,7 @@ export const LIVE_BRAIN_RUN_EVENT = {
   SLOW_STEP: "slow_step",
   QUESTION_QUEUED: "question_queued",
   CODE_SHOWN: "code_shown",
+  CALL_ENDING: "call_ending",
   ACTIONS_SETTLED: "actions_settled",
   REPLY_SENTENCE: "reply_sentence",
   ENDED: "ended",
@@ -76,6 +77,9 @@ export type LiveBrainRunEvent =
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CODE_SHOWN;
       readonly runId: string;
     } & PlanShownCode)
+  // The developer said they are done and the planning model asked to end
+  // the call; the service decides whether this run may still end it.
+  | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
   | { readonly kind: typeof LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE;

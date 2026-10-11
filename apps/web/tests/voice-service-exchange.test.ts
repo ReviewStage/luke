@@ -9,7 +9,7 @@ import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
-import { HOSTED_API_ERROR, MESSAGE_ROLE } from "../server/core";
+import { HOSTED_API_ERROR, MESSAGE_ROLE, TURN_STATUS } from "../server/core";
 import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
@@ -54,7 +54,7 @@ import {
 } from "../server/voice/service";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
-import { FIRST_EVE_TURN, spokenTurn } from "./support/eve-turns";
+import { FIRST_EVE_TURN, goodbyeTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   appended,
@@ -67,6 +67,7 @@ import {
 import {
   insertVoiceTranscriptSegment,
   readMessagesByConversationTyped,
+  readTurnsByConversation,
   readVoiceSessionsByUserTyped,
 } from "./support/store-rows";
 import {
@@ -1180,6 +1181,60 @@ it.effect(
       // What the service sent up while the turn ran is left unanswered: the call ends here.
       await framesWithin(session.upstream, QUIET_MS);
       await hangUp(context, session);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a goodbye's end_call tells the desktop the call is ending, says nothing over the goodbye, settles its turn, and the desktop's own hang-up ends the call",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const session = await openSession(context, plan.id);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(sessionId)));
+      await sendText(session.attach.socket, JSON.stringify(heard("That's all, bye!", 1000, 1800)));
+      await sendText(session.attach.socket, JSON.stringify(delegated("dl_bye", 1900)));
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the goodbye to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      const planned = await planConversationOf(context.target.userId, plan.id);
+      const eveSession = await asks.latestSession(context.target.userId, planned ?? "");
+      assert.ok(planned && eveSession);
+      const standing = {
+        sessionId: eveSession,
+        target: { userId: context.target.userId, conversationId: planned },
+        turn: BRAIN_HOST_TURN.SPOKEN,
+        model: "scripted-model",
+        state: memoryRelayState(),
+      };
+      for (const event of goodbyeTurn(FIRST_EVE_TURN, NOW))
+        await database.run(relay.handle(event, standing));
+
+      let ending: WireRecord | undefined;
+      for (let index = 0; index < 40 && ending === undefined; index += 1) {
+        const frame = record(await session.desktop.next(5_000));
+        if (frame.type === VOICE_SERVICE_FRAME.PLAN_CALL_ENDING) ending = frame;
+      }
+      assert.deepEqual(ending, { type: VOICE_SERVICE_FRAME.PLAN_CALL_ENDING, planId: plan.id });
+      assert.ok(context.log.some((entry) => entry.event === LOG_EVENT.CALL_ENDING));
+      const sent = await framesWithin(session.upstream, QUIET_MS);
+      assert.deepEqual(
+        sent.filter((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
+        [],
+        "the turn's return is not said over the goodbye",
+      );
+      const turns = await readTurnsByConversation(database.run, planned);
+      assert.deepEqual(
+        turns.map((turn) => turn.status),
+        [TURN_STATUS.SETTLED],
+      );
+
+      await hangUp(context, session);
+      const row = await sessionRowOf(context.target.userId, sessionId);
+      assert.equal(row?.closeReason, "close_requested");
       await context.stop();
     }),
 );

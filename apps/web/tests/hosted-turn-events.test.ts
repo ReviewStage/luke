@@ -26,6 +26,7 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
@@ -457,6 +458,41 @@ test("the projection: code a planning call shows is told with its lines, in orde
       { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CODE_SHOWN, callId: "c1", code: shown },
       { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued },
     ],
+  );
+});
+
+test("the projection: a planning call's end of the call is told once per turn, as soon as its call is journaled, and the turn still completes with its end", () => {
+  const settled = { status: ACTION_RESULT_STATUS.ACCEPTED };
+  // SAFETY: stored parts in the SDK's own shape, as the writer lands a step's calls and then its words.
+  const parts = [
+    toolPart(END_CALL_TOOL.name, "c1", {}, TOOL_PART_STATE.OUTPUT_AVAILABLE, settled),
+    toolPart(END_CALL_TOOL.name, "c2", {}, TOOL_PART_STATE.OUTPUT_AVAILABLE, settled),
+    { type: UI_PART_TYPE.STEP_START },
+    { type: UI_PART_TYPE.TEXT, text: "Bye for now.", state: UI_PART_STATE.DONE },
+  ] as StoredUIMessage["parts"];
+  assert.deepEqual(projectTurnEvents(TURN, journal(parts.slice(0, 2))), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CALL_ENDING },
+  ]);
+  assert.deepEqual(projectTurnEvents({ ...TURN, status: TURN_STATUS.SETTLED }, journal(parts)), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.CALL_ENDING },
+    { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.ACTIONS_SETTLED },
+    { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "Bye for now." },
+    { turnId: TURN.id, seq: 4, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
+  ]);
+});
+
+test("the projection: an end of the call still streaming in, or one that does not read, is not told", () => {
+  // SAFETY: a stored call whose input is a string, which no model call to end_call reads as.
+  const unreadable = {
+    ...toolPart(END_CALL_TOOL.name, "c2"),
+    input: "bye",
+  } as StoredUIMessage["parts"][number];
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([toolPart(END_CALL_TOOL.name, "c1", {}, "input-streaming"), unreadable]),
+    ),
+    [],
   );
 });
 

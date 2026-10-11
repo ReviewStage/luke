@@ -12,6 +12,7 @@ import {
   type HostedApiError,
   HTTP_STATUS,
   type PlanActivityFrame,
+  type PlanCallEndingFrame,
   type PlanCodeFrame,
   type PlanDraftFrame,
   type PlanWorkFrame,
@@ -557,6 +558,17 @@ export class VoiceService {
             type: VOICE_SERVICE_FRAME.PLAN_WORK,
             planId: opened.planId,
             turn,
+          };
+          this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
+        },
+        // Luke ending the call, sent the same way: the device hangs up
+        // through its own hang-up once his goodbye has played, so the close
+        // is the one the developer's stop asks for and nothing ends here.
+        onCallEnding: () => {
+          this.#log({ event: LOG_EVENT.CALL_ENDING });
+          const frame: PlanCallEndingFrame = {
+            type: VOICE_SERVICE_FRAME.PLAN_CALL_ENDING,
+            planId: opened.planId,
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

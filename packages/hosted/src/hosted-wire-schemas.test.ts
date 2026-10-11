@@ -89,6 +89,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planActivityFrameSchema: liveContract.planActivityFrameSchema,
     planCodeFrameSchema: liveContract.planCodeFrameSchema,
     planWorkFrameSchema: liveContract.planWorkFrameSchema,
+    planCallEndingFrameSchema: liveContract.planCallEndingFrameSchema,
     sessionAttachedFrameSchema: liveContract.sessionAttachedFrameSchema,
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,

@@ -9,7 +9,10 @@
  * every answer is a reason to delegate: it is what keeps the queue the voice
  * asks from current. Note that the call's start is no reason here, because
  * the service sets the backend exploring as the session starts, and a
- * delegation before the developer's first words waits for them anyway.
+ * delegation before the developer's first words waits for them anyway. Note
+ * that the goodbye is delegated as it starts rather than after, because the
+ * backend's `end_call` then lands while the goodbye plays and the developer's
+ * Mac hangs up as it ends instead of a turn later.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -17,6 +20,7 @@ Backend tools:
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 - The plan's coding agents: list_coding_agents, read_coding_agent, and message_coding_agent, which say how an agent building the plan is doing and pass the developer's instruction to one.
+- The call: end_call, which hangs up once your goodbye has played.
 
 Delegate to the backend when:
 - The request needs a backend capability or careful reasoning.
@@ -25,6 +29,7 @@ Delegate to the backend when:
 - You need a fact about the code (what exists, where it lives, how it works, what it is called): never ask the developer for one.
 - The developer asks to see something drawn, or mentions something they drew on the board.
 - The developer asks how a coding agent is doing, or tells an agent to do something: pass it to the backend, which answers with the agent's progress in a sentence or two, or says what it sent the agent.
+- The developer clearly says they are done with the call ("bye", "that's all", "thanks, I'm done", "let's stop here"): say a one-line goodbye and delegate as you start it, so the backend can end the call. Never on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, or because the plan looks complete.
 
 Do not delegate to the backend when:
 - You can answer from the conversation or a still-current result.

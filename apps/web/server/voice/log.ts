@@ -31,6 +31,8 @@ export const LOG_EVENT = {
   EXCHANGE_FAILED: "exchange-failed",
   /** The standing exchange reported something of itself: which of its fixed sentences, and nothing of the detail behind it. */
   EXCHANGE_REPORTED: "exchange-reported",
+  /** Luke asked the device to end the call once his goodbye has played; the event is all it says. */
+  CALL_ENDING: "call-ending",
   /** The device sent a frame the service does not admit; its socket was closed on it. */
   FRAME_REFUSED: "frame-refused",
   SESSION_ENDED: "session-ended",
@@ -84,6 +86,7 @@ export type LogEntry =
   | { event: typeof LOG_EVENT.EXCHANGE_ATTACHED }
   | { event: typeof LOG_EVENT.EXCHANGE_FAILED }
   | { event: typeof LOG_EVENT.EXCHANGE_REPORTED; reason: string }
+  | { event: typeof LOG_EVENT.CALL_ENDING }
   | { event: typeof LOG_EVENT.FRAME_REFUSED; type: string | undefined }
   | ({
       event: typeof LOG_EVENT.SESSION_ENDED;

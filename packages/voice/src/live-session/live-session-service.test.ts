@@ -38,6 +38,7 @@ import {
 } from "./live-brain.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
+  END_CALL_BOUNDS,
   LiveSessionService,
   type LiveSessionStatus,
   PROGRESS_NOTE_BOUNDS,
@@ -340,6 +341,8 @@ interface Fixture {
   statuses: LiveSessionStatus[];
   /** Every code `onCode` put on screen, in order. */
   codes: PlanShownCode[];
+  /** How many times the peer was told the call is ending. */
+  endings: { count: number };
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -352,6 +355,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const reports: string[] = [];
     const statuses: LiveSessionStatus[] = [];
     const codes: PlanShownCode[] = [];
+    const endings = { count: 0 };
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -359,6 +363,9 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         report: (message) => reports.push(message),
         onStatus: (status) => statuses.push(status),
         onCode: (shown) => codes.push(shown),
+        onCallEnding: () => {
+          endings.count += 1;
+        },
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -369,6 +376,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       reports,
       statuses,
       codes,
+      endings,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -856,6 +864,120 @@ it.effect(
       yield* settle();
       assert.deepEqual(f.codes, [shown], "the code goes on screen once, under its call");
     }),
+);
+
+/** The words of every commentary append the session was sent, oldest first. */
+function commentaryWords(sideband: FakeSideband): string[] {
+  return appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+    "content" in event ? event.content : "",
+  );
+}
+
+/** The goodbye the voice delegated, as the developer said it and the model asked about it. */
+function sayBye(sideband: FakeSideband, delegationId: string, atMs: number) {
+  sideband.input("Great, that's all for today, bye!", atMs, atMs + 800);
+  sideband.delegation(delegationId, atMs + 900);
+}
+
+it.effect(
+  "a run's end of the call tells the peer once however often it asks, and what the run says after is not spoken over the goodbye",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sayBye(sideband, "item_1", 0);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-1" });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-1",
+        sentence: "Ending the call now.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.equal(f.endings.count, 1);
+      assert.deepEqual(commentaryWords(sideband), []);
+      assert.equal(f.service.sessionStands(), true, "the peer's hang-up ends the call, not this");
+    }),
+);
+
+it.effect(
+  "an end of the call from a run the developer has since talked past, even before the brain has their next ask, or stopped, leaves the call up",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sayBye(sideband, "item_1", 0);
+      yield* settle();
+      sideband.input("Oh wait, one more thing about invites.", 2000, 3000);
+      sideband.delegation("item_2", 3100);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-1" });
+      yield* settle();
+      assert.equal(f.endings.count, 0, "a later delegation supersedes the goodbye");
+
+      sayBye(sideband, "item_3", 5000);
+      yield* settle();
+      f.brain.answerWhen = yield* Deferred.make<void>();
+      sideband.input("Actually, one more question.", 6000, 6800);
+      sideband.delegation("item_4", 6900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-3" });
+      yield* settle();
+      assert.equal(f.endings.count, 0, "a later delegation the brain has not taken yet counts too");
+      yield* Deferred.succeed(f.brain.answerWhen, undefined);
+      f.brain.answerWhen = undefined;
+
+      sayBye(sideband, "item_5", 8000);
+      yield* settle();
+      assert.equal(f.service.stopSpeaking(), true);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-5" });
+      yield* settle();
+      assert.equal(f.endings.count, 0, "the stop key cancels the goodbye's end");
+    }),
+);
+
+it.effect(
+  "an end of the call that lands past its bound leaves the call up, and one inside it ends the call",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sayBye(sideband, "item_1", 0);
+      yield* settle();
+      yield* advanceClock(END_CALL_BOUNDS.WITHIN_MS + 1);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-1" });
+      yield* settle();
+      assert.equal(f.endings.count, 0);
+
+      sayBye(sideband, "item_2", END_CALL_BOUNDS.WITHIN_MS + 5000);
+      yield* settle();
+      yield* advanceClock(END_CALL_BOUNDS.WITHIN_MS - 1000);
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-2" });
+      yield* settle();
+      assert.equal(f.endings.count, 1);
+    }),
+);
+
+it.effect("a run the backend opened of its own never ends the call", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.exploring = (sessionId) => `explore-${sessionId}`;
+    yield* f.open();
+    yield* settle();
+    f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "explore-sess-1" });
+    yield* settle();
+    assert.equal(f.endings.count, 0);
+  }),
 );
 
 it.effect(
@@ -2319,6 +2441,20 @@ it.effect(
       assert.equal(reply.content, "The answer that stands.");
       assert.equal(reply.delegation_id, "item_b");
     }),
+);
+
+it.effect("a run taken up on a re-attached session never ends the call", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    f.brain.recovery = {
+      revision: 1,
+      runs: [recoveredRun("run-a", "item_a", 1)],
+      told: [{ kind: LIVE_BRAIN_RUN_EVENT.CALL_ENDING, runId: "run-a" }],
+    };
+    yield* reattach(f, "sess-live");
+    yield* advanceClock(1000);
+    assert.equal(f.endings.count, 0);
+  }),
 );
 
 it.effect(

@@ -44,6 +44,8 @@ export const BRAIN_RUN_EVENT = {
   QUESTION_QUEUED: "question_queued",
   /** A planning run put code of the plan's repository on the developer's screen, with its lines; told once the call has read them, before the run ends. */
   CODE_SHOWN: "code_shown",
+  /** A planning run asked to end the call, the developer having said they are done; told once per run, as the call is journaled. */
+  CALL_ENDING: "call_ending",
   /** Every write the run has dispatched by now has its result journaled, so the sentences after it describe nothing still uncertain; a run that has only read tells it at its first words. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the answer, in order, after every write the run took has settled. */
@@ -205,6 +207,7 @@ export type BrainRunEventBody =
         readonly note?: string;
       };
     }
+  | { readonly kind: typeof BRAIN_RUN_EVENT.CALL_ENDING; readonly runId: string }
   | { readonly kind: typeof BRAIN_RUN_EVENT.ACTIONS_SETTLED; readonly runId: string }
   | {
       readonly kind: typeof BRAIN_RUN_EVENT.REPLY_SENTENCE;

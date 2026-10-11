@@ -3,7 +3,8 @@ import type { ShownCode } from "./plan-wire.js";
 /**
  * A turn's events: what the voice hears of a turn it asked while the turn
  * runs. The kinds are the run seams the live session service consumes — a
- * slow step began, a planning turn queued a question or showed code, every
+ * slow step began, a planning turn queued a question, showed code, or asked
+ * to end the call, every
  * action settled, one sentence of the reply, the turn ended — and nothing
  * wider: no tool part, no reasoning, and no message, only what a voice needs
  * to speak commentary while the turn runs. Each event is numbered from one inside its
@@ -19,6 +20,8 @@ export const TURN_EVENT_KIND = {
   QUESTION_QUEUED: "question_queued",
   /** A planning turn put code of the plan's repository on screen, with its lines; told once its call has read them, before the turn ends. */
   CODE_SHOWN: "code_shown",
+  /** A planning turn asked to end the call, the developer having said they are done; told once per turn, as the call is journaled. */
+  CALL_ENDING: "call_ending",
   /** Every action the turn has journaled by now has its result on the record; the reply's sentences follow, the first while the turn may still run. */
   ACTIONS_SETTLED: "actions_settled",
   /** One sentence of the reply, in order, after the actions settled. */
@@ -70,6 +73,7 @@ export type TurnEventBody =
       readonly callId: string;
       readonly code: ShownCode;
     }
+  | { readonly kind: typeof TURN_EVENT_KIND.CALL_ENDING }
   | { readonly kind: typeof TURN_EVENT_KIND.ACTIONS_SETTLED }
   | { readonly kind: typeof TURN_EVENT_KIND.REPLY_SENTENCE; readonly sentence: string }
   | { readonly kind: typeof TURN_EVENT_KIND.ENDED; readonly end: TurnEnd };

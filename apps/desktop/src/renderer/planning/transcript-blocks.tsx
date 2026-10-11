@@ -13,6 +13,7 @@ import {
   type LucideIcon,
   MessageCircleQuestionIcon,
   PencilLineIcon,
+  PhoneOffIcon,
   SearchIcon,
   SendIcon,
   TerminalIcon,
@@ -121,6 +122,7 @@ const CALL_ICON = {
   [CALL_KIND.LIST_AGENTS]: BotIcon,
   [CALL_KIND.READ_AGENT]: BotIcon,
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
+  [CALL_KIND.END_CALL]: PhoneOffIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 

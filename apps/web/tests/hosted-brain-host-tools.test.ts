@@ -46,6 +46,7 @@ import {
   MESSAGE_CODING_AGENT_TOOL,
   READ_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
+import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -284,6 +285,15 @@ test("a queued question on a plan's conversation is accepted, and one that does 
     status: ACTION_RESULT_STATUS.ACCEPTED,
   });
   const unreadable = await call(QUEUE_QUESTION_TOOL.name, { question: "" });
+  assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
+});
+
+test("a planning turn is offered end_call, which is accepted on a plan's conversation and refused when it does not read", async () => {
+  const call = await callerOn(brainHost(seams), await planConversation());
+
+  assert.deepEqual(await call(END_CALL_TOOL.name, {}), { status: ACTION_RESULT_STATUS.ACCEPTED });
+  // SAFETY: a model may emit any JSON as a call's input; a string stands for one that is no object.
+  const unreadable = await call(END_CALL_TOOL.name, "bye" as unknown as WireRecord);
   assert.equal(unreadable.status, ACTION_RESULT_STATUS.REJECTED);
 });
 
