@@ -155,3 +155,40 @@ it.effect(
       assert.equal(toast(), undefined);
     }),
 );
+
+it.effect(
+  "toasts that wait stand one after another, each for its own hold, a pause holding the line and a toast that does not wait taking the place of the one standing alone",
+  () =>
+    Effect.gen(function* () {
+      const show = mount(yield* registryOnTestClock);
+      const ended = (words: string): ToastNotice => ({
+        words,
+        tone: TOAST_TONE.DONE,
+        waits: true,
+        action: { label: "View", onPress: () => undefined },
+      });
+      show(ended("Opus 5.5 finished"));
+      show(ended("GPT 5.6 Sol finished"));
+      show(ended("Fix invitations failed"));
+      yield* landed;
+      assert.equal(toast(), "Opus 5.5 finishedView");
+
+      yield* advance(4_999);
+      assert.equal(toast(), "Opus 5.5 finishedView", "the first keeps its whole hold");
+      yield* advance(1 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), "GPT 5.6 Sol finishedView");
+
+      toastEvent("pointerover");
+      yield* advance(60_000);
+      assert.equal(toast(), "GPT 5.6 Sol finishedView", "held while pointed at");
+      toastEvent("pointerout");
+
+      show({ words: "Transcript copied", tone: TOAST_TONE.DONE, hold: Duration.millis(1_500) });
+      yield* landed;
+      assert.equal(toast(), "Transcript copied", "takes the place of the one standing");
+      yield* advance(1_500 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), "Fix invitations failedView", "and the line goes on after it");
+      yield* advance(5_000 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+    }),
+);

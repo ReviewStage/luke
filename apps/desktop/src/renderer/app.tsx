@@ -20,6 +20,7 @@ import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
+import { useAgentEndToasts } from "./planning/agent-end-toast";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -206,6 +207,12 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
+  // An agent's end said in the toast while the window was focused: its View
+  // goes where the notification's click would.
+  useAgentEndToasts((planId, agentId) => {
+    changeTab(PANEL_TAB.PLANS);
+    showAgent.current(planId, agentId);
+  });
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

@@ -10,7 +10,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
-import { Duration, Effect, Queue, Schedule, type Scope } from "effect";
+import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
 import { modelLabel } from "#shared/model-label";
 
 /**
@@ -25,9 +25,12 @@ import { modelLabel } from "#shared/model-label";
  * agent on a plan the developer has left is still watched. The ledger
  * keys an agent's run by the turn its status is read from (`turnId`): a
  * status that moves from still writing to ended under one turn is that
- * turn's end, announced once, as a notification, unless the window is
- * focused and that agent's tab is the one shown, and as the agent's unseen
- * dot, until its tab is shown or the window comes forward on it. A message
+ * turn's end, announced once, and as the agent's unseen dot, until its tab
+ * is shown or the window comes forward on it. It is announced nowhere while
+ * the window is focused on that agent's tab; in the window's own toast while
+ * the window is focused on anything else, since a notification would come
+ * from beside the window the developer is already looking at; and as a
+ * notification while the window is behind. A message
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
  * a new one: the ledger keeps the end it announced, and on the message's
@@ -41,7 +44,8 @@ import { modelLabel } from "#shared/model-label";
  * its agents with it.
  *
  * The notification says the plan's name, the agent's title or else its
- * model's name, and how the turn ended, and nothing of the transcript. A turn that completed is announced
+ * model's name, and how the turn ended, and nothing of the transcript; the
+ * toast says the same but the plan's name. A turn that completed is announced
  * as the pull request it opened where one is found: each end is queued
  * from the ledger's own synchronous path and a fiber on the notices' scope
  * takes it, reads what the agent published once, and posts; an end whose
@@ -74,16 +78,33 @@ export interface AgentNotice {
   onClick: () => void;
 }
 
-/** The one door a notification leaves through: Electron's `Notification`, or a test's record of it. */
-export interface AgentNoticePoster {
-  post(notice: AgentNotice): void;
-}
-
 /** Where a notification's click takes the developer: the plan, on the agent's tab. */
 export interface AgentPlace {
   planId: string;
   agentId: string;
 }
+
+/** A turn's end as the window's own toast says it: the words, whether the turn failed, and where its View goes. */
+export interface AgentEndToast {
+  place: AgentPlace;
+  words: string;
+  failed: boolean;
+}
+
+/**
+ * The two doors an announcement leaves this process through: the OS's
+ * notification, and the panel's toast. A service rather than a dependency
+ * handed in, because it is this process's door to Electron, so a test stands
+ * a Layer of its own on it.
+ */
+export interface AgentNoticeDoorsSurface {
+  post(notice: AgentNotice): void;
+  toast(end: AgentEndToast): void;
+}
+
+export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNoticeDoorsSurface>()(
+  "@luke/desktop/AgentNoticeDoors",
+) {}
 
 export interface AgentNoticesDependencies {
   /** The plan's agents with their status, as the host answers them: the watch's one read. */
@@ -92,7 +113,6 @@ export interface AgentNoticesDependencies {
   readPullRequest: (agentId: string) => Effect.Effect<CodingAgentPullRequestAnswerView>;
   /** The plan's name as main holds it, or nothing for a plan it holds no name for. */
   planName: (planId: string) => string | undefined;
-  poster: AgentNoticePoster;
   /** Brings Luke forward on the plan with the agent's tab open: the click's whole effect. */
   open: (place: AgentPlace) => void;
   /** Where the unseen agents are written, for the tabs to draw. */
@@ -137,10 +157,11 @@ interface HeldAgent {
   pastTurns: ReadonlySet<string>;
 }
 
-/** One turn's end as the ledger saw it, waiting to be announced. */
+/** One turn's end as the ledger saw it, waiting to be announced, and whether the window was focused as it ended. */
 interface TurnEnd {
   agentId: string;
   agent: HeldAgent;
+  focused: boolean;
 }
 
 function stillWriting(status: CodingAgentStatus): boolean {
@@ -182,9 +203,9 @@ export function noticeText(input: {
 export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgentNotices")(
   function* (
     dependencies: AgentNoticesDependencies,
-  ): Effect.fn.Return<AgentNotices, never, Scope.Scope> {
-    const { listAgents, readPullRequest, planName, poster, open, onUnseenChanged, report } =
-      dependencies;
+  ): Effect.fn.Return<AgentNotices, never, Scope.Scope | AgentNoticeDoors> {
+    const { listAgents, readPullRequest, planName, open, onUnseenChanged, report } = dependencies;
+    const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
     const unseen = new Set<string>();
     const ends = yield* Queue.unbounded<TurnEnd>();
@@ -207,7 +228,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (focused && shownAgent === agentId) return;
       unseen.add(agentId);
       publishUnseen();
-      Queue.offerUnsafe(ends, { agentId, agent });
+      Queue.offerUnsafe(ends, { agentId, agent, focused });
     }
 
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
@@ -230,7 +251,14 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
             ),
           );
 
-    /** One end announced: what the agent published read, then the notification posted. */
+    /**
+     * One end announced: what the agent published read, then the toast shown
+     * where the window was focused as the turn ended and still is, or else
+     * the notification posted. Note that focus is read on both sides of the
+     * read, because a toast to a window gone behind while it was out would
+     * play to nobody, and a window come forward meanwhile had already been
+     * told nothing of the end it missed.
+     */
     const announce = Effect.gen(function* () {
       const end = yield* Queue.take(ends);
       const pullRequest = yield* pullRequestOf(end);
@@ -243,10 +271,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         ...(pullRequest === undefined ? undefined : { pullRequest }),
       });
       if (text === undefined) return;
-      poster.post({
-        ...text,
-        onClick: () => open({ planId: end.agent.planId, agentId: end.agentId }),
-      });
+      const place = { planId: end.agent.planId, agentId: end.agentId };
+      if (end.focused && focused) {
+        doors.toast({
+          place,
+          words: text.body,
+          failed: end.agent.status === CODING_AGENT_STATUS.FAILED,
+        });
+        return;
+      }
+      doors.post({ ...text, onClick: () => open(place) });
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));

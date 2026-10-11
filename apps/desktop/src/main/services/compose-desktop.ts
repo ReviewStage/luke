@@ -6,11 +6,11 @@ import {
   layersInOrder,
 } from "@sidecar/host/effect";
 import { Context, Effect, Layer, Stream } from "effect";
-import { type AgentNotices, createAgentNotices } from "../agent-notices";
+import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
 import { registerDesktopIpc } from "../ipc/register-desktop-ipc";
 import { createElectronUpdaterEngine } from "../update-installer";
-import { electronNoticePoster } from "../window/notice-poster";
+import { electronNoticeDoors } from "../window/notice-doors";
 import type { DesktopConfig } from "./desktop-config";
 import { hostAssemblyLayerFor } from "./host-layer";
 import { createKeychainService } from "./keychain-service";
@@ -186,7 +186,8 @@ export function composeDesktop(
       });
       // The notices read the plans' names from the document and write the
       // unseen agents back into it; a click brings the window forward and
-      // asks the panel to open the plan on the agent's tab.
+      // asks the panel to open the plan on the agent's tab, and an end the
+      // focused window should hear is handed to the panels' toast.
       const notices = yield* createAgentNotices({
         listAgents: (planId) => operator.host.codingAgentList({ planId }),
         readPullRequest: (agentId) => operator.host.codingAgentPullRequest({ agentId }),
@@ -198,7 +199,6 @@ export function composeDesktop(
             (open?.id === planId ? open.name : undefined)
           );
         },
-        poster: electronNoticePoster(),
         open: (place) => {
           windows.panels.focusExpanded();
           windows.showAgent(place);
@@ -207,7 +207,7 @@ export function composeDesktop(
         onPanelFocusChanged: windows.onPanelFocusChanged,
         onAccountChanged: (listener) => operator.host.onAccountChanged(() => listener()),
         report: config.report,
-      });
+      }).pipe(Effect.provideService(AgentNoticeDoors, electronNoticeDoors(windows.toastAgentEnd)));
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

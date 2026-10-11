@@ -11,9 +11,16 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { Duration, Effect } from "effect";
+import { Duration, Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
-import { type AgentNotice, type AgentPlace, createAgentNotices, noticeText } from "./agent-notices";
+import {
+  type AgentEndToast,
+  type AgentNotice,
+  AgentNoticeDoors,
+  type AgentPlace,
+  createAgentNotices,
+  noticeText,
+} from "./agent-notices";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const OTHER_PLAN_ID = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
@@ -43,14 +50,20 @@ function agent(
 
 /**
  * The notices over a scripted host: each plan's list answers from its own
- * queue, the last answer standing, and everything posted, opened, and
- * written is kept for the test to read.
+ * queue, the last answer standing, and everything posted, toasted, opened,
+ * and written is kept for the test to read. Electron's doors are a Layer of
+ * the test's own that records what leaves through each.
  */
 function fixture() {
   const listed: string[] = [];
   const readPullRequests: string[] = [];
   const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
+  const toasted: AgentEndToast[] = [];
+  const doors = Layer.succeed(AgentNoticeDoors, {
+    post: (notice) => posted.push(notice),
+    toast: (end) => toasted.push(end),
+  });
   const opened: AgentPlace[] = [];
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
@@ -70,7 +83,6 @@ function fixture() {
         return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
       }),
     planName: (planId) => (planId === PLAN_ID ? PLAN_NAME : undefined),
-    poster: { post: (notice) => posted.push(notice) },
     open: (place) => opened.push(place),
     onUnseenChanged: (next) => unseen.push(next),
     onPanelFocusChanged: (listener) => {
@@ -87,12 +99,13 @@ function fixture() {
     },
     watchInterval: WATCH,
     report: () => undefined,
-  });
+  }).pipe(Effect.provide(doors));
   return {
     notices,
     listed,
     readPullRequests,
     posted,
+    toasted,
     /** What the agent's pull-request read answers, for the notice of its end. */
     publish: (agentId: string, answer: CodingAgentPullRequestAnswerView) =>
       published.set(agentId, answer),
@@ -231,19 +244,62 @@ it.effect(
     }),
 );
 
-it.effect("a window focused on another tab, or a plan left behind, is told", () =>
-  Effect.gen(function* () {
-    const f = fixture();
-    const notices = yield* f.notices;
-    f.focus(true);
-    notices.shown(null);
-    notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING)]);
-    // The page that says it failed carries the title generated since the list named the agent.
-    notices.observeTitle(AGENT_ID, "Fix invitations");
-    notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.FAILED);
-    yield* Effect.yieldNow;
-    assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Fix invitations failed" }]);
-  }),
+it.effect(
+  "a window focused on another tab, or a plan left behind, is told in its own toast and posts no notification, once for each turn, and a window behind is told by a notification and shown no toast",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      notices.shown(null);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.STARTING)]);
+      // The page that says it failed carries the title generated since the list named the agent.
+      notices.observeTitle(AGENT_ID, "Fix invitations");
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.FAILED);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.toasted, [
+        {
+          place: { planId: PLAN_ID, agentId: AGENT_ID },
+          words: "Fix invitations failed",
+          failed: true,
+        },
+      ]);
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.unseen, [[AGENT_ID]], "the tab is dotted all the same");
+
+      // The same end read again is the same turn, and says nothing twice.
+      notices.observeAgents([agent(CODING_AGENT_STATUS.FAILED, { title: "Fix invitations" })]);
+      yield* Effect.yieldNow;
+      assert.equal(f.toasted.length, 1);
+
+      // The window behind: the next turn's end is a notification, and no toast.
+      f.focus(false);
+      notices.observeAgents([
+        agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID, title: "Fix invitations" }),
+      ]);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Fix invitations finished" }]);
+      assert.equal(f.toasted.length, 1);
+    }),
+);
+
+it.effect(
+  "an end whose window went behind while what the agent published was read is posted as a notification, not toasted to nobody",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      notices.shown(null);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      // The window goes behind before the announcement's read has answered.
+      f.focus(false);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.toasted, []);
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 finished" }]);
+    }),
 );
 
 it.effect("an agent first seen ended, as after a relaunch, is not announced", () =>
