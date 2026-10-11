@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_BOUNDS,
@@ -18,6 +19,10 @@ import {
   PLAN_WORK_TOOL,
   type PlanWorkState,
 } from "@sidecar/hosted/planning-view";
+import { MOTION_DURATION_MS } from "@sidecar/surface";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -29,6 +34,7 @@ import {
   type ActResultFor,
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl, plansControl, usedPlan } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
@@ -50,6 +56,7 @@ import {
   useSidePanel,
 } from "../planning/use-side-panel";
 import { workerCallIds } from "../planning/work-model";
+import { ToastHost } from "../toast";
 import { DesktopPlans } from "./desktop-plans";
 import { SidePanelToggle } from "./side-panel";
 
@@ -2386,11 +2393,12 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
     null,
     page,
     createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(ToastHost),
   );
 }
 
-/** Mounts the plan's page with its agents and the panel shown. */
-function mountAgents(work?: PlansControl["work"]): HTMLElement {
+/** Mounts the plan's page with its agents and the panel shown, its atoms on `registry` where given. */
+function mountAgents(work?: PlansControl["work"], registry?: AtomRegistry): HTMLElement {
   installScrollIntoView();
   stops = [];
   listed = [RUNNING_AGENT, DONE_AGENT];
@@ -2399,7 +2407,8 @@ function mountAgents(work?: PlansControl["work"]): HTMLElement {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(AgentsPage, { work })));
+  const page = createElement(AgentsPage, { work });
+  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   press(container, '[aria-label="Show panel"]');
   return container;
 }
@@ -3095,6 +3104,39 @@ test("Copy concise and Copy full transcript put an agent's transcript, read whol
   ]);
   assert.equal(chosenTab(page), job, "copying chooses no tab");
 });
+
+it.effect(
+  "Copy concise transcript says so in the window's toast, which leaves on its own, and a refused copy says so instead",
+  () =>
+    Effect.gen(function* () {
+      const page = mountAgents(undefined, yield* registryOnTestClock);
+      const clipboard = installClipboard();
+      transcripts = new Map([
+        [
+          RUNNING_AGENT.id,
+          [{ id: "m1", role: "assistant", parts: [{ type: "text", text: "All green." }] }],
+        ],
+      ]);
+      const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
+      const landed = Effect.promise(settle);
+      const advance = (millis: number) =>
+        Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
+
+      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy concise transcript");
+      yield* landed;
+      assert.deepEqual(clipboard.copied, ["# Claude Opus 5.5\n\n## Agent\n\nAll green.\n"]);
+      assert.equal(toast(), "Transcript copied");
+      yield* advance(1_499);
+      assert.equal(toast(), "Transcript copied");
+      yield* advance(1 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+
+      clipboard.refuse(true);
+      chooseFromTab(tabNamed(page, "Claude Opus 5.5"), "Copy full transcript");
+      yield* landed;
+      assert.equal(toast(), "Could not copy to the clipboard. Try again.");
+    }),
+);
 
 test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the next tab is chosen", () => {
   const page = mountAgents();
