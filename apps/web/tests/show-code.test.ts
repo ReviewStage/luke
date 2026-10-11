@@ -172,7 +172,7 @@ it.layer(testSqlClient)("show_code reads the plan's checkout", (it) => {
   );
 
   it.effect(
-    "a call without a note, or with one longer than a sentence or two, shows nothing and reads no file",
+    "a call without a note, with a blank one, or with one longer than a sentence or two, shows nothing and reads no file",
     () =>
       Effect.gen(function* () {
         const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
@@ -181,6 +181,7 @@ it.layer(testSqlClient)("show_code reads the plan's checkout", (it) => {
         const answers = [
           yield* showExactly(call, { path }),
           yield* showExactly(call, { path, note: "" }),
+          yield* showExactly(call, { path, note: " \n\t " }),
           yield* showExactly(call, { path, note: "x".repeat(SHOWN_CODE_BOUNDS.NOTE_CHARS + 1) }),
         ];
 

@@ -270,13 +270,11 @@ export function runShowCode(
     if (Result.isFailure(read)) return rejected(SHOW_CODE_REFUSAL.UNREADABLE);
     const ref = read.success;
     if (isSecretFile(ref.path)) return rejected(SHOW_CODE_REFUSAL.SECRET);
-    const note = readNote(input);
-    if (Result.isFailure(note)) return rejected(SHOW_CODE_REFUSAL.NO_NOTE);
+    // Note that a note of blanks alone is no note, because the card would draw it empty.
+    const note = Result.getOrUndefined(readNote(input))?.note.trim();
+    if (note === undefined || note === "") return rejected(SHOW_CODE_REFUSAL.NO_NOTE);
     const code = yield* readLines(call, ref);
-    return {
-      status: ACTION_RESULT_STATUS.ACCEPTED,
-      code: { ...code, note: note.success.note },
-    } satisfies WireRecord;
+    return { status: ACTION_RESULT_STATUS.ACCEPTED, code: { ...code, note } } satisfies WireRecord;
   });
   return shown.pipe(
     Effect.catchTag("ShowCodeRefusal", (refusal) => Effect.succeed(rejected(refusal.reason))),
