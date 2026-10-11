@@ -38,10 +38,10 @@ import {
  * so a tab on an agent still reading the repository wears nothing yet.
  */
 
-/** The doors the menu and the row open: a page of GitHub's in the browser, and the clipboard. */
+/** The doors the menu and the row open: a page of GitHub's in the browser, and the clipboard, its toast reading `label`. */
 export interface PublishedDoors {
   openGitHub: (url: string) => void;
-  copy: (words: string) => void;
+  copy: (words: string, label: string) => void;
 }
 
 const MENU_LABEL = "Pull request actions";
@@ -78,11 +78,15 @@ function publishedActions(
     branch === null
       ? []
       : [
-          { label: "Copy branch name", icon: <CopyIcon />, onSelect: () => doors.copy(branch) },
+          {
+            label: "Copy branch name",
+            icon: <CopyIcon />,
+            onSelect: () => doors.copy(branch, "Branch name copied"),
+          },
           {
             label: "Copy checkout command",
             icon: <TerminalIcon />,
-            onSelect: () => doors.copy(checkoutCommand(branch)),
+            onSelect: () => doors.copy(checkoutCommand(branch), "Checkout command copied"),
           },
         ],
     changes === undefined

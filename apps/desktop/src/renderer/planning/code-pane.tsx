@@ -1,14 +1,15 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { CheckIcon, CopyIcon, FileInputIcon } from "lucide-react";
-import { type CSSProperties, memo, useRef, useState } from "react";
+import { FileInputIcon } from "lucide-react";
+import { type CSSProperties, memo } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
+import { CopyGlyph, copyHint, useCopyFeedback } from "../copy-feedback";
 import { Tooltip } from "../tooltip";
 import {
   type CodeFeedCall,
@@ -45,7 +46,6 @@ const LIVE_LABEL = "Live";
 
 /** What a card's copy is called, which is its accessible name and its hint. */
 const COPY_LABEL = "Copy lines";
-const COPIED_LABEL = "Copied";
 
 /** What a card's button that opens the whole file in a tab is called. */
 const OPEN_FILE_LABEL = "Open file";
@@ -121,50 +121,21 @@ function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
 }
 
 /**
- * The copy of a card's lines, as a transcript turn's copy behaves
- * (`copy-message.tsx`): the check mark stands while the pointer or the
- * keyboard stays on the button, with no clock to arm; a copy that lands
- * after the developer left shows nothing, and a clipboard that refused it
- * leaves the button as it was.
+ * The copy of a card's lines, answered as every copy button in the window is
+ * (`copy-feedback.tsx`): the glyph turns to a check for a moment, and the
+ * button's name stays its own.
  */
-function CopyLinesButton({
-  lines,
-  copyText,
-}: {
-  lines: string;
-  copyText: (words: string) => Promise<void>;
-}): React.JSX.Element {
-  const [copied, setCopied] = useState(false);
-  // Note that this is a ref, because a copy still out when the developer
-  // leaves reads it as it settles, which no render stands between.
-  const left = useRef(true);
-  const leave = () => {
-    left.current = true;
-    setCopied(false);
-  };
-  const label = copied ? COPIED_LABEL : COPY_LABEL;
+function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
+  const { state, copy } = useCopyFeedback();
   return (
-    <Tooltip label={label}>
+    <Tooltip label={copyHint(state, COPY_LABEL)}>
       <button
         type="button"
         className="icon-button code-card-action"
-        aria-label={label}
-        onPointerEnter={() => {
-          left.current = false;
-        }}
-        onPointerLeave={leave}
-        onBlur={leave}
-        onClick={() => {
-          left.current = false;
-          copyText(lines).then(
-            () => {
-              if (!left.current) setCopied(true);
-            },
-            () => undefined,
-          );
-        }}
+        aria-label={COPY_LABEL}
+        onClick={() => copy(lines)}
       >
-        {copied ? <CheckIcon aria-hidden="true" /> : <CopyIcon aria-hidden="true" />}
+        <CopyGlyph state={state} />
       </button>
     </Tooltip>
   );
@@ -179,11 +150,9 @@ function CopyLinesButton({
  */
 function CodeCardContent({
   showing,
-  copyText,
   onOpenFile,
 }: {
   showing: PlanCodeShowing;
-  copyText: (words: string) => Promise<void>;
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   const { code } = showing;
@@ -207,7 +176,7 @@ function CodeCardContent({
         </Tooltip>
         {label === undefined ? null : <span className="code-card-range">{label}</span>}
         <span className="code-card-actions">
-          <CopyLinesButton lines={copiedLines(code)} copyText={copyText} />
+          <CopyLinesButton lines={copiedLines(code)} />
           <Tooltip label={OPEN_FILE_LABEL}>
             <button
               type="button"
@@ -231,9 +200,8 @@ function CodeCardContent({
  * the whole comparison, because a `show_code` call's lines never change once
  * it has answered, while the view carrying them arrives anew with every
  * word of the call's activity: a plan with hundreds of snippets would
- * otherwise redraw each of them several times a second. The copy it holds
- * is the window's clipboard, which is the same door from one draw to the
- * next, and so is its opening of a file, the panel's own.
+ * otherwise redraw each of them several times a second. Its opening of a
+ * file is the panel's own, which is the same door from one draw to the next.
  */
 const CodeCard = memo(CodeCardContent, (was, now) => was.showing.callId === now.showing.callId);
 
@@ -241,12 +209,10 @@ const CodeCard = memo(CodeCardContent, (was, now) => was.showing.callId === now.
 function CodeFeedRun({
   call,
   now,
-  copyText,
   onOpenFile,
 }: {
   call: CodeFeedCall;
   now: number;
-  copyText: (words: string) => Promise<void>;
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   return (
@@ -264,12 +230,7 @@ function CodeFeedRun({
         {callHeading(call.startedAt, now)}
       </Checkpoint>
       {call.showings.map((showing) => (
-        <CodeCard
-          key={showing.callId}
-          showing={showing}
-          copyText={copyText}
-          onOpenFile={onOpenFile}
-        />
+        <CodeCard key={showing.callId} showing={showing} onOpenFile={onOpenFile} />
       ))}
     </>
   );
@@ -279,14 +240,11 @@ function CodeFeedRun({
 export function CodePane({
   shown,
   calls,
-  copyText,
   onOpenFile,
 }: {
   shown: readonly PlanCodeShowing[];
   /** The plan's calls as the Transcript tab draws them, which the code is grouped under. */
   calls: readonly CodeFeedCallSource[];
-  /** Puts a card's lines on the clipboard; a refusal rejects. */
-  copyText: (words: string) => Promise<void>;
   /** Opens the whole file a card's lines are of in a tab of its own, those lines lit. */
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
@@ -297,13 +255,7 @@ export function CodePane({
         {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
         <ConversationContent className="pt-0">
           {codeFeedCalls(shown, calls).map((call) => (
-            <CodeFeedRun
-              key={call.key}
-              call={call}
-              now={now}
-              copyText={copyText}
-              onOpenFile={onOpenFile}
-            />
+            <CodeFeedRun key={call.key} call={call} now={now} onOpenFile={onOpenFile} />
           ))}
         </ConversationContent>
         <ConversationScrollButton />

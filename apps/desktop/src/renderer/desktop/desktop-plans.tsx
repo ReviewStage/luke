@@ -5,13 +5,7 @@ import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
-import {
-  COPY_FAILED_NOTE,
-  COPY_SHOWN,
-  DOCUMENT_REGION,
-  PLAN_MARK,
-  PLANS_PAGE,
-} from "../planning/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -56,26 +50,11 @@ function Toolbar({
 }
 
 /**
- * Copy's chord and what the last Copy came to, said in the toolbar: the
- * press itself stands in the ⋯ menu, so a copy's check mark and a copy that
- * failed are said here, where the menu was.
+ * Copy plan's chord, the toolbar's while a plan is drawn: the press itself
+ * stands in the ⋯ menu, and what came of it is said in the window's toast.
  */
-function CopyNote({ copy }: { copy: PlansControl["copy"] }): React.JSX.Element | null {
+function CopyChord({ copy }: { copy: PlansControl["copy"] }): null {
   useAppCommand(APP_COMMAND.COPY_PLAN, copy.onPress);
-  if (copy.shown === COPY_SHOWN.FAILED) {
-    return (
-      <p className="desktop-toolbar-note" role="alert">
-        {COPY_FAILED_NOTE}
-      </p>
-    );
-  }
-  if (copy.shown === COPY_SHOWN.COPIED) {
-    return (
-      <p className="desktop-toolbar-word" role="status">
-        Copied
-      </p>
-    );
-  }
   return null;
 }
 
@@ -253,7 +232,7 @@ function PlanDocument({ plans }: { plans: PlansControl }): React.JSX.Element {
               {markNote}
             </p>
           ) : null}
-          <CopyNote copy={plans.copy} />
+          <CopyChord copy={plans.copy} />
           {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
           <Fragment key={plan.id}>

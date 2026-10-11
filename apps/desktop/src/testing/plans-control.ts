@@ -1,7 +1,7 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
 import type { PlansControl } from "../renderer/planning/use-plans-tab";
@@ -74,7 +74,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     boundFor: overrides.activePlanId,
     listFailed: false,
     region: { kind: DOCUMENT_REGION.NONE },
-    copy: { shown: COPY_SHOWN.IDLE, onPress: ignore },
+    copy: { onPress: ignore },
     microphone: { label: "Talk about this plan", enabled: true, muted: false, onPress: ignore },
     speaker: { muted: false, onPress: ignore },
     stop: { shown: false, onPress: ignore },

@@ -23,7 +23,6 @@
  * app's words.
  */
 
-import { useAtom } from "@effect/atom-react";
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import {
   FEEDBACK_KIND,
@@ -32,16 +31,16 @@ import {
   type FeedbackKind,
   type FeedbackSubmission,
 } from "@sidecar/feedback";
-import { CheckIcon, ImageIcon, RemoveIcon } from "@sidecar/panel";
-import { Duration, Effect } from "effect";
+import { ImageIcon, RemoveIcon } from "@sidecar/panel";
+import { Duration } from "effect";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { encodeFeedbackImage, imageFiles } from "./feedback-images";
-import { rendererRuntime } from "./renderer-runtime";
 import { trappedTab } from "./settings/confirm-dialog";
 import { useStagedFocus } from "./staged-focus";
+import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
 import { useStateWithRef } from "./use-state-with-ref";
 
@@ -75,14 +74,12 @@ const IMAGE_REFUSAL = {
 
 const SEND_REFUSAL = "Could not send that. Try again.";
 
-/** How long "Thanks — sent" stays: read on the way back from the Send button, gone before anyone wonders. */
-const SENT_NOTICE = Duration.seconds(3);
-
-/**
- * The thank-you's life, as an atom whose work is the wait: it is waiting for
- * exactly as long as the notice stands, and a second send restarts it.
- */
-const sentNoticeAtom = rendererRuntime.fn(() => Effect.sleep(SENT_NOTICE));
+/** The toast a delivered note is thanked with: read on the way back from the Send button, gone before anyone wonders. */
+const SENT_NOTICE: ToastNotice = {
+  words: "Thanks — sent",
+  tone: TOAST_TONE.DONE,
+  hold: Duration.seconds(3),
+};
 
 /** The note as it stands between openings: its words, its screenshots, and whether it is signed. */
 interface FeedbackDraft {
@@ -161,17 +158,6 @@ async function takenImages(
   return { images };
 }
 
-/** The quiet line that says it went, at the window's foot, for a moment after the dialog closes. */
-function SentNotice(): React.JSX.Element {
-  return createPortal(
-    <p className="feedback-sent" role="status">
-      <CheckIcon />
-      Thanks — sent
-    </p>,
-    document.body,
-  );
-}
-
 /** One screenshot coming along, small enough to recognise, with the way to take it off. */
 function ImageThumbnail({
   image,
@@ -229,7 +215,7 @@ export function FeedbackDialog({
   const [busy, setBusy, latestBusy] = useStateWithRef(false);
   const [rejection, setRejection] = useState<string>();
   const [dropping, setDropping] = useState(false);
-  const [sent, showSent] = useAtom(sentNoticeAtom);
+  const showToast = useToast();
   const open = kind !== undefined;
   const field = useRef<HTMLTextAreaElement | null>(null);
   const card = useRef<HTMLDivElement | null>(null);
@@ -325,7 +311,7 @@ export function FeedbackDialog({
     }
     discardDraft(kind);
     onClose();
-    showSent();
+    showToast(SENT_NOTICE);
   };
 
   const keyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -353,7 +339,6 @@ export function FeedbackDialog({
 
   return (
     <>
-      {sent.waiting && !open ? <SentNotice /> : null}
       {kind === undefined
         ? null
         : createPortal(

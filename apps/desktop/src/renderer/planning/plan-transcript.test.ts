@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PlanTranscript } from "./plan-transcript";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 
@@ -32,7 +36,13 @@ function said(count: number): TranscriptRegion {
 }
 
 const roots: Root[] = [];
-const copyNothing = () => Promise.resolve();
+
+/** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
+const settle = Effect.promise(() =>
+  act(async () => {
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  }),
+);
 
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
@@ -76,7 +86,6 @@ test("each line is drawn under its speaker, the developer's and Luke's told apar
         ],
       },
       onRetry: () => undefined,
-      copyText: copyNothing,
     }),
   );
   assert.match(drawn, /class="plan-transcript ph-no-capture"/u);
@@ -115,7 +124,6 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
         ],
       },
       onRetry: () => undefined,
-      copyText: copyNothing,
     }),
   );
   assert.doesNotMatch(drawn, /<img/u);
@@ -128,7 +136,6 @@ test("the empty, reading, and failed states each say where the transcript stands
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.EMPTY },
       onRetry: () => undefined,
-      copyText: copyNothing,
     }),
   );
   assert.match(empty, /Nothing said yet — start a call and the transcript appears here\./u);
@@ -137,7 +144,6 @@ test("the empty, reading, and failed states each say where the transcript stands
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.READING },
       onRetry: () => undefined,
-      copyText: copyNothing,
     }),
   );
   assert.match(reading, /aria-busy="true"/u);
@@ -154,7 +160,6 @@ test("the empty, reading, and failed states each say where the transcript stands
         onRetry: () => {
           retried += 1;
         },
-        copyText: copyNothing,
       }),
     ),
   );
@@ -172,11 +177,7 @@ test("a new line keeps the list at its newest, unless the developer scrolled up 
   const root = createRoot(container);
   roots.push(root);
   const draw = (region: TranscriptRegion) =>
-    act(() =>
-      root.render(
-        createElement(PlanTranscript, { region, onRetry: () => undefined, copyText: copyNothing }),
-      ),
-    );
+    act(() => root.render(createElement(PlanTranscript, { region, onRetry: () => undefined })));
 
   draw(said(1));
   const box = scrollBox(container, 1_000);
@@ -252,7 +253,6 @@ test("each call begins at a divider saying when it started, the standing one mar
       createElement(PlanTranscript, {
         region: TWO_CALLS,
         onRetry: () => undefined,
-        copyText: copyNothing,
       }),
     ),
   );
@@ -289,74 +289,36 @@ test("each call begins at a divider saying when it started, the standing one mar
   assert.deepEqual(order, ["call", "user", "assistant", "call", "assistant"]);
 });
 
-test("a turn's copy hands the clipboard its lines, a paragraph each, and shows the check once the clipboard took them", async () => {
-  const copied: string[] = [];
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      createElement(PlanTranscript, {
-        region: TWO_CALLS,
-        onRetry: () => undefined,
-        copyText: (words) => {
-          copied.push(words);
-          return Promise.resolve();
-        },
-      }),
-    ),
-  );
-  const copy = container.querySelector<HTMLButtonElement>(
-    '[data-speaker="user"] button[aria-label="Copy"]',
-  );
-  assert.ok(copy);
-  await act(async () => {
-    copy.click();
-    await Promise.resolve();
-  });
-  assert.deepEqual(copied, ["Invites should expire.\n\nAfter a week, say."]);
-  assert.equal(
-    container.querySelector('[data-speaker="user"] button')?.getAttribute("aria-label"),
-    "Copied",
-  );
-});
+it.effect(
+  "a turn's copy hands the clipboard its lines, a paragraph each, and shows the check for a moment under the button's own name",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(PlanTranscript, { region: TWO_CALLS, onRetry: () => undefined }),
+          ),
+        ),
+      );
+      const copy = container.querySelector<HTMLButtonElement>(
+        '[data-speaker="user"] button[aria-label="Copy"]',
+      );
+      assert.ok(copy);
+      act(() => copy.click());
+      yield* settle;
+      assert.deepEqual(clipboard.copied, ["Invites should expire.\n\nAfter a week, say."]);
+      assert.equal(copy.querySelector('[role="status"]')?.textContent, "Copied");
+      assert.equal(copy.getAttribute("aria-label"), "Copy");
 
-test("the check does not outlive the reader on the bar: a copy landing after the pointer left shows nothing, and focus leaving clears it", async () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  act(() =>
-    root.render(
-      createElement(PlanTranscript, {
-        region: TWO_CALLS,
-        onRetry: () => undefined,
-        copyText: copyNothing,
-      }),
-    ),
-  );
-  const copy = container.querySelector<HTMLButtonElement>('[data-speaker="user"] button');
-  assert.ok(copy);
-  const bar = copy.parentElement;
-  assert.ok(bar);
-  // The pointer leaves before the clipboard has answered, which it does a tick later.
-  act(() => {
-    copy.click();
-    bar.dispatchEvent(new MouseEvent("pointerout", { bubbles: true }));
-  });
-  await act(async () => {
-    await Promise.resolve();
-  });
-  assert.equal(copy.getAttribute("aria-label"), "Copy");
-
-  // On the bar by keyboard, a copy shows the check; tabbing away clears it.
-  act(() => copy.focus());
-  await act(async () => {
-    copy.click();
-    await Promise.resolve();
-  });
-  assert.equal(copy.getAttribute("aria-label"), "Copied");
-  act(() => copy.blur());
-  assert.equal(copy.getAttribute("aria-label"), "Copy");
-});
+      yield* TestClock.adjust(Duration.millis(1_200));
+      yield* settle;
+      assert.equal(copy.querySelector('[role="status"]')?.textContent, "");
+    }),
+);

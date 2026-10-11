@@ -802,6 +802,39 @@ body,
   outline-offset: 1px;
 }
 
+/* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the
+   alert in one cell, only the state's own drawn, so a copy crossfades in
+   place, the check in the success colour, and the button never moves. */
+.copy-glyph {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+}
+
+.copy-glyph > svg {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--duration-quick) var(--motion-exit),
+    transform var(--duration-fast) var(--spring-fast);
+}
+
+.copy-glyph[data-state="idle"] > [data-glyph="idle"],
+.copy-glyph[data-state="copied"] > [data-glyph="copied"],
+.copy-glyph[data-state="failed"] > [data-glyph="failed"] {
+  opacity: 1;
+  transform: none;
+}
+
+.copy-glyph > [data-glyph="copied"] {
+  color: var(--state-complete);
+}
+
+.copy-glyph > [data-glyph="failed"] {
+  color: var(--error-text);
+}
+
 /* Plan actions ---------------------------------------------------------- */
 
 /* One plan's menu, dropped from the toolbar's ⋯ or opened at the pointer on a
@@ -2397,13 +2430,6 @@ body,
   width: 300px;
 }
 
-/* A word the toolbar says in passing, beside its buttons: what the last Copy came to. */
-.desktop-toolbar-word {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
 /* Feedback dialog ------------------------------------------------------------ */
 
 /* A note to the people who make Luke, on the confirm dialog's backdrop and
@@ -2549,9 +2575,10 @@ body,
   color: var(--on-accent-muted);
 }
 
-/* Said quietly at the window's foot once a note has gone, and gone itself a
-   moment later. */
-.feedback-sent {
+/* The window's one passing notice (`toast.tsx`), said quietly at its foot
+   once a note has gone or a menu's copy has landed, and gone itself a moment
+   later: it rises in on the spring, and fades first on its way out. */
+.toast {
   position: fixed;
   z-index: 31;
   bottom: var(--space-24);
@@ -2568,19 +2595,37 @@ body,
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 560;
+  pointer-events: none;
   transform: translateX(-50%);
-  animation: feedback-sent-rise var(--duration-fast) var(--spring-fast);
+  animation:
+    toast-fade var(--duration-quick) var(--motion-exit),
+    toast-rise var(--duration-fast) var(--spring-fast);
+  transition: opacity var(--duration-exit) var(--motion-exit);
 }
 
-.feedback-sent svg {
+.toast[data-leaving="true"] {
+  opacity: 0;
+}
+
+.toast svg {
   width: 14px;
   height: 14px;
+  flex: none;
   color: var(--state-complete);
 }
 
-@keyframes feedback-sent-rise {
+.toast[data-tone="failed"] svg {
+  color: var(--error-text);
+}
+
+@keyframes toast-fade {
   from {
     opacity: 0;
+  }
+}
+
+@keyframes toast-rise {
+  from {
     transform: translateX(-50%) translateY(var(--space-8));
   }
 }
