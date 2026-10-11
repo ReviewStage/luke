@@ -396,6 +396,7 @@ test("the plan's coding agents are listed with their status, what each published
   assert.deepEqual(listed.agents, [
     {
       id: working.id,
+      title: "anthropic/claude-opus-5.5",
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       status: CODING_AGENT_STATUS.RUNNING,
@@ -405,6 +406,7 @@ test("the plan's coding agents are listed with their status, what each published
     },
     {
       id: starting.id,
+      title: "anthropic/claude-opus-5.5",
       model: "anthropic/claude-opus-5.5",
       effort: "high",
       status: CODING_AGENT_STATUS.STARTING,

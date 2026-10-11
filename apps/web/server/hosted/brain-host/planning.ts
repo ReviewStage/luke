@@ -181,7 +181,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 - task_cancel stops a worker you no longer need.
 - draw_on_board draws a diagram of shapes, zones, arrows, and text on the plan's whiteboard, replacing your previous one.
 - look_at_board shows you the whiteboard as the developer sees it, so you can check what you drew.
-- list_coding_agents lists the coding agents working on this plan, each with its id, status, and what it last did.
+- list_coding_agents lists the coding agents working on this plan, each with its id, its title as the developer sees it, its status, and what it last did.
 - read_coding_agent reads one agent's recent progress, as a short tail of what it said and did.
 - message_coding_agent sends one agent a message, as the developer would type it to the agent.
 

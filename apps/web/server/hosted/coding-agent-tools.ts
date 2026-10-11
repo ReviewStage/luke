@@ -137,10 +137,11 @@ const readMessage = Schema.decodeUnknownResult(MESSAGE_CODING_AGENT_INPUT);
 export const LIST_CODING_AGENTS_TOOL = {
   name: "list_coding_agents",
   description:
-    "List the coding agents working on this plan: each with its id, the model and effort it runs " +
-    "on, its status (starting, running, completed, failed, cancelled), the branch its sandbox " +
-    "is on if a turn has ended, and one line of what it last did. Call it when the developer " +
-    "asks about or addresses an agent, to find which one they mean.",
+    "List the coding agents working on this plan: each with its id, its title (how the " +
+    "developer sees it named), the model and effort it runs on, its status (starting, running, " +
+    "completed, failed, cancelled), the branch its sandbox is on if a turn has ended, and one " +
+    "line of what it last did. Call it when the developer asks about or addresses an agent, to " +
+    "find which one they mean.",
   inputSchema: Schema.Struct({}),
 } as const;
 
@@ -235,9 +236,11 @@ function entriesOf(journal: StoredUIMessage, maximumChars: number): string[] {
   });
 }
 
-/** One agent as the model reads it: what it runs on, where it stands, the branch its row holds, and what it last did. */
+/** One agent as the model reads it: its title, what it runs on, where it stands, the branch its row holds, and what it last did. */
 interface AgentReading {
   readonly id: string;
+  /** The agent's title as its tab shows it; the model's id where it has none yet, which is what the tab falls back to. */
+  readonly title: string;
   readonly model: string;
   readonly effort: string;
   readonly status: CodingAgentStatus;
@@ -292,6 +295,7 @@ const readAgent = (
         : entriesOf(newest, CODING_AGENT_TOOL_BOUNDS.ACTIVITY_CHARS).at(-1);
     return {
       id: agent.id,
+      title: agent.title ?? agent.model,
       model: agent.model,
       effort: agent.effort,
       status: standing.status,
