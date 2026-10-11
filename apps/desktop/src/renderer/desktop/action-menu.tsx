@@ -4,12 +4,13 @@ import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs } from "../tooltip";
 
 /**
- * action-menu.tsx -- the window's own drop-down menu: a plan's actions, an agent's actions, and the side panel's tabs to open.
+ * action-menu.tsx -- the window's own drop-down menu: a plan's actions, and an agent's actions.
  *
- * The one menu the plan's ⋯ and right-click, an agent's ⋯, and the panel's
- * "+" all draw. It is drawn here rather than asked of the system so that
- * every door draws it the same way and an action can be drawn red. It
- * behaves as a system menu does: focus on its first item, the arrow keys
+ * The one menu the plan's ⋯ and right-click and an agent's ⋯ draw, whose
+ * items the empty side panel also lists as buttons of their own. It is
+ * drawn here rather than asked of the system so that every door draws it
+ * the same way and an action can be drawn red. It behaves as a system menu
+ * does: focus on its first item, the arrow keys
  * between items, and Escape, Tab, a press elsewhere, or the window losing
  * the keyboard closing it with focus back where it was. An item that cannot
  * be chosen now is drawn dimmed and skipped by the keys, the way a system

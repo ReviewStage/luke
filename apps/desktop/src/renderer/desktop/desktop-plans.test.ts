@@ -17,6 +17,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
@@ -1167,12 +1168,40 @@ function kindRows(rows: Iterable<HTMLButtonElement>): [string, string, boolean][
   ]);
 }
 
-function menuItem(label: string): HTMLButtonElement {
-  const item = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(
-    (each) => each.querySelector(".plan-menu-label")?.textContent === label,
+/** The "+" menu's rows: each label, what it says at its end, and whether it may be picked. */
+function addRows(): [string, string, boolean][] {
+  return [...document.querySelectorAll<HTMLElement>('.tab-add-menu [role="option"]')].map((row) => [
+    row.querySelector(".plan-compose-menu-name")?.textContent ?? "",
+    row.querySelector(".plan-compose-menu-hint")?.textContent ?? "",
+    row.getAttribute("aria-disabled") !== "true",
+  ]);
+}
+
+/** The "+" menu's highlighted row, by label. */
+function addHighlighted(): string | undefined {
+  return (
+    document
+      .querySelector('.tab-add-menu [role="option"][aria-selected="true"]')
+      ?.querySelector(".plan-compose-menu-name")?.textContent ?? undefined
   );
-  assert.ok(item, `no ${label} item`);
-  return item;
+}
+
+/** What has focus, which a key is pressed on. */
+function focused(): HTMLElement {
+  const element = document.activeElement;
+  assert.ok(element instanceof HTMLElement, "something has focus");
+  return element;
+}
+
+/** Types into the focused search the way a key press does, through the setter React watches. */
+function typeSearch(words: string): void {
+  const field = document.activeElement;
+  assert.ok(field instanceof HTMLInputElement, "the search has focus");
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(field, words);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
 }
 
 test("the plan's tab names the plan, has no × to close it, and its hint says the plan's repository", () => {
@@ -1339,36 +1368,78 @@ test("the panel's tabs are one stop for Tab that the arrow keys move along, and 
   assert.equal(document.activeElement, tabNamed(page, "Transcript"));
 });
 
-test("the + offers every kind with its shortcut, those open dimmed, and opens a closed one at the strip's end", () => {
+/** The panel's "+". */
+function addButton(page: HTMLElement): HTMLElement {
+  const button = page.querySelector<HTMLElement>('.side-panel [aria-label="Open a tab"]');
+  assert.ok(button, "the panel draws its +");
+  return button;
+}
+
+test("the + drops the searchable menu over every kind with its shortcut, those open dimmed, and opens a closed one at the strip's end", () => {
+  installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
-  const add = () => {
-    const button = page.querySelector<HTMLElement>('.side-panel [aria-label="Open a tab"]');
-    assert.ok(button, "the panel draws its +");
-    return button;
-  };
 
   // Every kind is open, so there is nothing to add.
-  assert.equal(add().getAttribute("aria-disabled"), "true");
-  assert.equal(hover(add()), "Every tab is open");
-  act(() => add().click());
-  assert.equal(document.querySelector('[role="menu"]'), null);
+  assert.equal(addButton(page).getAttribute("aria-disabled"), "true");
+  assert.equal(hover(addButton(page)), "Every tab is open");
+  act(() => addButton(page).click());
+  assert.equal(document.querySelector(".tab-add-menu"), null);
 
   press(page, '[aria-label="Close Code"]');
-  assert.equal(add().getAttribute("aria-disabled"), "false");
-  act(() => add().click());
-  assert.deepEqual(kindRows(document.querySelectorAll('[role="menuitem"]')), [
+  assert.equal(addButton(page).getAttribute("aria-disabled"), "false");
+  act(() => addButton(page).click());
+  assert.deepEqual(addRows(), [
     ["Board", "Open", false],
     ["Code", "⌥⌘2", true],
     ["Transcript", "Open", false],
     ["Work", "Open", false],
   ]);
-  assert.equal(document.activeElement, menuItem("Code"), "focus starts on the one kind to open");
+  assert.equal(
+    document.activeElement?.getAttribute("placeholder"),
+    "Search tabs",
+    "the search takes focus as the menu opens",
+  );
+  assert.equal(addHighlighted(), "Code", "the highlight starts on the one kind to open");
 
-  act(() => menuItem("Code").click());
-  assert.equal(document.querySelector('[role="menu"]'), null);
+  // The arrows pass over the open kinds, and a press on one does nothing.
+  key(focused(), "ArrowDown");
+  assert.equal(addHighlighted(), "Code");
+  const board = document.querySelector<HTMLElement>('.tab-add-menu [role="option"]');
+  act(() => board?.click());
+  assert.ok(document.querySelector(".tab-add-menu"), "an open kind is not picked");
+
+  key(focused(), "Enter");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Code");
+  assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
+});
+
+test("the + menu's search narrows the kinds as it is typed, and Escape closes the menu and nothing behind it", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  press(page, '[aria-label="Close Board"]');
+  press(page, '[aria-label="Close Work"]');
+  act(() => addButton(page).click());
+
+  typeSearch("wo");
+  assert.deepEqual(addRows(), [["Work", "⌥⌘4", true]]);
+  assert.equal(addHighlighted(), "Work");
+  typeSearch("zzz");
+  assert.deepEqual(addRows(), []);
+  assert.match(document.querySelector(".tab-add-menu")?.textContent ?? "", /No tabs match/u);
+  typeSearch("");
+  assert.deepEqual(
+    addRows().map(([label]) => label),
+    ["Board", "Code", "Transcript", "Work"],
+  );
+
+  key(focused(), "Escape");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.ok(panelShown(page), "the panel behind the menu stays");
+  assert.equal(document.activeElement, addButton(page));
 });
 
 test("Option-Command-2 opens a closed Code tab again and chooses it, and no kind is ever open twice", () => {

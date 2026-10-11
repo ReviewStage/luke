@@ -1363,6 +1363,34 @@ body,
   margin-left: 0;
 }
 
+/* A row's shortcut, or why it cannot be picked now, at its end before the
+   end slot, the way a system menu prints a chord. */
+.plan-compose-menu-hint {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: var(--space-16);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.plan-compose-menu-hint + .plan-compose-menu-end {
+  margin-left: 0;
+}
+
+/* The heading over a section's rows: quiet, inset as a row's words are,
+   and a little apart from the section above it. */
+.plan-compose-menu-section {
+  padding: var(--space-8) var(--row-inset) var(--space-4);
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+[role="group"]:first-child > .plan-compose-menu-section {
+  padding-top: var(--space-2);
+}
+
 .plan-compose-note {
   margin: 0;
   color: var(--text-secondary);
@@ -1710,6 +1738,25 @@ body,
   flex: 1 1 auto;
   align-items: center;
   gap: var(--list-gap);
+}
+
+/* The "+" and the menu it drops, which hangs under it from its left edge,
+   or from its right where the window ends first. The menu falls over the
+   row's drag region, so it claims its presses back from the window frame. */
+.tab-add-anchor {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+}
+
+.tab-add-menu {
+  width: 280px;
+  -webkit-app-region: no-drag;
+}
+
+.tab-add-anchor[data-side="end"] .tab-add-menu {
+  right: 0;
+  left: auto;
 }
 
 /* With every tab closed, the panel offers what the "+" menu offers, as the

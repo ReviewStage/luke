@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { GitHubMark } from "./account-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "./searchable-menu";
@@ -550,4 +551,81 @@ test("a muted pinned row is passed over by the arrows and takes no highlight fro
   hover(muted);
   assert.equal(menu.highlighted(), "acme/relay", "the pointer over it moves nothing");
   assert.equal(muted.dataset["highlighted"], undefined);
+});
+
+test("a row that cannot be picked is dimmed and says why at its end, the highlight starts past it, and neither the arrows, the pointer, a press, nor Enter takes it", () => {
+  const menu = mount({
+    value: undefined,
+    rows: ROWS.map((row, index) => (index === 0 ? { ...row, disabled: "Open" } : row)),
+  });
+  const [relay] = menu.rows();
+  assert.ok(relay);
+  assert.equal(relay.getAttribute("aria-disabled"), "true");
+  assert.equal(relay.querySelector(".plan-compose-menu-hint")?.textContent, "Open");
+  assert.ok(Number(getComputedStyle(relay).opacity) < 1, "the row is dimmed");
+  assert.equal(menu.highlighted(), "acme/billing", "the first row that can be picked");
+
+  press("ArrowUp");
+  assert.equal(menu.highlighted(), "acme/site", "Up from the first pickable row wraps past it");
+  press("ArrowDown");
+  assert.equal(menu.highlighted(), "acme/billing", "Down from the last wraps past it");
+  hover(relay);
+  assert.equal(menu.highlighted(), "acme/billing", "the pointer over it moves nothing");
+  act(() => relay.click());
+  assert.deepEqual(menu.picked, []);
+
+  type(menu.find<HTMLInputElement>("input[role=combobox]"), "relay");
+  assert.equal(menu.highlighted(), undefined, "a match that cannot be picked takes no highlight");
+  press("Enter");
+  assert.deepEqual(menu.picked, []);
+});
+
+test("a row's shortcut is printed at its end, and rows sharing a section stand under its heading, which goes with them when the search matches none", () => {
+  const menu = mount({
+    value: undefined,
+    rows: [
+      { ...ROWS[0], id: "relay", label: "acme/relay", section: "Recent" },
+      { ...ROWS[1], id: "billing", label: "acme/billing", section: "Recent" },
+      {
+        ...ROWS[2],
+        id: "site",
+        label: "acme/site",
+        section: "Everything",
+        command: APP_COMMAND.SHOW_BOARD,
+      },
+    ],
+  });
+  const groups = () =>
+    [...menu.container.querySelectorAll<HTMLElement>("[role=listbox] > [role=group]")].map(
+      (group) => [
+        group.getAttribute("aria-label"),
+        group.querySelector(".plan-compose-menu-section")?.textContent,
+        [...group.querySelectorAll("[role=option]")].map(
+          (row) => row.querySelector(".plan-compose-menu-name")?.textContent,
+        ),
+      ],
+    );
+  assert.deepEqual(groups(), [
+    ["Recent", "Recent", ["acme/relay", "acme/billing"]],
+    ["Everything", "Everything", ["acme/site"]],
+  ]);
+  const site = menu.rows()[2];
+  assert.equal(site?.querySelector(".plan-compose-menu-hint")?.textContent, "⌥⌘1");
+
+  press("ArrowUp");
+  assert.equal(menu.highlighted(), "acme/site⌥⌘1", "the arrows run on across the headings");
+  type(menu.find<HTMLInputElement>("input[role=combobox]"), "site");
+  assert.deepEqual(groups(), [["Everything", "Everything", ["acme/site"]]]);
+});
+
+test("a row the highlight was moved to gives it up once it can no longer be picked, to the first that can", () => {
+  const menu = mount({ value: undefined });
+  press("ArrowDown");
+  assert.equal(menu.highlighted(), "acme/billing");
+  menu.restand({
+    rows: ROWS.map((row) => (row.id === "acme/billing" ? { ...row, disabled: "Open" } : row)),
+  });
+  assert.equal(menu.highlighted(), "acme/relay");
+  press("Enter");
+  assert.deepEqual(menu.picked, ["acme/relay"]);
 });
