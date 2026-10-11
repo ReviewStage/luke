@@ -24,9 +24,11 @@ import { useCallback, useEffect, useState } from "react";
  * has none of reads as the first open fixed tab, so leaving a plan or
  * opening another never shows a tab with nothing behind it, while the kept
  * value stands until the next choice: the plan whose agent it names shows
- * it again. A subagent's tab, opened from its call in the Work tab or from
- * the "+", follows the agents: it is held to the open plan's work the same
- * way, it closes, and it is kept nowhere, so a launch opens none. A draft
+ * it again. A subagent's tab, opened from its call in the Work tab, from
+ * the "+", or from a delegation's row in an agent's tab, follows the
+ * agents: it is held to the open plan's work, or to the plan's open agent
+ * tabs where one of them delegated, the same way, it closes, and it is
+ * kept nowhere, so a launch opens none. A draft
  * agent's tab, opened from the "+", stands after the agents while the open
  * plan holds the draft, and is kept nowhere either; closing it lets the
  * draft go, which is its owner's to do.
@@ -66,9 +68,17 @@ export interface AgentSidePanelTab {
   readonly agent: string;
 }
 
-/** One subagent's tab, named by the call that started it on the open plan's work. */
+/** A worker one of the plan's agents delegated to, as its tab carries it: the agent, and the task it handed over, which the tab names itself by. */
+interface SubagentDelegation {
+  readonly agent: string;
+  readonly task: string;
+}
+
+/** One subagent's tab, named by the call that started it: on the open plan's work, or, with the delegation, on one of its agents' turns. */
 export interface SubagentSidePanelTab {
   readonly subagent: string;
+  /** Absent for the planning worker, whose session the plan's work holds. */
+  readonly delegation?: SubagentDelegation;
 }
 
 /** The tab of an agent not yet started, named by the key its first message will start it under. */
@@ -127,10 +137,14 @@ export function isDraftTab(tab: SidePanelTab): tab is DraftSidePanelTab {
   return !isFixedTab(tab) && "draft" in tab;
 }
 
-/** Whether two tabs are the same tab. */
+/** Whether two tabs are the same tab. A delegated worker's call names it within its agent, as the service names its conversation, so its tab is the pair. */
 export function sameTab(a: SidePanelTab, b: SidePanelTab): boolean {
   if (isAgentTab(a)) return isAgentTab(b) && a.agent === b.agent;
-  if (isSubagentTab(a)) return isSubagentTab(b) && a.subagent === b.subagent;
+  if (isSubagentTab(a)) {
+    return (
+      isSubagentTab(b) && a.subagent === b.subagent && a.delegation?.agent === b.delegation?.agent
+    );
+  }
   if (isDraftTab(a)) return isDraftTab(b) && a.draft === b.draft;
   return a === b;
 }
@@ -190,7 +204,7 @@ export type SidePanelState = typeof sidePanelStateSchema.Type;
  */
 interface HeldState extends Omit<SidePanelState, "tab" | "closedAgents"> {
   readonly tab?: SidePanelTab | undefined;
-  readonly subagents: readonly string[];
+  readonly subagents: readonly SubagentSidePanelTab[];
   readonly closedAgents: readonly string[];
 }
 
@@ -221,8 +235,8 @@ export interface SidePanelControl {
   fullScreen: boolean;
   /** The open fixed tabs, in the strip's order; the plan's agent tabs follow them. */
   tabs: readonly FixedSidePanelTab[];
-  /** The open subagent tabs, by the call that started each, in the order opened; they follow the agent tabs, and only those the open plan's work holds are drawn. */
-  subagents: readonly string[];
+  /** The open subagent tabs in the order opened; they follow the agent tabs, and only those the open plan's work or open agent tabs hold are drawn. */
+  subagents: readonly SubagentSidePanelTab[];
   /** The agents whose tabs were closed, which the strip draws none for until one is opened again. */
   closedAgents: readonly string[];
   /** The chosen tab, which is none only while no tab is open. */
@@ -258,19 +272,19 @@ export function tabAddable(tab: FixedSidePanelTab, tabs: readonly FixedSidePanel
  * The state with the tab open at the strip's end where it was not, and
  * chosen if asked or if nothing was. An agent's tab opens again in its
  * place among the agents, which stand in the order started; a subagent's
- * opens at the end of its own run.
+ * opens at the end of its own run, and one already open is chosen as it
+ * stands, whichever path named its call.
  */
 function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState {
   const tabs = isFixedTab(tab) && !held.tabs.includes(tab) ? [...held.tabs, tab] : held.tabs;
+  const open = isSubagentTab(tab) ? held.subagents.find((each) => sameTab(each, tab)) : undefined;
   const subagents =
-    isSubagentTab(tab) && !held.subagents.includes(tab.subagent)
-      ? [...held.subagents, tab.subagent]
-      : held.subagents;
+    isSubagentTab(tab) && open === undefined ? [...held.subagents, tab] : held.subagents;
   const closedAgents =
     isAgentTab(tab) && held.closedAgents.includes(tab.agent)
       ? held.closedAgents.filter((each) => each !== tab.agent)
       : held.closedAgents;
-  const chosen = choose || held.tab === undefined ? tab : held.tab;
+  const chosen = choose || held.tab === undefined ? (open ?? tab) : held.tab;
   return tabs === held.tabs &&
     subagents === held.subagents &&
     closedAgents === held.closedAgents &&
@@ -279,16 +293,25 @@ function withTab(held: HeldState, tab: SidePanelTab, choose: boolean): HeldState
     : { ...held, tabs, subagents, closedAgents, tab: chosen };
 }
 
-/** The tabs the plan draws beside the fixed ones: its agents, its draft, and the open subagent tabs its work holds, in the strip's order. */
-interface DrawnTabs {
+/** What the plan holds for the tabs beside the fixed ones: its agents, or nothing while unread, the planning workers its work holds, by the call that started each, and its draft. */
+export interface DrawnTabs {
   agents: readonly string[] | undefined;
   subagents: readonly string[];
   draft: string | undefined;
 }
 
-/** The open subagent tabs the plan's work holds, in the order opened. */
-function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly string[] {
-  return held.subagents.filter((each) => drawn.subagents.includes(each));
+/**
+ * Whether the plan draws the subagent's tab: the planning worker's while
+ * the plan's work holds its call, and a delegated worker's while the
+ * agent that delegated has its tab open, or until the agents are read, as
+ * an agent's own tab stands. `agents` are the open agent tabs.
+ */
+export function drawsSubagent(
+  tab: SubagentSidePanelTab,
+  drawn: Pick<DrawnTabs, "agents" | "subagents">,
+): boolean {
+  if (tab.delegation === undefined) return drawn.subagents.includes(tab.subagent);
+  return drawn.agents === undefined || drawn.agents.includes(tab.delegation.agent);
 }
 
 /** The plan's agents whose tabs are open, in the order started; nothing while the agents are unread. */
@@ -297,6 +320,14 @@ function drawnAgents(
   closedAgents: readonly string[],
 ): readonly string[] | undefined {
   return agents?.filter((each) => !closedAgents.includes(each));
+}
+
+/** The open subagent tabs the plan draws, in the order opened. */
+function drawnSubagents(held: HeldState, drawn: DrawnTabs): readonly SubagentSidePanelTab[] {
+  const agents = drawnAgents(drawn.agents, held.closedAgents);
+  return held.subagents.filter((each) =>
+    drawsSubagent(each, { agents, subagents: drawn.subagents }),
+  );
 }
 
 /**
@@ -316,7 +347,7 @@ function neighbourOf(
     held.tabs,
     agents.map((agent) => ({ agent })),
     drawn.draft === undefined ? [] : [{ draft: drawn.draft }],
-    drawnSubagents(held, drawn).map((subagent) => ({ subagent })),
+    drawnSubagents(held, drawn),
   ];
   const run = runs.find((each) => each.some((other) => sameTab(other, tab))) ?? [];
   const strip = runs.flat();
@@ -340,8 +371,8 @@ function withoutTab(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): HeldS
         ? undefined
         : { ...held, closedAgents: [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT) }
       : isSubagentTab(tab)
-        ? held.subagents.includes(tab.subagent)
-          ? { ...held, subagents: held.subagents.filter((each) => each !== tab.subagent) }
+        ? held.subagents.some((each) => sameTab(each, tab))
+          ? { ...held, subagents: held.subagents.filter((each) => !sameTab(each, tab)) }
           : undefined
         : held;
   if (closed === undefined) return held;
@@ -417,14 +448,15 @@ function readStored(): HeldState {
 
 /**
  * The tab the panel shows for the one kept: an agent tab whose agent the
- * open plan has none of, or a subagent tab whose call the open plan's work
- * does not hold, reads as the first open fixed tab, or as none where every
- * fixed tab is closed. With the plan's agents not yet read, the kept
- * agent tab stands, so a tab kept across a launch is not swapped for
- * another and back while the list is on its way; a subagent's tab is kept
- * across no launch, and a plan whose work is unread or has no turn holds
- * no subagent, so nothing is waited for on its account. A draft's tab
- * shows while the open plan holds that draft.
+ * open plan has none of, or a subagent tab the plan does not draw
+ * (`drawsSubagent`), reads as the first open fixed tab, or as none where
+ * every fixed tab is closed. With the plan's agents not yet read, the kept
+ * agent tab stands, and a delegated worker's with it, so a tab kept across
+ * a launch is not swapped for another and back while the list is on its
+ * way; a planning worker's tab is kept across no launch, and a plan whose
+ * work is unread or has no turn holds no subagent, so nothing is waited
+ * for on its account. A draft's tab shows while the open plan holds that
+ * draft.
  */
 export function shownTab(
   kept: SidePanelTab | undefined,
@@ -438,7 +470,7 @@ export function shownTab(
     return agents === undefined || agents.includes(kept.agent) ? kept : tabs[0];
   }
   if (isDraftTab(kept)) return kept.draft === draft ? kept : tabs[0];
-  return subagents.includes(kept.subagent) ? kept : tabs[0];
+  return drawsSubagent(kept, { agents, subagents }) ? kept : tabs[0];
 }
 
 /** A staged state as the hook holds it: no subagent tab open, and the agents it closed. */
@@ -451,9 +483,10 @@ function heldOf(staged: SidePanelState): HeldState {
  * or where a fixture run stages one, that staged state and the presses on
  * it, which are kept nowhere. `agents` are the open plan's agent tabs, by
  * agent id, or nothing while they have not been read, and `subagents` the
- * subagents its work holds, by the call that started each, none where the
- * work has none or is unread, and `draft` its draft agent's key, if it
- * holds one; the tab shown is held to them.
+ * planning workers its work holds, by the call that started each, none
+ * where the work has none or is unread, and `draft` its draft agent's key,
+ * if it holds one; the tab shown is held to them, a delegated worker's to
+ * the open agent tabs.
  */
 export function useSidePanel(
   staged: SidePanelState | undefined,

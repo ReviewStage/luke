@@ -8,6 +8,11 @@
     "after": {
       "type": "string",
       "minLength": 1
+    },
+    "callId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
     }
   },
   "required": [

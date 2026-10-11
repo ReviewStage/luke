@@ -127,8 +127,9 @@ export function codingAgentActRows(
     },
     [ACT_KIND.CODING_AGENTS_MESSAGES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_MESSAGES, sender);
+      // A worker's page says where the worker stands and what it is called, which is no word on the agent.
       return noted(host.codingAgentMessages(params), (answer) => {
-        if ("status" in answer) {
+        if ("status" in answer && params.callId === undefined) {
           // The title first, so an end this page carries is announced under it.
           notices.observeTitle(params.agentId, answer.title);
           notices.observeStatus(params.agentId, answer.status);

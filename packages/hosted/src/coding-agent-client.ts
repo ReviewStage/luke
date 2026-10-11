@@ -50,6 +50,7 @@ import {
   agentPath,
   agentPullRequestPath,
   agentStopPath,
+  agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
   planAgentsPath,
 } from "./service-paths.js";
@@ -243,14 +244,18 @@ export class HostedCodingAgentClient {
     );
   }
 
-  /** One agent's transcript past the cursor, held by the service while the agent runs and nothing new stands. */
+  /** One agent's transcript past the cursor, or a worker's where the delegation call that started it is named, held by the service while the agent or the worker runs and nothing new stands. */
   messages(
     agentId: string,
     after: string,
+    callId?: string,
   ): Effect.Effect<CodingAgentMessagesAnswerView, never, HttpClient.HttpClient> {
-    return Effect.flatMap(
-      this.#held.send({ method: HTTP_METHOD.GET, path: agentMessagesPath(agentId, after) }),
-      (answer) => readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
+    const path =
+      callId === undefined
+        ? agentMessagesPath(agentId, after)
+        : agentSubagentMessagesPath(agentId, callId, after);
+    return Effect.flatMap(this.#held.send({ method: HTTP_METHOD.GET, path }), (answer) =>
+      readAnswer(answer, codingAgentMessagesAnswerSchema, ROW_REFUSALS),
     );
   }
 

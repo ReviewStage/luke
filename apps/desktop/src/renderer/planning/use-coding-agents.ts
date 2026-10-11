@@ -432,7 +432,7 @@ export function useCodingAgents(input: {
   }, []);
 
   const readTranscript = useCallback<TranscriptReader>(
-    (agentId, after) => act(ACT_KIND.CODING_AGENTS_MESSAGES, { agentId, after }),
+    (params) => act(ACT_KIND.CODING_AGENTS_MESSAGES, params),
     [act],
   );
 

@@ -1,6 +1,7 @@
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentMessagesAnswerView,
+  type CodingAgentMessagesParams,
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_CURSOR_START,
@@ -13,7 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { agentStillWriting, applyMessagesPage, followsAgent } from "./coding-agent-model";
 
 /**
- * use-agent-transcript.ts -- one agent's transcript as its tab draws it, read page by page on the service's held long-poll while the agent may still write.
+ * use-agent-transcript.ts -- one agent's transcript, or one of its workers', as its tab draws it, read page by page on the service's held long-poll while the agent may still write.
  *
  * The service holds a read open while the agent is starting or runs and
  * nothing new stands past the cursor, and lets it go at its own hold, so
@@ -25,13 +26,14 @@ import { agentStillWriting, applyMessagesPage, followsAgent } from "./coding-age
  * still write, and ends on its own when a page says the agent ended; an
  * agent that has ended is read once through, page by page, and then left
  * alone. A read that did not answer ends the loop and says so, with Try
- * again, rather than asking again at once.
+ * again, rather than asking again at once. A worker's transcript is read
+ * the same way under the agent and the delegation call that started it,
+ * and where the worker stands is what its pages say.
  */
 
-/** How one read is asked: the agent and the cursor to read past, answered as the view hears it. */
+/** How one read is asked: the agent, the cursor to read past, and the worker's call where it is a worker's, answered as the view hears it. */
 export type TranscriptReader = (
-  agentId: string,
-  after: string,
+  params: CodingAgentMessagesParams,
 ) => Promise<CodingAgentMessagesAnswerView>;
 
 /** What the tab draws of the transcript. */
@@ -74,7 +76,9 @@ function fresh(agentId: string): Held {
 
 export function useAgentTranscript(input: {
   agentId: string;
-  /** The agent's status as the tab knows it, which the pages read keep current through `onStatus`. */
+  /** The delegation call whose worker's transcript this is, where it is a worker's rather than the agent's own. */
+  callId?: string | undefined;
+  /** The agent's, or the worker's, status as the tab knows it, which the pages read keep current through `onStatus`. */
   status: CodingAgentStatus;
   /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
   shown: boolean;
@@ -84,7 +88,7 @@ export function useAgentTranscript(input: {
   /** A page said what the agent is titled now, which the list may have read before the title landed. */
   onTitle: (agentId: string, title: string | null) => void;
 }): AgentTranscriptControl {
-  const { agentId, status, shown, read, onStatus, onTitle } = input;
+  const { agentId, callId, status, shown, read, onStatus, onTitle } = input;
   const [held, setHeld] = useState<Held>(() => fresh(agentId));
   // Note that another agent's tab starts from nothing of this one's.
   if (held.agentId !== agentId) setHeld(fresh(agentId));
@@ -106,11 +110,17 @@ export function useAgentTranscript(input: {
     let live = true;
     const loop = async () => {
       while (live) {
-        const answer = await latest.current.read(agentId, cursor.current).catch(
-          (): CodingAgentMessagesAnswerView => ({
-            failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
-          }),
-        );
+        const answer = await latest.current
+          .read({
+            agentId,
+            after: cursor.current,
+            ...(callId === undefined ? undefined : { callId }),
+          })
+          .catch(
+            (): CodingAgentMessagesAnswerView => ({
+              failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+            }),
+          );
         if (!live) return;
         if ("failure" in answer) {
           setHeld((was) => ({ ...was, failed: true }));
@@ -140,7 +150,7 @@ export function useAgentTranscript(input: {
     return () => {
       live = false;
     };
-  }, [active, agentId, attempt]);
+  }, [active, agentId, callId, attempt]);
 
   const onRetry = useCallback(() => {
     setHeld((was) => ({ ...was, failed: false }));

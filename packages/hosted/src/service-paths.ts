@@ -98,6 +98,12 @@ export function agentMessagesPath(agentId: string, after?: string): string {
   return `${path}?${query}`;
 }
 
+/** One worker's transcript past a cursor (GET), under the agent and the delegation call that started it, held open while the worker runs as the agent's own is; the same answer as `agentMessagesPath`'s read. */
+export function agentSubagentMessagesPath(agentId: string, callId: string, after: string): string {
+  const query = new URLSearchParams({ after });
+  return `/api/agents/${encodeURIComponent(agentId)}/subagents/${encodeURIComponent(callId)}/messages?${query}`;
+}
+
 /** One agent: its model and effort changed for its next step (PATCH), `models-wire.ts`'s choice as the body. */
 export function agentPath(agentId: string): string {
   return `/api/agents/${encodeURIComponent(agentId)}`;

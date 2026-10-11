@@ -87,9 +87,13 @@ function fixture() {
           asked.push(`start:${params.planId}:${params.idempotencyKey}`);
           return STARTED;
         }),
-      codingAgentMessages: ({ agentId, after }) =>
+      codingAgentMessages: ({ agentId, after, callId }) =>
         Effect.sync(() => {
-          asked.push(`messages:${agentId}:${after}`);
+          asked.push(
+            callId === undefined
+              ? `messages:${agentId}:${after}`
+              : `worker:${agentId}:${callId}:${after}`,
+          );
           return { messages: [], cursor: after, status: CODING_AGENT_STATUS.RUNNING, title: null };
         }),
       codingAgentMessage: ({ agentId, text, clientKey }) =>
@@ -143,21 +147,34 @@ it.effect(
     }),
 );
 
-it.effect("a transcript read carries the agent and the cursor the panel stands at", () =>
-  Effect.gen(function* () {
-    const { router, asked } = fixture();
+it.effect(
+  "a transcript read carries the agent and the cursor the panel stands at, and a worker's read the call that started it, whose page is no word on where the agent stands",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked, noted } = fixture();
 
-    const outcome = yield* router.performAct(
-      { kind: ACT_KIND.CODING_AGENTS_MESSAGES, payload: { agentId: AGENT_ID, after: "3:2" } },
-      PANEL,
-    );
+      const outcome = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_MESSAGES, payload: { agentId: AGENT_ID, after: "3:2" } },
+        PANEL,
+      );
+      yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_MESSAGES,
+          payload: { agentId: AGENT_ID, after: "0:0", callId: "call-7" },
+        },
+        PANEL,
+      );
 
-    assert.deepEqual(outcome, {
-      status: ACT_OUTCOME_STATUS.DONE,
-      value: { messages: [], cursor: "3:2", status: CODING_AGENT_STATUS.RUNNING, title: null },
-    });
-    assert.deepEqual(asked, [`messages:${AGENT_ID}:3:2`]);
-  }),
+      assert.deepEqual(outcome, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { messages: [], cursor: "3:2", status: CODING_AGENT_STATUS.RUNNING, title: null },
+      });
+      assert.deepEqual(asked, [`messages:${AGENT_ID}:3:2`, `worker:${AGENT_ID}:call-7:0:0`]);
+      assert.deepEqual(noted, [
+        `title:${AGENT_ID}=null`,
+        `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
+      ]);
+    }),
 );
 
 it.effect(

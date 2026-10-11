@@ -1,3 +1,4 @@
+import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
@@ -12,7 +13,9 @@ import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
  * verb is `turn-rows.ts`'s, the same the Work tab says; the body's two
  * blocks are read from the input and the output in the tool's own terms
  * (a command, a patch, a file's words) where the tool is one eve gives the
- * agent, and as their JSON where it is not. Nothing here draws.
+ * agent, and as their JSON where it is not. A delegation's row is read the
+ * same way from the part S1's `delegate` tool stores: the task, the pair
+ * the worker runs on, and its answer once it has one. Nothing here draws.
  */
 
 /** The tools a coding agent has, eve's and Luke's own notes on the plan, by the names its parts carry. */
@@ -244,11 +247,54 @@ export function toolCallView(input: {
   );
 }
 
+/** The fields a delegation's part carries, in the wire's words (`codingAgentDelegationInputSchema`, `codingAgentDelegationOutputSchema`). */
+const DELEGATION_FIELD = {
+  TASK: "task",
+  MODEL: "model",
+  EFFORT: "effort",
+  RESULT: "result",
+} as const;
+
+/** What a delegation's row says and holds: the task, the pair the worker runs on, and its answer once it has one. */
+export interface DelegationView {
+  readonly task: string;
+  /** The pair the worker runs on: the one it ran on once settled, else the one the agent chose, each half the agent's own where it chose none; nothing where no pair is known. */
+  readonly choice: ModelChoice | undefined;
+  readonly result: string | undefined;
+}
+
+/**
+ * How one delegation is drawn, from the part's input and output. The settled
+ * output names the pair the worker ran on, which is the one to say; before it
+ * lands, the agent's choice stands, each half it left open filled from the
+ * agent's own pair, since that is what the service fills it from.
+ */
+export function delegationView(
+  part: { readonly input: WireValue | undefined; readonly output: WireValue | undefined },
+  own: ModelChoice | undefined,
+): DelegationView {
+  const settledModel = stringAt(part.output, DELEGATION_FIELD.MODEL);
+  const settledEffort = stringAt(part.output, DELEGATION_FIELD.EFFORT);
+  const model =
+    settledModel !== undefined && settledEffort !== undefined
+      ? settledModel
+      : (stringAt(part.input, DELEGATION_FIELD.MODEL) ?? own?.model);
+  const effort =
+    settledModel !== undefined && settledEffort !== undefined
+      ? settledEffort
+      : (stringAt(part.input, DELEGATION_FIELD.EFFORT) ?? own?.effort);
+  return {
+    task: stringAt(part.input, DELEGATION_FIELD.TASK) ?? "",
+    choice: model !== undefined && effort !== undefined ? { model, effort } : undefined,
+    result: stringAt(part.output, DELEGATION_FIELD.RESULT),
+  };
+}
+
 /** A markdown heading's marks, which a plan's first line usually opens on. */
 const HEADING_MARKS = /^#{1,6}\s+/u;
 
-/** How a plan is named on its card: its first heading, or its first line of words. */
-export function planCardTitle(text: string): string {
+/** How a plan, or a worker's task, is named on its card and its tab: its first heading, or its first line of words. */
+export function cardTitle(text: string): string {
   const first = text.split("\n").find((line) => line.trim().length > 0);
   return first === undefined ? "" : first.trim().replace(HEADING_MARKS, "");
 }

@@ -29,16 +29,19 @@ import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { Shimmer } from "../ai-elements/shimmer";
 import { useAppCommand } from "../app-commands";
-import { AgentStatusDot, AgentTab } from "../planning/agent-tab";
+import { AgentStatusDot, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
 import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
+import { cardTitle } from "../planning/tool-call-model";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "../planning/transcript-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import {
+  type DrawnTabs,
+  drawsSubagent,
   type FixedSidePanelTab,
   isAgentTab,
   isDraftTab,
@@ -49,6 +52,7 @@ import {
   SIDE_PANEL_WIDTH,
   type SidePanelControl,
   type SidePanelTab,
+  type SubagentSidePanelTab,
   sameTab,
   tabAddable,
 } from "../planning/use-side-panel";
@@ -82,12 +86,16 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * panel's coming and going never moves it. The fixed tabs come first and
  * the plan's coding agents follow, one tab each, named by model with a dot
  * for where the agent stands; after them stand the subagents opened from
- * the Work tab or the "+", one tab each, named by job. A draft agent opened
- * from the "+" stands after the agents until its first message starts it.
- * Every tab closes, and closing an agent's or a subagent's closes only the
- * view: the agent goes on as it was, and the "+" opens its tab again;
- * closing a draft's lets the draft go, nothing of it having been started. The plan's own
- * actions stay in the plan's toolbar and never come into the panel.
+ * the Work tab, the "+", or a delegation's row in an agent's tab, one tab
+ * each, named by job. A draft agent opened from the "+" stands after the
+ * agents until its first message starts it. Every tab closes, and closing
+ * an agent's or a subagent's closes only the view: the agent goes on as it
+ * was, and the "+" opens its tab again; closing a draft's lets the draft
+ * go, nothing of it having been started. The plan's own actions stay in
+ * the plan's toolbar and never come into the panel. Where a delegated
+ * worker stands is what its own tab's pages say, kept here for its glyph
+ * while the panel is drawn, and taken as running until a page says
+ * otherwise.
  *
  * Shutting the panel, or bringing it back from full screen, changes the
  * window's layout at once, and the panel keeps drawing what it held until its
@@ -282,7 +290,7 @@ function addEntries(input: {
         detail: stateWords(word, call.running),
         terms: [word],
         section: ADD_SECTION.SUBAGENTS,
-        hint: panel.subagents.includes(call.id) ? TAB_OPEN : undefined,
+        hint: panel.subagents.some((tab) => tab.subagent === call.id) ? TAB_OPEN : undefined,
       },
       onPick: () => panel.onChoose({ subagent: call.id }),
     };
@@ -483,8 +491,8 @@ function PanelTabs({
   panel: SidePanelControl;
   unread: readonly SidePanelTab[];
   agents: CodingAgentsControl;
-  /** The open subagent tabs the plan's work holds, in the strip's order. */
-  subagents: readonly WorkWorkerBlock[];
+  /** The open subagent tabs the plan draws, in the strip's order. */
+  subagents: readonly DrawnSubagent[];
   /** Every subagent the plan's work holds, in the order started, which the "+" offers. */
   workers: readonly WorkWorkerBlock[];
 }): React.JSX.Element {
@@ -540,14 +548,14 @@ function PanelTabs({
             }}
           />
         )}
-        {subagents.map(({ call }) => (
+        {subagents.map(({ tab, label, running }) => (
           <Tab
-            key={call.id}
-            icon={<BotIcon className={call.running ? "text-luke" : undefined} />}
-            label={workerJob(call)}
-            selected={chosen({ subagent: call.id })}
-            onSelect={() => panel.onChoose({ subagent: call.id })}
-            onClose={() => panel.onClose({ subagent: call.id })}
+            key={tab.subagent}
+            icon={<BotIcon className={running ? "text-luke" : undefined} />}
+            label={label}
+            selected={chosen(tab)}
+            onSelect={() => panel.onChoose(tab)}
+            onClose={() => panel.onClose(tab)}
           />
         ))}
         {/* The first read of the plan's agents did not land: nothing is known
@@ -590,6 +598,44 @@ interface SidePanelWork {
   onLoadEarlier: () => Promise<void>;
 }
 
+/** An open subagent tab the plan draws: its tab, what the strip calls it, whether its glyph is lit, and the planning worker's block where it is one. */
+interface DrawnSubagent {
+  tab: SubagentSidePanelTab;
+  label: string;
+  running: boolean;
+  worker: WorkWorkerBlock | undefined;
+}
+
+/** Where the open delegated workers stand, by the call that started each, as their tabs' pages last said. */
+type WorkerStandings = ReadonlyMap<string, CodingAgentStatus>;
+
+/** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
+function drawnSubagents(
+  tabs: readonly SubagentSidePanelTab[],
+  workRows: readonly WorkTurnRow[],
+  standings: WorkerStandings,
+  drawn: Pick<DrawnTabs, "agents" | "subagents">,
+): readonly DrawnSubagent[] {
+  return tabs.flatMap((tab): DrawnSubagent[] => {
+    if (!drawsSubagent(tab, drawn)) return [];
+    if (tab.delegation !== undefined) {
+      const status = standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING;
+      return [
+        {
+          tab,
+          label: cardTitle(tab.delegation.task),
+          running: agentStillWriting(status),
+          worker: undefined,
+        },
+      ];
+    }
+    const worker = workerOf(workRows, tab.subagent);
+    return worker === undefined
+      ? []
+      : [{ tab, label: workerJob(worker.call), running: worker.call.running, worker }];
+  });
+}
+
 /** What the chosen tab shows. */
 function TabContent({
   tab,
@@ -600,8 +646,11 @@ function TabContent({
   work,
   workRows,
   agents,
+  standings,
   shown,
   onOpenSubagent,
+  onOpenDelegation,
+  onWorkerStatus,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -612,10 +661,20 @@ function TabContent({
   /** The plan's work as rows, which a subagent's tab reads its session from. */
   workRows: readonly WorkTurnRow[];
   agents: CodingAgentsControl;
+  standings: WorkerStandings;
   /** Whether the panel is on screen, so an agent's tab knows to follow its transcript. */
   shown: boolean;
-  /** Opens a subagent's session in a tab of its own, by the call that started it. */
+  /** Opens a planning worker's session in a tab of its own, by the call that started it. */
   onOpenSubagent: (callId: string) => void;
+  /** Opens one of an agent's workers in a tab of its own, by the agent, the call that started it, and the task; where the worker stands seeds its glyph. */
+  onOpenDelegation: (
+    agentId: string,
+    callId: string,
+    task: string,
+    status: CodingAgentStatus,
+  ) => void;
+  /** A delegated worker's page said where it stands now. */
+  onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
 }): React.JSX.Element {
   const { act } = useAct();
   if (isDraftTab(tab)) {
@@ -634,10 +693,30 @@ function TabContent({
     return agent === undefined ? (
       <p className="side-panel-empty">Reading the agent…</p>
     ) : (
-      <AgentTab key={agent.id} agent={agent} control={agents} shown={shown} />
+      <AgentTab
+        key={agent.id}
+        agent={agent}
+        control={agents}
+        shown={shown}
+        onOpenSubagent={(callId, task, status) => onOpenDelegation(agent.id, callId, task, status)}
+      />
     );
   }
   if (isSubagentTab(tab)) {
+    if (tab.delegation !== undefined) {
+      return (
+        <AgentSubagentTab
+          key={tab.subagent}
+          agentId={tab.delegation.agent}
+          callId={tab.subagent}
+          task={tab.delegation.task}
+          status={standings.get(tab.subagent) ?? CODING_AGENT_STATUS.RUNNING}
+          control={agents}
+          shown={shown}
+          onStatus={(status) => onWorkerStatus(tab.subagent, status)}
+        />
+      );
+    }
     const worker = workerOf(workRows, tab.subagent);
     // As an agent's: the tab stands for a subagent the work no longer holds
     // only until the panel moves back to the board, a render away.
@@ -925,21 +1004,25 @@ export function SidePanel({
   const room = useRef<HTMLDivElement>(null);
   const { tab } = panel;
   // Every subagent the plan's work holds, and those with a tab open, each
-  // with its session, in the order started and the strip's order.
+  // with its session, in the order started and the strip's order; a
+  // delegated worker's tab stands while its agent's does.
   const workRows = workRowsOf(work.turns, work.callLive);
   const held = (callId: string) => {
     const worker = workerOf(workRows, callId);
     return worker === undefined ? [] : [worker];
   };
   const workers = workerCallIds(work.turns).flatMap(held);
-  const subagents = panel.subagents.flatMap(held);
+  const [standings, setStandings] = useState<WorkerStandings>(() => new Map());
+  const openAgents = agents.agents
+    ?.filter((agent) => !panel.closedAgents.includes(agent.id))
+    .map((agent) => agent.id);
+  const subagents = drawnSubagents(panel.subagents, workRows, standings, {
+    agents: openAgents,
+    subagents: workers.map((worker) => worker.call.id),
+  });
   const shownAgent =
     tab !== undefined && isAgentTab(tab)
       ? agents.agents?.find((agent) => agent.id === tab.agent)
-      : undefined;
-  const shownSubagent =
-    tab !== undefined && isSubagentTab(tab)
-      ? subagents.find((worker) => worker.call.id === tab.subagent)
       : undefined;
   const label =
     tab === undefined
@@ -949,15 +1032,23 @@ export function SidePanel({
           ? undefined
           : agentTabLabel(shownAgent, agents.models)
         : isSubagentTab(tab)
-          ? shownSubagent === undefined
-            ? undefined
-            : workerJob(shownSubagent.call)
+          ? subagents.find((each) => sameTab(each.tab, tab))?.label
           : isDraftTab(tab)
             ? DRAFT_TAB_LABEL
             : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
+  );
+  const onWorkerStatus = useCallback((callId: string, status: CodingAgentStatus) => {
+    setStandings((was) => (was.get(callId) === status ? was : new Map(was).set(callId, status)));
+  }, []);
+  const openDelegation = useCallback(
+    (agent: string, callId: string, task: string, status: CodingAgentStatus) => {
+      onWorkerStatus(callId, status);
+      panel.onChoose({ subagent: callId, delegation: { agent, task } });
+    },
+    [panel.onChoose, onWorkerStatus],
   );
 
   useLayoutEffect(() => {
@@ -1011,8 +1102,11 @@ export function SidePanel({
               work={work}
               workRows={workRows}
               agents={agents}
+              standings={standings}
               shown={shown && leaving === PANEL_LEAVING.NONE}
               onOpenSubagent={openSubagent}
+              onOpenDelegation={openDelegation}
+              onWorkerStatus={onWorkerStatus}
             />
           </div>
         )}

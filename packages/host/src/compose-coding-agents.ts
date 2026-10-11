@@ -133,12 +133,12 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGES]: (params) =>
       Effect.gen(function* () {
-        const { agentId, after } = yield* read(
+        const { agentId, after, callId } = yield* read(
           codingAgentMessagesParamsSchema,
           params,
           "reading an agent's transcript names the agent and a cursor",
         );
-        const answer = yield* asked(client.messages(agentId, after));
+        const answer = yield* asked(client.messages(agentId, after, callId));
         return carried<CodingAgentMessagesAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_MESSAGE]: (params) =>

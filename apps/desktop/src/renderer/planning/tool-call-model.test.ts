@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { TOOL_BLOCK } from "../ai-elements/tool";
-import { patchPaths, planCardTitle, stripAnsi, toolCallView } from "./tool-call-model";
+import { cardTitle, patchPaths, stripAnsi, toolCallView } from "./tool-call-model";
 import { CALL_KIND } from "./turn-rows";
 
 const ESCAPE = String.fromCharCode(27);
@@ -158,9 +158,9 @@ test("terminal escapes are taken out of words, colours and titles alike", () => 
 });
 
 test("a plan's card is titled by its first heading, or its first line of words", () => {
-  assert.equal(planCardTitle("# Teammate invitations\n\nInvite by email."), "Teammate invitations");
-  assert.equal(planCardTitle("\n\nInvite by email.\n# Later"), "Invite by email.");
-  assert.equal(planCardTitle("   "), "");
+  assert.equal(cardTitle("# Teammate invitations\n\nInvite by email."), "Teammate invitations");
+  assert.equal(cardTitle("\n\nInvite by email.\n# Later"), "Invite by email.");
+  assert.equal(cardTitle("   "), "");
 });
 
 test("a plan edit's row sums its notes by what each did, and shows them as JSON", () => {

@@ -5,7 +5,9 @@ import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
+  CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
+  type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan } from "@sidecar/hosted/plan-wire";
@@ -29,6 +31,7 @@ import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import { COPY_SHOWN, DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import type { TranscriptReader } from "../planning/use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
 import type { PlansControl } from "../planning/use-plans-tab";
 import {
@@ -89,7 +92,7 @@ function Page({
   work?: PlansControl["work"] | undefined;
   agents?: PlansControl["agents"] | undefined;
 }) {
-  const sidePanel = useSidePanel(staged, undefined, workerCallIds(work?.turns));
+  const sidePanel = useSidePanel(staged, agents?.agentIds, workerCallIds(work?.turns));
   useAppKeymap(true);
   useMenuCommands(true);
   const page = createElement(DesktopPlans, {
@@ -138,6 +141,13 @@ function mountOpenPlan(
   roots.push(root);
   act(() => root.render(createElement(Page, { ...options, staged: options.staged })));
   return container;
+}
+
+/** Lets every promise settled so far run its continuations. */
+async function settle(): Promise<void> {
+  await act(async () => {
+    for (let tick = 0; tick < 8; tick += 1) await Promise.resolve();
+  });
 }
 
 /** Renders the last mounted page again, as the first state arriving a render in renders it. */
@@ -616,6 +626,109 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   press(page, `[aria-label="Close ${job}"]`);
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.equal(chosenTab(page), "Work");
+});
+
+test("a delegation's row in an agent's tab opens the worker in a tab of its own, which draws the task as a card and reads the worker's transcript under the agent and the call, following it while the worker runs; pressed again it is chosen rather than doubled, and its × closes it to the agent", async () => {
+  const agent: CodingAgentSummary = {
+    id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    planId: PLAN.id,
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: null,
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+  const job = "Count the routes.";
+  const task = `${job}\n\nList every file under apps/web/server/routes.`;
+  const turn: CodingAgentMessage = {
+    id: "m-turn",
+    role: "assistant",
+    parts: [
+      { type: "tool-delegate", toolCallId: "call_d1", state: "input-available", input: { task } },
+    ],
+  };
+  const workerRows: CodingAgentMessage[] = [
+    { id: "w-task", role: "user", parts: [{ type: "text", text: task }] },
+    {
+      id: "w-1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-bash",
+          toolCallId: "wcall_1",
+          state: "output-available",
+          input: { command: "ls apps/web/server/routes" },
+          output: {
+            status: "completed",
+            exitCode: 0,
+            stdout: "agents\n",
+            stderr: "",
+            truncated: false,
+          },
+        },
+        { type: "text", text: "Three routes." },
+      ],
+    },
+  ];
+  const reads: (string | undefined)[] = [];
+  // The first page of each transcript lands at once; the reads after it are held, as the service holds them.
+  const readTranscript: TranscriptReader = ({ after, callId }) => {
+    reads.push(callId);
+    if (after !== CODING_AGENT_CURSOR_START) return new Promise(() => undefined);
+    return Promise.resolve(
+      callId === undefined
+        ? { messages: [turn], cursor: "1:1", status: CODING_AGENT_STATUS.RUNNING, title: null }
+        : { messages: workerRows, cursor: "1:2", status: CODING_AGENT_STATUS.RUNNING, title: null },
+    );
+  };
+  const page = mountOpenPlan({
+    agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
+  });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Claude Opus 5.5").click());
+  await settle();
+
+  press(page, '[data-subagent-row][data-call-id="call_d1"] [aria-label="Open in tab"]');
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Code",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    job,
+  ]);
+  assert.equal(chosenTab(page), job);
+  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
+  const content = page.querySelector('.side-panel-content[role="tabpanel"]');
+  assert.equal(content?.getAttribute("aria-label"), job);
+  const card = content?.querySelector("[data-task-card], [data-plan-card]");
+  assert.equal(card?.getAttribute("aria-label"), "Task");
+  assert.ok(card?.textContent?.includes(job));
+  assert.ok(content?.querySelector("[data-working]"));
+  await settle();
+  assert.deepEqual(reads.slice(-2), ["call_d1", "call_d1"], "read under the call, then held");
+  assert.ok(content?.textContent?.includes("Three routes."), "the worker's words from the route");
+  assert.equal(content?.querySelectorAll("[data-plan-card]").length, 1, "the task drawn once");
+  assert.ok(content?.querySelector('[data-call-id="wcall_1"]'), "each call on a line of its own");
+  assert.equal(content?.querySelector("[data-turn-fold]"), null);
+
+  act(() => tabNamed(page, "Claude Opus 5.5").click());
+  await settle();
+  press(page, '[data-subagent-row][data-call-id="call_d1"] [aria-label="Open in tab"]');
+  assert.deepEqual(panelTabs(page), [
+    "Board",
+    "Code",
+    "Transcript",
+    "Work",
+    "Claude Opus 5.5",
+    job,
+  ]);
+  assert.equal(chosenTab(page), job);
+
+  press(page, `[aria-label="Close ${job}"]`);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Claude Opus 5.5"]);
+  assert.equal(chosenTab(page), "Claude Opus 5.5");
 });
 
 test("a subagent's tab cuts a long job short and says the whole of it in its hint, while a tab shown whole hangs none", () => {
