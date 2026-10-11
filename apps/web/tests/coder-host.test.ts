@@ -316,13 +316,20 @@ function childSession(
   };
 }
 
-/** One worker turn as eve emits it: the task received, and the answer. */
+/** What a worker's turn thinks before it answers. */
+const WORKER_REASONING = "The routes live under one folder.";
+
+/** One worker turn as eve emits it: the task received, its reasoning, and the answer. */
 function workerTurn(turnId: string, task: string, answer: string): MessageStreamEvent[] {
   const sequence = 0;
   return [
     stamped({ type: "turn.started", data: { turnId, sequence } }),
     stamped({ type: "message.received", data: { turnId, sequence, message: task } }),
     stamped({ type: "step.started", data: { turnId, sequence, stepIndex: 0, modelId: "m" } }),
+    stamped({
+      type: "reasoning.completed",
+      data: { turnId, sequence, stepIndex: 0, reasoning: WORKER_REASONING },
+    }),
     stamped({
       type: "message.completed",
       data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: answer },
@@ -336,6 +343,9 @@ function workerTurn(turnId: string, task: string, answer: string): MessageStream
 }
 
 const STEP_START = "step-start";
+
+/** What a step on a Claude 5 model is told of its thinking: show it, summarized. */
+const SHOWN_THINKING = { type: "adaptive", display: "summarized" };
 
 /** One line the developer sent the agent, as the message route writes it ahead of its turn once eve took it, under the key given. */
 const awaitingLine = (target: ConversationTarget, text: string, clientKey: string) =>
@@ -468,7 +478,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "claude-opus-5-5");
         assert.equal(selected.success.modelContextWindowTokens, 1_000_000);
         assert.deepEqual(selected.success.modelOptions, {
-          providerOptions: { anthropic: { effort: "high" } },
+          providerOptions: { anthropic: { effort: "high", thinking: SHOWN_THINKING } },
         });
 
         const sol = yield* openAgent(host, "openai/gpt-6.1-sol", "low");
@@ -481,7 +491,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           CODER.FALLBACK_CONTEXT_WINDOW_TOKENS,
         );
         assert.deepEqual(unlisted.success.modelOptions, {
-          providerOptions: { openai: { reasoningEffort: "low" } },
+          providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
         });
       }),
   );
@@ -509,7 +519,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.ok(Result.isSuccess(selected));
         assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "claude-opus-5-5");
         assert.deepEqual(selected.success.modelOptions, {
-          providerOptions: { anthropic: { effort: "high" } },
+          providerOptions: { anthropic: { effort: "high", thinking: SHOWN_THINKING } },
         });
         assert.deepEqual(
           yield* host
@@ -551,7 +561,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.ok(Result.isSuccess(selected));
         assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "gpt-6.1-sol");
         assert.deepEqual(selected.success.modelOptions, {
-          providerOptions: { openai: { reasoningEffort: "low" } },
+          providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
         });
 
         const state = memoryRelayState();
@@ -577,6 +587,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             [MESSAGE_ROLE.ASSISTANT, "Three routes."],
           ],
         );
+        // The worker's thinking reads back with its answer, as the agent's does.
+        assert.equal(page.messages[1]?.parts.find(isReasoningUIPart)?.text, WORKER_REASONING);
         assert.equal(page.status, CODING_AGENT_STATUS.COMPLETED);
         // The agent's session still stands for its conversation, so its own calls still run.
         assert.ok(Result.isSuccess(yield* host.admit(auth, sessionId)));
@@ -638,7 +650,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
       assert.ok(Result.isSuccess(selected));
       assert.equal(Option.getOrUndefined(readModelId(selected.success.model)), "gpt-6.1-sol");
       assert.deepEqual(selected.success.modelOptions, {
-        providerOptions: { openai: { reasoningEffort: "low" } },
+        providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
       });
     }),
   );

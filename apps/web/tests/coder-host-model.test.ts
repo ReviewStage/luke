@@ -42,25 +42,57 @@ function providerModel(model: CoderModelSelection["model"]): {
   );
 }
 
-test("an Anthropic choice runs the provider's own model id with the effort as Anthropic takes it", () => {
+test("an Anthropic choice runs the provider's own model id with the effort as Anthropic takes it, its thinking shown", () => {
   const selected = coderModel({ model: "anthropic/claude-opus-5.5", effort: "max" }, KEYS, WINDOW);
   assert.ok(Result.isSuccess(selected));
   const { modelOptions, modelContextWindowTokens } = selected.success;
   const model = providerModel(selected.success.model);
   assert.equal(model.modelId, "claude-opus-5-5");
   assert.equal(model.provider.startsWith("anthropic"), true);
-  assert.deepEqual(modelOptions, { providerOptions: { anthropic: { effort: "max" } } });
+  assert.deepEqual(modelOptions, {
+    providerOptions: {
+      anthropic: { effort: "max", thinking: { type: "adaptive", display: "summarized" } },
+    },
+  });
   assert.equal(modelContextWindowTokens, WINDOW);
 });
 
-test("an OpenAI choice runs the Responses model with the effort as OpenAI takes it", () => {
+/** What a step on the catalog's Anthropic model is told, at the effort every choice below takes. */
+function optionsOf(model: string): CoderModelSelection["modelOptions"] {
+  const selected = coderModel({ model, effort: "high" }, KEYS, WINDOW);
+  assert.ok(Result.isSuccess(selected));
+  return selected.success.modelOptions;
+}
+
+test("a Claude 5 model that thinks unasked is asked to show it, and an older Claude is not asked to think", () => {
+  const shown = { effort: "high", thinking: { type: "adaptive", display: "summarized" } };
+  for (const model of [
+    "anthropic/claude-opus-5",
+    "anthropic/claude-sonnet-5.5",
+    "anthropic/claude-haiku-5.5",
+    "anthropic/claude-fable-5.1",
+  ]) {
+    assert.deepEqual(optionsOf(model), { providerOptions: { anthropic: shown } }, model);
+  }
+  for (const model of ["anthropic/claude-opus-4.8", "anthropic/claude-sonnet-4.6"]) {
+    assert.deepEqual(
+      optionsOf(model),
+      { providerOptions: { anthropic: { effort: "high" } } },
+      model,
+    );
+  }
+});
+
+test("an OpenAI choice runs the Responses model with the effort as OpenAI takes it, its reasoning summarised", () => {
   const selected = coderModel({ model: "openai/gpt-6.1-sol", effort: "xhigh" }, KEYS, WINDOW);
   assert.ok(Result.isSuccess(selected));
   const { modelOptions } = selected.success;
   const model = providerModel(selected.success.model);
   assert.equal(model.modelId, "gpt-6.1-sol");
   assert.equal(model.provider.startsWith("openai"), true);
-  assert.deepEqual(modelOptions, { providerOptions: { openai: { reasoningEffort: "xhigh" } } });
+  assert.deepEqual(modelOptions, {
+    providerOptions: { openai: { reasoningEffort: "xhigh", reasoningSummary: "auto" } },
+  });
 });
 
 test("a provider Luke does not run, or a key the deployment does not hold, refuses the step by name", () => {

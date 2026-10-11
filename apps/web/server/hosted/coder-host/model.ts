@@ -15,7 +15,11 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * the two providers spell it differently: Anthropic takes `effort` and
  * OpenAI's Responses API `reasoningEffort`, each under its own provider
  * options. Nothing goes through AI Gateway, so the catalog's efforts for a
- * model are handed to the provider as the catalog lists them. The agent's
+ * model are handed to the provider as the catalog lists them. Each step
+ * also asks for its reasoning in words, so the agent's tab can show what
+ * it thought as the Work tab shows Luke's: OpenAI for a summary, as the
+ * planning brain does, and Anthropic for its summarized thinking on a
+ * model that thinks whether asked or not. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
  * same provider door. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
@@ -23,6 +27,22 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /** The one model an agent's title is generated on: the cheapest that names a task well, at Anthropic's own id. */
 const AGENT_TITLE_MODEL_ID = "claude-haiku-5-5";
+
+/** How much of its reasoning an OpenAI step is asked to summarise: `auto` lets the model choose how much to say. */
+const OPENAI_REASONING_SUMMARY = "auto";
+
+/** The adaptive thinking a Claude step that already thinks is asked to show: summarized words rather than empty blocks. */
+const ANTHROPIC_SHOWN_THINKING = { type: "adaptive", display: "summarized" } as const;
+
+/**
+ * The Claude models that think when the request names no thinking: the
+ * Claude 5 family. Note that only these are asked to show their thinking,
+ * because the ask is adaptive thinking itself: for these it changes what
+ * the step returns and not what it costs, while an older Claude would
+ * start thinking where it did not, which is a step's cost and latency and
+ * no one decided that. The next family that thinks by default joins here.
+ */
+const THINKS_BY_DEFAULT = /^claude-[a-z]+-5(?:-|$)/u;
 
 /** Luke's own keys, sealed; one absent is that provider's agents refused at their first step. */
 export interface ProviderKeys {
@@ -37,13 +57,27 @@ export interface CoderModelSelection {
   readonly modelOptions: AgentModelOptionsDefinition;
 }
 
-/** The provider's own option carrying the effort, by provider. */
-function effortOptions(provider: ModelProvider, effort: string): AgentModelOptionsDefinition {
+/** The provider's own options for a step: the effort, and the ask for its reasoning in words where that costs nothing more. */
+function stepOptions(
+  provider: ModelProvider,
+  modelId: string,
+  effort: string,
+): AgentModelOptionsDefinition {
   switch (provider) {
     case MODEL_PROVIDER.ANTHROPIC:
-      return { providerOptions: { anthropic: { effort } } };
+      return {
+        providerOptions: {
+          anthropic: THINKS_BY_DEFAULT.test(modelId)
+            ? { effort, thinking: ANTHROPIC_SHOWN_THINKING }
+            : { effort },
+        },
+      };
     case MODEL_PROVIDER.OPENAI:
-      return { providerOptions: { openai: { reasoningEffort: effort } } };
+      return {
+        providerOptions: {
+          openai: { reasoningEffort: effort, reasoningSummary: OPENAI_REASONING_SUMMARY },
+        },
+      };
   }
 }
 
@@ -72,6 +106,6 @@ export function coderModel(
   return Result.succeed({
     model,
     modelContextWindowTokens: contextWindowTokens,
-    modelOptions: effortOptions(named.provider, choice.effort),
+    modelOptions: stepOptions(named.provider, named.modelId, choice.effort),
   });
 }

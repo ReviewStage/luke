@@ -1763,7 +1763,12 @@ provider's own, and the step is told `@ai-sdk/anthropic` on
 `@ai-sdk/openai`'s Responses model on `OPENAI_API_KEY` with
 `providerOptions.openai.reasoningEffort`, with the context window the
 catalog lists for the model (`CatalogModel.contextWindow`) or a fallback
-where it lists none. Nothing goes through AI Gateway. Reading the row every
+where it lists none. Each step also asks for its reasoning in words, so the
+agent's and each worker's tab show it as the Work tab shows Luke's:
+`reasoningSummary: "auto"` on OpenAI, as the planning brain asks, and
+adaptive thinking with `display: "summarized"` on a Claude 5 model, which
+thinks whether asked or not. An older Claude is not asked, since the ask
+would start it thinking. Nothing goes through AI Gateway. Reading the row every
 step means a later change to it is the next step's model.
 
 The sandbox (`coder/sandbox.ts`) is one Vercel Sandbox per session at the
