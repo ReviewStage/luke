@@ -22,11 +22,15 @@ import {
 import {
   type Plan,
   type PlanCreateRequest,
+  type PlanFileAnswer,
+  type PlanFileRequest,
   type PlanRenameRequest,
   type PlanSummary,
   planAnswerSchema,
   planCreateRequestSchema,
   planDeleteAnswerSchema,
+  planFileAnswerSchema,
+  planFileRequestSchema,
   planListAnswerSchema,
   planRenameRequestSchema,
   planUpdateRequestSchema,
@@ -42,6 +46,7 @@ import {
 import {
   HOSTED_SERVICE_PATH,
   planBoardPath,
+  planFilePath,
   planPath,
   planTranscriptPath,
   planWorkPath,
@@ -230,6 +235,23 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planWorkPath(planId, before) },
       planWorkAnswerSchema,
+    );
+  }
+
+  /**
+   * One window of a file of the plan's repository as GitHub holds it now,
+   * or why it is not shown; nothing where the service did not answer, or
+   * where the window asked is not one the wire admits.
+   */
+  readFile(
+    planId: string,
+    window: PlanFileRequest,
+  ): Effect.Effect<PlanFileAnswer | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planFileRequestSchema)(window));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planFilePath(planId, admitted) },
+      planFileAnswerSchema,
     );
   }
 

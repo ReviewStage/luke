@@ -22,7 +22,12 @@ import { act, createElement, Fragment, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, test, vi } from "vitest";
-import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
+import {
+  ACT_KIND,
+  ACT_OUTCOME_STATUS,
+  type ActKind,
+  type ActResultFor,
+} from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
@@ -87,12 +92,21 @@ function Page({
   staged,
   work,
   agents,
+  shownCode,
 }: {
   staged: SidePanelState | undefined;
   work?: PlansControl["work"] | undefined;
   agents?: PlansControl["agents"] | undefined;
+  shownCode?: PlansControl["shownCode"];
 }) {
-  const sidePanel = useSidePanel(staged, agents?.agentIds, workerCallIds(work?.turns));
+  const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
+  const sidePanel = useSidePanel(
+    staged,
+    agents?.agentIds,
+    workerCallIds(work?.turns),
+    undefined,
+    files,
+  );
   useAppKeymap(true);
   useMenuCommands(true);
   const page = createElement(DesktopPlans, {
@@ -109,6 +123,7 @@ function Page({
       },
       ...(work === undefined ? undefined : { work }),
       ...(agents === undefined ? undefined : { agents }),
+      shownCode,
     }),
   });
   return createElement(
@@ -133,6 +148,7 @@ function mountOpenPlan(
     staged?: SidePanelState;
     work?: PlansControl["work"];
     agents?: PlansControl["agents"];
+    shownCode?: PlansControl["shownCode"];
   } = {},
 ): HTMLElement {
   const container = document.createElement("div");
@@ -2638,4 +2654,85 @@ test("while Start could not run, New coding agent says Start's reason and opens 
     page.querySelector(".desktop-toolbar")?.textContent ?? "",
     /New (coding )?agent/u,
   );
+});
+
+test("a card's Open file opens its whole file in a tab named by the file, its lines lit, and opening it again from the + chooses that tab", async () => {
+  const asked: unknown[] = [];
+  Object.defineProperty(window, "sidecar", {
+    configurable: true,
+    value: {
+      onMenuCommand: () => () => undefined,
+      // Main answers a File tab's read with the file as GitHub holds it now.
+      act: (request: { payload?: unknown }) => {
+        asked.push(request.payload);
+        return Promise.resolve({
+          status: ACT_OUTCOME_STATUS.DONE,
+          value: {
+            file: {
+              path: "src/roles.ts",
+              repository: "acme/relay",
+              firstLine: 1,
+              lineCount: 3,
+              lines: [
+                [{ text: "export const ROLES = [" }],
+                [{ text: "  'admin'," }],
+                [{ text: "];" }],
+              ],
+            },
+          },
+        });
+      },
+    },
+  });
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: [SIDE_PANEL_TAB.CODE], tab: SIDE_PANEL_TAB.CODE, width: 400 },
+    shownCode: [
+      { callId: "show-1", turnId: "turn-1", shownAt: 1, code: CODE },
+      {
+        callId: "show-2",
+        turnId: "turn-1",
+        shownAt: 2,
+        code: { ...CODE, ref: { path: "src/roles.ts", startLine: 2, endLine: 2 } },
+      },
+    ],
+  });
+
+  const second = page.querySelectorAll<HTMLButtonElement>('button[aria-label="Open file"]')[1];
+  assert.ok(second);
+  await act(async () => {
+    second.click();
+    await Promise.resolve();
+  });
+
+  const tab = tabNamed(page, "roles.ts");
+  assert.equal(tab.getAttribute("aria-selected"), "true");
+  assert.deepEqual(asked, [{ planId: PLAN.id, path: "src/roles.ts", firstLine: 1, lastLine: 500 }]);
+  const lit = [...page.querySelectorAll('.file-tab [data-pointed="true"]')].map(
+    (line) => line.querySelector(".code-line-number")?.textContent,
+  );
+  assert.deepEqual(lit, ["2"]);
+
+  press(page, ".side-panel-tabs [aria-label='Close Code']");
+  installScrollIntoView();
+  press(page, "button[aria-label='Open a tab']");
+  const files = [...page.querySelectorAll<HTMLElement>(".tab-add-menu [role='option']")].filter(
+    (option) => option.textContent?.includes(".ts"),
+  );
+  assert.deepEqual(
+    files.map((option) => option.textContent),
+    ["invite.tssrc", "roles.tssrcOpen"],
+  );
+  act(() => files[1]?.click());
+  assert.deepEqual(
+    [...page.querySelectorAll('.side-panel-tabs [role="tab"]')].map((each) => each.textContent),
+    ["roles.ts"],
+    "the file's one tab, chosen again rather than opened twice",
+  );
+  press(page, "button[aria-label='Open a tab']");
+  const invite = [...page.querySelectorAll<HTMLElement>(".tab-add-menu [role='option']")].find(
+    (option) => option.textContent?.startsWith("invite.ts"),
+  );
+  act(() => invite?.click());
+  assert.equal(tabNamed(page, "invite.ts").getAttribute("aria-selected"), "true");
+  assert.equal(tabNamed(page, "roles.ts").getAttribute("aria-selected"), "false");
 });

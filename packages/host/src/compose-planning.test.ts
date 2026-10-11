@@ -18,7 +18,13 @@ import {
   LOOK_AT_BOARD_TOOL_NAME,
 } from "@sidecar/hosted/board-vocabulary";
 import type { Board, BoardElement } from "@sidecar/hosted/board-wire";
-import type { Plan, PlanSummary, ShownCode } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_FILE_REFUSAL,
+  type Plan,
+  type PlanFileAnswer,
+  type PlanSummary,
+  type ShownCode,
+} from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLAN_WORK_BOUNDS,
@@ -33,11 +39,12 @@ import {
   type PlanWorkAnswer,
   type PlanWorkState,
   type PlanWorkTurn,
+  planningFileAnswerSchema,
   planningViewSchema,
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
-import type { WireRecord } from "@sidecar/wire";
+import { unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Duration, Effect, Fiber, Result } from "effect";
 import { TestClock } from "effect/testing";
@@ -91,6 +98,8 @@ interface FakeService extends PlanningClient {
   olderWorks: Record<string, PlanWorkAnswer>;
   /** Every page of work asked for, in order: the plan, and the turn it was read before where it was. */
   readonly workReads: string[];
+  /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
+  files: Record<string, PlanFileAnswer>;
 }
 
 function fakeService(plans: Plan[]): FakeService {
@@ -109,6 +118,8 @@ function fakeService(plans: Plan[]): FakeService {
     works: {},
     olderWorks: {},
     workReads: [],
+    files: {},
+    readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -1389,5 +1400,40 @@ it.effect(
         status: PLANNING_READ.READY,
         transcript: { calls: [], earlierOmitted: false },
       });
+    }),
+);
+
+it.effect(
+  "a file's window is answered to the tab that asked, its lines coloured, a refusal as the service gave it, and a service that did not answer as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      service.files["src/invite.ts"] = {
+        file: {
+          path: "src/invite.ts",
+          repository: "acme/relay",
+          firstLine: 1,
+          lineCount: 2,
+          lines: ["export const DAYS = 7;", ""],
+        },
+      };
+      service.files[".env"] = { refusal: PLAN_FILE_REFUSAL.SECRET };
+      const { call } = yield* openPlan(service);
+      const window = (path: string) =>
+        call(GATEWAY_METHOD.PLANNING_FILE, { planId: INVITES, path, firstLine: 1, lastLine: 500 });
+
+      const read = Result.getOrUndefined(
+        readEither(planningFileAnswerSchema)(unparsedWire(yield* window("src/invite.ts"))),
+      );
+      assert.ok(read !== undefined && "file" in read);
+      const { lines } = read.file;
+      assert.equal(lines[0]?.map((token) => token.text).join(""), "export const DAYS = 7;");
+      assert.ok(
+        lines[0]?.some((token) => token.color !== undefined),
+        "the line is coloured",
+      );
+      assert.deepEqual(lines[1], []);
+      assert.deepEqual(yield* window(".env"), { refusal: PLAN_FILE_REFUSAL.SECRET });
+      assert.deepEqual(yield* window("gone.ts"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
     }),
 );

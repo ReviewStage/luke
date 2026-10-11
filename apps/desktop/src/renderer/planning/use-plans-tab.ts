@@ -6,6 +6,7 @@ import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
+import { shownFiles } from "./code-pane-model";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -222,11 +223,17 @@ export function usePlansTab(input: {
   });
   // A subagent's tab is held to the plan's work as an agent's is to its agents.
   const workers = useMemo(() => workerCallIds(viewed.work), [viewed.work]);
+  // A file's tab is held to the files Luke showed on the plan the same way.
+  const files = useMemo(
+    () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
+    [viewed.shownCode],
+  );
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
     agents.agentIds,
     workers,
     agents.draft?.id,
+    files,
   );
   panelRef.current = sidePanel;
   // Main hears which agent's tab is on screen, and none while the tab is

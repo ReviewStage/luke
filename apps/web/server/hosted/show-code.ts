@@ -3,7 +3,6 @@ import {
   type CodeRef,
   codeRefSchema,
   codeWindow,
-  SHOWN_CODE_BOUNDS,
   type ShownCode,
   shownCodeSchema,
 } from "@sidecar/hosted/plan-wire";
@@ -25,6 +24,15 @@ import {
   type RepositoryShellServices,
   runInSandbox,
 } from "./repository-shell.js";
+import {
+  isSecretFile,
+  SHOWN_FILE_BOUNDS,
+  SHOWN_FILE_REFUSAL,
+  type ShownFileFacts,
+  type ShownFileRefusal,
+  shownFileRefusal,
+  shownLines,
+} from "./shown-file.js";
 
 /**
  * show-code.ts -- the planning model's `show_code` tool: code of the plan's repository put on the developer's screen as Luke talks about it.
@@ -56,40 +64,57 @@ const NOT_SHOWN = "Not shown: ";
 /** Why the file could not be shown once the checkout stood, as the reason the model reads. */
 class ShowCodeRefusal extends Data.TaggedError("ShowCodeRefusal")<{ readonly reason: string }> {}
 
-/** The largest file read at all; a larger one is said to be too large. */
-const MAX_FILE_BYTES = 1024 * 1024;
-
-/** How many of a file's first bytes are read to tell text from binary. */
-const TEXT_PROBE_BYTES = 8192;
-
-/** A file kept secret, refused wherever it sits in the checkout. */
-const SECRET_FILE = /(^|\/)\.env[^/]*$/u;
-
-/** What the file probe answers with its exit code, beside the line count it prints. */
-const PROBE_EXIT = {
-  /** The path names no regular file inside the checkout: absent, a directory, or a link that leaves it. */
-  MISSING: 3,
-  /** The file is larger than the screen draws, or holds bytes text never does. */
-  NOT_TEXT: 4,
-} as const;
-
 const { PATH: SANDBOX_PATH, VARIABLE: SANDBOX_VARIABLE } = REPOSITORY_SANDBOX_CONTRACT;
 
 /**
- * Whether the file can be shown, and how many lines it has, counted as the
- * screen counts them: one more than its newlines. The path is resolved with
- * every link followed and must land inside the checkout root, and nothing
- * of it is spliced into shell text: the script reads it from its variable.
+ * The file's facts, as `shown-file.ts` decides on them, printed on one line:
+ * whether it is a regular file inside the checkout, its bytes, whether a
+ * NUL stands among its first bytes, and how many lines it has, counted as
+ * the screen counts them, one more than its newlines. The path is resolved
+ * with every link followed and must land inside the checkout root, and
+ * nothing of it is spliced into shell text: the script reads it from its
+ * variable. A file that is no regular file inside the checkout prints
+ * nothing else, and a file past the size bound is not counted.
  */
 const FILE_PROBE_SCRIPT = [
   'root="$(realpath -- .)"',
-  `target="$(realpath -e -- "$${SANDBOX_VARIABLE.FILE}" 2>/dev/null)" || exit ${PROBE_EXIT.MISSING}`,
-  `case "$target" in "$root"/*) ;; *) exit ${PROBE_EXIT.MISSING} ;; esac`,
-  `[ -f "$target" ] || exit ${PROBE_EXIT.MISSING}`,
-  `[ "$(wc -c < "$target")" -le ${MAX_FILE_BYTES} ] || exit ${PROBE_EXIT.NOT_TEXT}`,
-  `[ "$(head -c ${TEXT_PROBE_BYTES} -- "$target" | tr -d '\\000' | wc -c)" -eq "$(head -c ${TEXT_PROBE_BYTES} -- "$target" | wc -c)" ] || exit ${PROBE_EXIT.NOT_TEXT}`,
-  'echo $(( $(wc -l < "$target") + 1 ))',
+  `target="$(realpath -e -- "$${SANDBOX_VARIABLE.FILE}" 2>/dev/null)" || { echo 0 0 0 0; exit 0; }`,
+  'case "$target" in "$root"/*) ;; *) echo 0 0 0 0; exit 0 ;; esac',
+  '[ -f "$target" ] || { echo 0 0 0 0; exit 0; }',
+  'bytes="$(wc -c < "$target")"',
+  `if [ "$(head -c ${SHOWN_FILE_BOUNDS.TEXT_PROBE_BYTES} -- "$target" | tr -d '\\000' | wc -c)" -eq "$(head -c ${SHOWN_FILE_BOUNDS.TEXT_PROBE_BYTES} -- "$target" | wc -c)" ]; then binary=0; else binary=1; fi`,
+  `if [ "$bytes" -le ${SHOWN_FILE_BOUNDS.MAX_FILE_BYTES} ]; then lines=$(( $(wc -l < "$target") + 1 )); else lines=0; fi`,
+  'echo 1 "$bytes" "$binary" "$lines"',
 ].join("\n");
+
+/** The probe's line read back: the facts it found, and the line count, or nothing where it does not read. */
+function probedFacts(
+  path: string,
+  stdout: string,
+): { facts: ShownFileFacts; lineCount: number } | undefined {
+  const fields = stdout
+    .trim()
+    .split(/\s+/u)
+    .map((field) => Number.parseInt(field, 10));
+  const [regular, bytes, binary, lineCount] = fields;
+  if (fields.length !== 4 || fields.some((field) => !Number.isInteger(field))) return undefined;
+  if (
+    regular === undefined ||
+    bytes === undefined ||
+    binary === undefined ||
+    lineCount === undefined
+  ) {
+    return undefined;
+  }
+  return { facts: { path, regular: regular === 1, bytes, binary: binary === 1 }, lineCount };
+}
+
+/** The words the model reads for each reason the shared rule refuses a file. */
+const REFUSAL_WORDS = {
+  [SHOWN_FILE_REFUSAL.SECRET]: SHOW_CODE_REFUSAL.SECRET,
+  [SHOWN_FILE_REFUSAL.MISSING]: SHOW_CODE_REFUSAL.MISSING,
+  [SHOWN_FILE_REFUSAL.NOT_TEXT]: SHOW_CODE_REFUSAL.NOT_TEXT,
+} as const satisfies Record<ShownFileRefusal, string>;
 
 /** The window's lines, first to last, as the file holds them. */
 const FILE_WINDOW_SCRIPT = `sed -n "$\{${SANDBOX_VARIABLE.FIRST_LINE}},$\{${SANDBOX_VARIABLE.LAST_LINE}}p" < "$${SANDBOX_VARIABLE.FILE}"`;
@@ -148,29 +173,11 @@ export const SHOW_CODE_TOOL = {
 export function shownCodeOf(part: StoredToolPart): ShownCode | undefined {
   if (part.state !== TOOL_PART_STATE.OUTPUT_AVAILABLE) return undefined;
   const code = Result.getOrUndefined(readShownCode(part.output))?.code;
-  return code === undefined || SECRET_FILE.test(code.ref.path) ? undefined : code;
+  return code === undefined || isSecretFile(code.ref.path) ? undefined : code;
 }
 
 function rejected(reason: string): WireRecord {
   return { status: ACTION_RESULT_STATUS.REJECTED, reason };
-}
-
-/** The refusal a probe's exit code stands for. */
-function probeRefusal(exitCode: number): string {
-  switch (exitCode) {
-    case PROBE_EXIT.MISSING:
-      return SHOW_CODE_REFUSAL.MISSING;
-    case PROBE_EXIT.NOT_TEXT:
-      return SHOW_CODE_REFUSAL.NOT_TEXT;
-    default:
-      return SHOW_CODE_REFUSAL.READ_FAILED;
-  }
-}
-
-/** The window's lines as the file holds them, each cut to the bound, and never more than the window asked for. */
-function windowLines(stdout: string, count: number): string[] {
-  const lines = stdout.split(/\r?\n/u).slice(0, count);
-  return lines.map((line) => line.slice(0, SHOWN_CODE_BOUNDS.MAX_LINE_CHARS));
 }
 
 /** The lines read from the checkout for `ref`, or the refusal that stopped the read. */
@@ -188,12 +195,14 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
     },
     REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
   );
-  if (probed.exitCode !== 0) {
-    return yield* new ShowCodeRefusal({ reason: probeRefusal(probed.exitCode) });
-  }
-  const lineCount = Number.parseInt(probed.stdout.trim(), 10);
-  if (!Number.isInteger(lineCount) || lineCount < 1)
+  const probedFile = probed.exitCode === 0 ? probedFacts(ref.path, probed.stdout) : undefined;
+  if (probedFile === undefined) {
     return yield* new ShowCodeRefusal({ reason: SHOW_CODE_REFUSAL.READ_FAILED });
+  }
+  const refusal = shownFileRefusal(probedFile.facts);
+  if (refusal !== undefined) return yield* new ShowCodeRefusal({ reason: REFUSAL_WORDS[refusal] });
+  const { lineCount } = probedFile;
+  if (lineCount < 1) return yield* new ShowCodeRefusal({ reason: SHOW_CODE_REFUSAL.READ_FAILED });
   const window = codeWindow(ref, lineCount);
   const read = yield* runInSandbox(
     sandbox,
@@ -216,7 +225,7 @@ const readLines = /* @__PURE__ */ Effect.fn("web/showCodeRead")(function* (
     repository,
     firstLine: window.first,
     lineCount,
-    lines: windowLines(read.stdout, window.last - window.first + 1),
+    lines: shownLines(read.stdout, window.last - window.first + 1),
   };
 });
 
@@ -233,7 +242,7 @@ export function runShowCode(
     const read = readShownRef(input);
     if (Result.isFailure(read)) return rejected(SHOW_CODE_REFUSAL.UNREADABLE);
     const ref = read.success;
-    if (SECRET_FILE.test(ref.path)) return rejected(SHOW_CODE_REFUSAL.SECRET);
+    if (isSecretFile(ref.path)) return rejected(SHOW_CODE_REFUSAL.SECRET);
     const code = yield* readLines(call, ref);
     return { status: ACTION_RESULT_STATUS.ACCEPTED, code } satisfies WireRecord;
   });

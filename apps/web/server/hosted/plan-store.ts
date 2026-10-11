@@ -42,7 +42,7 @@ import { InstantColumnSchema } from "./store/database.js";
  * no database of its own.
  */
 
-type PlanStoreFailure = SqlError | Schema.SchemaError;
+export type PlanStoreFailure = SqlError | Schema.SchemaError;
 
 /** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.SqlClient>;

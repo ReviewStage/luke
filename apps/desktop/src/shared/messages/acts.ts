@@ -38,10 +38,13 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
+  type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
   planningBoardSaveParamsSchema,
+  planningFileAnswerSchema,
+  planningFileParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
   planningSetRepositoryAnswerSchema,
@@ -125,6 +128,8 @@ export const ACT_KIND = {
   PLANNING_BOARD_SAVE: "planning.boardSave",
   /** The Work tab scrolled back to its oldest turn: the open plan's page of work before it, read from the service; the view arrives on the document. */
   PLANNING_WORK_EARLIER: "planning.workEarlier",
+  /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
+  PLANNING_FILE: "planning.file",
   /**
    * A plan's coding agents, asked of the service: the models one may run
    * on, the account's default among them read and written, the plan's
@@ -443,6 +448,11 @@ export const ACT = {
     payload: actSchema(planningBoardSaveParamsSchema),
     result: answersNothing,
     refusal: "Could not save the board on this system.",
+  },
+  [ACT_KIND.PLANNING_FILE]: {
+    payload: actSchema(planningFileParamsSchema),
+    result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
+    refusal: "Could not read that file on this system.",
   },
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",

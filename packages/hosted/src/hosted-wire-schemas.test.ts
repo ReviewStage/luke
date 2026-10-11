@@ -113,6 +113,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planDeleteAnswerSchema: planWire.planDeleteAnswerSchema,
     codeRefSchema: planWire.codeRefSchema,
     shownCodeSchema: planWire.shownCodeSchema,
+    planFileRequestSchema: planWire.planFileRequestSchema,
+    planFileWindowSchema: planWire.planFileWindowSchema,
+    planFileAnswerSchema: planWire.planFileAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,

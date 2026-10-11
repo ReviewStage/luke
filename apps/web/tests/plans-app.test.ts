@@ -3,7 +3,12 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
-import { planAnswerSchema, planListAnswerSchema } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_FILE_REFUSAL,
+  planAnswerSchema,
+  planFileAnswerSchema,
+  planListAnswerSchema,
+} from "@sidecar/hosted/plan-wire";
 import { planWorkAnswerSchema } from "@sidecar/hosted/planning-view";
 import {
   planTranscriptAnswerSchema,
@@ -39,9 +44,11 @@ import { plansApp } from "../server/plans-app";
 import {
   type FakeGitHub,
   fakeGitHub,
+  GITHUB_FIXTURE_INSTALLATION_TOKEN,
   githubReaching,
   NO_GITHUB,
   openGithubUser,
+  type SentToGitHub,
 } from "./support/github-app-fake";
 import { INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
@@ -65,6 +72,7 @@ const ONE_PLAN = "/api/plans/plan";
 const BOARD = "/api/plans/board";
 const TRANSCRIPT = "/api/plans/transcript";
 const WORK = "/api/plans/work";
+const FILE = "/api/plans/file";
 
 const RELAY = {
   name: "Teammate invitations",
@@ -129,10 +137,17 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
 function request(
   path: string,
   userId: string | undefined,
-  init: { method?: string; body?: WireBoundaryInput; id?: string; command?: string } = {},
+  init: {
+    method?: string;
+    body?: WireBoundaryInput;
+    id?: string;
+    command?: string;
+    query?: Readonly<Record<string, string>>;
+  } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
   if (init.id !== undefined) url.searchParams.set("id", init.id);
+  for (const [name, value] of Object.entries(init.query ?? {})) url.searchParams.set(name, value);
   if (init.command !== undefined) url.searchParams.set("command", init.command);
   return new Request(url, {
     method: init.method ?? "GET",
@@ -160,6 +175,43 @@ function startedId(started: Answer): string {
 }
 
 const refusal = (status: number, error: string): Answer => ({ status, body: { error } });
+
+/** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
+const CONTENTS = new Map([
+  ["src/invite.ts", () => fileContents("one\ntwo\n" + "x".repeat(500) + "\nfour")],
+  ["assets/logo.png", () => fileContents("\u0089PNG\u0000\u0000")],
+  [
+    "big.json",
+    () => Response.json({ type: "file", size: 2 * 1024 * 1024, encoding: "none", content: "" }),
+  ],
+  ["src", () => Response.json([{ type: "file", name: "invite.ts" }])],
+  ["linked.ts", () => Response.json({ type: "symlink", target: "../outside.ts" })],
+]);
+
+/** The contents API's answer for a regular file of the text given. */
+function fileContents(text: string): Response {
+  const bytes = Buffer.from(text);
+  return Response.json({
+    type: "file",
+    size: bytes.length,
+    encoding: "base64",
+    content: bytes.toString("base64"),
+  });
+}
+
+const CONTENTS_PATH = /^\/repos\/Acme\/Relay\/contents\/(.+)$/u;
+
+/** The fixture repository's contents, as GitHub answers them on the repository's own paths. */
+function contentsOf(sent: SentToGitHub): Response | undefined {
+  const named = CONTENTS_PATH.exec(new URL(sent.url).pathname);
+  if (named === null) return undefined;
+  const contents = CONTENTS.get(decodeURIComponent(named[1] ?? ""));
+  return contents === undefined
+    ? Response.json({ message: "Not Found" }, { status: 404 })
+    : contents();
+}
+
+const RELAY_REACHED = [{ id: 1, login: "Acme", repositories: [{ owner: "Acme", name: "Relay" }] }];
 
 /** A note the developer drew, as the canvas would send it. */
 const NOTE = {
@@ -879,6 +931,135 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       assert.equal(text.startsWith("1 2 "), true);
       assert.equal(text.endsWith(`${TRANSCRIPT_BOUNDS.MAX_SEGMENTS} `), true);
     }),
+  );
+
+  it.effect(
+    "a file of the plan's repository reads a window as GitHub holds it on the default branch, on the App's token, each line cut as show_code cuts it; another account's plan reads as none",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, other, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const window = (userId: string, path: string, first: string, last: string) =>
+          ask(request(FILE, userId, { id: planId, query: { path, first, last } }));
+
+        const read = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* window(owner, "src/invite.ts", "2", "3"),
+        );
+        assert.deepEqual(read, {
+          file: {
+            path: "src/invite.ts",
+            repository: "Acme/Relay",
+            firstLine: 2,
+            lineCount: 4,
+            lines: ["two", "x".repeat(400)],
+          },
+        });
+        const asked = github.sent.find((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname));
+        assert.equal(new URL(asked?.url ?? ORIGIN).searchParams.get("ref"), "main");
+        assert.equal(
+          asked?.headers.get("authorization"),
+          `Bearer ${GITHUB_FIXTURE_INSTALLATION_TOKEN}`,
+        );
+        assert.equal(JSON.stringify(read).includes(GITHUB_FIXTURE_INSTALLATION_TOKEN), false);
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* window(owner, "src/invite.ts", "9", "12"),
+          ),
+          {
+            file: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              firstLine: 9,
+              lineCount: 4,
+              lines: [],
+            },
+          },
+          "a window past the end carries no lines",
+        );
+        assert.deepEqual(
+          yield* window(other, "src/invite.ts", "1", "2"),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const refusalOf = (path: string) =>
+          Effect.map(
+            ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "10" } })),
+            (answered) => readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+        const asked = () =>
+          github.sent.filter((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname)).length;
+
+        assert.deepEqual(yield* refusalOf("config/.env.local"), {
+          refusal: PLAN_FILE_REFUSAL.SECRET,
+        });
+        assert.deepEqual(yield* refusalOf("src/../../other/secret.ts"), {
+          refusal: PLAN_FILE_REFUSAL.MISSING,
+        });
+        assert.equal(asked(), 0, "neither is asked of GitHub");
+        assert.deepEqual(yield* refusalOf("gone.ts"), { refusal: PLAN_FILE_REFUSAL.MISSING });
+        assert.deepEqual(yield* refusalOf("src"), { refusal: PLAN_FILE_REFUSAL.MISSING });
+        assert.deepEqual(yield* refusalOf("linked.ts"), { refusal: PLAN_FILE_REFUSAL.MISSING });
+        assert.deepEqual(yield* refusalOf("big.json"), { refusal: PLAN_FILE_REFUSAL.NOT_TEXT });
+        assert.deepEqual(yield* refusalOf("assets/logo.png"), {
+          refusal: PLAN_FILE_REFUSAL.NOT_TEXT,
+        });
+      }),
+  );
+
+  it.effect(
+    "a plan with no repository says so, and a window out of order or past its bound is refused",
+    () =>
+      Effect.gen(function* () {
+        const reached = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(reached);
+        const bare = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })));
+        const withRepository = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const window = (planId: string, first: string, last: string) =>
+          request(FILE, owner, { id: planId, query: { path: "src/invite.ts", first, last } });
+
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* ask(window(bare, "1", "2")),
+          ),
+          { refusal: PLAN_FILE_REFUSAL.NO_REPOSITORY },
+        );
+        assert.deepEqual(
+          yield* ask(window(withRepository, "5", "2")),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* ask(window(withRepository, "1", "501")),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
   );
 
   it.effect("no bearer, a wrong method, and an id that is no UUID are refused", () =>

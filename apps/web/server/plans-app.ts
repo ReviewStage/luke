@@ -1,4 +1,5 @@
 import { BOARD_BOUNDS, boardSaveRequestSchema } from "@sidecar/hosted/board-wire";
+import { type PlanFileRequest, planFileRequestSchema } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
 import {
@@ -28,6 +29,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
+import { readPlanFile } from "./hosted/plan-file.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
 import { readTranscript } from "./hosted/transcript-store.js";
@@ -51,7 +53,10 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * (`hosted/transcript-store.ts`). `/api/plans/{id}/work` is what Luke's
  * planning model wrote and ran on them, a page at a time, and every code he
  * showed, read back from the plan's conversation
- * (`hosted/plan-work-store.ts`).
+ * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
+ * file of the plan's repository for the File tab, read from GitHub as it
+ * stands now through the App, under the rule `show_code` is held to
+ * (`hosted/plan-file.ts`).
  *
  * A plan may name the GitHub repository it is about, at its start or by a
  * later change, and null is a plan with none. A repository is kept only once
@@ -78,6 +83,8 @@ const PLANS_PATH = {
   TRANSCRIPT: "/api/plans/transcript",
   /** GET reads a page of the plan's work, before the turn `before` names where it names one, and on the newest page every code shown on it; the rewrite moves the path's id into the `id` query. */
   WORK: "/api/plans/work",
+  /** GET reads a window of one file of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  FILE: "/api/plans/file",
 } as const;
 
 const HTTP_METHOD = {
@@ -92,6 +99,13 @@ const PLAN_ID_QUERY = "id";
 
 /** The query naming the turn an older page of a plan's work is read before. */
 const BEFORE_TURN_QUERY = "before";
+
+/** The queries naming a window of a file: its path, and its first and last line. */
+const FILE_QUERY = {
+  PATH: "path",
+  FIRST_LINE: "first",
+  LAST_LINE: "last",
+} as const;
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
@@ -318,6 +332,43 @@ const workEndpoint = /* @__PURE__ */ Effect.fn("web/planWorkEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, work.value);
 });
 
+/** The window of a file the queries name, each named once, or the invalid-request refusal. */
+const fileRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<PlanFileRequest, HostedRefusal> {
+  const query = new URL(request.url).searchParams;
+  const once = (name: string) => {
+    const named = query.getAll(name);
+    return named.length === 1 ? named[0] : undefined;
+  };
+  const read = readEither(planFileRequestSchema)(
+    unparsedWire({
+      path: once(FILE_QUERY.PATH),
+      firstLine: Number(once(FILE_QUERY.FIRST_LINE)),
+      lastLine: Number(once(FILE_QUERY.LAST_LINE)),
+    }),
+  );
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return read.success;
+});
+
+/** GET reads a window of one file of the plan's repository, or why it is not shown. */
+const fileEndpoint = /* @__PURE__ */ Effect.fn("web/planFileEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const window = yield* fileRequestOf(request);
+  const file = yield* hostedStoreOrUnavailable(readPlanFile(userId, planId, window));
+  if (Option.isNone(file)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
+});
+
 /** The group: the plan paths, and the hosted vocabulary's own refusal for any other. */
 export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
   return Layer.mergeAll(
@@ -326,6 +377,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.BOARD, hostedRefusing(boardEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
     hostedNotFoundRoute,
   );
 }

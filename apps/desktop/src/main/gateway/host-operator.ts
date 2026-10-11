@@ -42,6 +42,8 @@ import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_CALL_FAILURE,
   type PlanningBoardSaveParams,
+  type PlanningFileAnswer,
+  type PlanningFileParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
   type PlanningSetRepositoryAnswer,
@@ -49,6 +51,7 @@ import {
   type PlanningStartAnswer,
   type PlanningStartRequest,
   type PlanningView,
+  planningFileAnswerSchema,
   planningRepositoriesAnswerSchema,
   planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
@@ -158,6 +161,8 @@ export interface HostOperator {
   ): Effect.Effect<PlanningSetRepositoryAnswer>;
   /** The open plan's whiteboard scene, saved whole with the number of Luke's drawing it holds. */
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
+  /** A window of a file of a plan's repository, coloured; or why it is not shown. */
+  planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -383,6 +388,21 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
                 readEither(planningRepositoriesAnswerSchema, { excess: EXCESS_KEYS.DROP })(
                   answer.result,
                 ),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningFile: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_FILE, {
+          planId: params.planId,
+          path: params.path,
+          firstLine: params.firstLine,
+          lastLine: params.lastLine,
+        }),
+        (answer): PlanningFileAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

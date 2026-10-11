@@ -1,0 +1,24 @@
+{
+  "type": "object",
+  "properties": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024
+    },
+    "firstLine": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "lastLine": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "required": [
+    "path",
+    "firstLine",
+    "lastLine"
+  ],
+  "additionalProperties": false
+}

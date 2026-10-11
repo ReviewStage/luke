@@ -5,6 +5,7 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_WORK_STATE,
   type PlanCodeShowing,
@@ -22,7 +23,7 @@ import {
   TranscriptIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import { BotIcon } from "lucide-react";
+import { BotIcon, FileCodeIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
@@ -31,8 +32,10 @@ import { Shimmer } from "../ai-elements/shimmer";
 import { useAppCommand } from "../app-commands";
 import { AgentStatusDot, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
+import { fileName, shownFiles } from "../planning/code-pane-model";
 import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
+import { FileTab } from "../planning/file-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -45,7 +48,9 @@ import {
   type FixedSidePanelTab,
   isAgentTab,
   isDraftTab,
+  isFileTab,
   isSubagentTab,
+  type OpenFile,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
@@ -165,6 +170,7 @@ const TAB_OPEN = "Open";
 const ADD_SECTION = {
   AGENTS: "Coding agents",
   SUBAGENTS: "Subagents",
+  FILES: "Files",
 } as const;
 
 /** The "+" menu's row that opens a draft agent, which no tab's key spells. */
@@ -242,16 +248,20 @@ interface AddEntry {
  * that opens a draft agent, or chooses the open plan's draft where it has
  * one, unavailable with Start's own reason while Start could not run, and
  * each of the plan's agents in the order started; then, under Subagents,
- * each subagent the plan's work holds. An agent's and a subagent's row wear the glyph its tab wears and
- * say where it stands, shimmering while it runs, and one whose tab is open
- * says so and is chosen again rather than dimmed.
+ * each subagent the plan's work holds; then, under Files, each file Luke
+ * showed on the plan, by name with its folder beside it. An agent's and a
+ * subagent's row wear the glyph its tab wears and say where it stands,
+ * shimmering while it runs, and one whose tab is open says so and is chosen
+ * again rather than dimmed, as is a file's; a file not open opens on the
+ * newest snippet of it.
  */
 function addEntries(input: {
   panel: SidePanelControl;
   agents: CodingAgentsControl;
   workers: readonly WorkWorkerBlock[];
+  files: readonly CodeRef[];
 }): AddEntry[] {
-  const { panel, agents, workers } = input;
+  const { panel, agents, workers, files } = input;
   const { start } = agents;
   const kinds = SIDE_PANEL_TABS.map((kind) => ({
     row: kindRow(kind, panel.tabs),
@@ -295,7 +305,25 @@ function addEntries(input: {
       onPick: () => panel.onChoose({ subagent: call.id }),
     };
   });
-  return [...kinds, newAgent, ...agentRows, ...subagentRows];
+  // Note that a file's row is named by its place in the list, because a path
+  // may spell a kind's word or another row's id, and the list only grows.
+  const fileRows = files.map((ref, at) => {
+    const name = fileName(ref.path);
+    const open = panel.files.some((file) => file.path === ref.path);
+    return {
+      row: {
+        id: String(at),
+        label: name,
+        icon: <FileCodeIcon />,
+        detail: ref.path.slice(0, -name.length - 1) || undefined,
+        terms: [ref.path],
+        section: ADD_SECTION.FILES,
+        hint: open ? TAB_OPEN : undefined,
+      },
+      onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref)),
+    };
+  });
+  return [...kinds, newAgent, ...agentRows, ...subagentRows, ...fileRows];
 }
 
 /**
@@ -487,6 +515,8 @@ function PanelTabs({
   agents,
   subagents,
   workers,
+  files,
+  shownFiles,
 }: {
   panel: SidePanelControl;
   unread: readonly SidePanelTab[];
@@ -495,6 +525,10 @@ function PanelTabs({
   subagents: readonly DrawnSubagent[];
   /** Every subagent the plan's work holds, in the order started, which the "+" offers. */
   workers: readonly WorkWorkerBlock[];
+  /** The open file tabs of files shown on the plan, in the strip's order. */
+  files: readonly OpenFile[];
+  /** Each file Luke showed on the plan, which the "+" offers. */
+  shownFiles: readonly CodeRef[];
 }): React.JSX.Element {
   const chosen = (tab: SidePanelTab) => panel.tab !== undefined && sameTab(tab, panel.tab);
   const draft = agents.draft?.id;
@@ -558,6 +592,17 @@ function PanelTabs({
             onClose={() => panel.onClose(tab)}
           />
         ))}
+        {files.map(({ path }) => (
+          <Tab
+            key={path}
+            icon={<FileCodeIcon />}
+            label={fileName(path)}
+            tooltip={path}
+            selected={chosen({ file: path })}
+            onSelect={() => panel.onChoose({ file: path })}
+            onClose={() => panel.onClose({ file: path })}
+          />
+        ))}
         {/* The first read of the plan's agents did not land: nothing is known
             to draw, so the strip offers the read again where the tabs would be. */}
         {agents.listFailed && agents.agents === undefined ? (
@@ -566,7 +611,10 @@ function PanelTabs({
           </button>
         ) : null}
       </TabStrip>
-      <AddTabButton entries={addEntries({ panel, agents, workers })} onOpen={agents.onRetryList} />
+      <AddTabButton
+        entries={addEntries({ panel, agents, workers, files: shownFiles })}
+        onOpen={agents.onRetryList}
+      />
     </div>
   );
 }
@@ -642,6 +690,7 @@ function TabContent({
   planId,
   board,
   shownCode,
+  files,
   transcript,
   work,
   workRows,
@@ -651,11 +700,14 @@ function TabContent({
   onOpenSubagent,
   onOpenDelegation,
   onWorkerStatus,
+  onOpenFile,
 }: {
   tab: SidePanelTab;
   planId: string;
   board: Board | undefined;
   shownCode: readonly PlanCodeShowing[] | undefined;
+  /** The open file tabs, which a file's tab reads its lit lines from. */
+  files: readonly OpenFile[];
   transcript: SidePanelTranscript;
   work: SidePanelWork;
   /** The plan's work as rows, which a subagent's tab reads its session from. */
@@ -675,8 +727,24 @@ function TabContent({
   ) => void;
   /** A delegated worker's page said where it stands now. */
   onWorkerStatus: (callId: string, status: CodingAgentStatus) => void;
+  /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
+  onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   const { act } = useAct();
+  if (isFileTab(tab)) {
+    const file = files.find((each) => each.path === tab.file);
+    // As a subagent's: the tab stands for a file no longer open only until
+    // the panel moves on, a render away.
+    return file === undefined ? (
+      <p className="side-panel-empty">Opening the file…</p>
+    ) : (
+      <FileTab
+        key={file.path}
+        file={file}
+        readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
+      />
+    );
+  }
   if (isDraftTab(tab)) {
     // As an agent's: the tab stands for a draft the plan no longer holds
     // only until the panel moves back to the board, a render away.
@@ -737,6 +805,7 @@ function TabContent({
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
           copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
+          onOpenFile={onOpenFile}
         />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
@@ -1020,6 +1089,9 @@ export function SidePanel({
     agents: openAgents,
     subagents: workers.map((worker) => worker.call.id),
   });
+  // The file tabs of files shown on the plan, in the strip's order.
+  const offered = shownFiles(shownCode ?? []);
+  const files = panel.files.filter((file) => offered.some((ref) => ref.path === file.path));
   const shownAgent =
     tab !== undefined && isAgentTab(tab)
       ? agents.agents?.find((agent) => agent.id === tab.agent)
@@ -1035,7 +1107,9 @@ export function SidePanel({
           ? subagents.find((each) => sameTab(each.tab, tab))?.label
           : isDraftTab(tab)
             ? DRAFT_TAB_LABEL
-            : SIDE_PANEL_TAB_KIND[tab].label;
+            : isFileTab(tab)
+              ? tab.file
+              : SIDE_PANEL_TAB_KIND[tab].label;
   const openSubagent = useCallback(
     (callId: string) => panel.onChoose({ subagent: callId }),
     [panel.onChoose],
@@ -1080,6 +1154,8 @@ export function SidePanel({
             agents={agents}
             subagents={subagents}
             workers={workers}
+            files={files}
+            shownFiles={offered}
           />
           <FullScreenToggle
             fullScreen={panel.fullScreen}
@@ -1098,6 +1174,7 @@ export function SidePanel({
               planId={planId}
               board={board}
               shownCode={shownCode}
+              files={files}
               transcript={transcript}
               work={work}
               workRows={workRows}
@@ -1107,6 +1184,7 @@ export function SidePanel({
               onOpenSubagent={openSubagent}
               onOpenDelegation={openDelegation}
               onWorkerStatus={onWorkerStatus}
+              onOpenFile={panel.onOpenFile}
             />
           </div>
         )}
