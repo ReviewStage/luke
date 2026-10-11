@@ -195,6 +195,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     return rest;
   }
 
+  /** How many codes a call has put on screen, so a work read tells a showing made while it was out. */
+  let codeShowings = 0;
+
   /** The plans whose board a settled draw may have moved, read one at a time by the loop below. */
   const boardReads = yield* Queue.sliding<string>(1);
 
@@ -330,12 +333,14 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * Reads the newest page of the active plan's work, and the code last shown
    * on it, as the service keeps them. Older pages already read stay, with
    * the place the next one is read from; a plan read for the first time
-   * takes the service's. Code a call put on screen stands over the
-   * record's, because the record may hold code the call never got to show.
+   * takes the service's. The record's newest code replaces what is on
+   * screen, so a refresh shows code another session showed, except where a
+   * call showed code while the read was out, since the read left before it.
    * A failed read keeps whatever is held.
    */
   function readWork(planId: string) {
     return Effect.gen(function* () {
+      const showingsBefore = codeShowings;
       const stored = yield* Effect.provide(client.readWork(planId), FetchHttpClient.layer);
       if (stored === undefined || view.activePlanId !== planId) return;
       const work = withPage(stored.turns);
@@ -344,7 +349,8 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         oldest !== undefined && !stored.turns.some((turn) => turn.turnId === oldest);
       const workEarlier = olderHeld ? view.workEarlier : stored.earlier;
       const shown = stored.code?.at(-1)?.code;
-      const code = view.code ?? (shown === undefined ? undefined : highlightCode(shown));
+      const code =
+        codeShowings !== showingsBefore || shown === undefined ? view.code : highlightCode(shown);
       writeWork({
         ...(work.length === 0 ? undefined : { work }),
         ...(workEarlier === undefined ? undefined : { workEarlier }),
@@ -389,6 +395,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function showCode(planId: string, code: ShownCode): void {
     if (view.activePlanId !== planId) return;
+    codeShowings += 1;
     write({ code: highlightCode(code) });
   }
 

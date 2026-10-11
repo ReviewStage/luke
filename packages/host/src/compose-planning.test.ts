@@ -1125,7 +1125,7 @@ it.effect(
 );
 
 it.effect(
-  "the service's work read lands under what the open plan's call told: a turn still running on record stays as told, a settled one is the record's, and the call's code stands",
+  "the service's work read lands under what the open plan's call told: a turn still running on record stays as told, a settled one is the record's, and code the call shows while the read is out stands",
   () =>
     Effect.gen(function* () {
       const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
@@ -1139,15 +1139,44 @@ it.effect(
       planning.showWork(INVITES, workTurn("turn-1", PLAN_WORK_STATE.RUNNING, "ls"));
       planning.showWork(INVITES, told);
       planning.showWork(INVITES, fresh);
-      planning.showCode(INVITES, shownCode({ path: "on-screen.ts" }));
       service.works[INVITES] = {
         turns: [settled, workTurn("turn-2", PLAN_WORK_STATE.RUNNING, "cat a.ts")],
-        code: [shownOn("turn-2", shownCode({ path: "never-shown.ts" }))],
+        code: [shownOn("turn-2", shownCode({ path: "read-before.ts" }))],
       };
+      // The call shows code after the read left and before its answer lands.
+      const read = service.readWork;
+      service.readWork = (planId, before) =>
+        Effect.tap(read(planId, before), () =>
+          Effect.sync(() => planning.showCode(INVITES, shownCode({ path: "on-screen.ts" }))),
+        );
       yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
 
       assert.deepEqual(last()?.work, [settled, told, fresh]);
       assert.equal(last()?.code?.ref.path, "on-screen.ts");
+    }),
+);
+
+it.effect(
+  "a refresh after a call's code takes the newer code the service keeps, as another session showed it",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const service = fakeService([invites]);
+      const { call, last, planning } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      planning.showCode(INVITES, shownCode({ path: "old.ts" }));
+      planning.callEnded(INVITES);
+      service.works[INVITES] = {
+        turns: [],
+        code: [
+          shownOn("turn-1", shownCode({ path: "old.ts" })),
+          shownOn("turn-2", shownCode({ path: "new.ts" })),
+        ],
+      };
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.equal(last()?.code?.ref.path, "new.ts");
     }),
 );
 
