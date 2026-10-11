@@ -12,15 +12,18 @@ import {
   type FeedbackResult,
   type FeedbackSubmission,
 } from "@sidecar/feedback";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
+import { onRegistry } from "#testing/copy-feedback";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppCommand, useMenuCommands } from "./app-commands";
 import { FeedbackDialog } from "./feedback-dialog";
 import { SettingsPanel } from "./settings/settings-panel";
+import { ToastHost } from "./toast";
 
 const SIGNED_IN: AccountSnapshot = {
   status: ACCOUNT_STATUS.SIGNED_IN,
@@ -61,11 +64,13 @@ beforeEach(() => {
 });
 
 const roots: Root[] = [];
+const registries: AtomRegistry.AtomRegistry[] = [];
 
 afterEach(() => {
   act(() => {
     for (const root of roots.splice(0)) root.unmount();
   });
+  for (const registry of registries.splice(0)) registry.dispose();
   document.body.innerHTML = "";
 });
 
@@ -80,6 +85,7 @@ function Harness({ account }: { account: AccountSnapshot }): React.JSX.Element {
     null,
     createElement(SettingsPanel, settingsPanelProps({ onFeedback: setKind })),
     createElement(FeedbackDialog, { kind, account, onClose: () => setKind(undefined) }),
+    createElement(ToastHost),
   );
 }
 
@@ -88,7 +94,10 @@ function mount(account: AccountSnapshot = SIGNED_IN): void {
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Harness, { account })));
+  // Each surface holds its own atoms, so a toast one test raised is not the next one's.
+  const registry = AtomRegistry.make();
+  registries.push(registry);
+  act(() => root.render(onRegistry(registry, createElement(Harness, { account }))));
 }
 
 function button(name: string, within: ParentNode = document): HTMLButtonElement {

@@ -1,4 +1,5 @@
 import type { Board } from "@sidecar/hosted/board-wire";
+import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { PLAN_CALL_FAILURE, PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -6,6 +7,7 @@ import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
 import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
+import { useCopyToast } from "../copy-feedback";
 import { shownFiles } from "./code-pane-model";
 import {
   FIXTURE_PLANNING_CALL,
@@ -15,12 +17,7 @@ import {
 } from "./planning-fixture";
 import {
   type CallStatus,
-  COPY_SHOWN,
-  type CopyOutcome,
-  type CopyShown,
   callStatus,
-  copyPlanDocument,
-  copyShown,
   DOCUMENT_REGION,
   type DocumentRegion,
   documentRegion,
@@ -109,7 +106,8 @@ export interface PlansControl {
   boundFor: string | undefined;
   listFailed: boolean;
   region: DocumentRegion;
-  copy: { shown: CopyShown; onPress: () => void };
+  /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
+  copy: { onPress: () => void };
   microphone: { label: string; enabled: boolean; muted: boolean; onPress: () => void };
   /** Silences Luke's voice on this Mac for the open plan's call, or plays it again; offered with the stop. */
   speaker: { muted: boolean; onPress: () => void };
@@ -208,6 +206,9 @@ interface PlanAsk {
   over: string | undefined;
 }
 
+/** What the toast says once Copy plan has put the plan on the clipboard. */
+const PLAN_COPIED_NOTE = "Plan copied";
+
 /** What a delete the service did not carry answers, so the plan stays and says why. */
 const DELETE_REFUSED: ActionResult = {
   status: ACTION_RESULT_STATUS.REJECTED,
@@ -256,7 +257,7 @@ export function usePlansTab(input: {
 }): PlansControl {
   const { shown, voice } = input;
   const { act, tell } = input.acts;
-  const [copied, setCopied] = useState<CopyOutcome | undefined>(undefined);
+  const copyWithToast = useCopyToast();
   const [newPlanPresses, setNewPlanPresses] = useState(0);
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
@@ -453,13 +454,9 @@ export function usePlansTab(input: {
 
   // Copy formats the document drawn now and hands it to main's clipboard;
   // it asks the model nothing and reads no flag.
-  const drawnDocument = region.kind === DOCUMENT_REGION.READY ? region.plan.document : undefined;
   const pressCopy = () => {
-    if (drawnDocument === undefined) return;
-    copyPlanDocument(drawnDocument, (words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })).then(
-      setCopied,
-      () => undefined,
-    );
+    if (region.kind !== DOCUMENT_REGION.READY) return;
+    copyWithToast(planMarkdown(region.plan.document), PLAN_COPIED_NOTE);
   };
 
   const microphone = microphoneButton({
@@ -574,10 +571,7 @@ export function usePlansTab(input: {
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
     region,
-    copy: {
-      shown: drawnDocument === undefined ? COPY_SHOWN.IDLE : copyShown(copied, drawnDocument),
-      onPress: pressCopy,
-    },
+    copy: { onPress: pressCopy },
     microphone: {
       label: microphone.label,
       enabled: microphone.press !== MICROPHONE_PRESS.NONE,

@@ -91,7 +91,8 @@ export function MessageActions({ className, children, ...props }: MessageActions
 export type MessageActionProps = Omit<ComponentProps<"button">, "aria-label"> & {
   /** What the action does, which is its accessible name and, when `tooltip` is set, the hint it shows. */
   label: string;
-  tooltip?: boolean;
+  /** Whether it hangs a hint: its label, or the words given here in its place. */
+  tooltip?: boolean | string;
 };
 
 /** One action: a 24px ghost button around a 16px icon. */
@@ -115,7 +116,8 @@ export function MessageAction({
       {children}
     </button>
   );
-  return tooltip ? <Tooltip label={label}>{button}</Tooltip> : button;
+  if (tooltip === false) return button;
+  return <Tooltip label={tooltip === true ? label : tooltip}>{button}</Tooltip>;
 }
 
 /**

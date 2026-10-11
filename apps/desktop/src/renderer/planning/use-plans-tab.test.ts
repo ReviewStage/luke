@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
@@ -18,9 +19,12 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { LIVE_STATUS } from "@sidecar/live";
+import { MOTION_DURATION_MS } from "@sidecar/surface";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { Option, Schema } from "effect";
-import { act, createElement, useState } from "react";
+import { Duration, Effect, Option, Schema } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
@@ -32,6 +36,8 @@ import {
   type VoiceCommand,
   type VoiceView,
 } from "#shared/messages/voice-view";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
@@ -76,6 +82,7 @@ interface Standing {
 function mount(
   initial: Partial<Standing> = {},
   answers: { [Kind in ActKind]?: () => Promise<ActResultFor<Kind>> } = {},
+  registry?: AtomRegistry,
 ) {
   const told: ActKind[] = [];
   /** The coding-agent acts, kept apart: they are the agents' own and no planning press tells them. */
@@ -139,8 +146,10 @@ function mount(
   }
   const container = document.createElement("div");
   document.body.append(container);
+  // The window's toast stands beside the tab, as the app draws it.
+  const surface = createElement(Fragment, null, createElement(Probe), createElement(ToastHost));
   act(() => {
-    createRoot(container).render(createElement(Probe));
+    createRoot(container).render(registry === undefined ? surface : onRegistry(registry, surface));
   });
   return {
     told,
@@ -162,6 +171,70 @@ afterEach(() => {
   document.body.innerHTML = "";
   window.localStorage.clear();
 });
+
+/** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
+const landed = Effect.promise(settle);
+
+/** Advances the clock the toast's hold waits on, then lets what fell due land. */
+const advance = (millis: number) =>
+  Effect.andThen(TestClock.adjust(Duration.millis(millis)), landed);
+
+/** What the window's toast says, while one stands. */
+function toast(): string | undefined {
+  return document.querySelector(".toast")?.textContent ?? undefined;
+}
+
+it.effect(
+  "Copy plan puts the plan drawn on the clipboard as Markdown and says so in a toast that leaves on its own, and a refused copy says so instead",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const reviewed = {
+        body: "# Teammate invitations\n\n## Open questions\n\n- Who can withdraw an invite?",
+        assumptions: [
+          { text: "Members and admins can both invite." },
+          { text: "An invite expires after 7 days." },
+        ],
+      };
+      const planning = {
+        ...OPEN,
+        document: { ...OPEN.document, plan: { ...PLAN, document: reviewed } },
+      };
+      const tab = mount({ shown: true, planning }, {}, yield* registryOnTestClock);
+
+      act(() => tab.control().copy.onPress());
+      yield* landed;
+      assert.deepEqual(clipboard.copied, [
+        `${reviewed.body}
+
+## Assumptions
+
+- Members and admins can both invite.
+- An invite expires after 7 days.
+`,
+      ]);
+      assert.equal(toast(), "Plan copied");
+      yield* advance(1_499);
+      assert.equal(toast(), "Plan copied");
+      // It fades out over the exit before it is gone.
+      yield* advance(1 + MOTION_DURATION_MS.EXIT);
+      assert.equal(toast(), undefined);
+
+      // An earlier copy's refusal landing after a later copy's says nothing.
+      clipboard.refuseNextLate();
+      act(() => tab.control().copy.onPress());
+      act(() => tab.control().copy.onPress());
+      yield* landed;
+      yield* landed;
+      assert.equal(toast(), "Plan copied");
+      yield* advance(1_500 + MOTION_DURATION_MS.EXIT);
+
+      clipboard.refuse(true);
+      act(() => tab.control().copy.onPress());
+      yield* landed;
+      assert.equal(toast(), "Could not copy to the clipboard. Try again.");
+    }),
+);
 
 test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {
   const tab = mount({ planning: OPEN });

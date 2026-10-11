@@ -67,7 +67,6 @@ const transcript = (run: { working: boolean; startedAt?: number; ended?: string 
     failed: false,
     onRetry: () => undefined,
     openGitHub: () => undefined,
-    copyText: () => Promise.resolve(),
     ...run,
   });
 

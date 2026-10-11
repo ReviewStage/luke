@@ -1010,18 +1010,11 @@ function TabContent({
         <CodePane
           shown={shownCode}
           calls={transcript.region.kind === TRANSCRIPT_REGION.READY ? transcript.region.calls : []}
-          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
           onOpenFile={onOpenFile}
         />
       );
     case SIDE_PANEL_TAB.TRANSCRIPT:
-      return (
-        <PlanTranscript
-          region={transcript.region}
-          onRetry={transcript.onRetry}
-          copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
-        />
-      );
+      return <PlanTranscript region={transcript.region} onRetry={transcript.onRetry} />;
     case SIDE_PANEL_TAB.WORK:
       return (
         <PlanWork

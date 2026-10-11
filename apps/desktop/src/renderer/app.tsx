@@ -26,6 +26,7 @@ import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settin
 import { SETTINGS_VIEW, type SettingsView } from "./settings-views";
 import { useSignInFaceCycle } from "./sign-in-gate";
 import { CAPTION_TONE } from "./strip-hold";
+import { ToastHost } from "./toast";
 import { fixtureUpdate } from "./update-row";
 import { useAppState } from "./use-app-state";
 import { useCaptionPresentation } from "./use-caption-presentation";
@@ -439,12 +440,15 @@ export function App(): React.JSX.Element {
         />
       </div>
       {/* A note to the people who make Luke, written in a dialog over the
-          window, and the thank-you after it lands. */}
+          window. */}
       <FeedbackDialog
         kind={feedbackKind}
         account={account}
         onClose={() => setFeedbackKind(undefined)}
       />
+      {/* The window's passing notice: the thank-you after a note lands, and
+          what came of a copy made from a menu. */}
+      <ToastHost />
 
       {/* Luke's words while he says them: one element in every state, always
           mounted so both edges of its fade can run. The inner stack is what

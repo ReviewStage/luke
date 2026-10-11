@@ -193,7 +193,6 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         return Promise.resolve();
       },
       openGitHub: ignore,
-      copyText: () => Promise.resolve(),
     });
   }
   const container = document.createElement("div");

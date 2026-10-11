@@ -21,6 +21,7 @@ import {
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
+import { useCopyToast } from "../copy-feedback";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import {
@@ -277,7 +278,6 @@ function AgentMessage({
   moving,
   components,
   delegation,
-  copyText,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -287,7 +287,6 @@ function AgentMessage({
   moving: boolean;
   components: Components;
   delegation: DelegationDoors | undefined;
-  copyText: (words: string) => Promise<void>;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} components={components} />;
@@ -297,7 +296,7 @@ function AgentMessage({
         <MessageContent>
           <TranscriptWords text={words} components={components} />
         </MessageContent>
-        <CopyMessageAction words={words} copyText={copyText} />
+        <CopyMessageAction words={words} />
       </Message>
     );
   }
@@ -308,7 +307,7 @@ function AgentMessage({
           {(part) => <AgentPartView part={part} components={components} delegation={delegation} />}
         </TranscriptRows>
       </MessageContent>
-      {words === "" ? null : <CopyMessageAction words={words} copyText={copyText} />}
+      {words === "" ? null : <CopyMessageAction words={words} />}
     </Message>
   );
 }
@@ -338,7 +337,6 @@ export function AgentTranscriptView({
   ended,
   onRetry,
   openGitHub,
-  copyText,
   footer,
 }: {
   messages: readonly CodingAgentMessage[];
@@ -359,8 +357,6 @@ export function AgentTranscriptView({
   onRetry: () => void;
   /** Opens a page of GitHub's in the browser, which is where the agent's pull request lives. */
   openGitHub: (url: string) => void;
-  /** Puts a turn's words on the clipboard; a refusal rejects. */
-  copyText: (words: string) => Promise<void>;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
 }): React.JSX.Element {
@@ -386,7 +382,6 @@ export function AgentTranscriptView({
               moving={working && index === messages.length - 1}
               components={components}
               delegation={delegation}
-              copyText={copyText}
             />
           ))}
           {working ? <WorkingLine startedAt={startedAt} /> : null}
@@ -446,7 +441,6 @@ export function AgentTabView({
   onStop,
   onOpenSubagent,
   openGitHub,
-  copyText,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -463,7 +457,6 @@ export function AgentTabView({
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
-  copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
@@ -482,7 +475,6 @@ export function AgentTabView({
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
         openGitHub={openGitHub}
-        copyText={copyText}
         footer={
           showsPublishedRow(agent.status, published) ? (
             <PublishedRow
@@ -523,7 +515,7 @@ export function AgentTab({
   /** Opens one of the agent's workers in a tab of the panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { tell } = useAct();
   const transcript = useAgentTranscript({
     agentId: agent.id,
     status: agent.status,
@@ -555,6 +547,7 @@ export function AgentTab({
     messages: transcript.messages,
     read: control.readPullRequest,
   });
+  const copyWithToast = useCopyToast();
   const openGitHub = (url: string) => tell(ACT_KIND.GITHUB_OPEN, { url });
   return (
     <AgentTabView
@@ -565,12 +558,11 @@ export function AgentTab({
       composer={composer}
       model={model}
       published={published}
-      doors={{ openGitHub, copy: (words) => tell(ACT_KIND.WINDOW_COPY_TEXT, { words }) }}
+      doors={{ openGitHub, copy: copyWithToast }}
       startedAt={shown ? agent.runStartedAt : undefined}
       onStop={() => control.onStop(agent.id)}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
-      copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
     />
   );
 }
@@ -602,7 +594,7 @@ export function AgentSubagentTab({
   /** A page said where the worker stands now. */
   onStatus: (status: CodingAgentStatus) => void;
 }): React.JSX.Element {
-  const { act, tell } = useAct();
+  const { tell } = useAct();
   const transcript = useAgentTranscript({
     agentId,
     callId,
@@ -625,7 +617,6 @@ export function AgentSubagentTab({
         ended={endLine(status, transcript.failure)}
         onRetry={transcript.onRetry}
         openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
-        copyText={(words) => act(ACT_KIND.WINDOW_COPY_TEXT, { words })}
       />
     </section>
   );

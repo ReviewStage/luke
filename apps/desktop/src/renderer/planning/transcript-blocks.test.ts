@@ -129,7 +129,6 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
     working: false,
     onRetry: () => undefined,
     openGitHub: () => undefined,
-    copyText: () => Promise.resolve(),
   });
   return [
     ["the Work tab", work],

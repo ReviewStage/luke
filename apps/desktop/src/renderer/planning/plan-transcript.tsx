@@ -61,13 +61,7 @@ function Speaker({ role }: { role: SpeakerTurn["role"] }): React.JSX.Element {
 }
 
 /** One turn: the speaker, each of their lines in a row as markdown, and a copy of them. */
-function TranscriptTurn({
-  turn,
-  copyText,
-}: {
-  turn: SpeakerTurn;
-  copyText: (words: string) => Promise<void>;
-}): React.JSX.Element {
+function TranscriptTurn({ turn }: { turn: SpeakerTurn }): React.JSX.Element {
   return (
     <Message from={turn.role} data-speaker={turn.role}>
       <Speaker role={turn.role} />
@@ -76,7 +70,7 @@ function TranscriptTurn({
           <TranscriptWords key={message.id} text={messageText(message)} />
         ))}
       </MessageContent>
-      <CopyMessageAction words={turnText(turn.messages)} copyText={copyText} />
+      <CopyMessageAction words={turnText(turn.messages)} />
     </Message>
   );
 }
@@ -85,11 +79,9 @@ function TranscriptTurn({
 function TranscriptCall({
   call,
   now,
-  copyText,
 }: {
   call: TranscriptCallRow;
   now: number;
-  copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   const ended = callEndedLine(call);
   return (
@@ -107,7 +99,7 @@ function TranscriptCall({
         {callHeading(call.startedAt, now)}
       </Checkpoint>
       {speakerTurns(call.messages).map((turn) => (
-        <TranscriptTurn key={turn.key} turn={turn} copyText={copyText} />
+        <TranscriptTurn key={turn.key} turn={turn} />
       ))}
       {ended === undefined ? null : (
         <TranscriptNote className="text-center">{ended}</TranscriptNote>
@@ -119,10 +111,8 @@ function TranscriptCall({
 /** The calls, kept scrolled to the newest line while the developer has not scrolled away from it. */
 function TranscriptCalls({
   region,
-  copyText,
 }: {
   region: Extract<TranscriptRegion, { kind: typeof TRANSCRIPT_REGION.READY }>;
-  copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   const now = Date.now();
   return (
@@ -133,7 +123,7 @@ function TranscriptCalls({
           <TranscriptNote>Earlier lines are not shown.</TranscriptNote>
         ) : null}
         {region.calls.map((call) => (
-          <TranscriptCall key={call.key} call={call} now={now} copyText={copyText} />
+          <TranscriptCall key={call.key} call={call} now={now} />
         ))}
       </ConversationContent>
       <ConversationScrollButton />
@@ -144,17 +134,14 @@ function TranscriptCalls({
 export function PlanTranscript({
   region,
   onRetry,
-  copyText,
 }: {
   region: TranscriptRegion;
   onRetry: () => void;
-  /** Puts a turn's words on the clipboard; a refusal rejects. */
-  copyText: (words: string) => Promise<void>;
 }): React.JSX.Element {
   return (
     <section className="plan-transcript ph-no-capture" aria-label="Transcript">
       {region.kind === TRANSCRIPT_REGION.READY ? (
-        <TranscriptCalls region={region} copyText={copyText} />
+        <TranscriptCalls region={region} />
       ) : (
         <ConversationEmptyState aria-busy={region.kind === TRANSCRIPT_REGION.READING}>
           {region.kind === TRANSCRIPT_REGION.READING ? (

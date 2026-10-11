@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   CHECK_SUMMARY,
   CODING_AGENT_BRIEF,
@@ -16,10 +17,13 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { Effect } from "effect";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PublishedChip, PublishedRow } from "./agent-published";
 import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
@@ -92,7 +96,6 @@ afterEach(() => {
 });
 
 const ignore = () => undefined;
-const copyNothing = () => Promise.resolve();
 
 /** Doors that lead nowhere. */
 const SHUT = { openGitHub: ignore, copy: ignore };
@@ -128,7 +131,7 @@ const AGENT = {
 /** The published chip mounted live, so its menu can be opened and its items pressed. */
 function mountedChip(
   published: CodingAgentPullRequestAnswer | undefined,
-  doors: { openGitHub: (url: string) => void; copy: (words: string) => void },
+  doors: { openGitHub: (url: string) => void; copy: (words: string, label: string) => void },
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
@@ -197,7 +200,6 @@ function tabMarkup(
       doors: SHUT,
       onStop: () => Promise.resolve(),
       openGitHub: ignore,
-      copyText: copyNothing,
     }),
   );
 }
@@ -216,7 +218,6 @@ function drawn(
       working,
       onRetry: ignore,
       openGitHub: ignore,
-      copyText: copyNothing,
     }),
   );
 }
@@ -225,24 +226,22 @@ function drawn(
 function mounted(
   messages: readonly CodingAgentMessage[],
   openGitHub: (url: string) => void = ignore,
-  copyText: (words: string) => Promise<void> = copyNothing,
+  registry?: AtomRegistry,
 ): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   act(() => {
-    root.render(
-      createElement(AgentTranscriptView, {
-        messages,
-        reading: false,
-        failed: false,
-        working: false,
-        onRetry: ignore,
-        openGitHub,
-        copyText,
-      }),
-    );
+    const view = createElement(AgentTranscriptView, {
+      messages,
+      reading: false,
+      failed: false,
+      working: false,
+      onRetry: ignore,
+      openGitHub,
+    });
+    root.render(registry === undefined ? view : onRegistry(registry, view));
   });
   return container;
 }
@@ -298,7 +297,6 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
         working: true,
         onRetry: ignore,
         openGitHub: ignore,
-        copyText: copyNothing,
       }),
     );
   });
@@ -349,9 +347,9 @@ function open(container: HTMLElement, selector: string): HTMLDetailsElement {
 function unfolded(
   messages: readonly CodingAgentMessage[],
   openGitHub: (url: string) => void = ignore,
-  copyText: (words: string) => Promise<void> = copyNothing,
+  registry?: AtomRegistry,
 ): HTMLElement {
-  const container = mounted(messages, openGitHub, copyText);
+  const container = mounted(messages, openGitHub, registry);
   for (;;) {
     const fold = container.querySelector<HTMLDetailsElement>("[data-turn-fold]:not([open])");
     if (fold === null) return container;
@@ -529,7 +527,6 @@ test("with nothing held the tab says the agent is starting, or how it ended befo
         ended,
         onRetry: ignore,
         openGitHub: ignore,
-        copyText: copyNothing,
       }),
     );
   assert.match(empty(false, false), /The agent is starting\./u);
@@ -611,42 +608,51 @@ test("an agent handed a task draws it as the developer's message, with no plan c
   assert.equal((planned.match(/data-plan-card=""/gu) ?? []).length, 1);
 });
 
-test("copying a turn hands the clipboard the agent's words alone, never its tool calls, and a turn of calls alone offers no copy", async () => {
-  const copied: string[] = [];
-  const container = unfolded([PLAN, TURN], ignore, (words) => {
-    copied.push(words);
-    return Promise.resolve();
-  });
-  const copy = container.querySelector<HTMLButtonElement>(
-    '.is-assistant button[aria-label="Copy"]',
-  );
-  assert.ok(copy);
-  await act(async () => {
-    copy.click();
-    await Promise.resolve();
-  });
-  assert.deepEqual(copied, [
-    "Opened [the pull request](https://github.com/acme/relay/pull/7). See [the docs](https://example.com/docs).",
-  ]);
-  assert.equal(copy.getAttribute("aria-label"), "Copied");
+it.effect(
+  "copying a turn hands the clipboard the agent's words alone, never its tool calls, and a turn of calls alone offers no copy",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const container = unfolded([PLAN, TURN], ignore, yield* registryOnTestClock);
+      const copy = container.querySelector<HTMLButtonElement>(
+        '.is-assistant button[aria-label="Copy"]',
+      );
+      assert.ok(copy);
+      act(() => copy.click());
+      yield* Effect.promise(() =>
+        act(async () => {
+          for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+        }),
+      );
+      assert.deepEqual(clipboard.copied, [
+        "Opened [the pull request](https://github.com/acme/relay/pull/7). See [the docs](https://example.com/docs).",
+      ]);
+      assert.equal(copy.querySelector('[role="status"]')?.textContent, "Copied");
 
-  const callsOnly = mounted([
-    {
-      id: "m-calls",
-      role: "assistant",
-      parts: [
+      const callsOnly = mounted([
         {
-          type: "tool-bash",
-          toolCallId: "call_only",
-          state: "output-available",
-          input: { command: "ls" },
-          output: { status: "completed", exitCode: 0, stdout: "a\n", stderr: "", truncated: false },
+          id: "m-calls",
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-bash",
+              toolCallId: "call_only",
+              state: "output-available",
+              input: { command: "ls" },
+              output: {
+                status: "completed",
+                exitCode: 0,
+                stdout: "a\n",
+                stderr: "",
+                truncated: false,
+              },
+            },
+          ],
         },
-      ],
-    },
-  ]);
-  assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
-});
+      ]);
+      assert.equal(callsOnly.querySelector('button[aria-label="Copy"]'), null);
+    }),
+);
 
 test("the box's foot wears the pull request's chip in its state's colour with the check dot, the branch's chip with no pull request, and nothing before the service has said; the chip's menu offers opening the pull request, copying the branch and its checkout command word for word, and the changes on GitHub", () => {
   const chip = (published: CodingAgentPullRequestAnswer | undefined) =>
@@ -663,10 +669,10 @@ test("the box's foot wears the pull request's chip in its state's colour with th
   assert.equal(chip(undefined), "");
 
   const opened: string[] = [];
-  const copied: string[] = [];
+  const copied: string[][] = [];
   const container = mountedChip(PUBLISHED, {
     openGitHub: (url) => opened.push(url),
-    copy: (words) => copied.push(words),
+    copy: (words, label) => copied.push([words, label]),
   });
   choose(container, "Open pull request");
   choose(container, "Copy branch name");
@@ -677,8 +683,11 @@ test("the box's foot wears the pull request's chip in its state's colour with th
     "https://github.com/acme/relay/pull/123/files",
   ]);
   assert.deepEqual(copied, [
-    "luke/teammate-invitations",
-    "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
+    ["luke/teammate-invitations", "Branch name copied"],
+    [
+      "git fetch origin luke/teammate-invitations && git switch luke/teammate-invitations",
+      "Checkout command copied",
+    ],
   ]);
   assert.deepEqual(menuItems(), [], "the menu closes on a choice");
 });
@@ -714,7 +723,6 @@ test("a finished transcript ends on the row summing the pull request up, whose O
       working: false,
       onRetry: ignore,
       openGitHub: ignore,
-      copyText: copyNothing,
       footer: createElement(PublishedRow, {
         pullRequest: PULL_REQUEST,
         turnUsage: { inputTokens: 1_000, outputTokens: 200, costUsd: 0.42 },

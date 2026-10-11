@@ -123,7 +123,6 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
       working: true,
       onRetry: () => undefined,
       openGitHub: () => undefined,
-      copyText: () => Promise.resolve(),
     }),
     createElement(PlanTranscript, {
       region: {
@@ -132,7 +131,6 @@ test("nothing inside the log sets a percentage height, and the log stacks its me
         calls: [{ key: "c1", startedAt: 1, live: true, lukeEnded: false, messages: CALL }],
       },
       onRetry: () => undefined,
-      copyText: () => Promise.resolve(),
     }),
     createElement(PlanWork, {
       callLive: true,
@@ -232,7 +230,6 @@ test("the card at the top of an agent's tab and a subagent's stands off the tab 
       working: false,
       onRetry: () => undefined,
       openGitHub: () => undefined,
-      copyText: () => Promise.resolve(),
     }),
     subagentTab(),
   ];

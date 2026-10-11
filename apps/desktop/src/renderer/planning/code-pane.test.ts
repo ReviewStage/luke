@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
+import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { CodePane } from "./code-pane";
 import { type CodeFeedCallSource, rangeLabel } from "./code-pane-model";
 
@@ -33,7 +38,6 @@ const CALLS: readonly CodeFeedCallSource[] = [
 ];
 
 const roots: Root[] = [];
-const copyNothing = () => Promise.resolve();
 const openNothing = () => undefined;
 
 afterEach(() => {
@@ -41,18 +45,41 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-/** The feed drawn into the document, redrawn by each `draw`. */
-function mounted(
-  copyText: (words: string) => Promise<void> = copyNothing,
-  onOpenFile: (ref: CodeRef) => void = openNothing,
-) {
+/** The feed drawn into the document, redrawn by each `draw`, its atoms on `registry` where one is given. */
+function mounted(onOpenFile: (ref: CodeRef) => void = openNothing, registry?: AtomRegistry) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (shown: readonly PlanCodeShowing[], calls = CALLS) =>
-    act(() => root.render(createElement(CodePane, { shown, calls, copyText, onOpenFile })));
+  const draw = (shown: readonly PlanCodeShowing[], calls = CALLS) => {
+    const pane = createElement(CodePane, { shown, calls, onOpenFile });
+    act(() => root.render(registry === undefined ? pane : onRegistry(registry, pane)));
+  };
   return { container, draw };
+}
+
+/** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
+const settle = Effect.promise(() =>
+  act(async () => {
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  }),
+);
+
+/** Advances the clock the copy's hold waits on, then lets what fell due land. */
+const advance = (millis: number) =>
+  Effect.andThen(TestClock.adjust(Duration.millis(millis)), settle);
+
+/** What a copy button says it came to, as a reader hears it, and the glyph it draws. */
+interface CopyAnswer {
+  said: string;
+  glyph: string | null;
+}
+
+function copyAnswer(button: HTMLElement): CopyAnswer {
+  return {
+    said: button.querySelector('[role="status"]')?.textContent ?? "",
+    glyph: button.querySelector(".copy-glyph")?.getAttribute("data-state") ?? null,
+  };
 }
 
 /** The feed's order as a reader meets it: each call's divider, marked where it stands live, and each card by its name. */
@@ -141,7 +168,6 @@ test("a card numbers its lines from where they sit in the file and lights the li
     createElement(CodePane, {
       shown: [showing("a", 2_000, code)],
       calls: CALLS,
-      copyText: copyNothing,
       onOpenFile: openNothing,
     }),
   );
@@ -188,7 +214,6 @@ test("a run carries its colour in both appearances, so the stylesheet picks one 
     createElement(CodePane, {
       shown: [showing("a", 2_000, code)],
       calls: CALLS,
-      copyText: copyNothing,
       onOpenFile: openNothing,
     }),
   );
@@ -197,28 +222,77 @@ test("a run carries its colour in both appearances, so the stylesheet picks one 
   assert.match(markup, /<span> function accept\(\) \{<\/span>/u);
 });
 
-test("a card's copy hands the clipboard the lines pointed at, and shows the check once the clipboard took them", async () => {
-  const copied: string[] = [];
-  const { container, draw } = mounted((words) => {
-    copied.push(words);
-    return Promise.resolve();
-  });
-  draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+it.effect(
+  "a card's copy hands the clipboard the lines pointed at and turns its glyph to a check for a moment, its name unchanged, a second press starting the moment again",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const { container, draw } = mounted(openNothing, yield* registryOnTestClock);
+      draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+      const copy = container.querySelector<HTMLButtonElement>('button[aria-label="Copy lines"]');
+      assert.ok(copy);
+      assert.deepEqual(copyAnswer(copy), { said: "", glyph: "idle" });
 
-  const copy = container.querySelector<HTMLButtonElement>('button[aria-label="Copy lines"]');
-  assert.ok(copy);
-  await act(async () => {
-    copy.click();
-    await Promise.resolve();
-  });
+      act(() => copy.click());
+      yield* settle;
+      assert.deepEqual(clipboard.copied, ["line 11\nline 12"]);
+      assert.deepEqual(copyAnswer(copy), { said: "Copied", glyph: "copied" });
+      assert.equal(copy.getAttribute("aria-label"), "Copy lines", "the button keeps its name");
 
-  assert.deepEqual(copied, ["line 11\nline 12"]);
-  assert.ok(container.querySelector('button[aria-label="Copied"]'));
-});
+      // Pressed again a second in, the check stands a whole moment from the second press.
+      yield* advance(1_000);
+      act(() => copy.click());
+      yield* settle;
+      yield* advance(1_000);
+      assert.deepEqual(copyAnswer(copy), { said: "Copied", glyph: "copied" });
+      yield* advance(200);
+      assert.deepEqual(copyAnswer(copy), { said: "", glyph: "idle" });
+    }),
+);
+
+it.effect(
+  "a card's copy the clipboard refused turns its glyph to an alert for the same moment, and back",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      clipboard.refuse(true);
+      const { container, draw } = mounted(openNothing, yield* registryOnTestClock);
+      draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+      const copy = container.querySelector<HTMLButtonElement>('button[aria-label="Copy lines"]');
+      assert.ok(copy);
+
+      act(() => copy.click());
+      yield* settle;
+      assert.deepEqual(clipboard.copied, []);
+      assert.deepEqual(copyAnswer(copy), { said: "Could not copy", glyph: "failed" });
+      yield* advance(1_200);
+      assert.deepEqual(copyAnswer(copy), { said: "", glyph: "idle" });
+    }),
+);
+
+it.effect(
+  "a card's copy shows its last press's answer, however late an earlier press's answer lands",
+  () =>
+    Effect.gen(function* () {
+      const clipboard = installClipboard();
+      const { container, draw } = mounted(openNothing, yield* registryOnTestClock);
+      draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
+      const copy = container.querySelector<HTMLButtonElement>('button[aria-label="Copy lines"]');
+      assert.ok(copy);
+
+      // The first press's refusal lands after the second press's copy.
+      clipboard.refuseNextLate();
+      act(() => copy.click());
+      act(() => copy.click());
+      yield* settle;
+      yield* settle;
+      assert.deepEqual(copyAnswer(copy), { said: "Copied", glyph: "copied" });
+    }),
+);
 
 test("a card's Open file and its path each open the whole file, its lines lit", () => {
   const opened: CodeRef[] = [];
-  const { container, draw } = mounted(copyNothing, (ref) => opened.push(ref));
+  const { container, draw } = mounted((ref) => opened.push(ref));
   draw([showing("a", 2_000, windowOf("src/invite.ts", 11, 12))]);
 
   act(() => container.querySelector<HTMLButtonElement>('button[aria-label="Open file"]')?.click());
