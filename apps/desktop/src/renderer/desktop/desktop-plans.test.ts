@@ -646,7 +646,7 @@ test("a worker's line opens the subagent's session in a tab of its own after the
   assert.equal(chosenTab(page), "Work");
 });
 
-test("a delegation's row in an agent's tab opens the worker in a tab of its own, which draws the task as a card and reads the worker's transcript under the agent and the call, following it while the worker runs; pressed again it is chosen rather than doubled, and its × closes it to the agent", async () => {
+test("a delegation's row in an agent's tab opens the worker in a tab of its own, which draws the task as a card and reads the worker's transcript under the agent and the call, following it while the worker runs with its thinking folded; pressed again it is chosen rather than doubled, and its × closes it to the agent", async () => {
   const agent: CodingAgentSummary = {
     id: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
     planId: PLAN.id,
@@ -672,6 +672,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
       id: "w-1",
       role: "assistant",
       parts: [
+        { type: "reasoning", text: "The routes live under one folder.", state: "done" },
         {
           type: "tool-bash",
           toolCallId: "wcall_1",
@@ -730,6 +731,12 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   assert.equal(content?.querySelectorAll("[data-plan-card]").length, 1, "the task drawn once");
   assert.ok(content?.querySelector('[data-call-id="wcall_1"]'), "each call on a line of its own");
   assert.equal(content?.querySelector("[data-turn-fold]"), null);
+  // The worker's thinking folds under one quiet line, as the Work tab's and the agent's do.
+  const thought = content?.querySelector<HTMLDetailsElement>(
+    "details:not([data-call-id]):not([data-plan-card]):not([data-subagent-row])",
+  );
+  assert.equal(thought?.querySelector("summary")?.textContent, "Thought");
+  assert.equal(thought?.open, false);
 
   act(() => tabNamed(page, "Claude Opus 5.5").click());
   await settle();
