@@ -2779,6 +2779,7 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
             file: {
               path: "src/roles.ts",
               repository: "acme/relay",
+              branch: "main",
               firstLine: 1,
               lineCount: 3,
               lines: [

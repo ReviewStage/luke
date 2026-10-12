@@ -4,6 +4,7 @@ import {
   type PlanFileRefusal,
 } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing, PlanFileShown } from "@sidecar/hosted/planning-view";
+import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 
 /**
@@ -20,9 +21,10 @@ export const FILE_READ = {
   FAILED: "failed",
 } as const;
 
-/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines. */
+/** The lines read so far, one run from `firstLine`, of a file of `lineCount` lines, read on `branch`. */
 export interface FileLines {
   readonly repository: string;
+  readonly branch: string;
   readonly lineCount: number;
   readonly firstLine: number;
   readonly lines: PlanCode["lines"];
@@ -86,6 +88,18 @@ export function snippetOf(
   return (opened ?? ofFile.at(-1))?.code;
 }
 
+/**
+ * The file's page on GitHub at the branch its lines were read on, its lit
+ * lines marked where it still has them: a file shortened past them, which
+ * the tab lights nothing of, opens at its top.
+ */
+export function fileUrl(held: FileLines, file: OpenFile): string {
+  const page = `https://github.com/${held.repository}/blob/${githubPath(held.branch)}/${githubPath(file.path)}`;
+  if (file.range === undefined || file.range.startLine > held.lineCount) return page;
+  const { startLine, endLine } = file.range;
+  return startLine === endLine ? `${page}#L${startLine}` : `${page}#L${startLine}-L${endLine}`;
+}
+
 /** Whether a refusal may pass with time, so the tab offers to read again. */
 export function refusalPasses(refusal: PlanFileRefusal): boolean {
   return refusal === PLAN_FILE_REFUSAL.UNAVAILABLE;
@@ -121,6 +135,7 @@ export function holdsLines(held: FileLines, startLine: number, endLine: number):
 export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   const window: FileLines = {
     repository: read.repository,
+    branch: read.branch,
     lineCount: read.lineCount,
     firstLine: read.firstLine,
     lines: read.lines,

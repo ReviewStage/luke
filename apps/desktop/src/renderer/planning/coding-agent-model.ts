@@ -798,16 +798,16 @@ export function checkoutCommand(branch: string): string {
   return `git fetch origin ${name} && git switch ${name}`;
 }
 
-/** A branch as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
-function branchPath(branch: string): string {
-  return encodeURIComponent(branch).replaceAll("%2F", "/");
+/** A branch or a file's path as a GitHub address spells it: every character encoded but the slashes GitHub reads as the name's own. */
+export function githubPath(name: string): string {
+  return encodeURIComponent(name).replaceAll("%2F", "/");
 }
 
 /** Where the chip opens on GitHub: the pull request, or the branch compared against the repository's default where there is no pull request yet. */
 export function publishedUrl(published: CodingAgentPullRequestAnswer): string | undefined {
   if (published.pullRequest !== null) return published.pullRequest.url;
   if (published.branch === null) return undefined;
-  return `https://github.com/${published.repository}/compare/${branchPath(published.branch)}?expand=1`;
+  return `https://github.com/${published.repository}/compare/${githubPath(published.branch)}?expand=1`;
 }
 
 /** The number as the chip and the row spell it. */

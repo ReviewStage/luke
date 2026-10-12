@@ -138,6 +138,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     file: {
       path: request.path,
       repository,
+      branch: confirmed.defaultBranch,
       firstLine: request.firstLine,
       lineCount: all.length,
       lines,
