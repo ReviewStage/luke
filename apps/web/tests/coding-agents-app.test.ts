@@ -2304,7 +2304,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(AGENT_MESSAGES, other, { id: agent.id })),
         );
-        assert.deepEqual(userTexts(read), [planMarkdown(SAVED)]);
+        assert.deepEqual(userTexts(read), [SNAPSHOT]);
 
         const sent = readAnswer(
           codingAgentAnswerSchema,
@@ -2317,7 +2317,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           [[`Bearer ${other}`, sessionId]],
         );
         assert.deepEqual(yield* transcript(), {
-          lines: [planMarkdown(SAVED), "Rename the subject line too."],
+          lines: [SNAPSHOT, "Rename the subject line too."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
       }),
@@ -2345,7 +2345,7 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           true,
         );
         assert.deepEqual(yield* transcript(), {
-          lines: [planMarkdown(SAVED), "Use seven days, not five."],
+          lines: [SNAPSHOT, "Use seven days, not five."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
 
