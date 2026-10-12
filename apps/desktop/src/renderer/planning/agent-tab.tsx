@@ -358,7 +358,7 @@ function AgentMessage({
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped)}>
+        <TranscriptRows rows={agentRows(message, moving, lead.grouped, newestTodos)}>
           {(part) => (
             <AgentPartView
               part={part}

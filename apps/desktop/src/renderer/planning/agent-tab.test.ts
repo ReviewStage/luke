@@ -546,6 +546,45 @@ test("an older list opens on a click onto the list as it stood, and folds once a
   assert.match(newest?.querySelector("summary")?.textContent ?? "", /2 of 2 done/u);
 });
 
+test("a finished turn folds its work but keeps the newest list out of the fold, open, ahead of its last words, and an older list stays folded away", () => {
+  const finished: CodingAgentMessage = {
+    ...LISTING,
+    parts: [...LISTING.parts, { type: "text", text: "The endpoint is next." }],
+  };
+  const container = document.createElement("div");
+  container.innerHTML = drawn([PLAN, finished]);
+  const newest = container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]');
+  assert.ok(newest);
+  assert.equal(newest.closest("[data-turn-fold]"), null);
+  assert.equal(newest.open, true);
+  assert.equal(container.querySelector('[data-call-id="call_t1"]'), null, "folded with the work");
+  const fold = container.querySelector("[data-turn-fold]");
+  assert.ok(fold);
+  assert.ok(fold.compareDocumentPosition(newest) & Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.match(
+    container.textContent ?? "",
+    /Updated the to-dos: 1 of 2 done.*The endpoint is next\./su,
+  );
+});
+
+test("while a newer write streams in before it reads as a list, the list standing stays open", () => {
+  const streaming: CodingAgentMessage = {
+    ...LISTING,
+    parts: [
+      ...LISTING.parts,
+      {
+        type: "tool-write_todos",
+        toolCallId: "call_t9",
+        state: "input-streaming",
+        input: { todos: [{ content: "Send the" }] },
+      },
+    ],
+  };
+  const container = mounted([PLAN, streaming]);
+  assert.equal(container.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open, true);
+  assert.equal(container.querySelector('[data-call-id="call_t9"][data-todos]'), null);
+});
+
 test("a to-do write whose input does not read as a list is drawn as a call's row with its JSON, not as a list", () => {
   const turn: CodingAgentMessage = {
     id: "m-unreadable",
