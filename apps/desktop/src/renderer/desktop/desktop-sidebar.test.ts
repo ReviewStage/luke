@@ -9,8 +9,8 @@ import {
 } from "@sidecar/credentials/snapshot";
 import {
   CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
   type CheckSummary,
+  CODING_AGENT_STATUS,
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
   type PullRequestState,
