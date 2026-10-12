@@ -12,16 +12,18 @@
 
 import { IDLE_PLANNING_VIEW } from "@sidecar/hosted/planning-view";
 import { ReturnIcon } from "@sidecar/panel";
-import { type AnimationEvent, useRef, useState } from "react";
+import { type AnimationEvent, type MouseEvent, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { VOICE_COMMAND, type VoiceCommand } from "#shared/messages/voice-view";
 import { type ActHandle, useAct } from "../act";
+import { useKeyboardModality } from "../keyboard-modality";
 import { CALL_CONTROL_LABEL, CallBar } from "../planning/planning-parts";
 import { Tooltip } from "../tooltip";
 import { useAppState } from "../use-app-state";
 import { useClipped } from "../use-clipped";
 import { useVoiceView } from "../use-voice-view";
 import { type CallCardModel, callCard } from "./call-card-model";
+import { useStaleHoverAfterMove } from "./window-pointer";
 
 /** The way back's name, for a reader and its hover: the plan it opens. */
 export function returnLabel(planName: string): string {
@@ -115,6 +117,11 @@ export function CallCard({
       <ReturnIcon />
     </button>
   );
+  // In the floating window a press on a button acts without taking focus,
+  // so the next drag never finds a button holding it.
+  const keepFocus = (event: MouseEvent<HTMLElement>) => {
+    if (event.target instanceof Element && event.target.closest("button")) event.preventDefault();
+  };
   const left = (event: AnimationEvent<HTMLElement>) => {
     if (leaving && event.target === event.currentTarget) onLeft?.();
   };
@@ -125,6 +132,7 @@ export function CallCard({
       data-surface={surface}
       data-leaving={leaving}
       onAnimationEnd={left}
+      onMouseDown={inWindow ? keepFocus : undefined}
     >
       <div className="call-card-head">
         <p className="call-card-title">{name}</p>
@@ -182,6 +190,8 @@ export function CallCardDock({
 
 /** The floating window's root: the card over the document it is handed. */
 export function CallWindowCard(): React.JSX.Element {
+  useKeyboardModality();
+  useStaleHoverAfterMove();
   const { tell } = useAct();
   const state = useAppState();
   const { view } = useVoiceView();

@@ -113,6 +113,18 @@ body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
   font-size: 12px;
 }
 
+/* A ring answers the keyboard alone here: a press never moves focus, and a
+   window that takes the keyboard back after a drag rings nothing. */
+html.call-window:not([data-keyboard="true"]) :focus-visible {
+  outline: none;
+}
+
+/* Moved under a still pointer, the buttons take no hover until the pointer
+   itself moves (`window-pointer.ts`). */
+html.call-window[data-pointer-stale="true"] .call-card button {
+  pointer-events: none;
+}
+
 /* Its buttons each answer one press; the rest of the card drags the window. */
 .call-card[data-surface="window"] button {
   -webkit-app-region: no-drag;

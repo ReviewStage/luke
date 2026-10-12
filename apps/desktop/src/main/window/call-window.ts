@@ -6,6 +6,7 @@ import fs from "node:fs";
 import type { RunMode } from "@sidecar/host";
 import { Option, Schema } from "effect";
 import { BrowserWindow, screen, type WebContents } from "electron";
+import { channels } from "#shared/bridge";
 import {
   CALL_WINDOW_BOUNDS,
   type CallWindowPoint,
@@ -130,6 +131,11 @@ export class CallWindow implements CallWindowSurface {
       if (window !== this.#window) return;
       this.#ready = true;
       if (this.#wanted) window.showInactive();
+    });
+    // The page is told the window is moving under the pointer, so a hover
+    // the drag left on a button is not drawn.
+    window.on("move", () => {
+      if (!window.isDestroyed()) window.webContents.send(channels.onCallWindowMoved);
     });
     window.on("moved", () => {
       const [left, top] = window.getPosition();

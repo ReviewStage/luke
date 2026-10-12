@@ -21,6 +21,7 @@ import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
+import { useKeyboardModality } from "./keyboard-modality";
 import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
@@ -277,27 +278,8 @@ export function App(): React.JSX.Element {
     fixtureSpeaking,
   });
 
-  // `:focus-visible` is a heuristic about how focus arrived, and here it guesses
-  // wrong: the window takes focus programmatically, which the engine can
-  // read as keyboard modality and ring a control after a plain press — most reliably the first time the window is ever focused. Modality
-  // is tracked outright instead, so a ring is drawn only once someone has
-  // actually moved focus with the keyboard.
-  useEffect(() => {
-    const root = document.documentElement;
-    const keyboardMoved = (event: KeyboardEvent) => {
-      if (event.key === "Tab" || event.key.startsWith("Arrow")) root.dataset.keyboard = "true";
-    };
-    const pointerUsed = () => {
-      delete root.dataset.keyboard;
-    };
-    // Capture: the flag has to be right before anything reacts to the event.
-    window.addEventListener("keydown", keyboardMoved, true);
-    window.addEventListener("pointerdown", pointerUsed, true);
-    return () => {
-      window.removeEventListener("keydown", keyboardMoved, true);
-      window.removeEventListener("pointerdown", pointerUsed, true);
-    };
-  }, []);
+  // Rings and keyboard-only hints follow focus the keyboard actually moved.
+  useKeyboardModality();
 
   /**
    * The report that the window has painted, made once, on the first snapshot
