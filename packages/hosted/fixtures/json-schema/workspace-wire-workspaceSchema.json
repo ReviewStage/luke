@@ -11,12 +11,21 @@
     },
     "personal": {
       "type": "boolean"
+    },
+    "role": {
+      "type": "string",
+      "enum": [
+        "owner",
+        "admin",
+        "member"
+      ]
     }
   },
   "required": [
     "id",
     "name",
-    "personal"
+    "personal",
+    "role"
   ],
   "additionalProperties": false
 }

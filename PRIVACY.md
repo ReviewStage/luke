@@ -255,7 +255,13 @@ counts — on an admin page of our site that only an account we have marked as a
 administrator can open; nothing you type, say, or run in a session appears on
 it. Every account also has a personal workspace on our service, a record
 named with your name and holding you as its owner; it goes when you delete
-your account. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
+your account. When your GitHub account reaches an installation of the Luke
+GitHub App that has no workspace yet, the service makes one for it, named for
+the GitHub account it is installed on and holding you as its owner, and keeps
+beside it GitHub's ids for the installation and that account, its login,
+whether it is a user or an organization, and whether the installation is
+active, suspended, or removed. An installation another Luke account already
+has a workspace for is offered to you to join and never joined for you. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result; and the turn's model, token counts, and the ids of OpenAI's

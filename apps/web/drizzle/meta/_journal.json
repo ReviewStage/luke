@@ -631,6 +631,13 @@
       "when": 1791435000000,
       "tag": "0090_plan_organization",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791460000000,
+      "tag": "0091_github_installation",
+      "breakpoints": true
     }
   ]
 }

@@ -67,8 +67,10 @@ export const HOSTED_SERVICE_PATH = {
   GITHUB_INSTALLED: "/api/github/installed",
   /**
    * The workspaces the account is a member of, its personal one first and
-   * the rest by name (GET); the first read makes the personal one.
-   * `workspace-wire.ts` declares the answer.
+   * the rest by name, and the ones of a GitHub App installation it may join
+   * (GET); a read makes the personal one and one per installation the
+   * account's GitHub reaches that has none yet. `workspace-wire.ts`
+   * declares the answer.
    */
   WORKSPACES: "/api/workspaces",
 } as const;

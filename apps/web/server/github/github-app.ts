@@ -52,6 +52,10 @@ import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
 import { account } from "../db/auth-schema.js";
+import {
+  GITHUB_ACCOUNT_TYPE,
+  type GitHubAccountType,
+} from "../db/github-installation-vocabulary.js";
 import { db } from "../db/query.js";
 import { InstantColumnSchema } from "../hosted/store/database.js";
 import type { StoreFailure } from "../hosted/store-failure.js";
@@ -143,6 +147,9 @@ const BOT_LOGIN_SUFFIX = "[bot]";
  */
 const PAGING = { PER_PAGE: 100, MAX_PAGES: 50 } as const;
 
+/** The kinds of account an installation's workspace is made for; an enterprise's is none of them. */
+const ACCOUNT_TYPES: readonly GitHubAccountType[] = Object.values(GITHUB_ACCOUNT_TYPE);
+
 export interface GitHubAppSettings {
   /** The App's numeric id, which is the JWT's issuer. */
   readonly appId: string;
@@ -161,6 +168,10 @@ interface GitHubInstallation {
   readonly id: number;
   /** The user or organization the App is installed on; absent for an enterprise install, which has no login. */
   readonly accountLogin: string | undefined;
+  /** GitHub's own id for that account, which a workspace is keyed on; absent where the login is. */
+  readonly accountId: number | undefined;
+  /** Whether that account is a user or an organization; absent for any other kind. */
+  readonly accountType: GitHubAccountType | undefined;
   readonly repositorySelection: GitHubRepositorySelection;
   /** Whether the installation grants the App every permission that reads a pull request's CI (`CI_READ_PERMISSIONS`). */
   readonly ciReadable: boolean;
@@ -396,7 +407,13 @@ interface ReadySettings extends GitHubAppSettings {
 
 const InstallationSchema = Schema.Struct({
   id: Schema.Number,
-  account: Schema.NullOr(Schema.Struct({ login: Schema.optional(Schema.String) })),
+  account: Schema.NullOr(
+    Schema.Struct({
+      login: Schema.optional(Schema.String),
+      id: Schema.optional(Schema.Number),
+      type: Schema.optional(Schema.String),
+    }),
+  ),
   repository_selection: Schema.Literals(Object.values(GITHUB_REPOSITORY_SELECTION)),
   /** What the installation grants the App, by permission name; read for the CI permissions alone. */
   permissions: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -530,6 +547,8 @@ function installationOf(record: InstallationRecord): GitHubInstallation {
   return {
     id: record.id,
     accountLogin: record.account?.login,
+    accountId: record.account?.id,
+    accountType: ACCOUNT_TYPES.find((type) => type === record.account?.type),
     repositorySelection: record.repository_selection,
     ciReadable: Object.keys(CI_READ_PERMISSIONS).every((permission) => permission in granted),
   };

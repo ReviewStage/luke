@@ -206,6 +206,7 @@ const EFFECT_MODULE_SCHEMAS = {
   } satisfies RecordedEffectJsonSchemas<typeof transcriptWire>,
   "workspace-wire": {
     workspaceSchema: workspaceWire.workspaceSchema,
+    availableWorkspaceSchema: workspaceWire.availableWorkspaceSchema,
     workspacesAnswerSchema: workspaceWire.workspacesAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof workspaceWire>,
 } as const;

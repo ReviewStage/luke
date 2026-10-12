@@ -16,19 +16,48 @@
           },
           "personal": {
             "type": "boolean"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "admin",
+              "member"
+            ]
           }
         },
         "required": [
           "id",
           "name",
-          "personal"
+          "personal",
+          "role"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "available": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "installationId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "installationId",
+          "name"
         ],
         "additionalProperties": false
       }
     }
   },
   "required": [
-    "workspaces"
+    "workspaces",
+    "available"
   ],
   "additionalProperties": false
 }

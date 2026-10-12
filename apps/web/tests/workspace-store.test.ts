@@ -67,7 +67,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
         assert.deepEqual(second, first);
         assert.deepEqual(yield* personalWorkspaceOf(userId), first);
         assert.deepEqual(yield* listWorkspaces(userId), [
-          { id: first.value, name: "Ada Lovelace", personal: true },
+          { id: first.value, name: "Ada Lovelace", personal: true, role: WORKSPACE_ROLE.OWNER },
         ]);
       }),
   );
@@ -87,7 +87,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
 
       assert.deepEqual(ensured, Option.some(raced.id));
       assert.deepEqual(yield* listWorkspaces(userId), [
-        { id: raced.id, name: "Grace Hopper", personal: true },
+        { id: raced.id, name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
       ]);
     }),
   );
@@ -106,14 +106,19 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
         const acme = yield* openSharedWorkspace(seams, "Acme", teammate, [owner]);
 
         assert.deepEqual(yield* listWorkspaces(owner), [
-          { id: ownerPersonal.value, name: "Owner", personal: true },
-          { id: acme, name: "Acme", personal: false },
-          { id: zeta, name: "Zeta", personal: false },
+          { id: ownerPersonal.value, name: "Owner", personal: true, role: WORKSPACE_ROLE.OWNER },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.MEMBER },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.OWNER },
         ]);
         assert.deepEqual(yield* listWorkspaces(teammate), [
-          { id: teammatePersonal.value, name: "Teammate", personal: true },
-          { id: acme, name: "Acme", personal: false },
-          { id: zeta, name: "Zeta", personal: false },
+          {
+            id: teammatePersonal.value,
+            name: "Teammate",
+            personal: true,
+            role: WORKSPACE_ROLE.OWNER,
+          },
+          { id: acme, name: "Acme", personal: false, role: WORKSPACE_ROLE.OWNER },
+          { id: zeta, name: "Zeta", personal: false, role: WORKSPACE_ROLE.MEMBER },
         ]);
       }),
   );
@@ -166,7 +171,7 @@ it.effect(
           [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
         );
         assert.deepEqual(yield* listWorkspaces(grace), [
-          { id: raced.id, name: "Grace Hopper", personal: true },
+          { id: raced.id, name: "Grace Hopper", personal: true, role: WORKSPACE_ROLE.OWNER },
         ]);
       }).pipe(Effect.provide(database));
     }),

@@ -1,0 +1,29 @@
+import { bigint, pgTable, text } from "drizzle-orm/pg-core";
+import { organization } from "./auth-schema.js";
+import type {
+  GitHubAccountType,
+  GitHubInstallationStatus,
+} from "./github-installation-vocabulary.js";
+import { instant } from "./instant.js";
+
+/**
+ * The GitHub App installation a workspace stands for: one Better Auth
+ * `organization` per installation, keyed on GitHub's own numeric ids for the
+ * installation and the account it is on, never the login, which an account
+ * can change. The login and the account's kind are refreshed by each sync
+ * that reaches the installation; the status is the installation webhook's,
+ * and a workspace whose installation is not active is hidden rather than
+ * deleted. The row leaves with its workspace.
+ */
+export const githubInstallation = pgTable("github_installation", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  installationId: bigint("installation_id", { mode: "number" }).notNull().unique(),
+  accountId: bigint("account_id", { mode: "number" }).notNull().unique(),
+  accountLogin: text("account_login").notNull(),
+  accountType: text("account_type").$type<GitHubAccountType>().notNull(),
+  status: text("status").$type<GitHubInstallationStatus>().notNull(),
+  createdAt: instant("created_at").notNull(),
+  updatedAt: instant("updated_at").notNull(),
+});
