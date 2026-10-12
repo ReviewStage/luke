@@ -168,6 +168,19 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_SHOWN,
     payload: { agentId: null },
   },
+  [ACT_KIND.CODING_AGENTS_INBOX]: {
+    kind: ACT_KIND.CODING_AGENTS_INBOX,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", after: "0" },
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: {
+    kind: ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
+    payload: {
+      itemId: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
+      revision: 1,
+      reply: "approved",
+      clientKey: "7f9e2c1d-4b3a-4c5d-9e8f-0a1b2c3d4e5f",
+    },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "end-call" },

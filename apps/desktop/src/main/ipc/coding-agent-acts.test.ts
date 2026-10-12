@@ -9,6 +9,7 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_KIND, INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@sidecar/hosted/inbox-wire";
 import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
@@ -39,6 +40,19 @@ const STARTED: CodingAgentAgentAnswer = {
     status: CODING_AGENT_STATUS.STARTING,
     turnId: null,
   },
+};
+
+const ITEM: InboxItem = {
+  id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
+  agentId: AGENT_ID,
+  key: "push-access",
+  revision: 2,
+  kind: INBOX_KIND.APPROVAL,
+  title: "Push to the release branch?",
+  needsReply: true,
+  status: INBOX_STATUS.OPEN,
+  postedAt: 1_800_000_000_000,
+  updatedAt: 1_800_000_060_000,
 };
 
 function fixture() {
@@ -159,6 +173,16 @@ function fixture() {
         Effect.sync(() => {
           asked.push(`remove:${provider}`);
           return { keys: [] };
+        }),
+      codingAgentInbox: ({ planId, after }) =>
+        Effect.sync(() => {
+          asked.push(`inbox:${planId}:${after}`);
+          return { items: [ITEM], cursor: "7" };
+        }),
+      codingAgentInboxAnswer: ({ itemId, revision, reply, clientKey }) =>
+        Effect.sync(() => {
+          asked.push(`answer:${itemId}:${revision}:${reply}:${clientKey}`);
+          return { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true };
         }),
     },
   });
@@ -376,5 +400,52 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel's inbox read carries the plan and its cursor, and an answer the item, its revision, and the answer's key; the voice window is refused both",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked, noted } = fixture();
+
+      const read = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX, payload: { planId: PLAN_ID, after: "0" } },
+        PANEL,
+      );
+      const answered = yield* router.performAct(
+        {
+          kind: ACT_KIND.CODING_AGENTS_INBOX_ANSWER,
+          payload: {
+            itemId: ITEM.id,
+            revision: 2,
+            reply: INBOX_REPLY.APPROVED,
+            clientKey: "answer-1",
+          },
+        },
+        PANEL,
+      );
+      const refused = yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_INBOX, payload: { planId: PLAN_ID, after: "0" } },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { items: [ITEM], cursor: "7" },
+      });
+      assert.deepEqual(answered, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { item: { ...ITEM, status: INBOX_STATUS.ANSWERED }, taken: true },
+      });
+      assert.deepEqual(refused, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.CODING_AGENTS_INBOX].refusal,
+      });
+      assert.deepEqual(asked, [
+        `inbox:${PLAN_ID}:0`,
+        `answer:${ITEM.id}:2:${INBOX_REPLY.APPROVED}:answer-1`,
+      ]);
+      assert.deepEqual(noted, []);
     }),
 );

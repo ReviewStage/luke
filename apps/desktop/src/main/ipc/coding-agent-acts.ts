@@ -3,6 +3,10 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentInboxAnsweredView,
+  type CodingAgentInboxAnswerParams,
+  type CodingAgentInboxAnswerView,
+  type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -32,7 +36,9 @@ import type { AgentNotices } from "../agent-notices";
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
  * (`main/agent-notices.ts`), which hold where each agent stands so an end
- * the panel is not looking at is still announced. Nothing else is held here.
+ * the panel is not looking at is still announced. The plan's inbox is
+ * answered to the panel alone: no notice watches it. Nothing else is held
+ * here.
  *
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
@@ -58,6 +64,10 @@ export interface CodingAgentActsDependencies {
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+    codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
+    codingAgentInboxAnswer(
+      params: CodingAgentInboxAnswerParams,
+    ): Effect.Effect<CodingAgentInboxAnsweredView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -88,7 +98,9 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
-  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE;
+  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
+  | typeof ACT_KIND.CODING_AGENTS_INBOX
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -189,6 +201,14 @@ export function codingAgentActRows(
     [ACT_KIND.PROVIDER_KEYS_REMOVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_REMOVE, sender);
       return host.providerKeyRemove(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX, sender);
+      return host.codingAgentInbox(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);
+      return host.codingAgentInboxAnswer(params);
     },
   };
 }

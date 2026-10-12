@@ -43,6 +43,12 @@ import {
  * no tab for: a plan opened on an agent shows its document while the list
  * is on its way, and stays on it where the read fails.
  *
+ * Once the plan has an agent, its Inbox tab stands second, after the
+ * plan's: everything the plan's agents need of the developer, answered in
+ * place (`inbox-board.tsx`). Like the plan's, it never closes and never
+ * moves, since what an agent posts must have somewhere to land whichever
+ * agents' tabs are open.
+ *
  * The agents' tabs are dragged or moved from the keyboard among
  * themselves and the draft's, and the plan keeps the order from then on: a
  * tab closed and opened again stands where it stood, and one never moved
@@ -58,16 +64,26 @@ import {
  * the column. ⌘T's ask for the column's "+" is a moment's, kept nowhere.
  */
 
-/** The column's own tab, which names the plan: its one word, beside the agents' and the draft's objects. */
+/**
+ * The column's own tabs, each one word beside the agents' and the draft's
+ * objects: the plan's, and its Inbox, which stands after it once the plan
+ * has an agent to post to it, since only an agent posts.
+ */
 export const MAIN_TAB = {
   PLAN: "plan",
+  INBOX: "inbox",
 } as const;
 
-/** The plan's own tab. */
-type PlanStripTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
+/** The plan's own tab, or its Inbox. */
+type FixedMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
 
-/** A tab of the plan's column: the plan's own, one agent's, or the draft agent's. */
-export type MainTab = PlanStripTab | AgentStripTab | DraftStripTab;
+/** A tab of the plan's column: the plan's own, its Inbox, one agent's, or the draft agent's. */
+export type MainTab = FixedMainTab | AgentStripTab | DraftStripTab;
+
+/** Whether a tab is one of the column's own, which never closes and never moves. */
+function isFixedTab(tab: MainTab): tab is FixedMainTab {
+  return tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX;
+}
 
 /** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.mainTabs";
@@ -98,7 +114,7 @@ const PLANS_KEPT = 500;
 
 /** A tab as it is kept across a launch: the plan's, or an agent's; a draft's is kept nowhere. */
 const keptTabSchema = Schema.Union([
-  Schema.Literal(MAIN_TAB.PLAN),
+  Schema.Literals(Object.values(MAIN_TAB)),
   Schema.Struct({ agent: Schema.String }),
 ]);
 
@@ -161,7 +177,7 @@ const NO_TABS: readonly MainTab[] = [];
 
 /** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: the plan's first, then the open agents' and the draft's. */
+  /** The column's tabs in the strip's order: the plan's first, its Inbox where it has an agent, then the open agents' and the draft's. */
   tabs: readonly MainTab[];
   /** The tab shown. */
   tab: MainTab;
@@ -173,7 +189,7 @@ export interface MainTabsControl {
   onChoose: (tab: MainTab) => void;
   /** Shows the agent's tab on the plan given, as `onChoose` does on the open plan: what a pin or a notification asks, the plan opened beside it. */
   onShow: (planId: string, tab: AgentStripTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was. The plan's tab never closes. */
+  /** Closes the tab, and only the view: an agent goes on as it was. The plan's tab and its Inbox never close. */
   onClose: (tab: MainTab) => void;
   /** Moves an agent's or the draft's tab to the place `to` among them, after the plan's, leaving the chosen one chosen. */
   onMove: (tab: MainTab, to: number) => void;
@@ -222,12 +238,17 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
   return agents?.filter((agent) => !held.closedAgents.includes(agent));
 }
 
-/** The strip in its order: the plan's tab, then the open agents' and the draft's in the plan's order. */
+/**
+ * The strip in its order: the plan's tab, its Inbox where it has an
+ * agent, open or closed, then the open agents' and the draft's in the
+ * plan's order.
+ */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
   const order = choicesOn(held, drawn.planId).order ?? NO_TABS;
-  return [MAIN_TAB.PLAN, ...inPlanOrder([...agents, ...draft], order, (tab) => tab)];
+  const inbox = (drawn.agents?.length ?? 0) === 0 ? [] : [MAIN_TAB.INBOX];
+  return [MAIN_TAB.PLAN, ...inbox, ...inPlanOrder([...agents, ...draft], order, (tab) => tab)];
 }
 
 /** Whether the tab stands in the plan's strip now. */
@@ -278,7 +299,7 @@ function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
  * own, and closing a draft's leaves the draft its owner's to let go.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
-  if (tab === MAIN_TAB.PLAN) return held;
+  if (isFixedTab(tab)) return held;
   const closed = isAgentTab(tab)
     ? { ...held, closedAgents: [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT) }
     : held;
@@ -293,9 +314,9 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
   return withViewed(forgotten, drawn.planId, [replacement]);
 }
 
-/** The state with the tab moved to `to` among the tabs after the plan's, kept as the plan's order (`movedOrder`). */
+/** The state with the tab moved to `to` among the tabs after the column's own, kept as the plan's order (`movedOrder`). */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
-  const movable = stripOf(held, drawn).filter((each) => each !== MAIN_TAB.PLAN);
+  const movable = stripOf(held, drawn).filter((each) => !isFixedTab(each));
   const was = choicesOn(held, drawn.planId).order ?? NO_TABS;
   const order = movedOrder(was, movable, tab, to);
   return order === undefined

@@ -31,6 +31,7 @@ import type { MessageSender } from "./use-agent-composer";
 import type { ChoiceWriter } from "./use-agent-model";
 import type { PullRequestReader } from "./use-agent-pull-request";
 import type { TranscriptReader } from "./use-agent-transcript";
+import type { InboxAnswerer, InboxReader } from "./use-plan-inbox";
 
 /**
  * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a task, the Stop, a message to one, a change of one's model, and the models the menus offer.
@@ -141,6 +142,10 @@ export interface CodingAgentsControl {
   readTranscript: TranscriptReader;
   /** One read of what an agent published, as its tab asks it. */
   readPullRequest: PullRequestReader;
+  /** One read of a plan's inbox past a cursor, as the Inbox tab's loop asks it. */
+  readInbox: InboxReader;
+  /** One answer to an inbox item, as a card sends it. */
+  answerInbox: InboxAnswerer;
 }
 
 /** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
@@ -518,6 +523,16 @@ export function useCodingAgents(input: {
     [act],
   );
 
+  const readInbox = useCallback<InboxReader>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX, params),
+    [act],
+  );
+
+  const answerInbox = useCallback<InboxAnswerer>(
+    (params) => act(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, params),
+    [act],
+  );
+
   return {
     agents,
     agentIds: agents?.map((agent) => agent.id),
@@ -549,5 +564,7 @@ export function useCodingAgents(input: {
     onTitle,
     readTranscript,
     readPullRequest,
+    readInbox,
+    answerInbox,
   };
 }

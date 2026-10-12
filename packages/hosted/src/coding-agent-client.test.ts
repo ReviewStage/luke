@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { fakeCloudApi, HTTP_STATUS } from "@sidecar/wire/testing";
-import { Effect } from "effect";
+import {
+  fakeCloudApi,
+  fakeHttpClientLayer,
+  HTTP_STATUS,
+  jsonResponse,
+} from "@sidecar/wire/testing";
+import { Deferred, Duration, Effect, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import { HostedCodingAgentClient } from "./coding-agent-client.js";
 import { CODING_AGENT_CALL_FAILURE } from "./coding-agent-view.js";
 import {
@@ -9,6 +15,13 @@ import {
   CODING_AGENT_CURSOR_START,
   CODING_AGENT_STATUS,
 } from "./coding-agent-wire.js";
+import {
+  INBOX_BOUNDS,
+  INBOX_CURSOR_START,
+  INBOX_KIND,
+  INBOX_REPLY,
+  INBOX_STATUS,
+} from "./inbox-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -30,6 +43,25 @@ const AGENT = {
   status: CODING_AGENT_STATUS.RUNNING,
   turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
 };
+
+const ITEM_ID = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
+
+/** One open item of the plan's inbox, as the service answers it. */
+const ITEM = {
+  id: ITEM_ID,
+  agentId: AGENT_ID,
+  key: "push-access",
+  revision: 2,
+  kind: INBOX_KIND.APPROVAL,
+  title: "Push to the release branch?",
+  needsReply: true,
+  status: INBOX_STATUS.OPEN,
+  postedAt: 1_800_000_000_000,
+  updatedAt: 1_800_000_060_000,
+};
+
+/** An answer approving that item at the revision the window drew. */
+const APPROVAL = { revision: 2, reply: INBOX_REPLY.APPROVED, clientKey: "answer-1" };
 
 const CHOICE = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
 
@@ -477,6 +509,132 @@ it.effect("a provider key the service would refuse by shape travels nowhere", ()
     );
 
     assert.deepEqual(refused, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    assert.deepEqual(api.requests(), []);
+  }),
+);
+
+it.effect(
+  "reads a plan's inbox past the cursor at the plan's inbox address, and a plan the service does not find reads as not found",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/inbox`]: { answer: () => ({ items: [ITEM], cursor: "7" }) },
+      });
+      const gone = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/inbox`]: {
+          answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND }),
+          status: HTTP_STATUS.NOT_FOUND,
+        },
+      });
+
+      const read = yield* Effect.provide(client().inbox(PLAN_ID, INBOX_CURSOR_START), api.layer);
+      const missing = yield* Effect.provide(client().inbox(PLAN_ID, "7"), gone.layer);
+
+      assert.deepEqual(read, { items: [ITEM], cursor: "7" });
+      assert.equal(
+        api.requests()[0]?.url,
+        `https://tryluke.dev/api/plans/${PLAN_ID}/inbox?after=${INBOX_CURSOR_START}`,
+      );
+      assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+    }),
+);
+
+it.effect(
+  "an inbox read the service holds past an ordinary call's deadline is still read when it answers",
+  () =>
+    Effect.gen(function* () {
+      const asked = yield* Deferred.make<void>();
+      let answer: (response: Response) => void = () => undefined;
+      const held = fakeHttpClientLayer(() => {
+        Deferred.doneUnsafe(asked, Effect.void);
+        return new Promise<Response>((resolve) => {
+          answer = resolve;
+        });
+      });
+
+      const reading = yield* Effect.forkChild(
+        Effect.provide(client().inbox(PLAN_ID, INBOX_CURSOR_START), held),
+      );
+      yield* Deferred.await(asked);
+      // The service holds the read while nothing changed: past the account call's usual deadline.
+      yield* TestClock.adjust(Duration.seconds(20));
+      answer(jsonResponse({ items: [ITEM], cursor: "8" }));
+      const read = yield* Fiber.join(reading);
+
+      assert.deepEqual(read, { items: [ITEM], cursor: "8" });
+    }),
+);
+
+it.effect(
+  "answers an inbox item at its own address with the answer as sent, and reads each refusal a message names as its own failure",
+  () =>
+    Effect.gen(function* () {
+      const answered = {
+        item: {
+          ...ITEM,
+          revision: 3,
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: "approved" },
+        },
+        taken: true,
+      };
+      const api = fakeCloudApi({ [`POST /api/inbox/${ITEM_ID}`]: { answer: () => answered } });
+
+      const answer = yield* Effect.provide(client().answerInbox(ITEM_ID, APPROVAL), api.layer);
+      assert.deepEqual(answer, answered);
+      assert.deepEqual(JSON.parse(api.requests()[0]?.body ?? "{}"), APPROVAL);
+
+      const refusals = [
+        [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_CALL_FAILURE.NOT_FOUND],
+        [HOSTED_API_ERROR.MESSAGE_TOO_LONG, CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG],
+        [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY],
+        [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_CALL_FAILURE.AGENT_RETIRED],
+        [
+          HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE,
+          CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
+        ],
+        [
+          HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED,
+          CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+        ],
+        [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED],
+        [HOSTED_API_ERROR.INVALID_REQUEST, CODING_AGENT_CALL_FAILURE.UNANSWERED],
+      ] as const;
+      for (const [error, failure] of refusals) {
+        const refusing = fakeCloudApi({
+          [`POST /api/inbox/${ITEM_ID}`]: {
+            status: HTTP_STATUS.CONFLICT,
+            answer: () => ({ error }),
+          },
+        });
+        const refused = yield* Effect.provide(
+          client().answerInbox(ITEM_ID, APPROVAL),
+          refusing.layer,
+        );
+        assert.deepEqual(refused, { failure }, error);
+      }
+    }),
+);
+
+it.effect("an inbox answer the service would refuse by shape travels nowhere", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`POST /api/inbox/${ITEM_ID}`]: { answer: () => ({ item: ITEM, taken: true }) },
+    });
+
+    const refused = [
+      { ...APPROVAL, clientKey: "" },
+      { ...APPROVAL, revision: -1 },
+      {
+        ...APPROVAL,
+        reply: INBOX_REPLY.ANSWERED,
+        note: "x".repeat(INBOX_BOUNDS.MAX_NOTE_CHARS + 1),
+      },
+    ];
+    for (const request of refused) {
+      const answer = yield* Effect.provide(client().answerInbox(ITEM_ID, request), api.layer);
+      assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    }
     assert.deepEqual(api.requests(), []);
   }),
 );

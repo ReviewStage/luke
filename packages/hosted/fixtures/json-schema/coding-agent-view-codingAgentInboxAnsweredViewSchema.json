@@ -1,0 +1,164 @@
+{
+  "anyOf": [
+    {
+      "type": "object",
+      "properties": {
+        "item": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "agentId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 36
+            },
+            "key": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "number",
+              "minimum": 0
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "choice",
+                "approval",
+                "question",
+                "task"
+              ]
+            },
+            "title": {
+              "type": "string"
+            },
+            "details": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160
+                  },
+                  "detail": {
+                    "type": "string",
+                    "maxLength": 600
+                  }
+                },
+                "required": [
+                  "label"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "recommended": {
+              "type": "string"
+            },
+            "needsReply": {
+              "type": "boolean"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "open",
+                "answered",
+                "closed"
+              ]
+            },
+            "answer": {
+              "type": "object",
+              "properties": {
+                "reply": {
+                  "type": "string",
+                  "enum": [
+                    "chose",
+                    "approved",
+                    "declined",
+                    "answered",
+                    "done",
+                    "not-done"
+                  ]
+                },
+                "choice": {
+                  "type": "string"
+                },
+                "note": {
+                  "type": "string",
+                  "maxLength": 4000
+                }
+              },
+              "required": [
+                "reply"
+              ],
+              "additionalProperties": false
+            },
+            "closedReason": {
+              "type": "string"
+            },
+            "postedAt": {
+              "type": "number",
+              "minimum": 0
+            },
+            "updatedAt": {
+              "type": "number",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "id",
+            "agentId",
+            "key",
+            "revision",
+            "kind",
+            "title",
+            "needsReply",
+            "status",
+            "postedAt",
+            "updatedAt"
+          ],
+          "additionalProperties": false
+        },
+        "taken": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "item",
+        "taken"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "failure": {
+          "type": "string",
+          "enum": [
+            "unanswered",
+            "not-found",
+            "no-repository",
+            "repository-not-reachable",
+            "github-sign-in-required",
+            "invalid-choice",
+            "message-too-long",
+            "agent-not-ready",
+            "agent-retired",
+            "plan-archived"
+          ]
+        }
+      },
+      "required": [
+        "failure"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

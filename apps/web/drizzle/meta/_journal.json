@@ -568,6 +568,13 @@
       "when": 1791185000000,
       "tag": "0081_better_auth_1_7",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1791210000000,
+      "tag": "0082_inbox_item",
+      "breakpoints": true
     }
   ]
 }

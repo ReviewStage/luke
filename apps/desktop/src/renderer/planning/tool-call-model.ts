@@ -4,6 +4,7 @@ import {
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_TOOL, type InboxPost, inboxPostInputSchema } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
@@ -24,10 +25,12 @@ import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
  * same way from the part S1's `delegate` tool stores: the task, the pair
  * the worker runs on, and its answer once it has one. A to-do write's list
  * is read through the wire's own schema, since its input is the list the
- * row draws item by item. Nothing here draws.
+ * row draws item by item, and an item posted to the developer's inbox
+ * through it too, its row naming the item the Inbox tab draws. Nothing
+ * here draws.
  */
 
-/** The tools a coding agent has, eve's and Luke's own notes on the plan and to-do list, by the names its parts carry. */
+/** The tools a coding agent has, eve's and Luke's own notes on the plan, to-do list, and inbox, by the names its parts carry. */
 export const AGENT_TOOL = {
   BASH: "bash",
   READ_FILE: "read_file",
@@ -39,6 +42,9 @@ export const AGENT_TOOL = {
   WEB_SEARCH: "web_search",
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
+  POST_TO_INBOX: INBOX_TOOL.POST,
+  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
+  READ_INBOX: INBOX_TOOL.READ,
 } as const;
 
 export interface ToolCallView {
@@ -220,6 +226,55 @@ function todosToolView(input: WireValue | undefined): ToolCallView {
   };
 }
 
+const readPost = Schema.decodeUnknownOption(inboxPostInputSchema);
+
+/** The item a post carries, or nothing where its input does not read as one, as while it streams. */
+function inboxPostView(input: WireValue | undefined): InboxPost | undefined {
+  return Option.getOrUndefined(readPost(input));
+}
+
+/** A post's context and options as the row's body lists them, the recommended one saying so. */
+function postLines(post: InboxPost): string {
+  const options = (post.options ?? []).map((option) => {
+    const recommended = post.recommended === option.label ? " (recommended)" : "";
+    const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
+    return `- ${option.label}${recommended}${detail}`;
+  });
+  return [post.details ?? "", ...options].filter((line) => line.trim() !== "").join("\n");
+}
+
+/**
+ * An inbox call's row: a post names its item's title and lists what it
+ * asks, a close names the item's key and says why, and a read names
+ * nothing. Its answer is the agent's whole inbox, which the Inbox tab draws
+ * as it stands, so none is shown here.
+ */
+function inboxToolView(tool: string, input: WireValue | undefined): ToolCallView {
+  if (tool === AGENT_TOOL.POST_TO_INBOX) {
+    const post = inboxPostView(input);
+    return {
+      kind: CALL_KIND.INBOX_POST,
+      subject: post?.title ?? "",
+      input:
+        post === undefined
+          ? input === undefined
+            ? textBlock("")
+            : jsonBlock(input)
+          : textBlock(postLines(post)),
+      output: undefined,
+    };
+  }
+  if (tool === AGENT_TOOL.CLOSE_INBOX_ITEM) {
+    return {
+      kind: CALL_KIND.INBOX_CLOSE,
+      subject: stringAt(input, "key") ?? "",
+      input: textBlock(stringAt(input, "reason") ?? ""),
+      output: undefined,
+    };
+  }
+  return { kind: CALL_KIND.INBOX_READ, subject: "", input: textBlock(""), output: undefined };
+}
+
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
 function knownToolView(
   tool: string,
@@ -290,6 +345,10 @@ function knownToolView(
       };
     case AGENT_TOOL.WRITE_TODOS:
       return todosToolView(input);
+    case AGENT_TOOL.POST_TO_INBOX:
+    case AGENT_TOOL.CLOSE_INBOX_ITEM:
+    case AGENT_TOOL.READ_INBOX:
+      return inboxToolView(tool, input);
     default:
       return undefined;
   }

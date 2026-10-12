@@ -4,6 +4,8 @@ import {
   agentPath,
   agentPullRequestPath,
   HOSTED_SERVICE_PATH,
+  inboxItemPath,
+  planInboxPath,
   planPath,
   VOICE_SERVICE_PATH,
 } from "./service-paths.js";
@@ -24,4 +26,10 @@ test("a plan stands under the plans read, with its id inside the path as one seg
 test("an agent's pull request stands under the agent's own address, with its id as one segment", () => {
   assert.equal(agentPath("a/b"), "/api/agents/a%2Fb");
   assert.equal(agentPullRequestPath("a/b"), "/api/agents/a%2Fb/pull-request");
+});
+
+test("a plan's inbox stands under the plan with its cursor in the query, and an item at its own address as one segment", () => {
+  assert.equal(planInboxPath("a/b"), `${HOSTED_SERVICE_PATH.PLANS}/a%2Fb/inbox`);
+  assert.equal(planInboxPath("a/b", "7&x"), `${HOSTED_SERVICE_PATH.PLANS}/a%2Fb/inbox?after=7%26x`);
+  assert.equal(inboxItemPath("a/b"), "/api/inbox/a%2Fb");
 });

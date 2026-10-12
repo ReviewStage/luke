@@ -8,6 +8,7 @@ import {
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
+import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -24,8 +25,10 @@ import {
  * are the few a window can act on: the service never answered, the plan or
  * the agent is gone, the plan names no repository yet, the App does not
  * reach it, the account must sign in with GitHub again, the choice named is
- * not one the service offers now, or — for a message — the words run past the
- * bound, the agent's session is still coming up, or it has ended for good.
+ * not one the service offers now, or — for a message, and for an answer to
+ * the plan's inbox, which may reach the agent as one — the words run past
+ * the bound, the agent's session is still coming up, or it has ended for
+ * good.
  *
  * The account's own provider keys travel here too, since they are what an
  * agent runs on: the keys as hints and statuses, a save, and a removal. A
@@ -194,3 +197,29 @@ export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPullRequestAnswerView = typeof codingAgentPullRequestAnswerViewSchema.Type;
+
+/** One plan's inbox past a cursor, as the window asks it: the plan, and where the window stands. */
+export const codingAgentInboxParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentInboxParams = typeof codingAgentInboxParamsSchema.Type;
+
+/** The plan's inbox, as the window hears it: every item its agents posted and the cursor to read on from, or why there is none. */
+export const codingAgentInboxAnswerViewSchema = EffectSchema.Union([inboxAnswerSchema, failed]);
+
+export type CodingAgentInboxAnswerView = typeof codingAgentInboxAnswerViewSchema.Type;
+
+/** An answer to one item of the inbox, as the window asks it: the item, and the answer request the service takes, its key the window's own. */
+export const codingAgentInboxAnswerParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  ...inboxAnswerRequestSchema.fields,
+});
+
+export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSchema.Type;
+
+/** The answer, as the window hears it: the item as it then stands and whether the answer was taken, or why there is no answer. */
+export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
+
+export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;

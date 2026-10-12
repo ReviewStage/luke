@@ -9,6 +9,13 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_KIND,
+  INBOX_REPLY,
+  INBOX_STATUS,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -68,6 +75,19 @@ const KEPT: ProviderKeySummary = {
   addedAt: 1,
   status: PROVIDER_KEY_STATUS.VERIFIED,
   statusAt: 1,
+};
+
+const ITEM: InboxItem = {
+  id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
+  agentId: AGENT_ID,
+  key: "push-access",
+  revision: 2,
+  kind: INBOX_KIND.APPROVAL,
+  title: "Push to the release branch?",
+  needsReply: true,
+  status: INBOX_STATUS.OPEN,
+  postedAt: 1_800_000_000_000,
+  updatedAt: 1_800_000_060_000,
 };
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -156,6 +176,26 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`remove:${removal.provider}`);
         return { keys: [] };
+      }),
+    inbox: (planId, after) =>
+      Effect.sync(() => {
+        asked.push(`inbox:${planId}:${after}`);
+        return { items: [ITEM], cursor: "7" };
+      }),
+    answerInbox: (itemId, request) =>
+      Effect.sync(() => {
+        asked.push(
+          `answer:${itemId}:${request.revision}:${request.reply}:${request.note ?? ""}:${request.clientKey}`,
+        );
+        return {
+          item: {
+            ...ITEM,
+            revision: 3,
+            status: INBOX_STATUS.ANSWERED,
+            answer: { reply: request.reply },
+          },
+          taken: true,
+        };
       }),
   };
   return { client, asked };
@@ -258,6 +298,31 @@ it.effect("each method asks the service once and answers what it said, whole", (
       yield* call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: AGENT_ID }),
       PUBLISHED,
     );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
+        planId: PLAN_ID,
+        after: INBOX_CURSOR_START,
+      }),
+      { items: [ITEM], cursor: "7" },
+    );
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
+        itemId: ITEM.id,
+        revision: 2,
+        reply: INBOX_REPLY.DECLINED,
+        note: "Not before the freeze lifts.",
+        clientKey: "answer-1",
+      }),
+      {
+        item: {
+          ...ITEM,
+          revision: 3,
+          status: INBOX_STATUS.ANSWERED,
+          answer: { reply: INBOX_REPLY.DECLINED },
+        },
+        taken: true,
+      },
+    );
 
     assert.deepEqual(asked, [
       "models",
@@ -272,6 +337,8 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `rename:${AGENT_ID}:Sign-out button`,
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
+      `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
+      `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
     ]);
   }),
 );
@@ -300,8 +367,20 @@ it.effect(
       const refused = yield* Effect.flip(
         call(GATEWAY_METHOD.CODING_AGENTS_MESSAGES, { agentId: AGENT_ID }),
       );
+      const noCursor = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { planId: PLAN_ID }),
+      );
+      const noRevision = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
+          itemId: ITEM.id,
+          reply: INBOX_REPLY.APPROVED,
+          clientKey: "answer-2",
+        }),
+      );
 
       assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.equal(noCursor._tag, "InvalidParamsRefusal");
+      assert.equal(noRevision._tag, "InvalidParamsRefusal");
       assert.deepEqual(asked, []);
     }),
 );

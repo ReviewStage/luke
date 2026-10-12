@@ -20,6 +20,10 @@ import {
   type CodingAgentAgentAnswer,
   type CodingAgentChooseParams,
   type CodingAgentDefaultAnswer,
+  type CodingAgentInboxAnsweredView,
+  type CodingAgentInboxAnswerParams,
+  type CodingAgentInboxAnswerView,
+  type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
   type CodingAgentMessageParams,
@@ -33,6 +37,8 @@ import {
   type CodingAgentStopParams,
   codingAgentAgentAnswerSchema,
   codingAgentDefaultAnswerViewSchema,
+  codingAgentInboxAnsweredViewSchema,
+  codingAgentInboxAnswerViewSchema,
   codingAgentListAnswerViewSchema,
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
@@ -229,6 +235,12 @@ export interface HostOperator {
   providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
   /** One provider's key removed; the keys as they then stand. */
   providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** One plan's inbox past a cursor, held by the service while nothing changed; or why there is none. */
+  codingAgentInbox(params: CodingAgentInboxParams): Effect.Effect<CodingAgentInboxAnswerView>;
+  /** One item of a plan's inbox answered; the item as it then stands and whether the answer was taken, or why there is no answer. */
+  codingAgentInboxAnswer(
+    params: CodingAgentInboxAnswerParams,
+  ): Effect.Effect<CodingAgentInboxAnsweredView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -659,6 +671,26 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
         codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    codingAgentInbox: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX, {
+          planId: params.planId,
+          after: params.after,
+        }),
+        codingAgentAnswer(codingAgentInboxAnswerViewSchema),
+      ),
+    codingAgentInboxAnswer: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
+          itemId: params.itemId,
+          revision: params.revision,
+          reply: params.reply,
+          ...("choice" in params ? { choice: params.choice } : undefined),
+          ...("note" in params ? { note: params.note } : undefined),
+          clientKey: params.clientKey,
+        }),
+        codingAgentAnswer(codingAgentInboxAnsweredViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

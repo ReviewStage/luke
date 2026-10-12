@@ -13,6 +13,7 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_CURSOR_START, INBOX_KIND, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
@@ -774,7 +775,7 @@ test("a delegation's row in an agent's tab opens the worker in a tab of the side
   const page = mountOpenPlan({
     agents: codingAgentsControl({ agents: [agent], agentIds: [agent.id], readTranscript }),
   });
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5"]);
   act(() => tabNamed(page, "Opus 5.5").click());
   await settle();
   assert.equal(panelShown(page), false);
@@ -2450,23 +2451,23 @@ test("an agent's tab is dragged among the agents' in the plan's column, never be
   });
   const page = mountOpenPlan({ agents });
   layOutTabs({ width: 4 * TAB_PITCH });
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"]);
 
   // Let go at 40, over the plan's tab: it lands first of the agents, after the plan's.
   dragTab(tabNamed(page, "GPT 5.6 Sol"), 245, [150, 40], DRAG_END.DROP);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol", "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol", "Opus 5.5"]);
   assert.equal(columnChosen(page), "GPT 5.6 Sol");
   assert.equal(columnMovedSaid(page), "GPT 5.6 Sol moved to position 1 of 2");
 
   // The plan's tab dragged past both is a press: it is chosen and moves nothing.
   dragTab(tabNamed(page, PLAN.name), 45, [150, 260], DRAG_END.DROP);
   act(() => tabNamed(page, PLAN.name).click());
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol", "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol", "Opus 5.5"]);
   assert.equal(columnChosen(page), PLAN.name);
   unmountAll();
 
   const next = mountOpenPlan({ agents });
-  assert.deepEqual(columnTabs(next), [PLAN.name, "GPT 5.6 Sol", "Opus 5.5"]);
+  assert.deepEqual(columnTabs(next), [PLAN.name, "Inbox", "GPT 5.6 Sol", "Opus 5.5"]);
 });
 test("a subagent's tab is dragged and stepped as any other, closed and opened again stands where it stood, and a launch drops it, leaving the rest where they stood", () => {
   const job = "Compare the two queue libraries.";
@@ -2509,16 +2510,16 @@ test("Shift-Command-Arrow moves an agent's tab among the agents' in the plan's c
   const claude = tabNamed(page, "Opus 5.5");
   act(() => claude.focus());
   keydown(MOVE_RIGHT);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol", "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol", "Opus 5.5"]);
   assert.equal(document.activeElement, claude);
   assert.equal(columnMovedSaid(page), "Opus 5.5 moved to position 2 of 2");
   keydown(left);
   keydown(left);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"]);
 
   act(() => tabNamed(page, PLAN.name).focus());
   keydown(MOVE_RIGHT);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"]);
 });
 test("Shift-Command-Arrow moves the focused tab along the strip, focus and choice staying put, and says where", () => {
   const page = mountOpenPlan();
@@ -2986,7 +2987,7 @@ test("the column's + offers New coding agent and the plan's coding agents under 
   key(focused(), "Enter");
   assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.equal(columnChosen(page), "GPT 5.6 Sol");
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"]);
   assert.ok(
     document.activeElement?.closest('.desktop-agent[aria-label="GPT 5.6 Sol"]'),
     "the agent's box takes focus as its tab opens",
@@ -3024,19 +3025,19 @@ test("an agent's × or Delete closes its tab and nothing of the agent's: it is n
   act(() => tabNamed(page, "Opus 5.5").click());
 
   press(page, '[aria-label="Close Opus 5.5"]');
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol"]);
   assert.equal(columnChosen(page), "GPT 5.6 Sol", "the tab viewed before it");
   assert.deepEqual(stops, []);
 
   act(() => columnAddButton(page).click());
   act(() => addRow("Opus 5.5").click());
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"]);
   assert.equal(columnChosen(page), "Opus 5.5");
 
   const sol = tabNamed(page, "GPT 5.6 Sol");
   act(() => sol.focus());
   key(sol, "Delete");
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5"]);
   assert.equal(columnChosen(page), "Opus 5.5", "closing another tab leaves the chosen one");
   assert.deepEqual(stops, []);
 
@@ -3044,7 +3045,7 @@ test("an agent's × or Delete closes its tab and nothing of the agent's: it is n
   const plan = tabNamed(page, PLAN.name);
   act(() => plan.focus());
   key(plan, "Delete");
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "Opus 5.5"]);
   assert.equal(page.querySelector(`[aria-label="Close ${PLAN.name}"]`), null);
 });
 test("the + reads the plan's agents again as it opens, so an agent no tab follows is named as it is now", () => {
@@ -3463,7 +3464,11 @@ test("Close in a tab's menu closes it as its × does, and Close others closes ev
   chooseFromTab(tabNamed(page, "Code"), "Close others");
   assert.deepEqual(panelTabs(page), ["Code"]);
   assert.equal(chosenTab(page), "Code");
-  assert.deepEqual(columnTabs(page), [PLAN.name, "Opus 5.5", "GPT 5.6 Sol"], "the column's own");
+  assert.deepEqual(
+    columnTabs(page),
+    [PLAN.name, "Inbox", "Opus 5.5", "GPT 5.6 Sol"],
+    "the column's own",
+  );
   assert.deepEqual(tabMenu(tabNamed(page, "Code")).slice(0, 2), [
     ["Close", true],
     ["Close others", false],
@@ -3472,7 +3477,7 @@ test("Close in a tab's menu closes it as its × does, and Close others closes ev
 
   // In the plan's column, Close others keeps the plan's tab, which offers no Close of its own.
   chooseFromTab(tabNamed(page, "GPT 5.6 Sol"), "Close others");
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol"]);
   assert.equal(columnChosen(page), "GPT 5.6 Sol");
   assert.deepEqual(tabMenu(tabNamed(page, PLAN.name)), [
     ["Close others", true],
@@ -3480,7 +3485,7 @@ test("Close in a tab's menu closes it as its × does, and Close others closes ev
   ]);
   closeMenu();
   chooseFromTab(tabNamed(page, PLAN.name), "Close others");
-  assert.deepEqual(columnTabs(page), [PLAN.name]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox"]);
   assert.equal(columnChosen(page), PLAN.name);
   assert.deepEqual(tabMenu(tabNamed(page, PLAN.name)), [
     ["Close others", false],
@@ -3640,7 +3645,7 @@ test("Command-W closes the chosen tab of the column holding the focus as its men
   act(() => tabNamed(page, "GPT 5.6 Sol").click());
   act(() => tabNamed(page, "Opus 5.5").click());
   assert.equal(keydown({ key: "w", metaKey: true }), true);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol"]);
   assert.equal(columnChosen(page), "GPT 5.6 Sol");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"], "the panel's stand");
 
@@ -3658,14 +3663,14 @@ test("Command-W closes the chosen tab of the column holding the focus as its men
   closeMenu();
   keydown({ key: "w", metaKey: true });
   assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
-  assert.deepEqual(columnTabs(page), [PLAN.name, "GPT 5.6 Sol"]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox", "GPT 5.6 Sol"]);
 
   // Back in the plan's column, the chord closes its tab, and then, on the plan's, nothing.
   into(".desktop-plan-main");
   keydown({ key: "w", metaKey: true });
-  assert.deepEqual(columnTabs(page), [PLAN.name]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox"]);
   assert.equal(keydown({ key: "w", metaKey: true }), false, "the plan's tab never closes");
-  assert.deepEqual(columnTabs(page), [PLAN.name]);
+  assert.deepEqual(columnTabs(page), [PLAN.name, "Inbox"]);
   assert.deepEqual(panelTabs(page), ["Board", "Transcript"]);
   assert.deepEqual(stops, [], "closing an agent's tab stops nothing");
 });
@@ -4020,4 +4025,43 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
     "Working…",
     "Queue A lets an admin revoke.",
   ]);
+});
+
+test("the Inbox tab counts what waits on the developer after its name, dimmed and with no mark between, and says nothing while nothing waits", async () => {
+  const waiting = (id: string) => ({
+    id,
+    agentId: RUNNING_AGENT.id,
+    key: id.slice(-4),
+    revision: 1,
+    kind: INBOX_KIND.QUESTION,
+    title: "What should the email say?",
+    needsReply: true,
+    status: INBOX_STATUS.OPEN,
+    postedAt: 1,
+    updatedAt: 1,
+  });
+  const inboxOf = (items: readonly ReturnType<typeof waiting>[]) =>
+    codingAgentsControl({
+      agents: [RUNNING_AGENT],
+      agentIds: [RUNNING_AGENT.id],
+      readInbox: ({ after }) =>
+        after === INBOX_CURSOR_START
+          ? Promise.resolve({ items, cursor: `1.${items.length}` })
+          : new Promise(() => undefined),
+    });
+  const page = mountOpenPlan({
+    agents: inboxOf([
+      waiting("a1b2c3d4-0000-4000-8000-000000000001"),
+      waiting("a1b2c3d4-0000-4000-8000-000000000002"),
+    ]),
+  });
+  await settle();
+  const inbox = tabNamed(page, "Inbox 2");
+  assert.equal(inbox.querySelector(".tab-label .tab-detail")?.textContent, "2");
+  assert.equal(tabUnread(inbox), false, "a count, not news");
+  unmountAll();
+
+  const empty = mountOpenPlan({ agents: inboxOf([]) });
+  await settle();
+  assert.equal(tabNamed(empty, "Inbox").querySelector(".tab-detail"), null);
 });

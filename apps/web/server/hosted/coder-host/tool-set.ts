@@ -2,6 +2,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_TODOS_TOOL,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import { WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
@@ -15,7 +16,8 @@ import { wireValidatedTool } from "../../core.js";
  * beside it: its shell and its file tools, the code extension's patch and
  * search, the provider-run web reads, the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
- * its plan (`plan-edit.ts`), and its to-do list (`todos.ts`). The worker's own rows name
+ * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
+ * developer's inbox it posts to (`inbox.ts`). The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -37,6 +39,9 @@ export const CODER_TOOL = {
   DELEGATE: CODING_AGENT_DELEGATE_TOOL,
   EDIT_PLAN: "edit_plan",
   WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
+  POST_TO_INBOX: INBOX_TOOL.POST,
+  CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
+  READ_INBOX: INBOX_TOOL.READ,
 } as const;
 
 /**

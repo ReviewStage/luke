@@ -5,6 +5,7 @@ import type { StoredAgentStep } from "../../db/coding-agent-schema.js";
 import { CODER } from "./bounds.js";
 import { DELEGATE_TOOL } from "./delegation.js";
 import { applyPatchIn, globIn, grepIn, readFileIn, writeFileIn } from "./files.js";
+import { INBOX_TOOLS } from "./inbox.js";
 import { EDIT_PLAN_TOOL } from "./plan-edit.js";
 import { bashStartingIn } from "./shell.js";
 import { TODOS_TOOL } from "./todos.js";
@@ -68,6 +69,18 @@ const AUTHORED_TOOLS = {
   [CODER_TOOL.WRITE_TODOS]: {
     description: TODOS_TOOL.description,
     inputSchema: emitJsonSchema(TODOS_TOOL.inputSchema),
+  },
+  [CODER_TOOL.POST_TO_INBOX]: {
+    description: INBOX_TOOLS.POST.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.POST.inputSchema),
+  },
+  [CODER_TOOL.CLOSE_INBOX_ITEM]: {
+    description: INBOX_TOOLS.CLOSE.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.CLOSE.inputSchema),
+  },
+  [CODER_TOOL.READ_INBOX]: {
+    description: INBOX_TOOLS.READ.description,
+    inputSchema: emitJsonSchema(INBOX_TOOLS.READ.inputSchema),
   },
 } as const satisfies Record<
   Exclude<(typeof CODER_TOOL)[keyof typeof CODER_TOOL], ProviderRunTool>,

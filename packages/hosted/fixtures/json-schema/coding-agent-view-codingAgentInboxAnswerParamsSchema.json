@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "revision": {
+      "type": "number",
+      "minimum": 0
+    },
+    "reply": {
+      "type": "string",
+      "enum": [
+        "chose",
+        "approved",
+        "declined",
+        "answered",
+        "done",
+        "not-done"
+      ]
+    },
+    "choice": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 4000
+    },
+    "clientKey": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    }
+  },
+  "required": [
+    "itemId",
+    "revision",
+    "reply",
+    "clientKey"
+  ],
+  "additionalProperties": false
+}

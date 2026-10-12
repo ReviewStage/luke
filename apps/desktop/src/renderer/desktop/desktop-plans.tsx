@@ -4,12 +4,14 @@ import { Fragment, useEffect, useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { ArchivedBanner } from "../planning/archived-plan";
+import { InboxBoard } from "../planning/inbox-board";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
+import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SPINNER_SIZE, Spinner } from "../spinner";
@@ -123,6 +125,11 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
+  const inbox = usePlanInbox({
+    planId: region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
+    shown: plans.shown,
+    agents: plans.agents,
+  });
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
   const summaryLayout = useSummaryLayout(summary, plans.sidePanel.open, area);
@@ -242,6 +249,7 @@ function PlanDocument({
               }}
               rename={archived ? undefined : rename}
               keys={plans.shown && !sideFocused}
+              inbox={inbox.board.open.length}
             />
           }
         >
@@ -306,7 +314,16 @@ function PlanDocument({
                 looks={looks}
               />
             </section>
-            {tab === MAIN_TAB.PLAN ? null : (
+            {tab === MAIN_TAB.INBOX ? (
+              <section className="desktop-inbox" role="tabpanel" aria-label="Inbox">
+                <InboxBoard
+                  control={inbox}
+                  agents={agents}
+                  onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
+                />
+              </section>
+            ) : null}
+            {tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX ? null : (
               <section
                 className="desktop-agent"
                 role="tabpanel"

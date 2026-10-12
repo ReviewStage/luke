@@ -78,6 +78,10 @@ export const GATEWAY_METHOD = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   /** One provider's key removed on the service; the keys as they then stand. */
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /** One plan's inbox past a cursor: every item its coding agents posted for the developer, held open by the service while nothing changed. */
+  CODING_AGENTS_INBOX: "codingAgents.inbox",
+  /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
+  CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",

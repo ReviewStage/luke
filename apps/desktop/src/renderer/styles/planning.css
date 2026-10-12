@@ -1527,3 +1527,215 @@ button.subagent-line:focus-visible {
   overflow: hidden;
   white-space: nowrap;
 }
+
+/* Decisions ------------------------------------------------------------------- */
+
+/* The plan's Inbox tab (`inbox-board.tsx`): a heading counting what waits,
+   then one card per item, each a raised box like a transcript's folded
+   card, so an item reads as something set apart for the developer rather
+   than one more line of an agent's work. */
+.inbox-board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-12);
+  padding-block: var(--space-24) var(--space-48);
+}
+
+.inbox-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.inbox-heading {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.inbox-count {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.inbox-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: var(--raised);
+}
+
+/* A settled card says what was said, or why the agent took it back, and
+   no more, so it steps back from the ones still waiting. */
+.inbox-card-settled {
+  border-color: var(--hairline);
+  background: none;
+}
+
+.inbox-asker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.inbox-asker svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* The agent's name opens its tab: a press drawn as the muted words it is,
+   underlined under the pointer or the keyboard. */
+.inbox-agent {
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+}
+
+.inbox-agent:hover,
+.inbox-agent:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+}
+
+.inbox-time::before {
+  content: "·";
+  margin-right: var(--space-6);
+}
+
+.inbox-title {
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.inbox-details {
+  color: var(--text-body);
+  font-size: 13px;
+}
+
+.inbox-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* An option is a row the width of the card, its label over its trade-off,
+   outlined in the accent once picked. */
+.inbox-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-12);
+  border: 1px solid var(--hairline-strong);
+  border-radius: var(--control-radius);
+  background: none;
+  color: var(--text-primary);
+  text-align: left;
+  transition:
+    border-color var(--duration-hover) ease,
+    background-color var(--duration-hover) ease;
+}
+
+.inbox-option:hover:not(:disabled) {
+  background: var(--raised-strong);
+}
+
+.inbox-option[aria-pressed="true"] {
+  border-color: var(--message-sent);
+  background: color-mix(in srgb, var(--message-sent) 14%, transparent);
+}
+
+.inbox-option:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.inbox-option-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.inbox-option-detail {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.inbox-recommended {
+  padding: 0 var(--space-6);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--state-complete) 20%, transparent);
+  color: var(--state-complete);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.inbox-note {
+  min-height: 44px;
+  font-size: 13px;
+}
+
+.inbox-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-12);
+}
+
+.inbox-failure {
+  margin-right: auto;
+  color: var(--error-text);
+  font-size: 12.5px;
+}
+
+.inbox-quiet {
+  margin-right: auto;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.inbox-presses {
+  display: flex;
+  gap: var(--space-8);
+}
+
+.inbox-answer {
+  color: var(--text-body);
+  font-size: 13px;
+  white-space: pre-wrap;
+}
+
+.inbox-settled {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  margin-top: var(--space-12);
+}
+
+.inbox-settled > summary {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: default;
+}
+
+.inbox-settled[open] > summary {
+  margin-bottom: var(--space-8);
+}
+
+.inbox-settled > .inbox-card + .inbox-card {
+  margin-top: var(--space-8);
+}

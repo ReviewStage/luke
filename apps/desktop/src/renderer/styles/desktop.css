@@ -1429,6 +1429,21 @@ body,
   padding-inline: max(var(--content-inset), var(--reading-room));
 }
 
+/* The plan's Inbox tab: its board scrolls in the column, its cards keeping
+   to the document's measure in the middle, as an agent's transcript does. */
+.desktop-inbox {
+  --reading-room: calc((100% - var(--reading-width)) / 2);
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.desktop-inbox .inbox-board {
+  padding-inline: max(var(--content-inset), var(--reading-room));
+}
+
 /* The transcript's way back to its newest line stands on the column's own
    ground rather than the panel's. */
 .desktop-agent .conversation-scroll {
@@ -3300,6 +3315,12 @@ body,
 
 .tab[data-unread="true"] .tab-label {
   font-weight: 680;
+}
+
+/* What follows a tab's label, the Inbox's count, is muted as a model's
+   effort is after its name (`.model-label-detail`). */
+.tab-detail {
+  color: var(--text-secondary);
 }
 
 /* The plan's column's tabs and their "+" take what the toolbar leaves

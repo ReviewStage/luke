@@ -32,6 +32,10 @@
     "dest": "/api/default.js?route=plans/agents&id=$1"
   },
   {
+    "src": "/api/plans/([^/]+)/inbox",
+    "dest": "/api/default.js?route=plans/inbox&id=$1"
+  },
+  {
     "src": "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     "dest": "/api/default.js?route=plans/restore&id=$1&seq=$2"
   },
@@ -66,6 +70,10 @@
   {
     "src": "/api/agents/([^/]+)",
     "dest": "/api/default.js?route=agents/agent&id=$1"
+  },
+  {
+    "src": "/api/inbox/([^/]+)",
+    "dest": "/api/default.js?route=inbox/item&id=$1"
   },
   {
     "src": "/api/account/delete",

@@ -11,6 +11,7 @@ import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
+import * as inboxWire from "./inbox-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as planEdit from "./plan-edit.js";
@@ -60,6 +61,19 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
     codingAgentTodosInputSchema: codingAgentWire.codingAgentTodosInputSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
+  "inbox-wire": {
+    inboxKeySchema: inboxWire.inboxKeySchema,
+    inboxOptionSchema: inboxWire.inboxOptionSchema,
+    inboxPostInputSchema: inboxWire.inboxPostInputSchema,
+    inboxCloseInputSchema: inboxWire.inboxCloseInputSchema,
+    inboxReadInputSchema: inboxWire.inboxReadInputSchema,
+    inboxReplySchema: inboxWire.inboxReplySchema,
+    inboxItemSchema: inboxWire.inboxItemSchema,
+    inboxCursorSchema: inboxWire.inboxCursorSchema,
+    inboxAnswerSchema: inboxWire.inboxAnswerSchema,
+    inboxAnswerRequestSchema: inboxWire.inboxAnswerRequestSchema,
+    inboxAnsweredSchema: inboxWire.inboxAnsweredSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof inboxWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
     codingAgentDefaultAnswerViewSchema: codingAgentView.codingAgentDefaultAnswerViewSchema,
@@ -79,6 +93,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentStopParamsSchema: codingAgentView.codingAgentStopParamsSchema,
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
+    codingAgentInboxParamsSchema: codingAgentView.codingAgentInboxParamsSchema,
+    codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
+    codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
+    codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
