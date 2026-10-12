@@ -4,7 +4,16 @@ import { it } from "@effect/vitest";
 import { ASK_ORIGIN } from "@sidecar/hosted";
 import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "@sidecar/wire";
 import { eq } from "drizzle-orm";
-import { Deferred, Duration, Effect, Fiber, PartitionedSemaphore, Result, Schema } from "effect";
+import {
+  Deferred,
+  Duration,
+  Effect,
+  Fiber,
+  Option,
+  PartitionedSemaphore,
+  Result,
+  Schema,
+} from "effect";
 import { TestClock } from "effect/testing";
 import { afterAll, test } from "vitest";
 import { db } from "../server/db/query";
@@ -30,10 +39,11 @@ import {
 } from "../server/hosted/brain-host/eve-sessions";
 import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
-  conversationOwnedBy,
+  conversationReachableBy,
   recordedRuntimeSession,
 } from "../server/hosted/brain-host/recorded-session";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { openPlanConversation } from "../server/hosted/plan-store";
 import { STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import {
   ASK_DISPATCH_REFUSAL,
@@ -43,6 +53,7 @@ import {
 } from "../server/hosted/store/asks";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The ask door over the real store on PGlite. The ownership refusals here
@@ -114,7 +125,7 @@ function memoryAsks(): AskRecord & { rows: Map<string, AskRow> } {
       // One dispatch at a time per conversation, as the conversation lock serialises them on the real record.
       locks.withPermit(target.conversationId)(
         Effect.gen(function* () {
-          if (!(yield* conversationOwnedBy(target.userId, target.conversationId))) {
+          if (!(yield* conversationReachableBy(target.userId, target.conversationId))) {
             return ASK_DISPATCH_REFUSAL.NO_CONVERSATION;
           }
           const row = rows.get(id);
@@ -243,6 +254,7 @@ function askIn(
   overrides: Partial<AskInput> = {},
 ): AskInput {
   return {
+    accountId: userId,
     userId,
     conversationId,
     question: "what changed?",
@@ -436,6 +448,31 @@ test("an ask naming another account's conversation is refused as not found befor
   );
   assert.deepEqual(h.eve.calls, []);
   assert.equal(h.asks.rows.size, 0);
+});
+
+test("a member's ask in the plan conversation a teammate opened is recorded under the teammate and reaches eve; a stranger's in the same conversation is refused as not found", async () => {
+  const opener = await database.createUser();
+  const member = await database.createUser();
+  const stranger = await database.createUser();
+  const plan = await database.run(startPlan(opener, { name: "Teammate invitations" }));
+  await database.run(joinWorkspace(plan.workspaceId, member));
+  const { conversationId } = Option.getOrThrow(
+    await database.run(openPlanConversation(opener, plan.id)),
+  );
+  const h = harness();
+
+  assert.deepEqual(
+    await h.ask(askIn(opener, conversationId, { accountId: stranger })),
+    Result.fail({ refusal: ASK_REFUSAL.NOT_FOUND }),
+  );
+  assert.equal(h.eve.calls.length, 0);
+
+  const asked = await h.ask(askIn(opener, conversationId, { accountId: member }));
+  assert.ok(Result.isSuccess(asked));
+  assert.equal(h.asks.rows.get(asked.success.id)?.userId, opener);
+  const [open] = h.eve.calls;
+  assert.ok(open && open.kind === "open");
+  assert.equal(open.message.conversationId, conversationId);
 });
 
 test("an ask naming a cleared conversation is refused as not found before eve is reached, and nothing is recorded", async () => {

@@ -78,6 +78,10 @@ import { CODER_TOOL } from "./tool-set.js";
  * Beside the relay, each step's end and each compaction of the agent's own
  * conversation is written on the agent's row, which is what the tab's
  * context ring reads (`context-estimate.ts`).
+ * Any member of the plan's workspace is admitted to an agent's conversation,
+ * and the plan is read and written as the member whose turn it is; the
+ * agent's row, its provider keys, its checkout, and its context stay its
+ * starter's, the conversation's owner, whoever is speaking to it.
  */
 
 /** What a host function answers: an effect over the ambient client, which the coder's authored files run at the web's edge. */
@@ -116,11 +120,11 @@ type DelegationEffect = Effect.Effect<
 >;
 
 export interface CoderHost {
-  /** Whether the session stands for a conversation of the caller's and is the one it runs in; every other function takes what this admitted. */
+  /** Whether the session stands for a conversation the caller reaches and is the one it runs in; every other function takes what this admitted. */
   admit(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The same admission for a session claiming the conversation as it starts, before its record stands. */
   admitStarting(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
-  /** The admission a worker's resolvers take, on ownership alone: eve hands a resolver no lineage, and the child's id is no record's. */
+  /** The admission a worker's resolvers take, on reach alone: eve hands a resolver no lineage, and the child's id is no record's. */
   admitDelegated(auth: SessionAuth, sessionId: string): HostEffect<ConversationAdmission>;
   /** The agent the admitted conversation is, or the refusal for a conversation that is no agent's. */
   agent(admitted: AdmittedConversation): HostEffect<Result.Result<CodingAgent, CoderRefusal>>;
@@ -179,7 +183,7 @@ export interface CoderHost {
   /**
    * Relays one event of a worker's session into the child conversation its
    * delegation was recorded under, as a child turn on the recorded pair; a
-   * session with no parent, one the account does not own, or one no
+   * session with no parent, one the caller does not reach, or one no
    * delegation was recorded for relays nothing.
    */
   relayChild(
@@ -418,7 +422,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const parent = session.parent;
         if (parent === undefined) return;
-        // Admitted on ownership alone, as the worker's resolvers are: claiming the agent's record
+        // Admitted on reach alone, as the worker's resolvers are: claiming the agent's record
         // for the child's session would refuse every later call of the agent's own.
         const admitted = yield* admitConversation(session.auth, {
           id: session.id,
@@ -448,7 +452,8 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         // An agent handed a task never saw the plan, so it has none to take notes on.
         if (found.success.task !== null) return planEditRejected(PLAN_EDIT_REFUSAL.NO_PLAN);
         const { id: agentId, planId } = found.success;
-        const binding = { userId: admitted.target.userId, planId };
+        // The plan is written as the member whose turn this is, whoever started the agent.
+        const binding = { userId: admitted.caller, planId };
         return yield* recordPlanEdit(binding, { agentId }, input, takenInTurn);
       }).pipe(
         Effect.tapError(logStoreFailure),
@@ -464,7 +469,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         const found = yield* agentOf(starting);
         if (Result.isFailure(found)) return;
         const agent = found.success;
-        const plan = yield* readPlan(starting.target.userId, agent.planId);
+        const plan = yield* readPlan(starting.caller, agent.planId);
         if (Option.isNone(plan)) return;
         const title = yield* generateAgentTitle(model, {
           planName: plan.value.plan.name,
