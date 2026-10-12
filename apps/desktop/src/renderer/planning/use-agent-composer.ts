@@ -49,7 +49,10 @@ export interface AgentComposerControl {
   setDraft: (text: string) => void;
   /** The files that go with the words, in the order attached. */
   attachments: readonly CodingAgentAttachment[];
-  setAttachments: (attachments: readonly CodingAgentAttachment[]) => void;
+  /** Changes the files from those the box holds as the change lands, which a read that lands late needs. */
+  setAttachments: (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Whether a message is on its way, during which the box takes nothing. */
   sending: boolean;
   /** Why the last message did not go, said under the box beside Retry; nothing while none failed. */
@@ -192,7 +195,8 @@ export function useAgentComposer(input: {
       })),
     attachments: held.attachments,
     // Note that a file put on or taken off lets Retry go too, since the message is another.
-    setAttachments: (attachments) => setHeld((was) => ({ ...was, attachments, failed: undefined })),
+    setAttachments: (next) =>
+      setHeld((was) => ({ ...was, attachments: next(was.attachments), failed: undefined })),
     sending: held.sending,
     note: held.closed === undefined ? held.failed?.note : undefined,
     closed: held.closed,

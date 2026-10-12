@@ -318,7 +318,6 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       act(() => {
         input.dispatchEvent(new Event("change", { bubbles: true }));
       });
-      await settle();
     },
     /** Files pasted into the box; whether the box left the paste to the browser. */
     paste: async (files: readonly File[]): Promise<boolean> => {
@@ -1060,4 +1059,20 @@ test("the developer's row read back from the service draws its files over the bu
   });
   assert.deepEqual(tab.sentChips(), ["shot.png", "spec.pdf1.5 MB", "staged.png"]);
   assert.deepEqual(tab.bubbles().at(-1)?.endsWith("Read these."), true);
+});
+
+test("files are taken after whatever the box holds as their read lands: two hand-offs read at once both stand, a chip taken off while another file is read stays off, and Send waits while a file is still being read", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  tab.type("Look at these.");
+  await tab.pickFiles([PNG]);
+  // The screenshot is still being read, so the words wait for it rather than going without it.
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+  await tab.pickFiles([NOTES]);
+  await tab.landed(() => assert.deepEqual([...tab.chips()].sort(), ["design.png", "notes.md1 KB"]));
+  assert.deepEqual(tab.control(), { label: "Send", disabled: false, type: "submit" });
+
+  tab.unattach("design.png");
+  await tab.pickFiles([file("shot.png", [0x89, 0x50, 0x4e, 0x47], "image/png")]);
+  tab.unattach("notes.md");
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["shot.png"]));
 });

@@ -24,7 +24,7 @@ import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
 import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
-import { attachFiles } from "./attached-files";
+import { readFiles, withFiles } from "./attached-files";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
 
@@ -142,6 +142,9 @@ export function AgentComposer({
   const [stopping, setStopping] = useState(false);
   const [refusal, setRefusal] = useState<string | undefined>(undefined);
   const [dropping, setDropping] = useState(false);
+  // How many hand-offs are still being read, during which Send waits, so no
+  // message goes without a file the developer already handed the box.
+  const [reading, setReading] = useState(0);
   // Note that files are read through a ref, because reading them takes a
   // while and the box they land in is whichever render is current by then.
   const latest = useRef(composer);
@@ -179,10 +182,15 @@ export function AgentComposer({
 
   const attach = (files: readonly File[]) => {
     if (files.length === 0 || held) return;
-    attachFiles(latest.current.attachments, files).then((taken) => {
-      latest.current.setAttachments(taken.attachments);
-      setRefusal(taken.refusal);
-    });
+    setReading((count) => count + 1);
+    readFiles(files)
+      .then((read) => {
+        // Taken after whatever the box holds as the read lands, so neither a
+        // read that landed first nor a chip taken off meanwhile is undone.
+        setRefusal(withFiles(latest.current.attachments, read).refusal);
+        latest.current.setAttachments((now) => withFiles(now, read).attachments);
+      })
+      .finally(() => setReading((count) => count - 1));
   };
 
   return (
@@ -221,7 +229,7 @@ export function AgentComposer({
               ? undefined
               : (index) => {
                   setRefusal(undefined);
-                  composer.setAttachments(composer.attachments.filter((_, at) => at !== index));
+                  composer.setAttachments((now) => now.filter((_, at) => at !== index));
                 }
           }
         />
@@ -292,7 +300,7 @@ export function AgentComposer({
                   status={
                     composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
                   }
-                  disabled={held || empty}
+                  disabled={held || empty || reading > 0}
                 />
               </Tooltip>
             )}

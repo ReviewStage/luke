@@ -75,7 +75,7 @@ export function DraftAgentTab({
     draft: draft.task,
     setDraft: (task) => control.onDraftChange({ task }),
     attachments: draft.attachments,
-    setAttachments: (attachments) => control.onDraftChange({ attachments }),
+    setAttachments: control.onDraftAttachments,
     sending: sending || control.start.busy,
     note,
     closed: undefined,

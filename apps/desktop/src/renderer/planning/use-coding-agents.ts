@@ -92,7 +92,11 @@ export interface CodingAgentsControl {
   /** Opens a draft agent on the open plan, or answers the one it has, by its key. */
   onNewDraft: () => string;
   /** Writes the open plan's draft: the words in its box, or the choice on its chip. */
-  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice" | "attachments">>) => void;
+  onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice">>) => void;
+  /** Changes the open plan's draft's files from those it holds as the change lands. */
+  onDraftAttachments: (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
@@ -358,8 +362,21 @@ export function useCodingAgents(input: {
     return id;
   };
 
-  const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice" | "attachments">>) => {
+  const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice">>) => {
     if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
+  };
+
+  // Note that the files are changed from the drafts as they stand when the
+  // change lands, because a file's read lands after the render that began it.
+  const onDraftAttachments = (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => {
+    if (planId === undefined) return;
+    setDrafts((was) => {
+      const held = was.get(planId);
+      if (held === undefined) return was;
+      return new Map(was).set(planId, { ...held, attachments: next(held.attachments) });
+    });
   };
 
   const onDiscardDraft = (draftId: string) => {
@@ -507,6 +524,7 @@ export function useCodingAgents(input: {
     draft,
     onNewDraft,
     onDraftChange,
+    onDraftAttachments,
     onDiscardDraft,
     startTask,
     listFailed,

@@ -601,7 +601,7 @@ test("a draft asks nothing of the service, one per plan, until its first message
 
   // The files attached to the words are the draft's too, and go with the task.
   const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
-  act(() => tab.control().onDraftChange({ attachments: [notes] }));
+  act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
   assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
     failed = await tab.control().startTask(draft, task, undefined, [notes]);

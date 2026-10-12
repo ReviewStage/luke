@@ -31,12 +31,6 @@ const REFUSAL = {
   TOO_MUCH: "These files are too large to send together.",
 } as const;
 
-/** The files a box holds after a hand-off, and why the first that did not come did not. */
-export interface AttachedFiles {
-  readonly attachments: readonly CodingAgentAttachment[];
-  readonly refusal: string | undefined;
-}
-
 /** Whether bytes spell text a model can read: UTF-8, with no NUL, which no text file holds. */
 function spellsText(bytes: Uint8Array): boolean {
   if (bytes.includes(0)) return false;
@@ -80,16 +74,20 @@ async function attachmentOf(file: File): Promise<FileRead> {
   return { attachment: { name, mediaType, data: base64Of(bytes) } };
 }
 
+/** Files read: what the message may carry of them, in order, and why the first that cannot come did not. */
+export interface FilesRead {
+  readonly attachments: readonly CodingAgentAttachment[];
+  readonly refusal: string | undefined;
+}
+
 /**
- * The files handed to the box taken after those it holds, in order: each
- * read as above, and taken while the message stays within its count and
- * its bytes together; the first refusal is the one said.
+ * The files handed to the box, each read as above, in order, and no more
+ * than a message holds; the first refusal is the one said. Nothing here
+ * reads the box, so a read that lands late is taken after whatever the
+ * box holds by then (`withFiles`).
  */
-export async function attachFiles(
-  held: readonly CodingAgentAttachment[],
-  files: readonly File[],
-): Promise<AttachedFiles> {
-  const attachments = [...held];
+export async function readFiles(files: readonly File[]): Promise<FilesRead> {
+  const attachments: CodingAgentAttachment[] = [];
   let refusal: string | undefined;
   for (const file of files) {
     if (attachments.length >= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) {
@@ -97,11 +95,25 @@ export async function attachFiles(
       break;
     }
     const read = await attachmentOf(file);
-    if ("refusal" in read) {
-      refusal ??= read.refusal;
-      continue;
+    if ("refusal" in read) refusal ??= read.refusal;
+    else attachments.push(read.attachment);
+  }
+  return { attachments, refusal };
+}
+
+/**
+ * Files read, taken after those the box holds, in order, while the message
+ * stays within its count and its bytes together; the read's own refusal is
+ * said first, then the first file the bounds left out.
+ */
+export function withFiles(held: readonly CodingAgentAttachment[], read: FilesRead): FilesRead {
+  const attachments = [...held];
+  let refusal = read.refusal;
+  for (const attachment of read.attachments) {
+    if (attachments.length >= CODING_AGENT_BOUNDS.MAX_ATTACHMENTS) {
+      refusal ??= REFUSAL.FULL;
+      break;
     }
-    const { attachment } = read;
     const total = attachments.reduce(
       (sum, each) => sum + base64Bytes(each.data),
       base64Bytes(attachment.data),
