@@ -603,6 +603,13 @@
       "when": 1791350000000,
       "tag": "0086_plan_document",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1791360000000,
+      "tag": "0087_account_plan_template",
+      "breakpoints": true
     }
   ]
 }

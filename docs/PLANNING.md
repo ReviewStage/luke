@@ -717,6 +717,15 @@ its bound, and saves the fields, the body, and the assumptions together; no
 code parses the body back. The notetaker reads the fields on its next run,
 and the planning model reads the canonical Markdown on its next turn.
 
+Plans are becoming one free Markdown document, each started from its
+account's own starter template. The service already stores and serves that
+template: `GET`/`PUT /api/account/plan-template` reads it or keeps one
+verbatim (null goes back to the default), in `account_preference.plan_template`,
+and an account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
+(`packages/hosted/src/plan-document-template.ts`): the sections below as `##`
+headings, each with one plain guidance sentence. Nothing reads it to start a
+plan yet; new plans start from it once the switch to one document lands.
+
 Luke is the developer's teammate: someone to bounce ideas off who is also
 responsible for turning them into a concrete plan. So the template is the
 design doc two engineering teammates would write after talking a task

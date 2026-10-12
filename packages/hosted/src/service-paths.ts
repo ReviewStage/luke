@@ -20,6 +20,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /**
+   * The Markdown the account's new plans start from: read it (GET), or keep
+   * one verbatim or go back to the default (PUT).
+   * `plan-document-template.ts` declares both bodies.
+   */
+  ACCOUNT_PLAN_TEMPLATE: "/api/account/plan-template",
+  /**
    * A clip dictated into a message box, answered with its words (POST).
    * Nothing of the clip or its words is kept. `dictation-wire.ts` declares
    * both bodies.

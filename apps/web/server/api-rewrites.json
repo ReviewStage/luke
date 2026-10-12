@@ -80,6 +80,10 @@
     "dest": "/api/default.js?route=account/delete"
   },
   {
+    "src": "/api/account/plan-template",
+    "dest": "/api/default.js?route=account/plan-template"
+  },
+  {
     "src": "/api/account/preferences",
     "dest": "/api/default.js?route=account/preferences"
   },

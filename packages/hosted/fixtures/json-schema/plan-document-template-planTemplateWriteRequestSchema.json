@@ -1,0 +1,20 @@
+{
+  "type": "object",
+  "properties": {
+    "template": {
+      "anyOf": [
+        {
+          "type": "string",
+          "maxLength": 20000
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "template"
+  ],
+  "additionalProperties": false
+}

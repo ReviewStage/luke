@@ -570,7 +570,7 @@ is: the router is a service the layer writes each path into, and the
 requirements a route's own handler has travel as request markers the handler
 provides per request from the context `runWeb` read. The auth group, the
 events and maintenance groups below, the account group's
-`server/routes/account/delete.ts` and `server/routes/account/preferences.ts`,
+`server/routes/account/delete.ts`, `preferences.ts`, and `plan-template.ts`,
 the plans group's four, and the dashboard's five behind the admin group are
 converted this way; the voice route alone exports something else, the
 `http.Server` described under "Hosted voice service".
@@ -633,15 +633,15 @@ against the auth schema module and runs on the ambient `SqlClient`;
 ## The account group
 
 `server/account-app.ts` is the account route group: the signed-in desktop's
-own delete and preferences endpoints, described as routes of the group's own
-rather than carried as a passthrough, because both answer from this
-deployment's own database and neither owns a contract of its own the way Better Auth does.
+own delete, preferences, and plan template endpoints, described as routes of the group's own
+rather than carried as a passthrough, because each answers from this
+deployment's own database and none owns a contract of its own the way Better Auth does.
 Each endpoint resolves the bearer against the deployment's own account store
 before touching anything — root AGENTS.md pins that no credential or account
 secret ever travels in an answer — and answers only the boolean or the
 snapshot the caller's own account carries. `server/hosted/account-seams.ts` is
 the one place that hands the group a real user table and a real preferences
-store, so both `api/account/delete.ts` and `api/account/preferences.ts` build
+store, so `api/account/delete.ts`, `preferences.ts`, and `plan-template.ts` build
 the same group from the same wiring; the reads and the writes themselves are
 `server/hosted/account-store.ts`'s effects over the ambient `SqlClient`,
 handed to the group as the effects they are rather than run at the seam, and
@@ -679,6 +679,18 @@ that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the voice it holds.
+
+The plan template is the group's third path, `/api/account/plan-template`:
+`GET` answers `{ template, custom }`, the account's own Markdown or
+`DEFAULT_PLAN_TEMPLATE` with `custom: false`, and `PUT { template }` keeps a
+string verbatim (untrimmed, empty allowed, at most 20,000 characters) or goes
+back to the default on null (`@sidecar/hosted/plan-document-template`). It is
+a path of its own rather than a third part of the snapshot, because the
+desktop syncs the snapshot over its own settings and a long text does not
+belong in that loop. It lives in `account_preference.plan_template`
+(migration 0087), and a write sets that column alone: `updated_at` stays
+the preferences part's own, so a row a template opened answers no snapshot.
+`tests/account-plan-template.test.ts` answers the path over a real dialect.
 
 ### Accounts' own provider keys
 
