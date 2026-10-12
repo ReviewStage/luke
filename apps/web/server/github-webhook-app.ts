@@ -28,7 +28,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
 /**
  * github-webhook-app.ts -- the Luke GitHub App's webhook: a delivery about a pull request or its checks reads what the agents on that branch published again.
  *
- * GitHub signs every delivery with the App's webhook secret, and nothing is
+ * The events read are a pull request's, a check suite's, a check run's once
+ * it ends, and a commit status's, since the checks' one word counts the
+ * statuses beside the runs. GitHub signs every delivery with the App's webhook secret, and nothing is
  * read before the signature over the body's own bytes is confirmed in
  * constant time; a deployment holding no secret refuses every delivery as
  * unavailable, so an unconfigured webhook trusts nothing. Of a delivery only
@@ -65,6 +67,8 @@ const WEBHOOK_EVENT = {
   PULL_REQUEST: "pull_request",
   CHECK_SUITE: "check_suite",
   CHECK_RUN: "check_run",
+  /** A commit status, which the checks' one word counts beside the check runs. */
+  STATUS: "status",
 } as const;
 
 /** A pull request's actions that change what a plan's row says of it: where it stands, its title, or its size. */
@@ -112,9 +116,16 @@ const CheckRunDeliverySchema = Schema.Struct({
   action: Schema.String,
   repository: RepositorySchema,
   check_run: Schema.Struct({
-    check_suite: Schema.Struct({ head_branch: Schema.NullOr(Schema.String) }),
+    check_suite: Schema.optionalKey(
+      Schema.Struct({ head_branch: Schema.optionalKey(Schema.NullOr(Schema.String)) }),
+    ),
     pull_requests: Schema.Array(HeadSchema),
   }),
+});
+
+const StatusDeliverySchema = Schema.Struct({
+  repository: RepositorySchema,
+  branches: Schema.Array(Schema.Struct({ name: Schema.String })),
 });
 
 /** A delivery read against the few fields it is read for; every other key GitHub sends is dropped unread. */
@@ -177,9 +188,17 @@ function deliveryTarget(event: string, payload: UnparsedWireValue): DeliveryTarg
       return {
         repository: read.success.repository.full_name,
         branches: branchesOf([
-          run.check_suite.head_branch,
+          run.check_suite?.head_branch ?? null,
           ...run.pull_requests.map((pr) => pr.head.ref),
         ]),
+      };
+    }
+    case WEBHOOK_EVENT.STATUS: {
+      const read = readDelivery(StatusDeliverySchema, payload);
+      if (Result.isFailure(read)) return undefined;
+      return {
+        repository: read.success.repository.full_name,
+        branches: branchesOf(read.success.branches.map((branch) => branch.name)),
       };
     }
     default:

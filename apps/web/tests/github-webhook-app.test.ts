@@ -162,13 +162,18 @@ function pullRequestDelivery(action: string, ref: string) {
   return { action, repository, pull_request: { number: 41, title: "Ignored", head: { ref } } };
 }
 
-/** GitHub's delivery of a check run's action on the agent's branch. */
+/** GitHub's delivery of a check run's action on a pull request from the agent's branch, its suite named by id alone. */
 function checkRunDelivery(action: string, ref: string) {
   return {
     action,
     repository,
-    check_run: { check_suite: { head_branch: ref }, pull_requests: [] },
+    check_run: { check_suite: { id: 123 }, pull_requests: [{ number: 41, head: { ref } }] },
   };
+}
+
+/** GitHub's delivery of a commit status on the agent's branch's head. */
+function statusDelivery(ref: string) {
+  return { sha: HEAD_SHA, state: "failure", repository, branches: [{ name: ref }] };
 }
 
 /** An account reaching the repository, with one agent on a plan about it, its row on the pull request's branch. */
@@ -281,7 +286,7 @@ it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
   );
 
   it.effect(
-    "a check run that ended reads the checks again, one still running and a pull request's action that moves nothing read nothing, and a branch no agent stands on reads none",
+    "a check run that ended and a commit status read the checks again, one still running and a pull request's action that moves nothing read nothing, and a branch no agent stands on reads none",
     () =>
       Effect.gen(function* () {
         const pull: PullRequestFixture = { state: "open", merged: false, conclusion: "success" };
@@ -309,6 +314,14 @@ it.layer(testSqlClient)("the GitHub App's webhook", (it) => {
           { status: HOSTED_HTTP_STATUS.OK, body: { read: 1 } },
         );
         assert.equal((yield* kept())?.checks, CHECK_SUMMARY.FAILING);
+
+        // A commit status on the branch reads the checks again too.
+        pull.conclusion = "success";
+        assert.deepEqual(yield* answer(github, SECRET, delivery("status", statusDelivery(ref))), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { read: 1 },
+        });
+        assert.equal((yield* kept())?.checks, CHECK_SUMMARY.PASSING);
       }),
   );
 });

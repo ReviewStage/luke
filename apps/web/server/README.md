@@ -221,8 +221,8 @@ against the HMAC-SHA256 of the body's own bytes in constant time before it
 reads anything; a deployment without the secret answers every delivery
 `unavailable` (503), and a signature that does not hold is `invalid-token`
 (401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
-ready_for_review, converted_to_draft), `check_suite`, and a completed
-`check_run` are read, for the repository's full name and the branches they
+ready_for_review, converted_to_draft), `check_suite`, a completed
+`check_run`, and `status` are read, for the repository's full name and the branches they
 name, and nothing of a delivery is kept or logged: the branch finds the agents
 whose rows stand on it, of whichever account, at most ten, newest first, and
 each one's pull request is read again from GitHub on its owner's own token
