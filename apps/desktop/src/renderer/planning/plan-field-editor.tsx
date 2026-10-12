@@ -269,7 +269,18 @@ function inPlaceValue(editor: FieldEditor): FieldValue {
 }
 
 /** SPIKE: how long the typing pauses before the document hears the field's words. */
-const DRAFT_COALESCE_MS = 150;
+const DRAFT_PAUSE = Duration.millis(150);
+
+/** SPIKE: the pause before a draft is handed over, as an atom whose work is the wait; setting it again starts the wait over. */
+const draftPauseAtom = rendererRuntime.fn((stamp: number) =>
+  Effect.as(Effect.sleep(DRAFT_PAUSE), stamp),
+);
+
+/** SPIKE: what the in-place editor reports through. */
+interface DraftDoors {
+  readonly onDraft: (value: FieldValue) => void;
+  readonly onFinish: () => void;
+}
 
 /**
  * SPIKE: the in-place editor's drafts, coalesced to one per pause in the
@@ -277,28 +288,29 @@ const DRAFT_COALESCE_MS = 150;
  * whole document around the editor, and the editor, not React, holds the
  * words meanwhile; a finish, or the editor going, hands over the last first.
  */
-function useCoalescedDrafts(editing: FieldEditing): {
-  onDraft: (value: FieldValue) => void;
-  onFinish: () => void;
-} {
+function useCoalescedDrafts(editing: FieldEditing): DraftDoors {
+  const [pause, restartPause] = useAtom(draftPauseAtom);
   const pending = useRef<FieldValue | undefined>(undefined);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const stamp = useRef(0);
   const door = useRef(editing);
   door.current = editing;
   const flush = () => {
-    clearTimeout(timer.current);
     const next = pending.current;
     pending.current = undefined;
     if (next === undefined) return;
     if (next.kind === FIELD_KIND.RULE) door.current.typeRule(next.rule);
     else door.current.typeText(next.text);
   };
+  // A pause that ran out on the newest draft hands it over.
+  useEffect(() => {
+    if (AsyncResult.isSuccess(pause) && !pause.waiting && pause.value === stamp.current) flush();
+  });
   useEffect(() => flush, []);
   return {
     onDraft: (value) => {
       pending.current = value;
-      clearTimeout(timer.current);
-      timer.current = setTimeout(flush, DRAFT_COALESCE_MS);
+      stamp.current += 1;
+      restartPause(stamp.current);
     },
     onFinish: () => {
       flush();

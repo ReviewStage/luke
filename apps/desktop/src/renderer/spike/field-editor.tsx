@@ -84,15 +84,22 @@ function extensionsOf(kind: FieldValue["kind"]) {
   ];
 }
 
+/** The field's words as the editor opens them: Markdown, or a document built as written. */
+interface OpenedWords {
+  readonly content: JSONContent | string;
+  readonly contentType: "markdown" | "json";
+}
+
 /** The field's words as the editor opens on them. */
-function contentOf(value: FieldValue): { content: JSONContent | string; markdown: boolean } {
-  if (value.kind === FIELD_KIND.RULE) return { content: ruleDocument(value.rule), markdown: false };
-  if (value.kind === FIELD_KIND.TEXT) return { content: value.text, markdown: true };
+function contentOf(value: FieldValue): OpenedWords {
+  if (value.kind === FIELD_KIND.RULE)
+    return { content: ruleDocument(value.rule), contentType: "json" };
+  if (value.kind === FIELD_KIND.TEXT) return { content: value.text, contentType: "markdown" };
   const lines = value.text.split("\n").filter((line) => line.trim() !== "");
   if (value.kind === FIELD_KIND.QUESTIONS) {
     return {
       content: (lines.length === 0 ? [""] : lines).map((line) => `- ${line}`).join("\n"),
-      markdown: true,
+      contentType: "markdown",
     };
   }
   // The assumptions are plain text, so they open as written rather than as Markdown.
@@ -102,7 +109,7 @@ function contentOf(value: FieldValue): { content: JSONContent | string; markdown
   }));
   return {
     content: { type: "doc", content: [{ type: "bulletList", content: items }] },
-    markdown: false,
+    contentType: "json",
   };
 }
 
@@ -136,11 +143,11 @@ export function FieldEditor({
 }): React.JSX.Element {
   const handlers = useRef({ onDraft, onFinish });
   handlers.current = { onDraft, onFinish };
-  const { content, markdown } = contentOf(value);
+  const { content, contentType } = contentOf(value);
   const editor = useEditor({
     extensions: extensionsOf(value.kind),
     content,
-    ...(markdown ? { contentType: "markdown" as const } : {}),
+    contentType,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: {
@@ -160,7 +167,6 @@ export function FieldEditor({
   });
 
   // The caret lands where the pointer did, since the editor's words stand where the drawn words stood.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: the caret is placed once, as the editor opens.
   useLayoutEffect(() => {
     const pos =
       at === undefined ? undefined : editor.view.posAtCoords({ left: at.x, top: at.y })?.pos;

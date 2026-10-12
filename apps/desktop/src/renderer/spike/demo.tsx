@@ -102,7 +102,7 @@ const NAME = "Teammate invitations";
 const PLAN_ID = "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60";
 
 function planOf(content: PlanContent, at: number, actor: Plan["lastEdit"]): Plan {
-  return {
+  const plan: Plan = {
     id: PLAN_ID,
     name: NAME,
     createdAt: 1,
@@ -110,8 +110,8 @@ function planOf(content: PlanContent, at: number, actor: Plan["lastEdit"]): Plan
     repository: "acme/relay",
     document: { body: planBody({ name: NAME }, content.fields), assumptions: content.assumptions },
     fields: content.fields,
-    ...(actor === undefined ? {} : { lastEdit: actor }),
   };
+  return actor === undefined ? plan : { ...plan, lastEdit: actor };
 }
 
 const params = new URLSearchParams(window.location.search);
