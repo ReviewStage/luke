@@ -2625,6 +2625,123 @@ body,
   white-space: nowrap;
 }
 
+/* A row and the chevron beside it that opens the sections its revision
+   changed, set over the row's end beside its time, so the row keeps its
+   whole width to press. */
+.version-item {
+  position: relative;
+}
+
+.version-item:has(.version-row-sections) .version-row {
+  padding-right: calc(var(--row-inset) + 20px);
+}
+
+.version-row-sections {
+  position: absolute;
+  top: 50%;
+  right: var(--space-4);
+  display: grid;
+  width: 20px;
+  height: 22px;
+  place-items: center;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-tertiary);
+  transform: translateY(-50%);
+  transition:
+    background-color var(--duration-hover) ease,
+    color var(--duration-hover) ease;
+}
+
+.version-row-sections:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+.version-row-sections svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The versions and the sections of the one opened stand side by side in a
+   track as wide as the column, the sections slid in over the column's own
+   edge the way a nested page of System Settings is, on transform alone. */
+.version-log-track {
+  display: grid;
+  min-height: 0;
+  flex: 1;
+  grid-template-columns: 100% 100%;
+  overflow: clip;
+}
+
+.version-log-pane {
+  min-width: 0;
+  transition: transform var(--duration-pane) var(--motion-pane);
+}
+
+.version-log-track[data-opened="true"] > .version-log-pane {
+  transform: translateX(-100%);
+}
+
+.version-sections-back {
+  width: auto;
+  margin-bottom: var(--space-8);
+}
+
+/* Who wrote the revision and when, on the one line over its sections. */
+.version-sections-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  margin: 0 var(--row-inset) var(--space-8);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.version-sections-head time {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.version-section-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  padding: var(--space-6) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.version-section-row:hover {
+  background: var(--raised);
+}
+
+.version-section-row[aria-current="true"] {
+  background: var(--raised-strong);
+}
+
+.version-section-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-section-change {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
 .version-earlier {
   margin-top: var(--space-8);
   padding: var(--space-8) var(--row-inset);

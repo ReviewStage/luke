@@ -22,9 +22,11 @@ import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
+import { runAppCommand } from "../app-commands";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { type PlanHistorySource, usePlanHistory } from "../planning/use-plan-history";
 import { DesktopVersionHistory } from "./desktop-version-history";
@@ -271,7 +273,7 @@ function press(scope: ParentNode, words: string) {
 
 /** An arrow pressed wherever focus stands, and what it asked let land. */
 function arrow(
-  key: "ArrowUp" | "ArrowDown",
+  key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight",
   target: EventTarget = document.activeElement ?? document.body,
 ) {
   return Effect.promise(() =>
@@ -483,6 +485,131 @@ it.effect(
       assert.deepEqual(marked(page, "del"), ["Only admins"]);
       assert.deepEqual(marked(page, "ins"), ["Any member"]);
       assert.deepEqual(marked(page, ".version-added, .version-removed"), []);
+    }),
+);
+
+/** The versions of a plan that is one document whose newest revision changed one section and added another. */
+const SECTIONED = [
+  FIRST,
+  textOf(["## Goal\n\nAny member can invite."]),
+  textOf(["## Goal\n\nAny member can invite by email.", "## Decisions\n\nInvites expire."]),
+];
+
+/** Each section the open revision changed, as its row reads. */
+function sectionRows(page: HTMLElement): string[] {
+  return [...page.querySelectorAll(".version-section-row")].map((row) => row.textContent ?? "");
+}
+
+/** The section whose row is lit. */
+function chosenSection(page: HTMLElement): string | null | undefined {
+  return page.querySelector('.version-section-row[aria-current="true"] .version-section-name')
+    ?.textContent;
+}
+
+/** Whether the sections of a revision stand in the list's place. */
+function sectionsOpen(page: HTMLElement): boolean {
+  return page.querySelector(".version-log-track")?.getAttribute("data-opened") === "true";
+}
+
+/** Presses the chevron beside the row whose words read `row`, which opens the sections its version changed. */
+function openSections(page: HTMLElement, row: string) {
+  const item = [...page.querySelectorAll(".version-item")].find(
+    (each) => each.querySelector(".version-row")?.textContent === row,
+  );
+  const chevron = item?.querySelector<HTMLButtonElement>(".version-row-sections");
+  assert.ok(chevron, `no chevron on the row reading "${row}"`);
+  return Effect.promise(() => act(async () => chevron.click()));
+}
+
+/** Runs the version history's Escape, as the window's keymap does. */
+function pressEscape() {
+  return Effect.promise(() =>
+    act(async () => {
+      runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY);
+    }),
+  );
+}
+
+it.effect(
+  "only a version of several changes offers the sections it changed, never one change, a restore, or the plan before history",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService(NOW, SECTIONED, true);
+      service.lines.push({
+        seq: 4,
+        lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
+        startedAt: NOW - 30 * HOUR,
+        changes: 3,
+        restoredFrom: { seq: 1, at: NOW - 26 * HOUR },
+      });
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      const offered = [...page.querySelectorAll(".version-item")].map(
+        (item) => item.querySelector(".version-row-sections") !== null,
+      );
+      assert.deepEqual(offered, [true, false, true, false]);
+    }),
+);
+
+it.effect(
+  "a version's chevron slides its sections in, under who wrote it and when: each a row by its name, an added one saying so, the first drawn alone",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+
+      yield* openSections(page, "Luke2h2 changes");
+      assert.equal(sectionsOpen(page), true);
+      assert.equal(
+        page.querySelector(".version-sections-head")?.textContent?.startsWith("Luke·"),
+        true,
+      );
+      assert.deepEqual(sectionRows(page), ["Goal", "DecisionsAdded"]);
+      assert.equal(chosenSection(page), "Goal");
+      assert.equal(page.querySelector(".version-page .plan-title"), null);
+      assert.match(body(page) ?? "", /Any member can invite by email\./u);
+      assert.doesNotMatch(body(page) ?? "", /Invites expire/u);
+
+      yield* press(page, "DecisionsAdded");
+      assert.equal(chosenSection(page), "Decisions");
+      assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
+      assert.doesNotMatch(body(page) ?? "", /Any member/u);
+    }),
+);
+
+it.effect(
+  "the arrows step through the sections and right opens them, and Escape, the left arrow, and All versions each go back to the versions with the version still chosen",
+  () =>
+    Effect.gen(function* () {
+      const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+
+      yield* arrow("ArrowRight");
+      assert.equal(sectionsOpen(page), true);
+      yield* arrow("ArrowDown");
+      assert.equal(chosenSection(page), "Decisions");
+      assert.equal(document.activeElement?.textContent, "DecisionsAdded");
+      yield* arrow("ArrowDown");
+      assert.equal(chosenSection(page), "Decisions", "the last section, past which there is none");
+      yield* arrow("ArrowUp");
+      assert.equal(chosenSection(page), "Goal");
+
+      yield* pressEscape();
+      assert.equal(sectionsOpen(page), false);
+      assert.equal(page.querySelector(".plan-as-it-stands"), null, "Escape went back, not out");
+      assert.equal(chosen(page), "Luke");
+      assert.equal(
+        page.querySelector(".version-page .plan-title")?.textContent,
+        "Teammate invitations",
+      );
+
+      yield* arrow("ArrowRight");
+      yield* arrow("ArrowLeft");
+      assert.equal(sectionsOpen(page), false);
+
+      yield* arrow("ArrowRight");
+      yield* press(page, "All versions");
+      assert.equal(sectionsOpen(page), false);
+      yield* pressEscape();
+      assert.ok(page.querySelector(".plan-as-it-stands"), "Escape over the versions leaves");
     }),
 );
 

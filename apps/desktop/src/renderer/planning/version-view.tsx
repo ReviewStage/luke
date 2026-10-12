@@ -30,7 +30,9 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * drawn under the plan's name, as the plan's own tab draws it, with no
  * assumptions' section after it, since its assumptions are a section of
  * its text. The first version has nothing before it, so it is drawn with
- * nothing marked, and a version still being read stands as
+ * nothing marked. A section opened from its revision's list is drawn alone,
+ * without the plan's name over it, marked as the whole version marks it,
+ * and a version still being read stands as
  * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
  * in the window's dialog with the accent rather than red, since a restore is
  * itself a version the history keeps and can be undone by restoring the
@@ -102,15 +104,18 @@ function VersionAssumptions({ diff }: { diff: VersionDiff }): React.JSX.Element 
 function VersionBody({
   diff,
   title,
+  section,
 }: {
   diff: VersionDiff;
   title: string | undefined;
+  section: number | undefined;
 }): React.JSX.Element {
+  const units = section === undefined ? diff.units : diff.units.slice(section, section + 1);
   return (
     <>
       <div className="plan-body">
-        {title === undefined ? null : <PlanTitle name={title} />}
-        {diff.units.map((unit, at) => (
+        {title === undefined || section !== undefined ? null : <PlanTitle name={title} />}
+        {units.map((unit, at) => (
           <MarkdownMessage
             // A unit's heading may stand twice, struck and written again, so its place keys it.
             // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
@@ -121,7 +126,7 @@ function VersionBody({
           />
         ))}
       </div>
-      {title === undefined ? <VersionAssumptions diff={diff} /> : null}
+      {title === undefined && section === undefined ? <VersionAssumptions diff={diff} /> : null}
     </>
   );
 }
@@ -147,9 +152,11 @@ export function VersionSkeleton(): React.JSX.Element {
 function VersionContent({
   viewing,
   title,
+  section,
 }: {
   viewing: ViewedVersion;
   title: string | undefined;
+  section: number | undefined;
 }): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
@@ -166,7 +173,7 @@ function VersionContent({
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
-      <VersionBody diff={diff} title={title} />
+      <VersionBody diff={diff} title={title} section={section} />
     </>
   );
 }
@@ -186,6 +193,7 @@ export function VersionView({
   onRestored,
   restorable = true,
   title,
+  section,
 }: {
   history: PlanHistoryControl;
   viewing: ViewedVersion;
@@ -195,6 +203,8 @@ export function VersionView({
   restorable?: boolean;
   /** The name of a plan that is one document, which every version is drawn under (`documentTitleOf`). */
   title?: string | undefined;
+  /** The one unit of the version to draw, alone and without the plan's title, as a section opened from its revision's list; the whole version without one. */
+  section?: number | undefined;
 }): React.JSX.Element {
   // An archive landing while the question stands takes the question down with the button.
   const restore = useConfirmDialog({ subject: restorable, surfaceOpen: shown }, async () => {
@@ -228,7 +238,7 @@ export function VersionView({
       </header>
       <div className="desktop-document">
         <div className="plan-document-scroll">
-          <VersionContent viewing={viewing} title={title} />
+          <VersionContent viewing={viewing} title={title} section={section} />
         </div>
       </div>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at)} />

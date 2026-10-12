@@ -452,3 +452,41 @@ export function versionDiff(
     assumptions.some((assumption) => assumption.change !== VERSION_CHANGE.SAME);
   return { units, assumptions, changed };
 }
+
+/** One section a revision changed, as its drill-in lists it: the unit of the version it is, its heading, and how it changed. */
+export interface ChangedSection {
+  /** Where the section stands among the version's units, which is how the page draws it alone. */
+  readonly unit: number;
+  readonly heading: string;
+  readonly change: Exclude<VersionChange, typeof VERSION_CHANGE.SAME>;
+}
+
+/**
+ * The sections a revision changed, in reading order: each unit of its diff
+ * that is not the same as before, so the list names what the page marks. A
+ * revision with nothing before it, the plan's first, wrote every section
+ * it holds. Note that a revision is one writer's saves joined, and the store
+ * keeps only the text they left, so a section is the finest step a revision
+ * can be read in.
+ */
+export function changedSections(diff: VersionDiff, first: boolean): readonly ChangedSection[] {
+  return diff.units.flatMap((unit, at): ChangedSection[] => {
+    const change = first ? VERSION_CHANGE.ADDED : unit.change;
+    if (change === VERSION_CHANGE.SAME) return [];
+    return [{ unit: at, heading: unit.key, change }];
+  });
+}
+
+/** Whether a revision's row opens the sections it changed: one whose saves made more than one change, never a restore or the plan before history. */
+export function opensSections(line: PlanRevisionLine): boolean {
+  return (
+    line.changes > 1 &&
+    line.restoredFrom === undefined &&
+    line.lastEdit.actor !== PLAN_ACTOR.EARLIER
+  );
+}
+
+/** What a section is called in a revision's list: its heading, or Opening for the words before the document's first heading. */
+export function sectionName(heading: string): string {
+  return heading === "" ? "Opening" : heading;
+}

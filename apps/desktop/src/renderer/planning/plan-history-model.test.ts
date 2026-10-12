@@ -7,6 +7,8 @@ import { DOCUMENT_NAME, DOCUMENT_TEXT } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
   authorName,
+  changedSections,
+  opensSections,
   REVISION_AUTHOR,
   revisionAuthorOf,
   revisionOfSave,
@@ -355,4 +357,35 @@ test("a revision of the template's fields with no assumptions is still drawn wit
     "Open questions",
     "Assumptions",
   ]);
+});
+
+test("a revision's changed sections are the units its diff marks, in reading order, and the plan's first revision wrote every one", () => {
+  const before = {
+    body: "## Goal\n\nOnly admins.\n\n## Risks\n\nSpam.\n\n## Notes\n\nNone.",
+    assumptions: [],
+  };
+  const after = {
+    body: "## Goal\n\nAny member.\n\n## Notes\n\nNone.\n\n## Decisions\n\nExpire.",
+    assumptions: [],
+  };
+
+  assert.deepEqual(changedSections(versionDiff(before, after, "Invites"), false), [
+    { unit: 0, heading: "Goal", change: VERSION_CHANGE.CHANGED },
+    { unit: 1, heading: "Risks", change: VERSION_CHANGE.REMOVED },
+    { unit: 3, heading: "Decisions", change: VERSION_CHANGE.ADDED },
+  ]);
+  assert.deepEqual(
+    changedSections(versionDiff(null, after, "Invites"), true).map((section) => section.change),
+    [VERSION_CHANGE.ADDED, VERSION_CHANGE.ADDED, VERSION_CHANGE.ADDED],
+  );
+});
+
+test("only a revision of several changes opens its sections: not one change, a restore, or the plan before history", () => {
+  assert.equal(opensSections(line()), true);
+  assert.equal(opensSections(line({ changes: 1 })), false);
+  assert.equal(opensSections(line({ restoredFrom: { seq: 1, at: NOW } })), false);
+  assert.equal(
+    opensSections(line({ lastEdit: { actor: PLAN_ACTOR.EARLIER, at: NOW, duringCall: false } })),
+    false,
+  );
 });

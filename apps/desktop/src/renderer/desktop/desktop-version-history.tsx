@@ -1,6 +1,6 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
-import type { PlanRevisionLine } from "@sidecar/hosted/plan-wire";
-import { BackIcon, TerminalIcon, WingFace } from "@sidecar/panel";
+import type { Plan, PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { BackIcon, ChevronRightIcon, TerminalIcon, WingFace } from "@sidecar/panel";
 import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -10,23 +10,30 @@ import { PersonAvatar } from "../person-avatar";
 import { centreWithin } from "../planning/code-pane";
 import {
   authorName,
+  type ChangedSection,
+  changedSections,
   type HistoryReader,
+  opensSections,
   REVISION_AUTHOR,
   type RevisionAuthor,
   revisionAuthorOf,
   revisionSummary,
+  sectionName,
+  VERSION_CHANGE,
+  versionDiff,
+  versionMoment,
 } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { documentTitleOf } from "../planning/plan-title";
 import { DOCUMENT_REGION } from "../planning/planning-model";
-import { HISTORY_READ } from "../planning/use-plan-history";
+import { HISTORY_READ, type ViewedVersion } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { VersionSkeleton, VersionView } from "../planning/version-view";
 import { HarnessMark } from "../provider-marks";
 import { RetryButton, RetryRowLabel } from "../retry-button";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
-import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
+import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -46,7 +53,15 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * the version that made the section's last change instead, its row brought
  * into the list's view. Choosing a row, or stepping with the up and down
  * arrows, draws that version beside the list (`version-view.tsx`), and older
- * versions are read a page at a time from the list's foot. While the
+ * versions are read a page at a time from the list's foot. A version of
+ * several changes carries a chevron at its row's end, and it or the right
+ * arrow slides the column one level over, as a nested page of System
+ * Settings does: All versions at its head, who wrote the version and when on
+ * one line, then a row for each section it changed, a section added or
+ * removed saying so. The first is drawn alone beside them, the arrows step
+ * through the rest, and the left arrow, Escape, or All versions slide back
+ * with the version still chosen. A version keeps only the text its writer's
+ * saves left, so a section is the finest step it is read in. While the
  * versions are read, the list and the page stand as quiet blocks in their
  * own shapes (`skeleton.tsx`).
  *
@@ -60,6 +75,16 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 
 /** What the page says while the plan has no revision yet. */
 const NO_HISTORY_LINE = "Versions appear here as the plan is written.";
+
+/** What the chevron that opens a revision's sections says. */
+const SECTIONS_HINT = "Show the sections it changed";
+
+/** The word a changed section wears beside its name: none for an edit, which most are. */
+const SECTION_CHANGE_WORDS = {
+  [VERSION_CHANGE.ADDED]: "Added",
+  [VERSION_CHANGE.REMOVED]: "Removed",
+  [VERSION_CHANGE.CHANGED]: undefined,
+} as const satisfies Record<ChangedSection["change"], string | undefined>;
 
 /** The placeholder rows' shape while the versions are read: each row's author and summary as wide as their share of it. */
 const LOG_SKELETON = [
@@ -103,7 +128,12 @@ function RevisionMark({ author }: { author: RevisionAuthor }): React.JSX.Element
   }
 }
 
-/** One revision's row: who wrote it, what it did, and when; lit while its version is drawn. */
+/**
+ * One revision's row: who wrote it, what it did, and when; lit while its
+ * version is drawn. A revision of several changes carries a chevron at its
+ * end that opens the sections it changed, a button beside the row rather
+ * than inside it, since a button holds no other.
+ */
 function RevisionRow({
   line,
   author,
@@ -111,6 +141,7 @@ function RevisionRow({
   now,
   rowRef,
   onSelect,
+  onOpenSections,
 }: {
   line: PlanRevisionLine;
   author: RevisionAuthor;
@@ -118,10 +149,12 @@ function RevisionRow({
   now: number;
   rowRef: (row: HTMLButtonElement | null) => void;
   onSelect: () => void;
+  /** Opens the sections the revision changed; none for a revision that opens none. */
+  onOpenSections: (() => void) | undefined;
 }): React.JSX.Element {
   const { lastEdit } = line;
   return (
-    <li>
+    <li className="version-item">
       <button
         ref={rowRef}
         type="button"
@@ -145,6 +178,78 @@ function RevisionRow({
           </span>
           <span className="version-row-summary">{revisionSummary(line)}</span>
         </span>
+      </button>
+      {onOpenSections === undefined ? null : (
+        <Tooltip label={SECTIONS_HINT}>
+          <button
+            type="button"
+            className="version-row-sections"
+            aria-label={SECTIONS_HINT}
+            tabIndex={-1}
+            onClick={onOpenSections}
+          >
+            <ChevronRightIcon />
+          </button>
+        </Tooltip>
+      )}
+    </li>
+  );
+}
+
+/** The head of a revision's sections: the way back to every version, and who wrote it and when, on one line. */
+function SectionsHead({
+  line,
+  author,
+  onBack,
+}: {
+  line: PlanRevisionLine;
+  author: RevisionAuthor;
+  onBack: () => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <button type="button" className="sidebar-item version-sections-back" onClick={onBack}>
+        <BackIcon />
+        All versions
+      </button>
+      <p className="version-sections-head">
+        <RevisionMark author={author} />
+        <span className="version-row-author" data-author={author.kind}>
+          {authorName(author)}
+        </span>
+        <span aria-hidden="true">·</span>
+        <time dateTime={new Date(line.lastEdit.at).toISOString()}>
+          {versionMoment(line.lastEdit.at)}
+        </time>
+      </p>
+    </>
+  );
+}
+
+/** One section a revision changed: its name, and a quiet word where it was added or removed rather than edited; lit while it is drawn. */
+function SectionRow({
+  section,
+  selected,
+  rowRef,
+  onSelect,
+}: {
+  section: ChangedSection;
+  selected: boolean;
+  rowRef: (row: HTMLButtonElement | null) => void;
+  onSelect: () => void;
+}): React.JSX.Element {
+  const word = SECTION_CHANGE_WORDS[section.change];
+  return (
+    <li>
+      <button
+        ref={rowRef}
+        type="button"
+        className="version-section-row"
+        aria-current={selected ? "true" : undefined}
+        onClick={onSelect}
+      >
+        <span className="version-section-name">{sectionName(section.heading)}</span>
+        {word === undefined ? null : <span className="version-section-change">{word}</span>}
       </button>
     </li>
   );
@@ -207,35 +312,58 @@ function keysTaken(target: EventTarget | null): boolean {
   return target.isContentEditable || target.closest("input, textarea, select, dialog") !== null;
 }
 
+/** What a list does with the arrow keys: up and down step through it, and right and left go into a row and back out, where the list offers them. */
+interface ArrowKeys {
+  /** Steps one row down or up; answers whether there was a row to step to. */
+  readonly step: (by: 1 | -1) => boolean;
+  /** Goes into the chosen row; answers whether it opens anything. */
+  readonly open?: () => boolean;
+  readonly back?: () => void;
+}
+
 /**
- * The up and down arrows, anywhere in the view but a field or a dialog,
- * choose the version above or below the one drawn, and focus its row, which
- * brings it into the list's view.
+ * The arrows, anywhere in the view but a field or a dialog, as the list on
+ * show takes them: the versions, or the sections of the one opened. Note
+ * that the handler reads the keys through a ref, so a list re-rendered on
+ * every step does not take the listener down and up again with it.
  */
-function useVersionKeys(
-  revisions: readonly PlanRevisionLine[],
-  selected: number | undefined,
-  onSelect: (seq: number) => void,
-  rows: Map<number, HTMLButtonElement>,
-): void {
-  const latest = useRef({ revisions, selected, onSelect });
-  latest.current = { revisions, selected, onSelect };
+function useArrowKeys(keys: ArrowKeys): void {
+  const latest = useRef(keys);
+  latest.current = keys;
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : 0;
-      if (step === 0 || event.defaultPrevented || keysTaken(event.target)) return;
+      if (event.defaultPrevented || keysTaken(event.target)) return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const held = latest.current;
-      const at = held.revisions.findIndex((line) => line.seq === held.selected);
-      const next = held.revisions[at + step];
-      if (at === -1 || next === undefined) return;
-      event.preventDefault();
-      held.onSelect(next.seq);
-      rows.get(next.seq)?.focus();
+      const step = event.key === "ArrowDown" ? 1 : event.key === "ArrowUp" ? -1 : undefined;
+      let handled = false;
+      if (step !== undefined) handled = held.step(step);
+      else if (event.key === "ArrowRight") handled = held.open?.() ?? false;
+      else if (event.key === "ArrowLeft" && held.back !== undefined) {
+        held.back();
+        handled = true;
+      }
+      if (handled) event.preventDefault();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [rows]);
+  }, []);
+}
+
+/** The row `step` away from the one whose key is `at` among `keys`, chosen and focused, which brings it into its list's view; false where there is none. */
+function stepThrough<K>(
+  keys: readonly K[],
+  at: K | undefined,
+  step: 1 | -1,
+  choose: (key: K) => void,
+  rows: Map<K, HTMLButtonElement>,
+): boolean {
+  const index = at === undefined ? -1 : keys.indexOf(at);
+  const next = keys[index + step];
+  if (index === -1 || next === undefined) return false;
+  choose(next);
+  rows.get(next)?.focus();
+  return true;
 }
 
 /**
@@ -259,13 +387,39 @@ function useOpenedRowShown(
   }, [selected, rows, log]);
 }
 
+/** The revision whose sections are open, and the one of them drawn, the first until another is chosen. */
+interface OpenedSections {
+  readonly seq: number;
+  readonly unit: number | undefined;
+}
+
+/** The sections the open revision changed, once its version is read; nothing while it is read, or while no revision is open. */
+function openedSections(
+  viewing: ViewedVersion | undefined,
+  opened: OpenedSections | undefined,
+  plan: Plan | undefined,
+): readonly ChangedSection[] | undefined {
+  if (opened === undefined || viewing?.line.seq !== opened.seq) return undefined;
+  const { read } = viewing;
+  if (read.kind !== HISTORY_READ.READY) return undefined;
+  const title = plan === undefined ? undefined : documentTitleOf(plan);
+  return changedSections(versionDiff(read.previous, read.document, title), read.previous === null);
+}
+
 /**
  * The version history's page beside the list: the version chosen, or the
  * state standing in its place. A restore that lands leaves for the plan it
  * restored, which is not always the one Back returns to; an archived plan's
  * versions are read and not restored.
  */
-function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
+function VersionPage({
+  plans,
+  section,
+}: {
+  plans: PlansControl;
+  /** The one unit of the version drawn alone, while a section of its revision is open. */
+  section: number | undefined;
+}): React.JSX.Element {
   const { history, region } = plans;
   if (history.viewing !== undefined) {
     const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
@@ -277,6 +431,7 @@ function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
         onRestored={history.onClose}
         restorable={plan?.archivedAt === undefined}
         title={plan === undefined ? undefined : documentTitleOf(plan)}
+        section={section}
       />
     );
   }
@@ -340,19 +495,51 @@ export function DesktopVersionHistory({
   const { list } = versions;
   const revisions = list.kind === HISTORY_READ.READY ? list.revisions : [];
   const rows = useRef(new Map<number, HTMLButtonElement>()).current;
+  const sectionRows = useRef(new Map<number, HTMLButtonElement>()).current;
   const log = useRef<HTMLDivElement>(null);
-  useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
-  useVersionKeys(revisions, versions.selected, versions.onSelect, rows);
-  useOpenedRowShown(versions.selected, rows, log);
+  const [opened, setOpened] = useState<OpenedSections | undefined>(undefined);
   const edge = useSidebarEdge(sidebar);
   const reader = readerOf(account);
   const agents = plans.agents.agents ?? [];
   // The plan is named as its document is drawn, or as the list names it while its read is on its way.
   const { region } = plans;
+  const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
   const name =
-    region.kind === DOCUMENT_REGION.READY
-      ? region.plan.name
-      : [...plans.plans, ...plans.archived].find((plan) => plan.id === plans.boundFor)?.name;
+    plan?.name ??
+    [...plans.plans, ...plans.archived].find((each) => each.id === plans.boundFor)?.name;
+  const sections = openedSections(versions.viewing, opened, plan);
+  const openedLine = revisions.find((line) => line.seq === opened?.seq);
+  const unit = opened?.unit ?? sections?.[0]?.unit;
+  const openSections = (seq: number) => {
+    versions.onSelect(seq);
+    setOpened({ seq, unit: undefined });
+  };
+  const closeSections = () => {
+    if (opened === undefined) return;
+    setOpened(undefined);
+    rows.get(opened.seq)?.focus();
+  };
+  useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, opened === undefined ? onExit : closeSections);
+  const chooseUnit = (at: number) => setOpened((held) => held && { ...held, unit: at });
+  const units = sections?.map((section) => section.unit) ?? [];
+  const seqs = revisions.map((line) => line.seq);
+  useArrowKeys(
+    opened === undefined
+      ? {
+          step: (by) => stepThrough(seqs, versions.selected, by, versions.onSelect, rows),
+          open: () => {
+            const line = revisions.find((each) => each.seq === versions.selected);
+            if (line === undefined || !opensSections(line)) return false;
+            openSections(line.seq);
+            return true;
+          },
+        }
+      : {
+          step: (by) => stepThrough(units, unit, by, chooseUnit, sectionRows),
+          back: closeSections,
+        },
+  );
+  useOpenedRowShown(versions.selected, rows, log);
 
   return (
     <div className="desktop-version-history">
@@ -371,33 +558,66 @@ export function DesktopVersionHistory({
         </button>
         <h1 className="version-log-title">Version history</h1>
         {name === undefined ? null : <p className="version-log-plan">{name}</p>}
-        <div ref={log} className="sidebar-section">
-          {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
-          <ol className="version-list">
-            {revisions.map((line) => (
-              <RevisionRow
-                key={line.seq}
-                line={line}
-                author={revisionAuthorOf(line, reader, agents)}
-                selected={line.seq === versions.selected}
-                now={now}
-                rowRef={(row) => {
-                  if (row === null) rows.delete(line.seq);
-                  else rows.set(line.seq, row);
-                }}
-                onSelect={() => versions.onSelect(line.seq)}
-              />
-            ))}
-          </ol>
-          {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
-            <EarlierRow onRead={versions.onLoadEarlier} />
-          ) : null}
+        <div className="version-log-track" data-opened={String(opened !== undefined)}>
+          <div ref={log} className="sidebar-section version-log-pane" inert={opened !== undefined}>
+            {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
+            <ol className="version-list">
+              {revisions.map((line) => (
+                <RevisionRow
+                  key={line.seq}
+                  line={line}
+                  author={revisionAuthorOf(line, reader, agents)}
+                  selected={line.seq === versions.selected}
+                  now={now}
+                  rowRef={(row) => {
+                    if (row === null) rows.delete(line.seq);
+                    else rows.set(line.seq, row);
+                  }}
+                  onSelect={() => versions.onSelect(line.seq)}
+                  onOpenSections={opensSections(line) ? () => openSections(line.seq) : undefined}
+                />
+              ))}
+            </ol>
+            {list.kind === HISTORY_READ.READY && list.earlier !== undefined ? (
+              <EarlierRow onRead={versions.onLoadEarlier} />
+            ) : null}
+          </div>
+          <section
+            className="sidebar-section version-log-pane"
+            aria-label="Sections changed"
+            inert={opened === undefined}
+          >
+            {openedLine === undefined ? null : (
+              <>
+                <SectionsHead
+                  line={openedLine}
+                  author={revisionAuthorOf(openedLine, reader, agents)}
+                  onBack={closeSections}
+                />
+                {sections === undefined ? <LogSkeleton /> : null}
+                <ol className="version-list">
+                  {sections?.map((section) => (
+                    <SectionRow
+                      key={section.unit}
+                      section={section}
+                      selected={section.unit === unit}
+                      rowRef={(row) => {
+                        if (row === null) sectionRows.delete(section.unit);
+                        else sectionRows.set(section.unit, row);
+                      }}
+                      onSelect={() => chooseUnit(section.unit)}
+                    />
+                  ))}
+                </ol>
+              </>
+            )}
+          </section>
         </div>
         {/* Last, so the drag strip above the way back does not take the edge's top from it. */}
         <SidebarResizeEdge edge={edge} />
       </nav>
       <section className="version-page ph-no-capture" aria-label="Version">
-        <VersionPage plans={plans} />
+        <VersionPage plans={plans} section={opened === undefined ? undefined : unit} />
       </section>
     </div>
   );
