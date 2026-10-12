@@ -96,6 +96,8 @@ function mount(
   const shownAgents: (string | null)[] = [];
   /** What the voice window was told to do, each time it was told. */
   const voiceCommands: VoiceCommand[] = [];
+  /** Each start's payload as it was asked, unread until a test reads it as the act's schema would. */
+  const starts: unknown[] = [];
   const record = (kind: ActKind) => {
     (kind.startsWith("codingAgents.") ? agentActs : told).push(kind);
   };
@@ -119,9 +121,10 @@ function mount(
         // An act the test does not answer is recorded and refused.
         act: <Kind extends ActKind>(
           kind: Kind,
-          ..._args: unknown[]
+          ...args: unknown[]
         ): Promise<ActResultFor<Kind>> => {
           record(kind);
+          if (kind === ACT_KIND.PLANNING_START) starts.push(args[0]);
           const answer = answers[kind];
           if (answer !== undefined) return answer();
           return Promise.reject(new Error("Not answered in this test."));
@@ -162,6 +165,7 @@ function mount(
     agentActs,
     shownAgents,
     voiceCommands,
+    starts,
     control: () => {
       assert.ok(control);
       return control;
@@ -1050,6 +1054,121 @@ test("a repository chosen by New plan is let go once a plan opens, so a later vi
 
   assert.deepEqual(chosen, { repository: "acme/ledger" });
   assert.equal(tab.control().newPlan.preset, undefined);
+});
+
+const PERSONAL = { id: "workspace-personal", name: "Personal", personal: true };
+const ACME = { id: "workspace-acme", name: "Acme", personal: false };
+
+/** The account's plans across its two workspaces: two of its own, one of the team's, and one of each archived. */
+const TWO_WORKSPACES: PlanningView = {
+  ...IDLE_PLANNING_VIEW,
+  listStatus: PLANNING_READ.READY,
+  workspaces: [PERSONAL, ACME],
+  plans: [
+    row("notes", 4),
+    { ...row("alerts", 3), workspaceId: ACME.id },
+    row("billing", 2),
+    { ...row("old-launch", 1, { archivedAt: 9 }), workspaceId: ACME.id },
+    row("old-notes", 1, { archivedAt: 8 }),
+  ],
+};
+
+/** A start's payload, read back as the act's own schema admits it. */
+const readStart = Schema.decodeUnknownOption(
+  Schema.Struct({ workspaceId: Schema.optionalKey(Schema.String) }),
+);
+
+/** The workspace each start the tab asked for named, none where it named none. */
+function startedIn(starts: readonly unknown[]): (string | undefined)[] {
+  return starts.map((payload) => Option.getOrUndefined(readStart(payload))?.workspaceId);
+}
+
+const UNSTARTED = {
+  [ACT_KIND.PLANNING_START]: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+};
+
+test("the sidebar lists the personal workspace's plans first, a workspace chosen lists its own alone, and New plan starts in the one chosen", async () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES }, UNSTARTED);
+
+  const personal = {
+    workspace: tab.control().workspace?.id,
+    plans: tab.control().plans.map((plan) => plan.id),
+    archived: tab.control().archived.map((plan) => plan.id),
+  };
+  await tab.control().newPlan.start("Invites", null);
+  act(() => tab.control().onChooseWorkspace(ACME.id));
+  await tab.control().newPlan.start("Usage", "acme/relay");
+
+  assert.deepEqual(personal, {
+    workspace: PERSONAL.id,
+    plans: ["notes", "billing"],
+    archived: ["old-notes"],
+  });
+  assert.equal(tab.control().workspace?.id, ACME.id);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["alerts"],
+  );
+  assert.deepEqual(
+    tab.control().archived.map((plan) => plan.id),
+    ["old-launch"],
+  );
+  assert.deepEqual(startedIn(tab.starts), [PERSONAL.id, ACME.id]);
+});
+
+test("a workspace chosen is chosen again on the next launch, and one the account is no longer in gives way to the personal one", () => {
+  const first = mount({ shown: true, planning: TWO_WORKSPACES });
+  act(() => first.control().onChooseWorkspace(ACME.id));
+  document.body.innerHTML = "";
+
+  const relaunched = mount({ shown: true, planning: TWO_WORKSPACES });
+  const kept = relaunched.control().workspace?.id;
+  relaunched.stand({ planning: { ...TWO_WORKSPACES, workspaces: [PERSONAL] } });
+
+  assert.equal(kept, ACME.id);
+  assert.equal(relaunched.control().workspace?.id, PERSONAL.id);
+  assert.deepEqual(
+    relaunched.control().plans.map((plan) => plan.id),
+    ["notes", "billing"],
+  );
+});
+
+test("before the workspaces are read every plan is listed and New plan names no workspace, so the service starts it in the personal one", async () => {
+  const tab = mount({ shown: true, planning: { ...TWO_WORKSPACES, workspaces: [] } }, UNSTARTED);
+
+  await tab.control().newPlan.start("Invites", null);
+
+  assert.equal(tab.control().workspace, undefined);
+  assert.deepEqual(
+    tab.control().plans.map((plan) => plan.id),
+    ["notes", "alerts", "billing"],
+  );
+  assert.deepEqual(startedIn(tab.starts), [undefined]);
+});
+
+test("Manage workspaces asks main to open the Workspaces page, and a fixture's opens nothing", () => {
+  const tab = mount({ shown: true, planning: TWO_WORKSPACES });
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+
+  act(() => tab.control().onManageWorkspaces());
+  act(() => fixture.control().onManageWorkspaces());
+
+  assert.equal(tab.told.at(-1), ACT_KIND.WORKSPACES_MANAGE);
+  assert.deepEqual(fixture.told, []);
+});
+
+test("a fixture run lists its personal workspace's plans under the switcher, and a choice there is kept nowhere", () => {
+  const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.IDLE });
+  const staged = fixture.control().plans.map((plan) => plan.name);
+  act(() => fixture.control().onChooseWorkspace("workspace-acme"));
+
+  assert.deepEqual(staged, ["Teammate invitations", "Billing export"]);
+  assert.deepEqual(
+    fixture.control().plans.map((plan) => plan.name),
+    ["Usage alerts"],
+  );
+  assert.equal(fixture.control().workspaces.length, 2);
+  assert.equal(window.localStorage.length, 0);
 });
 
 test("a fixture's plan is pinned and archived nowhere", () => {

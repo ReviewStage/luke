@@ -134,6 +134,14 @@ new-plan page, which leaves the plan, and the new-plan page closes the panel. Es
   end, how long ago it was last updated ("now", "5m", "3h", "2d", "3w", then
   the date), moved on each minute, the full moment on hover. Pinned and
   archived rows stay flat and name their `owner/repository` beneath.
+- An account in more than one workspace sees the list headed by the
+  workspace it lists, the personal one until another is chosen. Its menu
+  lists every workspace the account is a member of, the listed one checked,
+  then "Manage workspaces…", which opens the service's Workspaces page in the
+  browser. The list, Pinned, Archived, and the command palette hold the
+  chosen workspace's plans alone, New plan starts in it, and the choice is
+  remembered on this Mac. An account in its personal workspace alone draws
+  no head.
 - Clicking a row opens that plan on the document page (see "Leaving and
   resuming").
 - `New plan` at the head of the list leaves any open plan for the new-plan
@@ -1137,7 +1145,7 @@ the exact shape.
 | Part | Reuse | New |
 | --- | --- | --- |
 | The tab | The window's shell (`desktop/desktop-shell.tsx`, `desktop/desktop-sidebar.tsx`); `APP_PANEL_TAB` in `@sidecar/guide`, which the sidebar and the counted `panel:tab_change` share (`panel-tabs.tsx`) | `PLANS` in `APP_PANEL_TAB` and the counted tab set; the tab's pages (`desktop/desktop-plans.tsx`) and its control (`use-plans-tab.ts`) (LUKE-347). |
-| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting, and deleting a plan, the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
+| Acts | `ACT_KIND`, `act-router.ts`, `ActSender`, `registerDesktopIpc` | Rows a panel alone may send, refusing the voice window and the takeover: the plan list read as the tab shows, opening, leaving, starting (in the workspace the sidebar's switcher chose, `desktop/workspace-switcher.tsx` over `desktop/chosen-workspace.ts`), and deleting a plan, the service's Workspaces page opened in the browser (`workspaces.manage`), the repositories the account reaches, a plan's repository, a page of GitHub's opened in the browser, the microphone, and a plan's coding agents (`codingAgents.models`, `codingAgents.defaultRead`, `codingAgents.defaultWrite`, `codingAgents.list`, `codingAgents.start`, `codingAgents.messages`, `codingAgents.stop`, `codingAgents.pullRequest`). |
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
