@@ -61,7 +61,6 @@
   /* A line's end is read by the same sideways swipe that pulls the Conversation
      thread; at the block's edge the swipe stays the block's. */
   overscroll-behavior-x: contain;
-  scrollbar-width: none;
   text-align: left;
 }
 
@@ -121,7 +120,6 @@
   border-collapse: collapse;
   overflow-x: auto;
   overscroll-behavior-x: contain;
-  scrollbar-width: none;
   font-variant-numeric: tabular-nums;
   text-align: left;
 }

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { FILE_TREE_STYLE_ATTRIBUTE } from "@pierre/trees";
 import { onTestFinished, test } from "vitest";
+import { cssRules } from "#testing/css-rules";
 import type { FolderListing } from "./contract";
 import "./index";
 
@@ -151,6 +153,26 @@ test("each file is drawn with its type's icon in that type's colour", async () =
     tree.row("src/index.ts").querySelector("[data-icon-token]")?.getAttribute("data-icon-token"),
     "typescript",
   );
+});
+
+test("the tree scrolls under the window's thin scrollbar, the width its shadow root does not inherit", async () => {
+  const tree = mounted(repository);
+  tree.handle.reveal("src/index.ts", { focus: false });
+  await tree.settled();
+
+  const shadow = tree.host.querySelector("file-tree-container")?.shadowRoot;
+  const scroller = shadow?.querySelector("[data-file-tree-virtualized-scroll='true']");
+  assert.ok(shadow && scroller, "the tree drew its scroller");
+  // jsdom computes no cascade, so the width is read from the sheets the root holds past Pierre's own, which sets one for Firefox alone.
+  const sheets = [...shadow.querySelectorAll(`style:not([${FILE_TREE_STYLE_ATTRIBUTE}])`)]
+    .map((style) => style.textContent)
+    .join("\n");
+  const width = cssRules(sheets)
+    .filter((rule) => rule.declarations.has("scrollbar-width"))
+    .filter((rule) => rule.selectors.some((selector) => scroller.matches(selector)))
+    .at(-1)
+    ?.declarations.get("scrollbar-width");
+  assert.equal(width, "thin");
 });
 
 test("a search narrows the rows to the paths holding it, says when none do, and an empty one shows every row again", async () => {

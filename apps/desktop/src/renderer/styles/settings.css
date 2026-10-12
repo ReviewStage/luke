@@ -17,8 +17,6 @@
   overflow-x: clip;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
   animation: scroll-edge-fade linear both;
   animation-timeline: scroll(self block);
 }

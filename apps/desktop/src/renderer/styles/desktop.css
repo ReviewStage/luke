@@ -134,40 +134,38 @@ body,
   background: var(--desktop-ground);
 }
 
-.app-stage[data-surface="desktop"] {
-  /* Where the work column begins, which floating captions centre on, and the
-     width they are drawn at over it: no wider than the call bar draws them. */
-  --work-left: var(--sidebar-width);
-  --caption-width-max: 560px;
-  --caption-width: min(var(--caption-width-max), calc(100vw - var(--work-left) - 96px));
-  position: absolute;
-  inset: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-}
+/* Scrollbars ---------------------------------------------------------------- */
 
-.desktop-stage {
-  position: absolute;
-  z-index: 1;
-  inset: 0;
-}
+/* Every scroller in the window draws the one scrollbar a Mac app does: a thin
+   rounded thumb in the muted `--scrollbar` ink and no track at all, faded in
+   while the pointer is over the scroller or focus is in it. Note that the
+   track is named transparent rather than left to the engine, because macOS
+   set to always show scroll bars (or a mouse attached) draws Chromium's
+   classic bar, whose default track is the grey band behind the thumb. Where
+   macOS overlays its bars instead it shows them as a scroll moves and fades
+   them after, as it does in any Mac app. No scroller sets its own: the
+   colour inherits, so it reaches into Pierre's tree through its shadow root
+   too, where it stands in for that tree's own `::-webkit-scrollbar` thumb.
+   In the `base` layer with the element resets (base.css), so a component's
+   own `transition`, or a utility's, still wins on its element. */
+@layer base {
+  * {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+    transition: scrollbar-color var(--duration-quick) ease;
+  }
 
-.desktop-drag-strip {
-  flex: 0 0 auto;
-  height: var(--desktop-bar-height);
-  -webkit-app-region: drag;
-}
+  *:hover,
+  *:focus-within {
+    scrollbar-color: var(--scrollbar) transparent;
+  }
 
-.desktop-shell {
-  /* What a pinned header paints behind itself is the window's ground here. */
-  --surface-fill: var(--desktop-ground);
-  display: grid;
-  height: 100%;
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-}
-
-.app-stage[data-surface="desktop"]:has(.desktop-shell[data-sidebar-collapsed="true"]) {
-  --work-left: 0px;
+  /* The board is Excalidraw's, which draws its own thin thumbs on no track. */
+  .excalidraw,
+  .excalidraw * {
+    scrollbar-color: auto;
+    scrollbar-width: auto;
+  }
 }
 
 /* Sidebar ----------------------------------------------------------------- */
@@ -356,7 +354,6 @@ body,
   flex: 1;
   flex-direction: column;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 /* The plans stand a section's gap below the pinned ones while any are
@@ -1583,6 +1580,9 @@ body,
      on their own), so a body gliding in from where a pane displaced it
      never draws a scrollbar on the way. */
   overflow-x: hidden;
+  /* Where macOS draws a bar that takes room, the room stands while the plan
+     is still short of the page, so the column does not shift sideways on
+     the line Luke writes that first makes it scroll. */
   scrollbar-gutter: stable;
 }
 
@@ -1947,7 +1947,6 @@ body,
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .plan-compose-menu-list:focus-visible {
@@ -3819,7 +3818,6 @@ body,
   padding: var(--space-6);
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
 }
 
 .command-palette-list:focus-visible {
