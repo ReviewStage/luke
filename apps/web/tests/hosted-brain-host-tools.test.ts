@@ -443,6 +443,7 @@ test("the plan's coding agents are listed with their status, what each published
       id: working.id,
       title: "anthropic/claude-opus-5.5",
       model: "anthropic/claude-opus-5.5",
+      modelName: "Opus 5.5",
       effort: "high",
       status: CODING_AGENT_STATUS.RUNNING,
       repository: RELAY_FULL_NAME,
@@ -453,6 +454,7 @@ test("the plan's coding agents are listed with their status, what each published
       id: starting.id,
       title: "anthropic/claude-opus-5.5",
       model: "anthropic/claude-opus-5.5",
+      modelName: "Opus 5.5",
       effort: "high",
       status: CODING_AGENT_STATUS.STARTING,
       repository: RELAY_FULL_NAME,
@@ -535,11 +537,15 @@ test("a message to the plan's agent steers its session as the deployment acting 
 function startedAgentOf(answer: WireRecord) {
   const agent = answer.agent;
   assert.ok(isRecord(agent), JSON.stringify(answer));
-  const { id, model, effort, status } = agent;
+  const { id, model, modelName, effort, status } = agent;
   assert.ok(
-    isWireString(id) && isWireString(model) && isWireString(effort) && isWireString(status),
+    isWireString(id) &&
+      isWireString(model) &&
+      isWireString(modelName) &&
+      isWireString(effort) &&
+      isWireString(status),
   );
-  return { id, model, effort, status };
+  return { id, model, modelName, effort, status };
 }
 
 test("Luke starts an agent on the call's plan as the deployment acting for the account: on the plan and the default choice with no task, on a task and the choice named, under the tool call's own key so the same call run again starts no second agent; a choice the catalog refuses is refused with the choices, and a deployment with no secret starts nothing", async () => {
@@ -559,6 +565,8 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
   assert.deepEqual(agent, {
     id: agent.id,
     model: CODING_AGENT_DEFAULT_CHOICE.model,
+    // The name Luke says aloud, as the screen shows it: without the maker's word.
+    modelName: "Opus 5.5",
     effort: CODING_AGENT_DEFAULT_CHOICE.effort,
     status: CODING_AGENT_STATUS.STARTING,
   });

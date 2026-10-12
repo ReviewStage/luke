@@ -1,3 +1,4 @@
+import type { LiveSessionTrace } from "@sidecar/voice/live-session";
 import type { HostedApiError } from "../core.js";
 import type { VoiceSecondsOutcome } from "../hosted/quota.js";
 
@@ -93,7 +94,9 @@ export type LogEntry =
       finalization: Finalization;
       seconds: number | undefined;
     } & RelayCounts)
-  | { event: typeof LOG_EVENT.SESSION_FAILED };
+  | { event: typeof LOG_EVENT.SESSION_FAILED }
+  /** The live session's own hand-offs (`LIVE_SESSION_TRACE`): a revision, a target, or a fixed reason, never an id or a word. */
+  | LiveSessionTrace;
 
 export type Log = (entry: LogEntry) => void;
 

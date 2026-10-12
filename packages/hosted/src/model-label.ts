@@ -1,11 +1,12 @@
-import type { CatalogModel } from "@sidecar/hosted/models-wire";
+import type { CatalogModel } from "./models-wire.js";
 
 /**
  * model-label.ts -- a model as a tab, a menu, or a notification names it: the catalog's own name, or the id's own name spelled out.
  *
- * Shared by the panel, which draws the tabs and the Start menu, and the main
- * process, which posts the notification an agent's end is announced in, so
- * the two never name one model two ways.
+ * Shared by the panel, which draws the tabs and the Start menu, the main
+ * process, which posts the notification an agent's end is announced in, and
+ * the planning model's coding-agent tools, whose answers Luke says aloud, so
+ * no two of them name one model two ways.
  */
 
 /** The one separator a catalog id has between its provider and the model's own name. */
@@ -20,7 +21,7 @@ const GPT = "gpt";
 /**
  * The maker's word Anthropic's names lead with, which a label leaves off:
  * the harness mark beside a model already says whose it is, so "Claude Opus
- * 5.5" reads "Opus 5.5". OpenAI's names carry no such word and stay whole.
+ * 5.5" reads "Opus 5.5", and Luke says it the way the screen shows it. OpenAI's names carry no such word and stay whole.
  */
 const MAKER_WORD = "Claude ";
 

@@ -120,7 +120,8 @@ export const LIVE_DELEGATION_TARGET = {
   RESPONSES: "responses",
 } as const;
 
-type LiveDelegationTarget = (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
+export type LiveDelegationTarget =
+  (typeof LIVE_DELEGATION_TARGET)[keyof typeof LIVE_DELEGATION_TARGET];
 
 export const LiveDelegationTargetSchema = Schema.Literals(Object.values(LIVE_DELEGATION_TARGET));
 

@@ -574,6 +574,9 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
+        // Each hand-off the call turns on, written down as its words alone,
+        // so a call that stayed up says whether the voice delegated at all.
+        onTrace: (entry) => this.#log(entry),
       });
       if ("refused" in standing) {
         yield* leaveToSweep;
