@@ -83,24 +83,33 @@ function fakeService(now = NOW) {
   const unreachable = (): Promise<never> => Promise.reject(new Error("Main refused the act."));
   /** The Undo each restore offered, in order. */
   const undos: (() => Promise<boolean>)[] = [];
+  /** The answers held back while `holding`, in order. */
+  const held: (() => void)[] = [];
   const service = {
     current: LATEST,
     refusing: false,
     /** Whether main refuses every read, as an act it could not carry. */
     unreachable: false,
+    /** Whether a read waits for `release` before it is answered. */
+    holding: false,
+    held,
     undos,
   };
+  const answer = <A>(read: () => Promise<A>): Promise<A> =>
+    service.holding ? new Promise((land) => service.held.push(() => land(read()))) : read();
   const source: PlanHistorySource = {
-    readPage: () => (service.unreachable ? unreachable() : Promise.resolve({ revisions: lines })),
-    readRevision: (_planId, seq) => {
-      if (service.unreachable) return unreachable();
-      const document = VERSIONS[seq - 1];
-      return Promise.resolve(
-        document === undefined
-          ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
-          : { revision: { seq, document, previous: VERSIONS[seq - 2] ?? null } },
-      );
-    },
+    readPage: () =>
+      answer(() => (service.unreachable ? unreachable() : Promise.resolve({ revisions: lines }))),
+    readRevision: (_planId, seq) =>
+      answer(() => {
+        if (service.unreachable) return unreachable();
+        const document = VERSIONS[seq - 1];
+        return Promise.resolve(
+          document === undefined
+            ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+            : { revision: { seq, document, previous: VERSIONS[seq - 2] ?? null } },
+        );
+      }),
     restore: (_planId, seq) => {
       const document = VERSIONS[seq - 1];
       if (service.refusing || document === undefined) return Promise.resolve(false);
@@ -117,6 +126,7 @@ afterEach(() => {
   act(() => root?.unmount());
   root = undefined;
   document.body.replaceChildren();
+  delete document.documentElement.dataset.keyboard;
 });
 
 /** The plan as the window draws it, its document as the service holds it now. */
@@ -212,6 +222,31 @@ function arrow(
   );
 }
 
+/** Answers every read held back, and every read those answers ask for, and lets them land. */
+function release(service: ReturnType<typeof fakeService>) {
+  service.holding = false;
+  return Effect.promise(() =>
+    act(async () => {
+      for (const land of service.held.splice(0)) land();
+    }),
+  );
+}
+
+/** What a loading region in one part of the view says to a reader, and how many blocks it draws. */
+function skeleton(page: HTMLElement, part: string): { says: string; blocks: number } | undefined {
+  const region = page.querySelector(`${part} [role="status"][aria-busy="true"]`);
+  if (region === null) return undefined;
+  return {
+    says: region.querySelector(".visually-hidden")?.textContent ?? "",
+    blocks: region.querySelectorAll('.skeleton[aria-hidden="true"]').length,
+  };
+}
+
+/** The words of the version drawn. */
+function body(page: HTMLElement): string | null | undefined {
+  return page.querySelector(".version-page .plan-body")?.textContent;
+}
+
 /** The words marked in the version drawn as one kind of change. */
 function marked(page: HTMLElement, selector: string): string[] {
   return [...page.querySelectorAll(`.version-page ${selector}`)].map(
@@ -226,6 +261,16 @@ function restoreButton(page: HTMLElement): HTMLButtonElement | undefined {
   );
 }
 
+/** Whether Restore this version is announced as unavailable. */
+function restoreUnavailable(page: HTMLElement): boolean {
+  return restoreButton(page)?.getAttribute("aria-disabled") === "true";
+}
+
+/** The hint standing over the window, if any. */
+function hint(): string | null | undefined {
+  return document.body.querySelector('[role="tooltip"]')?.textContent;
+}
+
 it.effect(
   "the version history lists each version newest first: who wrote it, whether on a call, what it did, and when, under the plan's name",
   () =>
@@ -235,7 +280,7 @@ it.effect(
       assert.equal(page.querySelector(".version-log-title")?.textContent, "Version history");
       assert.equal(page.querySelector(".version-log-plan")?.textContent, "Teammate invitations");
       assert.deepEqual(rows(page), [
-        "Luke · Current · During a call · 2h · 2 changes",
+        "Luke · During a call · 2h · 2 changes",
         "Invite emails · 5h · 1 change",
         "Luke · 1d · 4 changes",
       ]);
@@ -251,8 +296,8 @@ it.effect(
       const page = yield* mount(fakeService(), yield* registryOnTestClock);
 
       assert.equal(chosen(page), "Luke");
-      assert.equal(page.querySelector(".version-page .version-tag")?.textContent, "Current");
-      assert.equal(restoreButton(page)?.disabled, true);
+      assert.equal(page.querySelector(".version-page .version-tag"), null);
+      assert.equal(restoreUnavailable(page), true);
       assert.deepEqual(marked(page, ".version-added"), [
         "Decisions\nInvites expire.",
         "Invites create memberships.",
@@ -261,20 +306,48 @@ it.effect(
 );
 
 it.effect(
-  "a version chosen is drawn beside the list with what it changed from the one before it marked, the Current row as any other",
+  "while the versions are read the list and the page stand as quiet blocks in their shapes, and so does a version chosen while it is read",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      service.holding = true;
+      const page = yield* mount(service, yield* registryOnTestClock);
+
+      assert.deepEqual(rows(page), []);
+      assert.deepEqual(skeleton(page, ".version-log"), {
+        says: "Reading the versions…",
+        blocks: 8,
+      });
+      assert.equal(skeleton(page, ".version-page")?.says, "Reading the version…");
+      yield* release(service);
+      assert.equal(rows(page).length, 3);
+      assert.equal(skeleton(page, ".version-log"), undefined);
+      assert.equal(skeleton(page, ".version-page"), undefined);
+
+      service.holding = true;
+      yield* press(page, "Luke1d4 changes");
+      assert.equal(skeleton(page, ".version-page")?.says, "Reading the version…");
+      assert.equal(body(page)?.includes("Only admins"), false);
+      yield* release(service);
+      assert.equal(skeleton(page, ".version-page"), undefined);
+      assert.match(body(page) ?? "", /Only admins can invite\./u);
+    }),
+);
+
+it.effect(
+  "a version chosen is drawn beside the list with what it changed from the one before it marked, the newest row as any other",
   () =>
     Effect.gen(function* () {
       const page = yield* mount(fakeService(), yield* registryOnTestClock);
 
       yield* press(page, "Invite emails5h1 change");
       assert.equal(chosen(page), "Invite emails");
-      assert.equal(page.querySelector(".version-page .version-tag"), null);
-      assert.equal(restoreButton(page)?.disabled, false);
+      assert.equal(restoreUnavailable(page), false);
       assert.deepEqual(marked(page, "del"), ["Only admins"]);
       assert.deepEqual(marked(page, "ins"), ["Any member"]);
       assert.equal(page.querySelector("[aria-label='Compare']"), null, "no other comparison");
 
-      yield* press(page, "LukeCurrentDuring a call2h2 changes");
+      yield* press(page, "LukeDuring a call2h2 changes");
       assert.equal(chosen(page), "Luke");
       assert.deepEqual(marked(page, "del"), []);
       assert.deepEqual(marked(page, ".version-added"), [
@@ -296,16 +369,50 @@ it.effect(
       yield* arrow("ArrowDown");
       yield* arrow("ArrowDown");
       assert.deepEqual(marked(page, "del"), [], "the first version, past which there is none");
-      assert.equal(
-        page.querySelector(".version-note")?.textContent,
-        "The first version: there is nothing before it to compare.",
-      );
+      assert.match(body(page) ?? "", /Only admins can invite\./u);
+      assert.equal(page.querySelector(".version-note"), null, "drawn without a word over it");
 
       yield* arrow("ArrowUp");
       yield* arrow("ArrowUp");
       yield* arrow("ArrowUp");
       assert.equal(chosen(page), "Luke");
-      assert.equal(page.querySelector(".version-page .version-tag")?.textContent, "Current");
+      assert.equal(restoreUnavailable(page), true);
+    }),
+);
+
+it.effect(
+  "over the plan as it stands, Restore this version says it is already current on hover and on keyboard focus, and a press restores nothing",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const page = yield* mount(service, yield* registryOnTestClock);
+      const restore = restoreButton(page);
+      assert.ok(restore);
+
+      act(() => restore.dispatchEvent(new MouseEvent("pointerover", { bubbles: true })));
+      assert.equal(hint(), "This version is already current");
+      act(() => {
+        restore.dispatchEvent(
+          new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+        );
+      });
+      assert.equal(hint(), undefined);
+
+      document.documentElement.dataset.keyboard = "true";
+      act(() => restore.focus());
+      assert.equal(hint(), "This version is already current");
+      assert.equal(
+        document.getElementById(restore.getAttribute("aria-describedby") ?? "")?.textContent,
+        "This version is already current",
+      );
+
+      yield* press(page, "Restore this version");
+      assert.equal(document.querySelector('[role="alertdialog"]'), null);
+      assert.equal(service.current, LATEST);
+
+      yield* press(page, "Invite emails5h1 change");
+      act(() => restoreButton(page)?.focus());
+      assert.equal(hint(), undefined, "an older version's Restore needs no hint");
     }),
 );
 
@@ -373,10 +480,8 @@ it.effect(
       service.unreachable = false;
       yield* press(page, "Luke1d4 changes");
       assert.deepEqual(marked(page, "del"), []);
-      assert.equal(
-        page.querySelector(".version-note")?.textContent,
-        "The first version: there is nothing before it to compare.",
-      );
+      assert.match(body(page) ?? "", /Only admins can invite\./u);
+      assert.equal(page.querySelector(".version-note"), null);
     }),
 );
 

@@ -9,7 +9,8 @@ import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { VersionView } from "../planning/version-view";
+import { VersionSkeleton, VersionView } from "../planning/version-view";
+import { Skeleton, SkeletonRegion } from "../skeleton";
 import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
@@ -23,10 +24,13 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * plan's name under the view's own, then the versions, newest first: who
  * wrote each (Luke, You, or a coding agent by its title), whether on a call,
  * what it did, and how long ago, in the sidebar's few letters with the
- * moment itself on hover. The newest is the plan as it stands, says so, and
- * is the one drawn when the view opens. Choosing a row, or stepping with the
- * up and down arrows, draws that version beside the list (`version-view.tsx`),
- * and older versions are read a page at a time from the list's foot.
+ * moment itself on hover. The newest is the plan as it stands and the one
+ * drawn when the view opens, wearing no tag of its own: its Restore says it
+ * is already current. Choosing a row, or stepping with the up and down
+ * arrows, draws that version beside the list (`version-view.tsx`), and older
+ * versions are read a page at a time from the list's foot. While the
+ * versions are read, the list and the page stand as quiet blocks in their
+ * own shapes (`skeleton.tsx`).
  *
  * The view is one place in the window's history however many versions are
  * chosen in it, so Back returns to wherever it was opened from, the plan as
@@ -39,17 +43,23 @@ import type { SidebarCollapse } from "./sidebar-collapse";
 /** What the page says while the plan has no revision yet. */
 const NO_HISTORY_LINE = "Versions appear here as the plan is written.";
 
+/** The placeholder rows' shape while the versions are read: each row's author and summary as wide as their share of it. */
+const LOG_SKELETON = [
+  { author: "34%", summary: "78%" },
+  { author: "48%", summary: "62%" },
+  { author: "28%", summary: "84%" },
+  { author: "40%", summary: "56%" },
+] as const;
+
 /** One revision's row: who, whether on a call, what it did, and when; lit while its version is drawn. */
 function RevisionRow({
   line,
-  current,
   selected,
   now,
   rowRef,
   onSelect,
 }: {
   line: PlanRevisionLine;
-  current: boolean;
   selected: boolean;
   now: number;
   rowRef: (row: HTMLButtonElement | null) => void;
@@ -67,7 +77,6 @@ function RevisionRow({
       >
         <span className="version-row-head">
           <span className="version-row-author">{revisionAuthor(lastEdit)}</span>
-          {current ? <span className="version-tag">Current</span> : null}
           {lastEdit.duringCall ? <span className="version-tag">During a call</span> : null}
           <time
             className="version-row-time"
@@ -80,6 +89,20 @@ function RevisionRow({
         <span className="version-row-summary">{revisionSummary(line)}</span>
       </button>
     </li>
+  );
+}
+
+/** The versions as quiet rows while they are read, in a row's own type. */
+function LogSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading the versions…">
+      {LOG_SKELETON.map((row) => (
+        <div key={row.author} className="version-skeleton-row">
+          <Skeleton width={row.author} className="version-skeleton-author" />
+          <Skeleton width={row.summary} />
+        </div>
+      ))}
+    </SkeletonRegion>
   );
 }
 
@@ -166,11 +189,26 @@ function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { list } = history;
-  const empty = list.kind === HISTORY_READ.READY && list.revisions.length === 0;
+  if (list.kind === HISTORY_READ.READING) {
+    return (
+      <>
+        <header className="desktop-toolbar">
+          <div className="desktop-toolbar-heading version-skeleton-title">
+            <Skeleton width="160px" />
+          </div>
+        </header>
+        <div className="desktop-document">
+          <div className="plan-document-scroll">
+            <VersionSkeleton />
+          </div>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <div className="desktop-drag-strip" />
-      <div className="desktop-empty" aria-busy={list.kind === HISTORY_READ.READING}>
+      <div className="desktop-empty">
         {list.kind === HISTORY_READ.FAILED ? (
           <>
             <p role="alert">The history could not be read.</p>
@@ -179,7 +217,7 @@ function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
             </button>
           </>
         ) : (
-          <p>{empty ? NO_HISTORY_LINE : "Reading the history…"}</p>
+          <p>{NO_HISTORY_LINE}</p>
         )}
       </div>
     </>
@@ -216,7 +254,6 @@ export function DesktopVersionHistory({
     region.kind === DOCUMENT_REGION.READY
       ? region.plan.name
       : [...plans.plans, ...plans.archived].find((plan) => plan.id === plans.boundFor)?.name;
-  const newest = revisions[0]?.seq;
 
   return (
     <div className="desktop-version-history">
@@ -236,12 +273,12 @@ export function DesktopVersionHistory({
         <h1 className="version-log-title">Version history</h1>
         {name === undefined ? null : <p className="version-log-plan">{name}</p>}
         <div className="sidebar-section">
+          {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
           <ol className="version-list">
             {revisions.map((line) => (
               <RevisionRow
                 key={line.seq}
                 line={line}
-                current={line.seq === newest}
                 selected={line.seq === versions.selected}
                 now={now}
                 rowRef={(row) => {

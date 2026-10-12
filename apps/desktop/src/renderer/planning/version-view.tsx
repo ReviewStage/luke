@@ -5,6 +5,8 @@ import {
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
+import { Skeleton, SkeletonRegion } from "../skeleton";
+import { Tooltip } from "../tooltip";
 import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
 import { PlanUnitWords } from "./plan-rule";
 import { momentText } from "./plan-time";
@@ -17,12 +19,16 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * The page beside a plan's version history (`desktop-version-history.tsx`),
  * the way Google Docs shows a version in the page rather than in its narrow
  * list. Its bar names when the version was saved and offers Restore this
- * version. The version is drawn whole against the version before it, which
+ * version, which the newest version, the plan as it stands, holds unavailable
+ * with a hint saying why: `aria-disabled` rather than `disabled`, since a
+ * disabled button takes no pointer and no focus, so its hint could never
+ * show. The version is drawn whole against the version before it, which
  * shows what that revision changed: words written in wear the accent and
  * words struck out are struck, so neither reads by its colour alone
  * (`plan-history-model.ts`). The first version has nothing before it, so it
- * is drawn with nothing marked. Restoring asks first, in the
- * window's dialog with the accent rather than red, since a restore is
+ * is drawn with nothing marked, and a version still being read stands as
+ * quiet blocks in the page's shape (`skeleton.tsx`). Restoring asks first,
+ * in the window's dialog with the accent rather than red, since a restore is
  * itself a version the history keeps and can be undone by restoring the
  * one before it. Everything drawn is the plan's words, so the root is left
  * out of the screen recording (`ph-no-capture`) as a second line behind the
@@ -32,8 +38,17 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
 /** What the view says over a version that changed nothing from the one before it. */
 const NO_CHANGE_LINE = "This version changed nothing from the one before it.";
 
-/** What the view says over the first version, which has nothing before it. */
-const FIRST_VERSION_LINE = "The first version: there is nothing before it to compare.";
+/**
+ * The placeholder page's shape while a version is read: a heading over its
+ * lines, twice, each line as wide as its share of the column.
+ */
+const PAGE_SKELETON = [
+  { heading: "42%", lines: ["100%", "96%", "88%", "54%"] },
+  { heading: "30%", lines: ["100%", "91%", "72%"] },
+] as const;
+
+/** Why Restore this version is unavailable over the newest version. */
+const CURRENT_HINT = "This version is already current";
 
 /** The question Restore this version asks, naming the version. */
 function restoreQuestion(at: number): DialogQuestion {
@@ -89,12 +104,27 @@ function VersionBody({ diff }: { diff: VersionDiff }): React.JSX.Element {
   );
 }
 
+/** The version's page as quiet blocks while it is read: headings over their lines, in the body's own type. */
+export function VersionSkeleton(): React.JSX.Element {
+  return (
+    <SkeletonRegion label="Reading the version…" className="plan-body">
+      {PAGE_SKELETON.map((section) => (
+        <div key={section.heading} className="version-skeleton-section">
+          <Skeleton width={section.heading} className="version-skeleton-heading" />
+          {section.lines.map((width, at) => (
+            // oxlint-disable-next-line react/no-array-index-key -- a placeholder's lines have nothing but their place.
+            <Skeleton key={at} width={width} />
+          ))}
+        </div>
+      ))}
+    </SkeletonRegion>
+  );
+}
+
 /** The version's content against the one before it, or the state standing in its place. */
 function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Element {
   const { read } = viewing;
-  if (read.kind === HISTORY_READ.READING) {
-    return <p className="version-note">Reading the version…</p>;
-  }
+  if (read.kind === HISTORY_READ.READING) return <VersionSkeleton />;
   if (read.kind === HISTORY_READ.FAILED) {
     return (
       <p className="version-note" role="alert">
@@ -103,11 +133,11 @@ function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Elem
     );
   }
   const diff = versionDiff(read.previous, read.document);
-  const note =
-    read.previous === null ? FIRST_VERSION_LINE : diff.changed ? undefined : NO_CHANGE_LINE;
+  // Note that the first version is compared with nothing, so it is never said to have changed nothing.
+  const unchanged = read.previous !== null && !diff.changed;
   return (
     <>
-      {note === undefined ? null : <p className="version-note">{note}</p>}
+      {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
       <VersionBody diff={diff} />
     </>
   );
@@ -139,22 +169,22 @@ export function VersionView({
   return (
     <>
       <header className="desktop-toolbar">
-        <div className="desktop-toolbar-heading version-heading">
+        <div className="desktop-toolbar-heading">
           <h1 className="desktop-toolbar-title" title={momentText(line.lastEdit.at)}>
             {versionMoment(line.lastEdit.at)}
           </h1>
-          {/* The newest version is the plan as it stands, so it has nothing to restore. */}
-          {viewing.current ? <span className="version-tag">Current</span> : null}
         </div>
         <div className="desktop-toolbar-actions">
-          <button
-            type="button"
-            className="primary-button"
-            disabled={viewing.current}
-            onClick={restore.ask}
-          >
-            Restore this version
-          </button>
+          <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
+            <button
+              type="button"
+              className="primary-button"
+              aria-disabled={viewing.current ? "true" : undefined}
+              onClick={viewing.current ? undefined : restore.ask}
+            >
+              Restore this version
+            </button>
+          </Tooltip>
         </div>
       </header>
       <div className="desktop-document">

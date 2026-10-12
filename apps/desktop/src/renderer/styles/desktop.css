@@ -1065,11 +1065,11 @@ body,
   color: var(--on-accent);
 }
 
-:is(.primary-button, .danger-button):hover:where(:not(:disabled)) {
+:is(.primary-button, .danger-button):hover:where(:not(:disabled, [aria-disabled="true"])) {
   filter: brightness(1.1);
 }
 
-:is(.primary-button, .danger-button):active:where(:not(:disabled)) {
+:is(.primary-button, .danger-button):active:where(:not(:disabled, [aria-disabled="true"])) {
   filter: brightness(0.92);
 }
 
@@ -2242,7 +2242,7 @@ body,
   white-space: nowrap;
 }
 
-/* "Current" and "During a call", on a row and over the version drawn. */
+/* "During a call", on a version's row. */
 .version-tag {
   flex: none;
   padding: 0 var(--space-6);
@@ -2289,12 +2289,36 @@ body,
   color: var(--text-primary);
 }
 
-/* The version's moment and its Current tag share the toolbar's title row. */
-.version-heading {
+/* The page while a version is read (`version-view.tsx`): each section's
+   heading a block in a heading's type over its lines in the body's, as far
+   apart as the plan's own sections stand. */
+.version-skeleton-section + .version-skeleton-section {
+  margin-top: var(--space-24);
+}
+
+.version-skeleton-heading {
+  margin-bottom: var(--space-8);
+  font-size: 1.35em;
+}
+
+/* The moment's place in the toolbar while the versions are read, in the
+   title's type. */
+.version-skeleton-title {
+  font-size: 15px;
+}
+
+/* A row while the versions are read: the author's block over the summary's,
+   in a row's own type and room, so the rows land where the blocks stood. */
+.version-skeleton-row {
   display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-8);
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--row-inset);
+  font-size: 12px;
+}
+
+.version-skeleton-author {
+  font-size: 12.5px;
 }
 
 /* No call bar stands below a version, so it needs no room under its last line. */
