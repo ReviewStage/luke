@@ -45,8 +45,8 @@ function foldSaying(container: HTMLElement, words: string): HTMLDetailsElement {
 }
 
 const REASONING = "List the sources first.";
-/** The reasoning as a model sends it, with the blank line it often ends on. */
-const REASONING_SENT = `${REASONING}\n\n`;
+/** The reasoning as a model sends it: a blank line around its words, which keep their indent. */
+const REASONING_SENT = `\n  ${REASONING}\n\n`;
 const COMMAND = "ls src";
 const OUTPUT = "invite.ts";
 
@@ -211,12 +211,12 @@ test.each(surfaces(true))(
 );
 
 test.each(surfaces(false))(
-  "on %s an opened reasoning ends on its last word, with no blank line after it",
+  "on %s an opened reasoning starts on its first line and ends on its last word, with no blank line around it",
   (_surface, element) => {
     const container = mounted(element);
     const thought = foldSaying(container, "Thought");
     act(() => thought.querySelector("summary")?.click());
-    assert.equal(thought.querySelector("summary + div")?.textContent, REASONING);
+    assert.equal(thought.querySelector("summary + div")?.textContent, `  ${REASONING}`);
   },
 );
 

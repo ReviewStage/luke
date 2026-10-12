@@ -90,18 +90,23 @@ export function TranscriptWords({
   );
 }
 
+/** The blank lines a reasoning may open on, up to the first line with words. */
+const LEADING_BLANK_LINES = /^(?:[^\S\n]*\n)+/u;
+
 /**
  * A model's reasoning, folded under one line until opened, its words as they
- * are but for the blank lines a model leaves around them. Note that it is
- * trimmed, because the words keep their line breaks and a trailing one would
- * draw as an empty line under the last.
+ * are but for the blank lines a model leaves around them. Note that only
+ * whole blank lines go at the start, because the words keep their line breaks
+ * and indents, and a trailing break would draw as an empty line under the last.
  */
 export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
       <ReasoningTrigger />
       <ReasoningContent>
-        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{text.trim()}</p>
+        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">
+          {text.replace(LEADING_BLANK_LINES, "").trimEnd()}
+        </p>
       </ReasoningContent>
     </Reasoning>
   );
