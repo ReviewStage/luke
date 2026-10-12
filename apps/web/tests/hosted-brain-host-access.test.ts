@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { fakeHttpClientLayer } from "@sidecar/wire/testing";
-import { Effect, Redacted, Result } from "effect";
+import { Effect, Option, Redacted, Result } from "effect";
 import { type AuthFn, ForbiddenError } from "eve/channels/auth";
 import type { SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   actedForAccount,
   conversationIdOf,
@@ -26,8 +28,8 @@ import { DEPLOYMENT_TURNS } from "../server/hosted/brain-host/channel";
 import {
   admitConversation,
   claimRuntimeSession,
-  conversationOwnedBy,
-  runtimeSessionOwner,
+  conversationReachableBy,
+  runtimeSessionReachableBy,
   SESSION_STANDING,
 } from "../server/hosted/brain-host/conversation";
 import {
@@ -42,8 +44,11 @@ import {
   EVE_SEND_OUTCOME,
   eveSessions,
 } from "../server/hosted/brain-host/eve-sessions";
+import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import { openPlanConversation } from "../server/hosted/plan-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * The host's own check of who a session is for: the conversation a request
@@ -174,7 +179,7 @@ test("a cleared conversation admits nobody, its owner included, and no session c
     await database.run(claimRuntimeSession({ userId: userA, conversationId }, session, new Date())),
     false,
   );
-  assert.equal(await database.run(runtimeSessionOwner(session)), undefined);
+  assert.equal(await database.run(runtimeSessionReachableBy(userA, session)), false);
 });
 
 /** The door: eve's route auth says who is signed in; the host says whose session and conversation the route names. */
@@ -184,8 +189,8 @@ function ownershipOf(
   conversations: Readonly<Record<string, string>>,
 ): SessionOwnership {
   return {
-    sessionOwner: async (sessionId) => owners[sessionId],
-    ownsConversation: async (userId, conversationId) => conversations[conversationId] === userId,
+    reachesSession: async (userId, sessionId) => owners[sessionId] === userId,
+    reachesConversation: async (userId, conversationId) => conversations[conversationId] === userId,
   };
 }
 
@@ -313,7 +318,7 @@ test("a message that names no kind of turn is refused before it dispatches", () 
   );
 });
 
-test("the runtime session's owner and a conversation's ownership read from the rows", async () => {
+test("who reaches the runtime session and the conversation reads from the rows", async () => {
   const userA = await database.createUser();
   const userB = await database.createUser();
   const id = await ownedConversation(userA);
@@ -323,10 +328,11 @@ test("the runtime session's owner and a conversation's ownership read from the r
     ),
     true,
   );
-  assert.equal(await database.run(runtimeSessionOwner(SESSION_A)), userA);
-  assert.equal(await database.run(runtimeSessionOwner(SESSION_NEW)), undefined);
-  assert.equal(await database.run(conversationOwnedBy(userA, id)), true);
-  assert.equal(await database.run(conversationOwnedBy(userB, id)), false);
+  assert.equal(await database.run(runtimeSessionReachableBy(userA, SESSION_A)), true);
+  assert.equal(await database.run(runtimeSessionReachableBy(userB, SESSION_A)), false);
+  assert.equal(await database.run(runtimeSessionReachableBy(userA, SESSION_NEW)), false);
+  assert.equal(await database.run(conversationReachableBy(userA, id)), true);
+  assert.equal(await database.run(conversationReachableBy(userB, id)), false);
 });
 
 test("a conversation runs in one session: the recorded one is admitted, another is refused, and a start claims the record only forward", async () => {
@@ -367,7 +373,7 @@ test("a conversation runs in one session: the recorded one is admitted, another 
     ),
   );
   assert.equal(await database.run(claimRuntimeSession(target, older, new Date())), false);
-  assert.equal(await database.run(runtimeSessionOwner(newer)), userA);
+  assert.equal(await database.run(runtimeSessionReachableBy(userA, newer)), true);
   assert.ok(
     Result.isSuccess(
       await database.run(
@@ -628,4 +634,58 @@ test("a session the deployment opened for an account admits that account's own b
     ),
   );
   assert.deepEqual(forOther, Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR));
+});
+
+test("a member of a plan's workspace reaches the plan's conversation, its coding agent's, and a subagent's beside either, and is admitted to them; a stranger reaches none", async () => {
+  const userA = await database.createUser();
+  const teammate = await database.createUser();
+  const stranger = await database.createUser();
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
+  await database.run(joinWorkspace(started.workspaceId, teammate));
+  const plan = Option.getOrThrow(await database.run(openPlanConversation(userA, started.id)));
+  const agent = Option.getOrThrow(
+    await database.run(
+      createCodingAgent(userA, {
+        planId: started.id,
+        idempotencyKey: randomUUID(),
+        model: "anthropic/claude-opus-5.5",
+        effort: "high",
+        repository: "reviewstage/luke",
+        planSnapshot: null,
+        task: "Draft the invite email.",
+      }),
+    ),
+  ).agent;
+  const planChild = await insertConversation(database.run, {
+    userId: userA,
+    kind: CONVERSATION_KIND.CHILD,
+    parentConversationId: plan.conversationId,
+  });
+  const agentChild = await insertConversation(database.run, {
+    userId: userA,
+    kind: CONVERSATION_KIND.CHILD,
+    parentConversationId: agent.conversationId,
+  });
+  const elsewhere = await ownedConversation(userA);
+
+  for (const conversationId of [plan.conversationId, agent.conversationId, planChild, agentChild]) {
+    assert.equal(await database.run(conversationReachableBy(teammate, conversationId)), true);
+    assert.equal(await database.run(conversationReachableBy(stranger, conversationId)), false);
+  }
+  assert.equal(await database.run(conversationReachableBy(teammate, elsewhere)), false);
+  assert.equal(await database.run(conversationReachableBy(userA, elsewhere)), true);
+
+  const opener = principal(userA, { [BRAIN_HOST_ATTRIBUTE.CONVERSATION]: plan.conversationId });
+  const spoken = await database.run(
+    admitConversation({ current: principal(teammate), initiator: opener }, CLAIMING),
+  );
+  assert.ok(Result.isSuccess(spoken));
+  assert.equal(spoken.success.caller, teammate);
+  assert.deepEqual(spoken.success.target, { userId: userA, conversationId: plan.conversationId });
+  assert.deepEqual(
+    await database.run(
+      admitConversation({ current: principal(stranger), initiator: opener }, CLAIMING),
+    ),
+    Result.fail(BRAIN_HOST_REFUSAL.NOT_INITIATOR),
+  );
 });

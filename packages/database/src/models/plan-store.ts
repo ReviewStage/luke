@@ -404,10 +404,11 @@ const findPlanOfConversation = SqlSchema.findOneOption({
 
 const PlanConversationRowSchema = Schema.Struct({
   conversationId: Schema.NullOr(Schema.String),
+  conversationOwnerId: Schema.NullOr(Schema.String),
   conversationDeletedAt: Schema.NullOr(InstantColumnSchema),
 });
 
-/** The plan row under its own lock, with the conversation it names and whether that conversation still stands. */
+/** The plan row under its own lock, with the conversation it names, the member who opened it, and whether it still stands. */
 const lockPlanConversation = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanConversationRowSchema,
@@ -415,6 +416,7 @@ const lockPlanConversation = SqlSchema.findOneOption({
     db
       .select({
         conversationId: plan.conversationId,
+        conversationOwnerId: conversations.userId,
         conversationDeletedAt: conversations.deletedAt,
       })
       .from(plan)
@@ -737,25 +739,37 @@ export function attachPlanConversation(
   return Effect.map(setConversation({ userId, planId, conversationId }), Option.isSome);
 }
 
+/** A plan's conversation as the store addresses it: its id and the member who opened it, whose id its rows are written under. */
+export interface PlanConversation {
+  readonly conversationId: string;
+  readonly ownerId: string;
+}
+
 /**
  * The conversation the plan's planning model runs in, opened and attached
  * now where the plan names none that still stands; nothing where the account
- * reaches no such plan. The plan row's lock holds two opens of one plan one
- * after the other, so the second finds the first's conversation rather than
- * opening another.
+ * reaches no such plan. A conversation a teammate opened is answered as
+ * theirs, so the caller speaks into the plan's one conversation rather than
+ * opening a second; one opened here is the caller's own. The plan row's
+ * lock holds two opens of one plan one after the other, so the second finds
+ * the first's conversation rather than opening another.
  */
 export function openPlanConversation(
   userId: string,
   planId: string,
-): PlanStoreEffect<Option.Option<string>> {
+): PlanStoreEffect<Option.Option<PlanConversation>> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockPlanConversation({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
-        const { conversationId, conversationDeletedAt } = locked.value;
-        if (conversationId !== null && conversationDeletedAt === null) {
-          return Option.some(conversationId);
+        const { conversationId, conversationOwnerId, conversationDeletedAt } = locked.value;
+        if (
+          conversationId !== null &&
+          conversationOwnerId !== null &&
+          conversationDeletedAt === null
+        ) {
+          return Option.some({ conversationId, ownerId: conversationOwnerId });
         }
         const now = yield* DateTime.nowAsDate;
         const opened = yield* insertPlanConversation({ userId, now }).pipe(
@@ -765,7 +779,7 @@ export function openPlanConversation(
         if (!(yield* attachPlanConversation(userId, planId, opened.id))) {
           return yield* Effect.die(new Error("the plan's new conversation did not attach"));
         }
-        return Option.some(opened.id);
+        return Option.some({ conversationId: opened.id, ownerId: userId });
       }),
     ),
   );

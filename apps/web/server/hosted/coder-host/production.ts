@@ -8,7 +8,7 @@ import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
 import { accountMeter } from "../agent-runtime/meter.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
-import { conversationOwnedBy, runtimeSessionOwner } from "../brain-host/conversation.js";
+import { conversationReachableBy, runtimeSessionReachableBy } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
 import { HostedEnvironment } from "../environment.js";
 import { accountProviderKeys } from "./account-keys.js";
@@ -33,7 +33,7 @@ export interface CoderHostSeams {
   /** The writer over the coding agent's tool set, composed once per instance. */
   readonly writer: () => Effect.Effect<StoreWriter>;
   readonly userInfo: UserInfoEndpoint;
-  /** Who a session or a conversation belongs to, for the door. */
+  /** Who reaches a session or a conversation, for the door. */
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
@@ -68,9 +68,9 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
     return {
       writer: () => writer,
       ownership: {
-        sessionOwner: (sessionId) => run(runtimeSessionOwner(sessionId)),
-        ownsConversation: (userId, conversationId) =>
-          run(conversationOwnedBy(userId, conversationId)),
+        reachesSession: (userId, sessionId) => run(runtimeSessionReachableBy(userId, sessionId)),
+        reachesConversation: (userId, conversationId) =>
+          run(conversationReachableBy(userId, conversationId)),
       },
       deploymentSecret: () => environment.cronSecret,
       userInfo: (input) =>

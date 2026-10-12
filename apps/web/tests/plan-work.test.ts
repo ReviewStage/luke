@@ -769,7 +769,7 @@ async function planConversation(): Promise<
   assert.ok(Option.isSome(opened));
   return {
     userId,
-    conversationId: opened.value,
+    conversationId: opened.value.conversationId,
     planId: plan.id,
     workspaceId: plan.workspaceId,
   };

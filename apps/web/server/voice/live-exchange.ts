@@ -28,7 +28,8 @@ import { type PlanDraft, planScribe } from "./plan-scribe.js";
 
 /**
  * The live session service composed for the hosted tier, for one account's
- * one planning call: the brain answered in process through the ask door under
+ * one planning call, in the plan's conversation whichever member of its
+ * workspace opened it: the brain answered in process through the ask door under
  * the eve client the caller composed for the account, and the record over the
  * voice writer with the sideband observed so the writer sees each event once
  * ahead of the service. The writers, the ask record, and the reads all stand
@@ -51,11 +52,11 @@ import { type PlanDraft, planScribe } from "./plan-scribe.js";
  */
 
 export interface HostedLiveExchangeOptions {
-  /** The account the session was opened for, resolved at the handshake; the deployment acts for it at eve's door. */
-  readonly userId: string;
+  /** The account the session was opened for, resolved at the handshake: it owns the voice row, is metered, and the deployment acts for it at eve's door. */
+  readonly accountId: string;
   readonly liveSessionId: string;
-  /** The conversation the spoken asks and the record land in: the plan's conversation. */
-  readonly conversationId: string;
+  /** The conversation the spoken asks and the record land in: the plan's, under the member who opened it, whoever is calling. */
+  readonly conversation: ConversationTarget;
   /**
    * The notetaker the call writes its plan through: the plan the session is
    * bound to and the model the scribe runs on. Absent on a deployment with no
@@ -182,13 +183,9 @@ function writeReport(
 export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExchange")(function* (
   options: HostedLiveExchangeOptions,
 ): Effect.fn.Return<HostedLiveExchange, never, Scope.Scope | SqlClient.SqlClient> {
-  const { userId, liveSessionId, conversationId, writer, report } = options;
+  const { accountId, liveSessionId, conversation, writer, report } = options;
   const store = hostedStore();
-  const target: VoiceTarget = {
-    userId,
-    liveSessionId,
-    conversation: { userId, conversationId },
-  };
+  const target: VoiceTarget = { userId: accountId, liveSessionId, conversation };
   const voice = voiceWriter({ store: writer });
   const record = yield* hostedLiveRecord({ writer: voice, target });
   yield* Effect.addFinalizer(() => record.drained());
@@ -207,8 +204,8 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
   const reported = (message: string | undefined): Effect.Effect<void> =>
     message === undefined ? Effect.void : Effect.sync(() => report(message));
   const brain = yield* hostedLiveBrain({
-    userId,
-    conversationId,
+    accountId,
+    conversation,
     asks: {
       asks: askRecord(),
       eve: options.eve,
@@ -240,7 +237,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
     options.scribe === undefined
       ? undefined
       : yield* planScribe({
-          userId,
+          userId: accountId,
           planId: options.scribe.planId,
           liveSessionId,
           model: options.scribe.model,
