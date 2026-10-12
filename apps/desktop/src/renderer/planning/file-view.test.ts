@@ -61,6 +61,7 @@ window.lukeFileTree = {
     );
     return () => host.replaceChildren();
   },
+  fileIcon: () => ({ symbol: "file-tree-builtin-default", type: "default" }),
 };
 
 const roots: Root[] = [];

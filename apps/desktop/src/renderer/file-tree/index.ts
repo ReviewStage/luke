@@ -1,8 +1,9 @@
-import { FileTree } from "@pierre/trees";
+import { createFileTreeIconResolver, FileTree, getBuiltInSpriteSheet } from "@pierre/trees";
 import type {
   FileTreeHandle,
   FileTreeModule,
   FileTreeProps,
+  FileTypeIcon,
   FolderListProps,
   ReadFolder,
   RevealOptions,
@@ -47,6 +48,10 @@ import {
  * A breadcrumb's list of one folder is drawn by Pierre too (`list`), so it
  * reads as the tree does, row for row: a tree of the folder's entries alone,
  * none of its folders opening, the crumb's own entry marked.
+ *
+ * The bundle also names a file's type icon by its name alone, for a file
+ * attached to a message, through Pierre's own resolver over the same set,
+ * drawn from Pierre's sprite sheet added to the document once.
  */
 
 /** What Pierre marks a row with: that it is an entry, and that it is a file. */
@@ -60,6 +65,12 @@ const TREE_LOOK = {
   flattenEmptyDirectories: true,
   density: "compact",
   icons: "complete",
+} as const;
+
+/** The slot Pierre resolves a file's type icon for, and the type of a file no rule names. */
+const FILE_ICON = {
+  SLOT: "file-tree-icon-file",
+  DEFAULT_TYPE: "default",
 } as const;
 
 /** What the pane says while the root is listed. */
@@ -124,6 +135,32 @@ function entriesOf(read: ReadFolder, onCut: () => void) {
       if (listed.truncated) onCut();
       return listed.entries;
     });
+}
+
+const iconResolver = createFileTreeIconResolver(TREE_LOOK.icons);
+
+/** The sheet the type icons draw from, made the first time one is asked for. */
+let spriteSheet: HTMLElement | undefined;
+
+/**
+ * A file's type icon, as the tree would draw the file, its sheet added to
+ * the document wherever it is not there. Note that the sheet is held at no
+ * size rather than hidden, because a symbol clipping itself through an id
+ * draws nothing out of a sheet that is not displayed.
+ */
+function fileIcon(name: string): FileTypeIcon {
+  if (spriteSheet === undefined) {
+    spriteSheet = document.createElement("div");
+    spriteSheet.setAttribute("aria-hidden", "true");
+    spriteSheet.style.position = "absolute";
+    spriteSheet.style.width = "0";
+    spriteSheet.style.height = "0";
+    spriteSheet.style.overflow = "hidden";
+    spriteSheet.innerHTML = getBuiltInSpriteSheet(TREE_LOOK.icons);
+  }
+  if (!spriteSheet.isConnected) document.body.append(spriteSheet);
+  const icon = iconResolver.resolveIcon(FILE_ICON.SLOT, name);
+  return { symbol: icon.name, type: icon.token ?? FILE_ICON.DEFAULT_TYPE };
 }
 
 function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
@@ -288,4 +325,4 @@ function list(host: HTMLElement, props: FolderListProps): () => void {
   };
 }
 
-window.lukeFileTree = { mount, list } satisfies FileTreeModule;
+window.lukeFileTree = { mount, list, fileIcon } satisfies FileTreeModule;

@@ -298,7 +298,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       ].filter(
         (each) =>
           !each.matches(
-            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .attached-file-remove",
+            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .attached-file-face, .attached-file-remove",
           ),
       );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
@@ -1054,7 +1054,7 @@ test("a message holds ten files, and an empty file and a PDF past its bound are 
   assert.equal(tab.note(), "A message can carry up to 10 files.");
 });
 
-test("the developer's row read back from the service draws its files over the bubble: an image as its thumbnail, any other file by its name and size, and one the service kept no bytes of by its name", () => {
+test("the developer's row read back from the service draws its files over the bubble: an image as its thumbnail, any other file by its name and size, and one the service kept no bytes of by its name; a press on one opens it", () => {
   const tab = mount({
     status: CODING_AGENT_STATUS.COMPLETED,
     messages: [
@@ -1083,6 +1083,16 @@ test("the developer's row read back from the service draws its files over the bu
   });
   assert.deepEqual(tab.sentChips(), ["shot.png", "spec.pdf1.5 MB", "staged.png"]);
   assert.deepEqual(tab.bubbles().at(-1)?.endsWith("Read these."), true);
+
+  // A sent file opens over the window from its chip, as one in the box does.
+  act(() =>
+    tab.container
+      .querySelector<HTMLButtonElement>('[role="log"] button[aria-label="Open spec.pdf"]')
+      ?.click(),
+  );
+  const viewer = document.querySelector('[role="dialog"]');
+  assert.equal(viewer?.querySelector("h2")?.textContent, "spec.pdf");
+  assert.ok(viewer?.querySelector('button[aria-label="Download"]'));
 });
 
 test("files are taken after whatever the box holds as their read lands: two hand-offs read at once both stand, a chip taken off while another file is read stays off, and Send waits while a file is still being read", async () => {
