@@ -9,13 +9,17 @@ import { useEffect } from "react";
  * hover the pointer had before, so a button the drag never touched can stay
  * lit after it. While the window is moving the root says the pointer is
  * stale (`data-pointer-stale`), which the stylesheet answers by taking hover
- * from the buttons, until the pointer itself moves again over the page.
+ * from the buttons, until the pointer itself moves again over the page. A
+ * drag is the pointer's doing, though a native drag region sends the page no
+ * press, so it also ends the keyboard's claim on focus rings: a button the
+ * keyboard last reached keeps no ring through a drag.
  */
 export function useStaleHoverAfterMove(): void {
   useEffect(() => {
     const root = document.documentElement;
     const stopMoved = window.sidecar.onCallWindowMoved(() => {
       root.dataset.pointerStale = "true";
+      delete root.dataset.keyboard;
     });
     // Note that only a pointer that moved counts, because the engine follows
     // a window's move with a move of its own at the pointer's old place.

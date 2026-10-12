@@ -175,6 +175,7 @@ test("folded, the card floats at the default sidebar's width, whatever width the
   assert.equal(declared(":root", "--sidebar-width-default"), `${SIDEBAR_WIDTH.DEFAULT}px`);
   assert.equal(declared(":root", "--sidebar-width"), "var(--sidebar-width-default)");
   assert.equal(declared('.call-card[data-surface="sidebar"]', "width"), undefined);
+});
 
 test("in the floating window a press on a button acts without taking focus, and rings and hover answer only the keyboard and a pointer that moved", async () => {
   draw(createElement(CallCard, { ...input(LISTENING), surface: CALL_CARD_SURFACE.WINDOW }));
