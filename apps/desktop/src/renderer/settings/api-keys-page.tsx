@@ -29,6 +29,8 @@ import { ConfirmSwap } from "./confirm-swap";
  * being pasted: it stands in the field alone, is read from it once on Save,
  * and is cleared from it as soon as the service keeps it. A save the
  * service refuses says why under the row and leaves the field as pasted.
+ * One change runs at a time across the rows, since every answer is the
+ * account's keys whole and two in flight could land out of order.
  * Remove asks first, in place. The whole page is kept out of the screen
  * recording, which masks a field's characters but not their count.
  */
@@ -106,11 +108,14 @@ function rejectionWords(provider: ProviderKeyProvider, rejection: ProviderKeyRej
 function ProviderKeyRow({
   provider,
   stored,
+  locked,
   onSave,
   onRemove,
 }: {
   provider: ProviderKeyProvider;
   stored: ProviderKeySummary | undefined;
+  /** Whether another row's change is in flight, which this row waits out. */
+  locked: boolean;
   /** Saves the key, answering why nothing was kept where it was not. */
   onSave: (provider: ProviderKeyProvider, key: string) => Promise<string | undefined>;
   onRemove: (provider: ProviderKeyProvider) => Promise<ActionResult>;
@@ -132,7 +137,7 @@ function ProviderKeyRow({
 
   const save = () => {
     const key = field.current?.value.trim() ?? "";
-    if (key === "" || saving) return;
+    if (key === "" || saving || locked) return;
     setSaving(true);
     setRejection(undefined);
     void onSave(provider, key).then((refused) => {
@@ -192,7 +197,7 @@ function ProviderKeyRow({
             disabled={saving}
             onChange={() => setRejection(undefined)}
           />
-          <button type="submit" className="toolbar-button" disabled={saving}>
+          <button type="submit" className="toolbar-button" disabled={saving || locked}>
             {saving ? "Checking…" : "Save"}
           </button>
           {replacing ? (
@@ -224,7 +229,7 @@ function ProviderKeyRow({
           <button
             type="button"
             className="toolbar-button"
-            disabled={removal.busy}
+            disabled={removal.busy || locked}
             onClick={() => setReplacing(true)}
           >
             Replace
@@ -232,7 +237,7 @@ function ProviderKeyRow({
           <button
             type="button"
             className="toolbar-button account-delete"
-            disabled={removal.busy}
+            disabled={removal.busy || locked}
             /* The ellipsis is the promise that it asks first. */
             title="Remove…"
             onClick={removal.ask}
@@ -255,6 +260,7 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
   const [keys, setKeys] = useState<readonly ProviderKeySummary[] | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [changing, setChanging] = useState<ProviderKeyProvider | undefined>(undefined);
 
   // The page opening reads the keys as the service holds them now, which a step may just have marked.
   useEffect(() => {
@@ -279,30 +285,36 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
   }, [act, signedIn, attempt]);
 
   const save = useCallback(
-    (provider: ProviderKeyProvider, key: string): Promise<string | undefined> =>
-      act(ACT_KIND.PROVIDER_KEYS_SAVE, { provider, key })
+    (provider: ProviderKeyProvider, key: string): Promise<string | undefined> => {
+      setChanging(provider);
+      return act(ACT_KIND.PROVIDER_KEYS_SAVE, { provider, key })
         .catch(() => undefined)
         .then((answer) => {
+          setChanging(undefined);
           if (answer === undefined || "failure" in answer) return PAGE_LINE.SAVE_FAILED;
           setKeys(answer.keys);
           return answer.rejected === undefined
             ? undefined
             : rejectionWords(provider, answer.rejected);
-        }),
+        });
+    },
     [act],
   );
 
   const remove = useCallback(
-    (provider: ProviderKeyProvider): Promise<ActionResult> =>
-      act(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider })
+    (provider: ProviderKeyProvider): Promise<ActionResult> => {
+      setChanging(provider);
+      return act(ACT_KIND.PROVIDER_KEYS_REMOVE, { provider })
         .catch(() => undefined)
         .then((answer): ActionResult => {
+          setChanging(undefined);
           if (answer === undefined || "failure" in answer) {
             return { status: ACTION_RESULT_STATUS.REJECTED, reason: PAGE_LINE.REMOVE_FAILED };
           }
           setKeys(answer.keys);
           return { status: ACTION_RESULT_STATUS.ACCEPTED };
-        }),
+        });
+    },
     [act],
   );
 
@@ -321,6 +333,7 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
               key={provider}
               provider={provider}
               stored={keys.find((each) => each.provider === provider)}
+              locked={changing !== undefined && changing !== provider}
               onSave={save}
               onRemove={remove}
             />

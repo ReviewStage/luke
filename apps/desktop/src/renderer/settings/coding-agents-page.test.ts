@@ -9,7 +9,7 @@ import {
   type ModelChoice,
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
-import { PROVIDER_KEY_STATUS } from "@sidecar/hosted/provider-key-wire";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -82,6 +82,8 @@ let refuseModels = false;
 let refuseDefaultRead = false;
 /** The providers the account holds a key of its own for, as the keys read answers them. */
 let ownKeys: readonly ModelProvider[] = [];
+/** How the provider last answered each of those keys. */
+let ownKeyStatus: ProviderKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -114,7 +116,7 @@ function answer(request: Act): Promise<ActOutcome> {
             provider,
             hint: "sk-…test",
             addedAt: 1,
-            status: PROVIDER_KEY_STATUS.VERIFIED,
+            status: ownKeyStatus,
             statusAt: 1,
           })),
         }),
@@ -141,6 +143,7 @@ beforeEach(() => {
   refuseModels = false;
   refuseDefaultRead = false;
   ownKeys = [];
+  ownKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -473,15 +476,22 @@ test("the model menu lists base models only, and the Fast switch under it stores
   );
 });
 
-test("the model row says the default runs on the account's own key where it holds one for the model's provider", async () => {
+test("the model row says the default runs on the account's own key where the provider accepted one, and that one it did not needs a hand", async () => {
   ownKeys = [MODEL_PROVIDER.ANTHROPIC];
   const own = await mount();
   ownKeys = [MODEL_PROVIDER.OPENAI];
   const luke = await mount();
+  ownKeys = [MODEL_PROVIDER.ANTHROPIC];
+  ownKeyStatus = PROVIDER_KEY_STATUS.UNREADABLE;
+  const unusable = await mount();
 
   const note = (page: HTMLElement) =>
     page.querySelector(".settings-picker-row .settings-copy small, .settings-copy small")
       ?.textContent;
   assert.equal(note(own), "What a click on Start runs an agent on, on your own Anthropic key.");
   assert.equal(note(luke), "What a click on Start runs an agent on.");
+  assert.equal(
+    note(unusable),
+    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
+  );
 });

@@ -47,6 +47,8 @@ let sent: Act[] = [];
 let refuseSave: ProviderKeyRejection | undefined;
 /** Whether the read is answered with a failure rather than the keys. */
 let refuseRead = false;
+/** Where a save is held unanswered until the test lets it go, rather than answered at once. */
+let holdSaves: ((answer: ActOutcome) => void)[] | undefined;
 
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
   status: ACT_OUTCOME_STATUS.DONE,
@@ -62,6 +64,10 @@ function answer(request: Act): Promise<ActOutcome> {
         done(refuseRead ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { keys: stored }),
       );
     case ACT_KIND.PROVIDER_KEYS_SAVE:
+      if (holdSaves !== undefined) {
+        const held = holdSaves;
+        return new Promise((resolve) => held.push(resolve));
+      }
       if (refuseSave !== undefined) {
         return Promise.resolve(done({ keys: stored, rejected: refuseSave }));
       }
@@ -85,6 +91,7 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   refuseRead = false;
+  holdSaves = undefined;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -234,4 +241,20 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
     "Your keys could not be read. Try again.",
   );
   assert.equal(signedOut.textContent, "Sign in to add your own API keys.");
+});
+
+test("while one row's save is out, the other row waits, so two answers cannot land out of order", async () => {
+  holdSaves = [];
+  const page = await mount();
+
+  await paste(page, "Anthropic", PASTED);
+  const openAiSave = button(page, "Save", rowOf(page, "OpenAI"));
+  const waited = openAiSave.disabled;
+  const release = holdSaves[0] ?? assert.fail("the save was not sent");
+  stored = [ANTHROPIC_KEPT];
+  release({ status: ACT_OUTCOME_STATUS.DONE, value: { keys: stored } });
+  await settle();
+
+  assert.equal(waited, true);
+  assert.equal(button(page, "Save", rowOf(page, "OpenAI")).disabled, false);
 });
