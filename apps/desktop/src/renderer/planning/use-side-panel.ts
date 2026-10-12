@@ -76,9 +76,11 @@ import {
  * one on a plan no tab was opened or moved on, or one whose kind's first
  * read landed since (`firstHeld`), stands after those it holds, in its
  * kind's place (`inPlanOrder`), so a strip kept before stands as it stood.
- * A tab opened on another plan, as a pin does, changes nothing of that
- * plan's order, since its strip is not drawn here to say whether the tab
- * already stands in it. The subagent and file tabs are kept nowhere, so
+ * A tab opened on another plan, as a pin does, goes to the end of that
+ * plan's strip where it is sure to stand in none of it, a fixed tab closed
+ * there or a file with no tab open (`withTabLastOn`), and otherwise
+ * changes nothing of its order, since its strip is not drawn here to say
+ * whether the tab already stands in it. The subagent and file tabs are kept nowhere, so
  * they keep their place until a launch and then drop out of the order,
  * leaving the rest as they stood.
  *
@@ -855,6 +857,26 @@ function withTabLast(held: HeldState, tab: SidePanelTab, drawn: DrawnTabs): Held
 }
 
 /**
+ * The state with the tab written at the end of the order of `planId`, a
+ * plan whose strip is not drawn here, where that strip is sure not to draw
+ * it: a fixed tab closed there, or a file with no tab open. Every other
+ * fixed kind is written before it, in the order a plan whose order holds
+ * none of them draws them, so it stands after whichever the plan draws.
+ * Any other tab changes nothing, since it may stand there already.
+ */
+function withTabLastOn(held: HeldState, planId: string, tab: SidePanelTab): HeldState {
+  const absent = isFixedTab(tab)
+    ? planTabs(held, planId).closed.includes(tab)
+    : isFileTab(tab) && !held.files.some((each) => each.path === tab.file);
+  if (!absent) return held;
+  const others = held.tabs.filter((each) => !sameTab(each, tab));
+  const order = openedOrder(orderOn(held, planId), others, tab);
+  return order === undefined
+    ? held
+    : withPlanTabs(held, planId, (choices) => ({ ...choices, order }));
+}
+
+/**
  * The state with each kind that arrived on the plan, its tab not closed
  * there, standing at the strip's end in the kinds' order, as `withTabLast`
  * stands a tab opened. `drawn` is the plan as it was before they arrived.
@@ -1191,14 +1213,17 @@ export function useSidePanel(
     [update, drawn, planId],
   );
   // Note that a tab shown on another plan is not counted viewed on the open
-  // one, nor written at its strip's end, because the plan it is viewed on
-  // is the one about to open, whose strip is not drawn yet.
+  // one, because the plan it is viewed on is the one about to open, whose
+  // strip is not drawn yet; it goes to that strip's end only where it is
+  // sure to stand in none of it (`withTabLastOn`).
   const onShow = useCallback(
     (on: string, tab: SidePanelTab) => {
       setAsked({ plan: on, tab });
       update((held) => {
         const here =
-          on === planId ? withTabLast(withChosenViewed(held, tab, drawn), tab, drawn) : held;
+          on === planId
+            ? withTabLast(withChosenViewed(held, tab, drawn), tab, drawn)
+            : withTabLastOn(held, on, tab);
         return { ...withTab(here, tab, on), open: true };
       });
     },

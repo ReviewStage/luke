@@ -498,6 +498,28 @@ test("a fixed tab opened stands at the strip's end, after a subagent's and a fil
   ]);
 });
 
+test("a tab closed on a plan and shown there from another, as a pin does, stands at that plan's end, and one open there stays where it stands", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const holds = {
+    [SIDE_PANEL_TAB.BOARD]: true,
+    [SIDE_PANEL_TAB.CODE]: true,
+    [SIDE_PANEL_TAB.WORK]: true,
+  };
+  const panel = mountOn(holds);
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.CODE));
+  panel.standOn({}, OTHER_PLAN);
+
+  act(() => panel.control().onShow(PLAN, SIDE_PANEL_TAB.BOARD));
+  act(() => panel.control().onShow(PLAN, SIDE_PANEL_TAB.CODE));
+  panel.standOn(holds, PLAN);
+  assert.deepEqual(panel.control().tabs, [
+    SIDE_PANEL_TAB.BOARD,
+    SIDE_PANEL_TAB.WORK,
+    SIDE_PANEL_TAB.CODE,
+  ]);
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE);
+});
+
 test("a kind's first content on the open plan adds its tab at the strip's end, while a kind's first read leaves it in its kind's place, as the strip stood", () => {
   const panel = mountOn({ [SIDE_PANEL_TAB.BOARD]: false, [SIDE_PANEL_TAB.TRANSCRIPT]: true });
 
