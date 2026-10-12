@@ -55,6 +55,8 @@ export const GITHUB_APP_ENVIRONMENT = {
   CLIENT_SECRET: "GITHUB_APP_CLIENT_SECRET",
   /** The App's private key, PEM; a value whose newlines arrived as `\\n` is read all the same. */
   PRIVATE_KEY: "GITHUB_APP_PRIVATE_KEY",
+  /** The secret GitHub signs the App's webhook deliveries with; absent refuses every delivery. */
+  WEBHOOK_SECRET: "GITHUB_APP_WEBHOOK_SECRET",
 } as const;
 
 /** The variables the auth service's own secrets are read from; a blank value is absent. */

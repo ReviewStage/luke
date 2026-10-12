@@ -229,14 +229,14 @@ export function hostedMethod(
 }
 
 /**
- * The request's JSON body as the unparsed wire value a schema reads next.
- * The stream is counted as it arrives rather than trusting a Content-Length
- * the sender may omit or misstate, and is left the moment the bound is
- * passed, so an oversized request is never held whole.
+ * The request's body as the bytes it arrived as. The stream is counted as it
+ * arrives rather than trusting a Content-Length the sender may omit or
+ * misstate, and is left the moment the bound is passed, so an oversized
+ * request is never held whole.
  */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
+export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesEffect")(function* (
   maximumBytes: number,
-): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+): Effect.fn.Return<Uint8Array, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const chunks: Uint8Array[] = [];
   let counted = 0;
@@ -255,10 +255,22 @@ export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEff
     joined.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return yield* Effect.try({
+  return joined;
+});
+
+/** Bytes read as UTF-8 JSON, the unparsed wire value a schema reads next; anything else is an invalid request. */
+export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireValue, HostedRefusal> {
+  return Effect.try({
     // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
     try: () =>
-      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as UnparsedWireValue,
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
+}
+
+/** The request's JSON body as the unparsed wire value a schema reads next, bounded as `readBodyBytesEffect` bounds it. */
+export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
+  maximumBytes: number,
+): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  return yield* parseJsonBytes(yield* readBodyBytesEffect(maximumBytes));
 });

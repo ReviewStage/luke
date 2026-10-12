@@ -6,7 +6,7 @@ import {
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -381,6 +381,24 @@ const findAgentsOfPlans = SqlSchema.findAll({
       .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
 });
 
+const findAgentsOnBranches = SqlSchema.findAll({
+  Request: Schema.Struct({
+    repository: Schema.String,
+    branches: Schema.Array(Schema.String),
+    limit: Schema.Number,
+  }),
+  Result: Schema.Struct({ ...CodingAgentRowSchema.fields, userId: Schema.String }),
+  execute: ({ repository, branches, limit }) =>
+    db
+      .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+      .from(codingAgent)
+      .where(
+        and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
+      )
+      .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+      .limit(limit),
+});
+
 const findAgent = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: CodingAgentRowSchema,
@@ -528,6 +546,30 @@ export function recordCodingAgentPublished(
   published: CodingAgentPullRequest | null,
 ): CodingAgentStoreEffect<void> {
   return updateAgentPublished({ userId, agentId, published });
+}
+
+/** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it. */
+export interface OwnedCodingAgent {
+  readonly userId: string;
+  readonly agent: CodingAgent;
+}
+
+/**
+ * The agents of any account whose row stands on one of the repository's
+ * branches named, newest started first and at most `limit` of them; none for
+ * no branch. This is the one read that names no account, since GitHub's
+ * delivery names a repository and a branch and nothing of who started an
+ * agent on them; what each answers is read again on its owner's own token.
+ */
+export function listCodingAgentsOnBranches(
+  repository: string,
+  branches: readonly string[],
+  limit: number,
+): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+  if (branches.length === 0) return Effect.succeed([]);
+  return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
+    rows.map(({ userId, ...agent }) => ({ userId, agent })),
+  );
 }
 
 /** The account's agent under this id, or nothing for an agent the account does not own. */

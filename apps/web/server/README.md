@@ -212,6 +212,25 @@ next takes focus (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 Nothing is stored at install time: which installations a user can reach is
 read from GitHub on the user's own token when a repository is chosen.
 
+The App's webhook is `POST /api/github/webhook` (`server/github-webhook-app.ts`),
+which keeps what a coding agent published current on the agent's row
+(`coding_agent.published`) for the plan list while nobody has the agent's tab
+open. GitHub signs every delivery with the App's webhook secret,
+`GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
+against the HMAC-SHA256 of the body's own bytes in constant time before it
+reads anything; a deployment without the secret answers every delivery
+`unavailable` (503), and a signature that does not hold is `invalid-token`
+(401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
+ready_for_review, converted_to_draft), `check_suite`, a completed
+`check_run`, and `status` are read, for the repository's full name and the branches they
+name, and nothing of a delivery is kept or logged: the branch finds the agents
+whose rows stand on it, of whichever account, at most ten, newest first, and
+each one's pull request is read again from GitHub on its owner's own token
+through `agentPublished`, as the agent's tab reads it, which writes the row.
+A redelivery reads the same again. GitHub's `ping` and any other event are
+answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
+scripted GitHub and PGlite.
+
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
 client: a Preview carrying the App's client id can complete a sign-in only
