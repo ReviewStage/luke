@@ -8,8 +8,9 @@ import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach } from "vitest";
+import { afterEach, test } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { builtStylesheet, cssRules } from "#testing/css-rules";
 import {
   TOAST_HOLD,
   TOAST_TONE,
@@ -347,3 +348,26 @@ it.effect(
       assert.deepEqual(spoken(), { status: "", alert: "" });
     }),
 );
+
+test("the toasts stand in the window's very corner, and step up clear of a call bar only while a card with something to press stands over it", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const stack = rules.find((rule) => rule.selectors.includes(".toast-stack"));
+  assert.equal(stack?.declarations.get("right"), "var(--space-16)");
+  assert.equal(stack?.declarations.get("bottom"), "var(--space-16)");
+  assert.equal(stack?.declarations.has("transform"), false);
+  // Nothing at the window's foot moves the corner itself.
+  const lifts = rules.filter(
+    (rule) =>
+      rule.selectors.some((selector) => selector.endsWith(" .toast-stack")) &&
+      rule.declarations.has("bottom"),
+  );
+  assert.deepEqual(lifts, []);
+  // The one step: a call bar drawn and a card with an action standing, by the bar's own row.
+  const step = rules.find((rule) =>
+    rule.selectors.includes(
+      'body:has(.desktop-call-bar) .toast-stack:has(.toast[data-action="true"]:not([data-leaving]))',
+    ),
+  );
+  assert.match(step?.declarations.get("transform") ?? "", /var\(--call-row-height\)/);
+  assert.match(stack?.declarations.get("transition") ?? "", /^transform var\(--duration-fast\)/);
+});
