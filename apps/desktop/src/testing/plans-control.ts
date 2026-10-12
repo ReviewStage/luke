@@ -151,6 +151,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onRenamePins: ignore,
       onOpenFile: ignore,
       onBrowseFile: ignore,
+      onFileHistory: ignore,
       onResize: ignore,
     },
     unreadTabs: [],

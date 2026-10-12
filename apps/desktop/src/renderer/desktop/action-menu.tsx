@@ -1,3 +1,4 @@
+import { CheckIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KeyedCommand } from "#shared/shortcuts";
@@ -29,8 +30,8 @@ type MenuAlign = (typeof MENU_ALIGN)[keyof typeof MENU_ALIGN];
 const MENU_MARGIN = 8;
 /** The gap between a button and the menu dropped from it. */
 export const MENU_DROP = 4;
-/** The items the menu's keys move between: every one that applies now. */
-const MENU_ITEM = '[role="menuitem"]:not(:disabled)';
+/** The items the menu's keys move between: every one that applies now, a setting's as an action's. */
+const MENU_ITEM = ':is([role="menuitem"], [role="menuitemcheckbox"]):not(:disabled)';
 
 /** Where a menu hangs: a point in the window, and which way from it the menu grows. */
 export interface MenuPlacement {
@@ -50,6 +51,8 @@ export interface MenuAction {
   command?: KeyedCommand;
   /** Drawn dimmed and not chosen: the action does not apply now. */
   disabled?: boolean;
+  /** A setting rather than an action: whether it is on, a check at the item's end saying so. */
+  checked?: boolean;
 }
 
 /** A menu standing open: where it hangs, and the control that opened it, which takes focus back. */
@@ -110,8 +113,9 @@ function itemAfter(key: string, at: number, count: number): number | undefined {
   }
 }
 
-/** What an item prints at its end: its shortcut, or nothing. */
+/** What an item prints at its end: a setting's check while it is on, its shortcut, or nothing. */
 function ItemEnd({ action }: { action: MenuAction }): React.JSX.Element | null {
+  if (action.checked === true) return <CheckIcon aria-hidden="true" className="plan-menu-check" />;
   if (action.command === undefined) return null;
   return <ShortcutGlyphs command={action.command} className="plan-menu-end" />;
 }
@@ -127,6 +131,29 @@ export function MenuItem({
   inMenu: boolean;
   onChoose: () => void;
 }): React.JSX.Element {
+  const body = (
+    <>
+      <span className="plan-menu-icon">{action.icon}</span>
+      <span className="plan-menu-label">{action.label}</span>
+      <ItemEnd action={action} />
+    </>
+  );
+  // A setting in a menu says whether it is on as a menu's check does.
+  if (inMenu && action.checked !== undefined) {
+    return (
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={action.checked}
+        tabIndex={-1}
+        className="plan-menu-item"
+        disabled={action.disabled}
+        onClick={onChoose}
+      >
+        {body}
+      </button>
+    );
+  }
   return (
     <button
       type="button"
@@ -137,9 +164,7 @@ export function MenuItem({
       disabled={action.disabled}
       onClick={onChoose}
     >
-      <span className="plan-menu-icon">{action.icon}</span>
-      <span className="plan-menu-label">{action.label}</span>
-      <ItemEnd action={action} />
+      {body}
     </button>
   );
 }

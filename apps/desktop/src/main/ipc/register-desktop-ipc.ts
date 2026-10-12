@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { highlightSnippet } from "@sidecar/host";
-import { BrowserWindow, clipboard, ipcMain } from "electron";
+import { BrowserWindow, clipboard, dialog, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
 import type { AppStateSnapshot } from "#shared/messages/app-state";
@@ -72,6 +72,16 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
       openExternal: config.openExternal,
+      saveFile: async (sender, name, text) => {
+        const window = BrowserWindow.fromWebContents(sender);
+        const options = { defaultPath: name };
+        const chosen = await (window === null
+          ? dialog.showSaveDialog(options)
+          : dialog.showSaveDialog(window, options));
+        if (chosen.canceled || chosen.filePath === undefined) return false;
+        await fs.promises.writeFile(chosen.filePath, text, "utf8");
+        return true;
+      },
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({

@@ -1,17 +1,13 @@
 import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { GitHubMark } from "../account-marks";
 import { BusyLabel, SpinnerRegion } from "../spinner";
-import { Tooltip } from "../tooltip";
 import { CodeLineRows, centreWithin } from "./code-pane";
-import { rangeLabel } from "./code-pane-model";
 import {
   FILE_READ,
   type FileLines,
   type FileRead,
   type FileWindow,
-  fileUrl,
   holdsLines,
   lastLineOf,
   refusalLine,
@@ -19,6 +15,7 @@ import {
   windowAt,
   withWindow,
 } from "./file-tab-model";
+import { useFileViewSettings } from "./file-view-settings";
 import type { OpenFile } from "./use-side-panel";
 
 /**
@@ -35,9 +32,11 @@ import type { OpenFile } from "./use-side-panel";
  * the checkout the snippet was read from: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the plan holds them. Once lines have landed, the
- * heading's GitHub button names the branch they were read on and opens the
- * file there, its lit lines marked. Every line here is
+ * showed of it where the plan holds them. The tab draws no heading of its
+ * own: the File view's bar over it names the file and offers what is done
+ * with it (`file-view.tsx`), told how the read stands as it moves. The lines
+ * are drawn numbered or not, wrapped or not, as every File tab is
+ * (`file-view-settings.ts`). Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
@@ -104,6 +103,20 @@ function EdgeRow({
   );
 }
 
+/** The attributes every run of a File tab's lines is drawn by: its numbers shown or not, wrapped or not, as the File tabs' settings say. */
+interface LinesLook {
+  readonly "data-line-numbers": string;
+  readonly "data-wrap": string;
+}
+
+function useLinesLook(): LinesLook {
+  const { settings } = useFileViewSettings();
+  return {
+    "data-line-numbers": String(settings.lineNumbers),
+    "data-wrap": String(settings.wordWrap),
+  };
+}
+
 /** The run of lines held after a window's answer, or why there is none. */
 function afterAnswer(held: FileRead, answer: PlanningFileAnswer): FileRead {
   if ("file" in answer) return { kind: FILE_READ.READY, ...withWindow(held, answer.file) };
@@ -130,6 +143,7 @@ function FileLinesView({
 }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
   const centred = useRef<number | undefined>(undefined);
+  const look = useLinesLook();
   const last = lastLineOf(held);
   const above = held.firstLine > 1 ? windowAt(held.firstLine - 1) : undefined;
   const below = last < held.lineCount ? windowAt(last + 1) : undefined;
@@ -152,7 +166,7 @@ function FileLinesView({
   });
 
   return (
-    <div className="code-lines file-tab-lines" ref={scroller}>
+    <div className="code-lines file-tab-lines" ref={scroller} {...look}>
       {above === undefined ? null : (
         <EdgeRow
           key={above.firstLine}
@@ -196,31 +210,29 @@ function ReadNotice({
   );
 }
 
-/** The tab: its file's heading, then the file, or why it is not shown over the lines Luke showed of it. */
+/** The tab: the file, or why it is not shown over the lines Luke showed of it. */
 export function FileTab({
   file,
   snippet,
   readFile,
-  openGitHub,
-  crumbs,
-  actions,
+  onRead,
 }: {
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: PlanCode | undefined;
   readFile: ReadFileWindow;
-  /** Opens a page of GitHub's in the browser, where the heading's button opens the file. */
-  openGitHub: (url: string) => void;
-  /** The file's path as breadcrumbs, drawn in the heading in place of the path. */
-  crumbs?: React.ReactNode;
-  /** Controls the heading ends with, after its GitHub button. */
-  actions?: React.ReactNode;
+  /** Hears how the read of the file stands each time it moves, the bar over the tab offering what it allows. */
+  onRead: (read: FileRead) => void;
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const held = useRef<FileRead>(read);
   held.current = read;
-  const label =
-    file.range === undefined ? undefined : rangeLabel({ path: file.path, ...file.range });
+  const told = useRef(onRead);
+  const look = useLinesLook();
+  told.current = onRead;
+  useEffect(() => {
+    told.current(read);
+  }, [read]);
 
   // Note that the reads go through refs to the latest file and door, so
   // they ask again only when the file is opened again, never because a
@@ -285,29 +297,6 @@ export function FileTab({
 
   return (
     <section className="file-tab ph-no-capture" aria-label={file.path}>
-      <header className="code-card-header file-tab-header">
-        {crumbs ?? (
-          <Tooltip label={file.path}>
-            <span className="code-card-path">
-              <bdi>{file.path}</bdi>
-            </span>
-          </Tooltip>
-        )}
-        {label === undefined ? null : <span className="code-card-range">{label}</span>}
-        {read.kind === FILE_READ.READY ? (
-          <Tooltip label={`Open on GitHub (${read.branch})`}>
-            <button
-              type="button"
-              className="toolbar-button code-card-action file-tab-github"
-              onClick={() => openGitHub(fileUrl(read, file))}
-            >
-              <GitHubMark />
-              <span className="plan-compose-chip-name">{read.branch}</span>
-            </button>
-          </Tooltip>
-        ) : null}
-        {actions}
-      </header>
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} readWindow={readWindow} />
       ) : read.kind === FILE_READ.READING ? (
@@ -322,7 +311,7 @@ export function FileTab({
             <ReadNotice read={read} onRetry={readLit} />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <div className="code-lines file-tab-lines">
+          <div className="code-lines file-tab-lines" {...look}>
             <CodeLineRows
               firstLine={snippet.firstLine}
               lines={snippet.lines}

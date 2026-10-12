@@ -1,17 +1,28 @@
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
-import { PanelRightIcon } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { GitHubMark } from "../account-marks";
 import type { FileTreeHandle } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
+import { FileMenu } from "./file-menu";
 import { FileTab, type ReadFileWindow } from "./file-tab";
+import { FILE_READ, type FileRead, fileUrl, readWholeText } from "./file-tab-model";
 import { FileTreePane } from "./file-tree-pane";
 import { keptListings, type ListFolder } from "./folder-listings";
-import type { OpenFile } from "./use-side-panel";
+import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel";
 
 /**
- * file-view.tsx -- a File tab with the plan's repository beside it: the file across the panel, its path as breadcrumbs, and the collapsible tree on its right.
+ * file-view.tsx -- a File tab with the plan's repository beside it: one bar across both, the file under it, and the collapsible tree on its right.
+ *
+ * The bar is the whole view's, the tree's column included, as an editor's
+ * is: Back and Forward through the files this tab showed, the file's path
+ * as breadcrumbs, then at its end the file opened on GitHub, the ⋯ of what
+ * is done with it (`file-menu.tsx`), and the tree's toggle, the side
+ * panel's own glyph, since the tree is docked on the right as the panel
+ * is. The tab under it reads the file and tells the bar how the read
+ * stands, which is what the GitHub button and the menu offer by.
  *
  * The tree and the breadcrumbs both browse the repository the file was
  * read from, listed through one store of what the panel has listed
@@ -22,10 +33,10 @@ import type { OpenFile } from "./use-side-panel";
  * to mount. The tree is open or closed for every File tab alike, as the
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
- * alone.
+ * alone, its path plain in the bar.
  */
 
-/** The heading's button that shows or hides the tree. */
+/** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
 function TreeToggle({
   open,
   onToggle,
@@ -38,15 +49,63 @@ function TreeToggle({
     <Tooltip label={label}>
       <button
         type="button"
-        className="icon-button code-card-action file-tree-toggle"
+        className="icon-button file-tree-toggle"
         aria-label={label}
-        aria-pressed={open}
+        aria-expanded={open}
+        data-open={String(open)}
         onClick={onToggle}
       >
-        <PanelRightIcon aria-hidden="true" />
+        <SidePanelIcon />
       </button>
     </Tooltip>
   );
+}
+
+/** A File tab's history as its bar walks it: whether each way holds a file, and the step. */
+export interface FileHistory {
+  readonly canGoBack: boolean;
+  readonly canGoForward: boolean;
+  readonly onStep: (step: FileHistoryStep) => void;
+}
+
+/**
+ * Back and Forward through the files this tab showed, as the sidebar's own
+ * pair is drawn: a way with nothing along it is dimmed rather than gone, so
+ * neither button moves.
+ */
+function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Element {
+  return (
+    <div className="file-view-history">
+      <Tooltip label="Back">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Back"
+          disabled={!history.canGoBack}
+          onClick={() => history.onStep(FILE_HISTORY_STEP.BACK)}
+        >
+          <ArrowLeftIcon />
+        </button>
+      </Tooltip>
+      <Tooltip label="Forward">
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="Forward"
+          disabled={!history.canGoForward}
+          onClick={() => history.onStep(FILE_HISTORY_STEP.FORWARD)}
+        >
+          <ArrowRightIcon />
+        </button>
+      </Tooltip>
+    </div>
+  );
+}
+
+/** The file as the tab last told its read, a read of a file shown before standing for nothing. */
+interface TabRead {
+  readonly path: string;
+  readonly read: FileRead;
 }
 
 export function FileView({
@@ -62,6 +121,7 @@ export function FileView({
   treeOpen,
   onToggleTree,
   onBrowse,
+  history,
 }: {
   planId: string;
   /** The plan's repository, `owner/name`, which the tree browses; none draws the tab alone. */
@@ -81,6 +141,7 @@ export function FileView({
   onToggleTree: () => void;
   /** A file chosen in the tree or the breadcrumbs, to show in this tab, or in a tab of its own where `newTab` asks. */
   onBrowse: (path: string, newTab: boolean) => void;
+  history: FileHistory;
 }): React.JSX.Element {
   // The view's store of listings, one per plan and repository. Note that
   // it lists through a ref to the latest door, so a parent drawing a fresh
@@ -129,38 +190,78 @@ export function FileView({
     if (!treeOpen) onToggleTree();
   };
 
+  const [told, setTold] = useState<TabRead | undefined>(undefined);
+  const read = told?.path === file.path ? told.read : { kind: FILE_READ.READING };
+  const onRead = useCallback(
+    (next: FileRead) => setTold({ path: file.path, read: next }),
+    [file.path],
+  );
+  // The whole text, for a copy or a download, read through the tab's door.
+  const readText = () =>
+    readWholeText((window) =>
+      readFile({ path: file.path, ...window }).then(
+        (answer) => ("file" in answer ? answer.file : undefined),
+        () => undefined,
+      ),
+    );
+
   const browsing = repository !== null;
   return (
     <div className="file-view">
-      <FileTab
-        key={file.path}
-        file={file}
-        snippet={snippet}
-        readFile={readFile}
-        openGitHub={openGitHub}
-        crumbs={
-          browsing ? (
-            <FileBreadcrumbs
-              repository={repository}
-              path={file.path}
-              listFolder={listFolder}
-              onReveal={reveal}
-              onOpen={(path) => onBrowse(path, false)}
-            />
-          ) : undefined
-        }
-        actions={browsing ? <TreeToggle open={treeOpen} onToggle={onToggleTree} /> : undefined}
-      />
-      {browsing && treeOpen ? (
-        <FileTreePane
-          file={file.path}
-          shown={shown}
-          listFolder={listFolder}
-          readWhole={listWhole}
-          onOpen={onBrowse}
-          onMounted={onMounted}
+      <header className="file-view-bar">
+        <HistoryButtons history={history} />
+        {browsing ? (
+          <FileBreadcrumbs
+            repository={repository}
+            path={file.path}
+            listFolder={listFolder}
+            onReveal={reveal}
+            onOpen={(path) => onBrowse(path, false)}
+          />
+        ) : (
+          <Tooltip label={file.path}>
+            <span className="file-view-path">
+              <bdi>{file.path}</bdi>
+            </span>
+          </Tooltip>
+        )}
+        <div className="file-view-actions">
+          <Tooltip label="Open on GitHub">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Open on GitHub"
+              disabled={read.kind !== FILE_READ.READY}
+              onClick={() => {
+                if (read.kind === FILE_READ.READY) openGitHub(fileUrl(read, file));
+              }}
+            >
+              <GitHubMark />
+            </button>
+          </Tooltip>
+          <FileMenu path={file.path} ready={read.kind === FILE_READ.READY} readText={readText} />
+          {browsing ? <TreeToggle open={treeOpen} onToggle={onToggleTree} /> : null}
+        </div>
+      </header>
+      <div className="file-view-body">
+        <FileTab
+          key={file.path}
+          file={file}
+          snippet={snippet}
+          readFile={readFile}
+          onRead={onRead}
         />
-      ) : null}
+        {browsing && treeOpen ? (
+          <FileTreePane
+            file={file.path}
+            shown={shown}
+            listFolder={listFolder}
+            readWhole={listWhole}
+            onOpen={onBrowse}
+            onMounted={onMounted}
+          />
+        ) : null}
+      </div>
     </div>
   );
 }
