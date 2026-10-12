@@ -148,6 +148,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
     payload: { provider: "anthropic" },
   },
+  [ACT_KIND.DICTATION_TRANSCRIBE]: {
+    kind: ACT_KIND.DICTATION_TRANSCRIBE,
+    payload: { audio: "GkXfow==", durationMs: 1_500, keywords: ["luke"] },
+  },
   [ACT_KIND.CODING_AGENTS_CHOOSE]: {
     kind: ACT_KIND.CODING_AGENTS_CHOOSE,
     payload: {

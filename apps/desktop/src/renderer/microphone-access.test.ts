@@ -20,7 +20,7 @@ function diagnostics(overrides: Partial<LiveDiagnostics>): LiveDiagnostics {
   };
 }
 
-test("access is offered only where it can be used", () => {
+test("access is offered wherever macOS has not answered, voice or no voice, since dictation uses the microphone too", () => {
   const offered = microphoneAccessRow({
     voiceAvailable: true,
 
@@ -30,18 +30,14 @@ test("access is offered only where it can be used", () => {
   // The button is the whole answer, so the row says nothing beside it.
   assert.equal(offered.detail, undefined);
 
-  // The macOS prompt is where someone agrees to their voice reaching OpenAI.
-  // Raising it for a feature that cannot run asks for that consent under a
-  // premise that is not true, and leaves the permission granted for a use that
-  // never happens.
+  // Dictating into a message box is a use of its own, so the ask no longer
+  // waits on a voice to talk to.
   const unavailable = microphoneAccessRow({
     voiceAvailable: false,
 
     status: "not-determined",
   });
-  assert.equal(unavailable.offerAccess, false);
-  // The panel never draws this row while voice is off — the Voice page holds
-  // the key row alone then — so there is nothing for it to say.
+  assert.equal(unavailable.offerAccess, true);
   assert.equal(unavailable.detail, undefined);
 });
 
@@ -94,10 +90,10 @@ test("System Settings is offered only where macOS has an answer to change", () =
     microphoneAccessRow({ voiceAvailable: true, status: "not-determined" }).offerSystemSettings,
     false,
   );
-  // And nothing about a microphone Luke has no use for.
+  // Voice or not, since a dictation opens the same microphone.
   assert.equal(
     microphoneAccessRow({ voiceAvailable: false, status: "granted" }).offerSystemSettings,
-    false,
+    true,
   );
 });
 

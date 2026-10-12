@@ -298,7 +298,7 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
       ].filter(
         (each) =>
           !each.matches(
-            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .attached-file-face, .attached-file-remove",
+            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .dictate-button, .attached-file-face, .attached-file-remove",
           ),
       );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
@@ -965,7 +965,7 @@ test('"Attach files" is the "+" just left of Send, opening the system\'s picker:
     [...tab.container.querySelectorAll(".agent-composer-actions button")].map((each) =>
       each.getAttribute("aria-label"),
     ),
-    ["Attach files", "Send"],
+    ["Dictate", "Attach files", "Send"],
   );
   const picker = tab.container.querySelector<HTMLInputElement>('input[type="file"]');
   assert.ok(picker);

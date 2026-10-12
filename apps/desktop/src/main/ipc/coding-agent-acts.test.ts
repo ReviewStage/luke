@@ -160,6 +160,11 @@ function fixture() {
           asked.push(`remove:${provider}`);
           return { keys: [] };
         }),
+      dictationTranscribe: ({ audio, keywords }) =>
+        Effect.sync(() => {
+          asked.push(`transcribe:${audio}:${keywords.join(",")}`);
+          return { text: "Run the tests" };
+        }),
     },
   });
   // SAFETY: the router dispatches on the kind alone; the rows under test are the only ones reached.
@@ -376,5 +381,27 @@ it.effect(
         [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
       );
       assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+    }),
+);
+
+it.effect(
+  "a panel's dictated clip reaches the host once, and the voice window cannot send one",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const clip = {
+        kind: ACT_KIND.DICTATION_TRANSCRIBE,
+        payload: { audio: "GkXfow==", durationMs: 1_500, keywords: ["luke"] },
+      } as const;
+
+      const heard = yield* router.performAct(clip, PANEL);
+      const refused = yield* router.performAct(clip, VOICE);
+
+      assert.deepEqual(heard, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { text: "Run the tests" },
+      });
+      assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(asked, ["transcribe:GkXfow==:luke"]);
     }),
 );

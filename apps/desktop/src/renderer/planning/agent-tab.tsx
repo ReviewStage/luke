@@ -567,6 +567,7 @@ export function AgentTabView({
   onUnarchive,
   onOpenSubagent,
   openGitHub,
+  keywords,
 }: {
   agent: CodingAgentSummary;
   models: readonly CatalogModel[] | undefined;
@@ -587,6 +588,8 @@ export function AgentTabView({
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
+  /** The words a dictation into the box is likely to say. */
+  keywords?: readonly string[] | undefined;
 }): React.JSX.Element {
   const lines = agentLines(transcript.messages, composer.sent);
   const working = agentStillWriting(agent.status);
@@ -638,6 +641,7 @@ export function AgentTabView({
             // Note that a started agent's conversation always opens on its plan or
             // task, so the box takes a follow up even before the transcript is read.
             followsUp
+            keywords={keywords}
           />
         )}
       </footer>
@@ -720,6 +724,7 @@ export function AgentTab({
       onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
+      keywords={control.keywords}
     />
   );
 }
