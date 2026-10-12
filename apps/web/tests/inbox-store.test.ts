@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
 import {
@@ -27,6 +27,7 @@ import {
   postInboxItem,
   withdrawInboxAnswer,
 } from "../server/hosted/inbox-store";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The developer's inbox as the store keeps it, through its public functions
@@ -48,7 +49,7 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan and one agent started on it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   const started = yield* createCodingAgent(userId, {
     planId: plan.id,
     idempotencyKey: randomUUID(),

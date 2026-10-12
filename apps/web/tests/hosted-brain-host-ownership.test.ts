@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { hostTurnId } from "@sidecar/database/models/ids";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
@@ -38,6 +38,7 @@ import {
   readTurnsByConversation,
   setConversationDeletedAt,
 } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -452,7 +453,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const SESSION = sessions();
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
   );
@@ -506,7 +507,7 @@ test("a subagent's tool call is admitted through the root it was delegated from:
   const CHILD = "wrun_01MCHILD000000000000000";
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
   );

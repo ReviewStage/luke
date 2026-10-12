@@ -17,7 +17,7 @@ import {
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -33,6 +33,7 @@ import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { count, eq, sql } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding agents of an account's plans, through the store's public
@@ -54,7 +55,7 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan started. */
 const openPlan = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

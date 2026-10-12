@@ -20,7 +20,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
-import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
+import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -133,6 +133,7 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
+import { fakeWorkspaceSeams, startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -344,6 +345,7 @@ const standing = (
         ),
       eveOrigin: () => ORIGIN,
       eve: (authorization: Redacted.Redacted) => eve.eve(Redacted.value(authorization)),
+      workspaces: yield* fakeWorkspaceSeams,
     };
     const agents = HttpRouter.toWebHandler(
       codingAgentsApp(seams).pipe(HttpRouter.provideRequest(services)),
@@ -452,7 +454,7 @@ const openPlan = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
@@ -773,7 +775,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(startAs(undefined, plan.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
-        const unreachable = yield* createPlan(owner, {
+        const unreachable = yield* startPlan(owner, {
           name: "Ledger",
           repository: "Acme/Ledger",
         });
@@ -781,7 +783,7 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
           yield* ask(startAs(owner, unreachable.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
-        const bare = yield* createPlan(owner, { name: "Bare" });
+        const bare = yield* startPlan(owner, { name: "Bare" });
         assert.deepEqual(
           yield* ask(startAs(owner, bare.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),
@@ -4085,7 +4087,7 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other, agent, ask, post, waiting } = yield* openInbox();
-        const second = yield* createPlan(owner, {
+        const second = yield* startPlan(owner, {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
@@ -4133,13 +4135,13 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
     () =>
       Effect.gen(function* () {
         const { owner, other, plan, ask, post, waiting } = yield* openInbox();
-        const second = yield* createPlan(owner, {
+        const second = yield* startPlan(owner, {
           name: "Billing export",
           repository: RELAY_FULL_NAME,
         });
         yield* savePlanText(owner, second.id, SAVED);
         const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
-        const third = yield* createPlan(owner, { name: "Audit log", repository: RELAY_FULL_NAME });
+        const third = yield* startPlan(owner, { name: "Audit log", repository: RELAY_FULL_NAME });
         yield* savePlanText(owner, third.id, SAVED);
         const thirdAgent = (yield* startedAgent(owner, third.id, ask)).agent;
         assert.deepEqual((yield* waiting()).plans, [], "no plan holds an item yet");

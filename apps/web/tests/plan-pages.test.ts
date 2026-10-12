@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { listPages, readPageVersion, writePage } from "@sidecar/database/models/plan-pages";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { planPageVersion } from "@sidecar/database/schemas/plan-page";
 import { getTestDB } from "@sidecar/database/testing";
@@ -11,6 +11,7 @@ import { PAGE_BOUNDS } from "@sidecar/hosted/page-wire";
 import { eq } from "drizzle-orm";
 import { Duration, Effect, Exit, Option } from "effect";
 import { TestClock } from "effect/testing";
+import { startPlan } from "./support/workspaces";
 
 /**
  * A plan's pages, through the store's write and reads: a write is a page's
@@ -32,7 +33,7 @@ const openAccount = Effect.gen(function* () {
 
 const openPlan = Effect.gen(function* () {
   const userId = yield* openAccount;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 
@@ -97,7 +98,7 @@ it.layer(getTestDB())("a plan's pages", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        const elsewhere = yield* createPlan(userId, { name: "Billing export" });
+        const elsewhere = yield* startPlan(userId, { name: "Billing export" });
         const theirs = yield* written(userId, elsewhere.id, CHART);
 
         assert.ok(

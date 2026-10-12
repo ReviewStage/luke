@@ -8,7 +8,7 @@ import {
 } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -67,6 +67,7 @@ import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { SKILL_ENTRY, skillsRepository } from "./support/skills-repository";
 import { insertConversation } from "./support/store-rows";
 import { titleModelAnswering } from "./support/title-model";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -213,7 +214,7 @@ async function planConversation(
   const owner = userId ?? (await database.createUser());
   const name = "Teammate invitations";
   const plan = await database.run(
-    createPlan(owner, repository === undefined ? { name } : { name, repository }),
+    startPlan(owner, repository === undefined ? { name } : { name, repository }),
   );
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(owner, plan.id)),

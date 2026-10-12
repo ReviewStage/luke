@@ -5,7 +5,7 @@ import { askRecord } from "@sidecar/database/models/asks";
 import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listJournals } from "@sidecar/database/models/message-reads";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
@@ -58,6 +58,7 @@ import {
 } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * One planning turn's work as the Work tab is sent it, over the real
@@ -761,7 +762,7 @@ function shownAt(path: string, line: string) {
 /** A plan of a new account, with the conversation its planning model runs in. */
 async function planConversation(): Promise<ConversationTarget & { planId: string }> {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, { name: "Teammate invitations" }));
+  const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
   const opened = await database.run(openPlanConversation(userId, plan.id));
   assert.ok(Option.isSome(opened));
   return { userId, conversationId: opened.value, planId: plan.id };
@@ -979,7 +980,7 @@ test("a plan of more turns than a page reads its newest first, then each older p
 
 test("a plan never planned on reads as no work, and a secret file a journal holds is not read back as code", async () => {
   const userId = await database.createUser();
-  const fresh = await database.run(createPlan(userId, { name: "Billing export" }));
+  const fresh = await database.run(startPlan(userId, { name: "Billing export" }));
   assert.deepEqual(
     await database.run(readPlanWork(userId, fresh.id, undefined)),
     Option.some({ turns: [], code: [] }),

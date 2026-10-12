@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { deletePlan } from "@sidecar/database/models/plan-store";
 import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
@@ -17,6 +17,7 @@ import {
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The live session row as the record now writes it: five effects over the
@@ -146,7 +147,7 @@ it.layer(getTestDB())("the voice session record over effect/unstable/sql", (it) 
       Effect.gen(function* () {
         const owner = yield* openUser;
         const other = yield* openUser;
-        const plan = yield* createPlan(owner, PLAN);
+        const plan = yield* startPlan(owner, PLAN);
         const liveSessionId = `live_p_${randomUUID()}`;
 
         assert.equal((yield* record.heldPlan({ userId: owner, planId: plan.id }))?.id, plan.id);

@@ -5,7 +5,7 @@ import { askRecord } from "@sidecar/database/models/asks";
 import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { MessageListRead } from "@sidecar/database/models/message-reads";
-import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
+import { openPlanConversation } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
@@ -81,6 +81,7 @@ import {
 } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { deleteConversation, insertConversation } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted live brain over the real ask door and the real store on PGlite:
@@ -988,7 +989,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1039,7 +1040,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1092,7 +1093,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1138,7 +1139,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1207,7 +1208,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1290,7 +1291,7 @@ it.live(
       const planConversation = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
           }),
         ),
@@ -1343,7 +1344,7 @@ it.live(
       const { planId, planConversation } = yield* Effect.promise(() =>
         database.run(
           Effect.gen(function* () {
-            const plan = yield* createPlan(target.userId, PLAN);
+            const plan = yield* startPlan(target.userId, PLAN);
             const conversation = yield* openPlanConversation(target.userId, plan.id);
             return { planId: plan.id, planConversation: Option.getOrThrow(conversation) };
           }),

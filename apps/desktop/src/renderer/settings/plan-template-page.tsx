@@ -69,6 +69,9 @@ const PAGE_LINE = {
 /** The id the template is drawn under as a plan's document, which names no plan of the account's. */
 export const TEMPLATE_DOCUMENT_ID = "plan-template";
 
+/** The workspace the template's document names: none, since the template is the account's own and stands in no workspace. */
+const TEMPLATE_WORKSPACE_ID = "plan-template";
+
 /** What the title line's button that opens the template's version history says, as a plan's menu item says it. */
 const HISTORY_LABEL = "Version history";
 
@@ -108,6 +111,7 @@ function written(
 function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Plan {
   return {
     id: TEMPLATE_DOCUMENT_ID,
+    workspaceId: TEMPLATE_WORKSPACE_ID,
     name: TEMPLATE_TITLE,
     createdAt: 0,
     updatedAt: 0,
