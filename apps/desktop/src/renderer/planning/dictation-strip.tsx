@@ -185,8 +185,9 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
       <Tooltip label={LABEL.FINISH}>
         <button
           type="button"
-          className="dictation-finish flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground"
+          className="dictation-finish flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-secondary disabled:text-muted-foreground"
           aria-label={LABEL.FINISH}
+          disabled={dictation.startedAt === undefined}
           onMouseDown={(event) => event.preventDefault()}
           onClick={dictation.finish}
         >

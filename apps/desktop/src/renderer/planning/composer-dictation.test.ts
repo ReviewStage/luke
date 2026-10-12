@@ -1,12 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   CODING_AGENT_CALL_FAILURE,
   type DictationTranscribeAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS, type CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CODING_AGENT_BOUNDS,
+  CODING_AGENT_STATUS,
+  type CodingAgentAttachment,
+} from "@sidecar/hosted/coding-agent-wire";
 import { DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -18,10 +26,12 @@ import {
   type ActPayload,
 } from "#shared/messages/acts";
 import { MICROPHONE_STATUS, type MicrophoneStatus } from "#shared/messages/audio";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { AgentComposer } from "./agent-composer";
 import { NewPlanForm } from "./new-plan-form";
 import type { AgentComposerControl } from "./use-agent-composer";
+import { DICTATION_AUTO_STOP } from "./use-dictation";
 
 /**
  * Dictating into a message box, through the boxes themselves: the
@@ -47,6 +57,11 @@ let sent: Act[] = [];
 /** The transcriptions asked for, held until the test answers each. */
 let transcriptions: ((answer: DictationTranscribeAnswerView) => void)[] = [];
 let microphoneStatus: MicrophoneStatus = MICROPHONE_STATUS.GRANTED;
+/** Whether the next recorder refuses to be made, as one refusing the format does. */
+let recorderRefuses = false;
+/** Holds the microphone's opening until the test lets it open; nothing held opens at once. */
+let heldOpen: (() => void) | undefined;
+let holdingOpen = false;
 
 /** A `MediaRecorder` as far as the hook reads one: it starts, and its stop hands over the clip. */
 class FakeRecorder {
@@ -56,6 +71,7 @@ class FakeRecorder {
   readonly options: MediaRecorderOptions | undefined;
 
   constructor(_stream: MediaStream, options?: MediaRecorderOptions) {
+    if (recorderRefuses) throw new Error("NotSupportedError");
     this.options = options;
     recorders.push(this);
   }
@@ -119,6 +135,9 @@ beforeEach(() => {
   sent = [];
   transcriptions = [];
   microphoneStatus = MICROPHONE_STATUS.GRANTED;
+  recorderRefuses = false;
+  heldOpen = undefined;
+  holdingOpen = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: {
@@ -131,7 +150,12 @@ beforeEach(() => {
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: {
-      getUserMedia: () => Promise.resolve(openedStream()),
+      getUserMedia: () =>
+        holdingOpen
+          ? new Promise<MediaStream>((resolve) => {
+              heldOpen = () => resolve(openedStream());
+            })
+          : Promise.resolve(openedStream()),
       enumerateDevices: () => Promise.resolve([]),
     },
   });
@@ -163,7 +187,7 @@ async function settle(): Promise<void> {
 const ignore = () => undefined;
 
 /** The agent's box over a draft the test can read, and the box's own presses. */
-function mountComposer(initial: string) {
+function mountComposer(initial: string, registry?: AtomRegistry.AtomRegistry) {
   let drafted = initial;
   function Probe() {
     const [draft, setDraft] = useState(initial);
@@ -195,7 +219,11 @@ function mountComposer(initial: string) {
       keywords: KEYWORDS,
     });
   }
-  return { ...render(createElement(Probe)), draft: () => drafted };
+  const probe = createElement(Probe);
+  return {
+    ...render(registry === undefined ? probe : onRegistry(registry, probe)),
+    draft: () => drafted,
+  };
 }
 
 function render(element: React.ReactElement) {
@@ -227,8 +255,8 @@ function render(element: React.ReactElement) {
       act(() => button("Dictate").click());
       await settle();
     },
-    key: (key: string): boolean => {
-      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+    key: (key: string, init: KeyboardEventInit = {}): boolean => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...init });
       act(() => {
         field().dispatchEvent(event);
       });
@@ -392,3 +420,105 @@ test("the New Plan card dictates into the plan's name with the same strip, liste
   assert.deepEqual(clips()[0]?.keywords, ["acme/relay", "relay"]);
   assert.equal(page.field().value, "Dark mode toggle");
 });
+
+test("Shift+Enter on a named New Plan card finishes the recording rather than starting the plan", async () => {
+  const starts: string[] = [];
+  const page = render(
+    createElement(NewPlanForm, {
+      newPlan: {
+        presses: 0,
+        preset: undefined,
+        start: (name) => {
+          starts.push(name);
+          return Promise.resolve(undefined);
+        },
+      },
+      repositories: {
+        recent: [],
+        read: () =>
+          Promise.resolve({
+            repositories: { installed: true, repositories: [], installationUrl: "" },
+          }),
+        openGitHub: ignore,
+        pictures: false,
+      },
+    }),
+  );
+  const box = page.field();
+  const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(box, "Dark mode");
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.dictate();
+
+  page.key("Enter", { shiftKey: true });
+  await settle();
+  await page.transcribed(0, { text: "toggle" });
+
+  assert.deepEqual(starts, []);
+  assert.equal(page.field().value, "Dark mode toggle");
+});
+
+test("words a full box has no room for are not put in, and the note says the box is full", async () => {
+  const full = "a".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+  const box = mountComposer(full);
+  box.caretAt(full.length - 1);
+  await box.dictate();
+  act(() => box.button("Done").click());
+  await settle();
+
+  await box.transcribed(0, { text: "fix" });
+
+  assert.equal(box.draft(), full);
+  assert.equal(box.note(), "The box is full, so the words couldn't go in.");
+});
+
+test("a recorder that cannot be made lets the microphone go and says so", async () => {
+  recorderRefuses = true;
+  const box = mountComposer("");
+
+  await box.dictate();
+
+  assert.equal(box.note(), "The microphone couldn't be opened.");
+  assert.equal(tracks.length, 1);
+  assert.ok(
+    tracks.every((track) => track.stopped),
+    "the microphone is let go",
+  );
+  assert.equal(box.strip(), null);
+});
+
+test("✓ waits for the microphone to open, and Enter before then sends nothing", async () => {
+  holdingOpen = true;
+  const box = mountComposer("");
+  await box.dictate();
+
+  assert.equal(box.button("Done").disabled, true);
+  box.key("Enter");
+  await settle();
+  assert.ok(box.strip(), "the strip still stands");
+
+  act(() => heldOpen?.());
+  await settle();
+
+  assert.equal(box.button("Done").disabled, false);
+  assert.equal(recorders[0]?.state, "recording");
+  assert.deepEqual(clips(), []);
+});
+
+it.effect(
+  "the recording stops itself a second short of the wire's two minutes and sends the clip, whatever the recorder's events do",
+  () =>
+    Effect.gen(function* () {
+      const box = mountComposer("", yield* registryOnTestClock);
+      yield* Effect.promise(box.dictate);
+
+      yield* TestClock.adjust(DICTATION_AUTO_STOP);
+      yield* Effect.promise(settle);
+
+      assert.equal(recorders[0]?.state, "inactive");
+      assert.equal(clips().length, 1);
+      assert.ok(box.container.querySelector(".dictation-transcribing"));
+    }),
+);

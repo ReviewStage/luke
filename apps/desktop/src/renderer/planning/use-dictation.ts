@@ -1,9 +1,13 @@
+import { useAtomValue } from "@effect/atom-react";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
+import { Duration, Effect } from "effect";
+import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { useAct } from "../act";
+import { rendererRuntime } from "../renderer-runtime";
 import { appSettingsNow, appStateNow } from "../use-app-state";
 import { openPreferredMicrophone } from "../voice/microphone-choice";
 import { base64Of } from "./attached-files";
@@ -19,10 +23,14 @@ import { base64Of } from "./attached-files";
  * which has OpenAI hear it and answers the words; the renderer never
  * reaches OpenAI. The words go in at the caret the press found, spaced from
  * the words around them, never over the draft, and the box takes the caret
- * back after them. Cancelling, or a press elsewhere that unmounts the box,
- * drops the clip unsent. The recording stops itself a slice short of the
- * wire's two minutes, so a clip is never refused for its length. Whatever
- * fails says why in the box's note and keeps nothing.
+ * back after them; words a full box has no room for are not put in at all.
+ * Cancelling, or a press elsewhere that unmounts the box, drops the clip
+ * unsent. The recording stops itself a second short of the wire's two
+ * minutes on a deadline of its own, kept on the renderer's runtime rather
+ * than on the recorder's events, which a hidden page may hold back; a clip
+ * that ran past the bound anyway is not sent. ✓ waits for the microphone
+ * to open, since until then there is nothing to send. Whatever fails says
+ * why in the box's note and keeps nothing, the microphone let go with it.
  *
  * While a dictation stands the box takes no typing: Enter finishes and
  * Escape cancels, so neither sends the draft nor leaves the box.
@@ -42,6 +50,7 @@ const DICTATION_NOTE = {
     "Luke can't use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
   MICROPHONE_FAILED: "The microphone couldn't be opened.",
   TOO_LONG: "That recording is too long to transcribe.",
+  BOX_FULL: "The box is full, so the words couldn't go in.",
   NO_WORDS: "No words were heard.",
   FAILED: "The recording couldn't be transcribed. Try again.",
 } as const;
@@ -49,11 +58,11 @@ const DICTATION_NOTE = {
 /** What the recorder writes: Opus in WebM, the one container the wire carries. */
 const RECORDING_TYPE = `${DICTATION_AUDIO_TYPE};codecs=opus`;
 
-/** How often the recorder hands over what it holds, which is how often the length is checked. */
+/** How often the recorder hands over what it holds, so a stop has little left to flush. */
 const RECORDER_SLICE_MS = 1_000;
 
-/** The length a recording stops itself at: a slice short of the bound, so the clip lands inside it. */
-const AUTO_STOP_MS = DICTATION_BOUNDS.MAX_DURATION_MS - RECORDER_SLICE_MS;
+/** The length a recording stops itself at: a second short of the bound, so the clip lands inside it. */
+export const DICTATION_AUTO_STOP = Duration.millis(DICTATION_BOUNDS.MAX_DURATION_MS - 1_000);
 
 /** The analyser's window: enough samples for a steady level at a frame's rate. */
 const ANALYSER_FFT_SIZE = 1_024;
@@ -76,7 +85,7 @@ export interface DictationControl {
   phase: DictationPhase;
   /** What the strip measures; nothing until the microphone is open. */
   analyser: AnalyserNode | undefined;
-  /** When the recording began on the page's clock; nothing until the microphone is open. */
+  /** When the recording began on the page's clock; nothing until the microphone is open, which is when ✓ takes a press. */
   startedAt: number | undefined;
   start: () => void;
   finish: () => void;
@@ -88,7 +97,7 @@ export interface DictationControl {
 /**
  * The words put in at the caret, a space between them and a word on either
  * side, and cut where the box's bound would cut them; answers the box's
- * words and where the caret goes after them.
+ * words and where the caret goes after them, or nothing where no word fits.
  */
 function withDictatedWords(draft: string, caret: number, words: string, maxLength: number) {
   const before = draft.slice(0, caret);
@@ -96,17 +105,19 @@ function withDictatedWords(draft: string, caret: number, words: string, maxLengt
   const lead = before === "" || /\s$/u.test(before) ? "" : " ";
   const trail = after === "" || /^\s/u.test(after) ? "" : " ";
   const room = Math.max(0, maxLength - draft.length - lead.length - trail.length);
-  const inserted = `${lead}${words.slice(0, room)}${trail}`;
+  const fitting = words.slice(0, room).trim();
+  if (fitting === "") return undefined;
+  const inserted = `${lead}${fitting}${trail}`;
   return {
     draft: `${before}${inserted}${after}`,
     caret: before.length + inserted.length - trail.length,
   };
 }
 
-/** Everything the recording opened, let go: the microphone's light goes out with the tracks. */
-function release(recording: Recording): void {
-  for (const track of recording.stream.getTracks()) track.stop();
-  recording.context.close().catch(() => undefined);
+/** Everything a recording opened, let go: the microphone's light goes out with the tracks. */
+function release(opened: { readonly stream: MediaStream; readonly context?: AudioContext }): void {
+  for (const track of opened.stream.getTracks()) track.stop();
+  opened.context?.close().catch(() => undefined);
 }
 
 export function useDictation(input: {
@@ -132,6 +143,11 @@ export function useDictation(input: {
   const pendingCaret = useRef<number | undefined>(undefined);
   const latest = useRef(input);
   latest.current = input;
+  // The deadline stands from the moment the microphone opens: an atom on the
+  // renderer's runtime, so it is let go with the box and a test's clock reaches it.
+  const [idle] = useState(() => rendererRuntime.atom(Effect.asVoid(Effect.never)));
+  const [deadline, setDeadline] = useState(idle);
+  const deadlinePassed = AsyncResult.isSuccess(useAtomValue(deadline));
 
   // The caret goes after the words once the box draws them.
   useLayoutEffect(() => {
@@ -159,6 +175,7 @@ export function useDictation(input: {
 
   const settle = (note: string | undefined) => {
     recording.current = undefined;
+    setDeadline(idle);
     setAnalyser(undefined);
     setStartedAt(undefined);
     setPhase(DICTATION_PHASE.IDLE);
@@ -172,6 +189,7 @@ export function useDictation(input: {
   const land = (caret: number, words: string) => {
     const { draft, setDraft, maxLength } = latest.current;
     const next = withDictatedWords(draft(), caret, words, maxLength);
+    if (next === undefined) return settle(DICTATION_NOTE.BOX_FULL);
     pendingCaret.current = next.caret;
     setDraft(next.draft);
     settle(undefined);
@@ -180,6 +198,9 @@ export function useDictation(input: {
   const transcribe = async (clip: Recording, durationMs: number) => {
     setPhase(DICTATION_PHASE.TRANSCRIBING);
     setAnalyser(undefined);
+    if (durationMs > DICTATION_BOUNDS.MAX_DURATION_MS) {
+      return fail(clip.generation, DICTATION_NOTE.TOO_LONG);
+    }
     const bytes = new Uint8Array(
       await new Blob(clip.chunks, { type: DICTATION_AUDIO_TYPE }).arrayBuffer(),
     );
@@ -187,7 +208,7 @@ export function useDictation(input: {
       return fail(clip.generation, DICTATION_NOTE.TOO_LONG);
     const answer = await act(ACT_KIND.DICTATION_TRANSCRIBE, {
       audio: base64Of(bytes),
-      durationMs: Math.min(durationMs, DICTATION_BOUNDS.MAX_DURATION_MS),
+      durationMs,
       keywords: latest.current.keywords,
     }).catch(() => undefined);
     if (generation.current !== clip.generation) return;
@@ -201,9 +222,9 @@ export function useDictation(input: {
   };
 
   const finish = () => {
+    // Note that ✓ before the microphone opens does nothing, because there is no clip yet and ✕ is the way out.
     const standing = recording.current;
-    if (standing === undefined) return cancel();
-    if (standing.recorder.state === "inactive") return;
+    if (standing === undefined || standing.recorder.state === "inactive") return;
     standing.keep = true;
     const durationMs = performance.now() - standing.startedAt;
     standing.recorder.onstop = () => {
@@ -251,36 +272,47 @@ export function useDictation(input: {
       for (const track of stream.getTracks()) track.stop();
       return;
     }
-    const context = new AudioContext();
-    const measured = context.createAnalyser();
-    measured.fftSize = ANALYSER_FFT_SIZE;
-    context.createMediaStreamSource(stream).connect(measured);
-    const recorder = new MediaRecorder(stream, {
-      mimeType: RECORDING_TYPE,
-      audioBitsPerSecond: DICTATION_BOUNDS.AUDIO_BITS_PER_SECOND,
-    });
-    const began = performance.now();
-    const standing: Recording = {
-      generation: asked,
-      caret,
-      stream,
-      recorder,
-      context,
-      chunks: [],
-      startedAt: began,
-      keep: false,
-    };
-    recording.current = standing;
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) standing.chunks.push(event.data);
-      if (standing.recorder.state === "recording" && performance.now() - began >= AUTO_STOP_MS) {
-        finish();
-      }
-    };
-    recorder.start(RECORDER_SLICE_MS);
-    setAnalyser(measured);
-    setStartedAt(began);
+    // Note that what follows the open can still throw, a recorder refusing the
+    // format, so the microphone is let go there too rather than left lit.
+    let context: AudioContext | undefined;
+    try {
+      context = new AudioContext();
+      const measured = context.createAnalyser();
+      measured.fftSize = ANALYSER_FFT_SIZE;
+      context.createMediaStreamSource(stream).connect(measured);
+      const recorder = new MediaRecorder(stream, {
+        mimeType: RECORDING_TYPE,
+        audioBitsPerSecond: DICTATION_BOUNDS.AUDIO_BITS_PER_SECOND,
+      });
+      const standing: Recording = {
+        generation: asked,
+        caret,
+        stream,
+        recorder,
+        context,
+        chunks: [],
+        startedAt: performance.now(),
+        keep: false,
+      };
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) standing.chunks.push(event.data);
+      };
+      recorder.start(RECORDER_SLICE_MS);
+      recording.current = standing;
+      setDeadline(rendererRuntime.atom(Effect.sleep(DICTATION_AUTO_STOP)));
+      setAnalyser(measured);
+      setStartedAt(standing.startedAt);
+    } catch {
+      release(context === undefined ? { stream } : { stream, context });
+      fail(asked, DICTATION_NOTE.MICROPHONE_FAILED);
+    }
   };
+
+  // The deadline passing is a press of ✓.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the deadline passing is what asks; finish reads the recording through a ref.
+  useEffect(() => {
+    if (deadlinePassed) finish();
+  }, [deadlinePassed]);
 
   const start = () => {
     if (phase !== DICTATION_PHASE.IDLE) return;
