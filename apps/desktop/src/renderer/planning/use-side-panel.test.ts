@@ -429,6 +429,18 @@ test("a fixed tab dragged among a plan's few keeps its place on a plan that has 
   ]);
 });
 
+test("a chosen tab the plan does not have reads as the first of the strip, an agent's moved ahead of the fixed tabs among them", () => {
+  const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+  const panel = mountOn({ [SIDE_PANEL_TAB.CODE]: true }, [AGENT]);
+  act(() => panel.control().onMove({ agent: AGENT }, 0));
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.CODE));
+
+  panel.standOn({ [SIDE_PANEL_TAB.BOARD]: true }, OTHER_PLAN);
+  act(() => panel.control().onChoose(SIDE_PANEL_TAB.BOARD));
+  panel.standOn({ [SIDE_PANEL_TAB.CODE]: true }, PLAN);
+  assert.deepEqual(panel.control().tab, { agent: AGENT });
+});
+
 test("tabs of every kind moved on one plan stand in that order on that plan alone", () => {
   const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
   const panel = mountOn(usedPlan(PLAN).holds, [AGENT]);

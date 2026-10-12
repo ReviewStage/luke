@@ -749,6 +749,23 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
 }
 
 /**
+ * The tabs a chosen tab the plan does not have reads as the first of
+ * (`shownTab`): the plan's fixed tabs in the strip's order, after the tab of
+ * another kind moved ahead of them where one stands first in the strip. Note
+ * that the tab ahead is the plan's order's own, so it is the same object from
+ * one render to the next, as the tab shown must be.
+ */
+function fallbackTabs(held: HeldState, drawn: DrawnTabs): readonly SidePanelTab[] {
+  const fixed = drawnFixed(held, drawn.plan);
+  const head = stripOf(held, drawn)[0];
+  const ahead =
+    head === undefined || isFixedTab(head)
+      ? undefined
+      : orderOn(held, drawn.plan.id).find((tab) => sameTab(tab, head));
+  return ahead === undefined ? fixed : [ahead, ...fixed];
+}
+
+/**
  * The tab the panel shows on the plan: the chosen one as `shownTab` holds it
  * to the plan, else the plan's first open agent's.
  */
@@ -758,7 +775,7 @@ function shownIn(held: HeldState, drawn: DrawnTabs): SidePanelTab | undefined {
   return (
     shownTab(
       held.tab,
-      drawnFixed(held, drawn.plan),
+      fallbackTabs(held, drawn),
       agents,
       drawn.subagents,
       drawn.draft,
@@ -997,8 +1014,8 @@ function readStored(): HeldState {
  * The tab the panel shows for the one kept: a fixed tab the open plan does
  * not draw, an agent tab whose agent the open plan has none of, a subagent
  * tab the plan does not draw (`drawsSubagent`), or a file tab of a file not
- * shown on the open plan, reads as the first of the plan's fixed tabs, or
- * as none where it draws none. With the plan's agents not yet read, the
+ * shown on the open plan, reads as the first of `tabs` (`fallbackTabs`), or
+ * as none where the plan draws none. With the plan's agents not yet read, the
  * kept agent tab stands, and a delegated worker's with it, so a tab kept
  * across a launch is not swapped for another and back while the list is on
  * its way; a planning worker's or a file's tab is kept across no launch,
@@ -1008,7 +1025,7 @@ function readStored(): HeldState {
  */
 export function shownTab(
   kept: SidePanelTab | undefined,
-  tabs: readonly FixedSidePanelTab[],
+  tabs: readonly SidePanelTab[],
   agents: readonly string[] | undefined,
   subagents: readonly string[] = [],
   draft: string | undefined = undefined,
@@ -1093,7 +1110,7 @@ export function useSidePanel(
   const shownFor = (holds: PlanHolds) =>
     shownTab(
       state.tab,
-      drawnFixed(state, { id: planId, holds }),
+      fallbackTabs(state, { plan: { id: planId, holds }, agents, subagents, draft, files }),
       openAgents,
       subagents,
       draft,
@@ -1216,7 +1233,9 @@ export function useSidePanel(
     subagents: state.subagents,
     closedAgents: state.closedAgents,
     files: state.files,
-    tab: shownTab(state.tab, tabs, openAgents, subagents, draft, files) ?? agentTab,
+    tab:
+      shownTab(state.tab, fallbackTabs(state, drawn), openAgents, subagents, draft, files) ??
+      agentTab,
     width: state.width,
     fullScreen: state.open && fullScreen,
     newTabAsked: state.open && newTabAsked,
