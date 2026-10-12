@@ -123,6 +123,10 @@ Click, type `**often** `, Esc. The shortcut becomes bold as it is typed:
 | --- | --- |
 | ![Rule](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/rule-editing.png) | ![List](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/list-editing.png) |
 
+| A heading typed with `## ` in a field | Highlighted code, read and edited the same |
+| --- | --- |
+| ![Heading](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/heading-editing.png) | ![Code](https://raw.githubusercontent.com/reviewstage/luke/pr-assets/pr-2072/code-editing.png) |
+
 Luke rewrites the section mid-edit, and the shipped conflict choice stands
 under the editor:
 
