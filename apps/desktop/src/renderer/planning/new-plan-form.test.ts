@@ -208,6 +208,11 @@ test("the menu is the search, the recent repositories first and the rest after e
   );
   assert.ok(relay?.querySelector("img.repository-picture"), "and the public one the same");
   assert.equal(
+    billing?.querySelector("img")?.getAttribute("loading"),
+    "lazy",
+    "a row out of sight asks for nothing until it scrolls in",
+  );
+  assert.equal(
     page.container.querySelector("svg.lock-icon"),
     null,
     "no lock says which is private",

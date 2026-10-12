@@ -12,8 +12,11 @@ import { repositoryOwnerPictureUrl } from "./planning/planning-model";
  * it is about GitHub rather than the repository. The picture is sized by
  * the glyph slot it stands in, as a glyph is. Where there is no picture to
  * draw, the slot holds the fallback the caller names: where it fails to
- * load, and in a fixture run, whose frames ask nothing of the network. A picture that fails is remembered by its address for as long as
- * this one stands, so another repository gets its own chance.
+ * load, and in a fixture run, whose frames ask nothing of the network. A
+ * picture that fails is remembered by its address for as long as this one
+ * stands, so another repository gets its own chance. It loads lazily, so a
+ * menu of a thousand repositories asks for the few rows in sight rather than
+ * every row it holds, and the rest as they scroll in.
  */
 export function RepositoryPicture({
   repository,
@@ -35,6 +38,7 @@ export function RepositoryPicture({
       className="repository-picture"
       src={url}
       alt=""
+      loading="lazy"
       referrerPolicy="no-referrer"
       draggable={false}
       onError={() => setFailedUrl(url)}
