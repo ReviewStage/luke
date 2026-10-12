@@ -469,6 +469,10 @@ function SummaryCard({
     // heard there.
     const key = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      // A menu or a question a row opened is the nearest layer, and takes its Escape itself.
+      if (event.target instanceof Element && event.target.closest(OPENED_FROM_CARD) !== null) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       collapse();

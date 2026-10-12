@@ -91,6 +91,8 @@ export interface CodingAgentsControl {
   archived: readonly CodingAgentSummary[] | undefined;
   /** The agent tabs the panel may show, by agent id; nothing before the first read lands. */
   agentIds: readonly string[] | undefined;
+  /** Every agent of the plan by id, an archived one among them, which its Inbox stands on, since an archived agent's items still stand; nothing before the first read lands. */
+  heldIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
   /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
@@ -156,6 +158,8 @@ export interface CodingAgentsControl {
    * its dialog or a toast of its own.
    */
   onArchive: (agentId: string, archived: boolean) => Promise<ActionResult>;
+  /** Reads the plan's agents again now, answering the one named as it stands, or nothing where the read did not land or holds no such agent. */
+  readAgent: (agentId: string) => Promise<CodingAgentSummary | undefined>;
   /** An agent's transcript page said where it stands now. */
   onStatus: (agentId: string, run: AgentRun) => void;
   /** An agent's transcript page said what it is titled now, which the list read before the title landed did not. */
@@ -563,6 +567,22 @@ export function useCodingAgents(input: {
     if (result.status !== ACTION_RESULT_STATUS.ACCEPTED) failed(result.reason);
   };
 
+  const readAgent = useCallback(
+    async (agentId: string): Promise<CodingAgentSummary | undefined> => {
+      if (planId === undefined) return undefined;
+      const answer = await act(ACT_KIND.CODING_AGENTS_LIST, {
+        planId,
+        includeArchived: true,
+      }).catch(() => undefined);
+      if (answer === undefined || "failure" in answer) return undefined;
+      setList((was) =>
+        was.planId === planId ? { planId, agents: answer.agents, failed: false } : was,
+      );
+      return answer.agents.find((agent) => agent.id === agentId);
+    },
+    [act, planId],
+  );
+
   const onTitle = useCallback((agentId: string, title: string | null) => {
     setList((was) =>
       was.agents === undefined ||
@@ -610,6 +630,7 @@ export function useCodingAgents(input: {
     agents,
     archived: archivedAgents,
     agentIds: agents?.map((agent) => agent.id),
+    heldIds: held?.map((agent) => agent.id),
     draft,
     onNewDraft,
     onDraftChange,
@@ -635,6 +656,7 @@ export function useCodingAgents(input: {
     onChoose,
     onRename,
     onArchive,
+    readAgent,
     onStatus,
     onTitle,
     readTranscript,

@@ -225,6 +225,8 @@ interface DrawnTabs {
   agents: readonly string[] | undefined;
   draft: string | undefined;
   waiting: boolean;
+  /** Whether the plan holds an agent, an archived one included, whose Inbox items still stand. */
+  holds: boolean;
 }
 
 /** The plan's choices. */
@@ -261,14 +263,14 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
 
 /**
  * The strip in its order: the plan's tab, then the open agents', the
- * draft's, and the Inbox where open on a plan with an agent, in the plan's
- * order.
+ * draft's, and the Inbox where open on a plan with an agent, an archived
+ * one included, in the plan's order.
  */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   const choices = choicesOn(held, drawn.planId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
-  const inbox = choices.inboxOpen === true && ((drawn.agents?.length ?? 0) > 0 || drawn.waiting);
+  const inbox = choices.inboxOpen === true && (drawn.holds || drawn.waiting);
   const order = choices.order ?? NO_TABS;
   return [
     MAIN_TAB.PLAN,
@@ -347,7 +349,7 @@ function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
 
 /** What a plan other than the open one holds for the tabs, which is unread. */
 function unreadPlan(planId: string): DrawnTabs {
-  return { planId, agents: undefined, draft: undefined, waiting: false };
+  return { planId, agents: undefined, draft: undefined, waiting: false, holds: false };
 }
 
 /**
@@ -482,8 +484,10 @@ function readStored(): HeldState {
 /**
  * The column's tabs over the open plan: `planId`, none while no plan is
  * open, `agents` its agents by id in the order started, or nothing while
- * unread, `draft` its draft agent's key, if it holds one, and `waiting`
- * whether an inbox item waits on it. A fixture run's column keeps nothing,
+ * unread, `draft` its draft agent's key, if it holds one, `waiting`
+ * whether an inbox item waits on it, and `held` every agent it holds, an
+ * archived one among them, which its Inbox stands on too, the standing
+ * ones where unsaid. A fixture run's column keeps nothing,
  * and starts from nothing.
  */
 export function useMainTabs(
@@ -492,6 +496,7 @@ export function useMainTabs(
   agents: readonly string[] | undefined,
   draft: string | undefined,
   waiting: boolean,
+  held: readonly string[] | undefined = agents,
 ): MainTabsControl {
   // Note that a fixture run's column is a state of its own rather than the
   // kept one reset, because the run is only known once the first state
@@ -504,9 +509,10 @@ export function useMainTabs(
     (change: (held: HeldState) => HeldState) => (fixture ? setStaged : setKept)(change),
     [fixture],
   );
+  const holds = (held?.length ?? 0) > 0;
   const drawn = useMemo(
-    () => ({ planId, agents, draft, waiting }),
-    [planId, agents, draft, waiting],
+    () => ({ planId, agents, draft, waiting, holds }),
+    [planId, agents, draft, waiting, holds],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.

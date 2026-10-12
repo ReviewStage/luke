@@ -420,6 +420,24 @@ test("an agent's row offers Archive agent on a right-click, archiving one at res
   ]);
 });
 
+test("Escape in a menu an agent's row of the card opened closes the menu alone, and the card stands", () => {
+  const page = mount();
+  layOutColumn(800);
+  act(() => page.querySelector<HTMLElement>('[aria-label="Expand summary"]')?.click());
+  const hung = card();
+  assert.ok(hung, "the card hangs");
+  rightClick(rowNamed(hung, AGENT.title ?? ""));
+  const item = document.body.querySelector<HTMLElement>('[role="menuitem"]');
+  assert.ok(item);
+  act(() => {
+    item.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  assert.equal(document.body.querySelector('[role="menu"]'), null, "the menu closed");
+  assert.ok(card(), "the card still hangs");
+});
+
 test("the archived agents fold under Archived at the foot of Coding agents, counted while folded, each unarchived from its own button or its right-click", async () => {
   const shelved = {
     ...AGENT,
@@ -436,7 +454,7 @@ test("the archived agents fold under Archived at the foot of Coding agents, coun
   assert.equal(summary.querySelector('ul[aria-label="Archived agents"]'), null);
   assert.deepEqual(
     listed(summary)[1],
-    ["Coding agents", [AGENT.title]],
+    ["Coding agents", ["Inbox", AGENT.title]],
     "an archived agent is no row of its own",
   );
 

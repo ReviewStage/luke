@@ -1890,6 +1890,29 @@ test("an agent's tab menu archives an agent at rest at once, and asks first of o
   assert.equal(document.querySelector('[role="alertdialog"]'), null);
 });
 
+test("an agent drawn at rest is read again before it is archived unasked, and one that began a turn since is asked about first", async () => {
+  const archived: [string, boolean][] = [];
+  const container = mountAgentTabs({
+    readAgent: () => Promise.resolve({ ...UNTITLED_AGENT, status: CODING_AGENT_STATUS.RUNNING }),
+    onArchive: (agentId, archive) => {
+      archived.push([agentId, archive]);
+      return Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED });
+    },
+  });
+  act(() => {
+    tabNamed(container, "GPT 5.6 Sol").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }),
+    );
+  });
+  act(() => menuItem("Archive agent").click());
+  await act(() => Promise.resolve());
+
+  const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]');
+  assert.ok(dialog, "the turn begun since is asked about");
+  assert.equal(dialog.querySelector("h2")?.textContent, "Stop and archive GPT 5.6 Sol?");
+  assert.deepEqual(archived, []);
+});
+
 test("a right-click on an agent's tab offers Rename where the pointer is, and Rename turns the tab into a field whose Return renames the agent and hands focus back", async () => {
   const renamed: [string, string][] = [];
   const container = mountAgentTabs({

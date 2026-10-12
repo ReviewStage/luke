@@ -17,7 +17,10 @@ import { ActionMenu, atPointer, type MenuAction, useActionMenu } from "./action-
  * Archive agent stands in an agent's tab menu and in the menu of its row in
  * the plan's summary. An agent at rest is archived at once; one still
  * working asks first, since archiving it stops the turn it is on, and a
- * stopped turn is not given back. Archived, the agent leaves its tab, the
+ * stopped turn is not given back. Note that an agent drawn at rest is read
+ * again before it is archived unasked, because nothing follows an agent
+ * whose tab is not shown, and a turn begun since, by Luke or another
+ * window, is asked about first like any other. Archived, the agent leaves its tab, the
  * summary, the "+" menu, ⌘K, and the sidebar's card and marks, while its
  * transcript and its pull request are kept, and a toast offers Undo
  * (`use-coding-agents.ts`).
@@ -84,7 +87,14 @@ export function useAgentArchive(
     action: {
       label: "Archive agent",
       icon: <ArchiveIcon />,
-      onSelect: working ? confirm.ask : () => press(agent.id, true),
+      onSelect: working
+        ? confirm.ask
+        : () =>
+            void agents.readAgent(agent.id).then((now) => {
+              // A read that did not land asks first rather than stop a turn it could not see.
+              if (now === undefined || agentStillWriting(now.status)) confirm.ask();
+              else return press(agent.id, true);
+            }),
     },
     dialog: (
       <ConfirmDialog
