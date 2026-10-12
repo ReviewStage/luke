@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
-import { Config, Effect, Layer, Redacted } from "effect";
+import { Config, Effect, Layer, Redacted, Schedule } from "effect";
 import * as Migrator from "effect/unstable/sql/Migrator";
 import { Client } from "pg";
 import { runWebMigrations } from "./effect-migrator.js";
@@ -72,6 +72,39 @@ export const withMigrationLock = /* @__PURE__ */ Effect.fn("web/withMigrationLoc
 }, Effect.scoped);
 
 /**
+ * What Neon answers a connection while every compute the project may run at
+ * once is awake: a burst of preview builds, one Neon branch each, each waking
+ * its own compute for this migration. A compute suspends once its build goes
+ * idle, so the refusal clears by itself.
+ */
+const ENDPOINT_LIMIT_MESSAGE = "exceeded the limit of concurrently active endpoints";
+
+/** How long a build waits out the limit: backing off from two seconds, for five minutes in all. */
+const ENDPOINT_LIMIT_RETRY = Schedule.exponential("2 seconds").pipe(
+  Schedule.upTo({ duration: "5 minutes" }),
+);
+
+function isEndpointLimit<E>(failure: E | Migrator.MigrationError): boolean {
+  return (
+    failure instanceof Migrator.MigrationError &&
+    failure.cause instanceof Error &&
+    failure.cause.message.includes(ENDPOINT_LIMIT_MESSAGE)
+  );
+}
+
+/**
+ * Runs a migration attempt again while Neon refuses it for the limit on
+ * awake computes, so a burst of preview builds queues for a compute rather
+ * than failing. Note that the attempt is a whole fresh one each time,
+ * because a `pg` client whose connect failed cannot connect again.
+ */
+export function migrateThroughEndpointLimit<A, E, R>(
+  attempt: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  return Effect.retry(attempt, { schedule: ENDPOINT_LIMIT_RETRY, while: isEndpointLimit });
+}
+
+/**
  * The unpooled URL, because the migration holds one session's advisory lock and
  * a pooler is free to answer two statements on two sessions.
  */
@@ -81,9 +114,11 @@ const migrateConfiguredDatabase = Effect.gen(function* () {
   const redacted = yield* migrationConnectionString;
   const url = Redacted.value(redacted);
   const client = PgClient.layer({ url: redacted, maxConnections: POOL_LIMITS.max });
-  yield* withMigrationLock(new Client({ connectionString: url }), runWebMigrations()).pipe(
-    Effect.provide(Layer.mergeAll(client, NodeServices.layer)),
-  );
+  yield* migrateThroughEndpointLimit(
+    Effect.suspend(() =>
+      withMigrationLock(new Client({ connectionString: url }), runWebMigrations()),
+    ),
+  ).pipe(Effect.provide(Layer.mergeAll(client, NodeServices.layer)));
 });
 
 const executedPath = process.argv[1];

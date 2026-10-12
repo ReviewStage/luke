@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Fiber } from "effect";
+import { TestClock } from "effect/testing";
 import type { Client } from "pg";
-import { withMigrationLock } from "../server/db/migrate.js";
+import { migrateThroughEndpointLimit, withMigrationLock } from "../server/db/migrate.js";
 
 type MigrationConnection = Pick<Client, "connect" | "query" | "end">;
 
@@ -73,5 +74,77 @@ it.effect("an unlock failure still closes the database connection", () =>
     // connection, so the migration still succeeds and the connection still closes.
     assert.equal(Exit.isSuccess(exit), true);
     assert.deepEqual(events, ["connect", "lock", "unlock", "end"]);
+  }),
+);
+
+/** A connection whose connect is refused with `refusal` for the first `refused` connections opened. */
+function refusingConnections(refusal: string, refused: number, events: string[]) {
+  let opened = 0;
+  return (): MigrationConnection => {
+    opened += 1;
+    const connection = migrationConnection(events);
+    if (opened > refused) return connection;
+    // SAFETY: Test double implements only the connect/query/end surface withMigrationLock uses.
+    return {
+      ...connection,
+      async connect() {
+        events.push("refused");
+        throw new Error(refusal);
+      },
+    } as MigrationConnection;
+  };
+}
+
+const NEON_ENDPOINT_LIMIT =
+  "You have exceeded the limit of concurrently active endpoints. Please suspend some endpoints and try again.";
+
+it.effect(
+  "a migration Neon refuses for its endpoint limit waits for a compute and then runs once",
+  () =>
+    Effect.gen(function* () {
+      const events: string[] = [];
+      const open = refusingConnections(NEON_ENDPOINT_LIMIT, 2, events);
+      const fiber = yield* Effect.forkChild(
+        migrateThroughEndpointLimit(
+          Effect.suspend(() =>
+            withMigrationLock(
+              open(),
+              Effect.sync(() => events.push("migrate")),
+            ),
+          ),
+        ),
+      );
+      yield* TestClock.adjust("1 minute");
+      yield* Fiber.join(fiber);
+
+      assert.deepEqual(events, [
+        "refused",
+        "refused",
+        "connect",
+        "lock",
+        "migrate",
+        "unlock",
+        "end",
+      ]);
+    }),
+);
+
+it.effect("a migration refused for any other reason fails without waiting", () =>
+  Effect.gen(function* () {
+    const events: string[] = [];
+    const open = refusingConnections("password authentication failed", 1, events);
+    const exit = yield* Effect.exit(
+      migrateThroughEndpointLimit(
+        Effect.suspend(() =>
+          withMigrationLock(
+            open(),
+            Effect.sync(() => events.push("migrate")),
+          ),
+        ),
+      ),
+    );
+
+    assert.equal(Exit.isFailure(exit), true);
+    assert.deepEqual(events, ["refused"]);
   }),
 );
