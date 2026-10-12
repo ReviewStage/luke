@@ -70,6 +70,8 @@ export type LiveBrainRunEvent =
       /** A question the planning model queued for the developer, and the answer it recommends. */
       readonly question: string;
       readonly recommendation: string;
+      /** Code the question is about, put on screen as the voice asks it. */
+      readonly code?: CodeRef;
     }
   | {
       readonly kind: typeof LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN;

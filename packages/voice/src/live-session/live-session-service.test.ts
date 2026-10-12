@@ -800,6 +800,44 @@ it.effect(
 );
 
 it.effect(
+  "code queued with a question goes on screen with the words that ask it, and not while an earlier question is still the one being asked",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      const ref = { path: "src/invite.ts", startLine: 3, endLine: 5 };
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "After how long?",
+        recommendation: "Seven days.",
+      });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-1",
+        question: "Should the expiry check move here?",
+        recommendation: "Yes.",
+        code: ref,
+      });
+      yield* acknowledgeAll(sideband);
+      sideband.output("After how long", 1000, 1100);
+      yield* settle();
+      assert.deepEqual(f.codes, [], "the first question shows no code");
+
+      sideband.input("A week.", 2000, 2400);
+      sideband.delegation("item_2", 2500);
+      yield* acknowledgeAll(sideband);
+      sideband.output("Look at", 2600, 2700);
+      yield* settle();
+      assert.deepEqual(f.codes, [ref]);
+    }),
+);
+
+it.effect(
   "code the planning model shows waits for Luke's next words, then goes on screen with a note the voice keeps",
   () =>
     Effect.gen(function* () {

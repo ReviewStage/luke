@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@sidecar/hosted";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -353,7 +354,7 @@ function journal(parts: StoredUIMessage["parts"]): StoredUIMessage {
 function toolPart(
   name: string,
   callId: string,
-  input: Readonly<Record<string, string | number>> = {},
+  input: Readonly<Record<string, string | number | CodeRef>> = {},
   state = "input-available",
 ): StoredUIMessage["parts"][number] {
   // SAFETY: a stored tool part in the SDK's own shape, as the writer lands one ahead of its run.
@@ -456,6 +457,25 @@ test("the projection: a question a planning call withdrew is told by its words o
         question: "Re-send it?",
       },
     ],
+  );
+});
+
+test("the projection: a queued question carries its code, and one whose code does not read is not told", () => {
+  const code = { path: "src/invite.ts", startLine: 40, endLine: 58 };
+  const queued = { question: "Move the check here?", recommendation: "Yes.", code };
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(QUEUE_QUESTION_TOOL.name, "c1", queued),
+        toolPart(QUEUE_QUESTION_TOOL.name, "c2", {
+          question: "And here?",
+          recommendation: "No.",
+          code: { path: "src/a.ts", startLine: 9, endLine: 2 },
+        }),
+      ]),
+    ),
+    [{ turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued }],
   );
 });
 

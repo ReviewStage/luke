@@ -1,3 +1,4 @@
+import { codeRefSchema } from "@sidecar/hosted/plan-wire";
 import { describeWire } from "@sidecar/wire/effect";
 import { Result, Schema } from "effect";
 import {
@@ -7,6 +8,7 @@ import {
   type UnparsedWireValue,
   type WireRecord,
 } from "../core.js";
+import { SHOW_CODE_INPUT } from "./show-code.js";
 
 /**
  * queue-question.ts -- the planning model's `queue_question` tool: one question handed to the voice the moment it is ready.
@@ -20,8 +22,9 @@ import {
  * hears the questions it has already queued.
  *
  * The voice service holds the queue and hands the voice one question at a
- * time, the next once the developer has answered. `withdraw_question` takes
- * back one still waiting there, by its words.
+ * time, the next once the developer has answered, so a question's code rides
+ * with it and goes on screen as Luke asks it rather than when it was queued.
+ * `withdraw_question` takes back one still waiting there, by its words.
  */
 
 /** Each field under the 500 tokens one GPT-Live append carries, with room for the frame the voice service puts round them. */
@@ -45,13 +48,27 @@ const QUEUE_QUESTION_INPUT = Schema.Struct({
     'The answer you recommend, and why in a few words, such as "No: just say the invite is ' +
       'no longer valid, so nobody learns who removed them."',
   ),
+  code: Schema.optionalKey(
+    describeWire(
+      SHOW_CODE_INPUT,
+      "Code the question is about, shown on the developer's screen as Luke asks it.",
+    ),
+  ),
+});
+
+// Note that the wire's own code reference is what is read, so a range out of order or too long
+// makes the whole question unreadable rather than a question with no code.
+const QUEUED_QUESTION = Schema.Struct({
+  question: QUEUED_TEXT,
+  recommendation: QUEUED_TEXT,
+  code: Schema.optionalKey(codeRefSchema),
 });
 
 /** A question the planning model queued, read back off its journaled call. */
-export type QueuedQuestion = typeof QUEUE_QUESTION_INPUT.Type;
+export type QueuedQuestion = typeof QUEUED_QUESTION.Type;
 
 // Note that a journaled call's input is the stored row's, which the AI SDK types as unknown.
-const readQueuedQuestion = Schema.decodeUnknownResult(QUEUE_QUESTION_INPUT);
+const readQueuedQuestion = Schema.decodeUnknownResult(QUEUED_QUESTION);
 
 const WITHDRAW_QUESTION_INPUT = Schema.Struct({ question: QUESTION_TEXT });
 
@@ -62,10 +79,10 @@ export const QUEUE_QUESTION_TOOL = {
   name: "queue_question",
   description:
     "Hand Luke one question for the developer the moment you have it, with your recommended " +
-    "answer. Luke asks queued questions one at a time, in the order you queued them, the next " +
-    "once the developer has answered, while you keep working. Call it once per question, " +
-    "before reading the repository or thinking further. Answers `accepted`, or `rejected` for " +
-    "an unreadable call.",
+    "answer and, where it is about specific code, that code. Luke asks queued questions one at " +
+    "a time, in the order you queued them, the next once the developer has answered, while you " +
+    "keep working. Call it once per question, before reading the repository or thinking " +
+    "further. Answers `accepted`, or `rejected` for an unreadable call.",
   inputSchema: QUEUE_QUESTION_INPUT,
 } as const;
 
@@ -81,7 +98,11 @@ export function queuedQuestionOf(part: StoredToolPart): QueuedQuestion | undefin
 /** Runs one call: accepted when its input reads, since the journal has already carried it. */
 export function runQueueQuestion(input: UnparsedWireValue): WireRecord {
   return Result.isFailure(readQueuedQuestion(input))
-    ? { status: ACTION_RESULT_STATUS.REJECTED, reason: "Not queued: the question is unreadable." }
+    ? {
+        status: ACTION_RESULT_STATUS.REJECTED,
+        reason:
+          "Not queued: give a question and a recommendation, and code with both lines or neither, the first no later than the last and at most 200 apart.",
+      }
     : { status: ACTION_RESULT_STATUS.ACCEPTED };
 }
 

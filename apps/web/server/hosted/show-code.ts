@@ -22,7 +22,8 @@ import {
 
 const lineNumber = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
-const SHOW_CODE_INPUT = Schema.Struct({
+/** A place in the plan's folder as a model is shown it; `queue_question` offers the same place for its own code. */
+export const SHOW_CODE_INPUT = Schema.Struct({
   path: describeWire(
     Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(CODE_PATH_MAX_CHARS)),
     'The file, relative to the plan\'s folder root, such as "src/members/invite.ts".',
@@ -47,8 +48,8 @@ export const SHOW_CODE_TOOL = {
   name: "show_code",
   description:
     "Put lines of a file in the plan's folder on the developer's screen, lit, as Luke starts saying " +
-    "your next words. Call it just before the queue_question or the return that talks about those " +
-    "lines, with the lines you found through run_in_repository. Point at the few lines that matter, " +
+    "your next words. Call it just before the return that talks about those lines, with the " +
+    "lines you found through run_in_repository; for a question, give them in queue_question's code instead. Point at the few lines that matter, " +
     "at most 200. Answers `accepted`, or `rejected` for an unreadable call.",
   inputSchema: SHOW_CODE_INPUT,
 } as const;

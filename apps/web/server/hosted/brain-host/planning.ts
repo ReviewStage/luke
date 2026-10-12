@@ -75,7 +75,8 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * rather than the investigation; the goal stands in its place. Note that
  * the voice service, not the voice, holds the queue and hands Luke one
  * question at a time, because a voice handed every question read several
- * out in a row; so a moot question is withdrawn by a call.
+ * out in a row; so a moot question is withdrawn by a call, and a question's
+ * code rides with it to the words that ask it.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -150,9 +151,9 @@ When findings arrive, tell Luke what they change in your return, and draw them o
 
 ### Available tools
 
-- queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
+- queue_question hands Luke one question, your recommended answer, and any code it is about, the moment you have it, while you keep working.
 - withdraw_question takes back a queued question an answer made moot, before Luke asks it.
-- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means.
+- show_code puts lines of a file in the plan's folder on the developer's screen as Luke starts saying your next words. When your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means; when a question is, give the lines with queue_question instead.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in the plan's folder on the developer's Mac. Start exploring it immediately, and keep exploring as the task comes into focus.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
 - worker does a job in the background, as above.

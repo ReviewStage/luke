@@ -65,6 +65,8 @@ export type TurnEventBody =
       readonly kind: typeof TURN_EVENT_KIND.QUESTION_QUEUED;
       readonly question: string;
       readonly recommendation: string;
+      /** Code the question is about, shown as the voice asks it. */
+      readonly code?: CodeRef;
     }
   | { readonly kind: typeof TURN_EVENT_KIND.QUESTION_WITHDRAWN; readonly question: string }
   | ({ readonly kind: typeof TURN_EVENT_KIND.CODE_SHOWN } & CodeRef)

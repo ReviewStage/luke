@@ -240,6 +240,7 @@ interface RetainedDelegation {
 interface HeldQuestion {
   readonly question: string;
   readonly recommendation: string;
+  readonly code?: CodeRef;
 }
 
 interface StandingSession {
@@ -1444,7 +1445,10 @@ export class LiveSessionService {
       case LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED: {
         const session = this.#sessionOf(exchange);
         if (!session) return;
-        session.questions.push({ question: event.question, recommendation: event.recommendation });
+        const { question, recommendation, code } = event;
+        session.questions.push(
+          code === undefined ? { question, recommendation } : { question, recommendation, code },
+        );
         if (!session.holdingQuestion) this.#handQuestion(session, this.#delegationOf(exchange));
         return;
       }
@@ -1540,12 +1544,13 @@ export class LiveSessionService {
 
   /**
    * Hands the voice the session's next queued question, if one waits, under
-   * the delegation it answers now.
+   * the delegation it answers now; its code is held for the words that ask it.
    */
   #handQuestion(session: StandingSession, delegationId: LiveDelegationId): void {
     const next = session.questions.shift();
     if (next === undefined) return;
     session.holdingQuestion = true;
+    if (next.code !== undefined) session.pendingCode = { ref: next.code, delegationId };
     this.#speakInto(session, delegationId, queuedQuestionNote(next.question, next.recommendation));
   }
 

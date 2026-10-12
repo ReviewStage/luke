@@ -12,6 +12,32 @@
       "minLength": 1,
       "maxLength": 500,
       "description": "The answer you recommend, and why in a few words, such as \"No: just say the invite is no longer valid, so nobody learns who removed them.\""
+    },
+    "code": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "The file, relative to the plan's folder root, such as \"src/members/invite.ts\"."
+        },
+        "startLine": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The first line you are talking about, counted from 1."
+        },
+        "endLine": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The last line you are talking about; the same as startLine for one line. Leave both out to show the file from its top."
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "additionalProperties": false,
+      "description": "Code the question is about, shown on the developer's screen as Luke asks it."
     }
   },
   "required": [
