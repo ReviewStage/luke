@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { planBoard } from "@sidecar/database/schemas/plan";
+import { turns } from "@sidecar/database/schemas/storage";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import {
+  VOICE_DELEGATION_MODE,
+  VOICE_SEGMENT_ROLE,
+  type VoiceSegmentRole,
+} from "@sidecar/database/voice-vocabulary";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import { boardAnswerSchema } from "@sidecar/hosted/board-wire";
 import {
@@ -39,16 +49,6 @@ import { Clock, Duration, Effect, Layer, Option, Result, type Schema } from "eff
 import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { user } from "../server/db/auth-schema";
-import { planBoard } from "../server/db/plan-schema";
-import { db } from "../server/db/query";
-import { turns } from "../server/db/storage-schema";
-import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
-import {
-  VOICE_DELEGATION_MODE,
-  VOICE_SEGMENT_ROLE,
-  type VoiceSegmentRole,
-} from "../server/db/voice-vocabulary";
 import {
   DRAW_ON_BOARD_REFUSAL,
   DRAW_ON_BOARD_STATUS,

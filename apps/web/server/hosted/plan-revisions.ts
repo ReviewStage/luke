@@ -1,3 +1,7 @@
+import { db } from "@sidecar/database/core/query";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { plan } from "@sidecar/database/schemas/plan";
+import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import { type PlanContent, type PlanFieldWriterWho, planBody } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -15,10 +19,6 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { codingAgent } from "../db/coding-agent-schema.js";
-import { planRevision } from "../db/plan-revision-schema.js";
-import { plan } from "../db/plan-schema.js";
-import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**

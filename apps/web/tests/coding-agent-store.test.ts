@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   CHECK_SUMMARY,
   CONTEXT_WINDOW,
@@ -10,11 +15,6 @@ import {
 import { count, eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { codingAgent } from "../server/db/coding-agent-schema";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
   type CodingAgent,
   type CodingAgentBriefText,

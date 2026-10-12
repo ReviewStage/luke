@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import { EMPTY_PLAN_FIELDS, NOTE_KIND, planBody } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -13,9 +16,6 @@ import {
 import { eq } from "drizzle-orm";
 import { Clock, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { planRevision } from "../server/db/plan-revision-schema";
-import { db } from "../server/db/query";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   PLAN_SAVE_REFUSAL,

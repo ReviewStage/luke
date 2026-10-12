@@ -4,10 +4,10 @@ import {
   type ContextWindow,
 } from "@sidecar/hosted/coding-agent-wire";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
-import { plan } from "./plan-schema.js";
-import { conversations } from "./storage-schema.js";
+import { createdAt, timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
+import { plan } from "./plan.js";
+import { conversations } from "./storage.js";
 
 /**
  * coding-agent-schema.ts -- one coding agent started on a plan, linking its conversation to the plan it works.
@@ -99,11 +99,11 @@ export const codingAgent = pgTable(
     /** The newest model step of the agent's own conversation; null before its first. */
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
-    compactedAt: instant("compacted_at"),
+    compactedAt: timestamptz("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
     published: jsonb("published").$type<CodingAgentPullRequest>(),
     idempotencyKey: text("idempotency_key").notNull(),
-    createdAt: instant("created_at").notNull().defaultNow(),
+    createdAt: createdAt(),
   },
   (table) => [
     // One agent per Start: a retry carrying the same key finds this row.

@@ -1,11 +1,6 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { Effect, Layer } from "effect";
-import { FileSystem } from "effect/FileSystem";
-import { Path } from "effect/Path";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   bootstrapFromDrizzleHistory,
   DRIZZLE_MIGRATIONS_TABLE,
@@ -14,7 +9,12 @@ import {
   runWebMigrations,
   webMigrationJournal,
   webMigrations,
-} from "../server/db/effect-migrator.js";
+} from "@sidecar/database/core/migrator";
+import { Effect, Layer } from "effect";
+import { FileSystem } from "effect/FileSystem";
+import { Path } from "effect/Path";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import type { SqlError } from "effect/unstable/sql/SqlError";
 import { testSqlClient, unmigratedPgliteSqlClient } from "./support/sql-client.js";
 
 interface RecordedMigration {

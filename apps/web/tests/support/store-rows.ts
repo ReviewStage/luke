@@ -1,21 +1,21 @@
 import assert from "node:assert/strict";
-import { MessageRoleSchema } from "@sidecar/wire";
-import { and, count, eq, isNull } from "drizzle-orm";
-import type { PgColumn } from "drizzle-orm/pg-core";
-import { Effect, Option, Schema } from "effect";
-import type { StoredUIMessage } from "../../server/core";
-import { user } from "../../server/db/auth-schema";
-import { devices } from "../../server/db/devices-schema";
-import { db } from "../../server/db/query";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { devices } from "@sidecar/database/schemas/devices";
 import {
   conversations,
   events,
   messages,
   providerCursors,
   turns,
-} from "../../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../../server/db/storage-vocabulary";
-import { voiceSessions, voiceTranscriptSegments } from "../../server/db/voice-schema";
+} from "@sidecar/database/schemas/storage";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { MessageRoleSchema } from "@sidecar/wire";
+import { and, count, eq, isNull } from "drizzle-orm";
+import type { PgColumn } from "drizzle-orm/pg-core";
+import { Effect, Option, Schema } from "effect";
+import type { StoredUIMessage } from "../../server/core";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "../../server/hosted/store/database";
 import type { HostedStoreTestRun } from "./hosted-store-database";
 
@@ -23,7 +23,7 @@ import type { HostedStoreTestRun } from "./hosted-store-database";
  * Rows over the ambient `SqlClient`, for the setup and assertions a test
  * still needs beneath the store's own effects: the same tables `writer.ts`
  * and its neighbors write, reached through the shared Drizzle handle over
- * the tables their own `db/*-schema.ts` modules declare, so a column renamed
+ * the tables their own `schemas/*.ts` modules declare, so a column renamed
  * under `db/` is a type error in this file rather than a statement that
  * still parses. Every insert answers the row's minted id where the table has
  * one; every read answers the row (or rows) as the builder maps them, which

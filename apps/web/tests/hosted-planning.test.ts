@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { NOTE_KIND } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
@@ -41,8 +43,6 @@ import {
   scriptedModel,
 } from "../eve/scripted-model";
 import { type StoredUIMessage, TOOL_PART_STATE } from "../server/core";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { GitHubApp } from "../server/github/github-app";
 import { LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { readBoard, writeScene } from "../server/hosted/board-store";

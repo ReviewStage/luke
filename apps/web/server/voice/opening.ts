@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, type Schema, type Scope } from "effect";
@@ -16,7 +17,6 @@ import {
   sessionOpeningFrameFromWire,
   VOICE_SERVICE_FRAME,
 } from "../core.js";
-import { VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
 import {
   decodeLivePayload,
   developerSeedItem,

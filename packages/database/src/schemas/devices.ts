@@ -1,6 +1,6 @@
 import { pgTable, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { timestamps, timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * One row per app installation on every platform Luke runs on: the Mac, the
@@ -34,20 +34,19 @@ export const devices = pgTable("devices", {
   installationId: text("installation_id").notNull().unique(),
   platform: text("platform").notNull(),
   /** Refreshed by every registration and heartbeat, so a row unseen for long can be retired. */
-  lastSeenAt: instant("last_seen_at").notNull().defaultNow(),
+  lastSeenAt: timestamptz("last_seen_at").notNull().defaultNow(),
   /** The instant the device's reported presence holds until; null for one that reports none. */
-  activeUntil: instant("active_until"),
+  activeUntil: timestamptz("active_until"),
   /**
    * The instant a meeting hold the device observes ends, reported by the Mac
    * from its calendar intervals on the change-signal poll; null for a device
    * that reports none. It holds speech and nothing more: a delivery reads it
    * to wait, never to decide, reword, or act.
    */
-  quietUntil: instant("quiet_until"),
+  quietUntil: timestamptz("quiet_until"),
   /** Apple issues one per installation, so the same token never stands on two rows. */
   pushToken: text("push_token").unique(),
   /** Which of Apple's two push gateways issued the token: sandbox or production. Null without a token. */
   pushEnvironment: text("push_environment"),
-  createdAt: instant("created_at").notNull().defaultNow(),
-  updatedAt: instant("updated_at").notNull().defaultNow(),
+  ...timestamps,
 });

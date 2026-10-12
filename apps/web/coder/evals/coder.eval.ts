@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -16,10 +19,7 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../../server/core";
-import { user } from "../../server/db/auth-schema";
-import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
-import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId } from "../../server/hosted/brain-host/ids";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";

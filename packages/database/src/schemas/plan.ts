@@ -3,9 +3,9 @@ import type { PlanAgentEdit, PlanFieldWriter } from "@sidecar/hosted/plan-templa
 import type { PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
-import { conversations } from "./storage-schema.js";
+import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { user } from "./auth.js";
+import { conversations } from "./storage.js";
 
 /**
  * plan-schema.ts -- a named feature plan and its one current document.
@@ -62,15 +62,15 @@ export const plan = pgTable(
      */
     repository: text("repository"),
     /** When the plan was pinned, which the sidebar lists first, newest pin first; null while it is not. */
-    pinnedAt: instant("pinned_at"),
+    pinnedAt: timestamptz("pinned_at"),
     /** When the plan was archived, which the list leaves out unless asked for it; null while it is not. */
-    archivedAt: instant("archived_at"),
+    archivedAt: timestamptz("archived_at"),
     conversationId: uuid("conversation_id").references(() => conversations.id, {
       onDelete: "set null",
     }),
-    createdAt: instant("created_at").notNull().defaultNow(),
+    createdAt: createdAt(),
     /** The last save of the document; the start, before any. */
-    updatedAt: instant("updated_at").notNull().defaultNow(),
+    updatedAt: updatedAt(),
   },
   (table) => [
     // The plan list reads one account's plans, newest started first.
@@ -101,5 +101,5 @@ export const planBoard = pgTable("plan_board", {
   drawingNumber: integer("drawing_number").notNull().default(0),
   /** The scene drawn as a PNG, base64, by the Mac's first save to hold drawing `applied_drawing`; null before one. */
   image: text("image"),
-  updatedAt: instant("updated_at").notNull().defaultNow(),
+  updatedAt: updatedAt(),
 });

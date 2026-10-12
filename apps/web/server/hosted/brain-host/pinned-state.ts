@@ -8,7 +8,7 @@ import type { StateHandle } from "eve/context";
  * the call is made in. A hook or a resolver is entered in its own session's
  * container, but the first statement it runs can leave it in another's: a
  * statement is a wait for the pool's one connection, and Effect resumes a
- * waiter inside the stack of whoever released it (`server/db/drizzle.ts`,
+ * waiter inside the stack of whoever released it (`packages/database/src/core/drizzle.ts`,
  * `tests/drizzle-bridge.test.ts`). With two sessions running turns in one
  * process, the releaser is the other session's step, so a relay reading its
  * turns after that statement reads the other session's state, finds no turn

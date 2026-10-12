@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { db } from "@sidecar/database/core/query";
+import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import {
   PLAN_WORK_BOUNDS,
@@ -15,8 +17,6 @@ import { eq } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
-import { db } from "../server/db/query";
-import { messages, turns } from "../server/db/storage-schema";
 import { BRAIN_HOST_TURN, RELAY_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";
 import { childConversationId, hostTurnId } from "../server/hosted/brain-host/ids";

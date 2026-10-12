@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { db } from "@sidecar/database/core/query";
+import { messages as messagesTable, turns } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -13,9 +16,6 @@ import { eq, sql } from "drizzle-orm";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { z } from "zod";
-import { db } from "../server/db/query";
-import { messages as messagesTable, turns } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { listRecentMessages, type StoredMessageRecord } from "../server/hosted/store";
 import type { MessageListRead } from "../server/hosted/store/message-reads";
 import { CLEARED_CONVERSATION_RETENTION_MS } from "../server/hosted/store/soft-delete";

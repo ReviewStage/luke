@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { afterAll, test } from "vitest";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
-} from "../server/db/voice-vocabulary";
+} from "@sidecar/database/voice-vocabulary";
+import { afterAll, test } from "vitest";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   assertRefusedWithCode,

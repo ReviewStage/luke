@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { turns } from "@sidecar/database/schemas/storage";
 import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
@@ -28,8 +30,6 @@ import {
   TURN_STATUS,
   unparsedWire,
 } from "../server/core";
-import { db } from "../server/db/query";
-import { turns } from "../server/db/storage-schema";
 import { CI_READ_PERMISSIONS } from "../server/github/github-app";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";

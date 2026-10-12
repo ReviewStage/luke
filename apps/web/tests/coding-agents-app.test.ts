@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
 import {
   base64Chars,
@@ -59,8 +61,6 @@ import {
   userMessage,
   userMetadataOf,
 } from "../server/core";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
 import { readAccountPreferences, writeAccountPreferences } from "../server/hosted/account-store";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { openChildConversation } from "../server/hosted/brain-host/conversation";

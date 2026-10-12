@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { Effect } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { testSqlClient } from "./support/sql-client";
 
 /**

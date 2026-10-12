@@ -1,7 +1,7 @@
 import type { ContextWindow } from "@sidecar/hosted/coding-agent-wire";
 import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { createdAt, timestamps, timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * One row per account for scalar cross-device preferences. Platform-local
@@ -26,7 +26,7 @@ export const accountPreference = pgTable("account_preference", {
   codingAgentModel: text("coding_agent_model"),
   codingAgentEffort: text("coding_agent_effort"),
   codingAgentContextWindow: text("coding_agent_context_window").$type<ContextWindow>(),
-  createdAt: instant("created_at").notNull().defaultNow(),
+  createdAt: createdAt(),
   /**
    * When the preferences part was last written; null on a row only a
    * coding-agent choice opened. The desktop reads the instant's presence as
@@ -34,7 +34,7 @@ export const accountPreference = pgTable("account_preference", {
    * must answer none, or a never-synced Mac would take an empty snapshot
    * over the voice it holds.
    */
-  updatedAt: instant("updated_at"),
+  updatedAt: timestamptz("updated_at"),
 });
 
 /**
@@ -52,8 +52,7 @@ export const accountWorkspacePreference = pgTable(
     agent: text("agent"),
     model: text("model"),
     effort: text("effort"),
-    createdAt: instant("created_at").notNull().defaultNow(),
-    updatedAt: instant("updated_at").notNull().defaultNow(),
+    ...timestamps,
   },
   (table) => [primaryKey({ columns: [table.userId, table.providerId] })],
 );

@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { db } from "@sidecar/database/core/query";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+import { VOICE_DELEGATION_MODE } from "@sidecar/database/voice-vocabulary";
 import { type ToolSet, tool, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
@@ -42,10 +46,6 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
-import { VOICE_DELEGATION_MODE } from "../server/db/voice-vocabulary";
 import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
 import { EpochMillisColumnSchema } from "../server/hosted/store/database";

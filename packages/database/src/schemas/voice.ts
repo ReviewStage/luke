@@ -1,12 +1,12 @@
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
 import type {
   VOICE_DELEGATION_MODE,
   VoiceCloseReason,
   VoiceSegmentRole,
-} from "./voice-vocabulary.js";
+} from "../voice-vocabulary.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * Voice, stored the way a call platform stores a call: one row per live
@@ -70,8 +70,8 @@ export const voiceSessions = pgTable(
     planId: uuid("plan_id"),
     liveSessionId: text("live_session_id").notNull().unique(),
     delegationMode: text("delegation_mode").$type<VoiceDelegationMode>().notNull(),
-    startedAt: instant("started_at").notNull().defaultNow(),
-    closedAt: instant("closed_at"),
+    startedAt: timestamptz("started_at").notNull().defaultNow(),
+    closedAt: timestamptz("closed_at"),
     closeReason: text("close_reason").$type<VoiceCloseReason>(),
     usage: jsonb("usage").$type<VoiceSessionUsage>(),
     /**
@@ -80,7 +80,7 @@ export const voiceSessions = pgTable(
      * the session, and cleared by the re-attach. An open row stamped longer
      * ago than the grace is an orphan the scheduled sweep closes.
      */
-    detachedAt: instant("detached_at"),
+    detachedAt: timestamptz("detached_at"),
     /**
      * Which connection holds the session now: minted by the connection that
      * created it or last re-attached to it, so a detach the connection it

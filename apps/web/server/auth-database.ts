@@ -1,8 +1,8 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
+import * as schema from "@sidecar/database/schemas/auth";
 import { drizzle, type NodePgClient } from "drizzle-orm/node-postgres";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 import type { Pool, PoolClient } from "pg";
-import * as schema from "./db/auth-schema.js";
 import { getPool } from "./db/index.js";
 
 type AuthSchema = typeof schema;

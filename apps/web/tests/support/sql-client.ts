@@ -1,12 +1,12 @@
 import { NodeServices } from "@effect/platform-node";
 import { PgClient } from "@effect/sql-pg";
 import { PGlite } from "@electric-sql/pglite";
+import { runWebMigrations } from "@sidecar/database/core/migrator";
 import { Effect, Layer, ManagedRuntime, Semaphore, Stream } from "effect";
 import * as Reactivity from "effect/unstable/reactivity/Reactivity";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type * as SqlConnection from "effect/unstable/sql/SqlConnection";
 import { SqlError, UnknownError } from "effect/unstable/sql/SqlError";
-import { runWebMigrations } from "../../server/db/effect-migrator.js";
 import { sqlClientOverUrl } from "../../server/db/sql-client.js";
 import { cloneStoreTestPostgres, STORE_TEST_DATABASE_ENVIRONMENT } from "./store-test-postgres.js";
 

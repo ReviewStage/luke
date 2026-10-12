@@ -1,3 +1,8 @@
+import { db } from "@sidecar/database/core/query";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { plan } from "@sidecar/database/schemas/plan";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   EMPTY_PLAN_FIELDS,
   type PlanAgentEdit,
@@ -23,11 +28,6 @@ import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { codingAgent } from "../db/coding-agent-schema.js";
-import { plan } from "../db/plan-schema.js";
-import { db } from "../db/query.js";
-import { conversations } from "../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { InstantColumnSchema } from "./store/database.js";
 

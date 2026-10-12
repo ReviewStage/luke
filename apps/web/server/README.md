@@ -6,10 +6,10 @@ Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
 migrations; the connection strings live nowhere in this repository. A table is
 declared twice and in two languages: once in the hand-written migration that
-builds it, and once in the `server/db/*-schema.ts` module the query builder
+builds it, and once in the `packages/database/src/schemas/*.ts` module the query builder
 reads it through. "The data layer" below is what holds the two together.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
-over `server/db/auth-schema.ts` (see below), which is in the same barrel as
+over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
 the eleven Luke-owned modules, so a migration that changes an auth column's type
 changes that declaration too.
 
@@ -21,10 +21,10 @@ dialects and refuses any `timestamp without time zone` column, so a new table
 declares `timestamptz` or fails the store tests.
 
 For a new table or a changed one, write the migration by hand under
-`drizzle/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
+`packages/database/migrations/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
 `drizzle-kit` used to generate before this migration off it; the directory
 name is what stands from that era and is not itself a dependency on the
-package), fold the change into the `server/db/*-schema.ts` module that
+package), fold the change into the `packages/database/src/schemas/*.ts` module that
 declares the table in the same commit, and add whatever query modules under
 `server/` need it. Dropping a column means deleting it from that module: the
 drift check reads the database both ways, so a declaration the database no
@@ -40,8 +40,8 @@ connection Neon supplies for that deployment. The runner holds a PostgreSQL
 advisory lock for the migration session, so overlapping builds targeting one
 branch cannot apply the same migration concurrently.
 
-What applies them is `effect/unstable/sql`'s own migrator: `server/db/effect-migrator.ts`
-reads `drizzle/meta/_journal.json` and the `.sql` file each entry names, in
+What applies them is `effect/unstable/sql`'s own migrator: `packages/database/src/core/migrator.ts`
+reads `packages/database/migrations/meta/_journal.json` and the `.sql` file each entry names, in
 order, and records what it applied in its own `effect_sql_migrations` table
 rather than `drizzle.__drizzle_migrations`, which a database an older
 Drizzle-based runner had already migrated is bootstrapped from once rather
@@ -85,7 +85,7 @@ vercel env run --environment production --scope stage-review -- \
   pnpm --filter @luke/web auth:seed
 ```
 
-Better Auth runs on its Drizzle adapter over `server/db/auth-schema.ts`
+Better Auth runs on its Drizzle adapter over `packages/database/src/schemas/auth.ts`
 (`server/auth-database.ts`), not its Kysely one: the migrations declare the
 OAuth tables' `scopes`, `redirect_uris`, `grant_types`, and `response_types`
 as `text[]`, which the Drizzle adapter writes as native arrays and the Kysely
@@ -372,18 +372,18 @@ environment variables reach all three services alike, and each service's own
 
 Drizzle is the statement layer and nothing else. A query module builds its
 statement with the query builder over the tables its own
-`server/db/*-schema.ts` module declares, and `server/db/drizzle.ts` — the
+`packages/database/src/schemas/*.ts` module declares, and `packages/database/src/core/drizzle.ts` — the
 bridge ported from `@effect/sql-drizzle`, named in root AGENTS.md as a
 permanent adaptor — renders it and runs it on the `SqlClient` the asking fiber
 already carries. So a module still answers `Effect<A, SqlError |
 Schema.SchemaError, SqlClient>`, a bridged statement lands inside whatever
 `client.withTransaction` encloses it rather than beside it on a second
 connection, and one module still runs on both dialects. Only
-`server/db/effect-migrator.ts` is raw by design: its six statements are
+`packages/database/src/core/migrator.ts` is raw by design: its six statements are
 dialect metaprogramming over the journal rather than domain queries. A tagged
 template anywhere else is a leftover, not a pattern.
 
-`server/db/query.ts` holds the one shared handle, `db`, built at module scope
+`packages/database/src/core/query.ts` holds the one shared handle, `db`, built at module scope
 and imported wherever a statement is spelled. There is nothing per-module or
 per-request to build: the handle carries no connection, no client, and no
 context — it reads the `SqlClient` out of the fiber that yields the statement
@@ -427,9 +427,9 @@ are the client's own `withTransaction` and a `.for("update")` select inside
 it, unchanged.
 
 `drizzle-kit` is not a dependency and no migration is generated from a schema
-module. Migrations stay hand-written SQL under `drizzle/`, applied by the
+module. Migrations stay hand-written SQL under `packages/database/migrations/`, applied by the
 Effect migrator above, and the modules are hand-maintained beside them:
-`drizzle/meta/` holds snapshots for `0000`–`0025` alone, from the era when the
+`packages/database/migrations/meta/` holds snapshots for `0000`–`0025` alone, from the era when the
 modules were `drizzle-kit`'s input and the migrations its output. What stands
 in for that lost loop is `tests/drizzle-schema.test.ts`, which compares the
 barrel against the `information_schema` of a database `runWebMigrations` has

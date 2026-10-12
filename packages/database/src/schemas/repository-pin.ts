@@ -1,6 +1,6 @@
 import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * One repository an account pinned in the sidebar, by its full name, and when
@@ -16,7 +16,7 @@ export const repositoryPin = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     repository: text("repository").notNull(),
-    pinnedAt: instant("pinned_at").notNull(),
+    pinnedAt: timestamptz("pinned_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.repository] })],
 );

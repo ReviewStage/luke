@@ -24,9 +24,9 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
-import { CONVERSATION_KIND } from "./storage-vocabulary.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { createdAt, timestamptz, updatedAt } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * The conversation storage the LUKE-95 rework settles on: one row per
@@ -99,10 +99,10 @@ export const conversations = pgTable(
     }),
     /** The runtime's own session id for this conversation: ours now, eve's later. */
     runtimeSessionId: text("runtime_session_id"),
-    createdAt: instant("created_at").notNull().defaultNow(),
-    lastActivityAt: instant("last_activity_at").notNull().defaultNow(),
+    createdAt: createdAt(),
+    lastActivityAt: timestamptz("last_activity_at").notNull().defaultNow(),
     /** Stamped by Clear; a row so stamped is purged later and read by nothing meanwhile. */
-    deletedAt: instant("deleted_at"),
+    deletedAt: timestamptz("deleted_at"),
     /** The next message sequence to hand out; counted up under the conversation's row lock and never reused. */
     nextMessageSeq: bigint("next_message_seq", { mode: "number" }).notNull().default(1),
     nextEventSeq: bigint("next_event_seq", { mode: "number" }).notNull().default(1),
@@ -112,11 +112,11 @@ export const conversations = pgTable(
     memoryFlushOperationId: text("memory_flush_operation_id"),
     /** How that flush ended; null while the claimed cycle is still running. */
     memoryFlushOutcome: text("memory_flush_outcome").$type<MemoryFlushOutcome>(),
-    memoryFlushedAt: instant("memory_flushed_at"),
+    memoryFlushedAt: timestamptz("memory_flushed_at"),
     /** A child's own short name, as the spawn call gave it; null on every other kind. */
     label: text("label"),
     /** Stamped once a settled child's completion has reached its parent, which is what the sweep reads to leave it alone. */
-    completionDeliveredAt: instant("completion_delivered_at"),
+    completionDeliveredAt: timestamptz("completion_delivered_at"),
     /** Whether a settled child owes its parent a completion at all; true on every row the sweep may consider. */
     expectsCompletion: boolean("expects_completion").notNull().default(true),
   },
@@ -180,8 +180,8 @@ export const messages = pgTable(
     parts: jsonb("parts").$type<StoredUIMessage["parts"]>().notNull(),
     /** The `@sidecar/wire` metadata for the row's role; a system row carries none. */
     metadata: jsonb("metadata").$type<StoredMessageMetadata>(),
-    createdAt: instant("created_at").notNull().defaultNow(),
-    finishedAt: instant("finished_at"),
+    createdAt: createdAt(),
+    finishedAt: timestamptz("finished_at"),
     /** The conversation's journal revision this row was last amended at; null for a row never amended. */
     revision: bigint("revision", { mode: "number" }),
     /**
@@ -189,7 +189,7 @@ export const messages = pgTable(
      * creation instant for a row placed as it arrived and an earlier one for
      * a row placed back among the messages it belongs with.
      */
-    placedAt: instant("placed_at").notNull(),
+    placedAt: timestamptz("placed_at").notNull(),
   },
   (table) => [
     unique("messages_conversation_client").on(table.conversationId, table.clientId),
@@ -245,13 +245,13 @@ export const turns = pgTable(
     usage: jsonb("usage").$type<StoredTurnUsage>(),
     /** eve's own id for the turn, so a relay can name to eve the turn this row is. */
     eveTurnId: text("eve_turn_id"),
-    queuedAt: instant("queued_at").notNull().defaultNow(),
-    startedAt: instant("started_at"),
-    settledAt: instant("settled_at"),
+    queuedAt: timestamptz("queued_at").notNull().defaultNow(),
+    startedAt: timestamptz("started_at"),
+    settledAt: timestamptz("settled_at"),
     failure: text("failure"),
     /** What the failure was, at whatever length it came; `failure` is the word, this is the detail. */
     failureDetail: text("failure_detail"),
-    cancelRequestedAt: instant("cancel_requested_at"),
+    cancelRequestedAt: timestamptz("cancel_requested_at"),
   },
   (table) => [
     index("turns_by_user").on(table.userId),
@@ -307,8 +307,8 @@ export const asks = pgTable(
     deliveryId: text("delivery_id"),
     /** The turn the ask ran in, as the store keys it, once known. */
     turnId: uuid("turn_id"),
-    createdAt: instant("created_at").notNull().defaultNow(),
-    cancelRequestedAt: instant("cancel_requested_at"),
+    createdAt: createdAt(),
+    cancelRequestedAt: timestamptz("cancel_requested_at"),
     /** The Live API's id of the voice session a spoken ask was delegated in; null for a typed ask. */
     voiceSessionId: text("voice_session_id"),
     /** The spoken ask's place in its voice session's order of delegations: a higher revision supersedes a lower. */
@@ -316,7 +316,7 @@ export const asks = pgTable(
     /** The last event of the ask's turn told to the voice under this ask short of its end, written before it is told. */
     toldSeq: integer("told_seq").notNull().default(0),
     /** When the run's end was told to the voice under this ask, written before it is told. */
-    endToldAt: instant("end_told_at"),
+    endToldAt: timestamptz("end_told_at"),
   },
   (table) => [
     uniqueIndex("asks_conversation_client").on(table.conversationId, table.clientId),
@@ -359,7 +359,7 @@ export const events = pgTable(
     /** The device that claimed, spoke, or rated; null for a kind no device took part in. */
     deviceId: text("device_id"),
     payload: jsonb("payload"),
-    createdAt: instant("created_at").notNull().defaultNow(),
+    createdAt: createdAt(),
   },
   (table) => [
     unique("events_conversation_seq").on(table.conversationId, table.seq),
@@ -386,7 +386,7 @@ export const providerCursors = pgTable(
     providerId: text("provider_id").notNull(),
     providerSessionId: text("provider_session_id").notNull(),
     cursor: text("cursor").notNull(),
-    updatedAt: instant("updated_at").notNull().defaultNow(),
+    updatedAt: updatedAt(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.providerId, table.providerSessionId] })],
 );

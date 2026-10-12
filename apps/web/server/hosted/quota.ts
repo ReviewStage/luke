@@ -1,10 +1,10 @@
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { hostedUsage, voiceSessionUsage } from "@sidecar/database/schemas/usage";
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { user } from "../db/auth-schema.js";
-import { db } from "../db/query.js";
-import { hostedUsage, voiceSessionUsage } from "../db/usage-schema.js";
 
 /** The UTC day a moment falls on, as the usage table's YYYY-MM-DD key. */
 export function utcDayKey(now: number): string {

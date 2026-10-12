@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
+import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
+import * as schema from "@sidecar/database/schemas";
 import { getTableColumns, getTableName, is } from "drizzle-orm";
 import { getTableConfig, PgTable } from "drizzle-orm/pg-core";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
-import * as schema from "../server/db/schema";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 
 /**
  * The drift check between the restored schema modules and the database the
  * migrations actually build. `drizzle-kit` no longer generates one from the
- * other — `drizzle/meta/` stops at 0025 and the modules are hand-maintained
+ * other — `packages/database/migrations/meta/` stops at 0025 and the modules are hand-maintained
  * beside hand-written SQL — so a migration that renames a column, drops one,
  * widens one, or makes one nullable leaves a module that still type-checks
  * and lies, and every query built on it is wrong in a way the compiler

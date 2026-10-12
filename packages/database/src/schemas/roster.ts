@@ -1,6 +1,6 @@
 import { bigint, pgTable, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { timestamptz } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * The latest roster one observation pass reported for a user: one row,
@@ -32,7 +32,7 @@ export const transcriptMark = pgTable("transcript_mark", {
     .references(() => user.id, { onDelete: "cascade" }),
   /** The instant the mark stands at, as epoch milliseconds. */
   mark: bigint("mark", { mode: "number" }).notNull(),
-  updatedAt: instant("updated_at").notNull(),
+  updatedAt: timestamptz("updated_at").notNull(),
 });
 
 /**

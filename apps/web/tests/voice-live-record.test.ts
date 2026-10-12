@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { liveBrainLayer, liveRecordLayer } from "@sidecar/voice/effect";
 import {
   LIVE_BRAIN_CANCEL,
@@ -28,7 +29,6 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import {
   type ConversationTarget,
   STORE_WRITE_EFFECT,

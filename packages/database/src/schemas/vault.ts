@@ -1,6 +1,6 @@
 import { pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
-import { instant } from "./instant.js";
+import { timestamps } from "./_helpers.js";
+import { user } from "./auth.js";
 
 /**
  * One encrypted provider API key per (user, provider). Storing a key for an
@@ -20,8 +20,7 @@ export const providerKey = pgTable(
      * The nonce is random per write; the auth tag provides integrity.
      */
     ciphertext: text("ciphertext").notNull(),
-    createdAt: instant("created_at").notNull().defaultNow(),
-    updatedAt: instant("updated_at").notNull().defaultNow(),
+    ...timestamps,
   },
   (table) => [primaryKey({ columns: [table.userId, table.providerId] })],
 );

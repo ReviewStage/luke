@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   EMPTY_PLAN_FIELDS,
   NOTE_KIND,
@@ -15,10 +19,6 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { deleteAccount } from "../server/hosted/account-store";
 import {
   PLAN_SAVE_REFUSAL,

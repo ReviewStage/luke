@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { PGlite } from "@electric-sql/pglite";
+import { runWebMigrations } from "@sidecar/database/core/migrator";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { atInstant } from "@sidecar/wire/testing";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import type * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { user } from "../../server/db/auth-schema";
-import { runWebMigrations } from "../../server/db/effect-migrator";
-import { db } from "../../server/db/query";
 import { sqlClientOverUrl } from "../../server/db/sql-client";
 import { type HostedStore, hostedStore } from "../../server/hosted/store";
 import { sqlClientOverPglite } from "./sql-client";

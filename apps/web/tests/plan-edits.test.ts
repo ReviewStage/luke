@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { NOTE_KIND, PLAN_HEADING } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD, PLAN_FIELD_BOUNDS } from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import {
   PLAN_SAVE_REFUSAL,
   PLAN_SAVE_STATUS,

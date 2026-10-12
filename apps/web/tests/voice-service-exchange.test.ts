@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
@@ -10,7 +11,6 @@ import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
 import { HOSTED_API_ERROR, MESSAGE_ROLE, TURN_STATUS } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import {
   EVE_SEND_OUTCOME,
