@@ -350,11 +350,14 @@ beforeEach(() => {
   };
   // jsdom captures no pointer; the drag's own events are dispatched at the edge.
   HTMLElement.prototype.setPointerCapture = () => undefined;
+  // Each test stands its own scroll up, so none leans on one an earlier test happened to install.
+  installScrollIntoView();
 });
 
 afterEach(() => {
   unmountAll();
   Reflect.deleteProperty(HTMLElement.prototype, "setPointerCapture");
+  Reflect.deleteProperty(Element.prototype, "scrollIntoView");
   copies = 0;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -1906,7 +1909,6 @@ function menuLabels(): string[] {
 }
 
 test("an archived plan reads but takes nothing: no editor, rename, repository, call, Start, new agent, or message, and its banner and its composer's note offer Unarchive", () => {
-  installScrollIntoView();
   const unarchives: Unarchives = { marked: [], composer: 0 };
   const { container } = mountArchivable(true, unarchives);
 
@@ -1967,7 +1969,6 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
 });
 
 test("an Unarchive gives an archived plan back everything at once: its editors, its call, Start, and its agent's composer, and the banner goes", () => {
-  installScrollIntoView();
   const { container, render } = mountArchivable(true, { marked: [], composer: 0 });
 
   render(false);
@@ -1981,7 +1982,6 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
 });
 
 test("a section editor still open when the plan is archived elsewhere is let go", () => {
-  installScrollIntoView();
   const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
   press(container, ".plan-unit-edit");
   assert.ok(container.querySelector(".plan-field-editor"), "a section editor is open");
@@ -1992,7 +1992,6 @@ test("a section editor still open when the plan is archived elsewhere is let go"
 });
 
 test("an agent's rename still open when the plan is archived elsewhere is let go", () => {
-  installScrollIntoView();
   const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
   const tab = tabNamed(container, TITLED_AGENT.title ?? "");
   act(() => {
@@ -2045,7 +2044,6 @@ test("closing the chosen tab chooses the tab viewed before it, and closing the l
 });
 
 test("the open panel on a plan that has used no tab says what will stand there, and the + opens any kind on it", () => {
-  installScrollIntoView();
   const page = mountOpenPlan({ holds: {} });
   press(page, '[aria-label="Show panel"]');
   assert.ok(panelShown(page));
@@ -2106,7 +2104,6 @@ function columnAddButton(page: HTMLElement): HTMLElement {
 }
 
 test("Command-T opens the + of the column holding the focus, the plan's column's unless the pointer went into the side panel, its search focused and its chord in the +'s pill, and Escape closes the menu choosing nothing", () => {
-  installScrollIntoView();
   const page = mountOpenPlan();
 
   assert.equal(keydown({ key: "t", metaKey: true }), true);
@@ -2172,7 +2169,6 @@ test("Command-F opens the find bar over the chosen tab of the column holding the
   assert.match(focused().closest(".find-scope")?.className ?? "", /side-panel-content/u);
 });
 test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
-  installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
@@ -2212,7 +2208,6 @@ test("the + drops the searchable menu over every kind, each with its shortcut wh
 });
 
 test("the + menu's search narrows the kinds as it is typed, and Escape closes the menu and nothing behind it", () => {
-  installScrollIntoView();
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
   press(page, '[aria-label="Close Board"]');
@@ -2954,7 +2949,6 @@ function mountAgents(
   registry?: AtomRegistry,
   agents: readonly CodingAgentSummary[] = [RUNNING_AGENT, DONE_AGENT],
 ): HTMLElement {
-  installScrollIntoView();
   stops = [];
   listed = agents;
   transcripts = new Map();
@@ -3167,7 +3161,6 @@ async function settled(): Promise<void> {
 
 /** Mounts the plan's page with no agent yet, the side panel shown. */
 async function mountDraftPage(repository: string | null = "acme/relay"): Promise<HTMLElement> {
-  installScrollIntoView();
   draftAsks = [];
   draftAnswers = new Map<ActKind, unknown[]>([
     [ACT_KIND.CODING_AGENTS_LIST, [{ agents: [] }]],
@@ -3383,7 +3376,6 @@ test("a card's Open file opens its whole file in a tab named by the file, its li
   assert.deepEqual(lit, ["2"]);
 
   press(page, ".side-panel-tabs [aria-label='Close Code']");
-  installScrollIntoView();
   press(page, "button[aria-label='Open a tab']");
   const files = [...page.querySelectorAll<HTMLElement>(".tab-add-menu [role='option']")].filter(
     (option) => option.textContent?.includes(".ts"),
@@ -4060,7 +4052,6 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
 });
 
 test("a coding agent's start on the Work tab opens the agent's tab in the plan's column, which then holds the keys, its tab already chosen or not", () => {
-  installScrollIntoView();
   const page = mountOpenPlan({
     staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
     agents: codingAgentsControl({ agents: [TITLED_AGENT], agentIds: [TITLED_AGENT.id] }),
