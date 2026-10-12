@@ -94,9 +94,9 @@
 }
 
 /* The field the caret is typing in: a small ring in the accent turning after
-   its heading, the spinner `state-glyph.tsx` turns around a working glyph,
-   held by `--loop-motion` like every animation with no end of its own and
-   still reading as work under way while held. */
+   its heading on the window's one spinner turn (`spinner.tsx`), held by
+   `--loop-motion` like every animation with no end of its own and still
+   reading as work under way while held. */
 .plan-writing > .markdown-heading:first-child::after {
   display: inline-block;
   box-sizing: border-box;
@@ -107,7 +107,7 @@
   border-top-color: var(--accent);
   border-radius: 50%;
   vertical-align: 0.05em;
-  animation: state-glyph-turn 900ms linear infinite;
+  animation: spinner-turn 900ms linear infinite;
   animation-play-state: var(--loop-motion);
   content: "";
 }
