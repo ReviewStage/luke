@@ -505,6 +505,27 @@ test("a panel filled over the column takes the card down, leaving it no Escape t
   assert.equal(card(), null);
 });
 
+test("a panel filled over the column hides the summary with it, and leaving full screen uncovers it as the column's width has it now", () => {
+  const page = mount();
+  press(page, '[aria-label="Show panel"]');
+  layOutColumn(800);
+  assert.equal(modeOf(page), "rail");
+
+  press(page, '[aria-label="Expand panel"]');
+  const column = page.querySelector<HTMLElement>(".desktop-plan-main");
+  assert.equal(column?.hidden, true, "the column, its toolbar and summary with it, is hidden");
+  assert.ok(column?.contains(summaryButton(page)), "no summary button stands over the panel");
+  // The window widened while the panel covers the column, which keeps its
+  // layout beneath the panel and so is still measured.
+  layOutColumn(1200);
+
+  press(page, '[aria-label="Exit full screen"]');
+
+  assert.equal(column?.hidden, false);
+  assert.equal(modeOf(page), "column");
+  assert.equal(card(), null);
+});
+
 test("Escape on the card is the card's alone: the window under it hears nothing of it", () => {
   const page = mount();
   layOutColumn(900);
