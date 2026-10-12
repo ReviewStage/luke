@@ -6,6 +6,7 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@sidecar/database/models/account-store";
+import { fillChildTitle } from "@sidecar/database/models/child-titles";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
 import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
@@ -95,7 +96,6 @@ import {
   type EveSessions,
   EveUnreachable,
 } from "../server/hosted/brain-host/eve-sessions";
-import { fillChildTitle } from "../server/hosted/child-titles";
 import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";

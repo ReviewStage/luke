@@ -1,3 +1,4 @@
+import { childTitlesOf } from "@sidecar/database/models/child-titles";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
@@ -58,7 +59,6 @@ import {
   type EveSessions,
   eveSessions,
 } from "./hosted/brain-host/eve-sessions.js";
-import { childTitlesOf } from "./hosted/child-titles.js";
 import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,

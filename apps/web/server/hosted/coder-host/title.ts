@@ -1,3 +1,4 @@
+import { childTitlesOf, fillChildTitle } from "@sidecar/database/models/child-titles";
 import {
   listMessagesPast,
   listRecentMessages,
@@ -10,7 +11,6 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
-import { childTitlesOf, fillChildTitle } from "../child-titles.js";
 import { type CodingAgent, fillCodingAgentTitle } from "../coding-agent-store.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
