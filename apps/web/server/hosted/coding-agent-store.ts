@@ -7,7 +7,7 @@ import {
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -811,6 +811,44 @@ export function delegationTitlesOf(
     userId: parent.userId,
     parentConversationId: parent.conversationId,
   });
+}
+
+const findUntitledDelegations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    since: Schema.Date,
+  }),
+  Result: Schema.Struct({ childConversationId: Schema.String }),
+  execute: ({ userId, parentConversationId, since }) =>
+    db
+      .select({ childConversationId: codingAgentDelegation.childConversationId })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNull(conversations.title),
+          gt(conversations.createdAt, since),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/** The children of the account's conversation delegated after `since` that have no title yet, which is where a title may still land. */
+export function untitledDelegationsSince(
+  parent: ConversationTarget,
+  since: Date,
+): CodingAgentStoreEffect<ReadonlySet<string>> {
+  return Effect.map(
+    findUntitledDelegations({
+      userId: parent.userId,
+      parentConversationId: parent.conversationId,
+      since,
+    }),
+    (rows) => new Set(rows.map((row) => row.childConversationId)),
+  );
 }
 
 /** The turn statuses under which an agent is still at work, which is when a Stop has something to stop. */

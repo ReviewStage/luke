@@ -1,10 +1,11 @@
 import { CODING_AGENT_BOUNDS } from "@sidecar/hosted/coding-agent-wire";
 import { generateText, type LanguageModel } from "ai";
-import { Duration, Effect, Option, type Schema } from "effect";
+import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { childTitlesOf, fillChildTitle } from "../child-titles.js";
 import type { ConversationTarget } from "../store/index.js";
+import { CODER } from "./bounds.js";
 
 /**
  * title.ts -- a coding agent's title, generated once from what it was handed as the agent starts, and a subagent's the same way.
@@ -26,7 +27,7 @@ const AGENT_TITLE = {
   /** The most tokens the model may spend on the title, which is a few words. */
   MAX_OUTPUT_TOKENS: 64,
   /** How long the call may take before the agent goes untitled. */
-  TIMEOUT: Duration.seconds(20),
+  TIMEOUT: CODER.TITLE_TIMEOUT,
   /** The least the model is asked to think, since a title is no reasoning task. */
   EFFORT: "low",
 } as const;

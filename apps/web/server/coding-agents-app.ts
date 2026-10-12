@@ -51,7 +51,10 @@ import {
   cursorOfWire,
   cursorToWire,
   delegationPast,
+  NO_TITLE_AWAITED,
+  type TitleAwaited,
   type TranscriptPage,
+  titleMayLand,
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import {
@@ -65,6 +68,7 @@ import {
   renameCodingAgent,
   updateCodingAgentChoice,
 } from "./hosted/coding-agent-store.js";
+import { HostedEnvironment } from "./hosted/environment.js";
 import { HOSTED_HTTP_STATUS } from "./hosted/http.js";
 import {
   HOSTED_REFUSAL,
@@ -133,7 +137,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * account's agent answers, so a call of another account's agent reads as
  * none. Each worker's title, generated from its task as it starts, is
  * carried on its own page and, for every worker titled so far, on the
- * agent's.
+ * agent's; a read of an ended agent, or worker, with nothing new waits for a
+ * title still due, since a short worker's lands after its agent ended and a
+ * reader stops at that read.
  */
 
 const AGENTS_PATH = {
@@ -177,7 +183,8 @@ export type CodingAgentsAppServices =
   | SqlClient.SqlClient
   | GitHubApp
   | HttpClient.HttpClient
-  | ModelCatalog;
+  | ModelCatalog
+  | HostedEnvironment;
 
 type AgentsServices = CodingAgentsAppServices | HttpServerRequest.HttpServerRequest;
 
@@ -224,6 +231,22 @@ const cursorOf = /* @__PURE__ */ Effect.fnUntraced(function* (
   );
   if (Result.isFailure(after)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   return after.success;
+});
+
+/**
+ * What a read of an ended agent, or of its worker, waits on for a worker's
+ * title: the worker named, or any of the agent's where none is; nothing on
+ * a deployment that generates no titles, which is one without Luke's
+ * Anthropic key, the title model's (`coder-host/model.ts`).
+ */
+const titleAwaitedOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  parent: ConversationTarget,
+  childConversationId?: string,
+): Effect.fn.Return<TitleAwaited, never, HostedEnvironment> {
+  const environment = yield* HostedEnvironment;
+  return environment.anthropicKey === undefined
+    ? NO_TITLE_AWAITED
+    : titleMayLand(parent, childConversationId);
 });
 
 /** A page of a transcript as the wire answers it. */
@@ -426,8 +449,9 @@ const messagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentMessagesEndpoint")(
   }
   const after = yield* cursorOf(request);
   const { agent, target } = yield* ownedAgent(seams, request);
+  const titleAwaited = yield* titleAwaitedOf(target);
   const page = yield* hostedStoreOrUnavailable(
-    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent),
+    transcriptPast(target, CODER_TOOL_SET, cursorOfWire(after), agent, agent, titleAwaited),
   );
   return transcriptResponse(page, agent.title);
 });
@@ -454,10 +478,16 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
         null,
       );
     }
+    const titleAwaited = yield* titleAwaitedOf(target, conversationId);
     const page = yield* hostedStoreOrUnavailable(
-      transcriptPast({ userId, conversationId }, CODER_TOOL_SET, cursorOfWire(after), {
-        createdAt: read.delegation.createdAt,
-      }),
+      transcriptPast(
+        { userId, conversationId },
+        CODER_TOOL_SET,
+        cursorOfWire(after),
+        { createdAt: read.delegation.createdAt },
+        undefined,
+        titleAwaited,
+      ),
     );
     // The title is read after the page, since it lands beside the worker's start, which a held read may span.
     const titles = yield* hostedStoreOrUnavailable(childTitlesOf(target, [conversationId]));

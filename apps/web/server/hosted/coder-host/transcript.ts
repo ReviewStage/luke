@@ -11,7 +11,7 @@ import {
   type CodingAgentUsage,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ToolSet } from "ai";
-import { Clock, Effect, Option, Schedule, type Schema } from "effect";
+import { Clock, Duration, Effect, Option, Schedule, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
@@ -32,6 +32,7 @@ import {
   readCodingAgentContext,
   readDelegation,
   turnUsagesOf,
+  untitledDelegationsSince,
 } from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import {
@@ -349,6 +350,31 @@ export function delegationPast(
   );
 }
 
+/** Whether a held read waits on a worker's title, asked at each look inside the hold. */
+export type TitleAwaited = TranscriptEffect<boolean>;
+
+/** A read that waits on no worker's title: one whose deployment generates none. */
+export const NO_TITLE_AWAITED: TitleAwaited = Effect.succeed(false);
+
+/**
+ * Whether a worker's title may still land: the one worker named, or any of
+ * the parent's where none is, still untitled and delegated inside the title
+ * call's own bound, past which the call that would fill it has given up.
+ */
+export function titleMayLand(
+  parent: ConversationTarget,
+  childConversationId?: string,
+): TitleAwaited {
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    const since = new Date(now - Duration.toMillis(CODER.TITLE_TIMEOUT));
+    const untitled = yield* untitledDelegationsSince(parent, since);
+    return childConversationId === undefined
+      ? untitled.size > 0
+      : untitled.has(childConversationId);
+  });
+}
+
 /**
  * The transcript past the cursor: the page as it stands, or, while the
  * agent is starting or runs and nothing new stands yet, the first page with
@@ -357,6 +383,10 @@ export function delegationPast(
  * ends the hold is read with that page, so a hold that ran out on an agent
  * that ended meanwhile still says so. The agent's own transcript names the
  * agent as `own`, whose context its pages carry; a worker's names none.
+ * An ended agent's empty page is held too while `titleAwaited` says a
+ * worker's title may still land, because a reader stops at that page and a
+ * short worker's title lands after its agent ended; the page that ends that
+ * hold carries the title.
  */
 export function transcriptPast(
   target: ConversationTarget,
@@ -364,11 +394,13 @@ export function transcriptPast(
   after: MessageCursor,
   agent: Pick<AgentStanding, "createdAt">,
   own?: OwnAgent,
+  titleAwaited: TitleAwaited = NO_TITLE_AWAITED,
 ): TranscriptEffect<TranscriptPage, ModelCatalog> {
   const once = Effect.gen(function* () {
     const read = yield* pagePast(target, tools, after, agent.createdAt);
     if (read.page.messages.length > 0) return Option.some(read);
-    return WAITING_STATUSES.has(read.page.status) ? Option.none() : Option.some(read);
+    if (WAITING_STATUSES.has(read.page.status)) return Option.none();
+    return (yield* titleAwaited) ? Option.none() : Option.some(read);
   });
   return once.pipe(
     Effect.repeat({ schedule: Schedule.spaced(CODER.MESSAGES_POLL), until: Option.isSome }),

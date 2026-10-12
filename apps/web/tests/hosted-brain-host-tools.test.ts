@@ -5,7 +5,7 @@ import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
-import type { SessionAuth, SessionAuthContext } from "eve/context";
+import type { SessionAuth, SessionAuthContext, SessionContext } from "eve/context";
 import type { ToolContext as EveToolContext } from "eve/tools";
 import { afterAll, test } from "vitest";
 import {
@@ -426,7 +426,7 @@ test("a worker's session is recorded in its child conversation as a child turn, 
   assert.ok(Result.isSuccess(await database.run(host.admit(auth, rootId))));
 });
 
-test("a worker is titled from the first task it receives on the child conversation of the call that started it, once; a title call that fails, or a deployment with no title model, leaves a worker untitled", async () => {
+test("a worker is titled from the first task it received, even where a later task's arrival is what asks, on the child conversation of the call that started it, once; a title call that fails, or a deployment with no title model, leaves a worker untitled", async () => {
   const target = await planConversation();
   const model = titleModelAnswering(['"Queue comparison."', "Second title"]);
   const titling = brainHost({ ...seams, titleModel: () => model });
@@ -442,21 +442,28 @@ test("a worker is titled from the first task it receives on the child conversati
   assert.equal(await database.run(titling.sessionStarted(starting.success, rootId)), true);
 
   const turn = { id: "turn_0", sequence: 0 };
-  /** A worker's session under the call named, its child conversation opened as its first turn starts. */
-  const workerOf = async (callId: string) => {
+  /** One task a worker's session receives, relayed as a turn of its own opening on it, under the state the relay keeps for that turn. */
+  const received = async (child: SessionContext["session"], turnId: string, task: string) => {
+    const state = memoryRelayState();
+    for (const event of [
+      stampedEveEvent({ type: "turn.started", data: { turnId, sequence: 0 } }, NOW),
+      stampedEveEvent(
+        { type: "message.received", data: { turnId, sequence: 0, message: task } },
+        NOW,
+      ),
+    ]) {
+      await database.run(titling.relayChild(event, child, state).pipe(Effect.provide(NO_GITHUB)));
+    }
+  };
+  /** A worker's session under the call named, having received its first task. */
+  const workerOf = async (callId: string, task: string) => {
     const child = {
       id: `${rootId}-${callId}`,
       auth,
       turn,
       parent: { callId, rootSessionId: rootId, sessionId: rootId, turn },
     };
-    const started = stampedEveEvent(
-      { type: "turn.started", data: { turnId: "turn_0", sequence: 0 } },
-      NOW,
-    );
-    await database.run(
-      titling.relayChild(started, child, memoryRelayState()).pipe(Effect.provide(NO_GITHUB)),
-    );
+    await received(child, "turn_0", task);
     return child;
   };
   const titlesOf = (callIds: readonly string[]) =>
@@ -467,17 +474,20 @@ test("a worker is titled from the first task it receives on the child conversati
       ),
     );
 
-  const worker = await workerOf("call-worker-1");
-  await database.run(titling.titleChild(worker, "Compare the two queues' retry policies."));
+  const worker = await workerOf("call-worker-1", "Compare the two queues' retry policies.");
+  // A second task lands before any title does, and its arrival is what asks for the title.
+  await received(worker, "turn_1", "Now compare their dead-letter queues.");
+  await database.run(titling.titleChild(worker));
   const [asked] = model.doGenerateCalls;
   assert.ok(asked !== undefined);
   assert.match(JSON.stringify(asked.prompt), /Compare the two queues' retry policies/u);
-  // A later task the same worker receives asks for no second title.
-  await database.run(titling.titleChild(worker, "Now compare their dead-letter queues."));
+  assert.doesNotMatch(JSON.stringify(asked.prompt), /dead-letter/u);
+  // A worker already titled asks for no second title.
+  await database.run(titling.titleChild(worker));
   assert.equal(model.doGenerateCalls.length, 1);
 
-  await database.run(failing.titleChild(await workerOf("call-worker-2"), "Read the queue docs."));
-  await database.run(untitled.titleChild(await workerOf("call-worker-3"), "Read the queue docs."));
+  await database.run(failing.titleChild(await workerOf("call-worker-2", "Read the queue docs.")));
+  await database.run(untitled.titleChild(await workerOf("call-worker-3", "Read the queue docs.")));
   assert.deepEqual(
     [...(await titlesOf(["call-worker-1", "call-worker-2", "call-worker-3"])).values()],
     ["Queue comparison"],
