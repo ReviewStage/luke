@@ -927,6 +927,17 @@ test("a plan saved since this Mac last saw it is unread, and so is one from anot
   assert.match(billing?.textContent ?? "", /\(unread\)/u);
 });
 
+test("another account's plans, listed on this Mac for the first time, are read too", () => {
+  mount(DEAN, { plans: { plans: [savedPlan("Billing", 1, 50)] } });
+  unmountAll();
+
+  const other = mount(DEAN, {
+    plans: { plans: [savedPlan("Roadmap", 1, 70), savedPlan("Hiring", 2, 80)] },
+  });
+
+  assert.deepEqual(unread(other), []);
+});
+
 it.effect(
   "an unread plan opened is read once it has been looked at, and stays read once left",
   () =>

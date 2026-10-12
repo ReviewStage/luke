@@ -28,8 +28,9 @@ import { rendererRuntime } from "../renderer-runtime";
  * its name in the heavier weight, until a look moves the mark past the save.
  * The first list this Mac reads with unread plans marks every plan in it
  * not yet looked at where it stands, once, so the plans from before are not
- * all unread at once; a plan arriving later with no mark, from another Mac,
- * is unread once anything has been saved in it since it started.
+ * all unread at once, and so does a list with no plan marked, another
+ * account's; a plan arriving later with no mark, from another Mac, is
+ * unread once anything has been saved in it since it started.
  */
 
 /** How long the plan is open before the developer has looked at it. */
@@ -215,9 +216,10 @@ export function usePlanLooks(plan: Plan | undefined): PlanLooks {
  * Whether each of the sidebar's plans is unread: saved after its mark, or,
  * with none, after it started, and not the plan the developer is watching,
  * whose saves are seen as they land. The first read list marks every plan
- * in it no look has marked, once, and nothing is unread until it has; a
- * `staged` run draws nothing unread and seeds nothing, so its frames never
- * wear a developer's marks.
+ * in it no look has marked, and so does a read list none of whose plans has
+ * a mark, which is an account this Mac has not listed before; nothing is
+ * unread until it has. A `staged` run draws nothing unread and seeds
+ * nothing, so its frames never wear a developer's marks.
  */
 export function useUnreadPlans(
   plans: readonly PlanSummary[],
@@ -226,7 +228,8 @@ export function useUnreadPlans(
   const looks = useAtomValue(looksAtom);
   const keep = useAtomSet(looksAtom);
   const watched = useAtomValue(watchedAtom);
-  const seeding = !staged && listRead && !looks.seeded;
+  const known = plans.some((plan) => looks.marks[plan.id] !== undefined);
+  const seeding = !staged && listRead && plans.length > 0 && !(looks.seeded && known);
 
   // Note that the seeding runs once the list is a read one, because the
   // empty list before the first read would mark nothing and count as done,
@@ -244,6 +247,7 @@ export function useUnreadPlans(
   return (plan) =>
     !staged &&
     looks.seeded &&
+    known &&
     plan.id !== watched &&
     plan.updatedAt > (looks.marks[plan.id] ?? plan.createdAt);
 }

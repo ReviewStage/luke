@@ -259,9 +259,10 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   being looked at is never unread, so a save landing on it while open
   changes nothing. The first list this Mac reads after unread plans arrived
   marks every plan in it no look had marked at its last save, once, so the
-  plans from before are not all unread at once; a plan arriving later with
-  no mark, from another Mac, is unread once anything has been saved in it
-  since it started.
+  plans from before are not all unread at once, and so does a list none of
+  whose plans has a mark, which is another account's; a plan arriving later
+  with no mark, from another Mac, is unread once anything has been saved in
+  it since it started.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
