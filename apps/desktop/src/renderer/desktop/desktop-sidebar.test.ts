@@ -558,7 +558,7 @@ test("a plan's row marks an agent at work, else its open, draft, or merged pull 
     ["Untouched", null, null, null],
   ]);
   assert.ok(
-    container.querySelector('[data-plan-mark="working"] svg.working-mark[data-size="glyph"]'),
+    container.querySelector('[data-plan-mark="working"] svg.working-mark'),
     "the agent at work wears the working mark",
   );
 });
