@@ -13,7 +13,12 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_CURSOR_START, INBOX_KIND, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_CURSOR_START,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+} from "@sidecar/hosted/inbox-wire";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
@@ -4161,8 +4166,10 @@ test("the Inbox tab counts what waits on the developer after its name, dimmed an
     agentId: RUNNING_AGENT.id,
     key: id.slice(-4),
     revision: 1,
-    kind: INBOX_KIND.QUESTION,
+    version: INBOX_WIRE_VERSION,
     title: "What should the email say?",
+    blocks: [],
+    response: { type: INBOX_RESPONSE.TEXT },
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1,

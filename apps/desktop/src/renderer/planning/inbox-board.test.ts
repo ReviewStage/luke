@@ -10,13 +10,17 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
+  INBOX_BLOCK,
   INBOX_CURSOR_START,
-  INBOX_KIND,
+  INBOX_FIELD,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxItem,
+  inboxItemSchema,
 } from "@sidecar/hosted/inbox-wire";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
@@ -40,11 +44,15 @@ const AGENT: CodingAgentSummary = {
 };
 
 /** An item of the agent's, open, as the service answers one. */
-function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id" | "kind" | "title">): InboxItem {
+function item(
+  overrides: Partial<InboxItem> & Pick<InboxItem, "id" | "response" | "title">,
+): InboxItem {
   return {
     agentId: AGENT.id,
     key: "item",
     revision: 1,
+    version: INBOX_WIRE_VERSION,
+    blocks: [],
     needsReply: true,
     status: INBOX_STATUS.OPEN,
     postedAt: 1_000,
@@ -56,21 +64,78 @@ function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id" | "kind" | "t
 const QUEUE = item({
   id: "a1b2c3d4-0000-4000-8000-000000000001",
   key: "invite-queue",
-  kind: INBOX_KIND.CHOICE,
   title: "Which queue sends the invitation emails?",
-  details: "The repo already runs **Postgres**.",
-  options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
-  recommended: "Postgres outbox",
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." }],
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
+    recommended: "Postgres outbox",
+  },
 });
 
 const SETTINGS = item({
   id: "a1b2c3d4-0000-4000-8000-000000000002",
   key: "branch-protection",
-  kind: INBOX_KIND.TASK,
   title: "Require a review on `main`",
+  blocks: [
+    {
+      type: INBOX_BLOCK.LINK,
+      url: "https://github.com/acme/relay/settings/branches",
+      label: "Branch rules",
+    },
+    { type: INBOX_BLOCK.LINK, url: "https://example.test/why", label: "Why" },
+  ],
+  response: { type: INBOX_RESPONSE.TASK },
   needsReply: false,
   postedAt: 2_000,
   updatedAt: 2_000,
+});
+
+const CHANNELS = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000004",
+  key: "channels",
+  title: "Which channels send the invitation?",
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
+    multiple: true,
+  },
+});
+
+const SMTP = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000005",
+  key: "smtp",
+  title: "SMTP settings",
+  response: {
+    type: INBOX_RESPONSE.FORM,
+    fields: [
+      { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+      { type: INBOX_FIELD.NUMBER, label: "Port" },
+      { type: INBOX_FIELD.SELECT, label: "Security", options: ["TLS", "STARTTLS"] },
+      { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+    ],
+  },
+});
+
+const RENAMED = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000006",
+  key: "renamed",
+  title: "The migration renamed the invites table",
+  response: { type: INBOX_RESPONSE.NONE },
+  needsReply: false,
+});
+
+/** An item a newer service wrote, with a block and a response this build does not know, as the window reads it. */
+const NEWER = Schema.decodeUnknownSync(inboxItemSchema)({
+  ...item({
+    id: "a1b2c3d4-0000-4000-8000-000000000007",
+    key: "newer",
+    title: "Pick a time",
+    response: { type: INBOX_RESPONSE.NONE },
+  }),
+  version: INBOX_WIRE_VERSION + 1,
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Before Friday." }, { type: "image" }],
+  response: { type: "schedule" },
 });
 
 const roots: Root[] = [];
@@ -78,7 +143,11 @@ const roots: Root[] = [];
 afterEach(() => {
   for (const root of roots.splice(0)) act(() => root.unmount());
   document.body.innerHTML = "";
+  opened.splice(0);
 });
+
+/** The pages a link block was pressed to open on GitHub, in order. */
+const opened: string[] = [];
 
 /**
  * The plan's agents over a service whose inbox answers each read with the
@@ -128,7 +197,12 @@ function Tab({
 }) {
   const inbox = usePlanInbox({ planId, shown: true, agents });
   return chosen
-    ? createElement(InboxBoard, { control: inbox, agents, onOpenAgent: () => undefined })
+    ? createElement(InboxBoard, {
+        control: inbox,
+        agents,
+        onOpenAgent: () => undefined,
+        openGitHub: (url) => opened.push(url),
+      })
     : null;
 }
 
@@ -189,6 +263,16 @@ function type(box: HTMLTextAreaElement | null, words: string): void {
   });
 }
 
+/** Types into a field as the developer does, through React's own value setter. */
+function typeInto(box: HTMLInputElement | undefined, words: string): void {
+  assert.ok(box);
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(box, words);
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
 /** The service's answer taking what was sent: the item answered as sent. */
 const taking =
   (standing: InboxItem) =>
@@ -198,7 +282,8 @@ const taking =
       status: INBOX_STATUS.ANSWERED,
       answer: {
         reply: sent.reply,
-        ...(sent.choice === undefined ? undefined : { choice: sent.choice }),
+        ...(sent.choices === undefined ? undefined : { choices: sent.choices }),
+        ...(sent.values === undefined ? undefined : { values: sent.values }),
         ...(sent.note === undefined ? undefined : { note: sent.note }),
       },
       updatedAt: 9_000,
@@ -207,12 +292,12 @@ const taking =
   });
 
 it.effect(
-  "the plan's open items are drawn the oldest first with their context and controls, a choice's recommendation marked and a task its agent need not hear back from saying so; a later read adds what landed",
+  "the plan's open items are drawn the oldest first with their blocks and controls, a choice's recommendation marked, a link opening on GitHub and one elsewhere inert with its address, and a task its agent need not hear back from saying so; a later read adds what landed",
   () =>
     Effect.gen(function* () {
       const later = item({
         id: "a1b2c3d4-0000-4000-8000-000000000003",
-        kind: INBOX_KIND.APPROVAL,
+        response: { type: INBOX_RESPONSE.APPROVAL },
         title: "Drop the legacy table?",
         postedAt: 3_000,
         updatedAt: 3_000,
@@ -243,9 +328,15 @@ it.effect(
         ["Postgres outbox · RecommendedNo new service.", "Redis"],
       );
       assert.equal(
-        card(page, QUEUE.id).querySelector("[data-inbox-details]")?.textContent,
+        card(page, QUEUE.id).querySelector("[data-inbox-markdown]")?.textContent,
         "The repo already runs Postgres.",
       );
+      const links = card(page, SETTINGS.id).querySelectorAll("[data-inbox-link]");
+      assert.equal(links.length, 2);
+      press(links[0]?.querySelector("a"));
+      assert.deepEqual(opened, ["https://github.com/acme/relay/settings/branches"]);
+      assert.equal(links[1]?.querySelector("a"), null, "a page off GitHub is no press");
+      assert.equal(links[1]?.textContent, "Why https://example.test/why");
       assert.ok(card(page, SETTINGS.id).querySelector("[data-inbox-quiet]"));
       assert.equal(card(page, QUEUE.id).querySelector("[data-inbox-quiet]"), null);
       assert.ok(buttonNamed(card(page, later.id), "Approve"));
@@ -274,7 +365,7 @@ it.effect(
           itemId: QUEUE.id,
           revision: 1,
           reply: INBOX_REPLY.CHOSE,
-          choice: "Redis",
+          choices: ["Redis"],
           note: "Keep it simple.",
           clientKey: undefined,
         },
@@ -473,5 +564,90 @@ it.effect(
       change({ items: [{ ...QUEUE, revision: 2, updatedAt: 2_000 }], cursor: "b" });
       yield* settle;
       assert.equal(card(page, QUEUE.id).querySelector("textarea")?.value, "");
+    }),
+);
+
+it.effect(
+  "a choice that allows several keeps every option pressed and sends them all; a form's fields are each the control of their type and send as the form's values; an item asking nothing is acknowledged by one press",
+  () =>
+    Effect.gen(function* () {
+      const { agents, sent } = service(
+        [{ items: [CHANNELS, SMTP, RENAMED], cursor: "a" }],
+        [taking(CHANNELS), taking(SMTP), taking(RENAMED)],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+
+      const channels = card(page, CHANNELS.id);
+      assert.ok(channels.querySelector('[data-inbox-choice="multiple"]'));
+      press(buttonNamed(channels, "Email"));
+      press(buttonNamed(channels, "SMS"));
+      assert.equal(buttonNamed(channels, "Email").getAttribute("aria-pressed"), "true");
+      assert.equal(buttonNamed(channels, "SMS").getAttribute("aria-pressed"), "true");
+      press(buttonNamed(channels, "Send to agent"));
+      yield* settle;
+
+      const smtp = card(page, SMTP.id);
+      assert.equal(buttonNamed(smtp, "Send to agent").disabled, true, "Host is required");
+      const inputs = smtp.querySelectorAll<HTMLInputElement>("input.settings-input");
+      assert.deepEqual(
+        [...inputs].map((input) => input.type),
+        ["text", "number"],
+      );
+      typeInto(inputs[0], "smtp.acme.test");
+      typeInto(inputs[1], "587");
+      press(buttonNamed(smtp, "STARTTLS"));
+      press(smtp.querySelector('[role="switch"]'));
+      assert.equal(buttonNamed(smtp, "Send to agent").disabled, false);
+      press(buttonNamed(smtp, "Send to agent"));
+      yield* settle;
+
+      const renamed = card(page, RENAMED.id);
+      assert.equal(
+        renamed.querySelectorAll("button.toolbar-button").length,
+        0,
+        "nothing to hold back",
+      );
+      press(buttonNamed(renamed, "Got it"));
+      yield* settle;
+
+      assert.deepEqual(
+        sent.map(({ clientKey: _clientKey, ...answer }) => answer),
+        [
+          { itemId: CHANNELS.id, revision: 1, reply: INBOX_REPLY.CHOSE, choices: ["Email", "SMS"] },
+          {
+            itemId: SMTP.id,
+            revision: 1,
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [
+              { label: "Host", value: "smtp.acme.test" },
+              { label: "Port", value: 587 },
+              { label: "Security", value: "STARTTLS" },
+              { label: "Verify certificate", value: true },
+            ],
+          },
+          { itemId: RENAMED.id, revision: 1, reply: INBOX_REPLY.ACKNOWLEDGED },
+        ],
+      );
+      assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
+    }),
+);
+
+it.effect(
+  "an item a newer service wrote draws the blocks this build knows, a line naming a newer Luke for the one it does not, and no controls for a response it does not know, while the rest of the inbox reads",
+  () =>
+    Effect.gen(function* () {
+      const { agents } = service([{ items: [NEWER, SETTINGS], cursor: "a" }], []);
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const newer = card(page, NEWER.id);
+      assert.equal(newer.querySelector("[data-inbox-markdown]")?.textContent, "Before Friday.");
+      assert.deepEqual(
+        [...newer.querySelectorAll("[data-inbox-unknown]")].map((line) => line.textContent),
+        ["Open this in a newer Luke to see the rest.", "Answer this in a newer Luke."],
+      );
+      assert.equal(newer.querySelector("textarea"), null);
+      assert.equal(newer.querySelectorAll("button.primary-button").length, 0);
+      assert.ok(buttonNamed(card(page, SETTINGS.id), "Done"));
     }),
 );

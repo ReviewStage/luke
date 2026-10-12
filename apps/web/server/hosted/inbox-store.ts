@@ -1,12 +1,13 @@
 import {
   INBOX_BOUNDS,
-  INBOX_KIND,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxItem,
   type InboxPost,
   type InboxReply,
-  inboxOptionSchema,
+  inboxBlockSchema,
   inboxReplySchema,
+  inboxResponseSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
@@ -26,7 +27,9 @@ import { InstantColumnSchema } from "./store/database.js";
  * one row per agent and key: posting under a key it used before writes
  * that row again, moves its revision on, and opens it again whether it was
  * answered or closed, so the agent keeps an item current rather than
- * posting it twice. A post counts the agent's open items against the bound
+ * posting it twice. A row keeps the item's blocks and its response as the
+ * wire's own JSON under the version of the vocabulary that wrote them,
+ * decoded on every read against the wire's closed shapes. A post counts the agent's open items against the bound
  * under a lock on the agent's own row, so two posts of one step cannot both
  * slip under it. An answer is taken only by the revision it names and only
  * while the item is open, so an answer to an item the agent has since
@@ -77,11 +80,10 @@ const INBOX_COLUMNS = {
   agentId: inboxItem.agentId,
   key: inboxItem.key,
   revision: inboxItem.revision,
-  kind: inboxItem.kind,
+  version: inboxItem.version,
   title: inboxItem.title,
-  details: inboxItem.details,
-  options: inboxItem.options,
-  recommended: inboxItem.recommended,
+  blocks: inboxItem.blocks,
+  response: inboxItem.response,
   needsReply: inboxItem.needsReply,
   status: inboxItem.status,
   answer: inboxItem.answer,
@@ -96,11 +98,10 @@ const InboxRowSchema = Schema.Struct({
   agentId: Schema.String,
   key: Schema.String,
   revision: Schema.Number,
-  kind: Schema.Literals(Object.values(INBOX_KIND)),
+  version: Schema.Number,
   title: Schema.String,
-  details: Schema.NullOr(Schema.String),
-  options: Schema.NullOr(Schema.Array(inboxOptionSchema)),
-  recommended: Schema.NullOr(Schema.String),
+  blocks: Schema.Array(inboxBlockSchema),
+  response: inboxResponseSchema,
   needsReply: Schema.Boolean,
   status: Schema.Literals(Object.values(INBOX_STATUS)),
   answer: Schema.NullOr(inboxReplySchema),
@@ -120,11 +121,10 @@ function storedItem(row: InboxRow): StoredInboxItem {
       agentId: row.agentId,
       key: row.key,
       revision: row.revision,
-      kind: row.kind,
+      version: row.version,
       title: row.title,
-      ...(row.details === null ? undefined : { details: row.details }),
-      ...(row.options === null ? undefined : { options: row.options }),
-      ...(row.recommended === null ? undefined : { recommended: row.recommended }),
+      blocks: row.blocks,
+      response: row.response,
       needsReply: row.needsReply,
       status: row.status,
       ...(row.answer === null ? undefined : { answer: row.answer }),
@@ -173,11 +173,9 @@ const PostWriteSchema = Schema.Struct({
   planId: Schema.String,
   agentId: Schema.String,
   key: Schema.String,
-  kind: Schema.Literals(Object.values(INBOX_KIND)),
   title: Schema.String,
-  details: Schema.NullOr(Schema.String),
-  options: Schema.NullOr(Schema.Array(inboxOptionSchema)),
-  recommended: Schema.NullOr(Schema.String),
+  blocks: Schema.Array(inboxBlockSchema),
+  response: inboxResponseSchema,
   needsReply: Schema.Boolean,
   now: Schema.Date,
 });
@@ -188,11 +186,10 @@ const upsertItem = SqlSchema.findOne({
   Result: InboxRowSchema,
   execute: (write) => {
     const posted = {
-      kind: write.kind,
+      version: INBOX_WIRE_VERSION,
       title: write.title,
-      details: write.details,
-      options: write.options,
-      recommended: write.recommended,
+      blocks: write.blocks,
+      response: write.response,
       needsReply: write.needsReply,
       status: INBOX_STATUS.OPEN,
       answer: null,
@@ -406,11 +403,9 @@ export function postInboxItem(
         const row = yield* upsertItem({
           ...agent,
           key: post.key,
-          kind: post.kind,
           title: post.title,
-          details: post.details ?? null,
-          options: post.kind === INBOX_KIND.CHOICE ? (post.options ?? []) : null,
-          recommended: post.kind === INBOX_KIND.CHOICE ? (post.recommended ?? null) : null,
+          blocks: post.blocks ?? [],
+          response: post.response,
           needsReply: post.needsReply ?? true,
           now: yield* DateTime.nowAsDate,
         }).pipe(Effect.catchTag("NoSuchElementError", Effect.die));

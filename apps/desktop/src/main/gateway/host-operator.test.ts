@@ -289,7 +289,7 @@ it.effect(
 );
 
 it.effect(
-  "an inbox answer's option and note travel to the host with the answer, and an answer naming neither carries no such field",
+  "an inbox answer's options, a form's values, and the note travel to the host with the answer, and an answer naming none carries no such field",
   () =>
     Effect.gen(function* () {
       const { client, requests } = recordingClient();
@@ -299,19 +299,32 @@ it.effect(
         itemId,
         revision: 2,
         reply: INBOX_REPLY.CHOSE,
-        choice: "Keep the old column",
+        choices: ["Keep the old column", "Backfill first"],
         note: "Drop it after the backfill.",
         clientKey: "answer-1",
+      };
+      const filled = {
+        itemId,
+        revision: 2,
+        reply: INBOX_REPLY.SUBMITTED,
+        values: [
+          { label: "Host", value: "smtp.acme.test" },
+          { label: "Port", value: 587 },
+          { label: "Verify certificate", value: true },
+        ],
+        clientKey: "answer-3",
       };
       const approved = { itemId, revision: 3, reply: INBOX_REPLY.APPROVED, clientKey: "answer-2" };
 
       yield* operator.codingAgentInboxAnswer(chose);
+      yield* operator.codingAgentInboxAnswer(filled);
       yield* operator.codingAgentInboxAnswer(approved);
 
       assert.deepEqual(
         requests.map((request) => [request.method, request.params]),
         [
           [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, chose],
+          [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, filled],
           [GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, approved],
         ],
       );

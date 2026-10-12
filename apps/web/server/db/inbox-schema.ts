@@ -1,4 +1,9 @@
-import type { InboxKind, InboxOption, InboxReply, InboxStatus } from "@sidecar/hosted/inbox-wire";
+import type {
+  InboxBlock,
+  InboxReply,
+  InboxResponse,
+  InboxStatus,
+} from "@sidecar/hosted/inbox-wire";
 import {
   boolean,
   index,
@@ -20,14 +25,19 @@ import { plan } from "./plan-schema.js";
  * The agent names the item by its key, unique per agent, so posting under
  * the same key again is a write of this row rather than a second one: the
  * revision moves on, the item opens again, and what it asked replaces what
- * it asked before. The kind, title, details, options, and recommendation
- * are what the agent posted last; `needs_reply` is whether the agent is to
- * hear the answer as a message. The status is open until the developer
- * answers it, which writes the answer and the key the client sent it under,
- * so an answer sent again after a lost reply is taken once, or until the
- * agent closes it, which writes why. The plan is the agent's, kept on the
- * row so a plan's inbox is read by one index. The row goes with its
- * account, its plan, and its agent alike.
+ * it asked before. The title, the blocks of context, and the response the
+ * item asks for are what the agent posted last, the blocks and the response
+ * as the wire's own JSON (`@sidecar/hosted/inbox-wire`), so a block type
+ * added later is a member of that JSON rather than a column; `needs_reply`
+ * is whether the agent is to hear the answer as a message. The status is
+ * open until the developer answers it, which writes the answer and the key
+ * the client sent it under, so an answer sent again after a lost reply is
+ * taken once, or until the agent closes it, which writes why. The plan is
+ * the agent's, kept on the row so a plan's inbox is read by one index. The
+ * row goes with its account, its plan, and its agent alike. The columns
+ * the fixed kinds stood in, `kind`, `details`, `options`, and
+ * `recommended`, are declared no longer and wait on their drop
+ * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
  */
 export const inboxItem = pgTable(
   "inbox_item",
@@ -46,14 +56,13 @@ export const inboxItem = pgTable(
     key: text("key").notNull(),
     /** Moved on by every change of the agent's, which an answer names so it answers the item it was shown. */
     revision: integer("revision").notNull(),
-    kind: text("kind").$type<InboxKind>().notNull(),
+    /** The version of the inbox vocabulary the blocks and the response were written in (`INBOX_WIRE_VERSION`). */
+    version: integer("version").notNull(),
     title: text("title").notNull(),
-    /** The context in Markdown; null where the agent wrote none. */
-    details: text("details"),
-    /** A choice's options; null on any other kind. */
-    options: jsonb("options").$type<readonly InboxOption[]>(),
-    /** The option a choice recommends, by its label; null where it recommends none. */
-    recommended: text("recommended"),
+    /** The context under the title, as the wire's blocks; empty where the agent wrote none. */
+    blocks: jsonb("blocks").$type<readonly InboxBlock[]>().notNull(),
+    /** What the item asks of the developer, as the wire's response. */
+    response: jsonb("response").$type<InboxResponse>().notNull(),
     needsReply: boolean("needs_reply").notNull(),
     status: text("status").$type<InboxStatus>().notNull(),
     /** The developer's answer; null until they answer. */

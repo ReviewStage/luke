@@ -89,8 +89,9 @@ and deleting your account removes them all.
 **A plan's inbox.** When a coding agent you started on a plan needs a
 decision from you, or something only you can do such as changing a setting
 on GitHub, it posts an item to the plan's inbox on our service: its title,
-the context the agent wrote for it, and any options it offers, stored under
-your account and readable by our own operators, like the agent's transcript.
+the context the agent wrote for it as Markdown and links, and the way it asks
+to be answered, with any options or form fields it offers, stored under your
+account and readable by our own operators, like the agent's transcript.
 The agent can change or withdraw its items, and our service keeps each one
 as it last stood. When you answer an item in Luke, your Mac sends your answer
 and any note you write to our service, which stores it with the item and,

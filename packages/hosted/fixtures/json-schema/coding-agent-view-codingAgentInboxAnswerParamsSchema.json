@@ -17,11 +17,50 @@
         "declined",
         "answered",
         "done",
-        "not-done"
+        "not-done",
+        "submitted",
+        "acknowledged"
       ]
     },
-    "choice": {
-      "type": "string"
+    "choices": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 6
+    },
+    "values": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "additionalProperties": false
+      },
+      "maxItems": 8
     },
     "note": {
       "type": "string",

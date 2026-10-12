@@ -4,7 +4,14 @@ import {
   type CodingAgentTodos,
   codingAgentTodosInputSchema,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_TOOL, type InboxPost, inboxPostInputSchema } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_BLOCK,
+  INBOX_FIELD,
+  INBOX_RESPONSE,
+  INBOX_TOOL,
+  type InboxPost,
+  inboxPostInputSchema,
+} from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
@@ -235,14 +242,33 @@ function inboxPostView(input: WireValue | undefined): InboxPost | undefined {
   return Option.getOrUndefined(readPost(input));
 }
 
-/** A post's context and options as the row's body lists them, the recommended one saying so. */
+/** What a post asks, as the row's body lists it: a choice's options, the recommended one saying so, or a form's fields with their types. */
+function askLines(response: InboxPost["response"]): readonly string[] {
+  switch (response.type) {
+    case INBOX_RESPONSE.CHOICE:
+      return response.options.map((option) => {
+        const recommended = response.recommended === option.label ? " (recommended)" : "";
+        const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
+        return `- ${option.label}${recommended}${detail}`;
+      });
+    case INBOX_RESPONSE.FORM:
+      return response.fields.map((field) => {
+        const options =
+          field.type === INBOX_FIELD.SELECT ? `: ${(field.options ?? []).join(", ")}` : "";
+        const required = field.required === true ? ", required" : "";
+        return `- ${field.label} (${field.type}${required})${options}`;
+      });
+    default:
+      return [];
+  }
+}
+
+/** A post's context and what it asks as the row's body lists them: each block in turn, a link as its label and address, then the options or the fields. */
 function postLines(post: InboxPost): string {
-  const options = (post.options ?? []).map((option) => {
-    const recommended = post.recommended === option.label ? " (recommended)" : "";
-    const detail = option.detail === undefined ? "" : ` -- ${option.detail}`;
-    return `- ${option.label}${recommended}${detail}`;
-  });
-  return [post.details ?? "", ...options].filter((line) => line.trim() !== "").join("\n");
+  const blocks = (post.blocks ?? []).map((block) =>
+    block.type === INBOX_BLOCK.MARKDOWN ? block.text : `${block.label}: ${block.url}`,
+  );
+  return [...blocks, ...askLines(post.response)].filter((line) => line.trim() !== "").join("\n");
 }
 
 /**
