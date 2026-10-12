@@ -4,7 +4,7 @@ import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/m
 import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
-import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -58,11 +58,7 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../server/hosted/coding-agent-tools";
 import { END_CALL_TOOL } from "../server/hosted/end-call";
-import {
-  CODING_AGENT_DEFAULT_CHOICE,
-  modelCatalogOf,
-  type OfferedModel,
-} from "../server/hosted/model-catalog";
+import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { stampedEveEvent } from "./support/eve-events";

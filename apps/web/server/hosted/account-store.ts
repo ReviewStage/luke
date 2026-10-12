@@ -4,12 +4,12 @@ import { user } from "@sidecar/database/schemas/auth";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { type AccountPreferences, accountPreferencesFromStored } from "@sidecar/settings";
 import { eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { CODING_AGENT_DEFAULT_CHOICE } from "./model-catalog.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the

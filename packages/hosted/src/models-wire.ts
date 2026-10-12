@@ -29,6 +29,12 @@ import { countedNumber } from "./service-wire.js";
  * does not know, is sent none for the default.
  */
 
+/** What a first-time account starts an agent on, until it chooses. */
+export const CODING_AGENT_DEFAULT_CHOICE = {
+  model: "anthropic/claude-opus-5.5",
+  effort: "high",
+} as const;
+
 /** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
 export const MODEL_PROVIDER = {
   ANTHROPIC: "anthropic",

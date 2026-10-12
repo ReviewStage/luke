@@ -7,6 +7,7 @@ import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { count, eq } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { Duration, Effect } from "effect";
@@ -16,7 +17,6 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "../server/hosted/account-store";
-import { CODING_AGENT_DEFAULT_CHOICE } from "../server/hosted/model-catalog";
 
 /**
  * The account group's own reads and writes against a real Postgres dialect.

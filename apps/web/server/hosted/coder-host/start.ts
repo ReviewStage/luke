@@ -1,5 +1,6 @@
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { CODING_AGENT_DEFAULT_CHOICE } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { Effect, Option } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
@@ -23,7 +24,6 @@ import {
 } from "../http-effect.js";
 import {
   acceptedModelChoice,
-  CODING_AGENT_DEFAULT_CHOICE,
   type ModelCatalog,
   type ModelChoiceRefused,
 } from "../model-catalog.js";
