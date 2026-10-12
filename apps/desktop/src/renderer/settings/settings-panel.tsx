@@ -13,6 +13,7 @@ import {
   settingsNavRowId,
 } from "../settings-views";
 import { AccountSection } from "./account-section";
+import { ApiKeysSection } from "./api-keys-page";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsSection } from "./coding-agents-page";
 import type {
@@ -165,6 +166,10 @@ export function SettingsPanel({
 
       {view === SETTINGS_VIEW.CODING_AGENTS ? (
         <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      ) : null}
+
+      {view === SETTINGS_VIEW.API_KEYS ? (
+        <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
       {view === SETTINGS_VIEW.SHORTCUTS ? (

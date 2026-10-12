@@ -17,6 +17,9 @@ import {
   codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  type ProviderKeysAnswerView,
+  providerKeyRemoveParamsSchema,
+  providerKeySaveParamsSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -28,7 +31,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -38,7 +41,8 @@ import type { RunMode } from "./run-mode.js";
  * so the window's loop is one held read after another rather than a clock
  * of its own, and the loop ends when the window stops asking. Behind a
  * closed account gate, or on a run that sends nothing, every ask answers
- * unanswered.
+ * unanswered. A provider key passes through on its way to the service and
+ * is held nowhere here; no answer carries one back.
  */
 
 /** The service's side of the agents, as this concern asks it. */
@@ -55,6 +59,9 @@ export type CodingAgentClient = Pick<
   | "rename"
   | "stop"
   | "pullRequest"
+  | "readProviderKeys"
+  | "saveProviderKey"
+  | "removeProviderKey"
 >;
 
 export interface CodingAgentsDependencies {
@@ -110,6 +117,31 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.writeDefault(choice));
         return carried<CodingAgentDefaultAnswer>(answer);
+      }),
+    [GATEWAY_METHOD.PROVIDER_KEYS_READ]: () =>
+      Effect.map(asked(client.readProviderKeys()), (answer) =>
+        carried<ProviderKeysAnswerView>(answer),
+      ),
+    [GATEWAY_METHOD.PROVIDER_KEYS_SAVE]: (params) =>
+      Effect.gen(function* () {
+        // Note that the sentence names the shape and never the value, because the value is a key.
+        const save = yield* read(
+          providerKeySaveParamsSchema,
+          params,
+          "a save names a provider and a key",
+        );
+        const answer = yield* asked(client.saveProviderKey(save));
+        return carried<ProviderKeysAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: (params) =>
+      Effect.gen(function* () {
+        const removal = yield* read(
+          providerKeyRemoveParamsSchema,
+          params,
+          "a removal names a provider",
+        );
+        const answer = yield* asked(client.removeProviderKey(removal));
+        return carried<ProviderKeysAnswerView>(answer);
       }),
     [GATEWAY_METHOD.CODING_AGENTS_LIST]: (params) =>
       Effect.gen(function* () {

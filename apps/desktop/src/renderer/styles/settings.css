@@ -688,6 +688,39 @@
   font-size: 10px;
 }
 
+/* Settings › API keys: a provider's name and what is true of its key beside
+   the field a key is pasted into, the field taking whatever the row leaves it
+   and wrapping under the name where the row is narrow. The hint is the key's
+   own characters, so it reads in the code face; a status that asks for a hand
+   reads in the error colour. */
+.api-key-row .provider-mark {
+  width: 16px;
+  height: 16px;
+}
+
+.api-key-form {
+  min-width: 0;
+  flex: 1 1 260px;
+}
+
+.api-key-form .settings-input {
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 6px 10px;
+}
+
+.api-key-hint {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.api-key-trouble {
+  color: var(--error-text);
+}
+
+.api-key-error {
+  flex: 1 0 100%;
+}
+
 /* The Keyboard shortcuts page: a reference list more than a form, so its rows
    sit at a list's density rather than a form's, each the command's name in
    regular weight and its chord's caps in the one column every row's chord

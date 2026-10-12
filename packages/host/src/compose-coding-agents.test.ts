@@ -10,6 +10,11 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import {
+  PROVIDER_KEY_PROVIDER,
+  PROVIDER_KEY_STATUS,
+  type ProviderKeySummary,
+} from "@sidecar/hosted/provider-key-wire";
 import type { WireRecord } from "@sidecar/wire";
 import { Effect } from "effect";
 import { type CodingAgentClient, composeCodingAgents } from "./compose-coding-agents.js";
@@ -51,6 +56,18 @@ const PUBLISHED = {
     deletions: 14,
     changedFiles: 6,
   },
+};
+
+/** A synthetic key, as Settings carries it once; nothing below may answer it back. */
+const PROVIDER_KEY = "sk-ant-api03-synthetic-0000000000000000wxyz";
+
+/** What the service answers of a kept key: never the key. */
+const KEPT: ProviderKeySummary = {
+  provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+  hint: "sk-ant-…wxyz",
+  addedAt: 1,
+  status: PROVIDER_KEY_STATUS.VERIFIED,
+  statusAt: 1,
 };
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -124,6 +141,21 @@ function fakeService() {
       Effect.sync(() => {
         asked.push(`pull-request:${agentId}`);
         return PUBLISHED;
+      }),
+    readProviderKeys: () =>
+      Effect.sync(() => {
+        asked.push("keys");
+        return { keys: [KEPT] };
+      }),
+    saveProviderKey: (save) =>
+      Effect.sync(() => {
+        asked.push(`save:${save.provider}:${save.key === PROVIDER_KEY ? "the key" : "another"}`);
+        return { keys: [KEPT] };
+      }),
+    removeProviderKey: (removal) =>
+      Effect.sync(() => {
+        asked.push(`remove:${removal.provider}`);
+        return { keys: [] };
       }),
   };
   return { client, asked };
@@ -290,5 +322,37 @@ it.effect(
       );
       assert.deepEqual(signedOut.asked, []);
       assert.deepEqual(offline.asked, []);
+    }),
+);
+
+it.effect(
+  "a provider key passes through to the service once and is answered back as its hint alone, and a save the schema refuses is refused in words that hold no key",
+  () =>
+    Effect.gen(function* () {
+      const { call, asked } = yield* subject();
+
+      const read = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_READ);
+      const saved = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
+        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+        key: PROVIDER_KEY,
+      });
+      const removed = yield* call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, {
+        provider: PROVIDER_KEY_PROVIDER.ANTHROPIC,
+      });
+      const refused = yield* Effect.flip(
+        call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, { provider: "google", key: PROVIDER_KEY }),
+      );
+
+      assert.deepEqual(read, { keys: [KEPT] });
+      assert.deepEqual(saved, { keys: [KEPT] });
+      assert.deepEqual(removed, { keys: [] });
+      assert.ok(!JSON.stringify([read, saved, removed]).includes(PROVIDER_KEY));
+      assert.equal(refused._tag, "InvalidParamsRefusal");
+      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
+      assert.deepEqual(asked, [
+        "keys",
+        `save:${PROVIDER_KEY_PROVIDER.ANTHROPIC}:the key`,
+        `remove:${PROVIDER_KEY_PROVIDER.ANTHROPIC}`,
+      ]);
     }),
 );

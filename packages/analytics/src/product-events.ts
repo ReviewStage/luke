@@ -215,6 +215,7 @@ export const PRODUCT_SETTINGS_VIEW = {
   CONNECTIONS: "connections",
   MEMORY: "memory",
   CODING_AGENTS: "coding_agents",
+  API_KEYS: "api_keys",
 } as const;
 
 export type ProductSettingsView =

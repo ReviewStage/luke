@@ -72,11 +72,19 @@ test("a row a page is not drawing is not offered", () => {
   assert.ok(!signedOut.includes("Sign out"));
   assert.ok(!signedOut.includes("Delete account"));
 
-  // Voice runs on the account alone, so no row offers a key for it and no
-  // key-shaped query finds one.
+  // Voice runs on the account alone, so no row offers a key for it: the one
+  // key-shaped query's results are the coding agents' own keys, on their page.
   const hosted = settingsSearchEntries(searchInput());
-  assert.ok(!labels(hosted).includes("OpenAI API key"));
-  assert.deepEqual(labels(found(searchSettings(hosted, "openai"))), []);
+  const keyed = found(searchSettings(hosted, "openai api key"));
+  assert.deepEqual(labels(keyed), ["OpenAI API key"]);
+  assert.deepEqual(
+    keyed.map((entry) => entry.page),
+    [SETTINGS_VIEW.API_KEYS],
+  );
+  const signedOutKeys = found(
+    searchSettings(settingsSearchEntries(searchInput({ accountDrawn: false })), "api key"),
+  );
+  assert.deepEqual(labels(signedOutKeys), [], "no key row without an account to hold it");
 });
 
 test("ids and labels are unique, so a result names exactly one row", () => {

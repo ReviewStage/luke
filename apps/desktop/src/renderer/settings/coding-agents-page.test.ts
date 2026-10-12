@@ -3,7 +3,13 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -74,6 +80,10 @@ let refuseWrites = false;
 let refuseModels = false;
 /** Whether the default read is answered with a failure rather than the stored choice. */
 let refuseDefaultRead = false;
+/** The providers the account holds a key of its own for, as the keys read answers them. */
+let ownKeys: readonly ModelProvider[] = [];
+/** How the provider last answered each of those keys. */
+let ownKeyStatus: ProviderKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -99,6 +109,18 @@ function answer(request: Act): Promise<ActOutcome> {
           refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: catalog },
         ),
       );
+    case ACT_KIND.PROVIDER_KEYS_READ:
+      return Promise.resolve(
+        done({
+          keys: ownKeys.map((provider) => ({
+            provider,
+            hint: "sk-…test",
+            addedAt: 1,
+            status: ownKeyStatus,
+            statusAt: 1,
+          })),
+        }),
+      );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
         return Promise.resolve(done({ failure: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE }));
@@ -120,6 +142,8 @@ beforeEach(() => {
   refuseWrites = false;
   refuseModels = false;
   refuseDefaultRead = false;
+  ownKeys = [];
+  ownKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -190,7 +214,11 @@ test("the page reads the default and the models as it opens, and draws the model
 
   assert.deepEqual(
     sent.map((request) => request.kind),
-    [ACT_KIND.CODING_AGENTS_DEFAULT_READ, ACT_KIND.CODING_AGENTS_MODELS],
+    [
+      ACT_KIND.CODING_AGENTS_DEFAULT_READ,
+      ACT_KIND.PROVIDER_KEYS_READ,
+      ACT_KIND.CODING_AGENTS_MODELS,
+    ],
   );
   assert.equal(chip(page).textContent, "Opus 5.5");
   assert.ok(chip(page).querySelector("svg.provider-mark"), "Claude Code's mark");
@@ -445,5 +473,25 @@ test("the model menu lists base models only, and the Fast switch under it stores
   assert.match(
     fastSwitch(reopened).closest(".settings-row")?.textContent ?? "",
     /No fast version of Sonnet 5\.5/u,
+  );
+});
+
+test("the model row says the default runs on the account's own key where the provider accepted one, and that one it did not needs a hand", async () => {
+  ownKeys = [MODEL_PROVIDER.ANTHROPIC];
+  const own = await mount();
+  ownKeys = [MODEL_PROVIDER.OPENAI];
+  const luke = await mount();
+  ownKeys = [MODEL_PROVIDER.ANTHROPIC];
+  ownKeyStatus = PROVIDER_KEY_STATUS.UNREADABLE;
+  const unusable = await mount();
+
+  const note = (page: HTMLElement) =>
+    page.querySelector(".settings-picker-row .settings-copy small, .settings-copy small")
+      ?.textContent;
+  assert.equal(note(own), "What a click on Start runs an agent on, on your own Anthropic key.");
+  assert.equal(note(luke), "What a click on Start runs an agent on.");
+  assert.equal(
+    note(unusable),
+    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
   );
 });

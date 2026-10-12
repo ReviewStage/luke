@@ -1,5 +1,11 @@
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
-import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -56,21 +62,49 @@ const PAGE_LINE = {
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
+/** A provider as the model row names the key it runs on. */
+const PROVIDER_NAME = {
+  [MODEL_PROVIDER.ANTHROPIC]: "Anthropic",
+  [MODEL_PROVIDER.OPENAI]: "OpenAI",
+} as const satisfies Record<ModelProvider, string>;
+
+/**
+ * What the model row says under its name: that the default runs on the
+ * account's own key where the provider last accepted it, and that the key
+ * needs a hand where it did not, since such a key fails the agent's steps
+ * rather than letting them fall back to Luke's.
+ */
+function modelRowNote(
+  provider: ModelProvider | undefined,
+  status: ProviderKeyStatus | undefined,
+): string {
+  const plain = "What a click on Start runs an agent on.";
+  if (provider === undefined || status === undefined) return plain;
+  const name = PROVIDER_NAME[provider];
+  return status === PROVIDER_KEY_STATUS.VERIFIED
+    ? `What a click on Start runs an agent on, on your own ${name} key.`
+    : `${plain} Your ${name} key needs attention in Settings › API keys.`;
+}
+
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
   choice,
   models,
   modelsFailed,
+  ownKeys,
   busy,
   onChange,
 }: {
   choice: ModelChoice;
   models: readonly CatalogModel[] | undefined;
   modelsFailed: boolean;
+  /** How each provider the account holds a key of its own for last answered it. */
+  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
   busy: boolean;
   onChange: (choice: ModelChoice) => void;
 }): React.JSX.Element {
   const listed = models?.find((model) => model.id === choice.model);
+  const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
@@ -97,7 +131,7 @@ function DefaultRows({
         copy={
           <>
             <strong>Default model</strong>
-            <small>What a click on Start runs an agent on.</small>
+            <small>{modelRowNote(listed?.provider, ownKey)}</small>
           </>
         }
         value={read.base}
@@ -224,6 +258,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
+  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
 
   // The page opening reads the default the service holds now, which a Start may just have written, and the models beside it.
   useEffect(() => {
@@ -243,6 +278,15 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
       () => {
         if (live) setReadFailed(true);
       },
+    );
+    // Which providers run on the account's own key, for the model row's note; a read that fails says nothing.
+    setOwnKeys(new Map());
+    act(ACT_KIND.PROVIDER_KEYS_READ).then(
+      (answer) => {
+        if (live && !("failure" in answer))
+          setOwnKeys(new Map(answer.keys.map((key) => [key.provider, key.status])));
+      },
+      () => undefined,
     );
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
@@ -290,6 +334,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
             choice={choice}
             models={models}
             modelsFailed={modelsFailed}
+            ownKeys={ownKeys}
             busy={busy}
             onChange={write}
           />

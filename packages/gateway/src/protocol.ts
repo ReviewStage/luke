@@ -70,6 +70,12 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_STOP: "codingAgents.stop",
   /** What one agent published: the branch it pushed and the pull request from it, as GitHub holds them now. */
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /** The account's own provider keys an agent runs on, read from the service now as hints and statuses; never a key. */
+  PROVIDER_KEYS_READ: "providerKeys.read",
+  /** One provider key saved on the service, the key carried once in the params; the keys as they then stand, or why nothing was kept. */
+  PROVIDER_KEYS_SAVE: "providerKeys.save",
+  /** One provider's key removed on the service; the keys as they then stand. */
+  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
