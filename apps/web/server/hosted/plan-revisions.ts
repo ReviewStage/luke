@@ -32,7 +32,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * The plan's one write (`plan-notes.ts`) records each save that changed the
  * plan here, inside the transaction that holds the plan's row, so the plan
  * and its history never disagree. A revision is the plan's content after it,
- * whole, so reading one or going back to one is a read and never a replay.
+ * whole, the template's fields or a document's text, so reading one or going
+ * back to one is a read and never a replay.
  * Saves the same writer makes one after another are one revision, moved on
  * by each: the notetaker's on one call, a coding agent's, or the developer's,
  * each while the revision's latest save is a few minutes old at most. A plan
@@ -68,12 +69,15 @@ export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
+/** A plan's content as a revision keeps it: the template's fields and assumptions, or the whole text of a plan that is one document. */
+export type RevisionContent = PlanContent | { readonly text: string };
+
 /** One save to record: the plan, its writer, its content before and after, and how many changes it made. */
 export interface PlanSaveRecord {
   readonly planId: string;
   readonly writer: PlanWriter;
-  readonly before: PlanContent;
-  readonly after: PlanContent;
+  readonly before: RevisionContent;
+  readonly after: RevisionContent;
   readonly changes: number;
   /** The plan's last save before this one, where it has been saved; none for a plan never written. */
   readonly savedBefore: Option.Option<Date>;
@@ -120,8 +124,9 @@ const insertRevision = SqlSchema.void({
     actor: Schema.Literals(Object.values(PLAN_ACTOR)),
     agentId: Schema.NullOr(Schema.String),
     liveSessionId: Schema.NullOr(Schema.String),
-    fields: planFieldsSchema,
+    fields: Schema.NullOr(planFieldsSchema),
     assumptions: Schema.Array(planAssumptionSchema),
+    document: Schema.NullOr(Schema.String),
     changes: Schema.Number,
     startedAt: Schema.Date,
     at: Schema.Date,
@@ -134,8 +139,9 @@ const moveRevisionOn = SqlSchema.void({
   Request: Schema.Struct({
     planId: Schema.String,
     seq: Schema.Number,
-    fields: planFieldsSchema,
+    fields: Schema.NullOr(planFieldsSchema),
     assumptions: Schema.Array(planAssumptionSchema),
+    document: Schema.NullOr(Schema.String),
     changes: Schema.Number,
     at: Schema.Date,
   }),
@@ -269,6 +275,13 @@ const findRevisionContents = SqlSchema.findAll({
       ),
 });
 
+/** The columns a revision keeps its content in: the fields and assumptions, or the text with neither. */
+function contentColumns(content: RevisionContent) {
+  return "text" in content
+    ? { fields: null, assumptions: [], document: content.text }
+    : { fields: content.fields, assumptions: content.assumptions, document: null };
+}
+
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
 function lastEditOf(row: LastEditRow): PlanLastEdit {
   return {
@@ -331,8 +344,7 @@ function recordEarlier(
           actor: PLAN_ACTOR.EARLIER,
           agentId: null,
           liveSessionId: null,
-          fields: record.before.fields,
-          assumptions: record.before.assumptions,
+          ...contentColumns(record.before),
           changes: 0,
           startedAt: at,
           at,
@@ -370,8 +382,7 @@ export function recordRevision(
       return yield* moveRevisionOn({
         planId: record.planId,
         seq: newest.value.seq,
-        fields: after.fields,
-        assumptions: after.assumptions,
+        ...contentColumns(after),
         changes: newest.value.changes + record.changes,
         at: now,
       });
@@ -383,8 +394,7 @@ export function recordRevision(
       actor: writer.actor,
       agentId: agentOf(writer),
       liveSessionId: callOf(writer),
-      fields: after.fields,
-      assumptions: after.assumptions,
+      ...contentColumns(after),
       changes: record.changes,
       startedAt: now,
       at: now,
@@ -435,19 +445,19 @@ export function listRevisions(
   });
 }
 
-/**
- * The account's plan's fields at one revision; nothing where it has no such
- * revision, the revision is of a plan that is one document, which has no
- * fields to put back, or the account owns no such plan.
- */
+/** The account's plan's content at one revision; nothing where it has no such revision, or the account owns no such plan. */
 export function readRevisionContent(
   userId: string,
   planId: string,
   seq: number,
-): Effect.Effect<Option.Option<PlanContent>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<RevisionContent>, RevisionFailure, SqlClient.SqlClient> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
-    Option.flatMap(Option.fromNullishOr(rows[0]), ({ fields, assumptions }) =>
-      fields === null ? Option.none() : Option.some({ fields, assumptions }),
+    Option.map(
+      Option.fromNullishOr(rows[0]),
+      ({ fields, assumptions, document }): RevisionContent =>
+        document !== null
+          ? { text: document }
+          : { fields: fields ?? EMPTY_PLAN_FIELDS, assumptions },
     ),
   );
 }

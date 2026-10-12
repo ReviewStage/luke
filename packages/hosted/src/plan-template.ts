@@ -244,6 +244,53 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
   return `${blocks.join("\n\n")}\n`;
 }
 
+/** A section of the template as one document holds it: its heading over its blocks, or its heading alone while it holds nothing. */
+function documentSection(heading: string, blocks: readonly string[]): string {
+  return blocks.length === 0 ? `## ${heading}` : section(heading, blocks);
+}
+
+/** A text answer's blocks: the answer, contained, or none while it is null. */
+function answerBlocks(value: string | null): readonly string[] {
+  return value === null ? [] : [contained(value)];
+}
+
+/** A list's blocks: one list of its items, or none while it is empty. */
+function listBlocks(items: readonly string[]): readonly string[] {
+  return items.length === 0 ? [] : [items.map((item) => listItem("- ", item)).join("\n")];
+}
+
+/**
+ * A plan's content as one free document: every section of the template in
+ * its order under its heading, no title line, and the assumptions as the
+ * last section. An answered section reads exactly as the body draws it, its
+ * text contained the same way; an unanswered core section is its heading
+ * alone, an unanswered optional one is left out, as the body leaves it out,
+ * and an empty list is its heading alone. This is what a plan kept as the
+ * template's fields becomes once it is one document.
+ */
+export function planDocumentOf(content: PlanContent): string {
+  const { fields } = content;
+  const optional = (heading: string, value: string | null) =>
+    value === null ? [] : [documentSection(heading, answerBlocks(value))];
+  const blocks = [
+    documentSection(PLAN_HEADING.CONTEXT, answerBlocks(fields.context)),
+    documentSection(PLAN_HEADING.GOAL, answerBlocks(fields.goal)),
+    documentSection(PLAN_HEADING.APPROACH, answerBlocks(fields.approach)),
+    documentSection(PLAN_HEADING.INTERFACES, answerBlocks(fields.interfaces)),
+    ...optional(PLAN_HEADING.ALTERNATIVES, fields.alternatives),
+    documentSection(PLAN_HEADING.HARD_PARTS, answerBlocks(fields.hardParts)),
+    documentSection(PLAN_HEADING.NOT_DOING, answerBlocks(fields.notDoing)),
+    ...optional(PLAN_HEADING.PLAN_OF_ATTACK, fields.planOfAttack),
+    documentSection(PLAN_HEADING.TESTING, answerBlocks(fields.testing)),
+    documentSection(PLAN_HEADING.OPEN_QUESTIONS, listBlocks(fields.openQuestions)),
+    documentSection(
+      PLAN_HEADING.ASSUMPTIONS,
+      listBlocks(content.assumptions.map((assumption) => assumption.text)),
+    ),
+  ];
+  return `${blocks.join("\n\n")}\n`;
+}
+
 /** The fields that hold one Markdown answer, as against the two lists. */
 export type PlanTextField = Exclude<
   PlanField,

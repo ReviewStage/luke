@@ -94,7 +94,9 @@ function fixture() {
         }),
       planningEdit: (params) =>
         Effect.sync(() => {
-          asked.push(`edit:${params.planId}:${params.edit.field}`);
+          asked.push(
+            `edit:${params.planId}:${"field" in params.edit ? params.edit.field : "document"}`,
+          );
           return { saved: true } as const;
         }),
       planningBoardSave: (params) =>

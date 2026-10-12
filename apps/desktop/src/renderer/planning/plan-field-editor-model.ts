@@ -1,7 +1,7 @@
 import {
   PLAN_EDIT_REFUSAL,
-  type PlanEditRequest,
   type PlanEditValue,
+  type PlanFieldEditRequest,
 } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_FIELD_HEADING,
@@ -76,7 +76,7 @@ export interface FieldEditor {
   /** The field as the developer's words are a change from: what the editor opened on, or their own last save. */
   readonly saved: EditBase;
   /** The save still out; absent while none is. */
-  readonly sending?: PlanEditRequest;
+  readonly sending?: PlanFieldEditRequest;
   readonly state: FieldEditorState;
   /** Whether the developer asked to close it, which it does once nothing is left to save. */
   readonly closing: boolean;
@@ -172,7 +172,7 @@ function draftOf(saved: EditBase): string {
 }
 
 /** The save an editor's words make: the field's base and what the words save as. */
-function requestOf(editor: FieldEditor): PlanEditRequest {
+function requestOf(editor: FieldEditor): PlanFieldEditRequest {
   const { saved, draft } = editor;
   switch (saved.field) {
     case PLAN_FIELD.OPEN_QUESTIONS:
@@ -191,7 +191,7 @@ function requestOf(editor: FieldEditor): PlanEditRequest {
 }
 
 /** The field as the service holds it of the developer's once a save lands. */
-function savedAs(request: PlanEditRequest): EditBase {
+function savedAs(request: PlanFieldEditRequest): EditBase {
   switch (request.field) {
     case PLAN_FIELD.OPEN_QUESTIONS:
       return { field: request.field, base: request.value };
@@ -239,14 +239,14 @@ export function editorTyped(editor: FieldEditor, draft: string): FieldEditor {
  * waits on the developer, or a failed save waits to be tried again, and
  * nothing where the words already are what the service holds of theirs.
  */
-export function pendingSave(editor: FieldEditor): PlanEditRequest | undefined {
+export function pendingSave(editor: FieldEditor): PlanFieldEditRequest | undefined {
   if (editor.sending !== undefined) return undefined;
   if (editor.state.kind !== FIELD_EDITOR_STATE.EDITING) return undefined;
   const request = requestOf(editor);
   return JSON.stringify(request.value) === JSON.stringify(request.base) ? undefined : request;
 }
 
-export function editorSent(editor: FieldEditor, request: PlanEditRequest): FieldEditor {
+export function editorSent(editor: FieldEditor, request: PlanFieldEditRequest): FieldEditor {
   return { ...editor, sending: request };
 }
 

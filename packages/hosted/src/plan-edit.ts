@@ -36,6 +36,11 @@ import {
  * developer's edit and the edit survives the point. A patch that does not
  * apply is a conflict, answered with what the field holds now, and nothing is
  * changed: the developer chooses whether their answer stands.
+ *
+ * A plan that is one document (`plan-document.ts`) is edited whole: the edit
+ * names the text the editor opened on and the text the developer wrote, and
+ * is taken the same way over the whole text, line by line, so a point Luke
+ * wrote in another section meanwhile survives the developer's edit.
  */
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
@@ -57,9 +62,20 @@ const ASSUMPTIONS = EffectSchema.Array(planAssumptionSchema).check(
 );
 
 /**
- * One edit of one field (POST `/api/plans/{id}/edit`): a text field's
- * answer, or a list field whole. The base is what the editor opened on, or
- * the developer's own last save since.
+ * A document's text as an edit names it, kept exactly as written and held to
+ * the plan's bound, so an edit is no larger a request than a field's. A text
+ * the developer's change lays past the bound over Luke's is the save's to
+ * refuse as too long.
+ */
+const DOCUMENT_TEXT = EffectSchema.String.check(
+  EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_BODY_CHARS),
+);
+
+/**
+ * One edit (POST `/api/plans/{id}/edit`): of one field, a text field's
+ * answer or a list field whole, or of a plan that is one document, its whole
+ * text. The base is what the editor opened on, or the developer's own last
+ * save since.
  */
 export const planEditRequestSchema = EffectSchema.Union([
   EffectSchema.Struct({
@@ -77,9 +93,18 @@ export const planEditRequestSchema = EffectSchema.Union([
     base: ASSUMPTIONS,
     value: ASSUMPTIONS,
   }),
+  EffectSchema.Struct({
+    document: EffectSchema.Struct({ base: DOCUMENT_TEXT, value: DOCUMENT_TEXT }),
+  }),
 ]);
 
 export type PlanEditRequest = typeof planEditRequestSchema.Type;
+
+/** An edit of one field, as against a document's whole text. */
+export type PlanFieldEditRequest = Exclude<PlanEditRequest, { readonly document: unknown }>;
+
+/** An edit of a document's whole text. */
+export type PlanDocumentEditRequest = Extract<PlanEditRequest, { readonly document: unknown }>;
 
 /** What a field holds, whatever its kind, as a conflict answers it. */
 export const planEditValueSchema = EffectSchema.Union([ANSWER_BASE, OPEN_QUESTIONS, ASSUMPTIONS]);
@@ -218,8 +243,44 @@ function appliedThrough<V extends PlanEditValue>(
   return { applied: lens.write(content, next) };
 }
 
+/**
+ * A document's lens. Note that each text is closed by one more line break
+ * than it holds, because a patch that adds after the last line leaves that
+ * line's own patch standing, and the break is taken off again once read.
+ */
+const DOCUMENT_LENS: FieldLens<string> = {
+  read: () => "",
+  write: (content) => content,
+  lines: (value) => `${value}\n`,
+  parsed: (lines) => (lines.endsWith("\n") ? lines.slice(0, -1) : lines),
+};
+
+/** A document edit taken into the text: the text with it, or the text as it stands where it conflicts. */
+export type PlanDocumentEditOutcome =
+  | { readonly applied: string }
+  | { readonly conflict: { readonly current: string } };
+
+/**
+ * The developer's edit of a document taken into the text as it stands now:
+ * their text where it still holds the base, their change laid over it where
+ * it moved since, or a conflict where it cannot be, or where they cleared a
+ * text that has changed since, which would strike words they never read.
+ */
+export function applyDocumentEdit(
+  current: string,
+  edit: PlanDocumentEditRequest,
+): PlanDocumentEditOutcome {
+  const { base, value } = edit.document;
+  if (current === base) return { applied: value };
+  const next = value === "" ? undefined : rebased(DOCUMENT_LENS, base, value, current);
+  return next === undefined ? { conflict: { current } } : { applied: next };
+}
+
 /** The edit taken into the content, rebased over what the field holds now where it moved since the edit's base. */
-export function applyDeveloperEdit(content: PlanContent, edit: PlanEditRequest): PlanEditOutcome {
+export function applyDeveloperEdit(
+  content: PlanContent,
+  edit: PlanFieldEditRequest,
+): PlanEditOutcome {
   switch (edit.field) {
     case PLAN_FIELD.OPEN_QUESTIONS:
       return appliedThrough(content, OPEN_QUESTIONS_LENS, edit.base, edit.value);

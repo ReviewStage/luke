@@ -1,5 +1,8 @@
+import { changedSections, withSectionWriters } from "@sidecar/hosted/plan-document";
 import {
   applyDeveloperEdit,
+  applyDocumentEdit,
+  type PlanDocumentEditRequest,
   type PlanEditRequest,
   type PlanEditValue,
 } from "@sidecar/hosted/plan-edit";
@@ -10,6 +13,7 @@ import {
   type PlanContent,
   type PlanNote,
   planBody,
+  planDocumentOf,
   withAgentEdit,
   withFieldWriters,
 } from "@sidecar/hosted/plan-template";
@@ -26,10 +30,16 @@ import { SqlClient } from "effect/unstable/sql";
 import {
   fieldWriterOf,
   type PlanWriter,
+  type RevisionContent,
   readRevisionContent,
   recordRevision,
 } from "./plan-revisions.js";
-import { readPlanForUpdate, type StoredPlan, savePlanDocument } from "./plan-store.js";
+import {
+  readPlanForUpdate,
+  type StoredPlan,
+  savePlanDocument,
+  savePlanText,
+} from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
@@ -102,8 +112,10 @@ export const PLAN_SAVE_REFUSAL = {
   NO_PLAN: "Not saved: this plan no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
   ARCHIVED: "Not saved: this plan is archived.",
-  /** The plan is one document, which takes none of the template's notes, field edits, or revisions. */
+  /** The plan is one document, which takes none of the template's notes or field edits. */
   DOCUMENT: "Not saved: this plan is a document, not the template's fields.",
+  /** The plan is the template's fields, which takes no edit of a document's text. */
+  NOT_DOCUMENT: "Not saved: this plan is the template's fields, not a document.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -146,6 +158,11 @@ const DOCUMENT_RESULT: PlanNotSaved = {
   reason: PLAN_SAVE_REFUSAL.DOCUMENT,
 };
 
+const NOT_DOCUMENT_RESULT: PlanNotSaved = {
+  status: PLAN_SAVE_STATUS.NOT_SAVED,
+  reason: PLAN_SAVE_REFUSAL.NOT_DOCUMENT,
+};
+
 /** Whether the plan as read under its lock is archived, which takes none of the developer's writes. */
 function archived(stored: StoredPlan): boolean {
   return stored.plan.archivedAt !== undefined;
@@ -158,6 +175,17 @@ interface PlanTaken {
   readonly agentEdits?: readonly PlanAgentEdit[];
 }
 
+/** What a change made of a document plan's text under its lock: the text to save, and how many changes it made. */
+interface TextTaken {
+  readonly text: string;
+  readonly changes: number;
+}
+
+/** A save under the plan's lock, before the change it took is named: the plan as saved and whether its words moved, or why nothing was saved. */
+type Written =
+  | { readonly status: typeof PLAN_SAVE_STATUS.SAVED; readonly plan: Plan; readonly moved: boolean }
+  | PlanNotSaved;
+
 /** One save under the plan's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
 type LockedSave<T> =
   | {
@@ -169,46 +197,41 @@ type LockedSave<T> =
     }
   | PlanNotSaved;
 
-/** A developer's edit that no longer lands in the field as it stands, with what the field holds; nothing was saved. */
+/** A developer's edit that no longer lands in the field or the text as it stands, with what that holds; nothing was saved. */
 interface PlanConflict {
   readonly status: typeof PLAN_SAVE_STATUS.CONFLICT;
   readonly current: PlanEditValue;
 }
 
+const TOO_LONG_RESULT: PlanNotSaved = {
+  status: PLAN_SAVE_STATUS.NOT_SAVED,
+  reason: PLAN_SAVE_REFUSAL.TOO_LONG,
+};
+
+/** The plan's last save before this one, where it has been saved, which a plan from before history records its first revision at. */
+function savedBeforeOf(stored: StoredPlan): Option.Option<Date> {
+  return stored.saved ? Option.some(new Date(stored.plan.updatedAt)) : Option.none();
+}
+
 /**
- * The plan read under its row's lock, the change taken into it, formatted,
- * and saved, all in one transaction. A change that moved the content is kept
- * as a revision under its writer, and each field it moved names the writer
- * as its last; one that moved nothing saves the document as it stood. A
- * change that refuses the plan as it found it answers its refusal, and
- * nothing is saved. A plan that is one document is refused before anything
- * is taken, since its text, not the fields, is what it reads as.
+ * Fields taken under the lock, formatted and saved: a change that moved
+ * them is kept as a revision under its writer, and each field it moved
+ * names the writer as its last; one that moved nothing saves the document
+ * as it stood.
  */
-function savedUnderLock<T extends PlanTaken, F>(
+function fieldsWritten(
   binding: PlanDocumentBinding,
   writer: PlanWriter,
-  take: (stored: StoredPlan, now: number) => Result.Result<T, F>,
-): Effect.Effect<LockedSave<T> | F, StoreFailure, SqlClient.SqlClient> {
-  const locked = Effect.gen(function* (): Effect.fn.Return<
-    LockedSave<T> | F,
-    StoreFailure,
-    SqlClient.SqlClient
-  > {
-    const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
-    if (Option.isNone(stored)) return NO_PLAN_RESULT;
-    // A plan that is one document keeps no fields, so a change to them would be written where nothing reads it.
-    if (stored.value.text !== undefined) return DOCUMENT_RESULT;
-    const { fields, plan, saved: savedBefore } = stored.value;
+  stored: StoredPlan,
+  taken: PlanTaken,
+  now: number,
+): Effect.Effect<Written, StoreFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const { fields, plan } = stored;
     const before: PlanContent = { fields, assumptions: plan.document.assumptions };
-    const now = yield* Clock.currentTimeMillis;
-    const outcome = take(stored.value, now);
-    if (Result.isFailure(outcome)) return outcome.failure;
-    const taken = outcome.success;
     const { content } = taken;
     const body = planBody({ name: plan.name }, content.fields);
-    if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) {
-      return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.TOO_LONG } as const;
-    }
+    if (body.length > PLAN_BOUNDS.MAX_BODY_CHARS) return TOO_LONG_RESULT;
     // A change that missed, or took a field to the words it held, leaves the plan as it was: no revision.
     const moved = changedFields(before, content).length > 0;
     if (moved) {
@@ -218,7 +241,7 @@ function savedUnderLock<T extends PlanTaken, F>(
         before,
         after: content,
         changes: taken.changes,
-        savedBefore: savedBefore ? Option.some(new Date(plan.updatedAt)) : Option.none(),
+        savedBefore: savedBeforeOf(stored),
       });
     }
     const saved = yield* savePlanDocument(
@@ -231,7 +254,7 @@ function savedUnderLock<T extends PlanTaken, F>(
         ...(moved
           ? {
               fieldWriters: withFieldWriters(
-                stored.value.fieldWriters,
+                stored.fieldWriters,
                 { before, after: content },
                 fieldWriterOf(writer),
                 now,
@@ -241,7 +264,82 @@ function savedUnderLock<T extends PlanTaken, F>(
       },
     );
     if (Option.isNone(saved)) return NO_PLAN_RESULT;
-    return { status: PLAN_SAVE_STATUS.SAVED, plan: saved.value, taken, moved };
+    return { status: PLAN_SAVE_STATUS.SAVED, plan: saved.value, moved };
+  });
+}
+
+/**
+ * A document plan's text taken under the lock and saved: held to the plan's
+ * bound, kept as a revision under its writer where it moved, and each
+ * section it moved naming the writer as its last; one that moved nothing
+ * saves the text as it stood.
+ */
+function textWritten(
+  binding: PlanDocumentBinding,
+  writer: PlanWriter,
+  stored: StoredPlan & { readonly text: string },
+  taken: TextTaken,
+  now: number,
+): Effect.Effect<Written, StoreFailure, SqlClient.SqlClient> {
+  return Effect.gen(function* () {
+    const before = stored.text;
+    const after = taken.text;
+    if (after.length > PLAN_BOUNDS.MAX_BODY_CHARS) return TOO_LONG_RESULT;
+    const moved = after !== before;
+    if (moved) {
+      yield* recordRevision({
+        planId: binding.planId,
+        writer,
+        before: { text: before },
+        after: { text: after },
+        changes: taken.changes,
+        savedBefore: savedBeforeOf(stored),
+      });
+    }
+    const sectionWriters = moved
+      ? withSectionWriters(stored.sectionWriters, { before, after }, fieldWriterOf(writer), now)
+      : undefined;
+    const saved = yield* savePlanText(binding.userId, binding.planId, after, sectionWriters);
+    if (Option.isNone(saved)) return NO_PLAN_RESULT;
+    return { status: PLAN_SAVE_STATUS.SAVED, plan: saved.value, moved };
+  });
+}
+
+/**
+ * The plan read under its row's lock, the change taken into it, and saved,
+ * all in one transaction: the template's fields formatted into the body, or
+ * a document plan's text as it is. A change answers which it took, and its
+ * taker is what keeps a change to the fields off a document plan and a
+ * change to a text off a plan of fields. A change that refuses the plan as
+ * it found it answers its refusal, and nothing is saved.
+ */
+function savedUnderLock<T extends PlanTaken | TextTaken, F>(
+  binding: PlanDocumentBinding,
+  writer: PlanWriter,
+  take: (stored: StoredPlan, now: number) => Result.Result<T, F>,
+): Effect.Effect<LockedSave<T> | F, StoreFailure, SqlClient.SqlClient> {
+  const locked = Effect.gen(function* (): Effect.fn.Return<
+    LockedSave<T> | F,
+    StoreFailure,
+    SqlClient.SqlClient
+  > {
+    const stored = yield* readPlanForUpdate(binding.userId, binding.planId);
+    if (Option.isNone(stored)) return NO_PLAN_RESULT;
+    const now = yield* Clock.currentTimeMillis;
+    const outcome = take(stored.value, now);
+    if (Result.isFailure(outcome)) return outcome.failure;
+    const taken = outcome.success;
+    const { text } = stored.value;
+    const written =
+      "text" in taken
+        ? text === undefined
+          ? NOT_DOCUMENT_RESULT
+          : yield* textWritten(binding, writer, { ...stored.value, text }, taken, now)
+        : text === undefined
+          ? yield* fieldsWritten(binding, writer, stored.value, taken, now)
+          : DOCUMENT_RESULT;
+    if (written.status !== PLAN_SAVE_STATUS.SAVED) return written;
+    return { ...written, taken };
   });
   return Effect.flatMap(SqlClient.SqlClient, (client) => client.withTransaction(locked));
 }
@@ -264,6 +362,26 @@ function reachedStore<A>(
       }),
     ),
   );
+}
+
+/**
+ * A revision's content taken back into the plan as it stands. Note that a
+ * restore's changes are counted by the fields it changes, the assumptions one
+ * of them, or by the sections it changes in a document plan.
+ */
+function restoreTaken(
+  stored: StoredPlan,
+  content: RevisionContent,
+): Result.Result<PlanTaken | TextTaken, PlanNotSaved> {
+  if (stored.text !== undefined) {
+    const text = "text" in content ? content.text : planDocumentOf(content);
+    return Result.succeed({ text, changes: changedSections(stored.text, text).length });
+  }
+  if ("text" in content) return Result.fail(NOT_DOCUMENT_RESULT);
+  return Result.succeed({
+    content,
+    changes: changedFields(contentOf(stored), content).length,
+  });
 }
 
 /** The notetaker off any call: a writer a test, or a run with no call to name, saves as. */
@@ -316,27 +434,43 @@ export type PlanEditSaveResult =
   | PlanConflict
   | PlanNotSaved;
 
+/** A conflict answered with what the field or the text holds now. */
+function conflictOf(current: PlanEditValue): Result.Result<never, PlanConflict> {
+  return Result.fail({ status: PLAN_SAVE_STATUS.CONFLICT, current });
+}
+
+/** The developer's edit of a document plan's whole text, taken into the text as it stands, or why it is not. */
+function takeDocumentEdit(
+  stored: StoredPlan,
+  edit: PlanDocumentEditRequest,
+): Result.Result<TextTaken, PlanConflict | PlanNotSaved> {
+  if (stored.text === undefined) return Result.fail(NOT_DOCUMENT_RESULT);
+  const outcome = applyDocumentEdit(stored.text, edit);
+  if ("conflict" in outcome) return conflictOf(outcome.conflict.current);
+  return Result.succeed({ text: outcome.applied, changes: 1 });
+}
+
 /**
- * The developer's own edit of one field, taken into the plan the service
- * bound under its lock and kept as a revision of theirs: the field set where
- * it still holds the edit's base, the developer's change laid over it where
- * Luke wrote meanwhile, and a conflict, with nothing saved, where it cannot
- * be (`@sidecar/hosted/plan-edit`).
+ * The developer's own edit of one field, or of a document plan's whole text,
+ * taken into the plan the service bound under its lock and kept as a
+ * revision of theirs: set where it still holds the edit's base, the
+ * developer's change laid over it where Luke wrote meanwhile, and a
+ * conflict, with nothing saved, where it cannot be
+ * (`@sidecar/hosted/plan-edit`). A field edit of a document plan, or a
+ * document edit of a plan of fields, is refused before anything is taken.
  */
 export function saveDeveloperEdit(
   binding: PlanDocumentBinding,
   edit: PlanEditRequest,
 ): Effect.Effect<PlanEditSaveResult, never, SqlClient.SqlClient> {
-  const take = (stored: StoredPlan): Result.Result<PlanTaken, PlanConflict | PlanNotSaved> => {
+  const take = (
+    stored: StoredPlan,
+  ): Result.Result<PlanTaken | TextTaken, PlanConflict | PlanNotSaved> => {
     if (archived(stored)) return Result.fail(ARCHIVED_RESULT);
+    if ("document" in edit) return takeDocumentEdit(stored, edit);
+    if (stored.text !== undefined) return Result.fail(DOCUMENT_RESULT);
     const outcome = applyDeveloperEdit(contentOf(stored), edit);
-    if ("conflict" in outcome) {
-      const conflict: PlanConflict = {
-        status: PLAN_SAVE_STATUS.CONFLICT,
-        current: outcome.conflict.current,
-      };
-      return Result.fail(conflict);
-    }
+    if ("conflict" in outcome) return conflictOf(outcome.conflict.current);
     return Result.succeed({ content: outcome.applied, changes: 1 });
   };
   const saved = Effect.map(
@@ -360,7 +494,8 @@ export type PlanRestoreResult =
  * and kept as a revision of the developer's naming the one it restored, so
  * the content it replaced stays in the history to restore in turn. A
  * revision that holds what the plan holds now saves nothing new and answers
- * the plan as it stands.
+ * the plan as it stands. A document plan takes any of its revisions back as
+ * text, one kept as the template's fields as the text those fields become.
  */
 export function restoreRevision(
   binding: PlanDocumentBinding,
@@ -375,14 +510,8 @@ export function restoreRevision(
     if (Option.isNone(content)) {
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.NO_REVISION } as const;
     }
-    // A restore's changes are counted by the fields it changes, the assumptions one of them.
-    const take = (stored: StoredPlan): Result.Result<PlanTaken, PlanNotSaved> =>
-      archived(stored)
-        ? Result.fail(ARCHIVED_RESULT)
-        : Result.succeed({
-            content: content.value,
-            changes: changedFields(contentOf(stored), content.value).length,
-          });
+    const take = (stored: StoredPlan): Result.Result<PlanTaken | TextTaken, PlanNotSaved> =>
+      archived(stored) ? Result.fail(ARCHIVED_RESULT) : restoreTaken(stored, content.value);
     const saved = yield* savedUnderLock(
       binding,
       { actor: PLAN_ACTOR.DEVELOPER, restoredFrom: seq },

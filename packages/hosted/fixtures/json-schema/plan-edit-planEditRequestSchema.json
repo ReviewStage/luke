@@ -135,6 +135,33 @@
         "value"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "document": {
+          "type": "object",
+          "properties": {
+            "base": {
+              "type": "string",
+              "maxLength": 200000
+            },
+            "value": {
+              "type": "string",
+              "maxLength": 200000
+            }
+          },
+          "required": [
+            "base",
+            "value"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "additionalProperties": false
     }
   ]
 }

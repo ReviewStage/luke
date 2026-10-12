@@ -209,7 +209,11 @@ function fakeService(plans: Plan[]): FakeService {
         const edited = {
           ...found,
           updatedAt: EDITED_AT,
-          document: { ...found.document, body: `${found.document.body}\n\n${edit.value}` },
+          document: {
+            ...found.document,
+            body:
+              "document" in edit ? edit.document.value : `${found.document.body}\n\n${edit.value}`,
+          },
           lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: EDITED_AT, duringCall: false },
         };
         service.plans = service.plans.map((candidate) =>
