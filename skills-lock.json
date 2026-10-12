@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "drizzle-best-practices": {
+      "source": "honra-io/drizzle-best-practices",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "c723c157f3af98486d64dea4a1c1250ca0c57e1d0cdd426a6c301f844dcdbaed"
+    },
     "effect-ts": {
       "source": "Effect-TS/skills",
       "sourceType": "github",

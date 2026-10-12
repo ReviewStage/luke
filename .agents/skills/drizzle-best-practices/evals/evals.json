@@ -1,0 +1,33 @@
+{
+  "skill_name": "drizzle-best-practices",
+  "evals": [
+    {
+      "id": 0,
+      "name": "new-project-rc-relations",
+      "prompt": "I'm starting a brand new project using Drizzle ORM with PostgreSQL (node-postgres). Set up the schema for a blog with users, posts, and comments, define the relations between them, and show me how to fetch a user together with their posts and each post's comments. Use the current/latest Drizzle. Give me the install command, the schema file, the relations file, the db setup, and the query.",
+      "expected_output": "Installs drizzle-orm@rc (and drizzle-kit@rc); uses defineRelations; db created with { relations }; relational query uses with: {...} and object-syntax where/orderBy if any; identity columns over serial.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "many-to-many-through",
+      "prompt": "I have a users table and a groups table, plus a users_to_groups junction table (user_id, group_id). I'm on the latest Drizzle release candidate. Define the many-to-many relation and write a query that returns each user along with the list of groups they belong to.",
+      "expected_output": "Uses defineRelations with r.many.groups({ from: r.users.id.through(...), to: r.groups.id.through(...) }); query is db.query.users.findMany({ with: { groups: true } }) WITHOUT traversing the junction table in the query.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "existing-0.45-legacy-detection",
+      "prompt": "Add a relation between my orders and customers tables and write a relational query that gets all orders with status 'shipped', ordered by created_at descending, including the customer for each order. My project is here — match whatever Drizzle version and conventions it already uses.",
+      "expected_output": "Detects drizzle-orm 0.45.2 from package.json and uses the LEGACY relations() API (import from 'drizzle-orm', fields/references), legacy db.query with callback/operator where + array orderBy. Should NOT emit defineRelations or v1 object-syntax for this project.",
+      "files": ["package.json"]
+    },
+    {
+      "id": 3,
+      "name": "validators-zod-rc",
+      "prompt": "I'm using the Drizzle release candidate (drizzle-orm@rc). I have a users table and I want to validate incoming request bodies for creating a user with Zod, derived from my Drizzle table so it stays in sync. How do I do this?",
+      "expected_output": "Imports createInsertSchema from 'drizzle-orm/zod' (NOT the standalone drizzle-zod package); explains insert schema makes generated columns optional; mentions refinements/factory optionally.",
+      "files": []
+    }
+  ]
+}
