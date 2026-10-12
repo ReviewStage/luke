@@ -201,6 +201,8 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 ## Return the result
 
 Return the relevant facts, the task's current status, and any queued question an answer has made moot, so Luke drops it. Don't repeat the questions you queued: Luke already holds them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
+
+A message with no tool call ends your turn, and nothing runs after it until the developer speaks again. Never end on what you are about to do ("let me check the repository"): make the call now, and return once its result is in.
 `;
 
 /**

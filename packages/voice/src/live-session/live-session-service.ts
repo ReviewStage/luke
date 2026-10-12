@@ -192,6 +192,49 @@ export const END_CALL_BOUNDS = {
 export const ROW_WRITE_DEBOUNCE_MS = 300;
 
 /**
+ * How long a delegation with no developer words of its own is held for the
+ * words the API delivers after it. Note that the voice waits on every
+ * delegation it makes, so one held past this is asked over the conversation
+ * as it stands rather than held until the developer happens to speak again,
+ * which left the call silent and the backend idle.
+ */
+export const RETAINED_DELEGATION_BOUNDS = {
+  GRACE_MS: 3_000,
+} as const;
+
+/**
+ * What the voice is told, silently, of an asked run that completed without a
+ * word for it: the delegation is answered, so the voice stops waiting on it
+ * and carries the conversation on rather than falling silent.
+ */
+export const COMPLETED_QUIET_NOTE =
+  "Luke finished this ask with nothing more to say; carry on with the conversation.";
+
+/** The line an ask held past its grace is composed with, since nothing the developer said since the last ask is its own. */
+const UNHEARD_ASK_LINE =
+  "Luke handed this over with no new words from the developer since the last ask; answer from the conversation so far.";
+
+/**
+ * What the service traces of a delegation's path and an ask's quiet end, for
+ * the composition's log: the kind alone and how long a held delegation
+ * waited, never a word of the call or an id.
+ */
+export const LIVE_SESSION_TRACE = {
+  DELEGATION_RETAINED: "delegation-retained",
+  DELEGATION_COMPOSED: "delegation-composed",
+  DELEGATION_COMPOSED_AFTER_GRACE: "delegation-composed-after-grace",
+  RUN_COMPLETED_QUIET: "run-completed-quiet",
+} as const;
+
+export type LiveSessionTraceKind = (typeof LIVE_SESSION_TRACE)[keyof typeof LIVE_SESSION_TRACE];
+
+export interface LiveSessionTrace {
+  readonly kind: LiveSessionTraceKind;
+  /** How long a held delegation waited before it was composed. */
+  readonly waitedMs?: number;
+}
+
+/**
  * What the stop key says to the model. Muting the microphone never stops the
  * output, as the live guide notes, and the live protocol has no cancel event,
  * so the stop key alone carries the delegation guide's own steering shape:
@@ -226,6 +269,8 @@ export interface LiveSessionServiceOptions {
    * developer's own hang-up. Told at most once per run.
    */
   onCallEnding?: () => void;
+  /** A delegation's path or an ask's quiet end, told as it happens; see `LIVE_SESSION_TRACE`. */
+  onTrace?: (trace: LiveSessionTrace) => void;
 }
 
 /**
@@ -277,6 +322,9 @@ interface StandingSession {
   lastDelegationOffsetMs: number;
   readonly claimedDelegations: Set<string>;
   retained: RetainedDelegation[];
+  /** The grace the oldest retained delegation is held under, and when it was retained; see `RETAINED_DELEGATION_BOUNDS`. */
+  retainedGrace: SessionDelay | undefined;
+  retainedAt: number | undefined;
   /** How many delegations have been composed into asks, each ask's revision being the count when it was. */
   revisions: number;
   /** How many times the stop key was pressed, so an ask delegated before a press and accepted after it is born silenced. */
@@ -368,6 +416,8 @@ interface Exchange {
   settled: boolean;
   buffered: string[];
   spokenChunks: number;
+  /** Whether any words of the run, a sentence or a queued question, were handed to the voice to say. */
+  told: boolean;
   slowStepTold: boolean;
   /** How many progress notes the exchange has written, and when it last wrote any thinking note. */
   progressNotes: number;
@@ -401,6 +451,7 @@ function newExchange(
     settled: false,
     buffered: [],
     spokenChunks: 0,
+    told: false,
     slowStepTold: false,
     progressNotes: 0,
     lastNoteAt: undefined,
@@ -923,6 +974,8 @@ export class LiveSessionService {
         voicePhase: undefined,
         pendingCode: undefined,
         retained: [],
+        retainedGrace: undefined,
+        retainedAt: undefined,
         revisions: 0,
         stops: 0,
         pendingRows: new Map(),
@@ -1180,25 +1233,81 @@ export class LiveSessionService {
     // The words said so far are on record before the ask is composed on them.
     this.#flushRows(session);
     if (!session.ledger.askContext(session.lastDelegationOffsetMs).ask) {
-      session.retained.push({ id, offsetMs });
+      this.#retain(session, id, offsetMs);
       return;
     }
     this.#start(this.#compose(session, id, offsetMs));
   }
 
+  /**
+   * Holds a delegation for the words it is about, under the session's one
+   * grace: armed by the first delegation held and given up by whatever
+   * composes them, so the newest held is asked either way.
+   */
+  #retain(session: StandingSession, id: string, offsetMs: number): void {
+    session.retained.push({ id, offsetMs });
+    this.#trace({ kind: LIVE_SESSION_TRACE.DELEGATION_RETAINED });
+    if (session.retainedGrace !== undefined) return;
+    session.retainedAt = this.#now();
+    session.retainedGrace = this.#after(RETAINED_DELEGATION_BOUNDS.GRACE_MS, () => {
+      session.retainedGrace = undefined;
+      this.#composeUnheard(session);
+    });
+  }
+
+  /** Takes the newest retained delegation off the session, giving up its grace; the older ones asked about the same span and are answered by the same ask. */
+  #takeRetained(
+    session: StandingSession,
+  ): { newest: RetainedDelegation; waitedMs: number } | undefined {
+    const newest = session.retained[session.retained.length - 1];
+    const waitedMs = this.#now() - (session.retainedAt ?? this.#now());
+    session.retained = [];
+    this.#cancelDelay(session.retainedGrace);
+    session.retainedGrace = undefined;
+    session.retainedAt = undefined;
+    return newest === undefined ? undefined : { newest, waitedMs };
+  }
+
   #composeRetained(session: StandingSession): void {
     if (session.retained.length === 0) return;
     if (!session.ledger.askContext(session.lastDelegationOffsetMs).ask) return;
-    // The newest retained delegation is the one the model waits on; the
-    // older ones asked about the same span and are answered by the same ask.
-    const newest = session.retained[session.retained.length - 1];
-    session.retained = [];
-    if (!newest) return;
+    const taken = this.#takeRetained(session);
+    if (!taken) return;
     // The fragment that let the delegation compose was the first on its row, and its
     // write is still put off: the row goes on record under the ledger's id ahead of
     // the ask's write, as it does when the delegation follows the words.
     this.#flushRows(session);
-    this.#start(this.#compose(session, newest.id, newest.offsetMs));
+    this.#start(this.#compose(session, taken.newest.id, taken.newest.offsetMs, taken.waitedMs));
+  }
+
+  /**
+   * A delegation held past its grace with no words of the developer's own,
+   * asked over the conversation since the last ask. Note that it claims no
+   * row and leaves the session's span where it was, because a row that
+   * opens late by its offset is still the next delegation's to attach.
+   */
+  #composeUnheard(session: StandingSession): void {
+    if (session.ended || this.#standing !== session) return;
+    const taken = this.#takeRetained(session);
+    if (!taken) return;
+    this.#flushRows(session);
+    session.revisions += 1;
+    const asked = { revision: session.revisions, stops: session.stops, at: this.#now() };
+    const question = [
+      renderAskContext(session.ledger.askContext(session.lastDelegationOffsetMs)),
+      UNHEARD_ASK_LINE,
+    ]
+      .filter((part) => part.length > 0)
+      .join("\n");
+    this.#trace({
+      kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED_AFTER_GRACE,
+      waitedMs: taken.waitedMs,
+    });
+    this.#start(this.#ask(session, taken.newest.id, question, asked, undefined));
+  }
+
+  #trace(trace: LiveSessionTrace): void {
+    this.#options.onTrace?.(trace);
   }
 
   /**
@@ -1211,7 +1320,12 @@ export class LiveSessionService {
    * handed names the latest of them as the developer's ask, as it did when
    * an ask was one row, over the whole context since the previous one.
    */
-  #compose(session: StandingSession, delegationId: string, offsetMs: number): Effect.Effect<void> {
+  #compose(
+    session: StandingSession,
+    delegationId: string,
+    offsetMs: number,
+    waitedMs?: number,
+  ): Effect.Effect<void> {
     // An ask still with the brain claims first whatever opened by its offset since, so this
     // delegation is about what is left and never about a row containing the earlier offset.
     for (const open of session.openAsks.values()) this.#claimLate(session, open);
@@ -1225,7 +1339,7 @@ export class LiveSessionService {
     if (!ask) {
       // An open ask's claim took the only words since: this delegation is about nothing yet, and
       // is retained for the next fragment as one before any developer utterance is.
-      session.retained.push({ id: delegationId, offsetMs });
+      this.#retain(session, delegationId, offsetMs);
       return Effect.void;
     }
     // A follow-up with no row of its own, its words on a row already an ask's, moves the session
@@ -1246,6 +1360,27 @@ export class LiveSessionService {
       renderAskContext(askContextBy(context, rows.length > 0 ? offsetMs : ask.startMs)),
       `The developer's ask is their latest line above: ${ask.text.trim()}`,
     ].join("\n");
+    this.#trace(
+      waitedMs === undefined
+        ? { kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED }
+        : { kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED, waitedMs },
+    );
+    return this.#ask(session, delegationId, question, asked, open);
+  }
+
+  /**
+   * The ask handed to the brain under its delegation, and what its answer
+   * stands: the exchange its run is spoken through, and the rows the open
+   * ask claimed attached to it. An ask composed with no open ask claims and
+   * attaches nothing.
+   */
+  #ask(
+    session: StandingSession,
+    delegationId: string,
+    question: string,
+    asked: { readonly revision: number; readonly stops: number; readonly at: number },
+    open: OpenAsk | undefined,
+  ): Effect.Effect<void> {
     return Effect.gen({ self: this }, function* () {
       // The delegation's id is the submission's: the record gives the ask's rows
       // that id, so a record that learns the ask's turn can attach the rows to it.
@@ -1259,9 +1394,9 @@ export class LiveSessionService {
       // API delivers a delegation ahead of the deltas it is about, and one that
       // landed while the brain was being asked may have opened a row of its own
       // that starts by the offset, which is this delegation's and no one else's.
-      this.#claimLate(session, open);
+      if (open !== undefined) this.#claimLate(session, open);
       session.openAsks.delete(delegationId);
-      const rowIds = [...open.rows]
+      const rowIds = [...(open?.rows ?? [])]
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
@@ -1587,6 +1722,17 @@ export class LiveSessionService {
     ) {
       this.#speakSentence(exchange, RUN_END_NOTE[exchange.end]);
     }
+    // An asked run that completed without a word for its delegation still answers it, silently,
+    // because the voice waits on every delegation it makes and would otherwise wait on in silence.
+    if (
+      !exchange.woken &&
+      !exchange.silenced &&
+      !exchange.told &&
+      exchange.end === LIVE_BRAIN_RUN_END.COMPLETED
+    ) {
+      this.#think(exchange, COMPLETED_QUIET_NOTE);
+      this.#trace({ kind: LIVE_SESSION_TRACE.RUN_COMPLETED_QUIET });
+    }
     // Told after the note is queued, so the planner gives way to Luke about to say it in one change.
     this.#reportStatus();
   }
@@ -1628,6 +1774,7 @@ export class LiveSessionService {
     const session = this.#sessionOf(exchange);
     if (!session) return;
     const delegationId = this.#delegationOf(exchange);
+    exchange.told = true;
     this.#voiceIn(session, VOICE_PHASE.ABOUT_TO_ANSWER);
     for (const chunk of chunkForAppend(sentence)) {
       session.channel.enqueue(
@@ -1721,6 +1868,8 @@ export class LiveSessionService {
     // The writes put off are the release's to make now; the delays behind them are given up here so none fires beside it.
     for (const delay of session.pendingRows.values()) this.#cancelDelay(delay);
     this.#cancelDelay(session.idleTimer);
+    this.#cancelDelay(session.retainedGrace);
+    session.retainedGrace = undefined;
     session.channel.close();
     session.retained = [];
     if (this.#standing === session) this.#standing = undefined;

@@ -574,6 +574,16 @@ export class VoiceService {
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },
+        // A delegation's path, written down by its kind alone, so a call that
+        // went quiet can be told from the log as held, composed, or answered
+        // with nothing to say.
+        onTrace: (trace) => {
+          this.#log({
+            event: LOG_EVENT.SESSION_TRACE,
+            trace: trace.kind,
+            ...(trace.waitedMs === undefined ? undefined : { waitedMs: trace.waitedMs }),
+          });
+        },
       });
       if ("refused" in standing) {
         yield* leaveToSweep;

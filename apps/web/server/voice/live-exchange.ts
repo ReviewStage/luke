@@ -5,6 +5,7 @@ import {
   type AdoptableSession,
   LiveSessionService,
   type LiveSessionStatus,
+  type LiveSessionTrace,
 } from "@sidecar/voice/live-session";
 import type { LanguageModel } from "ai";
 import { Cause, Effect, Layer, Result, type Schema, type Scope } from "effect";
@@ -85,6 +86,8 @@ export interface HostedLiveExchangeOptions {
   readonly onWork?: (work: PlanWorkTurn) => void;
   /** The developer said they are done and Luke is saying goodbye; a planning call's device hangs up once it has played. */
   readonly onCallEnding?: () => void;
+  /** A delegation's path or an ask's quiet end, for the service's log; see `LIVE_SESSION_TRACE`. */
+  readonly onTrace?: (trace: LiveSessionTrace) => void;
 }
 
 /** One signed-in session the voice service created or re-attached, as an exchange is offered it. */
@@ -107,6 +110,8 @@ export interface AttachedSession {
   readonly onWork?: ((work: PlanWorkTurn) => void) | undefined;
   /** The device's door for Luke ending the call; absent where the route sends it nothing of its own. */
   readonly onCallEnding?: (() => void) | undefined;
+  /** The service's log for a delegation's path; absent where nothing writes it down. */
+  readonly onTrace?: ((trace: LiveSessionTrace) => void) | undefined;
 }
 
 /**
@@ -282,6 +287,7 @@ export const hostedLiveExchange = /* @__PURE__ */ Effect.fn("web/hostedLiveExcha
       },
       ...(options.onCode ? { onCode: options.onCode } : undefined),
       ...(options.onCallEnding ? { onCallEnding: options.onCallEnding } : undefined),
+      ...(options.onTrace ? { onTrace: options.onTrace } : undefined),
     }),
     Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
   );

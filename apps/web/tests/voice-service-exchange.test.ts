@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
-import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
+import { LIVE_SESSION_TRACE, STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Exit, Option, Redacted, Schema, Scope } from "effect";
 import { afterAll } from "vitest";
@@ -1235,6 +1235,33 @@ it.effect(
       await hangUp(context, session);
       const row = await sessionRowOf(context.target.userId, sessionId);
       assert.equal(row?.closeReason, "close_requested");
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "a delegation's path is written to the service's log by its kind alone, with no words or ids",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const session = await openSession(context, plan.id);
+      const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
+      await sendText(session.attach.socket, JSON.stringify(sessionStarted(sessionId)));
+      await sendText(session.attach.socket, JSON.stringify(heard("Invites expire.", 1000, 1800)));
+      await sendText(session.attach.socket, JSON.stringify(delegated("dl_traced", 1900)));
+      await until(
+        () => context.eve.opened.length === 1,
+        () => `the ask to reach eve; reports ${JSON.stringify(context.reports)}`,
+      );
+      assert.deepEqual(
+        context.log.filter((entry) => entry.event === LOG_EVENT.SESSION_TRACE),
+        [{ event: LOG_EVENT.SESSION_TRACE, trace: LIVE_SESSION_TRACE.DELEGATION_COMPOSED }],
+      );
+
+      // What the service sent up meanwhile is left unanswered: the call ends here.
+      await framesWithin(session.upstream, QUIET_MS);
+      await hangUp(context, session);
       await context.stop();
     }),
 );

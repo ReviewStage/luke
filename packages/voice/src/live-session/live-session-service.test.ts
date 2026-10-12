@@ -38,10 +38,14 @@ import {
 } from "./live-brain.js";
 import type { LiveRecord, SpokenAskAttach, SpokenRowUpsert } from "./live-record.js";
 import {
+  COMPLETED_QUIET_NOTE,
   END_CALL_BOUNDS,
+  LIVE_SESSION_TRACE,
   LiveSessionService,
   type LiveSessionStatus,
+  type LiveSessionTrace,
   PROGRESS_NOTE_BOUNDS,
+  RETAINED_DELEGATION_BOUNDS,
   ROW_WRITE_DEBOUNCE_MS,
   RUN_END_NOTE,
   STOP_SPEAKING_INSTRUCTION,
@@ -343,6 +347,8 @@ interface Fixture {
   codes: PlanShownCode[];
   /** How many times the peer was told the call is ending. */
   endings: { count: number };
+  /** Every trace `onTrace` was told, in order. */
+  traces: LiveSessionTrace[];
   service: LiveSessionService;
   /** Adopts a fresh session over a new sideband, as the route hands one in, and starts it. */
   open: () => Effect.Effect<FakeSideband>;
@@ -356,6 +362,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
     const statuses: LiveSessionStatus[] = [];
     const codes: PlanShownCode[] = [];
     const endings = { count: 0 };
+    const traces: LiveSessionTrace[] = [];
     let ids = 0;
     const service = yield* Effect.provide(
       LiveSessionService.make({
@@ -366,6 +373,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
         onCallEnding: () => {
           endings.count += 1;
         },
+        onTrace: (trace) => traces.push(trace),
       }),
       Layer.mergeAll(liveBrainLayer(brain), liveRecordLayer(record)),
     );
@@ -377,6 +385,7 @@ function fixture(brain: FakeBrain = new FakeBrain()): Effect.Effect<Fixture, nev
       statuses,
       codes,
       endings,
+      traces,
       service,
       open: () =>
         Effect.gen(function* () {
@@ -756,6 +765,173 @@ it.effect("a retained delegation dies with its session", () =>
     second.input("Anything?", 100, 600);
     yield* settle();
     assert.equal(f.brain.asks.length, 0);
+  }),
+);
+
+it.effect(
+  "a delegation with no developer words since the last ask is asked once the grace has passed, over the conversation so far, attaching nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.output("Let me also check the repository.", 1000, 1800);
+      sideband.delegation("item_2", 1900);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      yield* advanceClock(RETAINED_DELEGATION_BOUNDS.GRACE_MS - 1);
+      assert.equal(f.brain.asks.length, 1);
+      yield* advanceClock(1);
+      assert.equal(f.brain.asks.length, 2);
+      assert.equal(f.brain.asks[1]?.submissionId, "item_2");
+      assert.ok(f.brain.asks[1]?.question.includes("Let me also check the repository."));
+      assert.ok((f.brain.asks[1]?.revision ?? 0) > (f.brain.asks[0]?.revision ?? 0));
+      assert.deepEqual(
+        attaches(f.record).map((attach) => attach.delegationId),
+        ["item_1"],
+      );
+    }),
+);
+
+it.effect(
+  "a retained delegation the next fragment composes inside the grace is asked once, and the grace asks nothing more",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.delegation("item_early", 400);
+      yield* settle();
+      sideband.input("Open the failing one.", 500, 1400);
+      yield* settle();
+      assert.equal(f.brain.asks.length, 1);
+      yield* advanceClock(RETAINED_DELEGATION_BOUNDS.GRACE_MS * 2);
+      assert.equal(f.brain.asks.length, 1);
+    }),
+);
+
+it.effect("the grace of a delegation retained in a session since closed asks nothing", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.delegation("item_orphan", 400);
+    sideband.closedBy(LIVE_CLOSE_REASON.REMOTE_HANGUP, 12);
+    yield* settle();
+    yield* advanceClock(RETAINED_DELEGATION_BOUNDS.GRACE_MS * 2);
+    assert.equal(f.brain.asks.length, 0);
+  }),
+);
+
+it.effect(
+  "a completed asked run that said nothing tells the voice silently, under its delegation, that the ask is done",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Note that down.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-1" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+        runId: "run-1",
+        end: LIVE_BRAIN_RUN_END.COMPLETED,
+      });
+      yield* advanceClock(1000);
+      assert.deepEqual(
+        appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND).map((event) =>
+          "content" in event ? [event.content, event.delegation_id] : [],
+        ),
+        [[COMPLETED_QUIET_NOTE, "item_1"]],
+      );
+      assert.deepEqual(appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND), []);
+    }),
+);
+
+it.effect(
+  "a completed run that queued a question, one that spoke, a silenced run, and a woken run add no completion note",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      f.brain.exploring = () => "explore-1";
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("First thing.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      sideband.input("Second thing.", 1000, 1800);
+      sideband.delegation("item_2", 1900);
+      yield* settle();
+      sideband.input("Third thing.", 2000, 2800);
+      sideband.delegation("item_3", 2900);
+      yield* settle();
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+        runId: "run-2",
+        question: "Should invites expire?",
+        recommendation: "Yes, after a week.",
+      });
+      f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-3" });
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
+        runId: "run-3",
+        sentence: "Done.",
+      });
+      for (const runId of ["explore-1", "run-1", "run-2", "run-3"]) {
+        f.brain.fire({
+          kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+          runId,
+          end: LIVE_BRAIN_RUN_END.COMPLETED,
+        });
+      }
+      yield* advanceClock(1000);
+      const thinking = appends(sideband, LIVE_CLIENT_EVENT.THINKING_APPEND);
+      assert.deepEqual(
+        thinking.filter((event) => "content" in event && event.content === COMPLETED_QUIET_NOTE),
+        [],
+      );
+    }),
+);
+
+it.effect("each delegation's path is traced by its kind alone, with no words or ids", () =>
+  Effect.gen(function* () {
+    const f = yield* fixture();
+    const sideband = yield* f.open();
+    yield* settle();
+    sideband.delegation("item_early", 400);
+    yield* settle();
+    yield* advanceClock(500);
+    sideband.input("Open the failing one.", 500, 1400);
+    yield* settle();
+    // The row began after the early delegation's offset, so it is the next delegation's own.
+    sideband.delegation("item_next", 1500);
+    yield* settle();
+    sideband.delegation("item_again", 1600);
+    yield* settle();
+    yield* advanceClock(RETAINED_DELEGATION_BOUNDS.GRACE_MS);
+    f.brain.fire({ kind: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED, runId: "run-3" });
+    f.brain.fire({
+      kind: LIVE_BRAIN_RUN_EVENT.ENDED,
+      runId: "run-3",
+      end: LIVE_BRAIN_RUN_END.COMPLETED,
+    });
+    yield* advanceClock(1000);
+    assert.deepEqual(f.traces, [
+      { kind: LIVE_SESSION_TRACE.DELEGATION_RETAINED },
+      { kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED, waitedMs: 500 },
+      { kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED },
+      { kind: LIVE_SESSION_TRACE.DELEGATION_RETAINED },
+      {
+        kind: LIVE_SESSION_TRACE.DELEGATION_COMPOSED_AFTER_GRACE,
+        waitedMs: RETAINED_DELEGATION_BOUNDS.GRACE_MS,
+      },
+      { kind: LIVE_SESSION_TRACE.RUN_COMPLETED_QUIET },
+    ]);
   }),
 );
 

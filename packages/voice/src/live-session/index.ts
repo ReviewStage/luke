@@ -23,8 +23,11 @@ export type { LiveRecord, SpokenAskAttach } from "./live-record.js";
 export { LIVE_SESSION_END_CAUSE, LiveSessionHolder } from "./live-session-holder.js";
 export {
   type AdoptableSession,
+  LIVE_SESSION_TRACE,
   LiveSessionService,
   type LiveSessionStatus,
+  type LiveSessionTrace,
+  type LiveSessionTraceKind,
   ROW_WRITE_DEBOUNCE_MS,
   STOP_SPEAKING_INSTRUCTION,
 } from "./live-session-service.js";
