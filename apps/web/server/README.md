@@ -743,6 +743,26 @@ drop it from the list and redeploy. A row counted unreadable reads
 migration, since a migration holds no key and runs before the deployment
 whose ring it would need.
 
+## The dictation group
+
+`server/dictation-app.ts` answers `POST /api/dictation`: one clip the
+developer dictated into a message box, `{ audio, durationMs, keywords }`
+(`@sidecar/hosted/dictation-wire`), answered `{ text }`. The clip is WebM
+with Opus in base64, held to two minutes and a megabyte and refused past
+either as `request_too_large` before anything goes upstream; `keywords` are
+up to fifty words the desktop expects to hear (the repository, the plan's
+title, the paths it names), each on one line. `server/hosted/transcription.ts`
+sends the clip and the words to OpenAI's `gpt-transcribe` on Luke's key as one
+multipart `POST /v1/audio/transcriptions`, the words as its `keywords[]`
+([OpenAI's speech-to-text guide](https://developers.openai.com/api/docs/guides/speech-to-text)).
+Nothing of the clip or the text is stored, logged, traced, or counted as an
+event; a failure logs OpenAI's status alone and answers `unavailable`, as a
+deployment without `OPENAI_API_KEY` does. The day is metered one call and the
+seconds OpenAI billed, or the clip's own length where the answer reports none,
+and a meter the database refused is logged while the text is still answered.
+There is no path on an account's own key. `tests/dictation-app.test.ts`
+answers the route over a scripted OpenAI at its HTTP door.
+
 ## The models group
 
 `server/models-app.ts` answers `GET /api/models`: the models a coding agent
@@ -1163,7 +1183,9 @@ loads the library at all.
 
 Use is counted per user per UTC day in the Luke-owned `hosted_usage` table:
 one atomic upsert before each upstream call (`server/hosted/quota.ts`).
-Nothing is refused on the count, which the admin pages read; a spend limit on
+A dictated clip is counted once it is transcribed instead, as one call and its
+seconds of audio in the row's `dictation_seconds`, beside the voice seconds
+`voice_session_usage` keeps. Nothing is refused on the count, which the admin pages read; a spend limit on
 the OpenAI project behind the key is the backstop and should be configured
 with it.
 

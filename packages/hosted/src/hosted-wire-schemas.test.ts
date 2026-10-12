@@ -10,6 +10,7 @@ import { test } from "vitest";
 import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
+import * as dictationWire from "./dictation-wire.js";
 import * as githubRepositoriesWire from "./github-repositories-wire.js";
 import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
@@ -80,6 +81,10 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentPullRequestParamsSchema: codingAgentView.codingAgentPullRequestParamsSchema,
     codingAgentPullRequestAnswerViewSchema: codingAgentView.codingAgentPullRequestAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
+  "dictation-wire": {
+    dictationRequestSchema: dictationWire.dictationRequestSchema,
+    dictationAnswerSchema: dictationWire.dictationAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof dictationWire>,
   "github-repositories-wire": {
     githubRepositoryFullNameSchema: githubRepositoriesWire.githubRepositoryFullNameSchema,
     githubRepositorySchema: githubRepositoriesWire.githubRepositorySchema,
