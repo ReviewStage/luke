@@ -5,7 +5,8 @@ import type { ReactNode } from "react";
 import { Shimmer } from "../ai-elements/shimmer";
 import { cn } from "../ai-elements/utils";
 import { rendererRuntime } from "../renderer-runtime";
-import { momentText } from "./plan-time";
+import { momentText, useMinute } from "./plan-time";
+import { callHeading } from "./transcript-model";
 
 /**
  * working-time.tsx -- how long an agent has been working: the compact duration a working line counts in, the clock it counts on once a second, and the line a finished turn ends on.
@@ -18,7 +19,9 @@ import { momentText } from "./plan-time";
  * closed, or a line that knows no start leaves nothing ticking. Once a
  * turn has finished, the count gives way to one quiet line at its end
  * saying how long it worked and when it ended, as Codex and Cursor end a
- * turn: "Worked for 1m 18s · 3:42 PM", the full date and time on hover.
+ * turn: "Worked for 1m 18s · Today, 3:42 PM", the day worded as a call's
+ * header words it, the full date and time on hover. Both lines are
+ * selectable, as the transcript around them is.
  */
 
 /** How often a count moves: the finest unit it says. */
@@ -43,12 +46,14 @@ export function workingTime(elapsedMs: number): string {
   return `${Math.floor(minutes / HOUR_MINUTES)}h ${minutes % HOUR_MINUTES}m`;
 }
 
-/** What a finished turn's last line says: how long it worked, and the time of day it ended in the developer's own locale and zone. */
-export function workedForText(startedAt: number, endedAt: number, locale?: string): string {
-  const ended = new Date(endedAt).toLocaleTimeString(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+/** What a finished turn's last line says: how long it worked, and the day and time it ended in the developer's own locale and zone, the day as a call's header says it from `now`. */
+export function workedForText(
+  startedAt: number,
+  endedAt: number,
+  now: number,
+  locale?: string,
+): string {
+  const ended = callHeading(endedAt, now, locale);
   return `Worked for ${workingTime(endedAt - startedAt)}${WORKED_SEPARATOR}${ended}`;
 }
 
@@ -95,10 +100,11 @@ export function WorkedFor({
   startedAt: number;
   endedAt: number;
 }): ReactNode {
+  const now = useMinute();
   return (
-    <p className="m-0 text-[11.5px] text-muted-foreground tabular-nums" data-worked="">
+    <p className="m-0 text-[11.5px] text-muted-foreground tabular-nums select-text" data-worked="">
       <time dateTime={new Date(endedAt).toISOString()} title={momentText(endedAt)}>
-        {workedForText(startedAt, endedAt)}
+        {workedForText(startedAt, endedAt, now)}
       </time>
     </p>
   );
@@ -107,7 +113,7 @@ export function WorkedFor({
 /** The shimmering line a transcript ends on while its agent works, counting how long where the run's start is known. */
 export function WorkingLine({ startedAt }: { startedAt: number | undefined }): ReactNode {
   return (
-    <p className="m-0 text-[12.5px]" data-working="" aria-live="polite">
+    <p className="m-0 text-[12.5px] select-text" data-working="" aria-live="polite">
       <Shimmer>{WORKING_LINE}</Shimmer>
       {startedAt === undefined ? null : <WorkingTime startedAt={startedAt} />}
     </p>

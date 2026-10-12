@@ -62,6 +62,7 @@ const mounted = (element: ReactElement) =>
       timers: () =>
         [...container.querySelectorAll("[role='timer']")].map((timer) => timer.textContent),
       worked: () => container.querySelector("[data-worked] time"),
+      working: () => container.querySelector("[data-working]"),
       draw: (next: ReactElement) =>
         Effect.andThen(
           Effect.sync(() => draw(next)),
@@ -126,18 +127,21 @@ it.effect("the clock a count reads says the time at once and again each second",
   }),
 );
 
-it.effect("a working line counts up from its run's start each second, across the minute", () =>
-  Effect.gen(function* () {
-    const line = yield* mounted(createElement(WorkingLine, { startedAt: -58 * SECOND }));
-    assert.equal(line.text(), "Working…58s");
-    yield* advance(Duration.seconds(1));
-    assert.equal(line.text(), "Working…59s");
-    yield* advance(Duration.seconds(1));
-    assert.equal(line.text(), "Working…1m 0s");
-    yield* advance(Duration.seconds(12));
-    assert.equal(line.text(), "Working…1m 12s");
-    line.unmount();
-  }),
+it.effect(
+  "a working line counts up from its run's start each second, across the minute, and is selectable",
+  () =>
+    Effect.gen(function* () {
+      const line = yield* mounted(createElement(WorkingLine, { startedAt: -58 * SECOND }));
+      assert.equal(line.text(), "Working…58s");
+      assert.equal(line.working()?.classList.contains("select-text"), true);
+      yield* advance(Duration.seconds(1));
+      assert.equal(line.text(), "Working…59s");
+      yield* advance(Duration.seconds(1));
+      assert.equal(line.text(), "Working…1m 0s");
+      yield* advance(Duration.seconds(12));
+      assert.equal(line.text(), "Working…1m 12s");
+      line.unmount();
+    }),
 );
 
 it.effect("a working line whose run's start is unknown only shimmers, with no count", () =>
@@ -237,18 +241,31 @@ const workerTurns = (running: boolean): readonly PlanWorkTurn[] => [
   },
 ];
 
-test("a finished turn's last line says how long it worked and the time of day it ended", () => {
+test("a finished turn's last line says how long it worked and the day and time it ended, the day as a call's header says it", () => {
+  const later = (days: number) => TURN_END + days * 24 * HOUR;
   assert.equal(
-    workedForText(TURN_END - 78 * SECOND, TURN_END, "en-US"),
-    "Worked for 1m 18s · 3:42 PM",
+    workedForText(TURN_END - 78 * SECOND, TURN_END, TURN_END + HOUR, "en-US"),
+    "Worked for 1m 18s · Today, 3:42 PM",
   );
-  assert.equal(workedForText(TURN_END - 3 * HOUR, TURN_END, "en-US"), "Worked for 3h 0m · 3:42 PM");
+  assert.equal(
+    workedForText(TURN_END - 3 * HOUR, TURN_END, later(1), "en-US"),
+    "Worked for 3h 0m · Yesterday, 3:42 PM",
+  );
+  assert.equal(
+    workedForText(TURN_END - 42 * SECOND, TURN_END, later(10), "en-US"),
+    "Worked for 42s · Oct 12, 3:42 PM",
+  );
+  assert.equal(
+    workedForText(TURN_END - 42 * SECOND, TURN_END, later(100), "en-US"),
+    "Worked for 42s · Oct 12, 2026, 3:42 PM",
+  );
 });
 
 it.effect(
-  "an agent's finished turn ends on how long it worked and when, the full moment on hover, and a turn still written ends on none",
+  "an agent's finished turn ends on how long it worked and when, selectable, the full moment on hover, and a turn still written ends on none",
   () =>
     Effect.gen(function* () {
+      yield* TestClock.setTime(TURN_END + MINUTE);
       const tab = yield* mounted(
         createElement(AgentTranscriptView, {
           messages: [agentTurn(false)],
@@ -271,7 +288,8 @@ it.effect(
         }),
       );
       const worked = tab.worked();
-      assert.match(worked?.textContent ?? "", /^Worked for 1m 18s · /u);
+      assert.match(worked?.textContent ?? "", /^Worked for 1m 18s · Today, /u);
+      assert.equal(worked?.closest("[data-worked]")?.classList.contains("select-text"), true);
       assert.equal(worked?.getAttribute("title"), momentText(TURN_END));
       assert.equal(worked?.getAttribute("datetime"), new Date(TURN_END).toISOString());
       tab.unmount();
