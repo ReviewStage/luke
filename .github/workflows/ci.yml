@@ -76,7 +76,7 @@ jobs:
         run: |
           for round in 1 2 3 4; do
             for image in \
-              public.ecr.aws/docker/library/postgres:18 \
+              public.ecr.aws/docker/library/postgres:luke-fallback-probe-missing \
               mirror.gcr.io/library/postgres:18 \
               docker.io/library/postgres:18; do
               if docker pull --quiet "$image"; then
