@@ -26,7 +26,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * A row of the list also says, in brief, what the plan's coding agents are
  * doing and what they published (`planAgentsSummarySchema`), so the sidebar
  * can mark a plan at work or with a pull request without a read per row.
- * The owning account and the conversation a plan resumes in are the
+ * A plan belongs to one workspace, which its summary names; a start names
+ * the workspace it starts in, or none for the account's personal one.
+ * The starting account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
  * Every request refuses a key it does not name, as every request frame on
@@ -42,12 +44,23 @@ export const PLAN_BOUNDS = {
   MAX_BODY_CHARS: 200_000,
   MAX_ASSUMPTIONS: 200,
   MAX_ASSUMPTION_CHARS: 2_000,
+  /** The most characters a workspace's id may spell; the service mints them far shorter. */
+  MAX_WORKSPACE_ID_CHARS: 200,
 } as const;
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
   return EffectSchema.Trim.check(EffectSchema.isNonEmpty(), EffectSchema.isMaxLength(maximumChars));
 }
+
+/**
+ * A workspace's id as the service minted it: Better Auth's own generated
+ * string rather than a UUID, so bounded text and nothing more.
+ */
+export const workspaceIdSchema = EffectSchema.String.check(
+  EffectSchema.isNonEmpty(),
+  EffectSchema.isMaxLength(PLAN_BOUNDS.MAX_WORKSPACE_ID_CHARS),
+);
 
 export const planAssumptionSchema = EffectSchema.Struct({
   /** The assumption as one plain sentence. */
@@ -161,11 +174,14 @@ export type PlanDocument = typeof planDocumentSchema.Type;
 const repositoryChoiceSchema = EffectSchema.NullOr(githubRepositoryFullNameSchema);
 
 /**
- * Starting a plan (POST): its name, and the repository it is about where one
- * is chosen; the document starts as the untouched template.
+ * Starting a plan (POST): its name, the repository it is about where one is
+ * chosen, and the workspace it starts in where one is named, the account's
+ * personal workspace where none is; the document starts as the untouched
+ * template.
  */
 export const planCreateRequestSchema = EffectSchema.Struct({
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
+  workspaceId: EffectSchema.optionalKey(workspaceIdSchema),
   repository: EffectSchema.optionalKey(repositoryChoiceSchema),
 });
 
@@ -249,6 +265,8 @@ export const PLAN_LIST_ARCHIVED = {
 
 const planSummaryFields = {
   id: wireUuidSchema,
+  /** The workspace the plan belongs to. */
+  workspaceId: workspaceIdSchema,
   name: trimmedText(PLAN_BOUNDS.MAX_NAME_CHARS),
   /** Epoch milliseconds the plan was started. */
   createdAt: countedNumber,

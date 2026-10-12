@@ -46,6 +46,7 @@ import { SIDE_PANEL_TAB, SIDE_PANEL_TABS } from "./use-side-panel";
 
 const PLAN: Plan = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1,
   updatedAt: 2,
@@ -692,7 +693,15 @@ function row(
   createdAt: number,
   marks: { pinnedAt?: number; archivedAt?: number } = {},
 ) {
-  return { id, name: id, createdAt, updatedAt: createdAt, repository: null, ...marks };
+  return {
+    id,
+    workspaceId: "workspace-personal",
+    name: id,
+    createdAt,
+    updatedAt: createdAt,
+    repository: null,
+    ...marks,
+  };
 }
 
 test("the sidebar lists the pinned plans first, newest pinned first, then the rest as the service lists them, and the archived apart, newest archived first", () => {

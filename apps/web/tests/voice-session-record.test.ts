@@ -12,10 +12,11 @@ import {
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
 } from "../server/db/voice-vocabulary";
-import { createPlan, deletePlan } from "../server/hosted/plan-store";
+import { deletePlan } from "../server/hosted/plan-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The live session row as the record now writes it: five effects over the
@@ -139,7 +140,7 @@ it.layer(testSqlClient)("the voice session record over effect/unstable/sql", (it
       Effect.gen(function* () {
         const owner = yield* openUser;
         const other = yield* openUser;
-        const plan = yield* createPlan(owner, PLAN);
+        const plan = yield* startPlan(owner, PLAN);
         const liveSessionId = `live_p_${randomUUID()}`;
 
         assert.equal((yield* record.heldPlan({ userId: owner, planId: plan.id }))?.id, plan.id);

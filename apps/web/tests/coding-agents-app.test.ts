@@ -96,7 +96,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, savePlanDocument, updatePlan } from "../server/hosted/plan-store";
+import { savePlanDocument, updatePlan } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
@@ -106,6 +106,7 @@ import {
   type RepositoryScript,
 } from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding-agent routes, answered by the group the way a function answers
@@ -397,7 +398,7 @@ const openPlan = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
@@ -697,12 +698,12 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(startAs(undefined, plan.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
-        const unreachable = yield* createPlan(owner, { name: "Ledger", repository: "Acme/Ledger" });
+        const unreachable = yield* startPlan(owner, { name: "Ledger", repository: "Acme/Ledger" });
         assert.deepEqual(
           yield* ask(startAs(owner, unreachable.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
-        const bare = yield* createPlan(owner, { name: "Bare" });
+        const bare = yield* startPlan(owner, { name: "Bare" });
         assert.deepEqual(
           yield* ask(startAs(owner, bare.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),

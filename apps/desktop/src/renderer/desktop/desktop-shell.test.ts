@@ -609,6 +609,7 @@ test("the panel's toggle stands in the title bar on a plan's page alone, disable
 test("Command-T is claimed on a drawn plan's page alone: not while a version stands in its place, nor on a plan not drawn, the new-plan page, or Settings", () => {
   const plan = {
     id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    workspaceId: "workspace-personal",
     name: "Teammate invitations",
     createdAt: 1,
     updatedAt: 2,

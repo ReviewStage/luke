@@ -22,7 +22,6 @@ import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
-  createPlan,
   openPlanConversation,
   readPlan,
   savePlanDocument,
@@ -81,6 +80,7 @@ import {
   sendText,
   startFakeOpenAi,
 } from "./support/voice-fakes";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The hosted exchange attached to the sessions route, over the real store on
@@ -207,7 +207,7 @@ const PLAN = {
 /** An account holding one plan, and the plan's conversation every call about it lands in. */
 async function account(): Promise<{ target: ConversationTarget; planId: string }> {
   const userId = await database.createUser();
-  const plan = await database.run(createPlan(userId, PLAN));
+  const plan = await database.run(startPlan(userId, PLAN));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
   );
@@ -1013,7 +1013,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       assert.equal(session.created.type, VOICE_SERVICE_FRAME.SESSION_CREATED);
       const create = context.openAi.creates[0];
@@ -1075,7 +1075,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
@@ -1143,7 +1143,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
@@ -1191,7 +1191,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await sendText(session.attach.socket, JSON.stringify(sessionStarted(sessionId)));
@@ -1245,7 +1245,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const session = await openSession(context, plan.id);
       const sessionId = context.openAi.attaches[0]?.sessionId ?? "";
       await speak(session.attach.socket, sessionId);
@@ -1319,7 +1319,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       await database.run(
         savePlanDocument(context.target.userId, plan.id, {
           body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
@@ -1341,7 +1341,7 @@ it.effect(
       await hangUpConnection(saved.desktop, saved.attach, saved.upstream);
 
       const long = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        startPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const tail = "The last line of a very long plan.";
       await database.run(
@@ -1363,7 +1363,7 @@ it.effect(
       // more than twice the room, where four characters to a token let all of
       // them through.
       const wide = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
+        startPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
       );
       await database.run(
         savePlanDocument(context.target.userId, wide.id, {
@@ -1392,12 +1392,12 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const fresh = await database.run(createPlan(context.target.userId, PLAN));
+      const fresh = await database.run(startPlan(context.target.userId, PLAN));
       const freshCall = await openSession(context, fresh.id);
       const [freshSeed] = seededTexts(context, 0);
       await hangUpConnection(freshCall.desktop, freshCall.attach, freshCall.upstream);
 
-      const saved = await database.run(createPlan(context.target.userId, PLAN));
+      const saved = await database.run(startPlan(context.target.userId, PLAN));
       await database.run(
         savePlanDocument(context.target.userId, saved.id, {
           body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
@@ -1423,7 +1423,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const first = await openSession(context, plan.id);
       await sendText(first.attach.socket, JSON.stringify(heard("Invites ", 1000, 1400)));
       await sendText(first.attach.socket, JSON.stringify(heard("should expire.", 1400, 2000)));
@@ -1454,7 +1454,7 @@ it.effect(
       await hangUpConnection(second.desktop, second.attach, second.upstream);
 
       const other = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        startPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const otherCall = await openSession(context, other.id);
       assert.deepEqual(seededTexts(context, 2).slice(1), []);
@@ -1472,7 +1472,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const first = await openSession(context, plan.id);
       await sendText(
         first.attach.socket,
@@ -1515,7 +1515,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       await database.run(
         savePlanDocument(context.target.userId, plan.id, {
           body: `# Teammate invitations\n\n${"Owners invite teammates by email. ".repeat(2_000)}\n`,
@@ -1564,7 +1564,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       const first = await openSession(context, plan.id);
       const voiceSessionId = String(first.created.voiceSessionId);
       await hangUpConnection(first.desktop, first.attach, first.upstream);
@@ -1603,12 +1603,12 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const first = await database.run(createPlan(context.target.userId, PLAN));
+      const first = await database.run(startPlan(context.target.userId, PLAN));
       const second = await database.run(
-        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        startPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const stranger = await database.createUser();
-      const foreign = await database.run(createPlan(stranger, PLAN));
+      const foreign = await database.run(startPlan(stranger, PLAN));
 
       const firstCall = await openSession(context, first.id);
       await speak(firstCall.attach.socket, context.openAi.attaches[0]?.sessionId ?? "");
@@ -1665,7 +1665,7 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      const plan = await database.run(startPlan(context.target.userId, PLAN));
       await database.run(updatePlan(context.target.userId, plan.id, { archived: true }));
 
       const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {

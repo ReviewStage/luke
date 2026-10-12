@@ -28,8 +28,9 @@ import {
   recordCodingAgentPublished,
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
-import { createPlan, deletePlan } from "../server/hosted/plan-store";
+import { deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding agents of an account's plans, through the store's public
@@ -51,7 +52,7 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan started. */
 const openPlan = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

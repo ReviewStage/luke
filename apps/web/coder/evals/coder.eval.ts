@@ -26,12 +26,12 @@ import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
 import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
 import { type CodingAgent, createCodingAgent } from "../../server/hosted/coding-agent-store";
-import { createPlan } from "../../server/hosted/plan-store";
 import {
   readMessagesByConversationTyped,
   readTurnById,
   readTurnsByConversation,
 } from "../../tests/support/store-rows";
+import { startPlan } from "../../tests/support/workspaces";
 import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
@@ -143,7 +143,7 @@ export default defineEval({
     const run: Run = (effect) => runtime.runPromise(effect);
     try {
       await ensureLocalDevUser(run);
-      const plan = await run(createPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
+      const plan = await run(startPlan(LOCAL_DEV_PRINCIPAL, { ...PLAN, repository: REPOSITORY }));
       const agent = await startAgent(run, plan.id);
 
       /** The Start as the route makes it: the first message of a typed turn on the agent's conversation, answered once the door has recorded the session on the conversation row. */

@@ -15,9 +15,10 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { listRevisions } from "../server/hosted/plan-revisions";
-import { createPlan, readPlan } from "../server/hosted/plan-store";
+import { readPlan } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The developer's own edit of one field, through the plan's one write: it
@@ -32,7 +33,7 @@ const CALL = { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: "rtc-session-edits" }
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

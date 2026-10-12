@@ -36,6 +36,7 @@ const ignore = () => undefined;
 
 const PLAN: Plan = {
   id: "0f6c2a1e-5b7d-4e3a-8c91-2d4f6a8b0c13",
+  workspaceId: "workspace-personal",
   name: "Invoice export",
   createdAt: 1,
   updatedAt: 2,

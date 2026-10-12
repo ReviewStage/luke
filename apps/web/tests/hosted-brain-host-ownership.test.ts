@@ -26,7 +26,7 @@ import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
@@ -38,6 +38,7 @@ import {
   readTurnsByConversation,
   setConversationDeletedAt,
 } from "./support/store-rows";
+import { startPlan } from "./support/workspaces";
 
 /**
  * Session ownership is the host's alone: eve authenticates a request and
@@ -452,7 +453,7 @@ test("a tool call is admitted again as it runs: the current session's lands, and
   const SESSION = sessions();
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
   );
@@ -506,7 +507,7 @@ test("a subagent's tool call is admitted through the root it was delegated from:
   const CHILD = "wrun_01MCHILD000000000000000";
   const userA = await database.createUser();
   const userB = await database.createUser();
-  const started = await database.run(createPlan(userA, { name: "Teammate invitations" }));
+  const started = await database.run(startPlan(userA, { name: "Teammate invitations" }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userA, started.id)),
   );

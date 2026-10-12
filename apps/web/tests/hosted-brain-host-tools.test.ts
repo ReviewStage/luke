@@ -61,7 +61,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { openPlanConversation } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { listJournals, sentLineStands } from "../server/hosted/store/message-reads";
@@ -70,6 +70,7 @@ import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
 import { titleModelAnswering } from "./support/title-model";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The planning tools as eve runs them through the host's `runTool`, over the
@@ -216,7 +217,7 @@ async function planConversation(
   const owner = userId ?? (await database.createUser());
   const name = "Teammate invitations";
   const plan = await database.run(
-    createPlan(owner, repository === undefined ? { name } : { name, repository }),
+    startPlan(owner, repository === undefined ? { name } : { name, repository }),
   );
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(owner, plan.id)),

@@ -90,6 +90,7 @@ const SEED = [
 /** A plan the account holds, untouched since it was started. */
 const PLAN: Plan = {
   id: "7d4f3c2a-1b0e-4f6a-9c8d-2e1f0a9b8c7d",
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1_000,
   updatedAt: 1_000,

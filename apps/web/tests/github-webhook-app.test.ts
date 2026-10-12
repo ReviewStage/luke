@@ -19,7 +19,6 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { createPlan } from "../server/hosted/plan-store";
 import {
   type FakeGitHub,
   githubReaching,
@@ -27,6 +26,7 @@ import {
   type SentToGitHub,
 } from "./support/github-app-fake";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The Luke GitHub App's webhook, answered by its group the way a function
@@ -181,7 +181,7 @@ function statusDelivery(ref: string) {
 const openAgent = (pull: PullRequestFixture) =>
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
-    const plan = yield* createPlan(owner, {
+    const plan = yield* startPlan(owner, {
       name: "Teammate invitations",
       repository: RELAY_FULL_NAME,
     });
