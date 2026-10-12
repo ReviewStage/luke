@@ -50,8 +50,8 @@ export interface PlanSection {
 /** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
 
-/** A `#` or `##` heading line, its words in the group, any closing hashes left out. */
-const SECTION_HEADING = /^ {0,3}#{1,2}(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/u;
+/** What opens a `#` or `##` heading line: up to three spaces, the hashes, then a space, a tab, or the line's end. */
+const SECTION_OPENER = /^ {0,3}#{1,2}(?=[ \t]|$)/u;
 
 /** A section while its lines are read: its heading, and the lines so far. */
 interface SectionLines {
@@ -59,11 +59,27 @@ interface SectionLines {
   readonly lines: string[];
 }
 
+/**
+ * A heading's words with the closing hashes CommonMark allows left out: a
+ * run of them at the end, standing behind a space or alone. Note that they
+ * are walked by hand rather than matched, because a pattern over a run of
+ * spaces and hashes backtracks across every long run it finds no end in.
+ */
+function withoutClosingHashes(words: string): string {
+  let end = words.length;
+  while (end > 0 && words[end - 1] === "#") end -= 1;
+  if (end === words.length) return words;
+  if (end === 0) return "";
+  const before = words[end - 1];
+  return before === " " || before === "\t" ? words.slice(0, end).trimEnd() : words;
+}
+
 /** The words a heading line is known by, cut to the bound, or nothing for a line that opens no section. */
 function headingOf(line: string): string | undefined {
-  const match = SECTION_HEADING.exec(line);
-  if (match === null) return undefined;
-  return (match[1] ?? "").trim().slice(0, PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS);
+  const opener = SECTION_OPENER.exec(line);
+  if (opener === null) return undefined;
+  const words = withoutClosingHashes(line.slice(opener[0].length).trim());
+  return words.slice(0, PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS);
 }
 
 /**

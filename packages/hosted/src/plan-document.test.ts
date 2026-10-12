@@ -85,3 +85,18 @@ test("a save names its writer on each section it moved, keeps the rest, and forg
     ],
   );
 });
+
+test("a heading's closing hashes are no part of its words, and a long run of tabs or hashes reads at once", () => {
+  const tabs = "\t".repeat(50_000);
+
+  assert.deepEqual(
+    planSections("## Goal ##\n\n## C# ##\n\n## # #\n").map((section) => section.heading),
+    ["Goal", "C#", "#"],
+  );
+  const { MAX_HEADING_CHARS } = PLAN_SECTION_BOUNDS;
+  assert.equal(
+    planSections(`##${tabs}x${tabs}#${tabs}y`)[0]?.heading,
+    `x${tabs}`.slice(0, MAX_HEADING_CHARS),
+  );
+  assert.equal(planSections(`## x ${"#".repeat(50_000)}`)[0]?.heading, "x");
+});
