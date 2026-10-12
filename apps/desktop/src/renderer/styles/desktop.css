@@ -80,6 +80,9 @@
   --panel-toggle-clearance: calc(var(--column-inset) + var(--control-height) + var(--control-gap));
   /* The measure a document is read at: about seventy characters of body text. */
   --reading-width: 720px;
+  /* The measure code is read at, a step wider than words', so a hundred
+     columns stand beside their line numbers without wrapping. */
+  --code-reading-width: 840px;
   /* A destructive act's own button, filled: deep enough to carry white words,
      where the panel's lighter red is drawn as text. */
   --danger-fill: #d4373a;
@@ -2214,11 +2217,52 @@ body,
 }
 
 .side-panel-content {
+  /* What the panel leaves either side of a column at each measure, read
+     where it is spent: a percentage there is of the box's frame, which is
+     the panel's width. */
+  --reading-room: calc((100% - var(--reading-width)) / 2);
+  --code-reading-room: calc((100% - var(--code-reading-width)) / 2);
   position: relative;
   display: flex;
   min-height: 0;
   flex: 1;
   flex-direction: column;
+}
+
+/* Every tab but the Board keeps to a column centred in the panel, however
+   wide it is drawn, as the document keeps to its own: words at the
+   document's measure, code at code's. Each scroller still spans the panel,
+   so its bar stays at the panel's edge, and pads in to the column, never by
+   less than the tab's own inset. An agent's composer pads in to the same
+   column as its transcript, so the card, its chips, and the transcript line
+   up; the sticky call headers and the way back to the newest line already
+   keep to the log's column. */
+.side-panel-content [role="log"],
+.side-panel-content .agent-composer {
+  padding-inline: max(var(--space-16), var(--reading-room));
+}
+
+.side-panel-content .code-pane [role="log"] {
+  padding-inline: max(var(--space-16), var(--code-reading-room));
+}
+
+.side-panel-content .history-tab {
+  padding-inline: max(var(--column-inset), var(--reading-room));
+}
+
+/* A file's heading keeps its band edge to edge, as the panel's own chrome
+   does, and starts its words at the column's edge. */
+.side-panel-content .file-tab {
+  --file-room: max(0px, var(--code-reading-room));
+}
+
+.side-panel-content .file-tab-header {
+  padding-right: calc(var(--file-room) + var(--space-2));
+  padding-left: calc(var(--file-room) + var(--space-12));
+}
+
+.side-panel-content .file-tab-lines {
+  padding-inline: var(--file-room);
 }
 
 /* The board fills the tab edge to edge: the panel is its frame, so its own
