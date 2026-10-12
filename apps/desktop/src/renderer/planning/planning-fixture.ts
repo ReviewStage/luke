@@ -1,7 +1,7 @@
 import { AGENT_TOOL, EVE_TOOL } from "@sidecar/hosted/agent-tools";
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
-import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { type Plan, type PlanSummary, ROLLOUT_BASE, type Rollout } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_STATE,
@@ -107,6 +107,28 @@ const FIXTURE_TEXT = [
     "- An invite expires after 7 days.",
 ].join("\n\n");
 
+/** The plan's rollout as cut: the pending memberships on main, then the invite flow and its screen, each on the memberships alone. */
+const FIXTURE_ROLLOUT: Rollout = [
+  {
+    title: "Pending memberships",
+    scope: "The `state` column on `memberships` and its migration.",
+    base: ROLLOUT_BASE.MAIN,
+    acceptance: "A store test writes a pending membership and reads it back.",
+  },
+  {
+    title: "Invite and accept",
+    scope: "`src/members/invite.ts`: `inviteMember` and `acceptInvite`.",
+    base: 1,
+    acceptance: "A withdrawn invite's link grants nothing.",
+  },
+  {
+    title: "Invite screen",
+    scope: "The form a member invites a teammate from.",
+    base: 1,
+    acceptance: null,
+  },
+];
+
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
   workspaceId: FIXTURE_PERSONAL.id,
@@ -115,6 +137,7 @@ const FIXTURE_PLAN: Plan = {
   updatedAt: 2,
   repository: "acme/relay",
   document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
+  rollout: FIXTURE_ROLLOUT,
 };
 
 const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [

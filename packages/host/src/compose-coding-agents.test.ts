@@ -271,7 +271,9 @@ function fakeService() {
           revision: {
             seq: revision.seq,
             document: { body: "## Why\n", assumptions: [] },
+            rollout: [],
             previous: null,
+            previousRollout: null,
           },
         };
       }),

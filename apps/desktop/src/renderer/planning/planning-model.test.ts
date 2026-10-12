@@ -18,6 +18,7 @@ const _PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 function _view(patch: Partial<PlanningView>): PlanningView {

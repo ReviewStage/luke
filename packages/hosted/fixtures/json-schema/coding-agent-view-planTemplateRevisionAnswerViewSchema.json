@@ -42,6 +42,59 @@
               ],
               "additionalProperties": false
             },
+            "rollout": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  },
+                  "scope": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  },
+                  "base": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "main"
+                        ]
+                      },
+                      {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 20
+                      }
+                    ]
+                  },
+                  "acceptance": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "title",
+                  "scope",
+                  "base",
+                  "acceptance"
+                ],
+                "additionalProperties": false
+              },
+              "maxItems": 20
+            },
             "previous": {
               "anyOf": [
                 {
@@ -80,12 +133,74 @@
                   "type": "null"
                 }
               ]
+            },
+            "previousRollout": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "title": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200
+                      },
+                      "scope": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 4000
+                      },
+                      "base": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "main"
+                            ]
+                          },
+                          {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 20
+                          }
+                        ]
+                      },
+                      "acceptance": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 4000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "title",
+                      "scope",
+                      "base",
+                      "acceptance"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "maxItems": 20
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
             "seq",
             "document",
-            "previous"
+            "rollout",
+            "previous",
+            "previousRollout"
           ],
           "additionalProperties": false
         }

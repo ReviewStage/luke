@@ -83,6 +83,7 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
       body,
       assumptions: [{ text: "An invite expires after 7 days." }],
     },
+    rollout: [],
   };
 }
 
@@ -93,6 +94,7 @@ function summary({
   document: _document,
   agentEdits: _agentEdits,
   lastEdit: _lastEdit,
+  rollout: _rollout,
   ...rest
 }: Plan): PlanSummary {
   return rest;

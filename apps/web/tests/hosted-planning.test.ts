@@ -7,7 +7,7 @@ import { openPlanConversation, readPlan, savePlanText } from "@sidecar/database/
 import { storeWriter } from "@sidecar/database/models/writer";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
-import { type PlanDocument, planDocumentSchema } from "@sidecar/hosted/plan-wire";
+import { type PlanDocument, planDocumentSchema, rolloutSchema } from "@sidecar/hosted/plan-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import {
   generateText,
@@ -52,6 +52,7 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { cutRollout, INVITATIONS_ROLLOUT } from "./support/plan-rollouts";
 import { sandboxDouble } from "./support/repository-sandbox";
 import { startPlan } from "./support/workspaces";
 
@@ -369,6 +370,11 @@ const readDocument = Schema.decodeUnknownSync(Schema.fromJsonString(planDocument
 /** The line the saved document follows in a standing context, as the model reads it. */
 const DOCUMENT_MARKER = "[saved document]";
 
+/** The line the plan's rollout follows in a standing context, beside the document. */
+const ROLLOUT_MARKER = "[rollout]";
+
+const readRollout = Schema.decodeUnknownSync(Schema.fromJsonString(rolloutSchema));
+
 /** The document a standing context hands the model, on the line after its marker, failing the test where it carries none. */
 function handedDocument(context: string): PlanDocument {
   const lines = context.split("\n");
@@ -436,6 +442,25 @@ it.layer(getTestDB())("the planning model on the hosted brain", (it) => {
           handedDocument(yield* host.standingContext(yield* admitted(host, session))),
           SAVED,
         );
+      }),
+  );
+
+  it.effect(
+    "the plan's rollout reaches the planning model beside the document once it has one, and nothing of it before",
+    () =>
+      Effect.gen(function* () {
+        const { host, planId, userId, conversationId } = yield* savedPlanWithConversation();
+        const session = yield* startSession(host, userId, conversationId);
+        const before = yield* host.standingContext(yield* admitted(host, session));
+
+        yield* cutRollout(planId, INVITATIONS_ROLLOUT);
+        const lines = (yield* host.standingContext(yield* admitted(host, session))).split("\n");
+
+        assert.ok(!before.split("\n").includes(ROLLOUT_MARKER));
+        const at = lines.indexOf(ROLLOUT_MARKER);
+        assert.notEqual(at, -1);
+        assert.deepEqual(readRollout(lines[at + 1]), INVITATIONS_ROLLOUT);
+        assert.ok(!(lines[lines.indexOf(DOCUMENT_MARKER) + 1] ?? "").includes("Invite route"));
       }),
   );
 

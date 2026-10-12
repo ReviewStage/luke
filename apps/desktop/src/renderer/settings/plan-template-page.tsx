@@ -116,6 +116,7 @@ function templateDocument(text: string, lastEdit: PlanLastEdit | undefined): Pla
     updatedAt: 0,
     repository: null,
     document: { body: text, assumptions: [] },
+    rollout: [],
     ...(lastEdit === undefined ? undefined : { lastEdit }),
   };
 }

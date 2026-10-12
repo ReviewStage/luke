@@ -7,6 +7,8 @@ import {
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
+  type Rollout,
+  rolloutSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -128,6 +130,7 @@ const PLAN_COLUMNS = {
   userId: plan.userId,
   agentEdits: plan.agentEdits,
   document: plan.document,
+  rollout: plan.rollout,
   conversationId: plan.conversationId,
 };
 
@@ -150,6 +153,7 @@ const PlanRowSchema = Schema.Struct({
   agentEdits: Schema.Array(planAgentEditSchema),
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
+  rollout: rolloutSchema,
   conversationId: Schema.NullOr(Schema.String),
 });
 
@@ -260,6 +264,7 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
         sectionEdits: sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        rollout: row.rollout,
       },
       text: row.document,
       agentEdits,
@@ -352,16 +357,18 @@ const replaceText = SqlSchema.findOneOption({
     planId: Schema.String,
     text: Schema.String,
     agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
+    rollout: Schema.optionalKey(rolloutSchema),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, text, agentEdits, now }) =>
+  execute: ({ userId, planId, text, agentEdits, rollout, now }) =>
     Database.use((db) =>
       db
         .update(plan)
         .set({
           document: text,
           ...(agentEdits ? { agentEdits } : undefined),
+          ...(rollout ? { rollout } : undefined),
           updatedAt: now,
         })
         .where(reachablePlan(userId, planId))
@@ -636,11 +643,13 @@ export function readPlanForUpdate(
 export interface PlanTextSaveExtras {
   /** The coding agents' journal. */
   readonly agentEdits?: readonly PlanAgentEdit[];
+  /** The rollout beside the text. */
+  readonly rollout?: Rollout;
 }
 
 /**
  * Replaces the text of a plan that is one document, with the agents' journal
- * where it is handed, and answers
+ * and the rollout where they are handed, and answers
  * the plan as saved, or nothing where the account reaches no such plan; nothing
  * is ever created here.
  */
