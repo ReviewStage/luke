@@ -125,6 +125,7 @@
             "github",
             "abandoned",
             "provider_key",
+            "not_started",
             "other"
           ]
         },

@@ -5,6 +5,7 @@ import {
 import { WireValueSchema } from "@sidecar/wire";
 import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
+import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
 
 /**
@@ -72,6 +73,24 @@ export const SANDBOX_TOOLS: ReadonlySet<string> = new Set([
   CODER_TOOL.GREP,
   CODER_TOOL.APPLY_PATCH,
 ]);
+
+/**
+ * Whether an event of the agent's session opened its sandbox: a request for
+ * a sandbox tool, or a message received with files, which eve stages in the
+ * sandbox before the turn opens, opening it to do so.
+ */
+export function opensSandbox(event: MessageStreamEvent): boolean {
+  switch (event.type) {
+    case "actions.requested":
+      return event.data.actions.some(
+        (action) => action.kind === "tool-call" && SANDBOX_TOOLS.has(action.toolName),
+      );
+    case "message.received":
+      return event.data.parts?.some((part) => part.type === "file") ?? false;
+    default:
+      return false;
+  }
+}
 
 /** A call's input as the row keeps it: one JSON object, whose fields are eve's own tool's to read. */
 const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {

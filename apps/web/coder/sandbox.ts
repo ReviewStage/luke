@@ -10,8 +10,12 @@ import { host } from "./host.js";
 /**
  * sandbox.ts -- the coding agent's sandbox: one Vercel Sandbox per eve session, with the agent's repository checked out in it.
  *
- * The sandbox opens on the first tool call that needs it and stands for the
- * session, across turns and deploys; a sandbox Vercel stopped resumes from
+ * The sandbox opens on the first tool call that needs it, or earlier where a
+ * message carries files, which eve stages in the sandbox before the turn
+ * opens: for an opening message that is before `session.started`, so the
+ * open claims the conversation's record itself rather than finding it
+ * claimed (`CoderHost.admitSandbox`). It stands for the session, across
+ * turns and deploys; a sandbox Vercel stopped resumes from
  * its snapshot with the checkout and the agent's changes intact. Its timeout
  * is the platform's maximum, so a long run is never cut off mid-turn, and
  * the store hook stops it the moment a turn ends rather than waiting that
@@ -66,7 +70,7 @@ export default defineSandbox(async ({ session }) => {
   });
   const token = await runWeb(
     Effect.gen(function* () {
-      const admitted = yield* host.admit(session.auth, session.id);
+      const admitted = yield* host.admitSandbox(session.auth, session.id);
       if (Result.isFailure(admitted)) {
         return yield* Effect.fail(new CheckoutRefused({ reason: admitted.failure }));
       }

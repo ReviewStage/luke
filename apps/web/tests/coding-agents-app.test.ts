@@ -1777,6 +1777,35 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
+    "an agent whose session never started reads as failed past the grace its first turn may land in, saying it never started, and a message to it is refused as an agent ended for good rather than one still starting",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, ask } = yield* openPlan({ eve });
+        const unclaimed = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const line = { text: "Hi", clientKey: randomUUID() };
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.millis(1)));
+
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: unclaimed.id })),
+        );
+        assert.equal(page.status, CODING_AGENT_STATUS.FAILED);
+        assert.equal(page.failureReason, CODING_AGENT_FAILURE.NOT_STARTED);
+        assert.deepEqual(
+          yield* ask(messageAs(owner, unclaimed.id, line)),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_RETIRED),
+        );
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
     "a message while a turn runs reaches eve under the developer's bearer with no policy of its own, shows in the transcript at once as the developer's line, and leaves the agent running",
     () =>
       Effect.gen(function* () {

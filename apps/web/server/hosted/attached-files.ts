@@ -21,7 +21,7 @@ import { COALESCED_LINE_SEPARATOR } from "./store/message-reads.js";
  * there are any, then each text file inlined as its own text part, headed
  * by its name and fenced, since no provider path takes a text file as a
  * file, then each image and PDF as a file part over a `data:` URL, which
- * eve stages in the sandbox where one is up. The journal keeps the words
+ * eve stages in the sandbox, opening it to do so. The journal keeps the words
  * as the row's first part, empty where there are none, and every file
  * after it as the SDK's file part over the same `data:` URL, a text file
  * under `text/plain`, so the transcript draws a thumbnail or a name for
@@ -173,9 +173,8 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
  * part spelled as a text file's heading and fence is that file, and every
  * other is words, since a message may carry files with no words. A file
  * staged in the sandbox carries no URL, so its part keeps its name and no
- * bytes; a task's files are never staged, because eve stages against a
- * sandbox that is up and a coding agent's opens on its first sandbox tool
- * call, after the opening message was received.
+ * bytes; eve stages every file a message carries, a task's included, so a
+ * receipt's own row names each file and draws none.
  */
 export function receivedMessage(received: {
   readonly message: string;
