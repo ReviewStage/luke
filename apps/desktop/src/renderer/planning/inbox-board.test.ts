@@ -24,7 +24,7 @@ import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { InboxBoard } from "./inbox-board";
 import type { CodingAgentsControl } from "./use-coding-agents";
-import { INBOX_CHANGED_NOTE, usePlanInbox } from "./use-plan-inbox";
+import { INBOX_NOT_TAKEN_NOTE, usePlanInbox } from "./use-plan-inbox";
 
 const PLAN = "2e4a6c8e-0b1d-4f3a-8c5e-7a9b1c3d5e7f";
 
@@ -112,19 +112,26 @@ function service(
   return { agents, sent, reads, listReads };
 }
 
-/** The tab as the plan's column draws it: the board over the plan's inbox. */
-function Tab({ agents }: { agents: CodingAgentsControl }) {
-  const inbox = usePlanInbox({ planId: PLAN, shown: true, agents });
+/** The tab as the plan's column draws it: the board over the open plan's inbox. */
+function Tab({ agents, planId = PLAN }: { agents: CodingAgentsControl; planId?: string }) {
+  const inbox = usePlanInbox({ planId, shown: true, agents });
   return createElement(InboxBoard, { control: inbox, agents, onOpenAgent: () => undefined });
 }
 
-function mount(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
+/** The tab mounted on the plan given, answering the page and a way to open another plan in its place. */
+function mounted(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(onRegistry(registry, createElement(Tab, { agents }))));
-  return container;
+  const open = (planId: string) =>
+    act(() => root.render(onRegistry(registry, createElement(Tab, { agents, planId }))));
+  open(PLAN);
+  return { page: container, open };
+}
+
+function mount(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
+  return mounted(agents, registry).page;
 }
 
 /** Lets every promise settled so far run its continuations. */
@@ -296,7 +303,7 @@ it.effect(
       assert.equal(sent[0]?.clientKey, sent[1]?.clientKey);
       assert.equal(
         card(page, SETTINGS.id).querySelector(".agent-note")?.textContent,
-        INBOX_CHANGED_NOTE,
+        INBOX_NOT_TAKEN_NOTE.CHANGED,
       );
       assert.equal(
         card(page, SETTINGS.id).querySelector("[data-inbox-title]")?.textContent,
@@ -340,5 +347,82 @@ it.effect(
       yield* settle;
       assert.ok(card(page, SETTINGS.id));
       assert.equal(listReads.length, 1);
+    }),
+);
+
+it.effect(
+  "a plan with no coding agent holds no read of its inbox open, since it has no Inbox tab",
+  () =>
+    Effect.gen(function* () {
+      const reads: string[] = [];
+      const agents = codingAgentsControl({
+        agents: [],
+        agentIds: [],
+        readInbox: ({ after }) => {
+          reads.push(after);
+          return Promise.resolve({ items: [], cursor: "0.0" });
+        },
+      });
+      mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.deepEqual(reads, []);
+    }),
+);
+
+it.effect(
+  "an answer that lands after the window opened another plan is drawn on neither, so the plan now open shows only its own items",
+  () =>
+    Effect.gen(function* () {
+      const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
+      let land: (answered: CodingAgentInboxAnsweredView) => void = () => undefined;
+      const agents = codingAgentsControl({
+        agents: [AGENT],
+        agentIds: [AGENT.id],
+        readInbox: ({ planId, after }) =>
+          after === INBOX_CURSOR_START
+            ? Promise.resolve(
+                planId === PLAN ? { items: [SETTINGS], cursor: "a" } : { items: [], cursor: "b" },
+              )
+            : new Promise(() => undefined),
+        answerInbox: () =>
+          new Promise((resolve) => {
+            land = resolve;
+          }),
+      });
+      const { page, open } = mounted(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(buttonNamed(card(page, SETTINGS.id), "Done"));
+      open(OTHER_PLAN);
+      yield* settle;
+      land({ item: { ...SETTINGS, status: INBOX_STATUS.OPEN, revision: 2 }, taken: false });
+      yield* settle;
+      assert.equal(page.querySelector(`[data-item-id="${SETTINGS.id}"]`), null);
+      assert.equal(page.textContent, "Nothing is waiting on you.");
+    }),
+);
+
+it.effect(
+  "an answer not taken because the item was answered first, from another window, settles the card with that answer and says nothing of the agent changing it",
+  () =>
+    Effect.gen(function* () {
+      const answeredElsewhere = {
+        ...SETTINGS,
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.DONE },
+      };
+      const { agents } = service(
+        [{ items: [SETTINGS], cursor: "a" }],
+        [() => ({ item: answeredElsewhere, taken: false })],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(buttonNamed(card(page, SETTINGS.id), "Done"));
+      yield* settle;
+      assert.equal(page.querySelectorAll("article[data-item-id]").length, 0);
+      assert.equal(
+        page.querySelector("[data-inbox-settled] > summary")?.textContent,
+        "Settled · 1",
+      );
+      assert.ok(!page.textContent?.includes(INBOX_NOT_TAKEN_NOTE.CHANGED));
     }),
 );

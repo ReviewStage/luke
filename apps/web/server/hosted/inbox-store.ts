@@ -57,6 +57,14 @@ export const INBOX_POST_REFUSAL = {
 
 export type InboxPostRefusal = (typeof INBOX_POST_REFUSAL)[keyof typeof INBOX_POST_REFUSAL];
 
+/** Where one item stands, without what it says. */
+export interface InboxStamp {
+  readonly id: string;
+  readonly revision: number;
+  readonly status: InboxItem["status"];
+  readonly updatedAt: number;
+}
+
 /** An item as the service holds it, beyond what the wire carries: the key its answer was taken under. */
 export interface StoredInboxItem {
   readonly item: InboxItem;
@@ -235,56 +243,106 @@ const closeItem = SqlSchema.findOneOption({
       .returning(INBOX_COLUMNS),
 });
 
-const findAgentItems = SqlSchema.findAll({
-  Request: AgentKeySchema,
+/** Where a read looks: one plan's items, or one agent's, always the account's own. */
+const INBOX_SCOPE = {
+  PLAN: "plan",
+  AGENT: "agent",
+} as const;
+
+const ScopeSchema = Schema.Struct({
+  userId: Schema.String,
+  scope: Schema.Literals(Object.values(INBOX_SCOPE)),
+  id: Schema.String,
+});
+
+type InboxScope = typeof ScopeSchema.Type;
+
+/** The rows a scope names: the account's, under the plan or the agent given. */
+function inScope(scope: InboxScope) {
+  return and(
+    eq(inboxItem.userId, scope.userId),
+    scope.scope === INBOX_SCOPE.PLAN
+      ? eq(inboxItem.planId, scope.id)
+      : eq(inboxItem.agentId, scope.id),
+  );
+}
+
+/** The order every read keeps: the latest changed first, and by id among those changed at one instant, so two reads of the same rows agree. */
+const LATEST_FIRST = [desc(inboxItem.updatedAt), desc(inboxItem.id)] as const;
+
+/** Every open item the scope holds, however long ago it last changed; the open bound per agent keeps these few. */
+const findOpenItems = SqlSchema.findAll({
+  Request: ScopeSchema,
   Result: InboxRowSchema,
-  execute: ({ userId, agentId }) =>
+  execute: (scope) =>
     db
       .select(INBOX_COLUMNS)
       .from(inboxItem)
-      .where(and(eq(inboxItem.userId, userId), eq(inboxItem.agentId, agentId)))
-      .orderBy(desc(inboxItem.updatedAt))
-      .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
+      .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
+      .orderBy(...LATEST_FIRST),
 });
 
-const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
-
-/** Every item of the plan still open, however long ago it last changed; the open bound per agent keeps these few. */
-const findOpenPlanItems = SqlSchema.findAll({
-  Request: PlanKeySchema,
+/** The scope's settled items, the latest changed first, as many as the read carries. */
+const findSettledItems = SqlSchema.findAll({
+  Request: Schema.Struct({ ...ScopeSchema.fields, limit: Schema.Number }),
   Result: InboxRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ limit, ...scope }) =>
     db
       .select(INBOX_COLUMNS)
       .from(inboxItem)
-      .where(
-        and(
-          eq(inboxItem.userId, userId),
-          eq(inboxItem.planId, planId),
-          eq(inboxItem.status, INBOX_STATUS.OPEN),
-        ),
-      )
-      .orderBy(desc(inboxItem.updatedAt)),
+      .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+      .orderBy(...LATEST_FIRST)
+      .limit(limit),
 });
 
-/** The plan's settled items, the latest changed first, as many as a read carries. */
-const findSettledPlanItems = SqlSchema.findAll({
-  Request: PlanKeySchema,
-  Result: InboxRowSchema,
-  execute: ({ userId, planId }) =>
-    db
-      .select(INBOX_COLUMNS)
-      .from(inboxItem)
-      .where(
-        and(
-          eq(inboxItem.userId, userId),
-          eq(inboxItem.planId, planId),
-          ne(inboxItem.status, INBOX_STATUS.OPEN),
-        ),
-      )
-      .orderBy(desc(inboxItem.updatedAt))
-      .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
+/** Where one item stands, without what it says: what a held read compares between looks. */
+const StampRowSchema = Schema.Struct({
+  id: Schema.String,
+  revision: Schema.Number,
+  status: Schema.Literals(Object.values(INBOX_STATUS)),
+  updatedAt: InstantColumnSchema,
 });
+
+const STAMP_COLUMNS = {
+  id: inboxItem.id,
+  revision: inboxItem.revision,
+  status: inboxItem.status,
+  updatedAt: inboxItem.updatedAt,
+};
+
+const findOpenStamps = SqlSchema.findAll({
+  Request: ScopeSchema,
+  Result: StampRowSchema,
+  execute: (scope) =>
+    db
+      .select(STAMP_COLUMNS)
+      .from(inboxItem)
+      .where(and(inScope(scope), eq(inboxItem.status, INBOX_STATUS.OPEN)))
+      .orderBy(...LATEST_FIRST),
+});
+
+const findSettledStamps = SqlSchema.findAll({
+  Request: Schema.Struct({ ...ScopeSchema.fields, limit: Schema.Number }),
+  Result: StampRowSchema,
+  execute: ({ limit, ...scope }) =>
+    db
+      .select(STAMP_COLUMNS)
+      .from(inboxItem)
+      .where(and(inScope(scope), ne(inboxItem.status, INBOX_STATUS.OPEN)))
+      .orderBy(...LATEST_FIRST)
+      .limit(limit),
+});
+
+/** The scope's items: every open one, then the latest settled ones up to the limit. */
+function scopeItems(
+  scope: InboxScope,
+  settledLimit: number,
+): InboxStoreEffect<readonly InboxItem[]> {
+  return Effect.map(
+    Effect.all([findOpenItems(scope), findSettledItems({ ...scope, limit: settledLimit })]),
+    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
+  );
+}
 
 const findItem = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, itemId: Schema.String }),
@@ -376,11 +434,20 @@ export function closeInboxItem(
   );
 }
 
-/** Every item the agent posted, the latest changed first. */
+/**
+ * The agent's own items as its tools answer with them: every one still
+ * open, then the latest settled ones, few enough that a tool's answer stays
+ * a small part of the agent's context. Note that the open items are read
+ * apart from the bound, so one the developer has yet to answer is never
+ * dropped from what the agent holds.
+ */
 export function agentInboxItems(
   agent: Pick<InboxAgent, "userId" | "agentId">,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  return Effect.map(findAgentItems(agent), (rows) => rows.map((row) => storedItem(row).item));
+  return scopeItems(
+    { userId: agent.userId, scope: INBOX_SCOPE.AGENT, id: agent.agentId },
+    INBOX_BOUNDS.MAX_SETTLED_TOLD,
+  );
 }
 
 /**
@@ -393,9 +460,22 @@ export function planInboxItems(
   userId: string,
   planId: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
+  return scopeItems({ userId, scope: INBOX_SCOPE.PLAN, id: planId }, INBOX_BOUNDS.MAX_ITEMS_READ);
+}
+
+/** Where each of the plan's items stands, the same items `planInboxItems` reads and none of their words: what a held read compares between looks. */
+export function planInboxStamps(
+  userId: string,
+  planId: string,
+): InboxStoreEffect<readonly InboxStamp[]> {
+  const scope = { userId, scope: INBOX_SCOPE.PLAN, id: planId };
   return Effect.map(
-    Effect.all([findOpenPlanItems({ userId, planId }), findSettledPlanItems({ userId, planId })]),
-    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
+    Effect.all([
+      findOpenStamps(scope),
+      findSettledStamps({ ...scope, limit: INBOX_BOUNDS.MAX_ITEMS_READ }),
+    ]),
+    ([open, settled]) =>
+      [...open, ...settled].map((row) => ({ ...row, updatedAt: row.updatedAt.getTime() })),
   );
 }
 

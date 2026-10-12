@@ -49,8 +49,10 @@ export const INBOX_BOUNDS = {
   MAX_REASON_CHARS: 600,
   /** The most items one agent keeps open at once: what a person works through, never a log. */
   MAX_OPEN_PER_AGENT: 20,
-  /** The most items a read of an inbox carries, the latest changed first. */
+  /** The most settled items a read of a plan's inbox carries beside every open one, the latest changed first. */
   MAX_ITEMS_READ: 200,
+  /** The most settled items an agent's inbox tool answers with beside every open one: enough to hear what was answered lately. */
+  MAX_SETTLED_TOLD: 20,
   /** The most characters a cursor may spell. */
   MAX_CURSOR_CHARS: 64,
   /** The most characters an answer's key may spell; a UUID is the usual. */

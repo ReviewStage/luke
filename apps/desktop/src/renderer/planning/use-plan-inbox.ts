@@ -7,6 +7,7 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   INBOX_CURSOR_START,
+  INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
 } from "@sidecar/hosted/inbox-wire";
@@ -21,7 +22,7 @@ import { type InboxBoardView, type InboxDraft, inboxBoard, inboxReply } from "./
  * lets it go at its own hold, so the loop is one read after another with no
  * clock of its own, as an agent's transcript is read (`use-agent-transcript.ts`);
  * each answer is the inbox whole, which replaces what was held. The loop
- * runs while the window shows the plans and a plan is open, so the tab's
+ * runs while the window shows the plans and a plan with an agent is open, so the tab's
  * count stands whichever tab is chosen, and another plan starts from
  * nothing of this one's. A read that did not answer ends the loop and says
  * so, with Try again, rather than asking again at once.
@@ -59,9 +60,27 @@ export interface PlanInboxControl {
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
 }
 
-/** What the card says when the agent changed the item before the answer landed. */
-export const INBOX_CHANGED_NOTE =
-  "The agent changed this item before your answer landed. Answer it as it stands now.";
+/** What a card says when its answer was not taken, by what had become of the item. */
+export const INBOX_NOT_TAKEN_NOTE = {
+  /** The agent changed the item before the answer landed. */
+  CHANGED: "The agent changed this item before your answer landed. Answer it as it stands now.",
+  /** The item was answered first, from another window or Mac. */
+  ANSWERED: "This item was already answered.",
+  /** The agent took the item back first. */
+  CLOSED: "The agent took this item back.",
+} as const;
+
+/** Why an answer was not taken, from the item as the service answered it. */
+function notTakenNote(item: InboxItem): string {
+  switch (item.status) {
+    case INBOX_STATUS.ANSWERED:
+      return INBOX_NOT_TAKEN_NOTE.ANSWERED;
+    case INBOX_STATUS.CLOSED:
+      return INBOX_NOT_TAKEN_NOTE.CLOSED;
+    case INBOX_STATUS.OPEN:
+      return INBOX_NOT_TAKEN_NOTE.CHANGED;
+  }
+}
 
 /** An answer's key and words, kept so the same answer sent again goes under the same key. */
 interface Attempt {
@@ -111,7 +130,9 @@ export function usePlanInbox(input: {
   const latest = useRef(agents);
   latest.current = agents;
 
-  const active = shown && planId !== undefined && !held.failed;
+  // A plan with no agent has no Inbox tab and nothing to read, so it holds no read open.
+  const hasAgents = (agents.agentIds?.length ?? 0) > 0;
+  const active = shown && planId !== undefined && hasAgents && !held.failed;
   useEffect(() => {
     if (!active || planId === undefined) return;
     let live = true;
@@ -160,6 +181,7 @@ export function usePlanInbox(input: {
       attempts.current.set(item.id, { key, words });
       setSending((standing) => new Set(standing).add(item.id));
       note(item.id, undefined);
+      const askedOn = planId;
       latest.current
         .answerInbox({ itemId: item.id, revision: item.revision, ...reply, clientKey: key })
         .catch((): CodingAgentInboxAnsweredView => UNANSWERED)
@@ -173,15 +195,20 @@ export function usePlanInbox(input: {
             note(item.id, messageFailureNote(answer.failure));
             return;
           }
-          setHeld((standing) => ({ ...standing, items: withItem(standing.items, answer.item) }));
+          // An answer landing after the window moved to another plan is that plan's no longer.
+          setHeld((standing) =>
+            standing.planId === askedOn
+              ? { ...standing, items: withItem(standing.items, answer.item) }
+              : standing,
+          );
           if (!answer.taken) {
-            note(item.id, INBOX_CHANGED_NOTE);
+            note(item.id, notTakenNote(answer.item));
             return;
           }
           if (item.needsReply) latest.current.onRetryList();
         });
     },
-    [sending, note],
+    [sending, note, planId],
   );
 
   // An item of an agent the list has not read yet, one started from another

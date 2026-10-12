@@ -18,6 +18,7 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
+  INBOX_KIND,
   INBOX_REPLY,
   INBOX_STATUS,
   inboxAnsweredSchema,
@@ -32,6 +33,7 @@ import { eq } from "drizzle-orm";
 import {
   Cause,
   Clock,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -98,7 +100,7 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import { readInboxItem } from "../server/hosted/inbox-store";
+import { answerInboxItem, readInboxItem } from "../server/hosted/inbox-store";
 import {
   CODING_AGENT_DEFAULT_CHOICE,
   modelCatalogOf,
@@ -2801,7 +2803,7 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
       const opened = yield* openPlan({ eve });
       const { agent, target } = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
       const sessionId = eve.opened[0]?.sessionId ?? "";
-      assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
       const owned = { userId: opened.owner, planId: opened.plan.id, agentId: agent.id };
       /** The agent's post, as its tool runs it. */
       const post = (value: WireBoundaryInput) => postToInbox(owned, unparsedWire(value));
@@ -2824,7 +2826,7 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
 
   const QUESTION = {
     key: "invite-copy",
-    kind: "question",
+    kind: INBOX_KIND.QUESTION,
     title: "What should the invitation email say?",
   } as const;
 
@@ -2879,7 +2881,7 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
         const { eve, post, read, answer } = yield* openInbox();
         yield* post({
           key: "branch-protection",
-          kind: "task",
+          kind: INBOX_KIND.TASK,
           title: "Protect main",
           needsReply: false,
         });
@@ -2986,11 +2988,11 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
   );
 
   it.effect(
-    "an answer the agent could not be handed is refused and taken back, so the item still waits, and the same answer sent again once the agent is ready is taken",
+    "an answer the agent could not be handed yet is refused and taken back, so the item still waits",
     () =>
       Effect.gen(function* () {
         const { post, read, answer } = yield* openInbox(
-          fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED }),
+          fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY }),
         );
         yield* post(QUESTION);
         const [item] = (yield* read()).items;
@@ -3006,6 +3008,69 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
         const [standing] = (yield* read()).items;
         assert.equal(standing?.status, INBOX_STATUS.OPEN);
         assert.equal(standing?.answer, undefined);
+      }),
+  );
+
+  it.effect(
+    "an answer to an item whose agent's session has ended for good is kept on the item, since no message will ever reach it, rather than leaving it waiting",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, answer } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED }),
+        );
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const kept = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: item.revision,
+            reply: INBOX_REPLY.ANSWERED,
+            note: "Keep it short.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(kept.taken, true);
+        assert.equal(kept.item.status, INBOX_STATUS.ANSWERED);
+      }),
+  );
+
+  it.effect(
+    "an answer taken whose hand-off was cut short is handed off by the retry under the same key, so the agent hears it once rather than never",
+    () =>
+      Effect.gen(function* () {
+        const { eve, owner, post, read, answer } = yield* openInbox();
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const clientKey = randomUUID();
+        const reply = { reply: INBOX_REPLY.ANSWERED, note: "Keep it short." } as const;
+        // The answer stands as the first send left it when the function ended before the hand-off.
+        yield* answerInboxItem(owner, item.id, item.revision, reply, clientKey);
+        const retried = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, { revision: item.revision, ...reply, clientKey }),
+        );
+        assert.equal(retried.taken, true);
+        yield* answer(item.id, { revision: item.revision, ...reply, clientKey });
+        assert.equal(eve.sent.length, 1, "the agent hears it once");
+      }),
+  );
+
+  it.effect(
+    "items changed at one instant read as the same cursor on every read, so a reader holding it is not let go while nothing changed",
+    () =>
+      Effect.gen(function* () {
+        const { post, read } = yield* openInbox();
+        yield* post(QUESTION);
+        yield* post({ ...QUESTION, key: "invite-copy-2" });
+        const standing = yield* read();
+        assert.equal((yield* read()).cursor, standing.cursor);
+        const held = yield* Effect.forkChild(read(standing.cursor));
+        yield* TestClock.adjust(Duration.seconds(2));
+        assert.equal(held.pollUnsafe(), undefined, "nothing changed, so the read holds");
       }),
   );
 

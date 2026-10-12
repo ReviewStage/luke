@@ -250,7 +250,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "an item left open stays in the plan's inbox however many others changed after it, while the settled ones a read carries are bounded",
+    "an item left open stays in the plan's inbox and in the agent's own read however many others changed after it, while the settled ones each read carries are bounded",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -265,6 +265,11 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           items.some((each) => each.key === SETTINGS.key && each.status === INBOX_STATUS.OPEN),
         );
         assert.equal(items.length, 1 + INBOX_BOUNDS.MAX_ITEMS_READ);
+        // The agent's own read keeps its open item too, beside only the latest few settled.
+        const told = yield* readOwnInbox(agent);
+        const lines = told.status === ACTION_RESULT_STATUS.ACCEPTED ? told.inbox : [];
+        assert.equal(lines[0]?.key, SETTINGS.key);
+        assert.equal(lines.length, 1 + INBOX_BOUNDS.MAX_SETTLED_TOLD);
       }),
   );
 
