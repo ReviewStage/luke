@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "reply": {
+      "type": "string",
+      "enum": [
+        "chose",
+        "approved",
+        "declined",
+        "answered",
+        "done",
+        "not-done"
+      ]
+    },
+    "choice": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string",
+      "maxLength": 4000
+    }
+  },
+  "required": [
+    "reply"
+  ],
+  "additionalProperties": false
+}
