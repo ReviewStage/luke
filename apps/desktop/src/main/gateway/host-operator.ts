@@ -63,6 +63,8 @@ import {
   type PlanningSetRepositoryParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
+  type PlanningTreeAnswer,
+  type PlanningTreeParams,
   type PlanningView,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
@@ -71,6 +73,7 @@ import {
   planningRevisionsAnswerSchema,
   planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
+  planningTreeAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
@@ -187,6 +190,7 @@ export interface HostOperator {
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
   planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
+  planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -460,6 +464,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           (answer.ok
             ? Result.getOrUndefined(
                 readEither(planningFileAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
+    planningTree: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_TREE, { planId: params.planId, path: params.path }),
+        (answer): PlanningTreeAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),

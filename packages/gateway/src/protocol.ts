@@ -40,6 +40,8 @@ export const GATEWAY_METHOD = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A window of a file of one plan's repository, read from GitHub through the service as it stands now and coloured here; answered to the caller, never held in the view. */
   PLANNING_FILE: "planning.file",
+  /** One folder of one plan's repository, listed from GitHub through the service as it stands now; answered to the caller, never held in the view. */
+  PLANNING_TREE: "planning.tree",
   /** A page of one plan's history, read from the service; answered to the caller, never held in the view. */
   PLANNING_REVISIONS: "planning.revisions",
   /** One revision of one plan beside the one before it, read from the service; answered to the caller, never held in the view. */

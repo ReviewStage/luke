@@ -136,6 +136,26 @@ await Promise.all([
     logLevel: "info",
     define: { "process.env.NODE_ENV": '"production"', "process.env.IS_PREACT": '"false"' },
   }),
+  // A File tab's tree, its own bundle so the bundle every window parses
+  // never carries Pierre's tree; the tab loads it the first time a tree is
+  // shown (`src/renderer/file-tree/contract.ts`). Pierre draws with its own
+  // Preact inside a shadow root, so no React rides along, and its styles
+  // reach the shadow root as constructed sheets, which the panel's policy
+  // admits.
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/file-tree/index.ts")],
+    outfile: path.join(outputRoot, "renderer/file-tree.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    conditions: ["production"],
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+    define: { "process.env.NODE_ENV": '"production"' },
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),

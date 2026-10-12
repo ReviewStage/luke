@@ -517,6 +517,171 @@ button.code-card-path:hover {
   scrollbar-width: thin;
 }
 
+/* A File tab beside its repository's tree: the file takes the room the
+   tree leaves, and the tree keeps to the right, as an editor's explorer
+   docked there does. */
+.file-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.file-view > .file-tab {
+  min-width: 0;
+}
+
+/* The heading's path as breadcrumbs: each folder a press that reveals it
+   in the tree, each chevron a menu of the folder's entries. The crumbs
+   give way from the left, so the file's own name stays in sight. */
+.file-breadcrumbs {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.file-breadcrumbs ol {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-breadcrumbs li {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.file-breadcrumbs li:last-child,
+.file-breadcrumbs li:has(> .file-breadcrumb-chevron) {
+  flex-shrink: 0;
+}
+
+.file-breadcrumb {
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.file-breadcrumb:hover,
+.file-breadcrumb-chevron:hover,
+.file-breadcrumb-chevron[aria-expanded="true"] {
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+.file-breadcrumb[aria-current="page"] {
+  color: var(--text-primary);
+}
+
+.file-breadcrumb-chevron {
+  display: flex;
+  width: 16px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.file-breadcrumb-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The heading's tree toggle keeps to its right, after the GitHub button
+   where that stands, and reads as on while the tree is shown. */
+.file-tree-toggle {
+  margin-left: auto;
+}
+
+.file-tab-github + .file-tree-toggle {
+  margin-left: 0;
+}
+
+.file-tree-toggle[aria-pressed="true"] {
+  color: var(--text-primary);
+}
+
+/* The tree beside a File tab, its heading level with the tab's. */
+.file-tree-pane {
+  display: flex;
+  width: min(264px, 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--hairline);
+}
+
+.file-tree-header {
+  display: flex;
+  min-height: calc(24px + 2 * var(--space-2));
+  align-items: center;
+  gap: var(--control-gap);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  font-size: 11.5px;
+}
+
+.file-tree-title {
+  flex: 1;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.file-tree-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Pierre's tree draws in a shadow root of its own, which inherits these:
+   the panel's words, its fills, and its focus ring, so the tree reads as
+   the panel's own list. */
+.file-tree-host {
+  --trees-bg-override: transparent;
+  --trees-bg-muted-override: var(--raised);
+  --trees-fg-override: var(--text-primary);
+  --trees-fg-muted-override: var(--text-secondary);
+  --trees-selected-bg-override: var(--selected);
+  --trees-selected-fg-override: var(--text-primary);
+  --trees-selected-focused-border-color-override: var(--focus-ring);
+  --trees-border-color-override: var(--hairline);
+  --trees-focus-ring-color-override: var(--focus-ring);
+  --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --trees-font-size-override: 12.5px;
+  --trees-scrollbar-thumb-override: var(--scrollbar);
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.file-tree-host > * {
+  min-height: 0;
+  flex: 1;
+}
+
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
 .file-tab-notice {
   display: flex;

@@ -1222,6 +1222,9 @@ body,
   border-radius: 10px;
   background: var(--surface-popover);
   box-shadow: 0 12px 32px var(--shadow);
+  /* A long menu, as a folder's entries may be, scrolls within the window. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   -webkit-app-region: no-drag;
 }
 

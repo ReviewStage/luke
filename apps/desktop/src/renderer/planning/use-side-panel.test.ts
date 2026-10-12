@@ -204,6 +204,58 @@ test("a file's tab closes to the tab viewed before it, is held to the files show
   assert.equal(second.control().tab, SIDE_PANEL_TAB.BOARD);
 });
 
+test("a file browsed to from a File tab takes that tab's place, opens a tab of its own where ⌘ asks, and chooses the tab a file already has", () => {
+  const panel = mount([], [], [INVITE, ROLES]);
+  const README = "README.md";
+  const STYLE = "docs/STYLE.md";
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 4, endLine: 6 }));
+  act(() => panel.control().onOpenFile({ path: ROLES }));
+  act(() => panel.control().onChoose({ file: INVITE }));
+
+  act(() => panel.control().onBrowseFile(INVITE, README, false));
+  assert.deepEqual(panel.control().tab, { file: README });
+  assert.deepEqual(
+    panel.control().files.map((file) => file.path),
+    [README, ROLES],
+    "in the place of the tab it was chosen from",
+  );
+  assert.equal(panel.control().files[0]?.range, undefined, "its lines lit nowhere");
+
+  act(() => panel.control().onBrowseFile(README, STYLE, true));
+  assert.deepEqual(panel.control().tab, { file: STYLE });
+  assert.deepEqual(
+    panel.control().files.map((file) => file.path),
+    [README, ROLES, STYLE],
+  );
+
+  act(() => panel.control().onBrowseFile(STYLE, ROLES, false));
+  assert.deepEqual(panel.control().tab, { file: ROLES });
+  assert.deepEqual(
+    panel.control().files.map((file) => file.path),
+    [README, ROLES, STYLE],
+    "one tab per file",
+  );
+  act(() => panel.control().onClose({ file: ROLES }));
+  assert.deepEqual(
+    panel.control().tab,
+    { file: STYLE },
+    "closing returns to the tab viewed before",
+  );
+});
+
+test("a file browsed to stands on the plan it was browsed on, though Luke never showed it, and on no other", () => {
+  const panel = mountStood({ agents: [], subagents: [], files: [INVITE] });
+  act(() => panel.control().onOpenFile({ path: INVITE }));
+  act(() => panel.control().onBrowseFile(INVITE, "README.md", true));
+  assert.deepEqual(panel.control().tab, { file: "README.md" });
+
+  panel.render({ plan: usedPlan(OTHER), agents: [], subagents: [], files: [INVITE] });
+  assert.equal(panel.control().tab, panel.control().tabs[0], "another plan draws no tab of it");
+  panel.render({ agents: [], subagents: [], files: [INVITE] });
+  act(() => panel.control().onChoose({ file: "README.md" }));
+  assert.deepEqual(panel.control().tab, { file: "README.md" });
+});
+
 test("what an earlier version kept loads as the order alone: the tabs it held open open none a plan has not used, and its chosen tab shows where a plan has it", () => {
   window.localStorage.setItem(
     "luke.sidePanel",

@@ -24,12 +24,14 @@ import {
   PLAN_ACTOR,
   PLAN_FIELD,
   PLAN_FILE_REFUSAL,
+  PLAN_TREE_ENTRY,
   type Plan,
   type PlanAgentsSummary,
   type PlanFileAnswer,
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSummary,
+  type PlanTreeAnswer,
   type RepositoryPin,
   type ShownCode,
 } from "@sidecar/hosted/plan-wire";
@@ -48,6 +50,7 @@ import {
   type PlanWorkState,
   type PlanWorkTurn,
   planningFileAnswerSchema,
+  planningTreeAnswerSchema,
   planningViewSchema,
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
@@ -120,6 +123,8 @@ interface FakeService extends PlanningClient {
   readonly workReads: string[];
   /** What the service answers for each file's window, by path; a path with none answers nothing, as a service that did not answer. */
   files: Record<string, PlanFileAnswer>;
+  /** What the service answers for each folder's listing, by path; a path with none answers nothing, as a service that did not answer. */
+  folders: Record<string, PlanTreeAnswer>;
   /** The newest page of the history, for any plan; none answers nothing, as a service that did not answer. */
   history: PlanRevisionsAnswer | undefined;
   /** The older pages of the history, by the revision each is read before. */
@@ -155,6 +160,7 @@ function fakeService(plans: Plan[]): FakeService {
     olderWorks: {},
     workReads: [],
     files: {},
+    folders: {},
     history: undefined,
     olderHistory: {},
     revisions: {},
@@ -211,6 +217,7 @@ function fakeService(plans: Plan[]): FakeService {
         return { ok: true, answer: { plan: edited } };
       }),
     readFile: (_planId, window) => Effect.sync(() => service.files[window.path]),
+    readTree: (_planId, folder) => Effect.sync(() => service.folders[folder.path]),
     readBoard: (planId) => Effect.sync(() => service.boards[planId]),
     readTranscript: (planId) => Effect.sync(() => service.transcripts[planId]),
     readWork: (planId, before) =>
@@ -1904,6 +1911,40 @@ it.effect(
         branch: "main",
       });
       assert.deepEqual(yield* window("gone.ts"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
+    }),
+);
+
+it.effect(
+  "a folder's listing is answered to the tree that asked as the service gave it, a refusal included, and a service that did not answer as unanswered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+      const root = {
+        folder: {
+          path: "",
+          repository: "acme/relay",
+          branch: "main",
+          entries: [
+            { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
+            { name: ".env", kind: PLAN_TREE_ENTRY.FILE },
+          ],
+          truncated: false,
+        },
+      };
+      service.folders[""] = root;
+      service.folders[".env.d"] = { refusal: PLAN_FILE_REFUSAL.SECRET };
+      const { call } = yield* openPlan(service);
+      const folder = (path: string) =>
+        call(GATEWAY_METHOD.PLANNING_TREE, { planId: INVITES, path });
+
+      assert.deepEqual(
+        Result.getOrUndefined(
+          readEither(planningTreeAnswerSchema)(unparsedWire(yield* folder(""))),
+        ),
+        root,
+      );
+      assert.deepEqual(yield* folder(".env.d"), { refusal: PLAN_FILE_REFUSAL.SECRET });
+      assert.deepEqual(yield* folder("gone"), { failure: PLAN_CALL_FAILURE.UNANSWERED });
     }),
 );
 

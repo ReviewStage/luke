@@ -17,7 +17,7 @@ import {
   WorkIcon,
 } from "@sidecar/panel";
 import { BotIcon, FileCodeIcon } from "lucide-react";
-import { Fragment, useCallback, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
@@ -33,8 +33,8 @@ import {
 import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
 import { agentGlyphState, agentStateWords } from "../planning/coding-agent-model";
-import { FileTab } from "../planning/file-tab";
 import { snippetOf } from "../planning/file-tab-model";
+import { FileView } from "../planning/file-view";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
 import { PlanWork, SubagentTab } from "../planning/plan-work";
@@ -615,6 +615,8 @@ function TabContent({
   onWorkerStatus,
   onWorkerHeld,
   onOpenFile,
+  fileTree,
+  onBrowseFile,
 }: {
   tab: SidePanelTab;
   planId: string;
@@ -640,6 +642,10 @@ function TabContent({
   onWorkerHeld: TabViews["onWorkerHeld"];
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef) => void;
+  /** Whether a File tab's tree is open, which holds for every File tab alike, and its toggle. */
+  fileTree: { readonly open: boolean; readonly onToggle: () => void };
+  /** Shows a file browsed to from a File tab's tree or breadcrumbs (`SidePanelControl.onBrowseFile`). */
+  onBrowseFile: (from: string, path: string, newTab: boolean) => void;
 }): React.JSX.Element {
   const { act, tell } = useAct();
   if (isFileTab(tab)) {
@@ -652,12 +658,17 @@ function TabContent({
       <p className="side-panel-empty">Opening the file…</p>
     ) : (
       <Fragment key={repository ?? undefined}>
-        <FileTab
-          key={file.path}
+        <FileView
+          planId={planId}
+          repository={repository}
           file={file}
           snippet={snippetOf(shownCode, file)}
           readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
+          readFolder={(path) => act(ACT_KIND.PLANNING_TREE, { planId, path })}
           openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+          treeOpen={fileTree.open}
+          onToggleTree={fileTree.onToggle}
+          onBrowse={(path, newTab) => onBrowseFile(file.path, path, newTab)}
         />
       </Fragment>
     );
@@ -975,6 +986,13 @@ export function SidePanel({
   const aside = useRef<HTMLElement>(null);
   const room = useRef<HTMLDivElement>(null);
   const { tab } = panel;
+  // Whether a File tab's tree is open, for every File tab alike and for the
+  // window's life, as an editor's explorer stands across its tabs.
+  const [fileTreeOpen, setFileTreeOpen] = useState(true);
+  const fileTree = useMemo(
+    () => ({ open: fileTreeOpen, onToggle: () => setFileTreeOpen((was) => !was) }),
+    [fileTreeOpen],
+  );
   // Every subagent the plan's work holds, and those with a tab open, each
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
@@ -989,9 +1007,11 @@ export function SidePanel({
     agents: openAgents,
     subagents: workers.map((worker) => worker.call.id),
   });
-  // The file tabs of files shown on the plan, in the strip's order.
+  // The file tabs of files shown on the plan or browsed to on it, in the strip's order.
   const offered = shownFiles(shownCode ?? []);
-  const files = panel.files.filter((file) => offered.some((ref) => ref.path === file.path));
+  const files = panel.files.filter(
+    (file) => file.browsedOn === planId || offered.some((ref) => ref.path === file.path),
+  );
   const label =
     tab === undefined
       ? undefined
@@ -1078,6 +1098,8 @@ export function SidePanel({
               onWorkerStatus={views.onWorkerStatus}
               onWorkerHeld={views.onWorkerHeld}
               onOpenFile={panel.onOpenFile}
+              fileTree={fileTree}
+              onBrowseFile={panel.onBrowseFile}
             />
           </div>
         )}

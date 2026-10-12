@@ -51,7 +51,12 @@ import {
  * per file: it follows the subagents, is held to the files Luke showed on
  * the open plan the same way, closes, and is kept nowhere. Opening a file
  * that already has a tab chooses that tab and moves its lit lines to the
- * snippet opened.
+ * snippet opened. A file browsed to from a File tab's tree or breadcrumbs
+ * is held to the plan it was browsed on instead, since any file of the
+ * plan's repository may be: it takes the place of the File tab it was
+ * chosen from among the file tabs, as an editor's preview does, or opens a
+ * tab of its own where ⌘ was held; a file that already has a tab chooses
+ * that tab.
  *
  * The panel holds tabs the way an editor's pane does: the developer closes
  * the ones they do not want, and the "+" or a tab's shortcut opens one again
@@ -138,6 +143,8 @@ export interface OpenFile {
   readonly path: string;
   readonly range: { readonly startLine: number; readonly endLine: number } | undefined;
   readonly opened: number;
+  /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs; none for a file opened from Luke's snippet. */
+  readonly browsedOn?: string | undefined;
 }
 
 /**
@@ -376,6 +383,12 @@ export interface SidePanelControl {
   onRenamePins: (planId: string, labels: ReadonlyMap<string, string>) => void;
   /** Shows the panel on the file's tab, opening one at the strip's end where none stands, its lit lines the reference's. */
   onOpenFile: (ref: CodeRef) => void;
+  /**
+   * Shows the file browsed to from the File tab of `from`: its own tab
+   * where one stands, else in `from`'s tab, in its place, or in a tab of
+   * its own at the strip's end where `newTab` asks.
+   */
+  onBrowseFile: (from: string, path: string, newTab: boolean) => void;
   /** Asks for a width; it is held to the least width before it is kept. */
   onResize: (width: number) => void;
 }
@@ -586,6 +599,25 @@ function withFileOpened(held: HeldState, ref: CodeRef): HeldState {
       ? [...held.files, opened]
       : held.files.map((each) => (each === standing ? opened : each));
   return { ...held, files, tab: { file: ref.path }, open: true };
+}
+
+/**
+ * The state with the file browsed to shown in the File tab `from` stands
+ * in, in that tab's place among the file tabs, or in a tab of its own at
+ * their end where `from` is none, its lines lit nowhere.
+ */
+function withFileBrowsed(
+  held: HeldState,
+  planId: string | undefined,
+  from: OpenFile | undefined,
+  to: string,
+): HeldState {
+  const browsed: OpenFile = { path: to, range: undefined, opened: 1, browsedOn: planId };
+  const files =
+    from === undefined
+      ? [...held.files, browsed]
+      : held.files.map((each) => (each === from ? browsed : each));
+  return { ...held, files, tab: { file: to }, open: true };
 }
 
 /**
@@ -897,6 +929,13 @@ export function useSidePanel(
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const planId = plan.id;
   const state = stage === undefined ? kept : (moved ?? stage);
+  // The files the plan draws tabs of: those Luke showed on it, and those browsed to on it.
+  const planFiles = useMemo(() => {
+    const browsed = state.files.flatMap((each) =>
+      each.browsedOn === planId && !files.includes(each.path) ? [each.path] : [],
+    );
+    return browsed.length === 0 ? files : [...files, ...browsed];
+  }, [files, state.files, planId]);
   const update = useCallback(
     (change: (held: HeldState) => HeldState) => {
       if (stage === undefined) setKept(change);
@@ -905,7 +944,7 @@ export function useSidePanel(
     [stage],
   );
   const shownFor = (holds: PlanHolds) =>
-    shownIn(state, { plan: { id: planId, holds }, agents, subagents, files });
+    shownIn(state, { plan: { id: planId, holds }, agents, subagents, files: planFiles });
 
   // Note that something arriving on the plan adds its tab without taking
   // the shown one's place, because a tab ahead of it in the strip would
@@ -933,8 +972,8 @@ export function useSidePanel(
   // it is the same array until something it is drawn from changes.
   const tabs = useMemo(() => drawnFixed(state, seen), [state, seen]);
   const drawn = useMemo(
-    () => ({ plan: seen, agents, subagents, files }),
-    [seen, agents, subagents, files],
+    () => ({ plan: seen, agents, subagents, files: planFiles }),
+    [seen, agents, subagents, planFiles],
   );
   // Note that a write that fails (storage full, or refused) costs only the
   // preference, so it is not worth a word on screen.
@@ -989,6 +1028,21 @@ export function useSidePanel(
       update((held) => withFileOpened(withChosenViewed(held, { file: ref.path }, drawn), ref)),
     [update, drawn],
   );
+  // Note that a file with a tab of its own is chosen there, because a file
+  // stands in one tab at most, and one opened in a tab of its own is viewed
+  // after the tab it was chosen from, as a snippet's file is.
+  const onBrowseFile = useCallback(
+    (from: string, path: string, newTab: boolean) =>
+      update((held) => {
+        const tab: SidePanelTab = { file: path };
+        if (held.files.some((each) => each.path === path)) {
+          return { ...withTab(withChosenViewed(held, tab, drawn), tab, planId), open: true };
+        }
+        const standing = newTab ? undefined : held.files.find((each) => each.path === from);
+        return withFileBrowsed(withChosenViewed(held, tab, drawn), planId, standing, path);
+      }),
+    [update, drawn, planId],
+  );
   const onMove = useCallback(
     (tab: SidePanelTab, to: number) => update((held) => withTabAt(held, tab, to, drawn)),
     [update, drawn],
@@ -1038,6 +1092,7 @@ export function useSidePanel(
     onUnpin,
     onRenamePins,
     onOpenFile,
+    onBrowseFile,
     onResize,
   };
 }

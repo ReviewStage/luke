@@ -3,10 +3,10 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
 import { Fragment, useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
+import { bundleAtom } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
 import { useAppState } from "../use-app-state";
 import {
@@ -50,32 +50,11 @@ const SAVE_PAUSE = Duration.millis(800);
 /** Where the board stands while its bundle loads or fails to. */
 const BOARD_LOAD_FAILED = "The board could not be opened.";
 
-/**
- * The whiteboard bundle, loaded once per window: its stylesheet and its
- * script added to the document, answered with what the script set on
- * `window`. Kept alive, so leaving the board and coming back loads nothing.
- */
-const whiteboardModuleAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    Effect.callback<WhiteboardModule, Error>((resume) => {
-      const loaded = window.lukeWhiteboard;
-      if (loaded !== undefined) {
-        resume(Effect.succeed(loaded));
-        return;
-      }
-      const stylesheet = document.createElement("link");
-      stylesheet.rel = "stylesheet";
-      stylesheet.href = WHITEBOARD_ASSET.STYLESHEET;
-      const script = document.createElement("script");
-      script.src = WHITEBOARD_ASSET.SCRIPT;
-      script.addEventListener("load", () => {
-        const module = window.lukeWhiteboard;
-        resume(module ? Effect.succeed(module) : Effect.fail(new Error(BOARD_LOAD_FAILED)));
-      });
-      script.addEventListener("error", () => resume(Effect.fail(new Error(BOARD_LOAD_FAILED))));
-      document.head.append(stylesheet, script);
-    }),
-  ),
+/** The whiteboard bundle, loaded once per window (`../bundle-loader.ts`). */
+const whiteboardModuleAtom = bundleAtom(
+  { script: WHITEBOARD_ASSET.SCRIPT, stylesheet: WHITEBOARD_ASSET.STYLESHEET },
+  () => window.lukeWhiteboard,
+  BOARD_LOAD_FAILED,
 );
 
 /** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */

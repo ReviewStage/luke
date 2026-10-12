@@ -51,6 +51,7 @@ import {
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
+  type PlanningTreeAnswer,
   planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
   planningEditAnswerSchema,
@@ -69,6 +70,8 @@ import {
   planningSetRepositoryParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
+  planningTreeAnswerSchema,
+  planningTreeParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
@@ -155,6 +158,8 @@ export const ACT_KIND = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
+  /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  PLANNING_TREE: "planning.tree",
   /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
   PLANNING_COLOUR_CODE: "planning.colourCode",
   /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
@@ -526,6 +531,11 @@ export const ACT = {
     payload: actSchema(planningFileParamsSchema),
     result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
     refusal: "Could not read that file on this system.",
+  },
+  [ACT_KIND.PLANNING_TREE]: {
+    payload: actSchema(planningTreeParamsSchema),
+    result: wireResult<PlanningTreeAnswer>(isReadable(planningTreeAnswerSchema)),
+    refusal: "Could not list that folder on this system.",
   },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     payload: record({
