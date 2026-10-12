@@ -28,9 +28,27 @@ function declarationsIn(loose: string): ReadonlyMap<string, string> {
   return declarations;
 }
 
+/** A selector list's selectors, split at its own commas rather than those inside `:is()` or `:where()`. */
+function selectorList(prelude: string): string[] {
+  const selectors: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let at = 0; at < prelude.length; at += 1) {
+    const char = prelude[at];
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "," && depth === 0) {
+      selectors.push(prelude.slice(start, at).trim());
+      start = at + 1;
+    }
+  }
+  selectors.push(prelude.slice(start).trim());
+  return selectors;
+}
+
 /** A nested rule's selectors resolved against the rule it sits in, as the browser resolves nesting. */
 function nestedSelectors(prelude: string, parents: readonly string[]): readonly string[] {
-  const own = prelude.split(",").map((each) => each.trim());
+  const own = selectorList(prelude);
   if (parents.length === 0) return own;
   return own.flatMap((selector) =>
     parents.map((parent) =>
@@ -174,4 +192,29 @@ export function ownDeclarations(
         ),
     ),
   );
+}
+
+/**
+ * What the built sheet gives an element for a property. jsdom computes no
+ * cascade and hovers nothing, so the sheet's last rule for the element wins,
+ * with an element marked `data-hovered` where the sheet says :hover.
+ */
+export async function sheetStyle(): Promise<
+  (element: Element, property: string) => string | undefined
+> {
+  const rules = cssRules(await builtStylesheet());
+  return (element, property) =>
+    rules
+      .filter((rule) => rule.declarations.has(property))
+      .filter((rule) =>
+        rule.selectors.some((selector) => {
+          try {
+            return element.matches(selector.replaceAll(":hover", "[data-hovered]"));
+          } catch {
+            return false;
+          }
+        }),
+      )
+      .at(-1)
+      ?.declarations.get(property);
 }

@@ -6,7 +6,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { builtStylesheet, cssRules } from "#testing/css-rules";
+import { sheetStyle } from "#testing/css-rules";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
@@ -405,29 +405,13 @@ test("only the open plan's row names Command-Shift-A on its Archive, the chord a
 });
 
 test("hovered or reached from the keyboard, a sidebar plan's time steps out and its Pin and Archive step into its place", async () => {
-  const rules = cssRules(await builtStylesheet());
+  const styled = await sheetStyle();
   const { plans, asked } = openTab();
   const row = mountSidebarPlan(plans, OTHER, asked);
   const item = row.parentElement;
   const time = row.querySelector(".sidebar-plan-time");
   const marks = rowMarks(row)[0]?.closest("span");
   assert.ok(item && time && marks);
-  // jsdom computes no cascade and hovers nothing, so the sheet's last rule
-  // for the element wins, with the item marked where the sheet says :hover.
-  const styled = (element: Element, property: string) =>
-    rules
-      .filter((rule) => rule.declarations.has(property))
-      .filter((rule) =>
-        rule.selectors.some((selector) => {
-          try {
-            return element.matches(selector.replaceAll(":hover", "[data-hovered]"));
-          } catch {
-            return false;
-          }
-        }),
-      )
-      .at(-1)
-      ?.declarations.get(property);
   const shown = () => [styled(time, "visibility") ?? "visible", styled(marks, "opacity")];
 
   const resting = shown();
@@ -444,6 +428,28 @@ test("hovered or reached from the keyboard, a sidebar plan's time steps out and 
   assert.deepEqual(resting, ["visible", "0"]);
   assert.deepEqual(hovered, ["hidden", "1"]);
   assert.deepEqual(focused, ["hidden", "1"]);
+});
+
+test("a sidebar plan's Pin and Archive draw no ground under the pointer, only their glyph brightening, as a tab's × does", async () => {
+  const styled = await sheetStyle();
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const item = row.parentElement;
+  assert.ok(item);
+  item.dataset.hovered = "true";
+  const drawn = rowMarks(row).map((mark) => {
+    const resting = [styled(mark, "background"), styled(mark, "color")];
+    mark.dataset.hovered = "true";
+    const hovered = [styled(mark, "background"), styled(mark, "color")];
+    delete mark.dataset.hovered;
+    return { resting, hovered };
+  });
+
+  const glyphOnly = {
+    resting: ["none", "var(--text-secondary)"],
+    hovered: ["none", "var(--text-primary)"],
+  };
+  assert.deepEqual(drawn, [glyphOnly, glyphOnly]);
 });
 
 test("Permanently delete on an archived plan asks without pointing at Archive", () => {

@@ -329,13 +329,15 @@ body,
 }
 
 /* New plan reads as a row of the list it heads: no ground at rest, and the
-   plan rows' own hover and selection, since its page is a place like theirs. */
-.sidebar-new-plan {
+   plan rows' own hover and selection, since its page is a place like theirs.
+   Search beneath it is drawn the same, and the section's gap falls after it. */
+.sidebar-new-plan,
+.sidebar-search {
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
   height: 36px;
-  margin: 0 0 var(--section-gap);
+  margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
   border-radius: 9px;
   background: none;
@@ -344,11 +346,16 @@ body,
   transition: background-color var(--duration-hover) ease;
 }
 
+.sidebar-search {
+  margin-bottom: var(--section-gap);
+}
+
 .sidebar-new-plan:disabled {
   opacity: 0.45;
 }
 
 .sidebar-new-plan svg,
+.sidebar-search svg,
 .sidebar-item svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -410,7 +417,8 @@ body,
    buttons at its end included, and no more than its hover does, so the open
    plan keeps its stronger fill. */
 :where(.sidebar-plan-item:hover) > .sidebar-plan,
-.sidebar-new-plan:hover:not(:disabled) {
+.sidebar-new-plan:hover:not(:disabled),
+.sidebar-search:hover {
   background: var(--raised);
 }
 
@@ -500,10 +508,40 @@ body,
   opacity: 0;
 }
 
+/* Note that Pin and Archive draw no ground under the pointer, as the
+   repository header's glyphs do not, because the row under them is already
+   lit by the hover: only the glyph itself brightens. */
 .sidebar-plan-mark {
+  display: inline-flex;
   width: var(--sidebar-plan-mark);
   height: var(--sidebar-plan-mark);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.sidebar-plan-mark:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.sidebar-plan-mark:disabled {
+  opacity: 0.45;
+}
+
+.sidebar-plan-mark:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px; /* off-scale */
+}
+
+.sidebar-plan-mark svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: 0 0 auto;
 }
 
 .sidebar-plan-item:hover > .sidebar-plan-marks,
@@ -523,6 +561,12 @@ body,
    is hovered, holds focus, or has its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-plans + .sidebar-repository {
+  margin-top: var(--space-8);
+}
+
+/* Archived stands at the foot of the list as one more group, its header a
+   repository's (`ArchivedPlans`). */
+.sidebar-archived {
   margin-top: var(--space-8);
 }
 
@@ -640,13 +684,13 @@ body,
   height: 11px;
 }
 
-/* A folded group's count of its plans, at the toggle's end beside the ⋯,
-   shown with the chevron while the header is hovered or reached from the
+/* A folded group's count of its plans, a small gap after the name, shown
+   with the chevron while the header is hovered or reached from the
    keyboard. It is always laid out while the group is folded, only its
    opacity changing, so the name is cut where it always is. */
 .sidebar-repository-count {
   flex: none;
-  margin-left: auto;
+  margin-left: calc(var(--space-6) - var(--glyph-gap));
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -699,43 +743,6 @@ body,
 .sidebar-repository-action svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
-}
-
-/* Archived plans fold away behind one quiet row at the foot of the list,
-   drawn in the heading's voice so it reads as a way in rather than a plan. */
-.sidebar-archived {
-  margin-top: var(--list-gap);
-}
-
-.sidebar-archived-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-archived-row:hover {
-  background: var(--raised);
-}
-
-.sidebar-archived-row svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  transition: transform var(--duration-hover) ease;
-}
-
-.sidebar-archived-row[aria-expanded="true"] svg {
-  transform: rotate(90deg);
 }
 
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
@@ -985,6 +992,7 @@ body,
 .danger-button,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
+.sidebar-search,
 .sidebar-plan,
 .sidebar-item {
   -webkit-app-region: no-drag;

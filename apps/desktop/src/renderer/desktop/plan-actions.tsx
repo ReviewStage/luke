@@ -118,7 +118,7 @@ function SidebarPlanMarks({
         >
           <button
             type="button"
-            className="icon-button sidebar-plan-mark"
+            className="sidebar-plan-mark"
             aria-label={label}
             disabled={disabled}
             onClick={() => plans.onMarkPlan(plan.id, mark)}
