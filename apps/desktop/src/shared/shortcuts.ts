@@ -26,6 +26,11 @@ export const APP_COMMAND = {
   TOGGLE_SIDE_PANEL: "toggle-side-panel",
   TOGGLE_FULL_SCREEN: "toggle-full-screen",
   EXIT_FULL_SCREEN: "exit-full-screen",
+  FULL_SCREEN: "full-screen",
+  MINIMIZE: "minimize",
+  HIDE: "hide",
+  HIDE_OTHERS: "hide-others",
+  QUIT: "quit",
   ACTUAL_SIZE: "actual-size",
   ZOOM_IN: "zoom-in",
   ZOOM_OUT: "zoom-out",
@@ -94,6 +99,8 @@ const SHORTCUT_KEY = {
   C: { accelerator: "C", glyph: "C", key: "c", code: "KeyC" },
   R: { accelerator: "R", glyph: "R", key: "r", code: "KeyR" },
   M: { accelerator: "M", glyph: "M", key: "m", code: "KeyM" },
+  H: { accelerator: "H", glyph: "H", key: "h", code: "KeyH" },
+  Q: { accelerator: "Q", glyph: "Q", key: "q", code: "KeyQ" },
   S: { accelerator: "S", glyph: "S", key: "s", code: "KeyS" },
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
@@ -139,9 +146,12 @@ const SHORTCUT_KEY = {
  * the key alone, which only Escape is: the window's Escape steps back one
  * layer at a time in `app.tsx`, so the keymap leaves it there, and the table
  * names it so the menu bar and the shortcuts page can say what it does.
+ * Control joins only the system's own ⌃⌘F, since a Control chord is
+ * otherwise a text field's caret move.
  */
 export interface ShortcutChord {
   key: ShortcutKey;
+  control?: true;
   option?: true;
   shift?: true;
   bare?: true;
@@ -165,6 +175,12 @@ export interface AppShortcut {
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
  * Raycast have it, and ⌘+, ⌘−, and ⌘0 to zoom as every browser has them.
+ *
+ * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, and ⌃⌘F, which
+ * every Mac app answers through the menu bar's standard items — so the menu
+ * reads them from here and the shortcuts page lists them. No control ever
+ * offers their commands, so the keymap never claims their keys, and the
+ * menu's own items answer them.
  */
 export const APP_SHORTCUTS = {
   [APP_COMMAND.NEW_PLAN]: { label: "New plan", chord: { key: SHORTCUT_KEY.N } },
@@ -188,13 +204,24 @@ export const APP_SHORTCUTS = {
     chord: { key: SHORTCUT_KEY.B, option: true },
   },
   [APP_COMMAND.TOGGLE_FULL_SCREEN]: {
-    label: "Toggle full screen",
+    label: "Toggle panel full screen",
     chord: { key: SHORTCUT_KEY.ENTER, shift: true },
   },
   [APP_COMMAND.EXIT_FULL_SCREEN]: {
-    label: "Exit full screen",
+    label: "Exit panel full screen",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
   },
+  [APP_COMMAND.FULL_SCREEN]: {
+    label: "Toggle full screen",
+    chord: { key: SHORTCUT_KEY.F, control: true },
+  },
+  [APP_COMMAND.MINIMIZE]: { label: "Minimize", chord: { key: SHORTCUT_KEY.M } },
+  [APP_COMMAND.HIDE]: { label: "Hide Luke", chord: { key: SHORTCUT_KEY.H } },
+  [APP_COMMAND.HIDE_OTHERS]: {
+    label: "Hide others",
+    chord: { key: SHORTCUT_KEY.H, option: true },
+  },
+  [APP_COMMAND.QUIT]: { label: "Quit Luke", chord: { key: SHORTCUT_KEY.Q } },
   [APP_COMMAND.ACTUAL_SIZE]: { label: "Actual size", chord: { key: SHORTCUT_KEY.ZERO } },
   [APP_COMMAND.ZOOM_IN]: { label: "Zoom in", chord: { key: SHORTCUT_KEY.PLUS } },
   [APP_COMMAND.ZOOM_OUT]: { label: "Zoom out", chord: { key: SHORTCUT_KEY.MINUS } },
@@ -260,6 +287,9 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.KEYBOARD_SHORTCUTS,
       APP_COMMAND.FIND,
       APP_COMMAND.EXIT_SETTINGS,
+      APP_COMMAND.HIDE,
+      APP_COMMAND.HIDE_OTHERS,
+      APP_COMMAND.QUIT,
     ],
   },
   {
@@ -277,6 +307,8 @@ export const APP_SHORTCUT_GROUPS = [
     commands: [
       APP_COMMAND.TOGGLE_SIDEBAR,
       APP_COMMAND.TOGGLE_SIDE_PANEL,
+      APP_COMMAND.TOGGLE_FULL_SCREEN,
+      APP_COMMAND.EXIT_FULL_SCREEN,
       APP_COMMAND.SHOW_BOARD,
       APP_COMMAND.SHOW_CODE,
       APP_COMMAND.SHOW_TRANSCRIPT,
@@ -303,8 +335,8 @@ export const APP_SHORTCUT_GROUPS = [
   {
     title: "Window",
     commands: [
-      APP_COMMAND.TOGGLE_FULL_SCREEN,
-      APP_COMMAND.EXIT_FULL_SCREEN,
+      APP_COMMAND.FULL_SCREEN,
+      APP_COMMAND.MINIMIZE,
       APP_COMMAND.ZOOM_IN,
       APP_COMMAND.ZOOM_OUT,
       APP_COMMAND.ACTUAL_SIZE,
@@ -337,6 +369,7 @@ export function isAppCommand(value: UnparsedWireValue): value is AppCommand {
 /** The chord as Electron's accelerator, for the menu bar. */
 export function shortcutAccelerator(chord: ShortcutChord): string {
   return [
+    chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
     chord.bare ? undefined : "Command",
@@ -349,6 +382,7 @@ export function shortcutAccelerator(chord: ShortcutChord): string {
 /** The chord as the glyphs a Mac draws it in, modifiers in the order macOS writes them. */
 export function shortcutGlyphs(chord: ShortcutChord): readonly string[] {
   return [
+    chord.control ? "⌃" : undefined,
     chord.option ? "⌥" : undefined,
     chord.shift ? "⇧" : undefined,
     chord.bare ? undefined : "⌘",
@@ -360,6 +394,7 @@ export function shortcutGlyphs(chord: ShortcutChord): readonly string[] {
 export function shortcutAria(chord: ShortcutChord): string {
   return [
     chord.bare ? undefined : "Meta",
+    chord.control ? "Control" : undefined,
     chord.option ? "Alt" : undefined,
     chord.shift ? "Shift" : undefined,
     chord.key.aria ?? (chord.key.key.length === 1 ? chord.key.key.toUpperCase() : chord.key.key),
@@ -370,15 +405,15 @@ export function shortcutAria(chord: ShortcutChord): string {
 
 /**
  * Whether a key press is the chord: Command and exactly the chord's other
- * modifiers, and the key. Control never joins, because Control chords are a
- * text field's own caret moves. The character is read where it can be,
+ * modifiers, and the key. The character is read where it can be,
  * which is what the menu bar matches too, and the physical key where Option
  * has changed the character. A key with an unshifted character answers
  * either character, Shift held or not, because which of the two needs Shift
  * is the keyboard layout's to say.
  */
 function shortcutMatches(chord: ShortcutChord, event: KeyboardEvent): boolean {
-  if (event.metaKey === (chord.bare === true) || event.ctrlKey) return false;
+  if (event.metaKey === (chord.bare === true)) return false;
+  if (event.ctrlKey !== (chord.control === true)) return false;
   const shiftFree = chord.key.unshifted !== undefined;
   if (event.altKey !== (chord.option === true)) return false;
   if (!shiftFree && event.shiftKey !== (chord.shift === true)) return false;

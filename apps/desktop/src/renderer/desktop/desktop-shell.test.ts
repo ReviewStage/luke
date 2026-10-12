@@ -502,14 +502,24 @@ test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page
 
   assert.equal(command("/"), true);
   assert.equal(settingsPage(), "Keyboard shortcuts");
-  // The page lists the window's own chords beside the two keys.
+  // The page lists the window's own chords beside the two keys, and the
+  // system's own the menu bar answers.
   const rows = [...document.body.querySelectorAll(".settings-row .shortcut-name")].map(
     (row) => row.textContent,
   );
   assert.ok(rows.includes("New plan"));
   assert.ok(rows.includes("Toggle panel"));
   assert.ok(rows.includes("New tab"));
-  assert.ok(rows.includes("Exit full screen"));
+  assert.ok(rows.includes("Exit panel full screen"));
+  for (const system of [
+    "Hide Luke",
+    "Hide others",
+    "Quit Luke",
+    "Minimize",
+    "Toggle full screen",
+  ]) {
+    assert.ok(rows.includes(system), `the page lists ${system}`);
+  }
 });
 
 test("Command-N leaves Settings for a new plan", () => {

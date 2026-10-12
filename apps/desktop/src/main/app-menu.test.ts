@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import type { MenuItemConstructorOptions } from "electron";
 import { test, vi } from "vitest";
 import { channels } from "#shared/bridge";
-import { APP_COMMAND } from "#shared/shortcuts";
+import {
+  APP_COMMAND,
+  APP_SHORTCUTS,
+  KEYED_COMMANDS,
+  type ShortcutChord,
+  shortcutAccelerator,
+  shortcutLayered,
+} from "#shared/shortcuts";
 import { appMenuTemplate } from "./app-menu";
 
 /** A browser window as the menu is handed one: only the page it sends to. */
@@ -57,7 +64,7 @@ test("an item clicked in the menu bar hands its command to the window it was cho
 test("a key the window left unclaimed runs no item: a text field's ⌘⌫ and the window's Escape stay theirs", () => {
   const window = new FakeBrowserWindow();
   choose("Permanently Delete Plan", window, true);
-  choose("Exit Full Screen", window, true);
+  choose("Exit Panel Full Screen", window, true);
   assert.deepEqual(window.sent, []);
 });
 
@@ -90,7 +97,7 @@ test("Help offers the two notes to the people who make Luke, each handing the wi
   ]);
 });
 
-test("File's New Tab and Close Tab hand the window their commands on a click, leaving ⌘T and ⌘W to the window's keymap, and Close Window closes the window on ⇧⌘W or a click", () => {
+test("File's New Tab and Close Tab hand the window their commands on a click, ⌘T is left to the window's keymap, a ⌘W with no tab to close closes the window, and Close Window closes it on ⇧⌘W or a click", () => {
   const file = appMenuTemplate("Luke").find((menu) => menu.label === "File");
   assert.ok(Array.isArray(file?.submenu));
   assert.deepEqual(
@@ -105,19 +112,22 @@ test("File's New Tab and Close Tab hand the window their commands on a click, le
   );
   const window = new FakeBrowserWindow();
   choose("New Tab", window, true);
-  choose("Close Tab", window, true);
-  assert.deepEqual(window.sent, [], "a ⌘T or ⌘W the window left unclaimed does nothing");
+  assert.deepEqual(window.sent, [], "a ⌘T the window left unclaimed does nothing");
   assert.equal(window.closes, 0);
+  choose("Close Tab", window, true);
+  assert.equal(window.closes, 1, "a ⌘W the window had no tab for closes the window");
+  assert.deepEqual(window.sent, []);
   choose("New Tab", window, false);
   choose("Close Tab", window, false);
   assert.deepEqual(window.sent, [
     [channels.onMenuCommand, APP_COMMAND.NEW_TAB],
     [channels.onMenuCommand, APP_COMMAND.CLOSE_TAB],
   ]);
+  assert.equal(window.closes, 1, "a click on Close Tab is the window's to answer");
 
   choose("Close Window", window, true);
   choose("Close Window", window, false);
-  assert.equal(window.closes, 2);
+  assert.equal(window.closes, 3);
   assert.equal(window.sent.length, 2, "Close Window hands the page nothing");
 });
 
@@ -149,4 +159,55 @@ test("View holds Actual Size, Zoom In, and Zoom Out as Chrome orders them, each 
     [channels.onMenuCommand, APP_COMMAND.ZOOM_OUT],
     [channels.onMenuCommand, APP_COMMAND.ACTUAL_SIZE],
   ]);
+});
+
+/** Every item in the menu bar, the menus' own items under them. */
+function everyItem(): MenuItemConstructorOptions[] {
+  const under = (items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] =>
+    items.flatMap((each) => [each, ...(Array.isArray(each.submenu) ? under(each.submenu) : [])]);
+  return under(appMenuTemplate("Luke"));
+}
+
+test("the system's own items answer the chords the shortcuts page lists: Hide, Hide Others, Quit, Minimize, and Toggle Full Screen", () => {
+  const chords = new Map(
+    everyItem().flatMap((each) => (each.role ? [[each.role, each.accelerator]] : [])),
+  );
+  assert.equal(chords.get("hide"), "Command+H");
+  assert.equal(chords.get("hideOthers"), "Alt+Command+H");
+  assert.equal(chords.get("quit"), "Command+Q");
+  assert.equal(chords.get("minimize"), "Command+M");
+  assert.equal(chords.get("togglefullscreen"), "Control+Command+F");
+  assert.ok(chords.has("windowMenu"), "the Window menu is macOS's own");
+  assert.ok(chords.has("help"), "the Help menu is macOS's own, with its search");
+});
+
+test("no chord is bound twice: not across the menu bar, not by the shortcut table, and not over the Edit menu's own", () => {
+  // The Edit menu's role brings these, unseen in the template.
+  const editing = [
+    "Command+Z",
+    "Shift+Command+Z",
+    "Command+X",
+    "Command+C",
+    "Command+V",
+    "Alt+Shift+Command+V",
+    "Command+A",
+  ];
+  const menu = everyItem().flatMap((each) =>
+    each.accelerator === undefined ? [] : [String(each.accelerator)],
+  );
+  const bound = [...menu, ...editing];
+  assert.deepEqual(
+    bound.filter((chord, index) => bound.indexOf(chord) !== index),
+    [],
+  );
+  // The window's layered Escape is the one chord several commands share.
+  const table = KEYED_COMMANDS.map((command): ShortcutChord => APP_SHORTCUTS[command].chord)
+    .filter((chord) => !shortcutLayered(chord))
+    .map(shortcutAccelerator);
+  const owned = [...table, ...editing];
+  assert.deepEqual(
+    owned.filter((chord, index) => owned.indexOf(chord) !== index),
+    [],
+  );
+  for (const chord of menu) assert.ok(table.includes(chord) || chord === "Escape", chord);
 });

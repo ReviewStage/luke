@@ -137,6 +137,10 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     rendererHtmlPath,
     rendererUrl,
     zoomFactor: () => zoomFactorOf(state.snapshot().settings?.stored.zoom),
+    // A capture run opens at the frame its evidence is measured at, and
+    // keeps no place of its own.
+    placementPath: runMode.takesFocus ? path.join(config.stateRoot, "main-window.json") : undefined,
+    closing: () => !launchStanding(),
     onAllClosed: () => config.quit(),
   });
   /** The hidden window that holds the live conversation. */
