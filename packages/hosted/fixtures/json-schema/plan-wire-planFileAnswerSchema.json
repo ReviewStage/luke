@@ -52,6 +52,41 @@
     {
       "type": "object",
       "properties": {
+        "text": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "repository": {
+              "type": "string",
+              "maxLength": 140
+            },
+            "branch": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string",
+              "maxLength": 1048576
+            }
+          },
+          "required": [
+            "path",
+            "repository",
+            "branch",
+            "text"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
         "refusal": {
           "type": "string",
           "enum": [

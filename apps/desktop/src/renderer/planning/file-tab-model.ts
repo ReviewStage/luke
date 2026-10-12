@@ -2,9 +2,13 @@ import {
   PLAN_FILE_BOUNDS,
   PLAN_FILE_REFUSAL,
   type PlanFileRefusal,
-  SHOWN_CODE_BOUNDS,
 } from "@sidecar/hosted/plan-wire";
-import type { PlanCode, PlanCodeShowing, PlanFileShown } from "@sidecar/hosted/planning-view";
+import type {
+  PlanCode,
+  PlanCodeShowing,
+  PlanFileShown,
+  PlanningFileAnswer,
+} from "@sidecar/hosted/planning-view";
 import { githubPath } from "./coding-agent-model";
 import type { OpenFile } from "./use-side-panel";
 
@@ -151,49 +155,26 @@ export function withWindow(held: FileRead, read: PlanFileShown): FileLines {
   return window;
 }
 
-/** One line's text, its coloured runs joined. */
-function lineText(tokens: PlanCode["lines"][number]): string {
-  return tokens.map((token) => token.text).join("");
-}
-
-/** Reads one window of a file: the lines it holds and the file's length, or nothing where the read did not land. */
-export type ReadWindowLines = (
-  window: FileWindow,
-) => Promise<{ readonly lines: PlanCode["lines"]; readonly lineCount: number } | undefined>;
-
-/** How a read of a whole file's text came out: the text, a file holding a line the service cut, or a window that did not land. */
+/** How a raw read of a file's whole text came out: the text, a file the service will not carry whole, or a read that did not land. */
 export const WHOLE_TEXT = {
   READ: "read",
-  CUT: "cut",
+  REFUSED: "refused",
   UNREAD: "unread",
 } as const;
 
 export type WholeText =
   | { readonly kind: typeof WHOLE_TEXT.READ; readonly text: string }
-  | { readonly kind: typeof WHOLE_TEXT.CUT }
+  | { readonly kind: typeof WHOLE_TEXT.REFUSED }
   | { readonly kind: typeof WHOLE_TEXT.UNREAD };
 
 /**
- * The whole file's text, read a window at a time from its first line to
- * its last, for a copy or a download of it. Note that the service carries
- * each line cut to a bound, so a file holding a line as long as the bound
- * may have lost the rest of it and is answered as cut rather than handed
- * on short; and its lines are joined with a newline, whatever ended them.
+ * A raw read's answer as a copy or a download of the file hears it: the
+ * file's text as it holds it, its lines uncut; a file the service refuses
+ * to carry whole, as one grown past its bound since it was drawn; or a read
+ * that did not land.
  */
-export async function readWholeText(read: ReadWindowLines): Promise<WholeText> {
-  const lines: PlanCode["lines"][number][] = [];
-  let lineCount = 1;
-  while (lines.length < lineCount) {
-    const window = await read(windowAt(lines.length + 1));
-    if (window === undefined) return { kind: WHOLE_TEXT.UNREAD };
-    // A file shortened between two reads ends where the latest read says.
-    lineCount = window.lineCount;
-    if (window.lines.length === 0) break;
-    lines.push(...window.lines);
-  }
-  const text = lines.slice(0, lineCount).map(lineText);
-  if (text.some((line) => line.length >= SHOWN_CODE_BOUNDS.MAX_LINE_CHARS)) {
-    return { kind: WHOLE_TEXT.CUT };
-  }
-  return { kind: WHOLE_TEXT.READ, text: text.join("\n") };
+export function wholeTextOf(answer: PlanningFileAnswer): WholeText {
+  if ("text" in answer) return { kind: WHOLE_TEXT.READ, text: answer.text.text };
+  if ("refusal" in answer) return { kind: WHOLE_TEXT.REFUSED };
+  return { kind: WHOLE_TEXT.UNREAD };
 }

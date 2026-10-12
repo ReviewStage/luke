@@ -1868,6 +1868,46 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
+    "a raw read carries the file's whole text with its long lines uncut, as the window's lines are not, held to the same rule; and a raw query other than 1 is invalid",
+    () =>
+      Effect.gen(function* () {
+        const reached = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(reached);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const read = (path: string, raw: string) =>
+          ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "1", raw } }));
+
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read("src/invite.ts", "1"),
+          ),
+          {
+            text: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              branch: "main",
+              text: `one\ntwo\n${"x".repeat(500)}\nfour`,
+            },
+          },
+        );
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* read(".env", "1")),
+          { refusal: PLAN_FILE_REFUSAL.SECRET },
+        );
+        assert.deepEqual(
+          yield* read("src/invite.ts", "yes"),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
     "a plan with no repository says so, and a window out of order or past its bound is refused",
     () =>
       Effect.gen(function* () {

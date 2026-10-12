@@ -42,7 +42,10 @@ import { logStoreFailure } from "./store-failure.js";
  * What is shown is decided by the rule `show_code` is held to
  * (`shown-file.ts`), so a secret file is refused before anything is asked of
  * GitHub, and a link, a directory, a file too large, or one that is not text
- * reads as refused; each line travels cut as `show_code` cuts it.
+ * reads as refused; each line travels cut as `show_code` cuts it. A raw
+ * read, which a copy or a download of the file asks, carries the file's
+ * whole text instead, its lines uncut, held to the same rule and the same
+ * bound on the file's size.
  *
  * Note that GitHub's head may differ from the checkout the snippet was read
  * from, whose clone is the default branch as it stood when the session first
@@ -165,7 +168,15 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
   }
   if (refusal !== undefined) return refused(FILE_REFUSAL_OF[refusal]);
   // A regular file GitHub carried no bytes of is past the bound, which the rule refused above.
-  const all = fileLines(new TextDecoder().decode(content));
+  const text = new TextDecoder().decode(content);
+  // Note that a raw read carries the file as it is, its lines uncut, because
+  // a copy or a download of it must not lose what the screen cuts.
+  if (request.raw === true) {
+    return {
+      text: { path: request.path, repository, branch: confirmed.defaultBranch, text },
+    } satisfies PlanFileAnswer;
+  }
+  const all = fileLines(text);
   const lines = all.slice(request.firstLine - 1, request.lastLine).map(shownLine);
   return {
     file: {

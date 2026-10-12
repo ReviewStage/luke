@@ -98,16 +98,22 @@ export function planWorkPath(planId: string, before?: string): string {
   return `${path}?${query}`;
 }
 
-/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line. */
+/** One window of a file of one plan's repository, as GitHub holds it now (GET): the path, and its first and last line; `raw=1` for its whole text uncut. */
 export function planFilePath(
   planId: string,
-  window: { readonly path: string; readonly firstLine: number; readonly lastLine: number },
+  window: {
+    readonly path: string;
+    readonly firstLine: number;
+    readonly lastLine: number;
+    readonly raw?: boolean;
+  },
 ): string {
   const query = new URLSearchParams({
     path: window.path,
     first: String(window.firstLine),
     last: String(window.lastLine),
   });
+  if (window.raw === true) query.set("raw", "1");
   return `${planPath(planId)}/file?${query}`;
 }
 

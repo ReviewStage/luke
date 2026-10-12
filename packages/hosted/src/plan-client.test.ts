@@ -402,7 +402,7 @@ it.effect(
 );
 
 it.effect(
-  "a file's window is asked by path and lines and read as the service answers it, a refusal included, and a window the wire refuses is never sent",
+  "a file's window is asked by path and lines, and its whole text with raw, and read as the service answers it, a refusal included, and a window the wire refuses is never sent",
   () =>
     Effect.gen(function* () {
       const window = {
@@ -415,15 +415,25 @@ it.effect(
           lines: ["const DAYS = 7;", "export { DAYS };"],
         },
       };
+      const whole = {
+        text: {
+          path: "src/invites.ts",
+          repository: "acme/web",
+          branch: "main",
+          text: "// days\nconst DAYS = 7;\nexport { DAYS };",
+        },
+      };
       const api = fakeCloudApi({
         [`GET /api/plans/${PLAN_ID}/file`]: {
           answer: (request) =>
-            request.searchParams.get("path") === ".env"
-              ? { refusal: PLAN_FILE_REFUSAL.SECRET }
-              : request.searchParams.get("first") === "2" &&
-                  request.searchParams.get("last") === "3"
-                ? window
-                : { error: "invalid-request" },
+            request.searchParams.get("raw") === "1"
+              ? whole
+              : request.searchParams.get("path") === ".env"
+                ? { refusal: PLAN_FILE_REFUSAL.SECRET }
+                : request.searchParams.get("first") === "2" &&
+                    request.searchParams.get("last") === "3"
+                  ? window
+                  : { error: "invalid-request" },
         },
       });
 
@@ -447,6 +457,18 @@ it.effect(
           api.layer,
         ),
         undefined,
+      );
+      assert.deepEqual(
+        yield* Effect.provide(
+          client().readFile(PLAN_ID, {
+            path: "src/invites.ts",
+            firstLine: 1,
+            lastLine: 1,
+            raw: true,
+          }),
+          api.layer,
+        ),
+        whole,
       );
     }),
 );

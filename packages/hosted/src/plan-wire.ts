@@ -544,6 +544,8 @@ export function codeWindow(ref: CodeRef, lineCount: number): CodeWindow {
 export const PLAN_FILE_BOUNDS = {
   /** The most lines one read of a file for the File tab carries; a longer file is read a window at a time as it is scrolled. */
   WINDOW_LINES: 500,
+  /** The longest text a raw read carries: the service reads a file of a megabyte at most, and its text, a character to a byte at least, is no longer. */
+  MAX_TEXT_CHARS: 1024 * 1024,
 } as const;
 
 /**
@@ -574,7 +576,12 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
   );
 }
 
-/** One window of a file of the plan's repository, as the File tab asks it (GET `/api/plans/{id}/file`): the path, and its first and last line. */
+/**
+ * One window of a file of the plan's repository, as the File tab asks it
+ * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
+ * with `raw`, the file's whole text, its lines uncut, as a copy or a
+ * download of the file asks it, the window then standing for nothing.
+ */
 export const planFileRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
     EffectSchema.isNonEmpty(),
@@ -582,6 +589,7 @@ export const planFileRequestSchema = EffectSchema.Struct({
   ),
   firstLine: codeLineSchema,
   lastLine: codeLineSchema,
+  raw: EffectSchema.optionalKey(EffectSchema.Boolean),
 }).check(EffectSchema.makeFilter(fileWindowIsReadable));
 
 export type PlanFileRequest = typeof planFileRequestSchema.Type;
@@ -616,9 +624,18 @@ export const planFileRefusalSchema = EffectSchema.Struct({
   branch: EffectSchema.optionalKey(EffectSchema.String),
 });
 
-/** The File tab's read answered: the window, or why the file is not shown. */
+/** A file of the plan's repository read raw: the path, the repository and the branch read, and the whole text as the file holds it. */
+export const planFileTextSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
+  text: EffectSchema.String.check(EffectSchema.isMaxLength(PLAN_FILE_BOUNDS.MAX_TEXT_CHARS)),
+});
+
+/** The File tab's read answered: the window, the whole text where it was read raw, or why the file is not shown. */
 export const planFileAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ file: planFileWindowSchema }),
+  EffectSchema.Struct({ text: planFileTextSchema }),
   planFileRefusalSchema,
 ]);
 

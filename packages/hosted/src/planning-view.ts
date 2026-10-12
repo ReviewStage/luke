@@ -11,6 +11,7 @@ import {
   planCreateRequestSchema,
   planFileRefusalSchema,
   planFileRequestSchema,
+  planFileTextSchema,
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionSeqSchema,
@@ -562,9 +563,10 @@ const planFileShownSchema = EffectSchema.Struct({
 
 export type PlanFileShown = typeof planFileShownSchema.Type;
 
-/** The File tab's read, as the window hears it: the window coloured, why the file is not shown, or that the service did not answer. */
+/** The File tab's read, as the window hears it: the window coloured, the whole text read raw, why the file is not shown, or that the service did not answer. */
 export const planningFileAnswerSchema = EffectSchema.Union([
   EffectSchema.Struct({ file: planFileShownSchema }),
+  EffectSchema.Struct({ text: planFileTextSchema }),
   planFileRefusalSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
 ]);

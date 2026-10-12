@@ -155,6 +155,8 @@ const FILE_QUERY = {
   PATH: "path",
   FIRST_LINE: "first",
   LAST_LINE: "last",
+  /** `1` asks the file's whole text, its lines uncut, in place of the window. */
+  RAW: "raw",
 } as const;
 
 /** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
@@ -412,11 +414,16 @@ const fileRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     const named = query.getAll(name);
     return named.length === 1 ? named[0] : undefined;
   };
+  const raw = query.getAll(FILE_QUERY.RAW);
+  if (raw.length > 1 || (raw.length === 1 && raw[0] !== "1")) {
+    return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  }
   const read = readEither(planFileRequestSchema)(
     unparsedWire({
       path: once(FILE_QUERY.PATH),
       firstLine: Number(once(FILE_QUERY.FIRST_LINE)),
       lastLine: Number(once(FILE_QUERY.LAST_LINE)),
+      ...(raw.length === 1 ? { raw: true } : undefined),
     }),
   );
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);

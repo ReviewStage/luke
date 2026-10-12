@@ -13,6 +13,9 @@
     "lastLine": {
       "type": "integer",
       "minimum": 1
+    },
+    "raw": {
+      "type": "boolean"
     }
   },
   "required": [
