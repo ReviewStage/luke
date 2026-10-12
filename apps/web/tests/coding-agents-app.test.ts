@@ -1471,7 +1471,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           text: "Now add the tests.",
           turnId: nextTurn,
         });
-        assert.ok(Result.isSuccess(taken) && Option.isSome(taken.success));
+        assert.ok(Result.isSuccess(taken) && taken.success.length === 1);
         const again = readAnswer(
           codingAgentMessagesAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
@@ -1504,6 +1504,56 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         );
         assert.equal(ended.agents[0]?.status, CODING_AGENT_STATUS.COMPLETED);
         assert.equal(ended.agents[0]?.turnId, nextTurn);
+      }),
+  );
+
+  it.effect(
+    "lines a turn already received coalesced into one row of its own, as the relay wrote them before it took a coalesced run, await nothing: the agent reads as completed once the turn ends, and a line no turn has received still reads it as running",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask, target, writer, turnId, sent, transcript } = yield* startedAgent(
+          fakeEve(),
+          { running: true },
+        );
+        const lines = [
+          "Check the verification map first.",
+          "Then see if you disagree with the plan.",
+        ];
+        for (const line of lines) yield* sent(line);
+        // eve's receipt of both lines at once, which no awaiting line's words matched alone.
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 3,
+          message: userMessage(
+            randomUUID(),
+            lines.join("\n\n"),
+            userMetadataOf(BRAIN_TURN_TRIGGER.ASK, undefined),
+          ),
+        });
+        yield* writer.consume(target, {
+          kind: BRAIN_RUN_EVENT.TURN_ENDED,
+          conversationId: sessionKey(target.conversationId),
+          turnId,
+          sequence: 4,
+          status: BRAIN_REQUEST_STATUS.SUCCEEDED,
+          responseIds: [],
+          at: 0,
+        });
+        const listed = () =>
+          Effect.map(
+            ask(request(PLAN_AGENTS, owner, { id: plan.id })),
+            (answered) =>
+              readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answered).agents[0]
+                ?.status,
+          );
+        assert.equal(yield* listed(), CODING_AGENT_STATUS.COMPLETED);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.COMPLETED);
+
+        yield* sent("Now add the tests.");
+        assert.equal(yield* listed(), CODING_AGENT_STATUS.RUNNING);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
       }),
   );
 

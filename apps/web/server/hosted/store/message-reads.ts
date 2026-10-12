@@ -1,5 +1,19 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -579,13 +593,23 @@ const AwaitingLinesRowSchema = Schema.Struct({
   lines: Schema.Number,
 });
 
+/** A developer's line and the turn-owned row later in its conversation that may carry its words: one table under the two names the read takes it by. */
+const receipt = alias(messages, "receipt");
+
+/** The words of a row's one text part, as both the line and the receipt hold them. */
+const lineWords = (parts: AnyPgColumn) => sql`${parts} -> 0 ->> 'text'`;
+
 /**
  * How many of the developer's lines stand in each coding-agent conversation
  * named with no turn yet: each is a message the session took and the next
  * turn will receive, which is what reads an idle agent as running again
  * until that turn opens. The kind is held here as the writer holds it when
  * it takes such a line, since a planning conversation's turnless user rows
- * are its spoken asks and wait for no turn of eve's.
+ * are its spoken asks and wait for no turn of eve's. A line whose words a
+ * later user row of a turn already carries is not counted: that row is
+ * eve's own receipt of it, alone or coalesced with the steers beside it,
+ * written by the relay where the line was not taken into the turn, so the
+ * line awaits nothing and must not read the agent as running forever.
  */
 const countAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
@@ -605,6 +629,20 @@ const countAwaitingLines = SqlSchema.findAll({
           eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
           isNull(messages.turnId),
+          notExists(
+            db
+              .select({ id: receipt.id })
+              .from(receipt)
+              .where(
+                and(
+                  eq(receipt.conversationId, messages.conversationId),
+                  eq(receipt.role, MESSAGE_ROLE.USER),
+                  isNotNull(receipt.turnId),
+                  gt(receipt.seq, messages.seq),
+                  sql`strpos(${lineWords(receipt.parts)}, ${lineWords(messages.parts)}) > 0`,
+                ),
+              ),
+          ),
         ),
       )
       .groupBy(messages.conversationId),
