@@ -33,6 +33,7 @@ import {
 } from "../planning/planning-model";
 import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
@@ -42,6 +43,7 @@ import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
@@ -276,6 +278,68 @@ function PlanRows({
   );
 }
 
+/** One row under Pinned: a pinned plan, or a tab pinned on a listed plan, and when it was pinned. */
+interface PinnedRow {
+  readonly plan: PlanSummary;
+  readonly pin: PinnedTab | undefined;
+  readonly at: number;
+}
+
+/**
+ * The rows under Pinned, newest pinned first: the pinned plans, and the
+ * tabs pinned to the sidebar on plans the list holds. A tab of an archived
+ * or deleted plan is drawn nowhere, its plan being out of the list.
+ */
+function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
+  const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
+  const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
+    const plan = plans.plans.find((each) => each.id === pin.plan);
+    return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
+  });
+  return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
+}
+
+/**
+ * The Pinned section's rows, each a plan's or a tab's. A tab's row is keyed
+ * by when it was pinned, which no other pin shares, and a plan's by its id.
+ */
+function PinnedRows({
+  rows,
+  context,
+  onOpenTab,
+}: {
+  rows: readonly PinnedRow[];
+  context: RowContext;
+  onOpenTab: (pin: PinnedTab) => void;
+}): React.JSX.Element {
+  return (
+    <ul className="sidebar-plans">
+      {rows.map(({ plan, pin }) =>
+        pin === undefined ? (
+          <SidebarPlan
+            key={plan.id}
+            plans={context.plans}
+            plan={plan}
+            current={context.current(plan.id)}
+            repositoryShown
+            now={context.now}
+            onOpen={() => context.onOpen(plan.id)}
+          />
+        ) : (
+          <SidebarPinnedTab
+            key={String(pin.at)}
+            plans={context.plans}
+            pin={pin}
+            plan={plan}
+            inSight={context.inSight}
+            onOpen={() => onOpenTab(pin)}
+          />
+        ),
+      )}
+    </ul>
+  );
+}
+
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
  * right-click on the header: Pin holds the group above the rest on the
@@ -486,9 +550,10 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
 /**
  * The window's left column: Luke, the way to a new plan, Search, which
  * opens the command palette, every plan the account owns, and the account's
- * row that leads to Settings. The pinned
- * plans stand in a section of their own above the rest while any are pinned,
- * newest pinned first and each naming its repository; the rest are grouped
+ * row that leads to Settings. The pinned plans, and the side panel tabs
+ * pinned to the sidebar, stand in a section of their own above the rest
+ * while any are pinned, newest pinned first, a plan naming its repository
+ * and a tab its plan; the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
  * pinned first, then the group updated most recently first;
  * and the archived ones are folded away under them all.
@@ -531,6 +596,10 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
+  const openPinnedTab = (pin: PinnedTab) => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.onOpenPinnedTab(pin);
+  };
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
@@ -552,6 +621,7 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  const pinnedSection = pinnedRows(pinned, plans);
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
   const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
@@ -624,10 +694,10 @@ export function DesktopSidebar({
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
-        {plans.signedIn && pinned.length > 0 ? (
+        {plans.signedIn && pinnedSection.length > 0 ? (
           <nav className="sidebar-group" aria-label="Pinned">
             <h2 className="sidebar-heading">Pinned</h2>
-            <PlanRows rows={pinned} repositoryShown context={context} />
+            <PinnedRows rows={pinnedSection} context={context} onOpenTab={openPinnedTab} />
           </nav>
         ) : null}
         <nav className="sidebar-group" aria-label="Plans">

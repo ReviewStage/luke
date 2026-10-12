@@ -1602,6 +1602,34 @@ test("a notification's click opens its plan on the agent's tab", () => {
   assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
 });
 
+test("a tab pinned to the sidebar opens its plan and the panel on that tab from another plan, and its tab closed leaves the pin", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  assert.equal(pin.plan, PLAN.id);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+
+  // The host opens the plan, and the panel stands open on the board, which the plan holds nothing of.
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+  assert.deepEqual(tab.control().sidePanel.pins, [pin]);
+});
+
 test("an agent main says ended unseen dots its tab beside the arrivals", () => {
   const tab = mount({ shown: true, planning: OPEN, unseenAgents: [AGENT_ID] });
   assert.deepEqual(tab.control().unreadTabs, [{ agent: AGENT_ID }]);

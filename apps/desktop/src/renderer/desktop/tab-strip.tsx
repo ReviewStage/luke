@@ -1,5 +1,4 @@
 import { CloseIcon } from "@sidecar/panel";
-import { PinIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -7,7 +6,7 @@ import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
 import { MENU_ALIGN, MENU_DROP, type MenuPlacement } from "./action-menu";
-import { runOf, type TabMove, useTabDrag } from "./use-tab-drag";
+import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
  * tab-strip.tsx -- the window's one tab strip, drawn alike across the plan's column and the side panel, the way an editor draws its tabs.
@@ -25,9 +24,7 @@ import { runOf, type TabMove, useTabDrag } from "./use-tab-drag";
  * ⇧⌘← and ⇧⌘→, as VS Code moves an editor, with focus kept on it. Either
  * way the strip says where the tab now stands to whoever reads it aloud.
  *
- * A pinned tab stands whole as any other does, and wears a pin in its ×'s
- * place, as VS Code's pinned editor does: the pin unpins it, and neither it
- * nor Delete closes it. A tab with actions of its own offers them on a
+ * A tab with actions of its own offers them on a
  * right-click, or from the keyboard on the menu key or ⇧F10, hanging under
  * the tab.
  *
@@ -136,9 +133,6 @@ function movedLine(tab: HTMLElement | undefined, to: number, count: number): str
   return `${tab?.textContent ?? "Tab"} moved to position ${to + 1} of ${count}`;
 }
 
-/** Every tab of a strip that says nothing of its runs moves among them all. */
-const ONE_RUN: readonly number[] = [Number.POSITIVE_INFINITY];
-
 /** Whether a key opens a tab's own menu from the keyboard: the menu key, or ⇧F10. */
 function opensMenu(event: React.KeyboardEvent): boolean {
   return event.key === "ContextMenu" || (event.shiftKey && event.key === "F10");
@@ -156,22 +150,21 @@ function underTab(tab: HTMLElement): MenuPlacement {
  * is gone by then; with none left, it goes on to the button after the
  * strip, or the first in what follows it: the side panel's "+". `onMove`,
  * while given, lets the tabs be moved, and hears each move as the tab's
- * place before and after it; `runs` are how many of them, from the first,
- * each run holds, each tab moving only among its own run, while the tabs
- * past every run stand where they are. Every tab moves among them all
- * unless said.
+ * place before and after it; `movable` is how many of them, from the
+ * first, move, among themselves, while the rest stand where they are.
+ * Every tab moves unless said.
  */
 export function TabStrip({
   label,
   className,
   onMove,
-  runs = ONE_RUN,
+  movable = Number.POSITIVE_INFINITY,
   children,
 }: {
   label: string;
   className?: string;
   onMove?: TabMove | undefined;
-  runs?: readonly number[];
+  movable?: number;
   children: React.ReactNode;
 }): React.JSX.Element {
   const strip = useRef<HTMLDivElement | null>(null);
@@ -231,16 +224,16 @@ export function TabStrip({
           setMovedSaid(movedLine(tabs[from], to, tabs.length));
           onMove(from, to);
         };
-  const onPointerDown = useTabDrag(move, runs);
+  const onPointerDown = useTabDrag(move, movable);
   // The focused tab one place along, drawn there before focus is put back
   // on it, since moving it in the document can take focus from it.
   const step = (by: number) => {
     const tabs = [...(strip.current?.querySelectorAll<HTMLElement>(TAB) ?? [])];
     const tab = tabs.find((each) => each === document.activeElement);
     const at = tab === undefined ? -1 : tabs.indexOf(tab);
-    const run = runOf(runs, at);
-    if (tab === undefined || move === undefined || run === undefined) return;
-    if (at + by < run.start || at + by >= Math.min(tabs.length, run.end)) return;
+    const end = Math.min(tabs.length, movable);
+    if (tab === undefined || move === undefined || at >= end || at + by < 0 || at + by >= end)
+      return;
     flushSync(() => move(at, at + by));
     focusTab(strip.current, tab);
   };
@@ -253,7 +246,7 @@ export function TabStrip({
     const at = event.target instanceof HTMLElement ? tabs.indexOf(event.target) : -1;
     if (at < 0) return;
     if (closesTab(event.key)) {
-      // Only a tab that closes hands focus on; a pinned one, or one that always stands, stays.
+      // Only a tab that closes hands focus on; one that always stands stays.
       const pill = event.target instanceof HTMLElement ? event.target.closest(".tab") : null;
       if (pill?.getAttribute("data-closable") === "true") closedAt.current = at;
       return;
@@ -312,11 +305,10 @@ export function TabStrip({
 
 /**
  * One tab. `onClose` gives it its × and its Delete key; a tab without it is
- * one that always stands, and a pinned one stands until it is unpinned,
- * wearing the pin that `onUnpin` answers in the ×'s place. `editor`, while
- * given, is drawn in the label's place as a field of its own, outside the
- * tab's role, so a reader reaches it. A label cut short is said whole in
- * the tab's hint, before what `tooltip` adds. `onMenu` opens the tab's own
+ * one that always stands. `editor`, while given, is drawn in the label's
+ * place as a field of its own, outside the tab's role, so a reader reaches
+ * it. A label cut short is said whole in the tab's hint, before what
+ * `tooltip` adds. `onMenu` opens the tab's own
  * actions where it says, from a right-click or the keyboard's menu keys.
  * A `quiet` tab draws no fill at rest, chosen or not, and the hover fill
  * under the pointer: a lone tab, always the chosen one, need not be told
@@ -331,11 +323,9 @@ export function Tab({
   keyshortcuts,
   editor,
   tabRef,
-  pinned = false,
   quiet = false,
   onSelect,
   onClose,
-  onUnpin,
   onMenu,
 }: {
   icon: React.JSX.Element;
@@ -348,18 +338,15 @@ export function Tab({
   keyshortcuts?: string | undefined;
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
-  pinned?: boolean;
   quiet?: boolean;
   onSelect: () => void;
   onClose?: (() => void) | undefined;
-  onUnpin?: (() => void) | undefined;
   onMenu?: ((placement: MenuPlacement, opener: HTMLElement) => void) | undefined;
 }): React.JSX.Element {
   // Whether the label is cut short: a label renamed, or the plan's one tab
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
   const hint = !clipped ? tooltip : tooltip === undefined ? label : `${label} · ${tooltip}`;
-  const closes = pinned ? undefined : onClose;
   const glyph = (
     <span className="tab-icon">
       {icon}
@@ -393,9 +380,9 @@ export function Tab({
           onMenu(underTab(event.currentTarget), event.currentTarget);
           return;
         }
-        if (closes === undefined || !closesTab(event.key)) return;
+        if (onClose === undefined || !closesTab(event.key)) return;
         event.preventDefault();
-        closes();
+        onClose();
       }}
     >
       {glyph}
@@ -408,8 +395,7 @@ export function Tab({
     <div
       className="tab"
       data-selected={String(selected)}
-      data-closable={String(closes !== undefined)}
-      data-pinned={String(pinned)}
+      data-closable={String(onClose !== undefined)}
       data-quiet={String(quiet)}
     >
       {editor === undefined ? (
@@ -420,23 +406,13 @@ export function Tab({
           {editor}
         </span>
       )}
-      {editor !== undefined ? null : pinned ? (
-        <button
-          type="button"
-          className="tab-close tab-pin"
-          aria-label={`Unpin ${label}`}
-          tabIndex={-1}
-          onClick={onUnpin}
-        >
-          <PinIcon />
-        </button>
-      ) : closes === undefined ? null : (
+      {onClose === undefined || editor !== undefined ? null : (
         <button
           type="button"
           className="tab-close"
           aria-label={`Close ${label}`}
           tabIndex={-1}
-          onClick={closes}
+          onClick={onClose}
         >
           <CloseIcon />
         </button>

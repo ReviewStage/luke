@@ -778,6 +778,54 @@ body,
   height: 12px;
 }
 
+/* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
+   glyph and name, which fades where it is cut short as a tab's does, and
+   its plan's name beneath in the repository's muted place. The name always
+   leaves its Unpin's room at the end, so showing it cuts nothing more. */
+.sidebar-pinned-tab .sidebar-plan-line {
+  align-items: center;
+  gap: var(--space-6);
+  padding-right: var(--sidebar-plan-mark);
+}
+
+.sidebar-pinned-tab-glyph {
+  display: flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.sidebar-pinned-tab-glyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-pinned-tab-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sidebar-pinned-tab-name[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+.sidebar-pinned-tab-plan {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A pin whose plan no longer holds what it opens stands dimmed, still
+   answering its hover, its Unpin, and its menu. */
+.sidebar-plan[aria-disabled="true"] :is(.sidebar-plan-line, .sidebar-pinned-tab-plan) {
+  opacity: 0.55;
+}
+
 .sidebar-foot {
   display: flex;
   flex-direction: column;
@@ -2785,8 +2833,7 @@ body,
 /* Only the chosen tab keeps room for its ×, so the strip holds more before
    it scrolls; another tab's × comes over the end of its label, which fades
    beneath it. */
-.tab[data-closable="true"][data-selected="true"],
-.tab[data-pinned="true"] {
+.tab[data-closable="true"][data-selected="true"] {
   --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
 }
 
@@ -2885,19 +2932,6 @@ body,
 .tab:hover .tab-close,
 .tab[data-selected="true"] .tab-close {
   opacity: 1;
-}
-
-/* A pinned tab wears its pin where the × would be, standing whether or not
-   the tab is chosen or under the pointer, as VS Code's pinned editor does,
-   and drawn a size down so it reads as a mark on the tab rather than a
-   control beside it. */
-.tab[data-pinned="true"] .tab-pin {
-  opacity: 1;
-}
-
-.tab-close.tab-pin svg {
-  width: 12px;
-  height: 12px;
 }
 
 /* Note that the × draws no ground under the pointer, because it is a glyph

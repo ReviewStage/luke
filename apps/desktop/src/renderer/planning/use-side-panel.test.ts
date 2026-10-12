@@ -386,7 +386,7 @@ test("what a version with the History tab kept loads whole without it, wherever 
     "the History tab chosen reads as the first",
   );
   assert.deepEqual(panel.control().closedTabs, []);
-  assert.deepEqual(panel.control().pinned, []);
+  assert.deepEqual(panel.control().pins, [], "its History pin is let go");
   act(() => panel.control().onClose(SIDE_PANEL_TAB.WORK));
   assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE, "the tabs viewed read without it too");
 });
@@ -429,52 +429,73 @@ test("a fixed tab dragged among a plan's few keeps its place on a plan that has 
   ]);
 });
 
-test("a subagent's and a file's tab pinned on a plan are open on it at the next launch, a draft's pin is kept nowhere, and closing a pinned tab unpins it", () => {
-  const DRAFT = "draft-key-1";
-  const delegated = { subagent: CALL, delegation: { agent: AGENT, task: "Find the sweep." } };
-  const first = mount([AGENT], [], DRAFT, [INVITE, ROLES]);
-  act(() => first.control().onOpenFile({ path: ROLES, startLine: 2, endLine: 2 }));
-  act(() => first.control().onChoose(delegated));
-  act(() => first.control().onChoose({ draft: DRAFT }));
-  for (const tab of [{ file: ROLES }, delegated, { draft: DRAFT }, SIDE_PANEL_TAB.WORK]) {
-    act(() => first.control().onPin(tab));
-  }
-  assert.deepEqual(first.control().pinned, [
-    { file: ROLES },
-    delegated,
-    { draft: DRAFT },
-    SIDE_PANEL_TAB.WORK,
+test("a tab pinned to the sidebar is kept across a launch with its plan and name, newest first, outlives its tab's close, and goes with an unpin", () => {
+  const first = mount([AGENT], [], undefined, [ROLES]);
+  act(() => first.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+  act(() => first.control().onOpenFile({ path: ROLES }));
+  act(() => first.control().onPin({ file: ROLES }, "roles.ts"));
+  act(() => first.control().onPin({ file: ROLES }, "roles.ts"));
+  act(() => first.control().onClose({ file: ROLES }));
+
+  const second = mount([AGENT], [], undefined, [ROLES]);
+  const pinned = second.control().pins.map(({ plan, tab, label }) => ({ plan, tab, label }));
+  assert.deepEqual(pinned, [
+    { plan: PLAN, tab: { file: ROLES }, label: "roles.ts" },
+    { plan: PLAN, tab: SIDE_PANEL_TAB.WORK, label: "Work" },
+  ]);
+  assert.deepEqual(second.control().files, [], "the closed tab stays closed, its pin standing");
+
+  act(() => second.control().onUnpin(PLAN, SIDE_PANEL_TAB.WORK));
+  assert.deepEqual(
+    second.control().pins.map((pin) => pin.tab),
+    [{ file: ROLES }],
+  );
+  assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.WORK), "unpinned, its tab stays open");
+});
+
+test("a pinned agent takes the name its tab has now on its own plan, and keeps the one it has elsewhere", () => {
+  const panel = mount([AGENT]);
+  act(() => panel.control().onPin({ agent: AGENT }, "GPT-5.5"));
+  act(() => panel.control().onRenamePins(OTHER, new Map([[AGENT, "Elsewhere"]])));
+  assert.equal(panel.control().pins[0]?.label, "GPT-5.5");
+
+  act(() => panel.control().onRenamePins(PLAN, new Map([[AGENT, "Invite flow"]])));
+  assert.equal(panel.control().pins[0]?.label, "Invite flow");
+});
+
+test("the tabs an earlier version pinned in each plan's strip read as pinned to the sidebar, older than any pinned since, a subagent's let go", () => {
+  const OTHER_PLAN = "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f";
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: SIDE_PANEL_TABS,
+      width: 400,
+      plans: {
+        [PLAN]: {
+          opened: [SIDE_PANEL_TAB.CODE],
+          closed: [],
+          pinned: [SIDE_PANEL_TAB.CODE, { agent: AGENT }, { subagent: CALL }],
+        },
+        [OTHER_PLAN]: { opened: [], closed: [], pinned: [{ file: "src/team/roles.ts" }] },
+      },
+    }),
+  );
+  const panel = mount([AGENT]);
+  act(() => panel.control().onPin(SIDE_PANEL_TAB.WORK, "Work"));
+
+  const pinned = panel.control().pins.map(({ plan, tab, label }) => ({ plan, tab, label }));
+  assert.deepEqual(pinned, [
+    { plan: PLAN, tab: SIDE_PANEL_TAB.WORK, label: "Work" },
+    { plan: PLAN, tab: SIDE_PANEL_TAB.CODE, label: "Code" },
+    { plan: PLAN, tab: { agent: AGENT }, label: "Coding agent" },
+    { plan: OTHER_PLAN, tab: { file: "src/team/roles.ts" }, label: "roles.ts" },
   ]);
 
-  const second = mount([AGENT], [], undefined, [INVITE, ROLES]);
-  assert.deepEqual(second.control().pinned, [{ file: ROLES }, delegated, SIDE_PANEL_TAB.WORK]);
-  assert.deepEqual(second.control().files, [{ path: ROLES, range: undefined, opened: 0 }]);
-  assert.deepEqual(second.control().subagents, [delegated]);
-
-  act(() => second.control().onClose({ file: ROLES }));
-  act(() => second.control().onUnpin(SIDE_PANEL_TAB.WORK));
-  assert.deepEqual(second.control().pinned, [delegated]);
-  assert.deepEqual(second.control().files, []);
-  assert.ok(second.control().tabs.includes(SIDE_PANEL_TAB.WORK), "unpinned, it stays open");
-
-  act(() => second.control().onOpenFile({ path: ROLES }));
-  act(() => second.control().onPin({ file: ROLES }));
-  act(() => second.control().onClose(SIDE_PANEL_TAB.WORK));
-  // Another plan showing the same file has no tab of it, and the plan whose only tab is now a pinned file shows it.
-  const other = mountStood({
-    plan: { id: "6f1e2d3c-4b5a-4c6d-8e7f-9a0b1c2d3e4f", holds: {} },
-    agents: [],
-    subagents: [],
-    files: [ROLES],
-  });
-  assert.deepEqual(other.control().files, []);
-  const alone = mountStood({
-    plan: { id: PLAN, holds: {} },
-    agents: [],
-    subagents: [],
-    files: [ROLES],
-  });
-  assert.deepEqual(alone.control().tab, { file: ROLES });
+  // The strip's own pins are read once: the record now holds the sidebar's alone.
+  const kept = window.localStorage.getItem("luke.sidePanel") ?? "";
+  assert.equal(kept.includes('"pinned"'), false);
+  assert.equal(mount([AGENT]).control().pins.length, 4);
 });
 
 test("closing the tab shown returns to the one viewed before it, wherever it stands in the strip, and closing another leaves the one shown", () => {

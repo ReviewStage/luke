@@ -7,6 +7,7 @@ import {
   ACCOUNT_STATUS,
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
+import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
@@ -18,13 +19,14 @@ import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { sheetStyle } from "#testing/css-rules";
 import { navigationHistory } from "#testing/navigation-history";
-import { plansControl } from "#testing/plans-control";
+import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { type PinnedTab, SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
@@ -445,6 +447,162 @@ test("the pinned plans stand under Pinned above the rest only while any are pinn
     ["Pinned", ["Invites"]],
     ["Plans", ["Billing"]],
   ]);
+});
+
+function press(container: ParentNode, selector: string): void {
+  const control = container.querySelector<HTMLElement>(selector);
+  assert.ok(control, `nothing to press at ${selector}`);
+  act(() => control.click());
+}
+
+/** A running agent on a plan, by its id. */
+function agentOn(id: string): CodingAgentSummary {
+  return {
+    id,
+    planId: "plan-Billing",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    title: "Invite flow",
+    createdAt: 3,
+    status: CODING_AGENT_STATUS.RUNNING,
+    turnId: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32",
+  };
+}
+
+/** Each row under Pinned as it reads: a plan's name, or a pinned tab's name and its plan's beneath, with whether its glyph leads it. */
+function pinnedSection(container: HTMLElement): string[] {
+  return [...container.querySelectorAll<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan")].map(
+    (row) => {
+      const tab = row.querySelector(".sidebar-pinned-tab-name");
+      if (tab === null) return row.querySelector(".sidebar-plan-name")?.textContent ?? "";
+      const glyph = row.querySelector(".sidebar-pinned-tab-glyph svg") === null ? "" : "◆ ";
+      return `${glyph}${tab.textContent} · ${row.querySelector(".sidebar-pinned-tab-plan")?.textContent}`;
+    },
+  );
+}
+
+/** The plans control with the tabs given pinned to the sidebar, and every other side panel press ignored. */
+function withPins(
+  pins: readonly PinnedTab[],
+  patch: Partial<PlansControl> = {},
+  onUnpin: PlansControl["sidePanel"]["onUnpin"] = () => undefined,
+): Partial<PlansControl> {
+  return { ...patch, sidePanel: { ...plansControl().sidePanel, pins, onUnpin } };
+}
+
+test("a tab pinned to the sidebar stands under Pinned with its glyph, its name, and its plan's name, among the pinned plans by when each was pinned", () => {
+  const invites = listedPlan("Invites", { pinnedAt: 20 });
+  const billing = listedPlan("Billing");
+  const archived = listedPlan("Ledger", { archivedAt: 3 });
+  const container = mount(DEAN, {
+    plans: withPins(
+      [
+        { plan: billing.id, tab: { agent: "agent-1" }, label: "Invite flow", at: 30 },
+        { plan: billing.id, tab: { file: "src/team/roles.ts" }, label: "roles.ts", at: 10 },
+        { plan: archived.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 40 },
+      ],
+      { plans: [invites, billing], archived: [archived] },
+    ),
+  });
+
+  assert.deepEqual(pinnedSection(container), [
+    "◆ Invite flow · Billing",
+    "Invites",
+    "◆ roles.ts · Billing",
+  ]);
+  assert.deepEqual(
+    sections(container).at(-1),
+    ["Plans", ["Billing"]],
+    "the plan itself stays listed",
+  );
+});
+
+test("a pinned tab alone draws Pinned, and a press on it opens its plan on the tab, bringing the Plans tab forward from Settings", () => {
+  const billing = listedPlan("Billing");
+  const pin: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.WORK, label: "Work", at: 1 };
+  const opened: PinnedTab[] = [];
+  const tabs: PanelTab[] = [];
+  const container = mount(DEAN, {
+    tab: PANEL_TAB.SETTINGS,
+    onTabChange: (tab) => tabs.push(tab),
+    plans: withPins([pin], { plans: [billing], onOpenPinnedTab: (each) => opened.push(each) }),
+  });
+
+  assert.deepEqual(sections(container)[0], ["Pinned", []]);
+  press(container, "nav[aria-label='Pinned'] .sidebar-plan");
+  assert.deepEqual(opened, [pin]);
+  assert.deepEqual(tabs, [PANEL_TAB.PLANS]);
+});
+
+test("a pinned tab's Unpin and its right-click's Unpin both unpin it, and an agent's menu offers its transcript's two copies first", () => {
+  const billing = listedPlan("Billing");
+  const agent: PinnedTab = {
+    plan: billing.id,
+    tab: { agent: "agent-1" },
+    label: "Invite flow",
+    at: 2,
+  };
+  const board: PinnedTab = { plan: billing.id, tab: SIDE_PANEL_TAB.BOARD, label: "Board", at: 1 };
+  const unpinned: unknown[] = [];
+  const container = mount(DEAN, {
+    plans: withPins([agent, board], { plans: [billing] }, (planId, tab) =>
+      unpinned.push({ planId, tab }),
+    ),
+  });
+
+  press(container, '[aria-label="Unpin Board"]');
+  const row = container.querySelector<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
+  assert.ok(row);
+  act(() => {
+    row.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, clientX: 10, clientY: 10 }));
+  });
+  const items = [...document.body.querySelectorAll<HTMLElement>('[role="menuitem"]')];
+  assert.deepEqual(
+    items.map((item) => item.textContent),
+    ["Copy concise transcript", "Copy full transcript", "Unpin"],
+  );
+  act(() => items.at(-1)?.click());
+
+  assert.deepEqual(unpinned, [
+    { planId: billing.id, tab: SIDE_PANEL_TAB.BOARD },
+    { planId: billing.id, tab: { agent: "agent-1" } },
+  ]);
+});
+
+test("on the open plan, a pinned agent its plan no longer holds stands dimmed with a note and opens nothing, and one it holds opens", () => {
+  const billing = listedPlan("Billing");
+  const gone: PinnedTab = {
+    plan: billing.id,
+    tab: { agent: "agent-gone" },
+    label: "Old run",
+    at: 2,
+  };
+  const held: PinnedTab = {
+    plan: billing.id,
+    tab: { agent: "agent-1" },
+    label: "Invite flow",
+    at: 1,
+  };
+  const opened: PinnedTab[] = [];
+  const container = mount(DEAN, {
+    plans: withPins([gone, held], {
+      plans: [billing],
+      page: PLANS_PAGE.DOCUMENT,
+      activePlanId: billing.id,
+      agents: codingAgentsControl({ agents: [agentOn("agent-1")] }),
+      onOpenPinnedTab: (each) => opened.push(each),
+    }),
+  });
+
+  assert.deepEqual(pinnedSection(container), [
+    "◆ Old run · No longer on this plan",
+    "◆ Invite flow · Billing",
+  ]);
+  const rows = container.querySelectorAll<HTMLElement>("nav[aria-label='Pinned'] .sidebar-plan");
+  assert.equal(rows[0]?.getAttribute("aria-disabled"), "true");
+  act(() => rows[0]?.click());
+  act(() => rows[1]?.click());
+  assert.deepEqual(opened, [held]);
 });
 
 test("the archived plans fold away behind a header that counts them while folded, which unfolds them under the rest", () => {

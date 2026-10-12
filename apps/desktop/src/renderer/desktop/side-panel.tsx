@@ -2,6 +2,7 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
+  type CodingAgentBrief,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -15,20 +16,15 @@ import {
   CopyIcon,
   ExpandIcon,
   PencilIcon,
+  PinIcon,
   PlusIcon,
   SidePanelIcon,
   TerminalIcon,
   TranscriptIcon,
+  UnpinIcon,
   WorkIcon,
 } from "@sidecar/panel";
-import {
-  BotIcon,
-  FileCodeIcon,
-  ListXIcon,
-  PinIcon,
-  PinOffIcon,
-  ScrollTextIcon,
-} from "lucide-react";
+import { BotIcon, FileCodeIcon, ListXIcon, ScrollTextIcon } from "lucide-react";
 import { Fragment, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
@@ -64,8 +60,10 @@ import {
   isAgentTab,
   isDraftTab,
   isFileTab,
+  isPinnable,
   isSubagentTab,
   type OpenFile,
+  type PinnableTab,
   SIDE_PANEL_TAB,
   SIDE_PANEL_TAB_KIND,
   SIDE_PANEL_TABS,
@@ -114,8 +112,8 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * an agent's or a subagent's closes only the view: the agent goes on as it
  * was, and the "+" opens its tab again; closing a draft's lets the draft
  * go, nothing of it having been started. Every tab's right-click offers
- * Close, Close others, and Pin, and a transcript's tab its two copies; a
- * tab pinned on the plan stands first in the strip. The plan's own actions stay in
+ * Close and Close others, a fixed tab's, an agent's, and a file's Pin to the
+ * sidebar, and a transcript's tab its two copies. The plan's own actions stay in
  * the plan's toolbar and never come into the panel. Where a delegated
  * worker stands is what its own tab's pages say, kept here for its glyph
  * while the panel is drawn, and taken as running until a page says
@@ -158,7 +156,7 @@ function documentReserve(area: HTMLElement): number {
   return Number.isFinite(declared) ? declared : SIDE_PANEL_WIDTH.MIN;
 }
 
-/** Each kind's glyph, leading its tab and its row in the "+" menu. */
+/** Each kind's glyph, leading its tab, its row in the "+" menu, and its pin in the sidebar (`pinnedTabIcon`). */
 const TAB_ICON = {
   [SIDE_PANEL_TAB.BOARD]: <BoardIcon />,
   [SIDE_PANEL_TAB.CODE]: <CodeIcon />,
@@ -420,16 +418,27 @@ function AddTabButton({
   );
 }
 
-/** A tab's menu, as the strip offers it to every tab of the panel: what each action does, and those it holds beyond Close and Pin. */
-interface TabDoors {
+/** The glyph a tab's pin wears in the sidebar: its kind's, the Coding agents glyph the "+" menu gives an agent, or a file's. */
+export function pinnedTabIcon(tab: PinnableTab): React.JSX.Element {
+  if (isAgentTab(tab)) return <TerminalIcon />;
+  return isFileTab(tab) ? <FileCodeIcon /> : TAB_ICON[tab];
+}
+
+/** A tab's pin to the sidebar, as its menu offers it: whether it stands, and the press that sets it or takes it away. */
+interface TabPin {
   pinned: boolean;
+  onToggle: () => void;
+}
+
+/** A tab's menu, as the strip offers it to every tab of the panel: what each action does, and those it holds beyond Close. */
+interface TabDoors {
   /** Whether the tab is the one chosen, which ⌘W closes. */
   chosen: boolean;
   onClose: () => void;
-  /** Closes every other tab that closes, none where there is none. */
+  /** Closes every other tab, none where there is none. */
   onCloseOthers: (() => void) | undefined;
-  onPin: () => void;
-  onUnpin: () => void;
+  /** The tab's pin to the sidebar, for a fixed tab's, an agent's, and a file's. */
+  pin: TabPin | undefined;
   /** Copies the tab's transcript, for an agent's and a subagent's. */
   onCopy?: ((copy: TranscriptCopy) => void) | undefined;
   /** Renames the tab's agent, for an agent's. */
@@ -438,15 +447,23 @@ interface TabDoors {
 
 /**
  * A tab's actions in the groups a rule divides, as an editor's tab offers
- * them: Close and Close others; Pin or Unpin, and an agent's Rename beside
- * it; and, for a transcript's tab, its two copies. Close others stands
- * dimmed where nothing else would close.
+ * them: Close and Close others; Pin tab or Unpin tab, which puts it in the
+ * sidebar or takes it out, and an agent's Rename beside it; and, for a
+ * transcript's tab, its two copies. Close others stands dimmed where nothing
+ * else would close.
  */
 function tabActionGroups(doors: TabDoors): MenuAction[][] {
   const { onCopy, onRename } = doors;
-  const pin: MenuAction = doors.pinned
-    ? { label: "Unpin tab", icon: <PinOffIcon />, onSelect: doors.onUnpin }
-    : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.onPin };
+  const pin: MenuAction[] =
+    doors.pin === undefined
+      ? []
+      : [
+          doors.pin.pinned
+            ? { label: "Unpin tab", icon: <UnpinIcon />, onSelect: doors.pin.onToggle }
+            : { label: "Pin tab", icon: <PinIcon />, onSelect: doors.pin.onToggle },
+        ];
+  const rename: MenuAction[] =
+    onRename === undefined ? [] : [{ label: "Rename", icon: <PencilIcon />, onSelect: onRename }];
   return [
     [
       {
@@ -463,9 +480,7 @@ function tabActionGroups(doors: TabDoors): MenuAction[][] {
         disabled: doors.onCloseOthers === undefined,
       },
     ],
-    onRename === undefined
-      ? [pin]
-      : [pin, { label: "Rename", icon: <PencilIcon />, onSelect: onRename }],
+    ...(pin.length + rename.length === 0 ? [] : [[...pin, ...rename]]),
     ...(onCopy === undefined
       ? []
       : [
@@ -500,7 +515,7 @@ interface PanelTabLook {
  * One tab of the panel's strip, whatever its kind, with its menu on a
  * right-click or the keyboard's menu keys (`tabActionGroups`), hung where
  * the pointer is or under the tab; closing the menu hands focus back to the
- * tab. A pinned tab wears its pin in its ×'s place.
+ * tab.
  */
 function PanelTab({
   look,
@@ -525,9 +540,7 @@ function PanelTab({
         {...look}
         editor={editor}
         tabRef={tabRef}
-        pinned={doors.pinned}
         onClose={doors.onClose}
-        onUnpin={doors.onUnpin}
         onMenu={(placement, element) => {
           opener.current = element;
           setMenu({ placement, opener: element });
@@ -593,6 +606,42 @@ function AgentPanelTab({
   );
 }
 
+/** A transcript read on demand for a copy, nothing where it could not be read. */
+type TranscriptRead = () => Promise<CopiedTranscript | undefined>;
+
+/** A copy of a transcript as the panel's tabs and the sidebar's pins offer it: read, then put on the clipboard as concise or full markdown. */
+export type TranscriptCopier = (read: TranscriptRead) => (copy: TranscriptCopy) => void;
+
+/** The copy of a transcript read on demand, answered with the window's toast: copied, or not read. */
+export function useTranscriptCopier(): TranscriptCopier {
+  const copyWithToast = useCopyToast();
+  const toast = useToast();
+  const unread = () =>
+    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
+  return (read) => (copy) => {
+    read().then(
+      (transcript) =>
+        transcript === undefined
+          ? unread()
+          : copyWithToast(transcriptMarkdown(transcript, copy), TRANSCRIPT_COPIED_NOTE),
+      unread,
+    );
+  };
+}
+
+/** A coding agent's transcript read whole from the service under the title given, since its tab holds it only while shown. */
+export function agentTranscriptRead(
+  readTranscript: CodingAgentsControl["readTranscript"],
+  agentId: string,
+  title: string,
+  brief: CodingAgentBrief | undefined,
+): TranscriptRead {
+  return () =>
+    readWholeTranscript(readTranscript, { agentId }).then((messages) =>
+      messages === undefined ? undefined : agentTranscript({ title, messages, brief }),
+    );
+}
+
 /** One tab the strip draws: the tab, how it looks, how it closes, how its transcript is copied, and the agent it is, for an agent's. */
 interface StripTab {
   tab: SidePanelTab;
@@ -616,26 +665,15 @@ function stripTabs(input: {
   agents: CodingAgentsControl;
   subagents: readonly DrawnSubagent[];
   files: readonly OpenFile[];
-  copyText: (words: string) => void;
-  /** Says a copy whose transcript could not be read. */
-  copyUnread: () => void;
+  copied: TranscriptCopier;
 }): StripTab[] {
-  const { panel, unread, agents, subagents, files, copyText, copyUnread } = input;
+  const { panel, unread, agents, subagents, files, copied } = input;
   const look = (tab: SidePanelTab, drawn: Omit<PanelTabLook, "selected" | "onSelect">) => ({
     ...drawn,
     unread: unread.some((each) => sameTab(each, tab)),
     selected: panel.tab !== undefined && sameTab(tab, panel.tab),
     onSelect: () => panel.onChoose(tab),
   });
-  const copied =
-    (read: () => Promise<CopiedTranscript | undefined>) =>
-    (copy: TranscriptCopy): void => {
-      read().then(
-        (transcript) =>
-          transcript === undefined ? copyUnread() : copyText(transcriptMarkdown(transcript, copy)),
-        copyUnread,
-      );
-    };
   const fixed = panel.tabs.map((tab) => ({
     tab,
     look: look(tab, {
@@ -649,12 +687,7 @@ function stripTabs(input: {
   const agentTabs = open.map((agent) => {
     const tab = { agent: agent.id };
     const label = agentTabLabel(agent, agents.models);
-    const read = () =>
-      readWholeTranscript(agents.readTranscript, { agentId: agent.id }).then((messages) =>
-        messages === undefined
-          ? undefined
-          : agentTranscript({ title: label, messages, brief: agent.brief }),
-      );
+    const read = agentTranscriptRead(agents.readTranscript, agent.id, label, agent.brief);
     return {
       tab,
       agent,
@@ -714,43 +747,24 @@ function stripTabs(input: {
   return [...fixed, ...agentTabs, ...draftTabs, ...subagentTabs, ...fileTabs];
 }
 
-/** The strip's tabs in their order, how many of them, from the first, are pinned, and the runs among which they move. */
-interface StripOrder {
-  strip: readonly StripTab[];
-  pins: number;
-  runs: readonly number[];
-}
-
 /**
- * The strip's tabs in their order: the tabs pinned on the plan first, in
- * the order pinned, then the rest in their kinds' order (`stripTabs`); how
- * many are pinned; and the runs among which they move: the pinned tabs,
- * and the fixed tabs not pinned.
- */
-function pinnedFirst(drawn: readonly StripTab[], pinned: readonly SidePanelTab[]): StripOrder {
-  const pins = pinned.flatMap((pin) => drawn.filter((each) => sameTab(each.tab, pin)));
-  const rest = drawn.filter((each) => !pins.includes(each));
-  const fixed = rest.filter((each) => SIDE_PANEL_TABS.some((kind) => kind === each.tab)).length;
-  return { strip: [...pins, ...rest], pins: pins.length, runs: [pins.length, fixed] };
-}
-
-/**
- * The strip of tabs across the panel's top: the tabs pinned on the plan,
- * then the open fixed tabs, then one per coding agent of the plan whose tab
- * was not closed, the draft, the subagents, and the files, then the "+". A
+ * The strip of tabs across the panel's top: the open fixed tabs, then one
+ * per coding agent of the plan whose tab was not closed, the draft, the
+ * subagents, and the files, then the "+". A
  * tab's own word is all it needs to say, so it hangs no pill; a fixed tab's
  * chord is in the View menu, the "+" menu, and on the Keyboard shortcuts
  * page, and an agent's tab wears the dot for where the agent stands in its
  * glyph's place; no agent's or subagent's tab has a chord. A tab something
  * arrived on while another was shown, and an agent's whose end no one was
- * looking at, wear the note at their corner until shown. The pinned tabs
- * are dragged or stepped among themselves, and the fixed tabs not pinned
- * among themselves, into the order the panel keeps; the agent tabs stand
- * after them in the order the agents started, and the subagent tabs after
- * those in the order opened, each wearing the worker's glyph, lit while it
- * runs, so neither is dragged unless pinned. Every tab's right-click offers
- * Close, Close others, which closes every tab but it and the pinned ones and
- * chooses it, and Pin or Unpin; an agent's and a subagent's add the two
+ * looking at, wear the note at their corner until shown. The fixed tabs are
+ * dragged or stepped among themselves into the order the panel keeps; the
+ * agent tabs stand after them in the order the agents started, and the
+ * subagent tabs after those in the order opened, each wearing the worker's
+ * glyph, lit while it runs, so neither is dragged. A tab pinned to the
+ * sidebar is drawn and moved as any other. Every tab's right-click offers
+ * Close, Close others, which closes every tab but it and chooses it, and a
+ * fixed tab's, an agent's, and a file's Pin tab or Unpin tab, which puts
+ * it in the sidebar or takes it out; an agent's and a subagent's add the two
  * copies of their transcript, built from the rows the tab draws
  * (`transcript-copy.ts`) and answered with the window's toast, and an
  * agent's Rename. The "+" stands after all of them, apart from the strip, so
@@ -758,6 +772,7 @@ function pinnedFirst(drawn: readonly StripTab[], pinned: readonly SidePanelTab[]
  */
 function PanelTabs({
   panel,
+  planId,
   keys,
   unread,
   agents,
@@ -767,6 +782,8 @@ function PanelTabs({
   shownFiles,
 }: {
   panel: SidePanelControl;
+  /** The open plan, which a tab's pin is of. */
+  planId: string;
   /** Whether the panel offers its keys: on screen and not on its way out. */
   keys: boolean;
   unread: readonly SidePanelTab[];
@@ -780,21 +797,23 @@ function PanelTabs({
   /** Each file Luke showed on the plan, which the "+" offers. */
   shownFiles: readonly CodeRef[];
 }): React.JSX.Element {
-  const copyWithToast = useCopyToast();
-  const toast = useToast();
-  const copyText = (words: string) => copyWithToast(words, TRANSCRIPT_COPIED_NOTE);
-  const copyUnread = () =>
-    toast({ words: TRANSCRIPT_UNREAD_NOTE, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
-  const drawn = stripTabs({ panel, unread, agents, subagents, files, copyText, copyUnread });
-  const { strip, pins, runs } = pinnedFirst(drawn, panel.pinned);
+  const copied = useTranscriptCopier();
+  const strip = stripTabs({ panel, unread, agents, subagents, files, copied });
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
   // is left to fall through to nothing rather than to the window.
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
-  const doorsOf = (entry: StripTab, at: number): TabDoors => {
-    const others = strip.filter((_, place) => place !== at && place >= pins);
+  const pinOf = ({ tab, look }: StripTab): TabPin | undefined => {
+    if (!isPinnable(tab)) return undefined;
+    const pinned = panel.pins.some((pin) => pin.plan === planId && sameTab(pin.tab, tab));
     return {
-      pinned: at < pins,
+      pinned,
+      onToggle: () => (pinned ? panel.onUnpin(planId, tab) : panel.onPin(tab, look.label)),
+    };
+  };
+  const doorsOf = (entry: StripTab, at: number): TabDoors => {
+    const others = strip.filter((_, place) => place !== at);
+    return {
       chosen: entry.look.selected,
       onClose: entry.close,
       onCloseOthers:
@@ -804,8 +823,7 @@ function PanelTabs({
               for (const other of others) other.close();
               panel.onChoose(entry.tab);
             },
-      onPin: () => panel.onPin(entry.tab),
-      onUnpin: () => panel.onUnpin(entry.tab),
+      pin: pinOf(entry),
       onCopy: entry.copy,
     };
   };
@@ -813,11 +831,11 @@ function PanelTabs({
     <div className="side-panel-tabs">
       <TabStrip
         label="Panel"
-        runs={runs}
+        movable={panel.tabs.length}
         onMove={(from, to) => {
-          // The pinned tabs move among themselves, and the fixed tabs not pinned among themselves.
-          const entry = strip[from];
-          if (entry !== undefined) panel.onMove(entry.tab, from < pins ? to : to - pins);
+          // Only the fixed tabs move, and only among themselves.
+          const tab = panel.tabs[from];
+          if (tab !== undefined) panel.onMove(tab, to);
         }}
       >
         {strip.map((entry, at) =>
@@ -1395,6 +1413,7 @@ export function SidePanel({
         <div className="side-panel-bar">
           <PanelTabs
             panel={panel}
+            planId={planId}
             keys={shown && leaving === PANEL_LEAVING.NONE}
             unread={unread}
             agents={agents}
