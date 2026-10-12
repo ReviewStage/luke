@@ -191,6 +191,20 @@ test("rules take a new rule, an example by number, a correction, and a strike", 
   assert.equal(second?.examples?.[0]?.when, "it is opened");
 });
 
+test("a rule noted with a list marker is taken, and numbered, without it", () => {
+  const noted = taken(applyNote(NOTED, add(PLAN_FIELD.RULES, "- Links expire in a week.")));
+
+  assert.equal(noted.fields.rules?.[1]?.statement, "Links expire in a week.");
+  assert.ok(planBody(HEADER, noted.fields).includes("\n### Rule 2: Links expire in a week.\n"));
+});
+
+test("a rule stored with a list marker is formatted without it", () => {
+  const rules = [{ statement: "- Links expire in a week.", examples: null }];
+  const body = planBody(HEADER, { ...EMPTY_PLAN_CONTENT.fields, rules });
+
+  assert.ok(body.includes("\n### Rule 1: Links expire in a week.\n"));
+});
+
 test("the lists take an item, correct one, and strike one", () => {
   const notes: PlanNote[] = [
     add(PLAN_FIELD.ASSUMPTIONS, "Links expire in a week."),

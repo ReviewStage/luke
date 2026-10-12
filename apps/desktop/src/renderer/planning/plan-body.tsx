@@ -11,7 +11,6 @@ import {
 } from "@sidecar/hosted/plan-wire";
 import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
-import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
   EDITOR_PLACE,
@@ -32,6 +31,7 @@ import {
   chaseView,
   type UnitView,
 } from "./plan-reveal";
+import { PlanUnitWords } from "./plan-rule";
 import { useMinute } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
@@ -335,7 +335,7 @@ function BodyUnit({
   const target = editTargetOfUnit(view.words, ruleCount);
   const changed = target !== undefined && marks.changed.has(target.field);
   const drawn = (
-    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+    <PlanUnitWords words={view.words} className={unitClass(view, changed)} edit={view.edit} />
   );
   if (target === undefined) return drawn;
   // A rule shares the rules' line, which stands on their heading.

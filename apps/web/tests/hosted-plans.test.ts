@@ -588,6 +588,27 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
   );
 
   it.effect(
+    "a rename formats again a body saved while a rule kept its list marker, the marker dropped",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const { id: planId } = yield* createPlan(userId, RELAY_PLAN);
+        const fields = {
+          ...EMPTY_PLAN_FIELDS,
+          rules: [{ statement: "- Links expire in a week.", examples: null }],
+        };
+        const body = planBody(RELAY_PLAN, fields).replace("Rule 1: ", "Rule 1: - ");
+        yield* savePlanDocument(userId, planId, { body, assumptions: [] }, { fields });
+
+        const renamed = yield* updatePlan(userId, planId, { name: "Team invites" });
+
+        const renamedBody = Option.getOrThrow(renamed).document.body;
+        assert.ok(renamedBody.startsWith("# Team invites\n"));
+        assert.ok(renamedBody.includes("\n### Rule 1: Links expire in a week.\n"));
+      }),
+  );
+
+  it.effect(
     "a rename whose heading would carry a full body past its bound keeps the body as saved, and the plan still reads",
     () =>
       Effect.gen(function* () {
