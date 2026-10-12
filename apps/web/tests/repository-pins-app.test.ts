@@ -150,6 +150,29 @@ it.layer(testSqlClient)("the repository pins route", (it) => {
   );
 
   it.effect(
+    "two pins asked at once one short of the bound keep exactly one, and refuse the other",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts;
+        const pin = (repository: string) =>
+          ask(request(owner, { method: "PUT", body: { repository, pinned: true } }));
+        for (let index = 0; index < REPOSITORY_PIN_BOUNDS.MAX_PINS - 1; index += 1) {
+          yield* pin(`acme/repo-${index}`);
+        }
+
+        const racing = yield* Effect.all([pin("acme/relay"), pin("acme/ledger")], {
+          concurrency: "unbounded",
+        });
+
+        assert.deepEqual(
+          racing.map((answered) => answered.status).sort(),
+          [HOSTED_HTTP_STATUS.OK, HOSTED_HTTP_STATUS.BAD_REQUEST].sort(),
+        );
+        assert.equal(pinsOf(yield* ask(request(owner))).length, REPOSITORY_PIN_BOUNDS.MAX_PINS);
+      }),
+  );
+
+  it.effect(
     "a body that is not a pin, a bearer that names no account, and a method the path does not answer are refused",
     () =>
       Effect.gen(function* () {

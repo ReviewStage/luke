@@ -1,10 +1,11 @@
 import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import { SqlClient, SqlSchema } from "effect/unstable/sql";
+import { user } from "../db/auth-schema.js";
 import { db } from "../db/query.js";
 import { repositoryPin } from "../db/repository-pin-schema.js";
-import type { PlanStoreEffect, PlanStoreFailure } from "./plan-store.js";
+import type { PlanStoreEffect } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**
@@ -13,7 +14,9 @@ import { InstantColumnSchema } from "./store/database.js";
  * Every function is an effect over the ambient `SqlClient`, keyed by the
  * account, so no account reads or moves another's pins. A pin keeps the
  * instant it was first made, so pinning twice moves nothing, and unpinning
- * deletes the row, so unpinning twice moves nothing either.
+ * deletes the row, so unpinning twice moves nothing either. A pin is counted
+ * against the bound and written under a lock on the account's own row, so
+ * two Macs pinning at once cannot both slip under it.
  */
 
 const PinRowSchema = Schema.Struct({
@@ -32,6 +35,14 @@ const findPins = SqlSchema.findAll({
       .from(repositoryPin)
       .where(eq(repositoryPin.userId, userId))
       .orderBy(desc(repositoryPin.pinnedAt), asc(repositoryPin.repository)),
+});
+
+/** The account's row, held for the transaction, which is what serializes one account's pins; nothing for an account gone. */
+const lockAccount = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (userId) =>
+    db.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update"),
 });
 
 const insertPin = SqlSchema.void({
@@ -62,27 +73,31 @@ export function listRepositoryPins(userId: string): PlanStoreEffect<readonly Rep
 
 /**
  * Pins one repository or unpins it, and answers the account's pins as they
- * then stand; nothing where a new pin would hold more than the bound, with
- * nothing written. A repository already pinned keeps its instant and counts
- * against no bound.
+ * then stand; nothing where a new pin would hold more than the bound, or the
+ * account is gone, with nothing written. A repository already pinned keeps
+ * its instant and counts against no bound.
  */
-export const setRepositoryPin = /* @__PURE__ */ Effect.fnUntraced(function* (
+export function setRepositoryPin(
   userId: string,
   repository: string,
   pinned: boolean,
-): Effect.fn.Return<
-  Option.Option<readonly RepositoryPin[]>,
-  PlanStoreFailure,
-  SqlClient.SqlClient
-> {
-  if (!pinned) {
-    yield* deletePin({ userId, repository });
-    return Option.some(yield* listRepositoryPins(userId));
-  }
-  const standing = yield* listRepositoryPins(userId);
-  if (standing.some((pin) => pin.repository === repository)) return Option.some(standing);
-  if (standing.length >= REPOSITORY_PIN_BOUNDS.MAX_PINS) return Option.none();
-  const now = yield* DateTime.nowAsDate;
-  yield* insertPin({ userId, repository, now });
-  return Option.some(yield* listRepositoryPins(userId));
-});
+): PlanStoreEffect<Option.Option<readonly RepositoryPin[]>> {
+  return Effect.flatMap(SqlClient.SqlClient, (client) =>
+    client.withTransaction(
+      Effect.gen(function* () {
+        const account = yield* lockAccount(userId);
+        if (Option.isNone(account)) return Option.none();
+        if (!pinned) {
+          yield* deletePin({ userId, repository });
+          return Option.some(yield* listRepositoryPins(userId));
+        }
+        const standing = yield* listRepositoryPins(userId);
+        if (standing.some((pin) => pin.repository === repository)) return Option.some(standing);
+        if (standing.length >= REPOSITORY_PIN_BOUNDS.MAX_PINS) return Option.none();
+        const now = yield* DateTime.nowAsDate;
+        yield* insertPin({ userId, repository, now });
+        return Option.some(yield* listRepositoryPins(userId));
+      }),
+    ),
+  );
+}

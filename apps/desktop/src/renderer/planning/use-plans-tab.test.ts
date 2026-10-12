@@ -76,6 +76,8 @@ interface Standing {
   fixtureMode: boolean;
   voice: VoiceView;
   unseenAgents: readonly string[];
+  /** Whether an account is signed in to the window. */
+  signedIn: boolean;
 }
 
 /** Mounts the hook alone over what the panel would hand it, keeping every act it told, in order; `answers` answers the acts it names. */
@@ -103,6 +105,7 @@ function mount(
     fixtureMode: false,
     voice: IDLE_VOICE_VIEW,
     unseenAgents: [],
+    signedIn: true,
     ...initial,
   };
   function Probe() {
@@ -135,7 +138,7 @@ function mount(
       },
       planning: held.planning,
       run: { fixtureMode: held.fixtureMode, profile: held.profile },
-      signedIn: true,
+      signedIn: held.signedIn,
       voiceAvailable: true,
       microphoneStatus: MICROPHONE_STATUS.GRANTED,
       shown: held.shown,
@@ -917,6 +920,22 @@ test("a repository pinned or unpinned is drawn so at once, newest pinned first, 
     tab.told.filter((kind) => kind === ACT_KIND.PLANNING_PIN_REPOSITORY),
     [ACT_KIND.PLANNING_PIN_REPOSITORY, ACT_KIND.PLANNING_PIN_REPOSITORY],
   );
+});
+
+test("a repository pin still waiting on the service is let go with a sign-out, so the next account never wears it", () => {
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    // The service never answers, as when the window signs out with the pin still out.
+    { [ACT_KIND.PLANNING_PIN_REPOSITORY]: () => new Promise<boolean>(() => undefined) },
+  );
+
+  act(() => tab.control().onPinRepository("acme/secret", true));
+  const pending = tab.control().pinnedRepositories;
+  tab.stand({ signedIn: false, planning: IDLE_PLANNING_VIEW });
+  tab.stand({ signedIn: true, planning: { ...OPEN, repositoryPins: [] } });
+
+  assert.deepEqual(pending, ["acme/secret"]);
+  assert.deepEqual(tab.control().pinnedRepositories, []);
 });
 
 it.effect("a repository pin the service refused puts the group back and says so in a toast", () =>

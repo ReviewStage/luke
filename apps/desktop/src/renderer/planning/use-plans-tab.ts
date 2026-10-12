@@ -242,6 +242,9 @@ interface PlanAsk {
   over: string | undefined;
 }
 
+/** No repository pin given here and still waiting on main's view. */
+const NO_PENDING_PINS: PendingRepositoryPins = new Map();
+
 /** What the toast says once Copy plan has put the plan on the clipboard. */
 const PLAN_COPIED_NOTE = "Plan copied";
 
@@ -409,11 +412,18 @@ export function usePlansTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  // A repository's pin given here stands until main's view carries it, as a plan's does.
+  // A repository's pin given here stands until main's view carries it, as a
+  // plan's does. Note that a sign-out lets every one go, because a pin names
+  // a repository rather than a row of this account's own, so one left
+  // standing would be drawn on the next account to sign in.
   const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
+  const accountSignedIn = input.signedIn;
   useEffect(
-    () => setRepositoryPins((held) => unsettledRepositoryPins(held, viewed.repositoryPins)),
-    [viewed],
+    () =>
+      setRepositoryPins((held) =>
+        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
+      ),
+    [viewed, accountSignedIn],
   );
   const planning = markedView(renamedView(viewed, renames), marks);
   const sidebar = sidebarPlans(planning.plans);
