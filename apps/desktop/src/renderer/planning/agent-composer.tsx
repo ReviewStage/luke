@@ -40,8 +40,8 @@ import type { AgentModelControl } from "./use-agent-model";
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
- * and a placeholder that asks for the first message until the conversation
- * has one and for a follow up after, because the tab's dot and the transcript's "Working…"
+ * and one placeholder asking for a follow up, since a started agent's
+ * conversation opens on its plan or task, because the tab's dot and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words, disabled while there are none and the agent is idle, and
@@ -53,8 +53,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * model that did not take says why in the same place. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
- * draws the same box over a start rather than a message, its conversation
- * still empty, and its model chip once the choice it starts on is known.
+ * draws the same box over a start rather than a message, asking for the
+ * first message of its still empty conversation, and its model chip once
+ * the choice it starts on is known.
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */

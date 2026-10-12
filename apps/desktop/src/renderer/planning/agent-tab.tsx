@@ -462,11 +462,10 @@ export function AgentTabView({
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
-  const lines = agentLines(transcript.messages, composer.sent);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <AgentTranscriptView
-        messages={lines}
+        messages={agentLines(transcript.messages, composer.sent)}
         brief={agent.brief}
         delegation={{
           models,
@@ -500,7 +499,9 @@ export function AgentTabView({
           published={published}
           doors={doors}
           onStop={onStop}
-          followsUp={lines.length > 0}
+          // Note that a started agent's conversation always opens on its plan or
+          // task, so the box takes a follow up even before the transcript is read.
+          followsUp
         />
       </footer>
     </section>

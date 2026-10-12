@@ -1,6 +1,5 @@
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
-import { ConversationEmptyState } from "../ai-elements/conversation";
 import { AgentComposer } from "./agent-composer";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
@@ -9,8 +8,9 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
  *
  * Opened from the side panel's "+", it is drawn as an agent's tab is with
- * nothing yet said: where the transcript would be, one line on what a send
- * does, and under it the composer, focused as the tab opens, with the model
+ * nothing yet said: nothing where the transcript would be, since the
+ * composer's placeholder is the one prompt, and at the tab's foot the
+ * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words as
  * its task, never the plan, on the model the chip names where the developer
@@ -25,9 +25,6 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /** What a draft agent's tab is named until its first message starts it. */
 export const DRAFT_TAB_LABEL = "New agent";
-
-/** What stands where the transcript will be, before the first send. */
-const DRAFT_LINE = "Describe a task. The agent starts when you send it.";
 
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve();
@@ -83,9 +80,6 @@ export function DraftAgentTab({
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
-      <ConversationEmptyState>
-        <p className="m-0">{DRAFT_LINE}</p>
-      </ConversationEmptyState>
       <footer className="agent-tab-foot">
         <AgentComposer
           status={CODING_AGENT_STATUS.STARTING}
