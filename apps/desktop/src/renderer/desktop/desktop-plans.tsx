@@ -16,6 +16,7 @@ import { usePlanInbox } from "../planning/use-plan-inbox";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { RetryButton } from "../retry-button";
+import { ConfirmDialog } from "../settings/confirm-dialog";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
@@ -402,9 +403,19 @@ export function DesktopPlans({
   /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
 }): React.JSX.Element {
+  // The second call's question stands over either page: a Talk press on a
+  // plan's page asks it, and so does a plan started from the new-plan page.
+  const secondCall = (
+    <ConfirmDialog confirm={plans.secondCall.confirm} question={plans.secondCall.question} />
+  );
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
-      return <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />;
+      return (
+        <>
+          <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />
+          {secondCall}
+        </>
+      );
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (
@@ -413,6 +424,7 @@ export function DesktopPlans({
           <div className="desktop-compose">
             <NewPlanForm newPlan={plans.newPlan} repositories={plans.repositories} />
           </div>
+          {secondCall}
         </>
       );
   }

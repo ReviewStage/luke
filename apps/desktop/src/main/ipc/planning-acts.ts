@@ -66,6 +66,8 @@ export interface PlanningActsDependencies {
   talkAboutPlan: (planId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
+  /** Whether a call is in progress, which a start leaves standing for the panel to ask about moving. */
+  callStanding: () => boolean;
   /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
   colourCode: (language: string, code: string) => CodeLines;
 }
@@ -121,12 +123,13 @@ export function planningActRows(
     // Note that a started plan opens its call at once, because pressing
     // Start plan is the developer's gesture and Luke opens a new plan by
     // greeting it; where the call would first have to ask for the
-    // microphone, the plan's own microphone button asks instead.
+    // microphone, the plan's own microphone button asks instead, and where
+    // a call already stands the panel asks whether to end it first.
     [ACT_KIND.PLANNING_START]: (request, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_START, sender);
       return Effect.tap(host.planningStart(request), (answer) =>
         Effect.sync(() => {
-          if ("planId" in answer && dependencies.voiceReady()) {
+          if ("planId" in answer && dependencies.voiceReady() && !dependencies.callStanding()) {
             dependencies.talkAboutPlan(answer.planId);
           }
         }),

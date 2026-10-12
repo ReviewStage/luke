@@ -39,6 +39,7 @@ import {
 } from "#shared/messages/voice-view";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import { CONFIRM_STAGE } from "../settings/confirm-state";
 import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
@@ -1171,6 +1172,57 @@ test("the microphone asks for the open plan's call, and the planning profile's f
     fixture.control().back();
   });
   assert.deepEqual(fixture.told, []);
+});
+
+test("a Talk press over a call about another plan asks before ending it: Cancel keeps that call, and the answer is the press", async () => {
+  const elsewhere: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    listening: true,
+    callPlanId: OTHER_PLAN_ID,
+  };
+  const tab = mount(
+    { shown: true, planning: OPEN, voice: elsewhere },
+    { [ACT_KIND.PLANNING_TALK]: () => Promise.resolve(undefined) },
+  );
+  act(() => tab.control().microphone.onPress());
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_TALK), false);
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.ASKING);
+  assert.equal(tab.control().secondCall.question.verb, "Start new call");
+
+  // Cancel: the call about the other plan is left as it was.
+  act(() => {
+    tab.control().secondCall.confirm.keep();
+    tab.control().secondCall.confirm.clear();
+  });
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
+  assert.equal(tab.told.includes(ACT_KIND.PLANNING_TALK), false);
+
+  act(() => tab.control().microphone.onPress());
+  await act(async () => tab.control().secondCall.confirm.run());
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_TALK);
+});
+
+test("a plan started while a call stands about another asks whether to move the call to it, and a press on the call's own plan never asks", async () => {
+  const elsewhere: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    callPlanId: OTHER_PLAN_ID,
+  };
+  const home: PlanningView = { ...IDLE_PLANNING_VIEW, listStatus: PLANNING_READ.READY };
+  const tab = mount(
+    { shown: true, planning: home, voice: elsewhere },
+    { [ACT_KIND.PLANNING_START]: () => Promise.resolve({ planId: PLAN.id }) },
+  );
+  await act(async () => {
+    await tab.control().newPlan.start("Teammate invitations", null);
+  });
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.ASKING);
+
+  const own = mount({ shown: true, planning: OPEN, voice: { ...elsewhere, callPlanId: PLAN.id } });
+  act(() => own.control().microphone.onPress());
+  assert.equal(own.told.at(-1), ACT_KIND.PLANNING_TALK);
+  assert.equal(own.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
 });
 
 test("the speaker silences Luke through the voice window and plays him again once he is silenced", () => {
