@@ -1,5 +1,5 @@
 /**
- * call-window.ts -- the floating call card's window: on top, on every Space, and never focused.
+ * call-window.ts -- the floating call card's window: on top, on every Space, and never bringing Luke forward.
  */
 
 import fs from "node:fs";
@@ -98,7 +98,12 @@ export class CallWindow implements CallWindowSurface {
       minimizable: false,
       maximizable: false,
       fullscreenable: false,
-      focusable: false,
+      // Note that the panel may take the keyboard, because a non-activating
+      // panel that cannot be key hands a press to the app instead: Luke
+      // comes forward, its window takes the keyboard, and this one is hidden
+      // under the very press that was meant for it. Being key here leaves
+      // the app inactive and every other window where it was.
+      focusable: true,
       acceptFirstMouse: true,
       skipTaskbar: true,
       hiddenInMissionControl: true,

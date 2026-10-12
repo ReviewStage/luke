@@ -226,21 +226,23 @@ it.effect(
 );
 
 it.effect(
-  "the call window's way back brings the panels forward on the call's own plan, and nothing else's ask, or one with no call, brings anything",
+  "the call card's way back, from the floating window or a panel's own card, brings the panels forward on the call's own plan, and the voice window's ask, or one with no call, brings nothing",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       const showPlan = { kind: ACT_KIND.CALL_SHOW_PLAN } as const;
       yield* f.perform(f.callSender, showPlan);
+      yield* f.perform(f.panelSender, showPlan);
       assert.equal(f.panelsFocused(), 0);
 
       f.report(f.voiceSender, { ...IDLE_VOICE_VIEW, voiceStatus: "listening", callPlanId: PLAN });
-      yield* f.perform(f.panelSender, showPlan);
       yield* f.perform(f.voiceSender, showPlan);
       assert.equal(f.panelsFocused(), 0);
       yield* f.perform(f.callSender, showPlan);
-      assert.equal(f.panelsFocused(), 1);
-      assert.deepEqual(f.toPanels, [{ channel: channels.onShowPlan, payload: { planId: PLAN } }]);
+      yield* f.perform(f.panelSender, showPlan);
+      assert.equal(f.panelsFocused(), 2);
+      const shown = { channel: channels.onShowPlan, payload: { planId: PLAN } };
+      assert.deepEqual(f.toPanels, [shown, shown]);
     }),
 );
 

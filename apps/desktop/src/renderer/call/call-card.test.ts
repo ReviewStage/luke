@@ -8,6 +8,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { ACT_KIND } from "#shared/messages/acts";
 import { IDLE_VOICE_VIEW, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+import { builtStylesheet, cssRules } from "#testing/css-rules";
 import type { ActHandle } from "../act";
 import {
   CALL_CARD_SURFACE,
@@ -148,4 +149,12 @@ test("a docked card slides out from the last call it was handed, and is gone onc
   dock(undefined);
   dock(input(LISTENING));
   assert.equal(container.querySelector<HTMLElement>(".call-card")?.dataset.leaving, "false");
+});
+
+test("in the floating window the whole card drags the window and every button answers its own press", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const regionOf = (selector: string) =>
+    rules.find((rule) => rule.selectors.includes(selector))?.declarations.get("-webkit-app-region");
+  assert.equal(regionOf('.call-card[data-surface="window"]'), "drag");
+  assert.equal(regionOf('.call-card[data-surface="window"] button'), "no-drag");
 });
