@@ -110,6 +110,14 @@ const drawnCard = (plan: PlanSummary) =>
       repository: container.querySelector(".plan-card-repository")?.textContent,
       agents: lines("Agents"),
       pullRequests: lines("Pull requests"),
+      // Each agent's glyph as a reader and an eye meet it: what it says, and the harness mark it wears.
+      agentGlyphs: [...container.querySelectorAll("[data-plan-card-agent] .plan-card-glyph")].map(
+        (glyph) => ({
+          said: glyph.querySelector('[role="img"]')?.getAttribute("aria-label"),
+          mark: glyph.querySelector(".provider-mark")?.tagName.toLowerCase(),
+          ring: glyph.querySelector(".state-glyph-ring") !== null,
+        }),
+      ),
       unmount: () => act(() => root.unmount()),
     };
   });
@@ -133,6 +141,21 @@ it.effect(
         "#128 · Invite teammates by email+214 −9 Draft",
         "#120 · Expire invitations after a week+31 −2",
         "and 2 more",
+      ]);
+      card.unmount();
+    }),
+);
+
+it.effect(
+  "an agent's line leads with its harness's mark as its tab wears it: a ring while it works, the mark alone once done, an alert in its place where it failed, and no dot",
+  () =>
+    Effect.gen(function* () {
+      const card = yield* drawnCard(PLAN);
+
+      assert.deepEqual(card.agentGlyphs, [
+        { said: "Working", mark: "svg", ring: true },
+        { said: undefined, mark: "img", ring: false },
+        { said: "Failed", mark: undefined, ring: false },
       ]);
       card.unmount();
     }),

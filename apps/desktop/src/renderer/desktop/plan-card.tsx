@@ -1,12 +1,7 @@
-import {
-  CHECK_SUMMARY,
-  CODING_AGENT_STATUS,
-  PULL_REQUEST_STATE,
-} from "@sidecar/hosted/coding-agent-wire";
+import { CHECK_SUMMARY, PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import type { PlanAgentLine, PlanPullRequestLine, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
-  CircleAlertIcon,
   GitMergeIcon,
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
@@ -14,6 +9,7 @@ import {
   LoaderCircleIcon,
 } from "lucide-react";
 import { GitHubMark } from "../account-marks";
+import { AgentGlyph } from "../planning/agent-tab";
 import { pullRequestPillLabel, pullRequestStateWord } from "../planning/coding-agent-model";
 import { ModelLabel } from "../planning/model-label";
 import {
@@ -97,7 +93,7 @@ export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Eleme
   }
 }
 
-/** One agent's line: a spinner while it works or an alert where it failed, its name, its model where the name is its title, and its corner. */
+/** One agent's line: its harness's mark wearing where it stands, as its tab wears it (`AgentGlyph`), its name, its model where the name is its title, and its corner. */
 function AgentLine({
   agent,
   models,
@@ -112,11 +108,7 @@ function AgentLine({
   return (
     <li className="plan-card-line" data-plan-card-agent="">
       <span className="plan-card-glyph">
-        {corner.kind === AGENT_LINE_CORNER.WORKING ? (
-          <WorkingGlyph label="Working" />
-        ) : agent.status === CODING_AGENT_STATUS.FAILED ? (
-          <CircleAlertIcon className="plan-mark-glyph plan-card-failed" aria-hidden="true" />
-        ) : null}
+        <AgentGlyph agent={agent} />
       </span>
       <span className="plan-card-label">
         {agent.title === null ? (

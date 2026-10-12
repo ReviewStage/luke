@@ -518,8 +518,7 @@ body,
   color: var(--state-merged);
 }
 
-.plan-mark-glyph[data-failing="true"],
-.plan-card-failed {
+.plan-mark-glyph[data-failing="true"] {
   color: var(--danger);
 }
 
@@ -3643,10 +3642,15 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-size: 12px;
 }
 
+/* An agent's line leads with its harness's mark wearing where it stands, as
+   its tab does, a size up from the pull request's glyph so the mark still
+   reads inside the working ring. */
 .plan-card-glyph {
   display: inline-flex;
-  width: 12px;
+  width: 14px;
   flex: none;
+  justify-content: center;
+  --state-glyph-size: 14px;
 }
 
 .plan-card-label {
