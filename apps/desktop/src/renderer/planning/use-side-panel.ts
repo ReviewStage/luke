@@ -7,8 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * The plan's document is always the page's main content; what supports it
  * (the whiteboard, the code Luke has on screen, what was said on the plan's
- * calls, what Luke's planning model wrote and ran on them, the plan's
- * history, and each coding agent started on the plan) stands in a panel at the window's right that
+ * calls, what Luke's planning model wrote and ran on them, and each coding
+ * agent started on the plan) stands in a panel at the window's right that
  * the developer opens and closes, as every devtool
  * window's secondary sidebar does. The one thing that opens it on its own is
  * Luke first drawing on a plan's board or first showing its code
@@ -18,8 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
  * board holds something, Luke showed code on it, a call on it has a line,
- * Luke's planning model took a turn on it, or anyone wrote it since its
- * history began. So a new plan has no tab,
+ * or Luke's planning model took a turn on it. So a new plan has no tab,
  * and what arrives on it adds its tab as it arrives, never taking the
  * chosen one's place. The developer's own choices lie over that, per plan:
  * a tab they open from the "+" or its shortcut stands on that plan though
@@ -29,7 +28,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * so a tab dragged to the front is at the front on every plan that has it,
  * and a chosen tab the open plan does not have reads as the first it does.
  *
- * The five fixed kinds are a constant; the agent tabs are the plan's, one
+ * The four fixed kinds are a constant; the agent tabs are the plan's, one
  * per agent, drawn after them, and come and go with the plan. An agent's
  * tab closes as any other does, which closes the view and leaves the agent
  * running, and the "+" opens it again; the agents whose tabs were closed
@@ -75,7 +74,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * mount. What an earlier version kept still reads: the fixed tabs it held
  * open, or every tab before they could close, give the order alone, so a
  * set an earlier launch held open opens no tab on a plan that has not used
- * it. A fixture run neither draws nor writes them: what it draws is staged,
+ * it, and a kind since retired (`RETIRED_SIDE_PANEL_TAB`) reads as never
+ * kept, wherever it was. A fixture run neither draws nor writes them: what it draws is staged,
  * and a capture must not depend on how the last run left the panel.
  *
  * The open panel may also fill the window's work, over the document, as
@@ -85,14 +85,28 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * where it was hidden and stands until the "+" opens its menu.
  */
 
-/** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
+/** The panel's kinds of tab, the fixed four. A kind is one entry here, one row below, and one case where the panel draws it. */
 export const SIDE_PANEL_TAB = {
   BOARD: "board",
   CODE: "code",
   TRANSCRIPT: "transcript",
   WORK: "work",
+} as const;
+
+/**
+ * The kinds an earlier version had and this one does not, which what it kept
+ * may still name: History, whose versions now take the whole window
+ * (`desktop-version-history.tsx`). Note that a kind is retired here rather
+ * than deleted, because a kept state naming one would otherwise not read at
+ * all and lose every other choice it holds.
+ */
+const RETIRED_SIDE_PANEL_TAB = {
   HISTORY: "history",
 } as const;
+
+type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
+
+const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PANEL_TAB));
 
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
@@ -157,7 +171,6 @@ export const SIDE_PANEL_TAB_KIND = {
   [SIDE_PANEL_TAB.CODE]: { label: "Code" },
   [SIDE_PANEL_TAB.TRANSCRIPT]: { label: "Transcript" },
   [SIDE_PANEL_TAB.WORK]: { label: "Work" },
-  [SIDE_PANEL_TAB.HISTORY]: { label: "History" },
 } as const satisfies Record<FixedSidePanelTab, SidePanelTabKind>;
 
 /** Every kind of tab, in the order a first launch stands them in and the "+" offers them; the agent tabs follow them. */
@@ -247,7 +260,11 @@ const RECENT_KEPT = 20;
  */
 const PLANS_KEPT = 500;
 
-const sidePanelTabSchema = Schema.Literals(SIDE_PANEL_TABS);
+/** A fixed kind as it is kept: one of today's, or one retired, which reads and is then let go (`settled`). */
+const sidePanelTabSchema = Schema.Literals([
+  ...SIDE_PANEL_TABS,
+  ...Object.values(RETIRED_SIDE_PANEL_TAB),
+]);
 const anyTabSchema = Schema.Union([sidePanelTabSchema, Schema.Struct({ agent: Schema.String })]);
 
 /** A tab a plan keeps pinned: any kind but a draft's, which is kept nowhere. */
@@ -277,8 +294,10 @@ const planTabsSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(anyTabSchema)),
 });
 
-/** A plan's own choices as the hook holds them, whose pins may hold a draft's tab, and whose tabs viewed any tab, the record keeps none of. */
-interface PlanTabs extends Omit<typeof planTabsSchema.Type, "pinned" | "recent"> {
+/** A plan's own choices as the hook holds them: today's kinds alone, pins that may hold a draft's tab, and tabs viewed that may be any tab, which the record keeps none of. */
+interface PlanTabs {
+  readonly opened: readonly FixedSidePanelTab[];
+  readonly closed: readonly FixedSidePanelTab[];
   readonly pinned?: readonly SidePanelTab[] | undefined;
   readonly recent?: readonly SidePanelTab[] | undefined;
 }
@@ -310,7 +329,8 @@ export type SidePanelState = typeof sidePanelStateSchema.Type;
  * or a file's tab chosen is written as no tab, which the next launch reads
  * as the first.
  */
-interface HeldState extends Omit<SidePanelState, "tab" | "closedAgents" | "plans"> {
+interface HeldState extends Omit<SidePanelState, "tabs" | "tab" | "closedAgents" | "plans"> {
+  readonly tabs: readonly FixedSidePanelTab[];
   readonly tab?: SidePanelTab | undefined;
   readonly subagents: readonly SubagentSidePanelTab[];
   readonly files: readonly OpenFile[];
@@ -763,20 +783,43 @@ function withTabAt(held: HeldState, tab: SidePanelTab, to: number, drawn: DrawnT
   return tabs === undefined ? held : { ...held, tabs };
 }
 
+/** Whether a kept tab is of a kind this version still has: any but a retired fixed kind. */
+function current<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
+  return !RETIRED_TABS.has(tab);
+}
+
+/** Each plan's kept choices without the kinds retired since they were kept. */
+function currentPlans(plans: SidePanelState["plans"]): HeldState["plans"] {
+  return Object.fromEntries(
+    Object.entries(plans ?? {}).map(([plan, { opened, closed, pinned, recent }]) => [
+      plan,
+      {
+        opened: opened.filter(current),
+        closed: closed.filter(current),
+        ...(pinned === undefined ? undefined : { pinned: pinned.filter(current) }),
+        ...(recent === undefined ? undefined : { recent: recent.filter(current) }),
+      },
+    ]),
+  );
+}
+
 /**
  * A kept or staged state made whole: every kind in the order once, those it
- * did not hold last, the width no narrower than its least, and no subagent
- * or file tab open; a plan's pinned ones open as it is drawn (`withPinsOpen`).
+ * did not hold last, the width no narrower than its least, no subagent or
+ * file tab open, and nothing of a kind retired since it was kept; a plan's
+ * pinned ones open as it is drawn (`withPinsOpen`).
  */
 function settled(state: SidePanelState): HeldState {
+  const { tab } = state;
   return {
     ...state,
-    tabs: [...new Set([...state.tabs, ...SIDE_PANEL_TABS])],
+    tabs: [...new Set([...state.tabs.filter(current), ...SIDE_PANEL_TABS])],
+    tab: tab === undefined || !current(tab) ? undefined : tab,
     width: clampWidth(state.width),
     subagents: [],
     files: [],
     closedAgents: state.closedAgents ?? [],
-    plans: state.plans ?? {},
+    plans: currentPlans(state.plans),
   };
 }
 

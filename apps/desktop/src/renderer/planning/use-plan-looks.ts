@@ -115,9 +115,9 @@ function visited(plan: Plan | undefined): Visit {
 /**
  * The drawn plan's sections changed since the developer last looked at it,
  * and the mark moved on once they have: after `PLAN_LOOK` open, and again
- * with every save while it stays open. Note that it is held by the plan's
- * region rather than its document, because a version from the History tab
- * drawn in the document's place is still a stay on the plan.
+ * with every save while it stays open. Note that it is held by the window's
+ * shell rather than the plan's page, because the plan's version history
+ * standing in the page's place is still a stay on the plan.
  */
 export function usePlanLooks(plan: Plan | undefined): PlanLooks {
   const [visit, setVisit] = useState(() => visited(plan));

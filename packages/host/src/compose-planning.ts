@@ -83,7 +83,7 @@ import type { RunMode } from "./run-mode.js";
  * given or taken away, are the service's too, asked through here, as are a
  * plan pinned or archived: the list holds the archived plans beside the
  * rest, each flagged, and which the window draws where is the window's. A
- * plan's history is read for the History tab that asks and held nowhere
+ * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
  */
@@ -657,7 +657,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         );
       }),
     // A page of the history, and a revision beside the one before it, are
-    // answered to the History tab that asked and held nowhere: the tab keeps
+    // answered to the version history that asked and held nowhere: it keeps
     // what it read, and reads again as the plan moves on.
     [GATEWAY_METHOD.PLANNING_REVISIONS]: (params) =>
       Effect.gen(function* () {

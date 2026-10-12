@@ -10,6 +10,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@sidecar/panel";
+import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
@@ -28,12 +29,13 @@ import { PlanNameField, usePlanRename } from "./plan-name-field";
  * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
  *
  * Both doors open the same menu over the same plan, so a plan in the list can
- * be acted on without being opened first, and nothing in the menu moves the
- * window to another plan. The menu is the window's own (`action-menu.tsx`),
+ * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Rename edits the name where the door draws it: the sidebar's row turns
- * into a field, and the toolbar's ⋯ opens its title as one. Pin and Archive
+ * into a field, and the toolbar's ⋯ opens its title as one. Version history
+ * opens the plan's versions over the whole window, opening the plan first
+ * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
@@ -133,7 +135,7 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename; Pin and Archive follow; the repository is
+ * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
  * changed from any plan and opened on GitHub where there is one; Permanently
  * delete is last and alone.
  */
@@ -146,6 +148,11 @@ function planActionGroups(
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const plan = planOf(plans, planId);
   const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
+  const versions: MenuAction = {
+    label: "Version history",
+    icon: <HistoryIcon />,
+    onSelect: () => plans.history.onOpen(planId),
+  };
   const change: MenuAction = {
     label: "Change repository…",
     icon: <GitHubMark />,
@@ -153,8 +160,8 @@ function planActionGroups(
   };
   const groups: MenuAction[][] = [
     drawn
-      ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename]
-      : [rename],
+      ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename, versions]
+      : [rename, versions],
     placeActions(plans, plan),
     (plan?.repository ?? null) === null
       ? [change]

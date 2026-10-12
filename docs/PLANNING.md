@@ -39,8 +39,8 @@ A reviewer can hold the build to these as easily as to the layout:
   the document it is handed, marked as the developer's own words.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
-  read and restored from its History tab ("History" below), which is the one
-  place a version is compared with another.
+  read and restored from its version history ("History" below), which is the
+  one place a version is compared with another.
 - An assumption is edited like any other field, never confirmed or accepted:
   there is no checkbox, no Accept, and nothing that moves one into a field.
 - The document is the record. What was said on the plan's calls can be read
@@ -236,7 +236,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   notetaker. The time moves on once a minute, and a save the notetaker makes
   on the open plan's call moves the line as it lands. A plan nobody has
   written since it started shows no line. A press on the line opens the
-  plan's History tab.
+  plan's version history.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
   on the section, from the writer the plan keeps for each field (`fieldEdits`
@@ -618,25 +618,30 @@ save that last changed it: the actor, the coding agent, and whether on a
 call, kept beside the revision by the same locked save, which each section's
 line reads.
 
-The History tab (`planning/history-tab.tsx`, ⌥⌘5) lists the revisions
-newest first, fifty a page (`GET /api/plans/{id}/revisions`), each as who
-wrote it ("Luke", "You", or a coding agent by its row), whether on a call,
-how many changes it made, and how long ago; the newest says it is the
-current one, and the plan from before history reads "Earlier". The list is
-read while the tab is on screen and again whenever the plan is edited
-meanwhile. Choosing a row reads that revision's content and the content
-before it (`GET /api/plans/{id}/revisions/{seq}`), both formatted under the
-plan's name as it stands, and draws the version read-only in the document's
-place (`planning/version-view.tsx`) under a bar: "Viewing version from 2h ago
-· Luke", the comparison, Restore this version, and Back to current. The
-version is drawn against the one before it by default, which is what the
-row's change count describes, or against the plan as it stands, which is
-what a restore would change: each section only one side holds is drawn
+Version history, in the plan's ⋯ menu (the toolbar's and the sidebar row's
+right-click alike) and behind the "Edited by" line, takes the whole window
+the way Settings does (`desktop/desktop-version-history.tsx`): a column as
+wide as the sidebar, with Back at its head, "Version history" and the
+plan's name, and the revisions newest first, fifty a page
+(`GET /api/plans/{id}/revisions`), each as who wrote it ("Luke", "You", or a
+coding agent by its row), whether on a call, how many changes it made, and
+how long ago; the newest is labelled "Current", and the plan from before
+history reads "Earlier". The list is read while the view stands and again
+whenever the plan is edited meanwhile. The chosen revision, the newest when
+the view opens, is read with the content before it
+(`GET /api/plans/{id}/revisions/{seq}`), both formatted under the plan's name
+as it stands, and drawn read-only beside the list
+(`planning/version-view.tsx`) under a bar with its moment and Restore this
+version; the up and down arrows step through the list. Every version, the
+current one included, is drawn against the one just before it, which is what
+the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
 words written in on a green wash and struck out on a red one, word by word
 with jsdiff (`planning/plan-history-model.ts`); the assumptions are
-compared as a list. Escape, Back to current, another tab, or another plan
-goes back to the plan.
+compared as a list. The first version has nothing before it and is drawn
+with nothing marked. The view is one step of the window's back and forward
+whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
+it was left, its side panel untouched.
 
 Restore this version asks first, in the window's dialog, and then puts the
 revision's fields and assumptions back through the plan's one locked save
@@ -646,8 +651,9 @@ revision's fields and assumptions back through the plan's one locked save
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed during a call. It takes
 no base: a save that landed after the version was chosen is the revision
-before the restore, and restoring it brings it back. The plan the service
-answers replaces the open document at once, and the window's toast says
+before the restore, and restoring it brings it back. A restore that lands
+leaves the version history for the plan, whose document the service's answer
+replaces at once, and the window's toast says
 "Version restored" with an Undo, which restores the version that stood
 before it. Until the notetaker's next save lands, the host draws no draft
 of the open plan's call, since a turn in flight was written over the

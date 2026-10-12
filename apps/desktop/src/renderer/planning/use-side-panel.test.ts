@@ -355,6 +355,42 @@ test("what an earlier version kept loads as the order alone: the tabs it held op
   assert.deepEqual(mountOn({ [SIDE_PANEL_TAB.WORK]: true }).control().tabs, [SIDE_PANEL_TAB.WORK]);
 });
 
+test("what a version with the History tab kept loads whole without it, wherever it named the tab", () => {
+  window.localStorage.setItem(
+    "luke.sidePanel",
+    JSON.stringify({
+      open: true,
+      tabs: ["history", SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.BOARD],
+      tab: "history",
+      width: 460,
+      closedAgents: [AGENT],
+      plans: {
+        [PLAN]: {
+          opened: ["history", SIDE_PANEL_TAB.CODE],
+          closed: ["history"],
+          pinned: ["history"],
+          recent: ["history", SIDE_PANEL_TAB.WORK],
+        },
+      },
+    }),
+  );
+  const panel = mountOn({ [SIDE_PANEL_TAB.WORK]: true }, [AGENT]);
+
+  assert.equal(panel.control().open, true);
+  assert.equal(panel.control().width, 460);
+  assert.deepEqual(panel.control().closedAgents, [AGENT]);
+  assert.deepEqual(panel.control().tabs, [SIDE_PANEL_TAB.WORK, SIDE_PANEL_TAB.CODE]);
+  assert.equal(
+    panel.control().tab,
+    SIDE_PANEL_TAB.WORK,
+    "the History tab chosen reads as the first",
+  );
+  assert.deepEqual(panel.control().closedTabs, []);
+  assert.deepEqual(panel.control().pinned, []);
+  act(() => panel.control().onClose(SIDE_PANEL_TAB.WORK));
+  assert.equal(panel.control().tab, SIDE_PANEL_TAB.CODE, "the tabs viewed read without it too");
+});
+
 test("a tab opened on a plan that holds nothing of it stands there across a launch, and on that plan alone", () => {
   const OTHER_PLAN = "6a8c0e2a-4c6e-4a8c-9e0a-2c4e6a8c0e2a";
   const first = mountOn({});

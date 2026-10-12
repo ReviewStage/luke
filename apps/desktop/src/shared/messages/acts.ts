@@ -149,9 +149,9 @@ export const ACT_KIND = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
-  /** The History tab's page of the open plan's history, read from the service; answered to the tab, never on the document. */
+  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
   PLANNING_REVISIONS: "planning.revisions",
-  /** The History tab's revision of the open plan beside the one before it, read from the service; answered to the tab, never on the document. */
+  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
   PLANNING_REVISION: "planning.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",

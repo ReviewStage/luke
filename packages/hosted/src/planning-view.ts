@@ -545,7 +545,7 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
 
-/** A page of a plan's history, as the History tab asks the host for it: the plan, and the revision the page is read before where it is an older page. */
+/** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   before: EffectSchema.optionalKey(planRevisionSeqSchema),
@@ -553,7 +553,7 @@ export const planningRevisionsParamsSchema = EffectSchema.Struct({
 
 export type PlanningRevisionsParams = typeof planningRevisionsParamsSchema.Type;
 
-/** The History tab's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
+/** The version history's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
 export const planningRevisionsAnswerSchema = EffectSchema.Union([
   planRevisionsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
@@ -561,7 +561,7 @@ export const planningRevisionsAnswerSchema = EffectSchema.Union([
 
 export type PlanningRevisionsAnswer = typeof planningRevisionsAnswerSchema.Type;
 
-/** One revision of a plan, as the History tab names it to read it or to restore it: the plan and the revision's number. */
+/** One revision of a plan, as the version history names it to read it or to restore it: the plan and the revision's number. */
 export const planningRevisionParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   seq: planRevisionSeqSchema,
@@ -569,7 +569,7 @@ export const planningRevisionParamsSchema = EffectSchema.Struct({
 
 export type PlanningRevisionParams = typeof planningRevisionParamsSchema.Type;
 
-/** The History tab's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
+/** The version history's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
 export const planningRevisionAnswerSchema = EffectSchema.Union([
   planRevisionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),

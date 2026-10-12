@@ -11,6 +11,7 @@ import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { CommandPalette } from "./command-palette";
 import { DesktopPlans } from "./desktop-plans";
@@ -94,7 +95,7 @@ function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}
     return createElement(
       "div",
       null,
-      createElement(DesktopPlans, { plans }),
+      createElement(DesktopPlans, { looks: NO_LOOKS, plans }),
       createElement(CommandPalette, {
         available: true,
         tab,

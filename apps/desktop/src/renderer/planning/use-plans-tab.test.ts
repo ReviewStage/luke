@@ -268,8 +268,11 @@ function revisionLine(seq: number) {
 
 const FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
 
+/** A plan other than the open one, which the host opens in its place. */
+const OTHER_PLAN_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+
 it.effect(
-  "the History tab reads the plan's versions; one chosen stands in the document's place until Escape or another tab, and a restore goes back to the plan and offers its Undo",
+  "Version history opens over the open plan on the plan as it stands with its side panel as it was, opens again on the newest, and a restore offers its Undo",
   () =>
     Effect.gen(function* () {
       const restoredAnswer = { value: false };
@@ -284,16 +287,23 @@ it.effect(
         },
         yield* registryOnTestClock,
       );
-      assert.ok(tab.control().sidePanel.tabs.includes(SIDE_PANEL_TAB.HISTORY));
-      assert.ok(!tab.told.includes(ACT_KIND.PLANNING_REVISIONS), "read only once it shows");
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
+      assert.equal(tab.control().history.open, false);
+      assert.ok(!tab.told.includes(ACT_KIND.PLANNING_REVISIONS), "read only once it opens");
 
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
+      act(() => tab.control().history.onOpen(PLAN.id));
       yield* landed;
+      assert.equal(tab.control().history.open, true);
       const { list } = tab.control().history;
       assert.deepEqual(
         list.kind === "ready" ? list.revisions.map(({ seq }) => seq) : list.kind,
         [2, 1],
       );
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "the plan as it stands first");
+      assert.equal(tab.control().history.viewing?.current, true);
+      assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+      assert.equal(tab.control().sidePanel.open, true);
+      assert.equal(tab.control().sidePanel.tab, SIDE_PANEL_TAB.WORK);
 
       act(() => tab.control().history.onSelect(1));
       yield* landed;
@@ -305,24 +315,13 @@ it.effect(
         FIRST_VERSION,
       );
 
-      let stepped = false;
-      act(() => {
-        stepped = tab.control().back();
-      });
-      assert.ok(stepped);
-      assert.equal(tab.control().history.viewing, undefined);
-      assert.equal(
-        tab.control().page,
-        PLANS_PAGE.DOCUMENT,
-        "Escape left the version, not the plan",
-      );
-
-      act(() => tab.control().history.onSelect(1));
+      act(() => tab.control().history.onClose());
+      assert.equal(tab.control().history.open, false);
+      assert.equal(tab.control().sidePanel.tab, SIDE_PANEL_TAB.WORK, "the panel as it was");
+      act(() => tab.control().history.onOpen(PLAN.id));
       yield* landed;
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-      assert.equal(tab.control().history.viewing, undefined, "another tab leaves the version");
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "it opens again on the newest");
 
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
       act(() => tab.control().history.onSelect(1));
       yield* landed;
       let refused: ActionResult | undefined;
@@ -354,18 +353,75 @@ it.effect(
       });
       yield* landed;
       assert.equal(restored?.status, ACTION_RESULT_STATUS.ACCEPTED);
-      assert.equal(tab.control().history.viewing, undefined);
-      const undo = document.querySelector<HTMLButtonElement>(".toast button");
-      assert.equal(undo?.textContent, "Undo");
+      const undo = undoButton();
       assert.equal(toast()?.replace("Undo", ""), "Version restored");
 
       // The Undo is itself a restore, and one the service refuses says so.
       restoredAnswer.value = false;
-      act(() => undo?.click());
+      act(() => undo.click());
       yield* landed;
       assert.equal(toast(), "The restore could not be undone. Try again.");
     }),
 );
+
+it.effect(
+  "a save landing while the version history stands moves the view on to it from the newest, and leaves an older version chosen where it is",
+  () =>
+    Effect.gen(function* () {
+      const head = { seq: 2 };
+      const editedAt = (at: number): PlanningView => ({
+        ...EDITED,
+        document: {
+          status: PLANNING_READ.READY,
+          plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true } },
+        },
+      });
+      const tab = mount(
+        { shown: true, planning: editedAt(20) },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({
+              revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
+            }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+
+      head.seq = 3;
+      tab.stand({ planning: editedAt(30) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 3, "the newest followed");
+      assert.equal(tab.control().history.viewing?.current, true);
+
+      act(() => tab.control().history.onSelect(2));
+      yield* landed;
+      head.seq = 4;
+      tab.stand({ planning: editedAt(40) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "an older version stays chosen");
+      assert.equal(tab.control().history.viewing?.current, false);
+    }),
+);
+
+test("another plan opening leaves the version history, and so does a notification's click onto an agent's tab", () => {
+  const tab = mount({ shown: true, planning: EDITED });
+  act(() => tab.control().history.onOpen(PLAN.id));
+  assert.equal(tab.control().history.open, true);
+
+  tab.stand({ planning: { ...EDITED, activePlanId: OTHER_PLAN_ID } });
+  assert.equal(tab.control().history.open, false);
+  tab.stand({ planning: EDITED });
+  assert.equal(tab.control().history.open, false, "coming back opens the plan, not its history");
+
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().onShowAgent(PLAN.id, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"));
+  assert.equal(tab.control().history.open, false);
+});
 
 test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {
   const tab = mount({ planning: OPEN });
@@ -1463,7 +1519,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("main is told which agent's tab is shown, and none once the panel moves off it or the tab goes away", async () => {
+test("main is told which agent's tab is shown, and none once the panel moves off it, the version history covers it, or the tab goes away", async () => {
   const tab = mount(
     { shown: true, planning: OPEN },
     { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
@@ -1476,8 +1532,10 @@ test("main is told which agent's tab is shown, and none once the panel moves off
 
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().history.onClose());
   tab.stand({ shown: false });
-  assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null]);
+  assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null, AGENT_ID, null]);
 });
 
 /** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */

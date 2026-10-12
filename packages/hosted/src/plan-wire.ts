@@ -365,7 +365,7 @@ export const PLAN_HISTORY_BOUNDS = {
 export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /**
- * One revision as the History tab lists it: its number, who wrote it and
+ * One revision as the version history lists it: its number, who wrote it and
  * when it last moved, when it began, how many changes its saves made, and,
  * for the developer's restore of an earlier revision, which one it brought
  * back and that revision's latest save.

@@ -5,23 +5,23 @@ import type {
 } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VERSION_COMPARE, type VersionCompare } from "./plan-history-model";
 
 /**
- * use-plan-history.ts -- the open plan's history as the History tab and the version view hold it: the revisions read, the version chosen, and its restore.
+ * use-plan-history.ts -- the open plan's history as its version history holds it: the revisions read, the version chosen, and its restore.
  *
- * The history is read through the service while the History tab is on
- * screen, the newest page first and each older page as the list asks, and
+ * The history is read through the service while the plan's version history
+ * stands, the newest page first and each older page as the list asks, and
  * read again whenever the plan is edited while it stands, so a save Luke
  * makes on a call lands at the head of the list as it lands in the
- * document. Choosing a revision reads its content and the content before it,
- * and the document area draws that version against one of them
- * (`VERSION_COMPARE`) until the developer goes back to the plan as it
- * stands, leaves the tab, or opens another plan. Restoring the version is
- * the service's write; the plan it answers arrives in the document through
- * main's view like any other save, and the history reads again on it. A
- * restore is undone by restoring the version that stood before it, which
- * the caller is handed to offer.
+ * document. The newest revision, the plan as it stands, is chosen until the
+ * developer chooses another, and a save landing meanwhile moves the view on
+ * to the new newest; choosing one reads its content and the content before
+ * it, and the version history draws what that revision changed until it is
+ * left or another plan opens, and opens again on the newest. Restoring the version is the service's write; the
+ * plan it answers arrives in the document through main's view like any
+ * other save, and the history reads again on it. A restore is undone by
+ * restoring the version that stood before it, which the caller is handed to
+ * offer.
  */
 
 /** Where a read of the history or of one version stands. */
@@ -51,7 +51,7 @@ type VersionRead =
       readonly previous: PlanDocument | null;
     };
 
-/** The version the document area draws: its revision, whether it is the plan as it stands, and its content as read. */
+/** The version the version history draws: its revision, whether it is the plan as it stands, and its content as read. */
 export interface ViewedVersion {
   readonly line: PlanRevisionLine;
   /** Whether it is the newest revision, which is the plan as it stands and has nothing to restore. */
@@ -66,22 +66,18 @@ export interface PlanHistorySource {
   restore: (planId: string, seq: number) => Promise<boolean>;
 }
 
-/** What the History tab and the version view draw, and their presses. */
+/** What the version history draws, and its presses. */
 export interface PlanHistoryControl {
   list: HistoryList;
-  /** The revision chosen, while the tab is on screen. */
+  /** The revision chosen, the newest until another is, while the version history stands. */
   selected: number | undefined;
-  /** The version the document area draws in the plan's place, while one is chosen. */
+  /** The version drawn, once the list holds the revision chosen. */
   viewing: ViewedVersion | undefined;
-  compare: VersionCompare;
   onSelect: (seq: number) => void;
-  onCompare: (compare: VersionCompare) => void;
-  /** Goes back to the plan as it stands. */
-  onBack: () => void;
   onRetry: () => void;
   /** Reads the page of revisions older than the oldest read; answers whether it landed. */
   onLoadEarlier: () => Promise<boolean>;
-  /** Restores the version chosen as the plan's content, and goes back to the plan once it is. */
+  /** Restores the version chosen as the plan's content; the caller hears it landed through `onRestored`. */
   onRestore: () => Promise<ActionResult>;
 }
 
@@ -97,12 +93,29 @@ interface HeldList {
   readonly list: HistoryList;
 }
 
-/** A version chosen on one plan, its content as read, and how many times it was asked for, so choosing one whose read failed reads it again. */
+/**
+ * A version chosen on one plan: its revision, none while the newest is
+ * followed, so a save landing moves the view onto it; its content as read and
+ * the revision that read was for; and how many times it was asked for, so
+ * choosing one whose read failed reads it again.
+ */
 interface HeldVersion {
   readonly planId: string;
-  readonly seq: number;
+  readonly seq: number | undefined;
   readonly read: VersionRead;
+  readonly readOf: number | undefined;
   readonly asked: number;
+}
+
+/** The version history opened on a plan: following the newest, nothing read yet. */
+function followingNewest(planId: string): HeldVersion {
+  return {
+    planId,
+    seq: undefined,
+    read: { kind: HISTORY_READ.READING },
+    readOf: undefined,
+    asked: 1,
+  };
 }
 
 /**
@@ -141,8 +154,8 @@ function versionOf(answer: PlanningRevisionAnswer): VersionRead {
  * The open plan's history. `planId` is the open plan, none while no plan is
  * drawn; `editedAt` its last edit, which reads what is read again; `name`
  * its name, under which a version is formatted, so a rename reads the
- * version drawn again; and `shown` whether the History tab is on screen,
- * which is what reads it and what a version view stands on.
+ * version drawn again; and `shown` whether the plan's version history is on
+ * screen, which is what reads it and what a version chosen stands on.
  */
 export function usePlanHistory(input: {
   source: PlanHistorySource;
@@ -151,16 +164,14 @@ export function usePlanHistory(input: {
   name: string | undefined;
   shown: boolean;
   /**
-   * Says a restore landed, once the plan is back as it stands, with the way
-   * to undo it: a restore of the version that stood before it, where the
-   * history read names one.
+   * Says a restore landed, with the way to undo it: a restore of the
+   * version that stood before it, where the history read names one.
    */
   onRestored: (undo: (() => Promise<boolean>) | undefined) => void;
 }): PlanHistoryControl {
   const { source, planId, editedAt, name, shown, onRestored } = input;
   const [list, setList] = useState<HeldList | undefined>(undefined);
   const [version, setVersion] = useState<HeldVersion | undefined>(undefined);
-  const [compare, setCompare] = useState<VersionCompare>(VERSION_COMPARE.PREVIOUS);
   const [retries, setRetries] = useState(0);
   // Note that every read counts itself, because an answer landing after a
   // newer read was made, or after another plan opened, is not the list's.
@@ -173,9 +184,16 @@ export function usePlanHistory(input: {
   latest.current = source;
   const reading = shown && planId !== undefined;
 
-  // A version stands while its tab does, on its own plan.
+  // A version stands while the version history does, on its own plan.
   const chosen = reading && version?.planId === planId ? version : undefined;
   if (version !== undefined && chosen === undefined) setVersion(undefined);
+  const held = list !== undefined && list.planId === planId ? list.list : undefined;
+  const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
+  // Until one is chosen, the plan as it stands is, whichever revision that is now.
+  const newest = revisions[0]?.seq;
+  if (reading && planId !== undefined && chosen === undefined) {
+    setVersion(followingNewest(planId));
+  }
 
   useEffect(() => {
     if (!reading || planId === undefined) return;
@@ -207,7 +225,7 @@ export function usePlanHistory(input: {
     );
   }, [reading, planId, editedAt, retries]);
 
-  const seq = chosen?.seq;
+  const seq = chosen === undefined ? undefined : (chosen.seq ?? newest);
   const asked = chosen?.asked;
   useEffect(() => {
     if (planId === undefined || seq === undefined || asked === undefined) return;
@@ -216,7 +234,7 @@ export function usePlanHistory(input: {
     const land = (landed: VersionRead) => {
       if (read !== versionReads.current) return;
       setVersion((held) =>
-        held?.planId === planId && held.seq === seq ? { ...held, read: landed } : held,
+        held?.planId === planId ? { ...held, read: landed, readOf: seq } : held,
       );
     };
     latest.current.readRevision(planId, seq).then(
@@ -225,27 +243,27 @@ export function usePlanHistory(input: {
     );
   }, [planId, seq, asked, editedAt, name]);
 
-  // Choosing the version drawn again leaves it as it is, unless its read failed.
+  // Choosing the version drawn again leaves it as it is, unless its read
+  // failed; choosing the newest follows the newest from then on.
   const onSelect = useCallback(
     (chosenSeq: number) => {
       if (planId === undefined) return;
       setVersion((held) => {
-        const same = held?.planId === planId && held.seq === chosenSeq;
+        const same = held?.planId === planId && (held.seq ?? newest) === chosenSeq;
         if (same && held.read.kind !== HISTORY_READ.FAILED) return held;
         return {
           planId,
-          seq: chosenSeq,
+          seq: chosenSeq === newest ? undefined : chosenSeq,
           read: { kind: HISTORY_READ.READING },
+          readOf: undefined,
           asked: (same ? held.asked : 0) + 1,
         };
       });
     },
-    [planId],
+    [planId, newest],
   );
-  const onBack = useCallback(() => setVersion(undefined), []);
   const onRetry = useCallback(() => setRetries((was) => was + 1), []);
 
-  const held = list !== undefined && list.planId === planId ? list.list : undefined;
   const onLoadEarlier = async (): Promise<boolean> => {
     if (planId === undefined || held?.kind !== HISTORY_READ.READY || held.earlier === undefined) {
       return false;
@@ -268,14 +286,12 @@ export function usePlanHistory(input: {
     return true;
   };
 
-  const revisions = held?.kind === HISTORY_READ.READY ? held.revisions : [];
   const onRestore = async (): Promise<ActionResult> => {
     if (planId === undefined || seq === undefined) return RESTORE_REFUSED;
     // The version standing before the restore is the newest the list read.
-    const before = revisions[0]?.seq;
+    const before = newest;
     const restored = await source.restore(planId, seq).catch(() => false);
     if (!restored) return RESTORE_REFUSED;
-    setVersion((was) => (was?.planId === planId && was.seq === seq ? undefined : was));
     onRestored(
       before === undefined || before === seq
         ? undefined
@@ -291,11 +307,13 @@ export function usePlanHistory(input: {
     viewing:
       chosen === undefined || line === undefined
         ? undefined
-        : { line, current: revisions[0]?.seq === line.seq, read: chosen.read },
-    compare,
+        : {
+            line,
+            current: newest === line.seq,
+            // A read made for the revision followed before a save moved it on is not this one's.
+            read: chosen.readOf === seq ? chosen.read : { kind: HISTORY_READ.READING },
+          },
     onSelect,
-    onCompare: setCompare,
-    onBack,
     onRetry,
     onLoadEarlier,
     onRestore,

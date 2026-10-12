@@ -1,37 +1,27 @@
-import type { PlanDocument } from "@sidecar/hosted/plan-wire";
+import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import {
   ConfirmDialog,
   DIALOG_TONE,
   type DialogQuestion,
   useConfirmDialog,
 } from "../settings/confirm-dialog";
-import {
-  VERSION_CHANGE,
-  VERSION_COMPARE,
-  type VersionCompare,
-  type VersionDiff,
-  versionDiff,
-  versionHeading,
-  versionMoment,
-} from "./plan-history-model";
+import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
 import { PlanUnitWords } from "./plan-rule";
-import { momentText, useMinute } from "./plan-time";
+import { momentText } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
 
 /**
- * version-view.tsx -- a version of the open plan drawn in the document's place, its changes marked, with its restore and the way back.
+ * version-view.tsx -- one version of a plan, drawn read-only with what it changed marked, under a bar with its restore.
  *
- * Choosing a row of the History tab turns the document area into a
- * read-only view of that version, the way Google Docs shows a version in
- * the page rather than in its narrow list. A bar above it says whose version
- * it is and from when, and offers the comparison, Restore this version, and
- * Back to current; Escape goes back too, as the window's nearest layer
- * (`use-plans-tab.ts`). The version is drawn whole against the version
- * before it, which shows what that revision changed, or against the plan as
- * it stands, which shows what restoring it would change: words written in
- * wear the accent and words struck out are struck, so neither reads by its
- * colour alone (`plan-history-model.ts`). Restoring asks first, in the
+ * The page beside a plan's version history (`desktop-version-history.tsx`),
+ * the way Google Docs shows a version in the page rather than in its narrow
+ * list. Its bar names when the version was saved and offers Restore this
+ * version. The version is drawn whole against the version before it, which
+ * shows what that revision changed: words written in wear the accent and
+ * words struck out are struck, so neither reads by its colour alone
+ * (`plan-history-model.ts`). The first version has nothing before it, so it
+ * is drawn with nothing marked. Restoring asks first, in the
  * window's dialog with the accent rather than red, since a restore is
  * itself a version the history keeps and can be undone by restoring the
  * one before it. Everything drawn is the plan's words, so the root is left
@@ -39,17 +29,11 @@ import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use
  * recording's text masking.
  */
 
-/** The comparison's two choices, as its segmented control names them. */
-const COMPARE_LABEL = {
-  [VERSION_COMPARE.PREVIOUS]: "Changes in this version",
-  [VERSION_COMPARE.CURRENT]: "Compared with current",
-} as const satisfies Record<VersionCompare, string>;
+/** What the view says over a version that changed nothing from the one before it. */
+const NO_CHANGE_LINE = "This version changed nothing from the one before it.";
 
-/** What the view says over a version that differs in nothing from what it is compared with. */
-const NO_CHANGE_LINE = {
-  [VERSION_COMPARE.PREVIOUS]: "This version changed nothing from the one before it.",
-  [VERSION_COMPARE.CURRENT]: "This version is the same as the plan as it stands.",
-} as const satisfies Record<VersionCompare, string>;
+/** What the view says over the first version, which has nothing before it. */
+const FIRST_VERSION_LINE = "The first version: there is nothing before it to compare.";
 
 /** The question Restore this version asks, naming the version. */
 function restoreQuestion(at: number): DialogQuestion {
@@ -105,16 +89,8 @@ function VersionBody({ diff }: { diff: VersionDiff }): React.JSX.Element {
   );
 }
 
-/** The version's content, compared as asked, or the state standing in its place. */
-function VersionContent({
-  viewing,
-  compare,
-  current,
-}: {
-  viewing: ViewedVersion;
-  compare: VersionCompare;
-  current: PlanDocument;
-}): React.JSX.Element {
+/** The version's content against the one before it, or the state standing in its place. */
+function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Element {
   const { read } = viewing;
   if (read.kind === HISTORY_READ.READING) {
     return <p className="version-note">Reading the version…</p>;
@@ -126,14 +102,9 @@ function VersionContent({
       </p>
     );
   }
-  const base = compare === VERSION_COMPARE.PREVIOUS ? read.previous : current;
-  const diff = versionDiff(base, read.document);
+  const diff = versionDiff(read.previous, read.document);
   const note =
-    base === null
-      ? "The first version: there is nothing before it to compare."
-      : diff.changed
-        ? undefined
-        : NO_CHANGE_LINE[compare];
+    read.previous === null ? FIRST_VERSION_LINE : diff.changed ? undefined : NO_CHANGE_LINE;
   return (
     <>
       {note === undefined ? null : <p className="version-note">{note}</p>}
@@ -143,35 +114,39 @@ function VersionContent({
 }
 
 /**
- * The version chosen in the History tab, drawn in the document's place:
- * the bar with its comparison, its restore, and the way back, over the
- * version itself. `current` is the plan as it stands, which the version is
- * compared with on asking; `shown` whether the window shows it, which the
- * restore's question stands on.
+ * The version chosen in the version history, the page beside its list: the
+ * bar with when it was saved and its restore, over the version itself.
+ * `shown` is whether the window shows it, which the restore's question
+ * stands on, and `onRestored` what follows a restore that landed.
  */
 export function VersionView({
   history,
   viewing,
-  current,
   shown,
+  onRestored,
 }: {
   history: PlanHistoryControl;
   viewing: ViewedVersion;
-  current: PlanDocument;
   shown: boolean;
+  onRestored: () => void;
 }): React.JSX.Element {
-  const now = useMinute();
-  const restore = useConfirmDialog({ subject: true, surfaceOpen: shown }, history.onRestore);
+  const restore = useConfirmDialog({ subject: true, surfaceOpen: shown }, async () => {
+    const result = await history.onRestore();
+    if (result.status === ACTION_RESULT_STATUS.ACCEPTED) onRestored();
+    return result;
+  });
   const { line } = viewing;
   return (
-    <div className="version-view ph-no-capture">
-      <section className="version-bar" aria-label="Version">
-        <p className="version-bar-title" title={momentText(line.lastEdit.at)}>
-          {versionHeading(line, now)}
+    <>
+      <header className="desktop-toolbar">
+        <div className="desktop-toolbar-heading version-heading">
+          <h1 className="desktop-toolbar-title" title={momentText(line.lastEdit.at)}>
+            {versionMoment(line.lastEdit.at)}
+          </h1>
           {/* The newest version is the plan as it stands, so it has nothing to restore. */}
-          {viewing.current ? " · Current version" : null}
-        </p>
-        <div className="version-bar-actions">
+          {viewing.current ? <span className="version-tag">Current</span> : null}
+        </div>
+        <div className="desktop-toolbar-actions">
           <button
             type="button"
             className="primary-button"
@@ -180,28 +155,14 @@ export function VersionView({
           >
             Restore this version
           </button>
-          <button type="button" className="toolbar-button" onClick={history.onBack}>
-            Back to current
-          </button>
         </div>
-        <fieldset className="settings-segments version-compare" aria-label="Compare">
-          {Object.values(VERSION_COMPARE).map((choice) => (
-            <button
-              key={choice}
-              type="button"
-              className="settings-segment"
-              aria-pressed={history.compare === choice}
-              onClick={() => history.onCompare(choice)}
-            >
-              {COMPARE_LABEL[choice]}
-            </button>
-          ))}
-        </fieldset>
-      </section>
-      <div className="plan-document-scroll version-document">
-        <VersionContent viewing={viewing} compare={history.compare} current={current} />
+      </header>
+      <div className="desktop-document">
+        <div className="plan-document-scroll">
+          <VersionContent viewing={viewing} />
+        </div>
       </div>
       <ConfirmDialog confirm={restore} question={restoreQuestion(line.lastEdit.at)} />
-    </div>
+    </>
   );
 }

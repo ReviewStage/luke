@@ -7,7 +7,6 @@ import {
   revisionSummary,
   VERSION_CHANGE,
   versionDiff,
-  versionHeading,
   versionMoment,
 } from "./plan-history-model";
 
@@ -69,7 +68,6 @@ test("a revision names its writer as the developer knows them, and says what it 
     revisionSummary(line({ restoredFrom: { seq: 1, at: restoredAt } })),
     `Restored the version from ${versionMoment(restoredAt)}`,
   );
-  assert.equal(versionHeading(line(), NOW), "Viewing version from 2h ago · Luke");
 });
 
 test("a version against the one before it marks the words written in and struck out where a unit changed", () => {
