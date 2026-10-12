@@ -1,19 +1,19 @@
-import { db } from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import { readPlan } from "@sidecar/database/models/plan-store";
-import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import type { Plan } from "@sidecar/hosted/plan-wire";
+import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
+import { Effect, Option, Schema } from "effect";
+import { type SqlClient, SqlSchema } from "effect/unstable/sql";
+import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { voiceSessions, voiceTranscriptSegments } from "../schemas/voice.js";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceCloseReason,
   type VoiceSegmentRole,
-} from "@sidecar/database/voice-vocabulary";
-import type { Plan } from "@sidecar/hosted/plan-wire";
-import { and, asc, desc, eq, isNotNull, isNull, lt } from "drizzle-orm";
-import { Effect, Option, Schema } from "effect";
-import { type SqlClient, SqlSchema } from "effect/unstable/sql";
-import type { SqlError } from "effect/unstable/sql/SqlError";
+} from "../voice-vocabulary.js";
+import { InstantColumnSchema } from "./columns.js";
+import { readPlan } from "./plan-store.js";
 
 /**
  * The one row per live session the storage rework keeps, written only here.

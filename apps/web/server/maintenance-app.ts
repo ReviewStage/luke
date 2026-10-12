@@ -1,6 +1,7 @@
 import { sweepAbandonedTurns } from "@sidecar/database/models/abandoned-turns";
 import { hostedStore } from "@sidecar/database/models/hosted-store";
 import { recordVoiceSeconds } from "@sidecar/database/models/quota";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { Effect, Layer, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
@@ -13,7 +14,6 @@ import { handleMaintenanceSweep } from "./hosted/maintenance-sweep.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 import { createLiveUpstream } from "./voice/openai.js";
 import { NOTHING_ORPHANED, sweepVoiceOrphans, VOICE_ORPHAN_SWEEP } from "./voice/orphan-sweep.js";
-import { voiceSessionRecord } from "./voice/session-record.js";
 
 /**
  * The maintenance group: the scheduled sweep's one entry, called by Vercel's

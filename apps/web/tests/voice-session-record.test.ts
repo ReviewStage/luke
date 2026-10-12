@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { user } from "@sidecar/database/schemas/auth";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { getTestDB } from "@sidecar/database/testing";
@@ -16,7 +17,6 @@ import {
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
-import { voiceSessionRecord } from "../server/voice/session-record";
 
 /**
  * The live session row as the record now writes it: five effects over the

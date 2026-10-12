@@ -493,7 +493,7 @@ bridged statements of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
 Outside `packages/database/src/models/`, `packages/database/src/models/plan-store.ts` is on the same
-client, and `server/voice/session-record.ts` is on it whole, each of its five methods
+client, and `packages/database/src/models/voice-session-record.ts` is on it whole, each of its five methods
 answering an effect over the live session row rather than running one.
 `VoiceService` yields those five
 directly: one upgrade is one `Scope` and one effect run on the `WebStoreRun`
@@ -1864,7 +1864,7 @@ within two minutes of the write, in which case the row joins the turn. No
 audio is ever stored.
 
 Two writers share those tables and never a column. The voice service's own
-`server/voice/session-record.ts` owns the session row's whole life: it is
+`packages/database/src/models/voice-session-record.ts` owns the session row's whole life: it is
 inserted when the session is created, found again by `(user_id,
 live_session_id)` when a fresh function instance re-attaches to the same
 live session, overwritten with each unconfirmed usage snapshot while open,

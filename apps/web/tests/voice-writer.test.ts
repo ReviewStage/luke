@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import {
   type SpokenRowWrite,
   VOICE_WRITE_REFUSAL,
@@ -26,7 +27,6 @@ import {
 } from "../server/core";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { LIVE_SERVER_EVENT, type LiveServerEvent, TRANSCRIPT_SPEAKER } from "../server/live";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { appended, delegated, heard, liveEventId, said } from "./support/live-events";
 import {

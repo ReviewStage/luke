@@ -11,6 +11,7 @@ import {
   savePlanText,
   updatePlan,
 } from "@sidecar/database/models/plan-store";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
@@ -55,7 +56,6 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "../server/voice/service";
-import { voiceSessionRecord } from "../server/voice/session-record";
 import { SOCKET_CLOSE_CODE } from "../server/voice/socket";
 import { FIRST_EVE_TURN, goodbyeTurn, spokenTurn } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";

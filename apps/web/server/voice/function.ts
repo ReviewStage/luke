@@ -1,4 +1,5 @@
 import { recordVoiceSeconds, spendHostedMeter } from "@sidecar/database/models/quota";
+import { voiceSessionRecord } from "@sidecar/database/models/voice-session-record";
 import { Effect, Redacted } from "effect";
 import { hostedUserInfo, userIdForAuthorization } from "../hosted/bearer.js";
 import { deploymentEveOrigin } from "../hosted/brain-host/eve-origin.js";
@@ -14,7 +15,6 @@ import {
   type VoiceServiceOptions,
   voiceServer,
 } from "./service.js";
-import { voiceSessionRecord } from "./session-record.js";
 
 /**
  * The deployment's real seams handed to the voice service, once per function

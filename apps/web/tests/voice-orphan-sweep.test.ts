@@ -3,6 +3,10 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { recordVoiceSeconds } from "@sidecar/database/models/quota";
+import {
+  type VoiceSessionRecord,
+  voiceSessionRecord,
+} from "@sidecar/database/models/voice-session-record";
 import { voiceSessionUsage } from "@sidecar/database/schemas/usage";
 import { VOICE_CLOSE_REASON } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
@@ -18,7 +22,6 @@ import {
   VOICE_SESSION_LIMIT_MS,
   type VoiceOrphanSweepOutcome,
 } from "../server/voice/orphan-sweep";
-import { type VoiceSessionRecord, voiceSessionRecord } from "../server/voice/session-record";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { readVoiceSessionsByUserTyped } from "./support/store-rows";
 import { type FakeOpenAi, readSocket, sendText, startFakeOpenAi } from "./support/voice-fakes";
