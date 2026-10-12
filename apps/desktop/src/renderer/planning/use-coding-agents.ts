@@ -4,7 +4,11 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import { CONTEXT_WINDOW, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentAttachment,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
@@ -89,11 +93,15 @@ export interface CodingAgentsControl {
   onNewDraft: () => string;
   /** Writes the open plan's draft: the words in its box, or the choice on its chip. */
   onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice">>) => void;
+  /** Changes the open plan's draft's files from those it holds as the change lands. */
+  onDraftAttachments: (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
    * Starts the draft's agent with the words as its task, never the plan,
-   * on the choice where one was made and else the account's default; the
+   * and the files attached to them, on the choice where one was made and else the account's default; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
    * nothing once it did.
    */
@@ -101,6 +109,7 @@ export interface CodingAgentsControl {
     draftId: string,
     task: string,
     choice: ModelChoice | undefined,
+    attachments: readonly CodingAgentAttachment[],
   ) => Promise<string | undefined>;
   /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
   onUnarchive: (() => void) | undefined;
@@ -134,10 +143,11 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
 }
 
-/** An agent not yet started: the key its first message starts it under, the words written so far, and the choice made on its chip, none while it runs on the account's default. */
+/** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
 export interface AgentDraft {
   readonly id: string;
   readonly task: string;
+  readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
 }
 
@@ -346,12 +356,27 @@ export function useCodingAgents(input: {
   const onNewDraft = (): string => {
     if (draft !== undefined) return draft.id;
     const id = mintKey();
-    if (planId !== undefined) withDraft(planId, { id, task: "", choice: undefined });
+    if (planId !== undefined) {
+      withDraft(planId, { id, task: "", attachments: [], choice: undefined });
+    }
     return id;
   };
 
   const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice">>) => {
     if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
+  };
+
+  // Note that the files are changed from the drafts as they stand when the
+  // change lands, because a file's read lands after the render that began it.
+  const onDraftAttachments = (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => {
+    if (planId === undefined) return;
+    setDrafts((was) => {
+      const held = was.get(planId);
+      if (held === undefined) return was;
+      return new Map(was).set(planId, { ...held, attachments: next(held.attachments) });
+    });
   };
 
   const onDiscardDraft = (draftId: string) => {
@@ -365,12 +390,14 @@ export function useCodingAgents(input: {
     draftId: string,
     task: string,
     choice: ModelChoice | undefined,
+    attachments: readonly CodingAgentAttachment[],
   ): Promise<string | undefined> => {
     if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
     if (archived) return START_ARCHIVED;
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,
+      ...(attachments.length === 0 ? undefined : { attachments }),
       ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
     if ("failure" in answer) return startFailureNote(answer.failure);
@@ -395,11 +422,12 @@ export function useCodingAgents(input: {
   };
 
   const onMessage = useCallback<MessageSender>(
-    async (agentId, text, clientKey) => {
+    async (agentId, text, clientKey, attachments) => {
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
+        ...(attachments.length === 0 ? undefined : { attachments }),
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>
@@ -496,6 +524,7 @@ export function useCodingAgents(input: {
     draft,
     onNewDraft,
     onDraftChange,
+    onDraftAttachments,
     onDiscardDraft,
     startTask,
     listFailed,

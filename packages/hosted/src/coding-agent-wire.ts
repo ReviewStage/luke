@@ -161,7 +161,7 @@ export function base64Chars(bytes: number): number {
 }
 
 /** The bytes standard padded base64 spells, as an attachment's data carries them. */
-function base64Bytes(base64: string): number {
+export function base64Bytes(base64: string): number {
   const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
   return Math.floor(base64.length / 4) * 3 - padding;
 }

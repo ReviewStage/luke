@@ -209,6 +209,8 @@ function tabElement(
     composer: {
       draft: "",
       setDraft: ignore,
+      attachments: [],
+      setAttachments: ignore,
       sending: false,
       note: undefined,
       closed: undefined,

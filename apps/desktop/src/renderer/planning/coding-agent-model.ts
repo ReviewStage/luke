@@ -8,6 +8,7 @@ import {
   CODING_AGENT_STATUS,
   CODING_AGENT_TODO_STATUS,
   CONTEXT_WINDOW,
+  type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
@@ -892,6 +893,8 @@ export interface SentLine {
   readonly id: string;
   /** The words as they went: trimmed, as the service keeps them. */
   readonly text: string;
+  /** The files that went with them, drawn on the line as the service's row will draw them. */
+  readonly attachments: readonly CodingAgentAttachment[];
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
 }
@@ -942,10 +945,16 @@ export function unreadSentLines(
 
 /** A sent line as the tab draws it before the service's row lands: the developer's row. */
 function sentLineMessage(line: SentLine): CodingAgentMessage {
+  const files = line.attachments.map((file) => ({
+    type: "file",
+    mediaType: file.mediaType,
+    filename: file.name,
+    url: `data:${file.mediaType};base64,${file.data}`,
+  }));
   return {
     id: line.id,
     role: MESSAGE_ROLE.USER,
-    parts: [{ type: AGENT_PART.TEXT, text: line.text }],
+    parts: [{ type: AGENT_PART.TEXT, text: line.text }, ...files],
   };
 }
 

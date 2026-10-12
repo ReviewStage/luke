@@ -176,7 +176,7 @@ test("an archived plan starts no agent, by Start or by a draft, and offers Unarc
   });
   let failed: string | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(draft, "Rename the subject.", undefined);
+    failed = await tab.control().startTask(draft, "Rename the subject.", undefined, []);
   });
   assert.equal(failed, START_ARCHIVED);
   assert.deepEqual(startPayloads(tab.asked), []);
@@ -324,7 +324,7 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   );
   await tab.mount();
 
-  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1");
+  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1", []);
   await settle();
   assert.deepEqual(answer, { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } });
   assert.deepEqual(tab.asked[1], {
@@ -333,15 +333,21 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   });
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
-  answer = await tab.control().onMessage(AGENT, "And tests.", "send-2");
+  // Files go with the words where there are any, and no empty list where there are none.
+  const shot = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  answer = await tab.control().onMessage(AGENT, "And tests.", "send-2", [shot]);
   await settle();
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+    payload: { agentId: AGENT, text: "And tests.", clientKey: "send-2", attachments: [shot] },
+  });
   // Nothing was read again: the answer is the status, and a refusal is none.
   assert.equal(tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_LIST).length, 1);
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
   // A service that never answered reads as unanswered.
-  answer = await tab.control().onMessage(AGENT, "Hello?", "send-3");
+  answer = await tab.control().onMessage(AGENT, "Hello?", "send-3", []);
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
 });
 
@@ -583,23 +589,27 @@ test("a draft asks nothing of the service, one per plan, until its first message
   });
   assert.notEqual(other, draft);
   await tab.stand({ planId: PLAN });
-  assert.deepEqual(tab.control().draft, { id: draft, task, choice });
+  assert.deepEqual(tab.control().draft, { id: draft, task, attachments: [], choice });
 
   let failed: string | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, choice);
+    failed = await tab.control().startTask(draft, task, choice, []);
   });
   assert.equal(failed, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
+  // The files attached to the words are the draft's too, and go with the task.
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
+  assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, undefined);
+    failed = await tab.control().startTask(draft, task, undefined, [notes]);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     { planId: PLAN, idempotencyKey: draft, task, ...choice },
-    { planId: PLAN, idempotencyKey: draft, task },
+    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes] },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
@@ -627,7 +637,7 @@ test("a draft let go is gone, the next is a new one, and a plan without a reposi
 
   let failed: string | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(second, "Rename the subject.", undefined);
+    failed = await tab.control().startTask(second, "Rename the subject.", undefined, []);
   });
   assert.equal(failed, START_NEEDS_REPOSITORY);
   assert.deepEqual(startPayloads(tab.asked), []);

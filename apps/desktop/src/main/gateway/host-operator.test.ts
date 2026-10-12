@@ -196,3 +196,52 @@ it.effect(
       );
     }),
 );
+
+it.effect(
+  "the files attached to a task or a message travel to the host with it, and a Start or a message with none carries no files field",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+      const attachments = [
+        { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const,
+      ];
+
+      yield* operator.codingAgentStart({
+        planId,
+        idempotencyKey: "press-1",
+        task: "Fix what this shows.",
+        attachments,
+      });
+      yield* operator.codingAgentMessage({
+        agentId: "agent-1",
+        text: "And this.",
+        clientKey: "send-1",
+        attachments,
+      });
+      yield* operator.codingAgentMessage({
+        agentId: "agent-1",
+        text: "Go on.",
+        clientKey: "send-2",
+      });
+
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [
+            GATEWAY_METHOD.CODING_AGENTS_START,
+            { planId, idempotencyKey: "press-1", task: "Fix what this shows.", attachments },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_MESSAGE,
+            { agentId: "agent-1", text: "And this.", clientKey: "send-1", attachments },
+          ],
+          [
+            GATEWAY_METHOD.CODING_AGENTS_MESSAGE,
+            { agentId: "agent-1", text: "Go on.", clientKey: "send-2" },
+          ],
+        ],
+      );
+    }),
+);

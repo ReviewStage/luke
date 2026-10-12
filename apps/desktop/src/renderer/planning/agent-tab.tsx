@@ -32,6 +32,7 @@ import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import type { HeldTranscript } from "./agent-tab-card";
 import { ArchivedComposerNote } from "./archived-plan";
+import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
 import {
   AGENT_PART,
   type AgentPart,
@@ -386,6 +387,7 @@ function AgentMessage({
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
+        <AttachedFileChips files={messageFileChips(message)} />
         <MessageContent>
           <TranscriptWords text={words} components={components} />
         </MessageContent>
