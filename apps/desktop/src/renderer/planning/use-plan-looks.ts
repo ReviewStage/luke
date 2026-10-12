@@ -41,7 +41,7 @@ const encodeStored = Schema.encodeSync(storedLooks);
 
 /** One stay on a plan, as the look's wait knows it: a fresh object each visit, so a wait from an earlier one never counts. */
 interface VisitToken {
-  readonly planId: string;
+  readonly planId: string | undefined;
 }
 
 /** The look's wait, as an atom whose work is the wait; a new visit starts it over. */
@@ -51,7 +51,7 @@ const lookAtom = rendererRuntime.fn((visit: VisitToken) =>
 
 /** One stay on a plan: the sections changed since the last look as it opened, and its token for the look's wait. */
 interface Visit {
-  readonly planId: string;
+  readonly planId: string | undefined;
   readonly token: VisitToken;
   readonly changed: ReadonlySet<PlanField>;
 }
@@ -63,6 +63,9 @@ export interface PlanLooks {
 }
 
 const NOTHING_CHANGED: ReadonlySet<PlanField> = new Set();
+
+/** The looks of a document no plan's visit stands behind: nothing changed, and nothing to dismiss. */
+export const NO_LOOKS: PlanLooks = { changed: NOTHING_CHANGED, dismiss: () => undefined };
 
 /** The kept marks, or none where none were kept, they no longer read, or storage refuses the read. */
 function readLooks(): Looks {
@@ -93,8 +96,10 @@ function newestSaveOf(plan: Plan): number | undefined {
   return instants.length === 0 ? undefined : Math.max(...instants);
 }
 
-/** A visit to the plan as it opens: each field someone else saved after the last look. */
-function visited(plan: Plan): Visit {
+/** A visit to the plan as it opens: each field someone else saved after the last look; none while no plan is drawn. */
+function visited(plan: Plan | undefined): Visit {
+  if (plan === undefined)
+    return { planId: undefined, token: { planId: undefined }, changed: NOTHING_CHANGED };
   const mark = readLooks()[plan.id];
   const changed =
     mark === undefined
@@ -108,33 +113,36 @@ function visited(plan: Plan): Visit {
 }
 
 /**
- * The open plan's sections changed since the developer last looked at it,
+ * The drawn plan's sections changed since the developer last looked at it,
  * and the mark moved on once they have: after `PLAN_LOOK` open, and again
- * with every save while it stays open.
+ * with every save while it stays open. Note that it is held by the plan's
+ * region rather than its document, because a version from the History tab
+ * drawn in the document's place is still a stay on the plan.
  */
-export function usePlanLooks(plan: Plan): PlanLooks {
+export function usePlanLooks(plan: Plan | undefined): PlanLooks {
   const [visit, setVisit] = useState(() => visited(plan));
   const [look, restartLook] = useAtom(lookAtom);
   let current = visit;
-  if (visit.planId !== plan.id) {
+  if (visit.planId !== plan?.id) {
     current = visited(plan);
     setVisit(current);
   }
   const { token } = current;
   const looked = AsyncResult.isSuccess(look) && !look.waiting && look.value === token;
-  const newest = newestSaveOf(plan);
+  const planId = plan?.id;
+  const newest = plan === undefined ? undefined : newestSaveOf(plan);
 
   useEffect(() => restartLook(token), [token, restartLook]);
 
   useEffect(() => {
-    if (looked && newest !== undefined) keepLook(plan.id, newest);
-  }, [looked, plan.id, newest]);
+    if (looked && planId !== undefined && newest !== undefined) keepLook(planId, newest);
+  }, [looked, planId, newest]);
 
   return {
     changed: current.changed,
     dismiss: () => {
-      setVisit((held) => (held.planId === plan.id ? { ...held, changed: NOTHING_CHANGED } : held));
-      if (newest !== undefined) keepLook(plan.id, newest);
+      setVisit((held) => (held.planId === planId ? { ...held, changed: NOTHING_CHANGED } : held));
+      if (planId !== undefined && newest !== undefined) keepLook(planId, newest);
     },
   };
 }

@@ -12,6 +12,7 @@ import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type PlanDocument,
+  type PlanFieldEdit,
   type PlanFields,
 } from "@sidecar/hosted/plan-wire";
 import {
@@ -119,6 +120,8 @@ export interface PlanDraft {
   readonly readAt: number;
   readonly savedAt?: number;
   readonly fields?: PlanFields;
+  /** The save that last changed each field, as the plan names them once this one is saved. */
+  readonly fieldEdits?: readonly PlanFieldEdit[];
 }
 
 export interface PlanScribe {
@@ -294,6 +297,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
                 readAt: plan.updatedAt,
                 savedAt: saved.savedAt,
                 fields: saved.fields,
+                fieldEdits: saved.fieldEdits,
               }
             : { document: saved.document, readAt: plan.updatedAt },
         );

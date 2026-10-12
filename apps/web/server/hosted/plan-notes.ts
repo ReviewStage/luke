@@ -18,6 +18,7 @@ import {
   PLAN_BOUNDS,
   type Plan,
   type PlanDocument,
+  type PlanFieldEdit,
   type PlanFields,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
@@ -110,6 +111,8 @@ export type PlanSaveResult =
       readonly missed: readonly PlanNote[];
       /** Whether the notes changed the plan's words, which is when the save is a revision of its writer's. */
       readonly moved: boolean;
+      /** The save that last changed each field, this one among them, as the plan now names them. */
+      readonly fieldEdits: readonly PlanFieldEdit[];
     }
   | {
       readonly status: typeof PLAN_SAVE_STATUS.NOT_SAVED;
@@ -274,6 +277,7 @@ export function saveNotes(
       savedAt: result.plan.updatedAt,
       missed: result.taken.missed,
       moved: result.moved,
+      fieldEdits: result.plan.fieldEdits ?? [],
     };
   });
   return reachedStore(saved);

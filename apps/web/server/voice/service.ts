@@ -529,6 +529,7 @@ export class VoiceService {
             readAt: draft.readAt,
             ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
             ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
+            ...(draft.fieldEdits === undefined ? undefined : { fieldEdits: draft.fieldEdits }),
           };
           this.#begin(Effect.ignore(device.send({ text: JSON.stringify(frame) })));
         },

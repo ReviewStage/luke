@@ -34,7 +34,7 @@ import {
 } from "./plan-reveal";
 import { useMinute } from "./plan-time";
 import { NO_ASSUMPTIONS_LINE } from "./planning-model";
-import { type PlanLooks, usePlanLooks } from "./use-plan-looks";
+import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
 /**
  * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -471,17 +471,21 @@ function PlanAssumptions({
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
  * plan's History tab from the "Edited by" line. With `onEdit`, and fields
  * from a service that sends them, each field opens in an editor in place.
+ * `looks` are the sections changed since the developer last looked, which
+ * the plan's region keeps (`use-plan-looks.ts`); without them none are.
  */
 export function PlanBody({
   plan,
   live,
   onShowHistory,
   onEdit,
+  looks = NO_LOOKS,
 }: {
   plan: Plan;
   live: boolean;
   onShowHistory?: () => void;
   onEdit?: PlanEditDoor;
+  looks?: PlanLooks;
 }): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
   const { fields } = plan;
@@ -492,7 +496,6 @@ export function PlanBody({
   const editable = content !== undefined;
   const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
   const ruleCount = fields?.rules?.length ?? 0;
-  const looks = usePlanLooks(plan);
   const now = useMinute();
   const marks: FieldMarks = {
     edits: new Map(plan.fieldEdits?.map((edit) => [edit.field, edit])),

@@ -19,7 +19,7 @@ import { afterEach, beforeEach } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PlanBody } from "./plan-body";
-import { PLAN_LOOK } from "./use-plan-looks";
+import { PLAN_LOOK, usePlanLooks } from "./use-plan-looks";
 
 /**
  * Who wrote each section of the open plan, and what changed since the
@@ -96,18 +96,27 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+/** The plan's region as the window draws it: the document, under the looks the region keeps. */
+function Region({ plan, version }: { plan: Plan; version: boolean }): React.JSX.Element | null {
+  const looks = usePlanLooks(plan);
+  // A version chosen in the History tab is drawn in the document's place.
+  if (version) return null;
+  return createElement(PlanBody, {
+    plan,
+    live: false,
+    onEdit: () => Promise.resolve({ saved: true } as const),
+    looks,
+  });
+}
+
 /** The document drawn over `plan`, its atoms on `registry`, so the test's clock is theirs. */
 function open(plan: Plan, registry: AtomRegistry) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const draw = (next: Plan) => {
-    const body = createElement(PlanBody, {
-      plan: next,
-      live: false,
-      onEdit: () => Promise.resolve({ saved: true } as const),
-    });
+  const draw = (next: Plan, version = false) => {
+    const body = createElement(Region, { plan: next, version });
     act(() => root.render(onRegistry(registry, body)));
   };
   draw(plan);
@@ -250,6 +259,24 @@ it.effect("a plan held open for the look is seen: the next visit shows nothing c
     const again = open(plan, yield* registryOnTestClock);
     assert.deepEqual(changed(again.container), []);
   }),
+);
+
+it.effect(
+  "a version drawn in the document's place is still a stay on the plan, and counts toward the look",
+  () =>
+    Effect.gen(function* () {
+      lookedAt(LOOKED_AT);
+      const plan = savedSince([edit(PLAN_FIELD.PROBLEM, PLAN_ACTOR.NOTETAKER, LOOKED_AT + 1)]);
+      const first = open(plan, yield* registryOnTestClock);
+      yield* landed;
+      first.redraw(plan, true);
+      yield* landed;
+      yield* TestClock.adjust(PLAN_LOOK);
+      yield* landed;
+      first.leave();
+
+      assert.deepEqual(changed(open(plan, yield* registryOnTestClock).container), []);
+    }),
 );
 
 it.effect("a plan left before the look keeps its changes lit for the next visit", () =>
