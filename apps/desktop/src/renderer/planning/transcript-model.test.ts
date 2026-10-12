@@ -5,7 +5,7 @@ import {
   TRANSCRIPT_PART_TYPE,
   type TranscriptMessage,
 } from "@sidecar/hosted/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { test } from "vitest";
 import {
   CALL_ENDED_LINE,
@@ -271,4 +271,45 @@ test("a call that ended closes with a line saying so, one Luke ended says he did
     CALL_ENDED_LINE.LUKE_ENDED,
     undefined,
   ]);
+});
+
+test("a stored call carries what its record holds of how it ended, and the call standing, though the record holds it, carries none", () => {
+  const record = {
+    endedAt: 9_000,
+    ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
+    usage: { seconds: 8, confirmed: true },
+    model: LIVE_DEFAULTS.MODEL,
+  };
+  const stored: PlanTranscript = {
+    calls: [
+      {
+        id: EARLIER_CALL,
+        startedAt: 1_000,
+        messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Hi.")],
+        ...record,
+      },
+      {
+        id: LIVE_CALL,
+        startedAt: 10_000,
+        messages: [spoken(0, TRANSCRIPT_SPEAKER.USER, "Hello")],
+        model: LIVE_DEFAULTS.MODEL,
+      },
+    ],
+    earlierOmitted: false,
+  };
+  const region = transcriptRegion({
+    transcript: { status: PLANNING_READ.READY, transcript: stored },
+    heard: heardCalls({
+      held: [],
+      voice: liveReport(LIVE_CALL, "Hello again"),
+      planId: PLAN,
+      now: 11_000,
+    }),
+  });
+
+  assert.equal(region.kind, TRANSCRIPT_REGION.READY);
+  assert.deepEqual(
+    region.kind === TRANSCRIPT_REGION.READY ? region.calls.map((call) => call.record) : [],
+    [record, undefined],
+  );
 });

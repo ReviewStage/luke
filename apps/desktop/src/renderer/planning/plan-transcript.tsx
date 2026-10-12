@@ -11,6 +11,7 @@ import {
 import { Message, MessageContent } from "../ai-elements/message";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
+import { CallEnded } from "./call-card";
 import { CopyMessageAction } from "./copy-message";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
@@ -36,7 +37,8 @@ import {
  * stands now; each run of lines from one speaker is one Message, the
  * developer's at the right in a bubble and Luke's at the left under his
  * mark, running the column's width; and a copy of the turn's words waits
- * under it. What is spoken is words alone: what Luke read and ran on the
+ * under it. A call that ended closes as a finished turn does, on how long
+ * it ran and when it ended, its card on hover. What is spoken is words alone: what Luke read and ran on the
  * call is the Work tab's. The list keeps to its newest line while it is
  * scrolled there, so a live call reads like a chat, and scrolling up to
  * read an earlier line leaves it where it is until the developer scrolls
@@ -78,7 +80,7 @@ function TranscriptTurn({ turn }: { turn: SpeakerTurn }): React.JSX.Element {
   );
 }
 
-/** One call: the checkpoint it begins at, each speaker's turns, and once it has ended, a quiet line saying so. */
+/** One call: the checkpoint it begins at, each speaker's turns, and once it has ended, a quiet line saying so and, where the record holds its end, how long it ran (`call-card.tsx`). */
 function TranscriptCall({
   call,
   now,
@@ -105,7 +107,7 @@ function TranscriptCall({
         <TranscriptTurn key={turn.key} turn={turn} />
       ))}
       {ended === undefined ? null : (
-        <TranscriptNote className="text-center">{ended}</TranscriptNote>
+        <CallEnded line={ended} startedAt={call.startedAt} record={call.record} />
       )}
     </>
   );

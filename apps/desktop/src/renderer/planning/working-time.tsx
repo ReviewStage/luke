@@ -42,7 +42,7 @@ const WORKING_LINE = "Working…";
 const WORKED_WORDS = "Worked for ";
 
 /** What separates how long a finished turn worked from when it ended. */
-const WORKED_SEPARATOR = " · ";
+export const WORKED_SEPARATOR = " · ";
 
 /** How long a run has gone, as devtools count it: "42s" under a minute, "1m 12s" under an hour, and "1h 3m" past it. */
 export function workingTime(elapsedMs: number): string {
