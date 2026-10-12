@@ -5,9 +5,9 @@
 Neon is provisioned through the Vercel integration. It supplies the pooled
 `DATABASE_URL` for application traffic and `DATABASE_URL_UNPOOLED` for
 migrations; the connection strings live nowhere in this repository. A table is
-declared twice and in two languages: once in the hand-written migration that
-builds it, and once in the `packages/database/src/schemas/*.ts` module the query builder
-reads it through. "The data layer" below is what holds the two together.
+declared once, in the `packages/database/src/schemas/*.ts` module the query
+builder reads it through, and `pnpm db:generate` writes the migration that
+builds it from that module. "The data layer" below is the rest.
 Better Auth is no exception, reaching its tables through its Drizzle adapter
 over `packages/database/src/schemas/auth.ts` (see below), which is in the same barrel as
 the eleven Luke-owned modules, so a migration that changes an auth column's type
@@ -20,20 +20,23 @@ kept them. `tests/instant-columns.test.ts` reads `information_schema` on both
 dialects and refuses any `timestamp without time zone` column, so a new table
 declares `timestamptz` or fails the store tests.
 
-For a new table or a changed one, write the migration by hand under
-`packages/database/migrations/` (a plain SQL file plus its `meta/_journal.json` entry, the shape
-`drizzle-kit` used to generate before this migration off it; the directory
-name is what stands from that era and is not itself a dependency on the
-package), fold the change into the `packages/database/src/schemas/*.ts` module that
-declares the table in the same commit, and add whatever query modules under
-`server/` need it. Dropping a column means deleting it from that module: the
+For a new table or a changed one, edit the `packages/database/src/schemas/*.ts`
+module that declares it, run `pnpm db:generate`, and commit the SQL file,
+snapshot, and journal entry it writes under `packages/database/migrations/`
+in the same commit, with whatever query modules under `server/` need it. The
+vendored `drizzle` and `db-migrations` skills are the conventions: a text
+column typed by `$type<>()` rather than a `pgEnum`, a surrogate key rather
+than a new composite one, and an online index or a backfill handled the way
+`db-migrations` lays out. Dropping a column means deleting it from that module: the
 drift check reads the database both ways, so a declaration the database no
 longer carries fails it exactly as a column no module declares does. It takes
 two deployments, because a build migrates while the deployment before it still
-serves and Drizzle names every declared column in an insert: the first deletes
-the declaration and lists the column in the drift check's `PENDING_DROP`, and
-the second, once the first is live, drops it with `DROP COLUMN IF EXISTS` and
-deletes the entry.
+serves and Drizzle names every declared column in an insert. The first
+deletes the declaration, runs `pnpm db:generate`, empties the `DROP COLUMN`
+out of the SQL file it writes (its snapshot already records the column gone),
+and lists the column in the drift check's `PENDING_DROP`. The second, once the
+first is live, runs `pnpm db:generate --custom`, writes `DROP COLUMN IF
+EXISTS` into the empty file it gets, and deletes the entry.
 
 Vercel runs `pnpm db:migrate` before every deployment build, using the direct
 connection Neon supplies for that deployment. The runner holds a PostgreSQL
@@ -386,14 +389,17 @@ per-request to build: the handle carries no connection, no client, and no
 context — it reads the `SqlClient` out of the fiber that yields the statement
 — so one serves every request and both dialects at once and two callers have
 nothing to contend over. It takes no `schema` config, because nothing reaches
-Drizzle's relational queries: the tables a statement names are named imports
-from their own module (`import { plan } from "../db/plan-schema.js"`), never
-the barrel and never a bare specifier,
+Drizzle's relational queries: a statement is the `db.select()` builder, never
+`db.query`, as the `drizzle` skill has it. The tables a statement names are
+named imports from their own module
+(`import { plan } from "@sidecar/database/schemas/plan"`), never the barrel,
 which is both what makes a renamed column a type error at the call site and
 the import `tests/store-writer-boundary.test.ts` resolves.
 
 The builder hands back the statement's rows, not a guarantee about them, so a
-row is still decoded by a `Schema`. `SqlSchema`'s `execute` takes the builder
+row is still decoded by an Effect `Schema`, where lobehub's examples reach for
+`drizzle-zod`: Effect takes no zod schema, and every other boundary value here
+is declared as a `Schema` already. `SqlSchema`'s `execute` takes the builder
 itself — a patched builder already is the `Effect<rows, SqlError, SqlClient>`
 that `execute` wants — so no wrapper stands between them:
 
