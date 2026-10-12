@@ -204,17 +204,22 @@ export function usePlanHistory(input: {
   if (reading && planId !== undefined && chosen === undefined) {
     setVersion(openedOn(planId, seek));
   }
-  // A save sought is its revision once the pages read show it, kept as chosen from then on.
-  const complete = held?.kind === HISTORY_READ.READY && held.earlier === undefined;
+  // A save sought is its revision once the pages read show it, kept as chosen
+  // from then on. Note that it is sought only in a list as new as the plan's
+  // last edit, because a list kept from an earlier visit may lack the
+  // revision the save made since, and would find the one before it.
+  const current =
+    held?.kind === HISTORY_READ.READY &&
+    (editedAt === undefined || (revisions[0]?.lastEdit.at ?? -1) >= editedAt);
+  const complete = current && held.earlier === undefined;
+  const seeking = chosen?.seeking;
   const sought =
-    chosen?.seeking === undefined ? undefined : revisionOfSave(revisions, chosen.seeking, complete);
+    seeking === undefined || !current ? undefined : revisionOfSave(revisions, seeking, complete);
   if (chosen !== undefined && sought !== undefined) {
     setVersion({ ...chosen, seq: sought === newest ? undefined : sought, seeking: undefined });
   }
   const seekingBefore =
-    chosen?.seeking !== undefined && sought === undefined && held?.kind === HISTORY_READ.READY
-      ? held.earlier
-      : undefined;
+    seeking !== undefined && sought === undefined && current ? held.earlier : undefined;
 
   useEffect(() => {
     if (!reading || planId === undefined) return;
@@ -317,12 +322,17 @@ export function usePlanHistory(input: {
   };
 
   // A save no page read so far shows is sought on the next older page, and
-  // one whose page could not be read gives way to the plan as it stands.
+  // one whose page could not be read gives way to the plan as it stands,
+  // unless the view has since been opened on another plan or another save.
   useEffect(() => {
-    if (seekingBefore === undefined) return;
+    if (seekingBefore === undefined || planId === undefined) return;
     onLoadEarlier().then((landed) => {
       if (landed) return;
-      setVersion((held) => (held?.seeking === undefined ? held : { ...held, seeking: undefined }));
+      setVersion((held) =>
+        held !== undefined && held.planId === planId && held.seeking === seeking
+          ? { ...held, seeking: undefined }
+          : held,
+      );
     });
   }, [seekingBefore]);
 

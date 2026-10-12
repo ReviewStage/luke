@@ -395,6 +395,47 @@ it.effect(
 );
 
 it.effect(
+  "a section's save made while the version history was away, and saved over since, is sought in the history read again, not the list kept from before",
+  () =>
+    Effect.gen(function* () {
+      const head = { seq: 2 };
+      const editedAt = (at: number): PlanningView => ({
+        ...EDITED,
+        document: {
+          status: PLANNING_READ.READY,
+          plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true } },
+        },
+      });
+      const tab = mount(
+        { shown: true, planning: editedAt(20) },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({
+              revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
+            }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      act(() => tab.control().history.onClose());
+
+      // The section's save made the third revision, and another writer the fourth.
+      head.seq = 4;
+      tab.stand({ planning: editedAt(40) });
+      yield* landed;
+      act(() => tab.control().history.onOpen(PLAN.id, revisionLine(3).lastEdit.at - 1));
+      process.stderr.write(
+        `DBG ${JSON.stringify(tab.control().history.list)} sel=${tab.control().history.selected}\n`,
+      );
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 3);
+    }),
+);
+
+it.effect(
   "a save landing while the version history stands moves the view on to it from the newest, and leaves an older version chosen where it is",
   () =>
     Effect.gen(function* () {

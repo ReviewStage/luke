@@ -607,3 +607,71 @@ it.effect(
       assert.equal(restoreUnavailable(failed), true);
     }),
 );
+
+it.effect(
+  "an older page that fails after the view opened on another plan's save leaves that save sought",
+  () =>
+    Effect.gen(function* () {
+      const OTHER_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+      const lines = fakeService().lines;
+      /** Every page read waits here, by plan, until the test answers it; the first plan's older pages fail. */
+      const pages: { planId: string; before: number | undefined; land: () => void }[] = [];
+      const source: PlanHistorySource = {
+        readPage: (planId, before) =>
+          new Promise((land) =>
+            pages.push({
+              planId,
+              before,
+              land: () =>
+                land(
+                  before === undefined
+                    ? { revisions: lines.slice(0, 1), earlier: 3 }
+                    : planId === PLAN_ID
+                      ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+                      : { revisions: lines.slice(1) },
+                ),
+            }),
+          ),
+        readRevision: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+        restore: () => Promise.resolve(false),
+      };
+      const answer = (planId: string, before: number | undefined) =>
+        Effect.promise(() =>
+          act(async () => {
+            const at = pages.findIndex((page) => page.planId === planId && page.before === before);
+            pages.splice(at, 1)[0]?.land();
+          }),
+        );
+      let selected: () => number | undefined = () => undefined;
+      let openOn: (planId: string, seek: number) => void = () => undefined;
+      function Harness() {
+        const [opened, setOpened] = useState({ planId: PLAN_ID, seek: NOW - 26 * HOUR });
+        openOn = (planId, seek) => setOpened({ planId, seek });
+        const history = usePlanHistory({
+          source,
+          planId: opened.planId,
+          editedAt: undefined,
+          name: "Teammate invitations",
+          shown: true,
+          seek: opened.seek,
+          onRestored: () => undefined,
+        });
+        selected = () => history.selected;
+        return null;
+      }
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      yield* Effect.promise(() => act(async () => root?.render(createElement(Harness))));
+
+      // The first plan's save is on a page past its first, whose read is on its way.
+      yield* answer(PLAN_ID, undefined);
+      assert.ok(pages.some((page) => page.planId === PLAN_ID && page.before === 3));
+      act(() => openOn(OTHER_ID, NOW - 5 * HOUR));
+      yield* answer(PLAN_ID, 3);
+      yield* answer(OTHER_ID, undefined);
+      yield* answer(OTHER_ID, 3);
+
+      assert.equal(selected(), 2, "the other plan's save found, not given way to its newest");
+    }),
+);
