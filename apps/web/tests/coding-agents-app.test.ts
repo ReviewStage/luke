@@ -490,7 +490,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
-    "a task's files open the session with it, the words first and each file after them, and files with no task to go with are refused",
+    "a task's files open the session with it, the words first and each file after them, files alone open it with no words part, and files with no task to go with are refused",
     () =>
       Effect.gen(function* () {
         const { owner, plan, eve, ask } = yield* openPlan();
@@ -528,6 +528,27 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
             ],
           ],
         );
+
+        const filesAlone = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(
+            startAs(owner, plan.id, {
+              idempotencyKey: randomUUID(),
+              task: " ",
+              attachments: [shot],
+            }),
+          ),
+        );
+        assert.equal(filesAlone.agent.brief, CODING_AGENT_BRIEF.TASK);
+        assert.deepEqual(eve.opened.at(-1)?.message.message, [
+          {
+            type: "file",
+            data: "data:image/png;base64,iVBORw0KGgo=",
+            mediaType: "image/png",
+            filename: "shot.png",
+          },
+        ]);
       }),
   );
 
@@ -2279,6 +2300,50 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
             mediaType: "application/pdf",
             filename: "spec.pdf",
             url: "data:application/pdf;base64,JVBERi0=",
+          },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a message may be files alone: eve is handed the files with no words part, and the line stands in the transcript with empty words and its files",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, agent, ask } = yield* startedAgent(eve, { running: true });
+        const shot = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" };
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.ACCEPTED,
+          yield* ask(
+            messageAs(owner, agent.id, { text: "", clientKey: randomUUID(), attachments: [shot] }),
+          ),
+        );
+        assert.deepEqual(
+          eve.sent.map((sent) => sent.message.message),
+          [
+            [
+              {
+                type: "file",
+                data: "data:image/png;base64,iVBORw0KGgo=",
+                mediaType: "image/png",
+                filename: "shot.png",
+              },
+            ],
+          ],
+        );
+        const page = readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(page.messages.at(-1)?.parts, [
+          { type: "text", text: "", state: "done" },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "shot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
           },
         ]);
       }),

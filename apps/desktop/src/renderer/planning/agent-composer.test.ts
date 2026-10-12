@@ -959,7 +959,7 @@ const PNG = file("design.png", [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
 /** A Markdown file: "# Notes" in UTF-8, under a type the picker leaves empty. */
 const NOTES = file("notes.md", [0x23, 0x20, 0x4e, 0x6f, 0x74, 0x65, 0x73]);
 
-test('"Attach files" is the "+" just left of Send, opening the system\'s picker: picked files stand as chips over the words, one that cannot come says why, files with no words keep Send disabled and ask for a message, and the send carries them, draws them on its line at once, and brings them back with the words when it did not go', async () => {
+test('"Attach files" is the "+" just left of Send, opening the system\'s picker: picked files stand as chips over the words, one that cannot come says why, and the send carries them, draws them on its line at once, and brings them back with the words when it did not go', async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
   assert.deepEqual(
     [...tab.container.querySelectorAll(".agent-composer-actions button")].map((each) =>
@@ -979,8 +979,6 @@ test('"Attach files" is the "+" just left of Send, opening the system\'s picker:
   await tab.pickFiles([PNG, NOTES, file("tool.bin", [0x00, 0x01, 0x02])]);
   await tab.landed(() => assert.deepEqual(tab.chips(), ["design.png", "notes.md1 KB"]));
   assert.equal(tab.note(), "tool.bin can't be attached. Attach images, PDFs, or text files.");
-  assert.equal(tab.field().placeholder, "Add a message to send these files");
-  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
 
   tab.unattach("notes.md");
   assert.deepEqual(tab.chips(), ["design.png"]);
@@ -1001,6 +999,32 @@ test('"Attach files" is the "+" just left of Send, opening the system\'s picker:
   act(() => retry.click());
   assert.deepEqual(tab.sends[1]?.attachments, [shot]);
   assert.equal(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
+});
+
+test("files alone are a message: Send stands under the box's own placeholder with no words written, Enter sends them, and the line draws only their chips, with no empty bubble beside them", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  const placeholder = tab.field().placeholder;
+  await tab.pickFiles([PNG]);
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["design.png"]));
+  assert.equal(tab.field().placeholder, placeholder);
+  assert.deepEqual(tab.control(), { label: "Send", disabled: false, type: "submit" });
+
+  tab.key({ key: "Enter" });
+  assert.deepEqual(
+    tab.sends.map(({ text, attachments }) => ({ text, attachments })),
+    [
+      {
+        text: "",
+        attachments: [{ name: "design.png", mediaType: "image/png", data: "iVBORw0KGgo=" }],
+      },
+    ],
+  );
+  assert.deepEqual(tab.sentChips(), ["design.png"]);
+  const line = [...tab.container.querySelectorAll('[role="log"] .is-user')].at(-1);
+  assert.deepEqual(
+    [...(line?.children ?? [])].map((each) => each.getAttribute("aria-label")),
+    ["Attached files"],
+  );
 });
 
 test("an image pasted into the box is taken, while any other paste is left to the browser, and files dropped on the card are taken, the card lighting as the drop target while they are over it", async () => {

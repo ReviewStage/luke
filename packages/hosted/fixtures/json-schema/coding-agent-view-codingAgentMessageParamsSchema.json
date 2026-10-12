@@ -7,7 +7,6 @@
     },
     "text": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 16000
     },
     "clientKey": {

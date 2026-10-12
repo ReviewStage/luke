@@ -1,4 +1,4 @@
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, hasWordsOrFiles } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import { AgentComposer } from "./agent-composer";
 import { ArchivedComposerNote } from "./archived-plan";
@@ -13,8 +13,8 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * composer's placeholder is the one prompt, and at the tab's foot the
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
- * service until the first send, which starts the agent with those words as
- * its task, never the plan, with the files attached to them, on the model
+ * service until the first send, which starts the agent with those words, the
+ * files attached, or both as its task, never the plan, on the model
  * the chip names where the developer
  * changed it and else on the account's default, in the plan's repository;
  * the tab then gives way to the agent's own. The words and the choice are
@@ -63,7 +63,7 @@ export function DraftAgentTab({
 
   const send = () => {
     const task = draft.task.trim();
-    if (task === "" || sending) return;
+    if (!hasWordsOrFiles(task, draft.attachments) || sending) return;
     setSending(true);
     setNote(undefined);
     latest.current.startTask(draft.id, task, draft.choice, draft.attachments).then((failed) => {

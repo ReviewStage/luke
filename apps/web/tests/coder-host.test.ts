@@ -1233,7 +1233,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it, and a receipt no line awaits keeps its words and its files on its own row, a text file read back to a file by its heading",
+    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it and a line of files alone after it, and a receipt of files alone no line awaits keeps them on its own row with no words, a text file read back to a file by its heading",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
@@ -1264,8 +1264,18 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           Effect.succeed(true),
         );
         assert.ok(Result.isSuccess(withFiles) && Option.isSome(withFiles.success));
+        const filesAlone = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "",
+            clientKey: "k-alone",
+            attachments: [{ name: "after.png", mediaType: "image/png", data: "iVBORw0KGgo=" }],
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(filesAlone) && Option.isSome(filesAlone.success));
 
-        // eve coalesced the two steers into one message: its summary names the image, its parts hold the words.
+        // eve coalesced the three steers into one message: its summary names the images, its parts hold the words.
         yield* play([
           stamped({
             type: "message.received",
@@ -1273,24 +1283,26 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
               turnId: "turn_0",
               sequence: 0,
               message:
-                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]",
+                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]\n[file: after.png (image/png)]",
               parts: [
                 { type: "text", text: "Plain first." },
                 { type: "text", text: "Look at these." },
                 { type: "text", text: "Attached file: notes.md\n```\n# Notes\n```" },
                 { type: "file", filename: "shot.png", mediaType: "image/png" },
+                { type: "file", filename: "after.png", mediaType: "image/png" },
               ],
             },
           }),
         ]);
-        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files"]), [
+        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files", "k-alone"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
           { turnId: hostTurnId(sessionId, "turn_0") },
           { turnId: hostTurnId(sessionId, "turn_0") },
         ]);
-        assert.equal((yield* developerLines(target)).length, 3);
+        assert.equal((yield* developerLines(target)).length, 4);
 
-        // A receipt no line awaits is written as eve received it: the words, then each file; words
-        // spelled like a file's heading stay words, since the first text part is always the words.
+        // A receipt no line awaits is written as eve received it: its words, empty where it carried
+        // files alone, then each file, a text part spelled as a file's heading read back as that file.
         yield* TestClock.adjust("1 minute");
         yield* play([
           stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
@@ -1338,7 +1350,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           },
         ]);
         assert.deepEqual(rows.at(-1)?.message.parts, [
-          { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```", state: "done" },
+          { type: "text", text: "", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "spec.md",
+            url: "data:text/plain;base64,UmVhZCBpdC4=",
+          },
           {
             type: "file",
             mediaType: "text/plain",

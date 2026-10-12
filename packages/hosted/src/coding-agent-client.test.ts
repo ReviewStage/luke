@@ -197,6 +197,48 @@ it.effect("a Start the service would refuse by shape travels nowhere", () =>
   }),
 );
 
+it.effect(
+  "a message and a Start's task carry words, files, or both, and one carrying neither travels nowhere",
+  () =>
+    Effect.gen(function* () {
+      const api = fakeCloudApi({
+        [`POST /api/plans/${PLAN_ID}/agents`]: { answer: () => ({ agent: AGENT }), status: 201 },
+        [`POST /api/agents/${AGENT_ID}/messages`]: { answer: () => ({ agent: AGENT }) },
+      });
+      const shot = [{ name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" }] as const;
+      const carried = [
+        { words: "Match this design." },
+        { words: "", attachments: shot },
+        { words: "Match this design.", attachments: shot },
+      ];
+      for (const { words, attachments } of carried) {
+        const files = attachments === undefined ? undefined : { attachments };
+        const message = { text: words, clientKey: "send-1", ...files };
+        const start = { idempotencyKey: "press-1", task: words, ...files };
+        assert.deepEqual(yield* Effect.provide(client().message(AGENT_ID, message), api.layer), {
+          agent: AGENT,
+        });
+        assert.deepEqual(yield* Effect.provide(client().start(PLAN_ID, start), api.layer), {
+          agent: AGENT,
+        });
+      }
+      assert.equal(api.requests().length, 6);
+
+      const neither = [
+        client().message(AGENT_ID, { text: "  ", clientKey: "send-2" }),
+        client().message(AGENT_ID, { text: "", clientKey: "send-3", attachments: [] }),
+        client().start(PLAN_ID, { idempotencyKey: "press-2", task: "  " }),
+        client().start(PLAN_ID, { idempotencyKey: "press-3", task: "", attachments: [] }),
+      ];
+      for (const refused of neither) {
+        assert.deepEqual(yield* Effect.provide(refused, api.layer), {
+          failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+        });
+      }
+      assert.equal(api.requests().length, 6);
+    }),
+);
+
 it.effect("reads the transcript past the cursor at the agent's messages address", () =>
   Effect.gen(function* () {
     const message = {

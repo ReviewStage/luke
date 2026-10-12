@@ -17,21 +17,23 @@ import { COALESCED_LINE_SEPARATOR } from "./store/message-reads.js";
 /**
  * attached-files.ts -- the files a developer attached to a coding agent's message: as eve is handed them, as the journal keeps them, and as eve's receipt of them reads back.
  *
- * eve is handed the words first, then each text file inlined as its own
- * text part, headed by its name and fenced, since no provider path takes a
- * text file as a file, then each image and PDF as a file part over a
- * `data:` URL, which eve stages in the sandbox where one is up. The journal
- * keeps the words as the row's first part, which is what a receipt is
- * matched by, and every file after it as the SDK's file part over the same
- * `data:` URL, a text file under `text/plain`, so the transcript draws a
- * thumbnail or a name for each from the row alone. eve's receipt of a
- * message flattens its files into placeholders, so a line is matched by
- * its text parts instead: the words and each text file as eve was handed
- * them, joined by the separator eve joins coalesced steers with, which is
- * what eve's received text parts join to whether the steers it coalesced
- * carried files or not. A receipt the relay writes as a row of its own,
- * such as a task's, reads its text files back to file parts by their
- * heading, so the developer's bubble shows a name rather than the file.
+ * A message is words, files, or both. eve is handed the words first where
+ * there are any, then each text file inlined as its own text part, headed
+ * by its name and fenced, since no provider path takes a text file as a
+ * file, then each image and PDF as a file part over a `data:` URL, which
+ * eve stages in the sandbox where one is up. The journal keeps the words
+ * as the row's first part, empty where there are none, and every file
+ * after it as the SDK's file part over the same `data:` URL, a text file
+ * under `text/plain`, so the transcript draws a thumbnail or a name for
+ * each from the row alone. eve's receipt of a message flattens its files
+ * into placeholders, so a line is matched by its parts instead: the words
+ * and each text file as eve was handed them, and each image and PDF by its
+ * name and type, joined by the separator eve joins coalesced steers with,
+ * which is what eve's received parts join to whether the steers it
+ * coalesced carried words, files, or both. A receipt the relay writes as a
+ * row of its own, such as a task's, reads its text files back to file
+ * parts by their heading, so the developer's bubble shows a name rather
+ * than the file.
  */
 
 /** What heads a text file inlined for the model, before its name. */
@@ -54,6 +56,11 @@ function base64Of(url: string): string | undefined {
   return url.startsWith("data:") && comma >= 0 ? url.slice(comma + 1) : undefined;
 }
 
+/** An image or a PDF as a line is matched by it: its name and its type, which a receipt lists it by whether eve staged it or not. */
+function fileMark(filename: string | undefined, mediaType: string): string {
+  return `[file: ${filename ?? ""} (${mediaType})]`;
+}
+
 /** A text file as the model reads it: its name, then the file in a fence longer than any run of backticks inside it. */
 function inlinedFile(name: string, text: string): string {
   const longest = Math.max(0, ...Array.from(text.matchAll(/`+/gu), (run) => run[0].length));
@@ -68,8 +75,9 @@ function textOf(base64: string): string {
 
 /**
  * What eve is handed for a message: the words alone where nothing is
- * attached, as every message went before files, and otherwise the words,
- * the text files inlined, and the images and PDFs as file parts.
+ * attached, as every message went before files, and otherwise the words
+ * where there are any, the text files inlined, and the images and PDFs as
+ * file parts, so a model is never handed an empty text part.
  */
 export function eveContent(
   text: string,
@@ -93,7 +101,7 @@ export function eveContent(
           },
         ],
   );
-  return [{ type: "text", text }, ...texts, ...files];
+  return [...(text === "" ? [] : [{ type: "text" as const, text }]), ...texts, ...files];
 }
 
 /** The parts the journal keeps for a developer's line: the words, then each file it carried, in the order attached. */
@@ -115,21 +123,30 @@ export function lineParts(
 }
 
 /**
- * A line's text as eve's receipt carries it: the words, then each text
- * file it carried as eve was handed it; nothing for a row with no words.
+ * A line's parts as eve's receipt lists them, in the order eve was handed
+ * them: the words where there are any, each text file inlined, then each
+ * image and PDF by its mark; nothing for a row with no words part.
  */
-export function receivedTextOf(parts: readonly UIMessage["parts"][number][]): string | undefined {
-  const [words, ...files] = parts;
+export function receivedPartsOf(
+  parts: readonly UIMessage["parts"][number][],
+): readonly string[] | undefined {
+  const [words, ...rest] = parts;
   if (words === undefined || !isTextUIPart(words)) return undefined;
+  const files = rest.filter(isFileUIPart);
   const texts = files.flatMap((part) => {
-    if (!isFileUIPart(part) || part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
+    if (part.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT) return [];
     const base64 = base64Of(part.url);
     return base64 === undefined ? [] : [inlinedFile(part.filename ?? "", textOf(base64))];
   });
-  return [words.text, ...texts].join(COALESCED_LINE_SEPARATOR);
+  const marks = files.flatMap((part) =>
+    part.mediaType === CODING_AGENT_ATTACHMENT_TYPE.TEXT
+      ? []
+      : [fileMark(part.filename, part.mediaType)],
+  );
+  return [...(words.text === "" ? [] : [words.text]), ...texts, ...marks];
 }
 
-/** A message eve received, read back: the text a line is matched by, and the words and files a receipt's own row keeps. */
+/** A message eve received, read back: the parts a line is matched by, joined, and the words and files a receipt's own row keeps. */
 export interface ReceivedMessage {
   readonly text: string;
   readonly words: string;
@@ -150,10 +167,11 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
 }
 
 /**
- * eve's receipt of a message read back. Its text parts joined are what a
- * line is matched by; an eve that projects no parts is read by its
- * summary, which for words alone is the words. The first text part is
- * always words, so words spelled like a file's heading stay words. A file
+ * eve's receipt of a message read back. Its parts joined, each image and
+ * PDF by its mark, are what a line is matched by; an eve that projects no
+ * parts is read by its summary, which for words alone is the words. A text
+ * part spelled as a text file's heading and fence is that file, and every
+ * other is words, since a message may carry files with no words. A file
  * staged in the sandbox carries no URL, so its part keeps its name and no
  * bytes; a task's files are never staged, because eve stages against a
  * sandbox that is up and a coding agent's opens on its first sandbox tool
@@ -172,12 +190,12 @@ export function receivedMessage(received: {
   for (const part of received.parts) {
     if (part.type === "text") {
       texts.push(part.text);
-      // The first text part is the developer's words however they are spelled; a file follows them.
-      const inlined = texts.length === 1 ? undefined : inlinedFileOf(part.text);
+      const inlined = inlinedFileOf(part.text);
       if (inlined === undefined) words.push(part.text);
       else files.push(inlined);
       continue;
     }
+    texts.push(fileMark(part.filename, part.mediaType));
     files.push({
       type: "file",
       mediaType: part.mediaType,
