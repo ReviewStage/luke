@@ -33,13 +33,13 @@ test("a command still running has its row and its command, and no answer yet", (
   assert.equal(view.output, undefined);
 });
 
-test("a command the model described carries its description for the row and keeps the command for the body; one with none, or only blanks, is the command's row as before", () => {
+test("a command the model described carries its description on one line for the row and keeps the command for the body; one with none, or only blanks, is the command's row as before", () => {
   const described = toolCallView({
     tool: "bash",
-    input: { command: "pnpm test --filter web", description: " Run the web tests " },
+    input: { command: "pnpm test --filter web", description: " Run the web\n- tests " },
     output: undefined,
   });
-  assert.equal(described.description, "Run the web tests");
+  assert.equal(described.description, "Run the web - tests");
   assert.equal(described.subject, "pnpm test --filter web");
   assert.deepEqual(described.input, { kind: TOOL_BLOCK.COMMAND, text: "pnpm test --filter web" });
 

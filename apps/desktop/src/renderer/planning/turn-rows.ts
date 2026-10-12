@@ -102,9 +102,14 @@ export function callLine(
   return { verb: words.verb, subject, code: words.code };
 }
 
-/** The plain words a command's input says it is for, or nothing where it says none, as an older call or another harness's does not. */
+/**
+ * The plain words a command's input says it is for, on one line, or nothing
+ * where it says none, as an older call or another harness's does not. Note
+ * that a break inside them is a space, because they are a row's one line and
+ * a copied call's one bullet.
+ */
 export function commandDescription(description: string | undefined): string | undefined {
-  const words = description?.trim();
+  const words = description?.replace(/\s+/gu, " ").trim();
   return words === undefined || words === "" ? undefined : words;
 }
 
