@@ -156,6 +156,21 @@ it.effect("lists a plan's agents, and a plan the service does not find reads as 
   }),
 );
 
+it.effect("a refusal carrying more than its reason still reads as the refusal it names", () =>
+  Effect.gen(function* () {
+    const gone = fakeCloudApi({
+      [`GET /api/plans/${PLAN_ID}/agents`]: {
+        answer: () => ({ error: HOSTED_API_ERROR.NOT_FOUND, requestId: "req_1" }),
+        status: HTTP_STATUS.NOT_FOUND,
+      },
+    });
+
+    const missing = yield* Effect.provide(client().list(PLAN_ID), gone.layer);
+
+    assert.deepEqual(missing, { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND });
+  }),
+);
+
 it.effect(
   "starts an agent with the request as sent, and reads each refusal as its own failure",
   () =>

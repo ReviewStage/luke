@@ -93,6 +93,7 @@ export {
   hostedErrorSchema,
   hostedQuotaSchema,
   isWireUuid,
+  readServiceAnswer,
   WIRE_UUID_LENGTH,
   wireUuidSchema,
 } from "./service-wire.js";
