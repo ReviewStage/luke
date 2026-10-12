@@ -8,7 +8,14 @@ import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
 import { FileMenu } from "./file-menu";
 import { FileTab, type ReadFileWindow } from "./file-tab";
-import { FILE_READ, type FileRead, fileUrl, readWholeText } from "./file-tab-model";
+import {
+  FILE_READ,
+  type FileRead,
+  fileUrl,
+  WHOLE_TEXT,
+  type WholeText,
+  wholeTextOf,
+} from "./file-tab-model";
 import { FileTreePane } from "./file-tree-pane";
 import { keptListings, type ListFolder } from "./folder-listings";
 import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-side-panel";
@@ -196,14 +203,12 @@ export function FileView({
     (next: FileRead) => setTold({ path: file.path, read: next }),
     [file.path],
   );
-  // The whole text, for a copy or a download, read through the tab's door.
-  const readText = () =>
-    readWholeText((window) =>
-      readFile({ path: file.path, ...window }).then(
-        (answer) => ("file" in answer ? answer.file : undefined),
-        () => undefined,
-      ),
-    );
+  // The whole text, for a copy or a download, read raw through the tab's
+  // door in one read, the window it names standing for nothing.
+  const readText = (): Promise<WholeText> =>
+    readFile({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
+      kind: WHOLE_TEXT.UNREAD,
+    }));
 
   const browsing = repository !== null;
   return (

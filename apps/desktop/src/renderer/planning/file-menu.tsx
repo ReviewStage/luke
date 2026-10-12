@@ -18,14 +18,14 @@ import { useFileViewSettings } from "./file-view-settings";
  * toast as every copy from a menu is; the file saved where the system's
  * save dialog chooses (`ACT_KIND.WINDOW_SAVE_FILE`); and, under a rule, the
  * File tabs' two settings as checks (`file-view-settings.ts`). The text is
- * read whole only when it is asked for, a window at a time, so a file
- * scrolled through a window costs nothing more until it is copied; a file
- * holding a line the service cut is refused rather than handed on short.
+ * read only when it is asked for, raw and in one read, so what is copied
+ * or saved is the file as it holds it, its long lines uncut, rather than
+ * the lines the tab draws, which the service cuts.
  */
 
-/** What the menu says where the file's text could not be read whole, or holds a line too long to carry whole. */
+/** What the menu says where the file's text could not be read, or the service will not carry it whole. */
 const UNREAD = "Could not read the whole file.";
-const CUT = "This file has lines too long to copy whole. Open it on GitHub instead.";
+const REFUSED = "This file is too large to copy whole. Open it on GitHub instead.";
 
 export function FileMenu({
   path,
@@ -51,7 +51,7 @@ export function FileMenu({
   const withText = (use: (text: string) => void) =>
     readText().then((whole) => {
       if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
-      else failed(whole.kind === WHOLE_TEXT.CUT ? CUT : UNREAD);
+      else failed(whole.kind === WHOLE_TEXT.REFUSED ? REFUSED : UNREAD);
     });
   const save = (text: string) =>
     act(ACT_KIND.WINDOW_SAVE_FILE, { name, text }).then(

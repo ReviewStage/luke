@@ -222,6 +222,17 @@ const refusal = (status: number, error: string): Answer => ({ status, body: { er
 /** What the contents API holds of the fixture repository, by path: a file's text, a directory, a link, or a file past the bound. */
 const CONTENTS = new Map([
   ["src/invite.ts", () => fileContents("one\ntwo\n" + "x".repeat(500) + "\nfour")],
+  ["src/marked.ts", () => fileContents("\uFEFFa\r\nb")],
+  [
+    "src/latin1.txt",
+    () =>
+      Response.json({
+        type: "file",
+        size: 3,
+        encoding: "base64",
+        content: Buffer.from([0x61, 0xe9, 0x62]).toString("base64"),
+      }),
+  ],
   ["assets/logo.png", () => fileContents("\u0089PNG\u0000\u0000")],
   [
     "big.json",
@@ -1862,6 +1873,66 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         twice.searchParams.append("path", "docs");
         assert.deepEqual(
           yield* ask(new Request(twice, { headers: { authorization: `Bearer ${owner}` } })),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+      }),
+  );
+
+  it.effect(
+    "a raw read carries the file's whole text as it holds it, its long lines uncut and its byte-order mark and line endings kept, refuses bytes that are not UTF-8, is held to the same rule, and a raw query other than 1 is invalid",
+    () =>
+      Effect.gen(function* () {
+        const reached = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(reached);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const read = (path: string, raw: string) =>
+          ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "1", raw } }));
+
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read("src/invite.ts", "1"),
+          ),
+          {
+            text: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              branch: "main",
+              text: `one\ntwo\n${"x".repeat(500)}\nfour`,
+            },
+          },
+        );
+        const marked = readAnswer(
+          planFileAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* read("src/marked.ts", "1"),
+        );
+        assert.ok("text" in marked);
+        assert.deepEqual(
+          [...Buffer.from(marked.text.text)],
+          [0xef, 0xbb, 0xbf, 0x61, 0x0d, 0x0a, 0x62],
+          "the bytes GitHub holds, its byte-order mark and line endings kept",
+        );
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* read("src/latin1.txt", "1"),
+          ),
+          { refusal: PLAN_FILE_REFUSAL.NOT_TEXT },
+          "bytes that are not UTF-8 are refused rather than carried changed",
+        );
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* read(".env", "1")),
+          { refusal: PLAN_FILE_REFUSAL.SECRET },
+        );
+        assert.deepEqual(
+          yield* read("src/invite.ts", "yes"),
           refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
       }),

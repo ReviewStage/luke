@@ -129,6 +129,12 @@ function showing(path: string, repository: string): PlanCodeShowing {
 /** A file of `lineCount` lines read a window at a time, each line saying its own number. */
 function numberedFile(lineCount: number): ReadFileWindow {
   return (window) => {
+    if (window.raw === true) {
+      const text = Array.from({ length: lineCount }, (_, at) => `line ${at + 1}`).join("\n");
+      return Promise.resolve({
+        text: { path: window.path, repository: REPOSITORY, branch: "release/2026", text },
+      });
+    }
     const last = Math.min(window.lastLine, lineCount);
     return Promise.resolve({
       file: {
@@ -699,36 +705,51 @@ test("a later press on another crumb stands in for one still listing, so only it
 });
 
 it.effect(
-  "a file holding a line as long as the service carries is not copied or saved short, and says why",
+  "the ⋯ copies and saves the file as it holds it, read raw, its long lines uncut, and a file the service will not carry whole is refused with a word on where to read it",
   () =>
     Effect.gen(function* () {
       const saved = installSaveDialog();
       const clipboard = installClipboard();
       const registry = yield* registryOnTestClock;
-      const long: ReadFileWindow = (window) =>
-        Promise.resolve({
-          file: {
-            path: window.path,
-            repository: REPOSITORY,
-            branch: "main",
-            firstLine: 1,
-            lineCount: 2,
-            lines: [[{ text: "x".repeat(400) }], [{ text: "end" }]],
-          },
-        });
-      const view = mounted([], undefined, long, registry);
-      yield* Effect.promise(() => view.draw("dist/bundle.js"));
       const toasts = createRoot(document.body.appendChild(document.createElement("div")));
       roots.push(toasts);
       act(() => toasts.render(onRegistry(registry, createElement(ToastHost))));
-
+      const minified = `${"x".repeat(600)}\r\nend`;
+      const long: ReadFileWindow = (window) =>
+        Promise.resolve(
+          window.raw === true
+            ? {
+                text: { path: window.path, repository: REPOSITORY, branch: "main", text: minified },
+              }
+            : {
+                file: {
+                  path: window.path,
+                  repository: REPOSITORY,
+                  branch: "main",
+                  firstLine: 1,
+                  lineCount: 2,
+                  lines: [[{ text: "x".repeat(400) }], [{ text: "end" }]],
+                },
+              },
+        );
+      const view = mounted([], undefined, long, registry);
+      yield* Effect.promise(() => view.draw("dist/bundle.js"));
       yield* Effect.promise(() => chooseInMenu(view, "Copy file contents"));
       yield* Effect.promise(() => chooseInMenu(view, "Download file"));
       yield* Effect.promise(() => view.settle());
+      assert.deepEqual(clipboard.copied, [minified]);
+      assert.deepEqual(saved, ["bundle.js: 2 lines"]);
 
-      assert.deepEqual(clipboard.copied, []);
-      assert.deepEqual(saved, []);
-      assert.match(document.body.textContent ?? "", /lines too long to copy whole/);
+      const grown: ReadFileWindow = (window) =>
+        window.raw === true
+          ? Promise.resolve({ refusal: PLAN_FILE_REFUSAL.NOT_TEXT })
+          : long(window);
+      const refused = mounted([], undefined, grown, registry);
+      yield* Effect.promise(() => refused.draw("dist/grown.js"));
+      yield* Effect.promise(() => chooseInMenu(refused, "Copy file contents"));
+      yield* Effect.promise(() => refused.settle());
+      assert.deepEqual(clipboard.copied, [minified]);
+      assert.match(document.body.textContent ?? "", /too large to copy whole\. Open it on GitHub/);
     }),
 );
 

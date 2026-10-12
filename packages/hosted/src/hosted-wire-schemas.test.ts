@@ -145,6 +145,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planFileRequestSchema: planWire.planFileRequestSchema,
     planFileWindowSchema: planWire.planFileWindowSchema,
     planFileRefusalSchema: planWire.planFileRefusalSchema,
+    planFileTextSchema: planWire.planFileTextSchema,
     planFileAnswerSchema: planWire.planFileAnswerSchema,
     planTreeRequestSchema: planWire.planTreeRequestSchema,
     planTreeEntrySchema: planWire.planTreeEntrySchema,
