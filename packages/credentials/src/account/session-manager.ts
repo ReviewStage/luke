@@ -42,11 +42,10 @@ const SIGN_IN_PAGES = {
 } as const;
 
 /**
- * Whose mark the landing card carries. Only the two identity providers have
- * one; anything else draws Luke's own mark alone rather than a wrong badge.
+ * Whose mark the landing card carries. Only the identity provider has one;
+ * anything else draws Luke's own mark alone rather than a wrong badge.
  */
 function connectionSource(provider: AccountProvider): LoopbackConnectionSource | undefined {
-  if (provider === LOOPBACK_CONNECTION_SOURCE.GOOGLE) return LOOPBACK_CONNECTION_SOURCE.GOOGLE;
   if (provider === LOOPBACK_CONNECTION_SOURCE.GITHUB) return LOOPBACK_CONNECTION_SOURCE.GITHUB;
   return undefined;
 }

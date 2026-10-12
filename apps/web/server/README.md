@@ -54,8 +54,7 @@ changes are applied to the matching branch before Vite builds the application.
 No package lifecycle hook runs migrations.
 
 The auth service also needs `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`,
-`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_APP_CLIENT_ID`, and
-`GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
+`GITHUB_APP_CLIENT_ID`, and `GITHUB_APP_CLIENT_SECRET`; the GitHub App beneath the last two is described
 under "The Luke GitHub App" below.
 
 The web service's `routes` in `vercel.json` carry a legacy entry for
@@ -145,7 +144,9 @@ accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
 during sign-in, holds no client secret, requires PKCE, and skips consent as a
 trusted first-party app.
 
-Google's callback is `${BETTER_AUTH_URL}/api/auth/callback/google`; GitHub's is
+Sign-in is GitHub's alone, since a workspace is a GitHub App installation and
+every account needs a GitHub identity; an account that signed in with Google
+alone, from before, can no longer sign in. GitHub's callback is
 `${BETTER_AUTH_URL}/api/auth/callback/github`. The GitHub provider requests no
 OAuth scope (`GITHUB_SIGN_IN` in `server/auth-policy.ts`): it is a GitHub App's
 user authorization, and a GitHub App has permissions rather than scopes, the
@@ -1376,16 +1377,13 @@ carries the relay hooks, while only a positively identified Preview accepts the
 returned profile.
 
 The Preview environment needs `BETTER_AUTH_URL`, `BETTER_AUTH_SECRET`,
-`BETTER_AUTH_PROXY_SECRET`, Google's `GOOGLE_CLIENT_ID` and
-`GOOGLE_CLIENT_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
+`BETTER_AUTH_PROXY_SECRET`, and the GitHub App's `GITHUB_APP_ID`,
 `GITHUB_APP_SLUG`, `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, and
-`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the end that
-exchanges the code, but Better Auth's Google provider refuses to build the
-authorization URL without a client secret, so a Preview without
-`GOOGLE_CLIENT_SECRET` answers 500 to every Google sign-in before the browser
-leaves for Google (found 2026-09-18); Better Auth's own oauth-proxy setup sets
-the provider secrets in every environment, and Charles chose on 2026-09-18 to
-follow it rather than hold them back from Preview; the preview then builds its own Google URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
+`GITHUB_APP_PRIVATE_KEY`, the same values production holds. Production is the
+end that exchanges the code, but Better Auth's oauth-proxy setup sets the
+provider secrets in every environment, and Charles chose on 2026-09-18 to
+follow it rather than hold them back from Preview; the preview then builds its
+own authorization URL and production still exchanges the code. `BETTER_AUTH_PROXY_SECRET` has to hold the same dedicated value on both
 ends, or the profile arrives undecryptable. A Preview without it does not expose
 the profile-accepting endpoint at all: falling back to `BETTER_AUTH_SECRET`
 would require putting production's session-signing and provider-token key into

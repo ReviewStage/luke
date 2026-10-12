@@ -9,7 +9,7 @@ import { ACT_KIND, type Act, type ActKind } from "#shared/messages/acts";
 export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.ACCOUNT_BEGIN_SIGN_IN]: {
     kind: ACT_KIND.ACCOUNT_BEGIN_SIGN_IN,
-    payload: { provider: "google" },
+    payload: { provider: "github" },
   },
   [ACT_KIND.ACCOUNT_CANCEL_SIGN_IN]: { kind: ACT_KIND.ACCOUNT_CANCEL_SIGN_IN },
   [ACT_KIND.ACCOUNT_SIGN_OUT]: { kind: ACT_KIND.ACCOUNT_SIGN_OUT },
