@@ -9,6 +9,7 @@ import {
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, type UnparsedWireValue } from "@sidecar/wire";
+import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { cardTitle } from "./tool-call-model";
 import {
@@ -57,6 +58,8 @@ export interface WorkCallRow {
   running: boolean;
   input: ToolBlock;
   output?: string;
+  /** For a call that started a coding agent, the agent it started; absent before the start answered, for a start refused, and for any other call. */
+  agent?: string;
 }
 
 export type WorkBlock =
@@ -117,7 +120,7 @@ const CALL_KIND_OF_TOOL = {
   [PLAN_WORK_TOOL.OTHER]: CALL_KIND.OTHER,
 } as const satisfies Record<PlanWorkTool, CallKind>;
 
-/** How the fold reads a block: a worker on a row of its own, every other call grouped. */
+/** How the fold reads a block: a worker on a row of its own, every other call grouped, a start that began a coding agent counted apart. */
 const WORK_READING: RowReading<WorkBlock> = {
   key: (block, index) =>
     block.kind === WORK_BLOCK.CALL || block.kind === WORK_BLOCK.WORKER
@@ -130,7 +133,7 @@ const WORK_READING: RowReading<WorkBlock> = {
       case WORK_BLOCK.REASONING:
         return ROW_PART.NOTE;
       case WORK_BLOCK.CALL:
-        return ROW_PART.CALL;
+        return block.call.agent === undefined ? ROW_PART.CALL : ROW_PART.CODING_AGENT;
       case WORK_BLOCK.WORKER:
         return ROW_PART.SUBAGENT;
     }
@@ -185,6 +188,17 @@ export function startedAgentCallIds(turns: readonly PlanWorkTurn[] | undefined):
   );
 }
 
+/** What a coding agent's start answers, read for the one field that says it began one: the agent it started. */
+const decodeStartedAgent = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ agent: Schema.Struct({ id: Schema.String }) })),
+);
+
+/** The agent a call started, read off its answer; nothing for any other call, or a start refused, which answers no agent. */
+function startedAgentOf(kind: CallKind, output: string | undefined): string | undefined {
+  if (kind !== CALL_KIND.START_AGENT || output === undefined) return undefined;
+  return Option.getOrUndefined(Option.map(decodeStartedAgent(output), (answer) => answer.agent.id));
+}
+
 /** The fields of a call's input the tab reads apart from the rest. */
 const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message", TASK: "taskId" } as const;
 
@@ -235,6 +249,7 @@ function callRowOf(
       : kind === CALL_KIND.WEB_PAGE && part.subject !== undefined
         ? pageName(part.subject)
         : (stopped ?? part.subject);
+  const agent = startedAgentOf(kind, part.output);
   return {
     id: part.id,
     kind,
@@ -243,6 +258,7 @@ function callRowOf(
     running: moving && part.state === PLAN_WORK_STATE.RUNNING,
     input: inputBlock(kind, part.input),
     ...(part.output === undefined ? undefined : { output: part.output }),
+    ...(agent === undefined ? undefined : { agent }),
   };
 }
 
