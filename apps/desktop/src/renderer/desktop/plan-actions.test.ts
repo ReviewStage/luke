@@ -7,7 +7,7 @@ import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { sheetStyle } from "#testing/css-rules";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
@@ -113,7 +113,13 @@ function mount(element: ReactElement): HTMLElement {
 }
 
 function mountToolbar(plans: PlansControl): HTMLButtonElement {
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   return more;
@@ -466,12 +472,22 @@ test("an archived plan's page says so in a banner over its document, whose prima
   const archived = { ...PLAN, archivedAt: 9 };
   const open = { ...plans, region: { kind: DOCUMENT_REGION.READY, plan: archived } as const };
 
-  const listed = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const listed = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   assert.equal(listed.querySelector(".archived-banner"), null);
   unmountAll();
-  const banner = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans: open })).querySelector(
-    ".archived-banner",
-  );
+  const banner = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans: open,
+    }),
+  ).querySelector(".archived-banner");
   const unarchive = banner?.querySelector(".primary-button");
   assert.ok(unarchive instanceof HTMLButtonElement);
   act(() => unarchive.click());
@@ -554,7 +570,13 @@ function renameFromTab(tab: HTMLElement): void {
 
 test("a press on the plan's tab only chooses it, while its right-click and the ⋯ menu rename the plan in place, and a press elsewhere keeps what was typed", async () => {
   const { plans, asked } = openTab();
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -587,7 +609,13 @@ test("a press on the plan's tab only chooses it, while its right-click and the �
 
 test("a rename the service refused says so quietly beside the name until the next edit", async () => {
   const { plans, asked } = openTab({}, undefined, () => Promise.resolve(false));
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -610,7 +638,13 @@ test("the refusal of a rename a newer edit replaced leaves no note beside the ne
       settles.push(resolve);
     });
   const { plans } = openTab({}, undefined, pending);
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
@@ -926,7 +960,13 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
       region: { kind },
       onLeavePlan: () => left.push(kind),
     });
-    const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+    const container = mount(
+      createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        plans,
+      }),
+    );
     const close = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Close plan",
     );
@@ -941,7 +981,11 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
 function mountToolbarWithKeys(plans: PlansControl): HTMLButtonElement {
   function Toolbar() {
     useAppKeymap(true);
-    return createElement(DesktopPlans, { looks: NO_LOOKS, plans });
+    return createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    });
   }
   const container = mount(createElement(Toolbar));
   const more = container.querySelector('[aria-label="Plan actions"]');
@@ -994,7 +1038,13 @@ test("Command-Shift-A archives the open plan, and an archived plan leaves the ch
 
 test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
   const { plans } = openTab({ [PLAN.id]: "acme/relay" });
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
 
@@ -1004,6 +1054,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   act(() => {
     roots.at(-1)?.render(
       createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
       }),
@@ -1026,7 +1077,13 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
 
 test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
   const { plans } = openTab();
-  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  const container = mount(
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans,
+    }),
+  );
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
@@ -1036,6 +1093,7 @@ test("Change repository… on a plan that still has its chip hands focus back to
   act(() => {
     roots.at(-1)?.render(
       createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
       }),

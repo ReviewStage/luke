@@ -195,8 +195,8 @@ function ResizeEdge({ edge }: { edge: ResizableEdgeProps }): React.JSX.Element {
   return <div className="side-panel-resize" {...edge} />;
 }
 
-/** The "+" menu's sections after the fixed kinds. */
-const ADD_SECTION = {
+/** The "+" menu's sections after the fixed kinds, which the plan's summary lists under the same headings. */
+export const ADD_SECTION = {
   SUBAGENTS: "Subagents",
   FILES: "Files",
 } as const;
@@ -225,33 +225,43 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
 }
 
 /**
- * The "+" menu's rows: the fixed kinds; then, under Subagents, each
- * subagent the plan's work holds; then, under Files, each file Luke showed
- * on the plan, by name with its folder beside it. A subagent's row wears
- * the worker's glyph and says nothing of where it stands, which its tab
- * does. Picking a row whose tab is open chooses that tab rather than
- * opening another, as a browser's tab search does, so no row says it is
- * open; a file not open opens on the newest snippet of it. The plan's coding
- * agents are opened from the plan's column's own "+" (`main-tabs.tsx`).
+ * What the panel may open, as its "+" menu offers it and the plan's summary
+ * lists it (`plan-summary.tsx`): the fixed kinds given, every one for the
+ * "+" and those the plan has used for the summary; then, under Subagents,
+ * each subagent the plan's work holds; then, under Files, each file Luke
+ * showed on the plan, by name with its folder beside it. A subagent's row
+ * wears the worker's glyph, and where the worker stands only where
+ * `standing` asks: the "+" leaves that to its tab, beside it, and the
+ * summary has no tab beside it to say it. Picking a row whose tab is open
+ * chooses that tab rather than opening another, as a browser's tab search
+ * does, so no row says it is open; a file not open opens on the newest
+ * snippet of it. The plan's coding agents are opened from the plan's
+ * column's own "+" (`main-tabs.tsx`).
  */
-function addEntries(input: {
+export function panelEntries(input: {
   panel: SidePanelControl;
+  kinds: readonly FixedSidePanelTab[];
   workers: readonly WorkWorkerBlock[];
   files: readonly CodeRef[];
+  standing: boolean;
 }): AddEntry[] {
-  const { panel, workers, files } = input;
-  const kinds = SIDE_PANEL_TABS.map((kind) => ({
+  const { panel, workers, files, standing } = input;
+  const kinds = input.kinds.map((kind) => ({
     row: kindRow(kind),
     onPick: () => panel.onChoose(kind),
   }));
-  const subagentRows = workers.map(({ call, session }) => ({
+  const subagentRows = workers.map((worker) => ({
     row: {
-      id: call.id,
-      label: session?.title ?? workerJob(call),
-      icon: <BotIcon />,
+      id: worker.call.id,
+      label: worker.session?.title ?? workerJob(worker.call),
+      icon: standing ? (
+        <StateGlyph glyph={<BotIcon />} state={workerStanding(worker).state} />
+      ) : (
+        <BotIcon />
+      ),
       section: ADD_SECTION.SUBAGENTS,
     },
-    onPick: () => panel.onChoose({ subagent: call.id }),
+    onPick: () => panel.onChoose({ subagent: worker.call.id }),
   }));
   // Note that a file's row is named by its place in the list, because a path
   // may spell a kind's word or another row's id, and the list only grows.
@@ -271,6 +281,17 @@ function addEntries(input: {
     };
   });
   return [...kinds, ...subagentRows, ...fileRows];
+}
+
+/** Every subagent the plan's work holds, with its session, in the order started. */
+export function planWorkers(
+  turns: readonly PlanWorkTurn[] | undefined,
+  workRows: readonly WorkTurnRow[],
+): readonly WorkWorkerBlock[] {
+  return workerCallIds(turns).flatMap((callId) => {
+    const worker = workerOf(workRows, callId);
+    return worker === undefined ? [] : [worker];
+  });
 }
 
 /** The glyph a tab's pin wears in the sidebar: its kind's, the Coding agents glyph the "+" menu gives an agent, or a file's. */
@@ -498,7 +519,13 @@ function PanelTabs({
         label="Open a tab"
         placeholder="Search tabs"
         noMatch="No tabs match"
-        entries={addEntries({ panel, workers, files: shownFiles })}
+        entries={panelEntries({
+          panel,
+          kinds: SIDE_PANEL_TABS,
+          workers,
+          files: shownFiles,
+          standing: false,
+        })}
         onOpen={undefined}
         asked={panel.newTabAsked}
         answers={keys}
@@ -998,11 +1025,7 @@ export function SidePanel({
   // with its session, in the order started and the strip's order; a
   // delegated worker's tab stands while its agent's does.
   const workRows = workRowsOf(work.turns, work.callLive);
-  const held = (callId: string) => {
-    const worker = workerOf(workRows, callId);
-    return worker === undefined ? [] : [worker];
-  };
-  const workers = workerCallIds(work.turns).flatMap(held);
+  const workers = planWorkers(work.turns, workRows);
   const { held: drawnTranscripts, standings } = views;
   const subagents = drawnSubagents(panel.subagents, workRows, standings, drawnTranscripts, {
     agents: openAgents,

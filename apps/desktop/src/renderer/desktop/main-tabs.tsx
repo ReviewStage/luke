@@ -80,8 +80,8 @@ import { TabStrip } from "./tab-strip";
  * renamed.
  */
 
-/** The "+" menu's section for the plan's agents. */
-const AGENTS_SECTION = "Coding agents";
+/** The "+" menu's section for the plan's agents, which the plan's summary lists under the same heading. */
+export const AGENTS_SECTION = "Coding agents";
 
 /** The "+" menu's row that opens a draft agent, which no agent's id spells. */
 const NEW_AGENT_ROW = "new-coding-agent";
@@ -259,12 +259,34 @@ function agentTabs(input: {
 }
 
 /**
+ * Each of the plan's agents in the order started, as the "+" menu offers it
+ * and the plan's summary lists it (`plan-summary.tsx`). In the "+" it wears
+ * the Coding agents glyph and says nothing of where it stands, which its
+ * tab does; the summary has no tab beside it to say it, so there it wears
+ * its harness's mark for where it stands, as its tab does (`standing`).
+ * Picking an agent whose tab is open chooses that tab rather than opening
+ * another, as a browser's tab search does.
+ */
+export function agentEntries(
+  main: MainTabsControl,
+  agents: CodingAgentsControl,
+  standing: boolean,
+): AddEntry[] {
+  return (agents.agents ?? []).map((agent) => ({
+    row: {
+      id: agent.id,
+      label: agentTabLabel(agent, agents.models),
+      icon: standing ? <AgentGlyph agent={agent} /> : <TerminalIcon />,
+      section: AGENTS_SECTION,
+    },
+    onPick: () => main.onChoose({ agent: agent.id }),
+  }));
+}
+
+/**
  * The "+" menu's rows: New coding agent, unavailable with Start's own
  * reason while Start could not run, and left out on an archived plan; then
- * each of the plan's agents in the order started, wearing the Coding agents
- * glyph and saying nothing of where it stands, which its tab does. Picking
- * an agent whose tab is open chooses that tab rather than opening another,
- * as a browser's tab search does.
+ * each of the plan's agents (`agentEntries`).
  */
 function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntry[] {
   const { start } = agents;
@@ -278,15 +300,7 @@ function addEntries(main: MainTabsControl, agents: CodingAgentsControl): AddEntr
     },
     onPick: () => main.onChoose({ draft: agents.onNewDraft() }),
   };
-  const agentRows = (agents.agents ?? []).map((agent) => ({
-    row: {
-      id: agent.id,
-      label: agentTabLabel(agent, agents.models),
-      icon: <TerminalIcon />,
-      section: AGENTS_SECTION,
-    },
-    onPick: () => main.onChoose({ agent: agent.id }),
-  }));
+  const agentRows = agentEntries(main, agents, false);
   return [...(agents.onUnarchive === undefined ? [newAgent] : []), ...agentRows];
 }
 

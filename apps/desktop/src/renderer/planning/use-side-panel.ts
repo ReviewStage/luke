@@ -351,6 +351,8 @@ export interface SidePanelControl {
   order: readonly SidePanelTab[];
   /** The fixed tabs the developer closed on the open plan, which stay closed there however much arrives until one is opened again. */
   closedTabs: readonly FixedSidePanelTab[];
+  /** The fixed kinds the open plan has used, in the kinds' order: each it holds something of, its tab closed or not, and each opened on it. */
+  used: readonly FixedSidePanelTab[];
   /** Every plan's tabs pinned to the sidebar, newest pinned first. */
   pins: readonly PinnedTab[];
   /** The open subagent tabs in the order opened; they follow the fixed tabs, and only those the open plan's work or open agent tabs hold are drawn. */
@@ -971,6 +973,10 @@ export function useSidePanel(
   // only where the plan or what it holds changed, so the strip drawn from
   // it is the same array until something it is drawn from changes.
   const tabs = useMemo(() => drawnFixed(state, seen), [state, seen]);
+  const used = useMemo(
+    () => SIDE_PANEL_TABS.filter((kind) => tabs.includes(kind) || seen.holds[kind] === true),
+    [tabs, seen],
+  );
   const drawn = useMemo(
     () => ({ plan: seen, agents, subagents, files: planFiles }),
     [seen, agents, subagents, planFiles],
@@ -1083,6 +1089,7 @@ export function useSidePanel(
     tabs,
     order: orderOn(state, planId),
     closedTabs: planTabs(state, planId).closed,
+    used,
     pins: state.pins,
     subagents: state.subagents,
     files: state.files,

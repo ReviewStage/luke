@@ -22,6 +22,7 @@ import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory } from "./desktop-version-history";
 import type { LukeIdentityProps } from "./luke-identity";
 import { PaneGlide } from "./pane-motion";
+import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
 import type { SidebarCollapse } from "./sidebar-collapse";
 
@@ -145,9 +146,9 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * takes the whole window as Settings does, its versions listed where the
  * sidebar was, and leaves the same way; it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
- * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar, or
- * opening, shutting, or growing the side panel, glides the work beside them
- * (pane-motion.tsx). Back and forward ride the left column's title-bar row,
+ * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
+ * opening, shutting, or growing the side panel, or pinning the plan's summary
+ * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
  * stands behind it. The live captions ride the call bar while the plan's
@@ -178,6 +179,8 @@ export function DesktopShell({
 }): React.JSX.Element {
   const { account } = settings;
   const shell = useRef<HTMLDivElement>(null);
+  // A fixture run keeps the summary's pin as it keeps the sidebar's fold: not at all.
+  const summary = useSummaryPin(sidebar.staged);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
   const { region } = plans;
@@ -261,6 +264,7 @@ export function DesktopShell({
           plans={plans}
           looks={looks}
           captions={captionsInColumn ? captionStrip : undefined}
+          summary={summary}
         />
       </main>
       {captionsInColumn ? null : captionStrip}
@@ -285,6 +289,7 @@ export function DesktopShell({
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: plans.sidePanel.open,
           panelFullScreen: plans.sidePanel.fullScreen,
+          summaryPinned: summary.pinned,
         }}
       />
     </div>

@@ -38,7 +38,12 @@ import {
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
-import { codingAgentsControl, plansControl, usedPlan } from "#testing/plans-control";
+import {
+  codingAgentsControl,
+  plansControl,
+  UNPINNED_SUMMARY,
+  usedPlan,
+} from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
@@ -133,6 +138,7 @@ function Page({
   useAppKeymap(true);
   useMenuCommands(true);
   const page = createElement(DesktopPlans, {
+    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
@@ -353,13 +359,14 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-test("a first launch shows the document alone, its toolbar ending at the plan's menu and the panel shut", () => {
+test("a first launch shows the document alone, its toolbar ending at the plan's menu and the summary's button and the panel shut", () => {
   const page = mountOpenPlan();
 
   assert.ok(documentShown(page));
   assert.equal(page.querySelector(".side-panel"), null);
   const last = page.querySelector(".desktop-toolbar-actions")?.lastElementChild;
-  assert.equal(last?.getAttribute("aria-label"), "Plan actions");
+  assert.equal(last?.getAttribute("aria-label"), "Toggle pinned summary");
+  assert.equal(last?.previousElementSibling?.getAttribute("aria-label"), "Plan actions");
   assert.equal(page.querySelector(".desktop-toolbar .side-panel-toggle"), null);
   assert.equal(
     page.querySelector('[aria-label="Show panel"]')?.getAttribute("aria-expanded"),
@@ -438,6 +445,7 @@ test("the Code tab draws every code Luke showed on the plan, and says so where h
     const page = document.createElement("div");
     page.innerHTML = renderToStaticMarkup(
       createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
@@ -477,6 +485,7 @@ test("a tab with something new on it reads in semibold and says it is new, and t
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
@@ -502,6 +511,7 @@ test("the Work tab draws each turn's calls as lines that open onto their output,
   act(() =>
     root.render(
       createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
@@ -883,6 +893,7 @@ test("a tab's label cut short is marked to fade at its end, while a label shown 
 test("the Work tab with no turn says what will appear there", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
@@ -969,6 +980,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
 test("the Transcript tab draws each call's turns under their speakers, left out of the screen recording", () => {
   const markup = renderToStaticMarkup(
     createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       plans: plansControl({
         page: PLANS_PAGE.DOCUMENT,
@@ -1412,6 +1424,7 @@ test("with no plan open the plan's chords are left to the rest of the window", (
   function Home() {
     useAppKeymap(true);
     return createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
       looks: NO_LOOKS,
       plans: plansControl({ page: PLANS_PAGE.NEW }),
     });
@@ -1428,7 +1441,11 @@ test("with no plan open the plan's chords are left to the rest of the window", (
 
 test("with no plan open the work column is the new-plan page, with nothing to go back to", () => {
   const markup = renderToStaticMarkup(
-    createElement(DesktopPlans, { looks: NO_LOOKS, plans: plansControl({ page: PLANS_PAGE.NEW }) }),
+    createElement(DesktopPlans, {
+      summary: UNPINNED_SUMMARY,
+      looks: NO_LOOKS,
+      plans: plansControl({ page: PLANS_PAGE.NEW }),
+    }),
   );
 
   assert.match(markup, /<h1 [^>]*>What are we planning\?<\/h1>/u);
@@ -1476,6 +1493,7 @@ test("the menu bar's Exit Full Screen steps out of full screen, and does nothing
 function Opening({ region }: { region: PlansControl["region"] }) {
   const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id));
   return createElement(DesktopPlans, {
+    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
@@ -1605,6 +1623,7 @@ test("the plan's tab names the plan, has no × to close it, and its hint says th
     act(() =>
       root.render(
         createElement(DesktopPlans, {
+          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           plans: plansControl({
             page: PLANS_PAGE.DOCUMENT,
@@ -1666,6 +1685,7 @@ function mountAgentTabs(agents: Partial<CodingAgentsControl>, chosen: MainTab[] 
   act(() =>
     root.render(
       createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
         looks: NO_LOOKS,
         plans: plansControl({
           page: PLANS_PAGE.DOCUMENT,
@@ -1831,6 +1851,7 @@ function mountArchivable(archived: boolean, unarchives: Unarchives) {
     act(() =>
       root.render(
         createElement(DesktopPlans, {
+          summary: UNPINNED_SUMMARY,
           looks: NO_LOOKS,
           plans: plansControl({
             page: PLANS_PAGE.DOCUMENT,
@@ -2864,6 +2885,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
     workerCallIds(work?.turns),
   );
   const page = createElement(DesktopPlans, {
+    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
@@ -3084,6 +3106,7 @@ function DraftPage({ repository }: { repository: string | null }) {
   mainRef.current = mainTabs;
   const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id), mainTabs.openAgents, []);
   const page = createElement(DesktopPlans, {
+    summary: UNPINNED_SUMMARY,
     looks: NO_LOOKS,
     plans: plansControl({
       page: PLANS_PAGE.DOCUMENT,
