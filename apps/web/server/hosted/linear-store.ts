@@ -11,12 +11,12 @@
  */
 
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { linearConnection } from "@sidecar/database/schemas/linear";
 import { and, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { InstantColumnSchema } from "./store/database.js";
 
 /** What a row's status may say. No row is a disconnected account. */
 export const LINEAR_ROW_STATUS = {

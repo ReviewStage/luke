@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { plan } from "@sidecar/database/schemas/plan";
 import { planRevision } from "@sidecar/database/schemas/plan-revision";
@@ -18,7 +19,6 @@ import { alias } from "drizzle-orm/pg-core";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * plan-revisions.ts -- a plan's history: every save kept as a revision under the writer who made it.

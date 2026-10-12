@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema, NumberFromBigIntColumn } from "@sidecar/database/models/columns";
 import { account, session, user } from "@sidecar/database/schemas/auth";
 import { adminFavorite } from "@sidecar/database/schemas/favorite";
 import { hostedUsage } from "@sidecar/database/schemas/usage";
@@ -24,7 +25,6 @@ import { Duration, Effect, Option, Result, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { utcDayKey } from "../hosted/quota.js";
-import { InstantColumnSchema, NumberFromBigIntColumn } from "../hosted/store/database.js";
 import { isAdminRole, USER_ROLE } from "./admin-access.js";
 import { ADMIN_DAY_ACCOUNTS_LIMIT, type AdminDaySource } from "./admin-day.js";
 import {

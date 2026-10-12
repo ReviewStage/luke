@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { db } from "@sidecar/database/core/query";
+import {
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  nullable,
+  TurnUsageColumnSchema,
+} from "@sidecar/database/models/columns";
 import { asks, conversations, messages, turns } from "@sidecar/database/schemas/storage";
 import { voiceSessions } from "@sidecar/database/schemas/voice";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
@@ -55,12 +61,6 @@ import {
 } from "../../core.js";
 import { lineParts, receivedPartsOf } from "../attached-files.js";
 import { sentLineId } from "../brain-host/ids.js";
-import {
-  EpochMillisColumnSchema,
-  InstantColumnSchema,
-  nullable,
-  TurnUsageColumnSchema,
-} from "./database.js";
 import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**

@@ -1,4 +1,5 @@
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { user } from "@sidecar/database/schemas/auth";
 import { accountPreference } from "@sidecar/database/schemas/preferences";
 import { CONTEXT_WINDOW, contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
@@ -9,7 +10,6 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { CODING_AGENT_DEFAULT_CHOICE } from "./model-catalog.js";
-import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * What the account group reads and writes of an account: the erasure, the

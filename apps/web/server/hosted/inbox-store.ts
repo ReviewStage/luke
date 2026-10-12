@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { db } from "@sidecar/database/core/query";
+import { InstantColumnSchema } from "@sidecar/database/models/columns";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { inboxItem } from "@sidecar/database/schemas/inbox";
 import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
@@ -25,7 +26,6 @@ import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { InstantColumnSchema } from "./store/database.js";
 
 /**
  * inbox-store.ts -- the developer's inbox: the items a plan's coding agents post, close, and read, and the developer's answers to them.
