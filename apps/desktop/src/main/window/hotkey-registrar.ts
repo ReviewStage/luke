@@ -41,8 +41,9 @@ export interface TalkKeyHandle {
 export interface HotkeyHost {
   voiceHost(): BrowserWindow | undefined;
   /**
-   * The plan a talk press is about: the plan open in the panel while one is,
-   * and nothing otherwise.
+   * The plan a talk press names: the plan open in the panel while one is,
+   * and nothing otherwise. It is the plan a press opens a call about where
+   * none stands; a standing call takes the press whatever it names.
    */
   talkPlanId(): string | undefined;
   /**

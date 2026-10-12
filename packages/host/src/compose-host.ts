@@ -110,7 +110,7 @@ export const hostAssemblyLayer: Layer.Layer<
     const planning = yield* composePlanning({
       kernel,
       account,
-      endPlanCall: (keep) => live.service.endPlanCall(keep),
+      endPlanCall: (planId) => live.service.endPlanCall(planId),
       client: new HostedPlanClient({
         serviceBaseUrl: kernel.hostedServiceBaseUrl,
         ...account.token,

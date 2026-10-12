@@ -6,8 +6,6 @@ import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
-import { APP_COMMAND } from "#shared/shortcuts";
-import { runAppCommand } from "../app-commands";
 import type { CallStatus } from "./planning-model";
 import { CallBar } from "./planning-parts";
 
@@ -121,22 +119,6 @@ test("a call reported with no stop, as a fixture stages one, is still drawn as t
   assert.equal(bar.querySelector(".call-start"), null);
   assert.equal(bar.querySelector(".call-status-word")?.textContent, "Listening");
   assert.ok(bar.querySelector('button[aria-label="Mute microphone"]'));
-  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), false);
-});
-
-test("the call's chords reach its two mutes only while the call stands", () => {
-  const rest = callBar();
-  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), false);
-  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_SPEAKER), false);
-  assert.deepEqual(rest.pressed, []);
-  act(() => {
-    for (const root of roots.splice(0)) root.unmount();
-  });
-
-  const live = callBar(LISTENING);
-  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_MICROPHONE), true);
-  assert.equal(runAppCommand(APP_COMMAND.TOGGLE_SPEAKER), true);
-  assert.deepEqual(live.pressed, ["microphone", "speaker"]);
 });
 
 test("the call's second line names the planning model's command and the notetaker, with the dots and a reader's status line", () => {

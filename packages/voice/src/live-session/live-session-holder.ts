@@ -97,10 +97,10 @@ export interface LiveSessionHolderOptions {
  * code for every path that could have closed it.
  */
 export const LIVE_SESSION_END_CAUSE = {
-  /** The panel opened another plan than the one the call is about. */
-  PLAN_SWITCHED: "plan_switched",
-  /** The panel left the plan, or the account signed out. */
-  PLAN_LEFT: "plan_left",
+  /** The plan the call is about was deleted. */
+  PLAN_DELETED: "plan_deleted",
+  /** The account signed out. */
+  SIGNED_OUT: "signed_out",
   /** The peer asked the host to hang up. */
   HANG_UP: "hang_up",
   /** The stored voice changed, which a standing session cannot follow. */
@@ -122,7 +122,7 @@ export const LIVE_SESSION_END_CAUSE = {
 export type LiveSessionEndCause =
   (typeof LIVE_SESSION_END_CAUSE)[keyof typeof LIVE_SESSION_END_CAUSE];
 
-/** A creation under way: the plan it is about, and the end a switch asked for meanwhile. */
+/** A creation under way: the plan it is about, and the end a delete or a sign-out asked for meanwhile. */
 interface Creating {
   readonly planId: string;
   endedBy: LiveSessionEndCause | undefined;
@@ -179,9 +179,9 @@ export class LiveSessionHolder {
   #held: HeldSession | undefined;
   /**
    * The session being created and not yet held: the plan it is about, and
-   * whether a switch has meanwhile asked for a call about that plan to end,
-   * so the session is ended the moment it stands rather than left standing
-   * about a plan no longer on screen.
+   * whether a delete or a sign-out has meanwhile asked for a call about that
+   * plan to end, so the session is ended the moment it stands rather than
+   * left standing about a plan that is gone.
    */
   #creating: Creating | undefined;
   /** The release still running for the session last declared over, so an end asked for meanwhile waits for it. */
@@ -236,23 +236,23 @@ export class LiveSessionHolder {
   }
 
   /**
-   * Ends the standing session where it is a planning call about any plan but
-   * `keep`: the panel opened another plan, or left it, and only one
-   * plan is ever the spoken conversation. The call about `keep` itself is
-   * left standing.
+   * Ends the standing session where it is a planning call about `planId`,
+   * or whatever it is about where none is named: the plan is being deleted,
+   * and a call still standing would go on writing a document that is gone,
+   * or the account signed out. The panel opening another plan or leaving
+   * this one ends nothing, because the call outlives the plan on screen.
    */
-  endPlanCall(keep: string | undefined): Effect.Effect<void> {
+  endPlanCall(planId: string | undefined): Effect.Effect<void> {
     return Effect.suspend(() => {
       const cause =
-        keep === undefined
-          ? LIVE_SESSION_END_CAUSE.PLAN_LEFT
-          : LIVE_SESSION_END_CAUSE.PLAN_SWITCHED;
+        planId === undefined
+          ? LIVE_SESSION_END_CAUSE.SIGNED_OUT
+          : LIVE_SESSION_END_CAUSE.PLAN_DELETED;
+      const about = (candidate: string) => planId === undefined || candidate === planId;
       const creating = this.#creating;
-      if (creating !== undefined && creating.planId !== keep) creating.endedBy ??= cause;
+      if (creating !== undefined && about(creating.planId)) creating.endedBy ??= cause;
       const session = this.#held;
-      if (session === undefined || session.planId === keep) {
-        return Effect.void;
-      }
+      if (session === undefined || !about(session.planId)) return Effect.void;
       return this.#end(session, cause);
     });
   }
@@ -267,7 +267,7 @@ export class LiveSessionHolder {
    * session came to stand there.
    */
   createSession(sdpOffer: string, planId: string): Effect.Effect<LiveSessionCreated | undefined> {
-    // The creation is named from its first step to its last, so a switch landing
+    // The creation is named from its first step to its last, so an end landing
     // anywhere in it (the prior session's end, the create, the attach) is heard.
     const creating: Creating = { planId, endedBy: undefined };
     return Effect.ensuring(
@@ -294,7 +294,7 @@ export class LiveSessionHolder {
             ? Effect.void
             : Scope.close(scope, Exit.void),
       );
-      // A switch that landed while the call was being created ends it now that
+      // An end that landed while the call was being created ends it now that
       // it stands, so the peer is told to hang up and nothing is said into it.
       const held = this.#held;
       if (created !== undefined && creating.endedBy !== undefined && held !== undefined) {
