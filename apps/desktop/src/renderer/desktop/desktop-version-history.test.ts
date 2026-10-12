@@ -117,7 +117,7 @@ function fakeService(now = NOW) {
       return Promise.resolve(true);
     },
   };
-  return Object.assign(service, { source });
+  return Object.assign(service, { source, lines });
 }
 
 let root: Root | undefined;
@@ -147,10 +147,16 @@ function planOf(document: PlanDocument, archived: boolean): Plan {
 
 /**
  * The plan's version history over the window, as the shell draws it, over the
- * service given, its minute on the test's clock; leaving it draws the plan in
- * its place.
+ * service given, its minute on the test's clock, opened on the plan as it
+ * stands or on the revision of the save `seek` names; leaving it draws the
+ * plan in its place.
  */
-function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, archived = false) {
+function mount(
+  service: ReturnType<typeof fakeService>,
+  registry: AtomRegistry,
+  archived = false,
+  seek: number | undefined = undefined,
+) {
   function Window() {
     const sidebar = useSidebarCollapse(false);
     const [open, setOpen] = useState(true);
@@ -162,6 +168,7 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, 
       editedAt: undefined,
       name: "Teammate invitations",
       shown: open,
+      seek,
       onRestored: (undo) => {
         if (undo !== undefined) service.undos.push(undo);
       },
@@ -199,6 +206,11 @@ function rows(page: HTMLElement): string[] {
       .map((part) => part.textContent)
       .join(" · "),
   );
+}
+
+/** What the version whose row is lit did. */
+function chosenSummary(page: HTMLElement): string | null | undefined {
+  return page.querySelector('.version-row[aria-current="true"] .version-row-summary')?.textContent;
 }
 
 /** Who wrote the version whose row is lit. */
@@ -533,4 +545,133 @@ it.effect("a restore offers to undo it, which puts back the version that stood b
     assert.ok(undone);
     assert.equal(service.current, LATEST);
   }),
+);
+
+it.effect(
+  "opened from a section's \"Edited by\", the view draws the version that made the section's last save, its row lit",
+  () =>
+    Effect.gen(function* () {
+      // The section's save is stamped a moment before the revision it began.
+      const save = NOW - 5 * HOUR - 4;
+      const page = yield* mount(fakeService(), yield* registryOnTestClock, false, save);
+
+      assert.equal(chosen(page), "Invite emails");
+      assert.equal(restoreUnavailable(page), false);
+      assert.deepEqual(marked(page, "del"), ["Only admins"]);
+      assert.deepEqual(marked(page, "ins"), ["Any member"]);
+    }),
+);
+
+it.effect(
+  "a save older than the newest page is sought on the older pages, the page standing quiet until it is found, and the plan as it stands is drawn where they cannot be read",
+  () =>
+    Effect.gen(function* () {
+      const save = NOW - 26 * HOUR;
+      const older: (() => void)[] = [];
+      const paged = (failing: boolean) => {
+        const service = fakeService();
+        service.source.readPage = (_planId, before) =>
+          before === undefined
+            ? Promise.resolve({ revisions: service.lines.slice(0, 1), earlier: 3 })
+            : new Promise((land) =>
+                older.push(() =>
+                  land(
+                    failing
+                      ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+                      : { revisions: service.lines.slice(1) },
+                  ),
+                ),
+              );
+        return service;
+      };
+      const landOlder = Effect.promise(() =>
+        act(async () => {
+          for (const land of older.splice(0)) land();
+        }),
+      );
+
+      const page = yield* mount(paged(false), yield* registryOnTestClock, false, save);
+      assert.equal(rows(page).length, 1);
+      assert.equal(chosenSummary(page), undefined);
+      assert.equal(skeleton(page, ".version-page")?.says, "Reading the version…");
+      yield* landOlder;
+      assert.equal(rows(page).length, 3);
+      assert.equal(chosenSummary(page), "4 changes");
+      assert.match(body(page) ?? "", /Only admins can invite\./u);
+      act(() => root?.unmount());
+      document.body.replaceChildren();
+
+      const failed = yield* mount(paged(true), yield* registryOnTestClock, false, save);
+      yield* landOlder;
+      assert.equal(chosenSummary(failed), "2 changes", "the plan as it stands");
+      assert.equal(restoreUnavailable(failed), true);
+    }),
+);
+
+it.effect(
+  "an older page that fails after the view opened on another plan's save leaves that save sought",
+  () =>
+    Effect.gen(function* () {
+      const OTHER_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+      const lines = fakeService().lines;
+      /** Every page read waits here, by plan, until the test answers it; the first plan's older pages fail. */
+      const pages: { planId: string; before: number | undefined; land: () => void }[] = [];
+      const source: PlanHistorySource = {
+        readPage: (planId, before) =>
+          new Promise((land) =>
+            pages.push({
+              planId,
+              before,
+              land: () =>
+                land(
+                  before === undefined
+                    ? { revisions: lines.slice(0, 1), earlier: 3 }
+                    : planId === PLAN_ID
+                      ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
+                      : { revisions: lines.slice(1) },
+                ),
+            }),
+          ),
+        readRevision: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+        restore: () => Promise.resolve(false),
+      };
+      const answer = (planId: string, before: number | undefined) =>
+        Effect.promise(() =>
+          act(async () => {
+            const at = pages.findIndex((page) => page.planId === planId && page.before === before);
+            pages.splice(at, 1)[0]?.land();
+          }),
+        );
+      let selected: () => number | undefined = () => undefined;
+      let openOn: (planId: string, seek: number) => void = () => undefined;
+      function Harness() {
+        const [opened, setOpened] = useState({ planId: PLAN_ID, seek: NOW - 26 * HOUR });
+        openOn = (planId, seek) => setOpened({ planId, seek });
+        const history = usePlanHistory({
+          source,
+          planId: opened.planId,
+          editedAt: undefined,
+          name: "Teammate invitations",
+          shown: true,
+          seek: opened.seek,
+          onRestored: () => undefined,
+        });
+        selected = () => history.selected;
+        return null;
+      }
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      yield* Effect.promise(() => act(async () => root?.render(createElement(Harness))));
+
+      // The first plan's save is on a page past its first, whose read is on its way.
+      yield* answer(PLAN_ID, undefined);
+      assert.ok(pages.some((page) => page.planId === PLAN_ID && page.before === 3));
+      act(() => openOn(OTHER_ID, NOW - 5 * HOUR));
+      yield* answer(PLAN_ID, 3);
+      yield* answer(OTHER_ID, undefined);
+      yield* answer(OTHER_ID, 3);
+
+      assert.equal(selected(), 2, "the other plan's save found, not given way to its newest");
+    }),
 );

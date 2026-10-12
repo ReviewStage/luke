@@ -4,6 +4,7 @@ import { test } from "vitest";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
   revisionAuthor,
+  revisionOfSave,
   revisionSummary,
   VERSION_CHANGE,
   versionDiff,
@@ -68,6 +69,52 @@ test("a revision names its writer as the developer knows them, and says what it 
     revisionSummary(line({ restoredFrom: { seq: 1, at: restoredAt } })),
     `Restored the version from ${versionMoment(restoredAt)}`,
   );
+});
+
+/**
+ * A plan's revisions, newest first, as the service lists them: Luke's on a
+ * call, moved on by saves from three hours ago to two, an agent's five hours
+ * ago, and the plan before its history began.
+ */
+const REVISIONS = [
+  line({ seq: 3, startedAt: NOW - 3 * HOUR }),
+  line({
+    seq: 2,
+    lastEdit: {
+      actor: PLAN_ACTOR.AGENT,
+      label: "Invite emails",
+      at: NOW - 5 * HOUR,
+      duringCall: false,
+    },
+    startedAt: NOW - 5 * HOUR,
+  }),
+  line({
+    seq: 1,
+    lastEdit: { actor: PLAN_ACTOR.EARLIER, at: NOW - 26 * HOUR, duringCall: false },
+    startedAt: NOW - 26 * HOUR,
+  }),
+];
+
+test("a save is found as the revision it moved on, a moment before or at the revision's own", () => {
+  // The section's save is stamped just before the revision it began is.
+  assert.equal(revisionOfSave(REVISIONS, NOW - 5 * HOUR - 4, true), 2);
+  assert.equal(revisionOfSave(REVISIONS, NOW - 5 * HOUR, true), 2);
+  // A save that moved a revision on is that revision's, wherever it fell within it.
+  assert.equal(revisionOfSave(REVISIONS, NOW - 3 * HOUR - 4, true), 3);
+  assert.equal(revisionOfSave(REVISIONS, NOW - 2.5 * HOUR, true), 3);
+  assert.equal(revisionOfSave(REVISIONS, NOW - 2 * HOUR, true), 3);
+  assert.equal(revisionOfSave(REVISIONS, NOW - 26 * HOUR, true), 1);
+});
+
+test("a save older than every revision read is sought on the older pages, and is the oldest's where there are none", () => {
+  const page = REVISIONS.slice(0, 2);
+
+  assert.equal(revisionOfSave(page, NOW - 26 * HOUR, false), undefined);
+  assert.equal(revisionOfSave(page, NOW - 5 * HOUR, false), undefined, "its revision may be older");
+  assert.equal(revisionOfSave(page, NOW - 4 * HOUR, false), 3, "an older revision read bounds it");
+  assert.equal(revisionOfSave(page, NOW - 26 * HOUR, true), 2);
+  assert.equal(revisionOfSave([], NOW, true), undefined);
+  assert.equal(revisionOfSave(REVISIONS, NOW, true), 3, "a save past the newest is the newest's");
 });
 
 test("a version against the one before it marks the words written in and struck out where a unit changed", () => {

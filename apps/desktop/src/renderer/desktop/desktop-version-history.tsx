@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
+import { centreWithin } from "../planning/code-pane";
 import { revisionAuthor, revisionSummary } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
 import { DOCUMENT_REGION } from "../planning/planning-model";
@@ -28,7 +29,9 @@ import type { SidebarCollapse } from "./sidebar-collapse";
  * what it did, and how long ago, in the sidebar's few letters with the
  * moment itself on hover. The newest is the plan as it stands and the one
  * drawn when the view opens, wearing no tag of its own: its Restore says it
- * is already current. Choosing a row, or stepping with the up and down
+ * is already current. Opened from a section's "Edited by", the view draws
+ * the version that made the section's last change instead, its row brought
+ * into the list's view. Choosing a row, or stepping with the up and down
  * arrows, draws that version beside the list (`version-view.tsx`), and older
  * versions are read a page at a time from the list's foot. While the
  * versions are read, the list and the page stand as quiet blocks in their
@@ -176,6 +179,27 @@ function useVersionKeys(
 }
 
 /**
+ * The row of the version the view opened on, brought into the list's view
+ * once it is chosen, so a version opened deep in the list is seen lit. Only
+ * the list scrolls, since the window around it must not.
+ */
+function useOpenedRowShown(
+  selected: number | undefined,
+  rows: Map<number, HTMLButtonElement>,
+  log: React.RefObject<HTMLDivElement | null>,
+): void {
+  const shown = useRef(false);
+  useEffect(() => {
+    const row = selected === undefined ? undefined : rows.get(selected);
+    if (shown.current || row === undefined || log.current === null) return;
+    shown.current = true;
+    const box = log.current.getBoundingClientRect();
+    const line = row.getBoundingClientRect();
+    if (line.top < box.top || line.bottom > box.bottom) centreWithin(log.current, row);
+  }, [selected, rows, log]);
+}
+
+/**
  * The version history's page beside the list: the version chosen, or the
  * state standing in its place. A restore that lands leaves for the plan it
  * restored, which is not always the one Back returns to; an archived plan's
@@ -196,7 +220,9 @@ function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
     );
   }
   const { list } = history;
-  if (list.kind === HISTORY_READ.READING) {
+  // A list read that holds versions is still finding the one the view opened on.
+  const finding = list.kind === HISTORY_READ.READY && list.revisions.length > 0;
+  if (list.kind === HISTORY_READ.READING || finding) {
     return (
       <>
         <header className="desktop-toolbar">
@@ -250,8 +276,10 @@ export function DesktopVersionHistory({
   const { list } = versions;
   const revisions = list.kind === HISTORY_READ.READY ? list.revisions : [];
   const rows = useRef(new Map<number, HTMLButtonElement>()).current;
+  const log = useRef<HTMLDivElement>(null);
   useAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY, onExit);
   useVersionKeys(revisions, versions.selected, versions.onSelect, rows);
+  useOpenedRowShown(versions.selected, rows, log);
   const edge = useSidebarEdge(sidebar);
   // The plan is named as its document is drawn, or as the list names it while its read is on its way.
   const { region } = plans;
@@ -277,7 +305,7 @@ export function DesktopVersionHistory({
         </button>
         <h1 className="version-log-title">Version history</h1>
         {name === undefined ? null : <p className="version-log-plan">{name}</p>}
-        <div className="sidebar-section">
+        <div ref={log} className="sidebar-section">
           {list.kind === HISTORY_READ.READING ? <LogSkeleton /> : null}
           <ol className="version-list">
             {revisions.map((line) => (

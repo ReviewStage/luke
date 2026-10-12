@@ -226,11 +226,31 @@
 }
 
 .plan-unit-attributed:hover .plan-unit-byline,
+.plan-unit-attributed:focus-within .plan-unit-byline,
 .plan-unit-editable:hover .plan-unit-byline,
 .plan-unit-editable:focus-within .plan-unit-byline,
 .plan-assumptions:hover > .plan-unit-byline,
 .plan-assumptions:focus-within > .plan-unit-byline {
   opacity: 1;
+}
+
+/* Where the window offers the version history, the line opens it on the
+   section's last change, so it is a press drawn as the quiet line it was,
+   underlined only under the pointer or the keyboard, as the line over the
+   document is. Note that it takes the pointer although it fades out, because
+   a pointer on it is on its section, which shows it. */
+button.plan-unit-byline {
+  border-radius: 4px;
+  background: none;
+  pointer-events: auto;
+  text-align: left;
+}
+
+button.plan-unit-byline:hover,
+button.plan-unit-byline:focus-visible {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
 }
 
 /* A section changed since the developer last looked: a still wash of Luke's

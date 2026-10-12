@@ -246,7 +246,9 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   line at the end of its heading's row while the pointer or the keyboard is
   on the section, from the writer the plan keeps for each field (`fieldEdits`
   on the wire, `plan.field_writers` on the service); a section no save has
-  changed since the service began keeping writers says nothing.
+  changed since the service began keeping writers says nothing. A press on a
+  section's line, or Return on it from the keyboard, opens the version
+  history on the revision that save made, and opens no editor.
 - The sections someone other than the developer changed since they last
   looked at the plan on this Mac wear a still tint of Luke's accent, counted
   under the "Edited by" line ("Changed since you last looked · 3 sections ·
@@ -653,7 +655,10 @@ coding agent by its row), whether on a call, how many changes it made, and
 how long ago; the newest is labelled "Current", and the plan from before
 history reads "Earlier". The list is read while the view stands and again
 whenever the plan is edited meanwhile. The chosen revision, the newest when
-the view opens, is read with the content before it
+the view opens, or, opened from a section's line, the revision that made the
+save it names (the oldest whose latest save is at or after the save's
+moment, older pages read until one shows it, and the newest where one cannot
+be read), is read with the content before it
 (`GET /api/plans/{id}/revisions/{seq}`), both formatted under the plan's name
 as it stands, and drawn read-only beside the list
 (`planning/version-view.tsx`) under a bar with its moment and Restore this
