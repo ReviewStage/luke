@@ -4,6 +4,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import { webSqlClient } from "./db/sql-client.js";
 import { githubAppFromEnvironment } from "./github/github-app.js";
 import { hostedEnvironment } from "./hosted/environment.js";
+import { linearConnectFromEnvironment } from "./hosted/linear-connect.js";
 import { modelCatalogLayer } from "./hosted/model-catalog.js";
 
 /**
@@ -40,6 +41,10 @@ const webLogger = Logger.layer([Logger.consoleJson, Logger.tracerLogger]);
  * `GitHubApp` the one place the Luke GitHub App's id, slug, client, and
  * private key are.
  *
+ * `LinearConnect` is the one place the Linear connector's UID is read, for
+ * the account routes that connect and disconnect an account and the agents
+ * that read its token alike.
+ *
  * `ModelCatalog` is here for the same reason: its read of AI Gateway's
  * public catalog is cached on the service, so one instance reads the catalog
  * once an hour for every route that offers or checks a model.
@@ -56,6 +61,7 @@ const webServices = Layer.mergeAll(
   webSqlClient,
   hostedEnvironment,
   githubAppFromEnvironment,
+  linearConnectFromEnvironment,
   webLogger,
   modelCatalogLayer.pipe(Layer.provide(FetchHttpClient.layer)),
 ).pipe(Layer.provide(webConfigProvider));

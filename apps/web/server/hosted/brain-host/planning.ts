@@ -31,6 +31,7 @@ import {
   START_CODING_AGENT_TOOL,
 } from "../coding-agent-tools.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
+import { connectionToolEntries } from "../connection-tools.js";
 import { END_CALL_TOOL, runEndCall } from "../end-call.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import type { PlanDocumentBinding } from "../plan-notes.js";
@@ -552,7 +553,7 @@ export const WORKER_TOOL_NAMES: ReadonlySet<string> = new Set([
 export const WORKER_INSTRUCTIONS = `
 You do one job for a planning assistant, who hands it to you and reads what you return. You never speak to the developer, and you ask nobody anything: if the job is unclear, do the most likely reading and say which one you took.
 
-Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Stop when you can answer, or when more reading stops turning up anything new.
+Read the plan's repository with run_in_repository, a checkout of its default branch: ls and find to see the layout, grep to find names, cat or sed to read files, git log to see history. ${COMMAND_DESCRIPTION_INSTRUCTION} When it answers not-run, nothing of the code has been read: say so and why. Search the public Internet with search_web and read the pages that matter with read_web_page, preferring primary sources: official documentation, specifications, and the project's own repository. Never put the repository's code, names, or paths into a search: the repository is private and a search is public. Where the developer connected Linear, read it with connection_search and connection_execute; change something in Linear only when the job explicitly asks you to, and say exactly what you changed. Stop when you can answer, or when more reading stops turning up anything new.
 
 Return a short summary that answers the job, then what you relied on: URLs, and file paths with line numbers where they matter. Say plainly what you could not confirm. Keep it under 300 words.
 `;
@@ -566,7 +567,7 @@ export function planningToolDeclarations(): readonly HostedToolDeclaration[] {
   }));
 }
 
-/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's. */
+/** The planning tools as stored rows are held to them, so a turn's calls are written and read back like the catalog's, with eve's delegation and the Linear connection's calls beside them (`../connection-tools.ts`). */
 export function planningToolSet(): ToolSet {
   return Object.fromEntries([
     ...PLANNING_TOOLS.map((tool) => [
@@ -577,6 +578,7 @@ export function planningToolSet(): ToolSet {
       name,
       wireValidatedTool(`eve's own ${name} tool`, inputSchema),
     ]),
+    ...connectionToolEntries(),
   ]);
 }
 

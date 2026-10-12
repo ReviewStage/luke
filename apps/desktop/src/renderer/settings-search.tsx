@@ -127,6 +127,14 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
       : undefined,
     input.accountDrawn
       ? {
+          id: SETTINGS_SEARCH_ROW.LINEAR,
+          label: "Linear",
+          page: SETTINGS_VIEW.ROOT,
+          haystack: ["Linear", "connect disconnect issues tracker integration mcp"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
           id: SETTINGS_SEARCH_ROW.DELETE_ACCOUNT,
           label: "Delete account",
           page: SETTINGS_VIEW.ROOT,

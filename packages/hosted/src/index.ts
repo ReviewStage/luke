@@ -28,6 +28,20 @@ export {
   githubRepositoryFullNameSchema,
   githubRepositorySchema,
 } from "./github-repositories-wire.js";
+export { HostedLinearClient, type HostedLinearClientOptions } from "./linear-client.js";
+export {
+  LINEAR_LANDING,
+  LINEAR_LANDING_STATUS,
+  LINEAR_STATUS,
+  type LinearConnectAnswer,
+  type LinearLandingStatus,
+  type LinearStatus,
+  type LinearStatusAnswer,
+  linearConnectAnswerSchema,
+  linearLandingPath,
+  linearLandingStatusFromWire,
+  linearStatusAnswerSchema,
+} from "./linear-wire.js";
 export {
   HOSTED_SERVICE_ORIGIN,
   HOSTED_VOICE_SERVICE_ORIGIN,

@@ -54,6 +54,13 @@ import {
   planTemplateAnswerViewSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
+import {
+  LINEAR_CALL_FAILURE,
+  type LinearConnectView,
+  type LinearStatusView,
+  linearConnectViewSchema,
+  linearStatusViewSchema,
+} from "@sidecar/hosted/linear-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -209,6 +216,12 @@ export interface HostOperator {
   planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+  /** Where the account's Linear connection stands; or why there is no answer. */
+  linearStatus(): Effect.Effect<LinearStatusView>;
+  /** A Linear sign-in begun and opened in the browser by the host; whether it was, never the address. */
+  linearConnect(): Effect.Effect<LinearConnectView>;
+  /** The account's Linear connection ended; where it then stands, or why there is no answer. */
+  linearDisconnect(): Effect.Effect<LinearStatusView>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -299,6 +312,9 @@ function answered<Value>(value: UnparsedWireValue): Value | undefined {
 /** What a coding-agent call the host could not answer is drawn as. */
 const CODING_AGENT_UNANSWERED = { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } as const;
 
+/** What a Linear call the host could not answer is drawn as. */
+const LINEAR_UNANSWERED = { failure: LINEAR_CALL_FAILURE.UNANSWERED } as const;
+
 export function createHostOperator(options: HostOperatorOptions): HostOperator {
   const { client } = options;
 
@@ -348,7 +364,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
         : undefined) ?? CODING_AGENT_UNANSWERED;
 
+  /** A Linear answer as the host's method documents it, or unanswered, on the same terms as a coding-agent answer. */
+  const linearAnswer =
+    <Answer, Encoded>(schema: EffectSchema.Codec<Answer, Encoded>) =>
+    (answer: GatewayCallResult): Answer | typeof LINEAR_UNANSWERED =>
+      (answer.ok
+        ? Result.getOrUndefined(readEither(schema, { excess: EXCESS_KEYS.DROP })(answer.result))
+        : undefined) ?? LINEAR_UNANSWERED;
+
   return {
+    linearStatus: () =>
+      Effect.map(client.call(GATEWAY_METHOD.LINEAR_STATUS), linearAnswer(linearStatusViewSchema)),
+    linearConnect: () =>
+      Effect.map(client.call(GATEWAY_METHOD.LINEAR_CONNECT), linearAnswer(linearConnectViewSchema)),
+    linearDisconnect: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.LINEAR_DISCONNECT),
+        linearAnswer(linearStatusViewSchema),
+      ),
     bootstrap: () =>
       Effect.map(client.call(GATEWAY_METHOD.CLIENT_BOOTSTRAP), (answer) =>
         Option.fromUndefinedOr(answered<HostBootstrap>(record(answer))),

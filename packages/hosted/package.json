@@ -13,6 +13,8 @@
     "./dictation-wire": "./src/dictation-wire.js",
     "./inbox-wire": "./src/inbox-wire.js",
     "./model-label": "./src/model-label.js",
+    "./linear-view": "./src/linear-view.js",
+    "./linear-wire": "./src/linear-wire.js",
     "./models-wire": "./src/models-wire.js",
     "./plan-document": "./src/plan-document.js",
     "./plan-document-template": "./src/plan-document-template.js",

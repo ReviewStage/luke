@@ -3,9 +3,11 @@ import {
   GATEWAY_METHOD,
   type GatewayMethodTable,
   type GatewayShutdownSteps,
+  NODE_CAPABILITY_STATUS,
 } from "@sidecar/gateway";
 import {
   HostedCodingAgentClient,
+  HostedLinearClient,
   HostedPlanClient,
   type PlanActivityFrame,
   type PlanCodeFrame,
@@ -18,6 +20,7 @@ import type * as FileSystem from "effect/FileSystem";
 import type * as Path from "effect/Path";
 import { composeAccount } from "./compose-account.js";
 import { composeCodingAgents } from "./compose-coding-agents.js";
+import { composeLinear } from "./compose-linear.js";
 import { composeLive } from "./compose-live.js";
 import { composePlanning } from "./compose-planning.js";
 import { composeSettings } from "./compose-settings.js";
@@ -33,15 +36,17 @@ import {
   ShutdownSignal,
 } from "./effect/seams.js";
 import { shutdownStepsClosingLiveSession, shutdownStepsFlushingEvents } from "./lifecycle.js";
+import { HOST_NODE_CAPABILITY } from "./node-capabilities.js";
 import { createGatewayService } from "./service.js";
 
-/** The five concerns, by the name each is built under. */
+/** The six concerns, by the name each is built under. */
 export const HOST_CONCERN = {
   SETTINGS: "settings",
   ACCOUNT: "account",
   LIVE: "live",
   PLANNING: "planning",
   CODING_AGENTS: "codingAgents",
+  LINEAR: "linear",
 } as const;
 
 export type HostConcern = (typeof HOST_CONCERN)[keyof typeof HOST_CONCERN];
@@ -56,6 +61,7 @@ export const HOST_START_ORDER: readonly HostConcern[] = [
   HOST_CONCERN.LIVE,
   HOST_CONCERN.PLANNING,
   HOST_CONCERN.CODING_AGENTS,
+  HOST_CONCERN.LINEAR,
 ];
 
 /**
@@ -124,6 +130,20 @@ export const hostAssemblyLayer: Layer.Layer<
         ...account.token,
       }),
     });
+    const linear = yield* composeLinear({
+      kernel,
+      account,
+      client: new HostedLinearClient({
+        serviceBaseUrl: kernel.hostedServiceBaseUrl,
+        ...account.token,
+      }),
+      // Note that a refusal's reason is not reported, because it may carry the address.
+      openExternal: (url) =>
+        Effect.map(
+          kernel.nodes.invoke(HOST_NODE_CAPABILITY.OPEN_EXTERNAL, { url }),
+          (result) => result.status === NODE_CAPABILITY_STATUS.OK,
+        ),
+    });
     activePlanId = planning.activePlanId;
     showPlanDraft = planning.showDraft;
     showPlanActivity = planning.showActivity;
@@ -171,6 +191,7 @@ export const hostAssemblyLayer: Layer.Layer<
       [HOST_CONCERN.LIVE]: live,
       [HOST_CONCERN.PLANNING]: planning,
       [HOST_CONCERN.CODING_AGENTS]: codingAgents,
+      [HOST_CONCERN.LINEAR]: linear,
     } satisfies Readonly<Record<HostConcern, Composer>>;
 
     /**

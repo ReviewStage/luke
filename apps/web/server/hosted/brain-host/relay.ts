@@ -32,6 +32,7 @@ import {
 } from "../../core.js";
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
+import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
@@ -420,6 +421,18 @@ function withSettlement(
   return { ...turn, steps };
 }
 
+/** The name a call the turn holds is stored under, or nothing for a call it does not hold. */
+function heldCallName(state: RelayState, eveTurnId: string, callId: string): string | undefined {
+  const turn = state.turns[eveTurnId];
+  if (!turn) return undefined;
+  for (const step of Object.values(turn.steps)) {
+    for (const part of step.parts) {
+      if (part.kind === "tool" && part.callId === callId) return part.name;
+    }
+  }
+  return undefined;
+}
+
 /** The steps in index order, so a message is told in the order the model produced it whatever order the events arrived. */
 function orderedSteps(turn: RelayTurnState): readonly RelayStep[] {
   return Object.entries(turn.steps)
@@ -469,12 +482,19 @@ export class StreamRelay {
           for (const action of actions) {
             const call = requestedCallOf(action);
             if (!call) continue;
+            const input = unparsedWire(action.input);
+            const parentCallId = action.kind === TOOL_CALL_KIND ? action.parentCallId : undefined;
+            const stored =
+              parentCallId === undefined
+                ? { name: call.name, input }
+                : this.#nestedCall(turnId, call.name, input, parentCallId, standing);
+            if (!stored) continue;
             yield* this.#toolCall(
               turnId,
               stepIndex,
               call.callId,
-              call.name,
-              unparsedWire(action.input),
+              stored.name,
+              stored.input,
               standing,
             );
           }
@@ -483,6 +503,9 @@ export class StreamRelay {
       case "action.result": {
         const result = event.data.result;
         if (result.kind !== TOOL_RESULT_KIND) return Effect.void;
+        // A nested call the record left out leaves its result out with it.
+        const held = heldCallName(standing.state.get(), event.data.turnId, result.callId);
+        if (held === undefined && isRemoteToolName(result.toolName)) return Effect.void;
         // Note that a look's image went to the model once and is not kept, because it is no record of the plan.
         const output = unparsedWire(result.output);
         const kept =
@@ -490,7 +513,7 @@ export class StreamRelay {
         return this.#toolResult(
           event.data.turnId,
           result.callId,
-          result.toolName,
+          held ?? result.toolName,
           settlementOf(event.data.status, result.isError, kept, event.data.error?.message),
           standing,
         );
@@ -801,6 +824,32 @@ export class StreamRelay {
         })),
       );
     });
+  }
+
+  /**
+   * A call eve nested under another, as the record keeps it: a Linear
+   * tool's run under the `connection_execute` this turn holds, stored under
+   * its fixed name and envelope (`../connection-tools.ts`), so both the
+   * wrapper and the call Linear answered stand in the transcript. A nested
+   * call under anything else, or of no Linear tool, has no name the record
+   * holds and is left out, its wrapper standing for it.
+   */
+  #nestedCall(
+    eveTurnId: string,
+    name: string,
+    input: UnparsedWireValue,
+    parentCallId: string,
+    standing: RelayStanding,
+  ): { readonly name: string; readonly input: UnparsedWireValue } | undefined {
+    const parent = heldCallName(standing.state.get(), eveTurnId, parentCallId);
+    const stored =
+      parent === CONNECTION_TOOL.EXECUTE ? storedRemoteCall(name, input, parentCallId) : undefined;
+    if (stored === undefined && standing.state.get().turns[eveTurnId] !== undefined) {
+      this.#seams.report(
+        `A nested call of turn ${eveTurnId} under ${parent ?? "no held call"} has no stored name and is not recorded.`,
+      );
+    }
+    return stored;
   }
 
   #toolCall(

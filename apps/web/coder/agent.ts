@@ -9,10 +9,10 @@ import { scriptedModel } from "./scripted-model.js";
  * Luke's coding agent, as an eve agent. eve's default tools are off and the
  * tools it runs are authored one file each under `tools/`, so the set is
  * exactly the one the store writer registers (`server/hosted/coder-host/tool-set.ts`):
- * its shell and file tools, the code extension's patch and search, and the
- * provider-run web reads. No subagent is declared, since the code
- * extension's worker runs on an AI Gateway model and Luke calls the
- * providers directly. The session's input tokens are uncapped, as the plan
+ * its shell and file tools, the code extension's patch and search, the
+ * provider-run web reads, the delegation to its own declared worker, and
+ * eve's two tools over the account's Linear connection (`connections/linear.ts`).
+ * The session's input tokens are uncapped, as the plan
  * decided, and compaction runs at eve's default share of the window, named
  * where the agent's tab reads it too. The model is chosen at every
  * step from the agent's row, so a later change to the row is the next

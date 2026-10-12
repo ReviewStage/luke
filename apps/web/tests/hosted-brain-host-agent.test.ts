@@ -13,6 +13,7 @@ import {
   planningToolDeclarations,
 } from "../server/hosted/brain-host/planning";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
+import { CONNECTION_TOOL } from "../server/hosted/connection-tools";
 
 /**
  * What the eve agent is declared as, held to the trust decisions the host
@@ -44,12 +45,13 @@ test("a follow-up steers the turn under way rather than queueing behind it, and 
   assert.equal(Array.isArray(channel.auth), false);
 });
 
-test("the writer and the reader share one tool set, which names every planning tool a turn is offered and eve's own delegation tools, and declares no output schema", () => {
+test("the writer and the reader share one tool set, which names every planning tool a turn is offered, eve's own delegation tools, and the Linear connection's calls, and declares no output schema", () => {
   assert.deepEqual(
     Object.keys(HOSTED_TOOL_SET).sort(),
     [
       ...planningToolDeclarations().map((declared) => declared.name),
       ...Object.values(EVE_DELEGATION_TOOL),
+      ...Object.values(CONNECTION_TOOL),
     ].sort(),
   );
   for (const declared of Object.values(HOSTED_TOOL_SET)) {

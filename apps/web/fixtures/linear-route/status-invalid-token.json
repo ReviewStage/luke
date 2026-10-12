@@ -1,0 +1,11 @@
+{
+  "status": 401,
+  "statusText": "",
+  "headers": [
+    [
+      "content-type",
+      "application/json"
+    ]
+  ],
+  "body": "{\"error\":\"invalid-token\"}"
+}

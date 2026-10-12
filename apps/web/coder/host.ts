@@ -12,6 +12,11 @@ import {
   productionCoderHostSeams,
 } from "../server/hosted/coder-host/production.js";
 import { hostedEnvironment } from "../server/hosted/environment.js";
+import {
+  type LinearAdmission,
+  linearAccessToken,
+  linearConnection,
+} from "../server/hosted/linear-connection.js";
 import { runWeb } from "../server/runtime.js";
 import { scriptedModel } from "./scripted-model.js";
 
@@ -118,4 +123,15 @@ export function runInboxTool(
       return yield* host.inbox(admitted.success, call);
     }),
   );
+}
+
+/**
+ * The Linear connection under one of this project's ownership checks, the
+ * agent's or the worker's, for each one's own `connections/linear.ts`, on the
+ * same terms as the planning project's (`../eve/host.ts`).
+ */
+export function linearConnectionFor(
+  admit: (auth: SessionAuth, sessionId: string) => LinearAdmission,
+) {
+  return linearConnection((auth, sessionId) => runWeb(linearAccessToken(admit(auth, sessionId))));
 }

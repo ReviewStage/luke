@@ -17,6 +17,7 @@ export default defineConfig({
         "sign-in": resolveEntry("./sign-in.html"),
         consent: resolveEntry("./consent.html"),
         "github-installed": resolveEntry("./github-installed.html"),
+        "linear-connected": resolveEntry("./linear-connected.html"),
         admin: resolveEntry("./admin.html"),
       },
     },
