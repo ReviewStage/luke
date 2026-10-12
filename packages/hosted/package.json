@@ -11,6 +11,7 @@
     "./coding-agent-view": "./src/coding-agent-view.js",
     "./coding-agent-wire": "./src/coding-agent-wire.js",
     "./dictation-wire": "./src/dictation-wire.js",
+    "./inbox-wire": "./src/inbox-wire.js",
     "./model-label": "./src/model-label.js",
     "./models-wire": "./src/models-wire.js",
     "./plan-edit": "./src/plan-edit.js",

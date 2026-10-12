@@ -18,6 +18,14 @@ import {
   PULL_REQUEST_STATE,
   TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
+import {
+  INBOX_KIND,
+  INBOX_REPLY,
+  INBOX_STATUS,
+  type InboxPost,
+  inboxAnsweredSchema,
+  inboxAnswerSchema,
+} from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
@@ -27,6 +35,7 @@ import { eq } from "drizzle-orm";
 import {
   Cause,
   Clock,
+  DateTime,
   Deferred,
   Duration,
   Effect,
@@ -92,6 +101,7 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import { answerInboxItem, postInboxItem, readInboxItem } from "../server/hosted/inbox-store";
 import {
   CODING_AGENT_DEFAULT_CHOICE,
   modelCatalogOf,
@@ -3086,3 +3096,324 @@ const startedAgent = (
 function startAs(bearer: string | undefined, planId: string, body: WireBoundaryInput): Request {
   return request(PLAN_AGENTS, bearer, { method: "POST", id: planId, body });
 }
+
+const PLAN_INBOX = "/api/plans/inbox";
+const INBOX_ITEM = "/api/inbox/item";
+
+it.layer(testSqlClient)("the developer's inbox", (it) => {
+  /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
+  const openInbox = (eve = fakeEve()) =>
+    Effect.gen(function* () {
+      const opened = yield* openPlan({ eve });
+      const { agent, target } = yield* startedAgent(opened.owner, opened.plan.id, opened.ask);
+      const sessionId = eve.opened[0]?.sessionId ?? "";
+      assert.equal(yield* claimRuntimeSession(target, sessionId, yield* DateTime.nowAsDate), true);
+      const owned = { userId: opened.owner, planId: opened.plan.id, agentId: agent.id };
+      /** An item posted for the agent, as its tool will post one. */
+      const post = (value: InboxPost) => postInboxItem(owned, value);
+      /** The plan's inbox as the owner reads it past the cursor. */
+      const read = (after?: string) =>
+        Effect.map(
+          opened.ask(
+            request(PLAN_INBOX, opened.owner, {
+              id: opened.plan.id,
+              ...(after === undefined ? undefined : { after }),
+            }),
+          ),
+          (answered) => readAnswer(inboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+        );
+      /** The owner's answer to an item, as the route answers it. */
+      const answer = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
+        opened.ask(request(INBOX_ITEM, bearer, { method: "POST", id: itemId, body }));
+      return { ...opened, agent, target, post, read, answer };
+    });
+
+  const QUESTION = {
+    key: "invite-copy",
+    kind: INBOX_KIND.QUESTION,
+    title: "What should the invitation email say?",
+  } as const;
+
+  it.effect(
+    "an answer to an item that asks to be heard back reaches the agent as the developer's message naming it, under the answer's key, and the item reads answered; sent again under the same key it is taken once",
+    () =>
+      Effect.gen(function* () {
+        const { eve, post, read, answer } = yield* openInbox();
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        assert.equal(item.status, INBOX_STATUS.OPEN);
+
+        const clientKey = randomUUID();
+        const body = {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey,
+        };
+        const taken = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, body),
+        );
+        assert.equal(taken.taken, true);
+        assert.deepEqual(taken.item.answer, {
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+        });
+        assert.deepEqual(
+          eve.sent.map((sent) => sent.message.message),
+          [
+            'Inbox answer on "What should the invitation email say?" (key invite-copy): Answered in their own words.\n\nKeep it short.',
+          ],
+        );
+
+        const again = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, body),
+        );
+        assert.equal(again.taken, true);
+        assert.equal(eve.sent.length, 1, "the agent hears it once");
+      }),
+  );
+
+  it.effect(
+    "a task the agent needs only done is answered without a message to the agent, and the agent reads the answer in its inbox",
+    () =>
+      Effect.gen(function* () {
+        const { eve, post, read, answer } = yield* openInbox();
+        yield* post({
+          key: "branch-protection",
+          kind: INBOX_KIND.TASK,
+          title: "Protect main",
+          needsReply: false,
+        });
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const done = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, { revision: 1, reply: INBOX_REPLY.DONE, clientKey: randomUUID() }),
+        );
+        assert.equal(done.taken, true);
+        assert.equal(done.item.status, INBOX_STATUS.ANSWERED);
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "an answer to a revision the agent has since moved on from is not taken and sends nothing, an answer the kind does not take is refused, and another account's answer finds no item",
+    () =>
+      Effect.gen(function* () {
+        const { eve, other, post, read, answer } = yield* openInbox();
+        yield* post(QUESTION);
+        yield* post({
+          ...QUESTION,
+          title: "What should the invitation email say, in Spanish too?",
+        });
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        assert.equal(item.revision, 2);
+        const stale = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: 1,
+            reply: INBOX_REPLY.ANSWERED,
+            note: "Hi!",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(stale.taken, false);
+        assert.equal(stale.item.title, "What should the invitation email say, in Spanish too?");
+        assert.deepEqual(
+          yield* answer(item.id, { revision: 2, reply: INBOX_REPLY.DONE, clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* answer(
+            item.id,
+            { revision: 2, reply: INBOX_REPLY.ANSWERED, note: "Hi!", clientKey: randomUUID() },
+            other,
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "an answer is taken on its item before the agent is handed it, so an answer the item no longer takes never reaches the agent",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient;
+        const base = fakeEve();
+        const seen: (string | undefined)[] = [];
+        let watched: { readonly userId: string; readonly itemId: string } | undefined;
+        // eve as the group reaches it, noting where the item stood the moment the answer was handed over.
+        const eve = {
+          ...base,
+          eve: (authorization: string): EveSessions => {
+            const sessions = base.eve(authorization);
+            return {
+              ...sessions,
+              send: (sessionId, message) =>
+                Effect.flatMap(
+                  watched === undefined
+                    ? Effect.void
+                    : readInboxItem(watched.userId, watched.itemId).pipe(
+                        Effect.provideService(SqlClient.SqlClient, client),
+                        Effect.orDie,
+                        Effect.flatMap((found) =>
+                          Effect.sync(() => {
+                            seen.push(Option.getOrUndefined(found)?.item.status);
+                          }),
+                        ),
+                      ),
+                  () => sessions.send(sessionId, message),
+                ),
+            };
+          },
+        };
+        const { owner, post, read, answer } = yield* openInbox(eve);
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        watched = { userId: owner, itemId: item.id };
+        yield* answer(item.id, {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey: randomUUID(),
+        });
+        assert.deepEqual(seen, [INBOX_STATUS.ANSWERED]);
+      }),
+  );
+
+  it.effect(
+    "an answer the agent could not be handed yet is refused and taken back, so the item still waits",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, answer } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.NOT_READY }),
+        );
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const body = {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey: randomUUID(),
+        };
+        const refused = yield* answer(item.id, body);
+        assert.notEqual(refused.status, HOSTED_HTTP_STATUS.OK);
+        const [standing] = (yield* read()).items;
+        assert.equal(standing?.status, INBOX_STATUS.OPEN);
+        assert.equal(standing?.answer, undefined);
+      }),
+  );
+
+  it.effect(
+    "an answer to an item whose agent's session has ended for good is kept on the item, since no message will ever reach it, rather than leaving it waiting",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, answer } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED }),
+        );
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const kept = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: item.revision,
+            reply: INBOX_REPLY.ANSWERED,
+            note: "Keep it short.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(kept.taken, true);
+        assert.equal(kept.item.status, INBOX_STATUS.ANSWERED);
+      }),
+  );
+
+  it.effect(
+    "an answer taken whose hand-off was cut short is handed off by the retry under the same key, so the agent hears it once rather than never",
+    () =>
+      Effect.gen(function* () {
+        const { eve, owner, post, read, answer } = yield* openInbox();
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const clientKey = randomUUID();
+        const reply = { reply: INBOX_REPLY.ANSWERED, note: "Keep it short." } as const;
+        // The answer stands as the first send left it when the function ended before the hand-off.
+        yield* answerInboxItem(owner, item.id, item.revision, reply, clientKey);
+        const retried = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, { revision: item.revision, ...reply, clientKey }),
+        );
+        assert.equal(retried.taken, true);
+        yield* answer(item.id, { revision: item.revision, ...reply, clientKey });
+        assert.equal(eve.sent.length, 1, "the agent hears it once");
+      }),
+  );
+
+  it.effect(
+    "items changed at one instant read as the same cursor on every read, so a reader holding it is not let go while nothing changed",
+    () =>
+      Effect.gen(function* () {
+        const { post, read } = yield* openInbox();
+        yield* post(QUESTION);
+        yield* post({ ...QUESTION, key: "invite-copy-2" });
+        const standing = yield* read();
+        assert.equal((yield* read()).cursor, standing.cursor);
+        const held = yield* Effect.forkChild(read(standing.cursor));
+        yield* TestClock.adjust(Duration.seconds(2));
+        assert.equal(held.pollUnsafe(), undefined, "nothing changed, so the read holds");
+      }),
+  );
+
+  it.effect(
+    "a change of an item within the same millisecond as the read before it still moves the cursor, so a reader holding it hears the change at once",
+    () =>
+      Effect.gen(function* () {
+        const { post, read } = yield* openInbox();
+        yield* post(QUESTION);
+        const before = yield* read();
+        yield* post({ ...QUESTION, title: "What should the email say, in Spanish too?" });
+        const after = yield* read(before.cursor);
+        assert.notEqual(after.cursor, before.cursor);
+        assert.equal(after.items[0]?.revision, 2);
+      }),
+  );
+
+  it.effect(
+    "a read of the plan's inbox answers at once from the start, holds while nothing changed past its cursor, and answers the change once a post lands",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, other, plan, ask } = yield* openInbox();
+        const first = yield* read();
+        assert.deepEqual(first.items, []);
+
+        const held = yield* Effect.forkChild(read(first.cursor));
+        yield* TestClock.adjust(Duration.seconds(2));
+        assert.equal(held.pollUnsafe(), undefined, "nothing changed, so the read holds");
+        yield* post(QUESTION);
+        const changed = yield* driven(held, Duration.millis(500), EARLY_READ_STEPS);
+        assert.deepEqual(
+          changed.items.map((item) => item.key),
+          [QUESTION.key],
+        );
+
+        assert.deepEqual(
+          yield* ask(request(PLAN_INBOX, other, { id: plan.id })),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+});

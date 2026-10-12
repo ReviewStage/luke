@@ -39,6 +39,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/plans/([^/]+)/tree", route: "plans/tree", query: "id=$1" },
   { src: "/api/plans/([^/]+)/edit", route: "plans/edit", query: "id=$1" },
   { src: "/api/plans/([^/]+)/agents", route: "plans/agents", query: "id=$1" },
+  { src: "/api/plans/([^/]+)/inbox", route: "plans/inbox", query: "id=$1" },
   {
     src: "/api/plans/([^/]+)/revisions/([^/]+)/restore",
     route: "plans/restore",
@@ -56,6 +57,7 @@ const SEGMENT_REWRITES: readonly SegmentRewrite[] = [
   { src: "/api/agents/([^/]+)/stop", route: "agents/stop", query: "id=$1" },
   { src: "/api/agents/([^/]+)/pull-request", route: "agents/pull-request", query: "id=$1" },
   { src: "/api/agents/([^/]+)", route: "agents/agent", query: "id=$1" },
+  { src: "/api/inbox/([^/]+)", route: "inbox/item", query: "id=$1" },
 ];
 
 /** The characters a route key may spell for its exact rewrite to be its own regular expression. */
