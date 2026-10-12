@@ -306,6 +306,7 @@ function Window({ plan, versions }: { plan: Plan; versions: boolean }): React.JS
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps(),
   });

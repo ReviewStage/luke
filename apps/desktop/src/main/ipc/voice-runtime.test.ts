@@ -18,6 +18,8 @@ import {
 
 /** The voice rows through the real router, over the real document. */
 
+const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+
 /** What the document is composed from; the voice rows read none of it. */
 const RUN = {
   launch: {
@@ -34,11 +36,16 @@ const RUN = {
 
 function fixture() {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
+  const sentToCall: { channel: string; payload: WireRecord }[] = [];
+  const toPanels: { channel: string; payload: WireRecord }[] = [];
+  let panelsFocused = 0;
   const liveCalls: string[] = [];
   // SAFETY: the row reads senders by identity alone; two distinct inert objects are two windows.
   const panelSender = {} as WebContents;
   // SAFETY: a second inert object, so the row reads two distinct windows.
   const voiceSender = {} as WebContents;
+  // SAFETY: a third, for the call window.
+  const callSender = {} as WebContents;
   // SAFETY: the command path reads only `owns` and `current().webContents.send` off the voice window surface.
   const voiceWindow = {
     owns: (sender: WebContents) => sender === voiceSender,
@@ -50,15 +57,32 @@ function fixture() {
       },
     }),
   } as unknown as VoiceRuntimeDependencies["voiceWindow"];
-  // SAFETY: this path reads only `owns` and the exchange edge off the panel manager.
+  // SAFETY: the call window's paths read only `owns` and `current().webContents.send`, as the voice window's do.
+  const callWindow = {
+    owns: (sender: WebContents) => sender === callSender,
+    current: () => ({
+      webContents: {
+        send: (channel: string, payload: WireRecord) => {
+          sentToCall.push({ channel, payload });
+        },
+      },
+    }),
+  } as unknown as VoiceRuntimeDependencies["callWindow"];
+  // SAFETY: these paths read only `owns`, the exchange edge, the broadcast, and the focus off the panel manager.
   const panels = {
     owns: (sender: WebContents) => sender === panelSender,
     setVoiceExchange: () => undefined,
-    broadcast: () => undefined,
+    broadcast: (channel: string, payload: WireRecord) => {
+      toPanels.push({ channel, payload });
+    },
+    focusExpanded: () => {
+      panelsFocused += 1;
+    },
   } as unknown as PanelManager;
   const dependencies = {
     panels,
     voiceWindow,
+    callWindow,
     state: new AppStateStore(initialAppState(RUN, false), Context.empty()),
     openExternal: async () => undefined,
     liveSession: {
@@ -97,6 +121,7 @@ function fixture() {
     sender,
     panel: sender === panelSender,
     voice: sender === voiceSender,
+    call: sender === callSender,
   });
   const command = (sender: WebContents) =>
     router.performAct(
@@ -111,10 +136,15 @@ function fixture() {
     command,
     perform,
     report,
+    reports,
     liveCalls,
     sentToVoice,
+    sentToCall,
+    toPanels,
+    panelsFocused: () => panelsFocused,
     panelSender,
     voiceSender,
+    callSender,
     state: dependencies.state,
   };
 }
@@ -179,18 +209,50 @@ it.effect("the five live session acts reach the host from the voice window alone
 );
 
 it.effect(
-  "a panel's command reaches the voice window, and one from anything else reaches nothing",
+  "a panel's or the call window's command reaches the voice window, and one from anything else reaches nothing",
   () =>
     Effect.gen(function* () {
       const f = fixture();
       assert.deepEqual(yield* f.command(f.voiceSender), { status: "done", value: undefined });
       assert.deepEqual(f.sentToVoice, []);
       assert.deepEqual(yield* f.command(f.panelSender), { status: "done", value: undefined });
-      assert.deepEqual(f.sentToVoice, [
-        { channel: channels.onVoiceCommand, payload: { command: VOICE_COMMAND.END_CALL } },
-      ]);
+      yield* f.command(f.callSender);
+      const ended = {
+        channel: channels.onVoiceCommand,
+        payload: { command: VOICE_COMMAND.END_CALL },
+      };
+      assert.deepEqual(f.sentToVoice, [ended, ended]);
     }),
 );
+
+it.effect(
+  "the call window's way back brings the panels forward on the call's own plan, and nothing else's ask, or one with no call, brings anything",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const showPlan = { kind: ACT_KIND.CALL_SHOW_PLAN } as const;
+      yield* f.perform(f.callSender, showPlan);
+      assert.equal(f.panelsFocused(), 0);
+
+      f.report(f.voiceSender, { ...IDLE_VOICE_VIEW, voiceStatus: "listening", callPlanId: PLAN });
+      yield* f.perform(f.panelSender, showPlan);
+      yield* f.perform(f.voiceSender, showPlan);
+      assert.equal(f.panelsFocused(), 0);
+      yield* f.perform(f.callSender, showPlan);
+      assert.equal(f.panelsFocused(), 1);
+      assert.deepEqual(f.toPanels, [{ channel: channels.onShowPlan, payload: { planId: PLAN } }]);
+    }),
+);
+
+it("the voice window's levels reach the call window as well as the panels, and nothing else's do", () => {
+  const f = fixture();
+  const levels = { developer: 0.4, luke: 0 };
+  f.reports.reportVoiceLevel({ sender: f.panelSender }, levels);
+  assert.deepEqual(f.sentToCall, []);
+  f.reports.reportVoiceLevel({ sender: f.voiceSender }, levels);
+  assert.deepEqual(f.sentToCall, [{ channel: channels.onVoiceLevelChanged, payload: levels }]);
+  assert.deepEqual(f.toPanels, [{ channel: channels.onVoiceLevelChanged, payload: levels }]);
+});
 
 it("the voice window's report is written to the document; a panel's report is ignored", () => {
   const f = fixture();

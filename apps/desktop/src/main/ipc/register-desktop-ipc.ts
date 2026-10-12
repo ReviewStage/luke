@@ -29,7 +29,7 @@ import { windowSurfaceActRows, windowSurfaceReports } from "./window-surface";
 export function registerDesktopIpc(services: DesktopServices): void {
   const { config, state, telemetry, native, updates, operator, windows, notices, run } = services;
   const { launch } = config;
-  const { panels, voiceWindow, hotkeys } = windows;
+  const { panels, voiceWindow, callWindow, hotkeys } = windows;
   const recordProductEvent = telemetry.recordProductEvent;
 
   /**
@@ -40,6 +40,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
+    callWindow,
     state,
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,
@@ -141,6 +142,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       sender,
       panel: panels.owns(sender),
       voice: voiceWindow.owns(sender),
+      call: callWindow.owns(sender),
     }),
     router: createActRouter(rows),
     run,

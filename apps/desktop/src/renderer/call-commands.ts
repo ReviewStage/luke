@@ -2,10 +2,14 @@
  * call-commands.ts -- the standing call's mute chords, answering wherever the panel stands.
  */
 
-import { VOICE_COMMAND, type VoiceCommand, type VoiceView } from "#shared/messages/voice-view";
+import {
+  callInProgress,
+  VOICE_COMMAND,
+  type VoiceCommand,
+  type VoiceView,
+} from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "./app-commands";
-import { planningCallInProgress } from "./planning/planning-model";
 
 /**
  * The call's two mute chords, offered while a call is in progress wherever
@@ -21,7 +25,7 @@ export function useCallCommands(
   microphoneGranted: boolean,
   send: (command: VoiceCommand) => void,
 ): void {
-  const inProgress = planningCallInProgress(view);
+  const inProgress = callInProgress(view);
   useAppCommand(
     APP_COMMAND.TOGGLE_MICROPHONE,
     inProgress && microphoneGranted ? () => send(VOICE_COMMAND.TOGGLE_MICROPHONE) : undefined,

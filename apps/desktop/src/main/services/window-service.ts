@@ -21,6 +21,8 @@ import { WINDOW_ROLE } from "#shared/messages/session";
 import type { AgentEndToast, AgentPlace } from "../agent-notices";
 import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
+import { CallWindow } from "../window/call-window";
+import { CallWindowPresence } from "../window/call-window-presence";
 import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
 import { askForNotifications } from "../window/notice-doors";
@@ -55,6 +57,8 @@ export interface WindowServiceDependencies {
 export interface WindowService extends DesktopService {
   readonly panels: PanelManager;
   readonly voiceWindow: VoiceWindow;
+  /** The floating call window, shown while a call stands and no Luke window has the keyboard. */
+  readonly callWindow: CallWindow;
   readonly hotkeys: HotkeyRegistrar;
   /**
    * One `app:state` per window, each composed with that window's own facts.
@@ -102,7 +106,7 @@ export interface WindowService extends DesktopService {
 
 /**
  * Everything this process draws or claims from the machine on the windows'
- * behalf: the panel, the hidden voice window, the keys, the Dock, the login
+ * behalf: the panel, the hidden voice window, the call window, the keys, the Dock, the login
  * item, the media permissions, and the display and power changes the panel
  * answers.
  * It is the one concern that opens a window, and it opens none until `start`.
@@ -129,6 +133,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   // of what any window here may navigate to or speak from.
   const voiceHtmlPath = path.join(config.resourceDirectory, "renderer", "voice.html");
   const voiceUrl = pathToFileURL(voiceHtmlPath).href;
+  // The call window's document, on the same terms: the one bundle, no host.
+  const callHtmlPath = path.join(config.resourceDirectory, "renderer", "call.html");
+  const callUrl = pathToFileURL(callHtmlPath).href;
 
   const panels = new PanelManager({
     runMode,
@@ -158,6 +165,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     },
   });
   const voiceWindowWanted = runMode.registersGlobalKeys || runMode.sendsNetwork;
+  const callWindow = new CallWindow({
+    runMode,
+    preloadPath,
+    rendererHtmlPath: callHtmlPath,
+    rendererUrl: callUrl,
+    placementPath: path.join(config.stateRoot, "call-window.json"),
+  });
+  const callPresence = new CallWindowPresence(callWindow);
 
   /** Electron's own `nativeTheme`, the one appearance every window here follows. */
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
@@ -194,7 +209,9 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   }
 
   function windowFactsFor(sender: WebContents): AppWindowFacts {
-    return { role: voiceWindow.owns(sender) ? WINDOW_ROLE.VOICE : WINDOW_ROLE.PANEL };
+    if (voiceWindow.owns(sender)) return { role: WINDOW_ROLE.VOICE };
+    if (callWindow.owns(sender)) return { role: WINDOW_ROLE.CALL };
+    return { role: WINDOW_ROLE.PANEL };
   }
 
   function publishAppState(): void {
@@ -206,6 +223,11 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     for (const sender of panels.senders()) send(sender, held);
     const voice = voiceWindow.current();
     if (voice && !voice.isDestroyed()) send(voice.webContents, voiceWindowState(held));
+    const call = callWindow.current();
+    if (call) send(call.webContents, voiceWindowState(held));
+    // The call window follows the document it draws, so it stands and goes
+    // on the same version every window is told.
+    callPresence.voiceChanged(held.voice.view);
   }
 
   function sendToVoice<Payload>(channel: string, payload: Payload): void {
@@ -235,6 +257,15 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       app.removeListener("browser-window-blur", blurred);
     };
   }
+
+  // Which panel has the keyboard, for the call window: while one does, that
+  // panel draws the call itself, as its call bar or its own call card.
+  const panelFocused = (_event: Electron.Event, window: BrowserWindow) => {
+    if (panels.owns(window.webContents)) callPresence.panelFocused(window.webContents);
+  };
+  const panelBlurred = (_event: Electron.Event, window: BrowserWindow) => {
+    if (panels.owns(window.webContents)) callPresence.panelBlurred(window.webContents);
+  };
 
   /**
    * Every wait this service schedules — the settling a display change waits
@@ -335,6 +366,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     name: "windows",
     panels,
     voiceWindow,
+    callWindow,
     hotkeys,
     publishAppState,
     applyAppearance,
@@ -346,7 +378,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     reporterOf,
     trustedSender: (event) => {
       const url = event.senderFrame?.url ?? event.sender.getURL();
-      return url === rendererUrl || url === voiceUrl;
+      return url === rendererUrl || url === voiceUrl || url === callUrl;
     },
     applyLoginItem,
     reapplyTalkHotkey: () => void hotkeys.reapply(HOTKEY_RANK.TALK),
@@ -393,6 +425,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
 
       app.on("second-instance", handleSecondInstance);
       app.on("activate", handleActivate);
+      app.on("browser-window-focus", panelFocused);
+      app.on("browser-window-blur", panelBlurred);
       screen.on("display-added", handleDisplayChange);
       screen.on("display-removed", handleDisplayChange);
       screen.on("display-metrics-changed", handleDisplayChange);
@@ -403,6 +437,8 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     stop: async () => {
       app.removeListener("second-instance", handleSecondInstance);
       app.removeListener("activate", handleActivate);
+      app.removeListener("browser-window-focus", panelFocused);
+      app.removeListener("browser-window-blur", panelBlurred);
       screen.removeListener("display-added", handleDisplayChange);
       screen.removeListener("display-removed", handleDisplayChange);
       screen.removeListener("display-metrics-changed", handleDisplayChange);
@@ -414,6 +450,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
       await run(Scope.close(appearanceScope, Exit.void));
       hotkeys.release();
       voiceWindow.closeForGood();
+      callWindow.closeForGood();
     },
   };
 }

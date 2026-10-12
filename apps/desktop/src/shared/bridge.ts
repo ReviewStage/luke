@@ -268,6 +268,17 @@ export const BRIDGE = {
     ),
   }),
   /**
+   * The floating call window's way back pressed: the panel is to show the
+   * call's plan. An event, as a notification's click is, because it is an
+   * ask the window answers once.
+   */
+  onShowPlan: entry({
+    kind: "subscribe",
+    channel: "app:show-plan",
+    args: noArgs,
+    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
+  }),
+  /**
    * A coding agent's turn ended while the window was focused: the panel says
    * so in its toast, whose View opens the plan on that agent's tab. An event,
    * as a click is, because it is said once and never bootstrapped from.

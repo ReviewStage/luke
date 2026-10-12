@@ -645,19 +645,24 @@ it.effect(
     }),
 );
 
-it.effect("activity on the call about a plan the panel does not have open is dropped", () =>
-  Effect.gen(function* () {
-    const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
-    const { call, planning, told } = yield* subject(fakeService([invites]));
-    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
-    yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
-    const drawn = told.length;
+it.effect(
+  "activity on the call about a plan the panel does not have open is the call's alone, and goes when that call ends",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "# Draft", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
 
-    planning.showActivity(activityFrame(BILLING, { planner: {}, notes: false }));
+      const working = { planner: { action: "ls src" }, notes: false };
+      planning.showActivity(activityFrame(BILLING, working));
+      assert.deepEqual(last()?.callActivity, working);
+      assert.equal(last()?.activity, undefined);
 
-    assert.equal(told.length, drawn);
-    assert.equal(planning.snapshot().activity, undefined);
-  }),
+      planning.callEnded(BILLING);
+      assert.equal(last()?.callActivity, undefined);
+      assert.equal(last()?.activePlanId, INVITES);
+    }),
 );
 
 it.effect("leaving the open plan or switching to another clears the activity drawn for it", () =>

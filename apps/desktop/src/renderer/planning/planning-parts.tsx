@@ -29,7 +29,7 @@ const PLANNER_THINKING = "Thinking";
 const NOTETAKER_WRITING = "Notetaker · Writing notes";
 
 /** Each call control's name for a reader and its hover, by whether it is on. */
-const CALL_CONTROL_LABEL = {
+export const CALL_CONTROL_LABEL = {
   MUTE_MICROPHONE: "Mute microphone",
   UNMUTE_MICROPHONE: "Unmute microphone",
   MUTE_SPEAKER: "Mute speaker",

@@ -215,6 +215,7 @@ function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): Re
     }),
     history: navigationHistory(),
     sidebar,
+    call: undefined,
     captions: captionStripProps(),
     settings: settingsPanelProps(),
   });

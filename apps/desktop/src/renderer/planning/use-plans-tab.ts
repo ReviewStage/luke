@@ -11,7 +11,7 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
 import type { MicrophoneStatus } from "#shared/messages/audio";
-import { VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
+import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
@@ -47,7 +47,6 @@ import {
   type PlansPage,
   pendingMark,
   pinnedRepositories,
-  planningCallInProgress,
   plansPage,
   REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
@@ -725,8 +724,7 @@ export function usePlansTab(input: {
     callPlanId: voice.view.callPlanId,
     voiceStatus: voice.view.voiceStatus,
   });
-  const live =
-    planningCallInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
+  const live = callInProgress(voice.view) && voice.view.callPlanId === planning.activePlanId;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {

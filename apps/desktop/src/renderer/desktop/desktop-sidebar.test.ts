@@ -139,6 +139,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
               voiceOpening: false,
             },
             history: navigationHistory(),
+            call: undefined,
             plans: plansControl(plans),
             tab: options.tab ?? PANEL_TAB.PLANS,
             onTabChange: options.onTabChange ?? (() => undefined),

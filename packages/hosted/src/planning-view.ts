@@ -370,6 +370,13 @@ export const planningViewSchema = EffectSchema.Struct({
   document: planningDocumentSchema,
   /** What each part of Luke is doing on the call about the active plan, as last told; absent with no plan open or no word yet. */
   activity: EffectSchema.optionalKey(planActivitySchema),
+  /**
+   * What each part of Luke is doing on the standing call, whichever plan it
+   * is about, as last told: what the floating call window draws while the
+   * call's plan is not the one open. Absent before the first word and once
+   * the call has ended.
+   */
+  callActivity: EffectSchema.optionalKey(planActivitySchema),
   /** The active plan's whiteboard as last read or saved; absent with no plan open or before its first read lands. */
   board: EffectSchema.optionalKey(boardSchema),
   /** What was said on the active plan's calls as last read; absent with no plan open. */

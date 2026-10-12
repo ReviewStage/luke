@@ -1,0 +1,193 @@
+/* The call card (`renderer/call/call-card.tsx`): the standing call wherever
+   it is not otherwise on screen, drawn as a player's card is in a browser's
+   sidebar. One card in three places: at the foot of a sidebar, floating in
+   the window's bottom-left corner while the sidebar is folded, and alone in
+   the floating call window. Last in index.css, because that window's ground
+   has to be no ground at all, over the desktop's own. */
+
+html.call-window,
+html.call-window body,
+html.call-window #root {
+  background: transparent;
+}
+
+html.call-window #root {
+  display: grid;
+  place-items: center;
+}
+
+/* On the ground of what floats over the window, as a toast is, so the card
+   reads as the same kind of thing wherever it stands. It rises in on the
+   spring and leaves on the exit's beat, as a toast does. */
+.call-card {
+  --call-ring: transparent;
+  --control-height: 28px;
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--surface-popover);
+  box-shadow:
+    0 1px 2px var(--shadow-soft),
+    0 6px 18px var(--shadow);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 18px;
+  animation:
+    call-card-fade var(--duration-quick) var(--motion-exit),
+    call-card-rise var(--duration-fast) var(--spring-fast);
+}
+
+.call-card[data-leaving="true"] {
+  pointer-events: none;
+  animation: call-card-leave var(--duration-exit) var(--motion-exit) forwards;
+}
+
+@keyframes call-card-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes call-card-rise {
+  from {
+    transform: translateY(var(--space-8));
+  }
+}
+
+@keyframes call-card-leave {
+  to {
+    opacity: 0;
+    transform: translateY(var(--space-8));
+  }
+}
+
+/* Above the account row, edge to edge with the rows' own fills. */
+.call-card[data-surface="sidebar"] {
+  margin-bottom: var(--space-8);
+}
+
+/* Where the sidebar's card would stand, as far in from the corner as the
+   toasts are from theirs, over the content rather than moving it, and clear
+   of a call bar's row where one is drawn. */
+.call-card[data-surface="floating"] {
+  position: fixed;
+  z-index: var(--z-toast);
+  bottom: var(--space-16);
+  left: var(--space-16);
+  width: calc(var(--sidebar-width) - 2 * var(--row-inset));
+}
+
+body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
+  bottom: calc(var(--call-row-height) + 3 * var(--space-12) + 1px);
+}
+
+/* Alone in its window, which shows and hides it whole, so it neither rises
+   nor leaves, and its shadow keeps within the room the window leaves it. */
+.call-card[data-surface="window"] {
+  width: 248px;
+  box-shadow: 0 2px 6px var(--shadow);
+  animation: none;
+}
+
+/* The ring around Luke's mark and the status say whose turn it is in the
+   meters' colours, a mute in the destructive red, and a call still opening
+   in the warning tint. */
+.call-card[data-tone="luke"],
+.call-card[data-tone="working"] {
+  --call-ring: var(--voice-luke);
+}
+.call-card[data-tone="developer"] {
+  --call-ring: var(--voice-developer);
+}
+.call-card[data-tone="muted"] {
+  --call-ring: var(--danger);
+}
+.call-card[data-tone="opening"] {
+  --call-ring: var(--state-attention);
+}
+
+.call-card-title {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+button.call-card-title:hover {
+  background: var(--raised-strong);
+}
+
+/* In the floating window the title is what the window is dragged by. */
+.call-card[data-surface="window"] .call-card-title {
+  -webkit-app-region: drag;
+}
+
+.call-card-words {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.call-card-words[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+.call-card-plan {
+  font-weight: 600;
+}
+
+.call-card-status {
+  color: var(--text-secondary);
+}
+
+.call-card[data-tone="luke"] .call-card-status {
+  color: var(--voice-luke);
+}
+.call-card[data-tone="developer"] .call-card-status {
+  color: var(--voice-developer);
+}
+.call-card[data-tone="muted"] .call-card-status {
+  color: var(--danger-text);
+}
+.call-card[data-tone="opening"] .call-card-status {
+  color: var(--state-attention);
+}
+
+/* Luke's mark and the controls, evenly spaced across the card. */
+.call-card-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-2);
+}
+
+.call-card-mark {
+  display: grid;
+  width: var(--control-height);
+  height: var(--control-height);
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  box-shadow: 0 0 0 2px var(--call-ring);
+  transition: box-shadow var(--duration-quick) var(--motion-exit);
+}
+
+.call-card-mark .luke-face {
+  width: 18px;
+  height: 18px;
+}
+
+.call-card .call-end {
+  margin-left: 0;
+}

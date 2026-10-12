@@ -14,6 +14,9 @@ import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAct } from "./act";
 import { runAppCommand, useAppCommand, useAppKeymap, useMenuCommands } from "./app-commands";
+import { type CallCardInput, callControls } from "./call/call-card";
+import { callBarPlanId, callCard, callCardShown } from "./call/call-card-model";
+import { useWindowFocused } from "./call/use-window-focused";
 import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
@@ -22,6 +25,7 @@ import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { PLANS_PAGE } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -213,6 +217,39 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
+  // The call card's way back: the Plans tab, on the call's plan, opening it
+  // where another plan, or none, is open.
+  const selectPlan = useRef(plans.onSelect);
+  selectPlan.current = plans.onSelect;
+  const boundPlan = useRef(plans.boundFor);
+  boundPlan.current = plans.boundFor;
+  useEffect(
+    () =>
+      window.sidecar.onShowPlan(({ planId }) => {
+        changeTab(PANEL_TAB.PLANS);
+        if (planId !== boundPlan.current) selectPlan.current(planId);
+      }),
+    [changeTab],
+  );
+  // The call card, while this window has the keyboard and its call bar is not
+  // on screen: another plan, the new-plan page, Settings, or the plan itself
+  // under its version history or a side panel filling the window.
+  const focused = useWindowFocused();
+  const planShown = callBarPlanId({
+    plansTab: tab === PANEL_TAB.PLANS,
+    documentPage: plans.page === PLANS_PAGE.DOCUMENT,
+    historyOpen: plans.history.open,
+    sidePanelFullScreen: plans.sidePanel.fullScreen,
+    activePlanId: state?.planning.activePlanId,
+  });
+  const call: CallCardInput | undefined =
+    !accountGated && callCardShown({ view: voiceView, focused, planShown })
+      ? {
+          card: callCard({ view: voiceView, planning: state?.planning ?? IDLE_PLANNING_VIEW }),
+          speakerMuted: voiceView.speakerMuted,
+          controls: callControls(tell, voiceView.speakerMuted),
+        }
+      : undefined;
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.
@@ -415,6 +452,7 @@ export function App(): React.JSX.Element {
           plans={plans}
           history={history}
           sidebar={sidebar}
+          call={call}
           captions={{
             caption,
             volumeHint: {

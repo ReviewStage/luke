@@ -19,7 +19,6 @@ import {
   MICROPHONE_PRESS,
   microphoneButton,
   PLANS_PAGE,
-  planningCallInProgress,
   plansPage,
   recentRepositories,
   repositoryFailureNote,
@@ -273,19 +272,6 @@ test("an archived plan opens no call, and its own call still standing is still m
     }),
     { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
   );
-});
-
-test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {
-  const on = (voiceStatus: LiveStatus, callPlanId: string | undefined) =>
-    planningCallInProgress({ ...IDLE_VOICE_VIEW, voiceStatus, callPlanId });
-  assert.equal(on(LIVE_STATUS.CONNECTING, INVITES), true);
-  assert.equal(on(LIVE_STATUS.LISTENING, INVITES), true);
-  assert.equal(on(LIVE_STATUS.SPEAKING, INVITES), true);
-  assert.equal(on(LIVE_STATUS.MUTED, INVITES), true);
-  assert.equal(on(LIVE_STATUS.LISTENING, undefined), false);
-  assert.equal(on(LIVE_STATUS.CLOSING, INVITES), false);
-  assert.equal(on(LIVE_STATUS.FAILED, INVITES), false);
-  assert.equal(on(LIVE_STATUS.IDLE, undefined), false);
 });
 
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
