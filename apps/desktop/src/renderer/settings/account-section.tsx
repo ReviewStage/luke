@@ -1,5 +1,4 @@
-import type { AccountSnapshot } from "@sidecar/credentials/snapshot";
-import { ACCOUNT_PROVIDER, type ACCOUNT_STATUS } from "@sidecar/credentials/snapshot";
+import type { ACCOUNT_STATUS, AccountSnapshot } from "@sidecar/credentials/snapshot";
 import { UserIcon } from "@sidecar/panel";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 
@@ -71,9 +70,7 @@ export function AccountSection({
             <span className="settings-name">
               <strong>{account.email}</strong>
             </span>
-            <small>
-              Signed in with {account.provider === ACCOUNT_PROVIDER.GITHUB ? "GitHub" : "Google"}
-            </small>
+            <small>Signed in with GitHub</small>
           </span>
         </span>
         <ConfirmSwap

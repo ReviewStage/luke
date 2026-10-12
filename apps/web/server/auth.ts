@@ -70,7 +70,6 @@ export const auth = betterAuth({
   },
   disabledPaths: [...DISABLED_AUTH_PATHS],
   socialProviders: {
-    google: { ...socialProvider(secrets.google), scope: ["email", "profile"] },
     // The Luke GitHub App's client: signing in is the user's authorization
     // of the App, and the token it leaves on the account row is the App's
     // expiring user token, refreshed by `github/github-app.ts`.

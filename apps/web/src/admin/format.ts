@@ -73,6 +73,5 @@ export function formatTrendMove(trend: AdminTrend): string {
 /** A linked provider's row value drawn as its label where the page knows one. */
 export function signInMethodLabel(providerId: string): string {
   if (providerId === SOCIAL_PROVIDER.GITHUB) return SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GITHUB];
-  if (providerId === SOCIAL_PROVIDER.GOOGLE) return SOCIAL_PROVIDER_LABEL[SOCIAL_PROVIDER.GOOGLE];
   return providerId;
 }

@@ -228,7 +228,7 @@ export class GitHubUnavailable extends Data.TaggedError("GitHubUnavailable")<{
 
 /** Why a user token could not be had, every case of which the user mends by signing in with GitHub again. */
 export const SIGN_IN_REQUIRED = {
-  /** The user has no GitHub account row: they signed in with Google alone. */
+  /** The user has no GitHub account row: they signed in with Google alone, before sign-in was GitHub's. */
   NO_GITHUB_ACCOUNT: "no-github-account",
   /** The row holds the OAuth App's token from before the GitHub App, which reaches no installation and cannot be refreshed. */
   BEFORE_THE_APP: "before-the-app",

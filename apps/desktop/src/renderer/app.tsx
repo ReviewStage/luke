@@ -21,7 +21,6 @@ import { CommandPalette } from "./desktop/command-palette";
 import { DesktopShell } from "./desktop/desktop-shell";
 import { useSidebarCollapse } from "./desktop/sidebar-collapse";
 import { FeedbackDialog } from "./feedback-dialog";
-import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
@@ -120,7 +119,6 @@ export function App(): React.JSX.Element {
   const signInFace = useSignInFaceCycle(usePrefersReducedMotion() || !accountGated);
 
   const signIn = useSignIn();
-  const lastSignIn = useLastSignIn(account, state?.run.fixtureMode === true);
 
   // The menu bar's Help items open the same dialog Settings' buttons do.
   useAppCommand(APP_COMMAND.SEND_FEEDBACK, () => setFeedbackKind(FEEDBACK_KIND.FEEDBACK));
@@ -431,7 +429,6 @@ export function App(): React.JSX.Element {
             accountRequired: state.run.accountRequired,
             signInWait: signIn.signInWait,
             signInFailure: signIn.signInFailure,
-            lastSignIn,
             onBeginSignIn: signIn.beginSignIn,
             onCancelSignIn: signIn.cancelSignIn,
             signInFace,
