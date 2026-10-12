@@ -6,7 +6,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
 import { builtStylesheet, cssRules } from "#testing/css-rules";
 import { GLYPH_STATE, type GlyphState, StateGlyph } from "./state-glyph";
-import { WORKING_MARK_SIZE, WorkingMark, type WorkingMarkSize } from "./working-mark";
+import { WorkingMark } from "./working-mark";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -38,9 +38,9 @@ function glyphSeen(state: GlyphState) {
   };
 }
 
-/** The track's cells of the mark at `size`, as the eye meets them: where each starts and how wide it is. */
-function trackOf(size: WorkingMarkSize) {
-  const container = drawn(createElement(WorkingMark, { size }));
+/** The track's cells of the mark, as the eye meets them: where each starts and how wide it is. */
+function trackOf() {
+  const container = drawn(createElement(WorkingMark));
   const mark = container.querySelector("svg.working-mark");
   const cells = [...(mark?.querySelectorAll(".working-mark-track") ?? [])].map((cell) => ({
     x: Number(cell.getAttribute("x")),
@@ -96,23 +96,19 @@ test("the mark standing alone is said in its label, and beside words that say it
   assert.equal(quiet.querySelector('[role="img"]'), null);
 });
 
-test("the badge is the glyph's grid with fewer cells, never the glyph shrunk: every cell and every gap is the same whole 2px at both sizes", () => {
-  const glyph = trackOf(WORKING_MARK_SIZE.GLYPH);
-  const badge = trackOf(WORKING_MARK_SIZE.BADGE);
+test("the mark laps eight cells round a 3×3 grid, every cell and every gap a whole 2px", () => {
+  const { side, cells } = trackOf();
 
-  assert.deepEqual([glyph.side, glyph.cells.length], [12, 8], "eight cells round a 3×3 grid");
-  assert.deepEqual([badge.side, badge.cells.length], [8, 4], "four round a 2×2");
-  for (const { side, cells } of [glyph, badge]) {
-    assert.deepEqual(new Set(cells.map((cell) => cell.side)), new Set([2]));
-    assert.deepEqual(new Set(gapsIn(cells)), new Set([2]));
-    for (const cell of cells) {
-      assert.ok(Number.isInteger(cell.x) && Number.isInteger(cell.y), "on whole pixels");
-      assert.ok(cell.x >= 1 && cell.x + cell.side <= side - 1, "inside the mark with a margin");
-    }
+  assert.deepEqual([side, cells.length], [12, 8], "eight cells round a 3×3 grid");
+  assert.deepEqual(new Set(cells.map((cell) => cell.side)), new Set([2]));
+  assert.deepEqual(new Set(gapsIn(cells)), new Set([2]));
+  for (const cell of cells) {
+    assert.ok(Number.isInteger(cell.x) && Number.isInteger(cell.y), "on whole pixels");
+    assert.ok(cell.x >= 1 && cell.x + cell.side <= side - 1, "inside the mark with a margin");
   }
 });
 
-test("held still, as reduced motion and a capture run hold it, the glyph stands mid-lap: each chaser a cell past its tail and the two chasers opposite, rather than all on the first cell", async () => {
+test("held still, as reduced motion and a capture run hold it, the mark stands mid-lap: each chaser a cell past its tail and the two chasers opposite, rather than all on the first cell", async () => {
   const rules = cssRules(await builtStylesheet());
   const declared = (selector: string, property: string) =>
     rules.find((rule) => rule.selectors.includes(selector))?.declarations.get(property);
@@ -120,7 +116,7 @@ test("held still, as reduced motion and a capture run hold it, the glyph stands 
   assert.match(declared(moving, "animation") ?? "", /\bworking-lap\b.*\b1\.6s\b.*\bstep-end\b/u);
   assert.equal(declared(moving, "animation-play-state"), "var(--loop-motion)");
 
-  // The glyph laps its eight cells in 1.6s, a cell to each 0.2s beat; a held pixel stands on the cell its delay puts it at.
+  // The mark laps its eight cells in 1.6s, a cell to each 0.2s beat; a held pixel stands on the cell its delay puts it at.
   const cellHeld = (dot: string) => {
     const delay = seconds(declared(`.working-mark-dot[data-dot="${dot}"]`, "animation-delay"));
     assert.ok(delay < 0, "held past its first frame");

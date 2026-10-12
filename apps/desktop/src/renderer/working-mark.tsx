@@ -2,27 +2,16 @@
  * working-mark.tsx -- the one mark an agent at work wears: two pixels chasing each other round the edge of a small grid, in the gray ink around it.
  *
  * Every place that says an agent is working draws this mark: an agent's or
- * a subagent's glyph (`state-glyph.tsx`), a sidebar plan's row, a call's
- * row in a transcript, and the summary rail's badge. Its cells and the gap
- * between them are whole pixels and the same at every size, so the badge is
- * the glyph's grid with fewer cells rather than the glyph shrunk: the glyph
- * laps eight cells round a 3×3 grid, the badge four round a 2×2. Each cell
- * steps to the next on one beat, so the motion is stepped frames of
- * `transform` alone and never lays anything out. Reduced motion and a
- * capture run hold it on `--loop-motion`, on a frame chosen to show the
- * chase mid-lap rather than its first, so a still mark still reads as
- * working. The mark is decorative unless given a label, which is said in a
- * fixed word, so nothing of the work rides the attribute the screen
- * recording keeps.
+ * a subagent's glyph (`state-glyph.tsx`), a sidebar plan's row, and a
+ * call's row in a transcript. Its cells and the gap between them are whole
+ * pixels, eight cells lapped round a 3×3 grid. Each cell steps to the next
+ * on one beat, so the motion is stepped frames of `transform` alone and
+ * never lays anything out. Reduced motion and a capture run hold it on
+ * `--loop-motion`, on a frame chosen to show the chase mid-lap rather than
+ * its first, so a still mark still reads as working. The mark is decorative
+ * unless given a label, which is said in a fixed word, so nothing of the
+ * work rides the attribute the screen recording keeps.
  */
-
-/** How large the mark is drawn: a glyph beside words, or a badge on an icon. */
-export const WORKING_MARK_SIZE = {
-  GLYPH: "glyph",
-  BADGE: "badge",
-} as const;
-
-export type WorkingMarkSize = (typeof WORKING_MARK_SIZE)[keyof typeof WORKING_MARK_SIZE];
 
 /** The pixels that move: each chaser and the fainter tail one cell behind it. */
 const WORKING_DOT = {
@@ -32,52 +21,29 @@ const WORKING_DOT = {
   TRAIL_TAIL: "trail-tail",
 } as const;
 
-type WorkingDot = (typeof WORKING_DOT)[keyof typeof WORKING_DOT];
-
-/** One cell's side, in CSS pixels, at every size. */
+/** One cell's side, in CSS pixels. */
 const CELL = 2;
 
-/** One step from a cell to the next, cell and gap, in CSS pixels, at every size; the keyframes in `base.css` step by it. */
+/** One step from a cell to the next, cell and gap, in CSS pixels; the keyframes in `base.css` step by it. */
 const PITCH = 4;
 
-/** Where the first cell starts, from the mark's corner, at every size. */
+/** Where the first cell starts, from the mark's corner. */
 const INSET = 1;
 
-/**
- * Each size's grid: its side, the cells of its track in the order the
- * chasers lap them, and which pixels chase. Note that the badge has room
- * for one chaser alone, because its two diagonals would otherwise trade
- * places on every beat and read as a blink rather than a lap.
- */
-const WORKING_GRID = {
-  [WORKING_MARK_SIZE.GLYPH]: {
-    side: 12,
-    track: [
-      [0, 0],
-      [1, 0],
-      [2, 0],
-      [2, 1],
-      [2, 2],
-      [1, 2],
-      [0, 2],
-      [0, 1],
-    ],
-    dots: [WORKING_DOT.LEAD, WORKING_DOT.LEAD_TAIL, WORKING_DOT.TRAIL, WORKING_DOT.TRAIL_TAIL],
-  },
-  [WORKING_MARK_SIZE.BADGE]: {
-    side: 8,
-    track: [
-      [0, 0],
-      [1, 0],
-      [1, 1],
-      [0, 1],
-    ],
-    dots: [WORKING_DOT.LEAD, WORKING_DOT.LEAD_TAIL],
-  },
-} as const satisfies Record<
-  WorkingMarkSize,
-  { side: number; track: readonly (readonly [number, number])[]; dots: readonly WorkingDot[] }
->;
+/** The mark's side, in CSS pixels. */
+const SIDE = 12;
+
+/** The cells of the track, in the order the chasers lap them. */
+const TRACK = [
+  [0, 0],
+  [1, 0],
+  [2, 0],
+  [2, 1],
+  [2, 2],
+  [1, 2],
+  [0, 2],
+  [0, 1],
+] as const;
 
 /** Where a cell's top-left corner stands in the mark, in CSS pixels. */
 interface CellCorner {
@@ -91,28 +57,20 @@ function cellAt(column: number, row: number): CellCorner {
 }
 
 /**
- * The mark at `size`, said to a reader as `label` where it stands alone, or
- * hidden from one where the control around it already says it.
+ * The mark, said to a reader as `label` where it stands alone, or hidden
+ * from one where the control around it already says it.
  */
-export function WorkingMark({
-  size = WORKING_MARK_SIZE.GLYPH,
-  label,
-}: {
-  size?: WorkingMarkSize;
-  label?: string;
-}): React.JSX.Element {
-  const { side, track, dots } = WORKING_GRID[size];
+export function WorkingMark({ label }: { label?: string }): React.JSX.Element {
   const start = cellAt(0, 0);
   const mark = (
     <svg
       className="working-mark"
-      data-size={size}
-      width={side}
-      height={side}
-      viewBox={`0 0 ${side} ${side}`}
+      width={SIDE}
+      height={SIDE}
+      viewBox={`0 0 ${SIDE} ${SIDE}`}
       aria-hidden="true"
     >
-      {track.map(([column, row], index) => (
+      {TRACK.map(([column, row], index) => (
         <rect
           key={index}
           className="working-mark-track"
@@ -122,7 +80,7 @@ export function WorkingMark({
           rx={CELL / 4}
         />
       ))}
-      {dots.map((dot) => (
+      {Object.values(WORKING_DOT).map((dot) => (
         <rect
           key={dot}
           className="working-mark-dot"

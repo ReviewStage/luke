@@ -279,7 +279,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
   assert.equal(modeOf(page), "column");
 
   assert.deepEqual(listed(summary), [
-    ["Panels", ["Board", "Transcript"]],
+    ["Tabs", ["Board", "Transcript"]],
     ["Coding agents", [AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
@@ -291,26 +291,15 @@ test("the pinned summary lists what the two pickers open, under their headings, 
   }
 });
 
-test("collapsed to its rail, which hides the agents and subagents, the chevron wears the working badge while one works, said to a reader and in its hint, and none once they rest", () => {
-  const working = mount();
-  act(() => summaryButton(working).click());
-  assert.equal(modeOf(working), "rail");
-  const chevron = working.querySelector<HTMLElement>('[aria-label="Expand summary"]');
-  const badge = chevron?.querySelector(".summary-rail-badge");
-  assert.ok(chevron && badge);
-  assert.equal(badge.getAttribute("aria-label"), "agent working");
-  assert.equal(chevron.getAttribute("aria-describedby"), badge.id, "the chevron says it");
-  assert.equal(hover(chevron), "Expand summary, agent working", "and so does its hint");
-  assert.ok(badge.querySelector('svg.working-mark[data-size="badge"]'), "the badge-sized mark");
-  quit();
-
-  const resting = mount(false, SHOWN, true);
-  if (modeOf(resting) !== "rail") act(() => summaryButton(resting).click());
-  const quiet = resting.querySelector<HTMLElement>('[aria-label="Expand summary"]');
-  assert.ok(quiet);
-  assert.equal(quiet.querySelector(".summary-rail-badge, .working-mark"), null, "no badge");
-  assert.equal(quiet.getAttribute("aria-describedby"), null);
-  assert.equal(hover(quiet), "Expand summary");
+test("collapsed to its rail while an agent and a subagent work, the chevron says only Expand summary and wears no working mark", () => {
+  const page = mount();
+  act(() => summaryButton(page).click());
+  assert.equal(modeOf(page), "rail");
+  const chevron = page.querySelector<HTMLElement>('[aria-label="Expand summary"]');
+  assert.ok(chevron);
+  assert.equal(chevron.querySelector(".working-mark") !== null, false, "no working mark");
+  assert.equal(chevron.getAttribute("aria-describedby"), null);
+  assert.equal(hover(chevron), "Expand summary");
 });
 
 test("a panel's row opens the panel on its tab, and a column with room still holds the summary pinned beside it", () => {
@@ -359,7 +348,7 @@ test("a column too narrow to keep the document at its measure beside the summary
   layOutColumn(1039);
   const rail = summaryOf(page);
   assert.equal(modeOf(page), "rail");
-  assert.deepEqual(listed(rail), [["Panels", ["Board", "Transcript"]]]);
+  assert.deepEqual(listed(rail), [["Tabs", ["Board", "Transcript"]]]);
   assert.equal(rail.querySelector(".plan-summary-heading"), null, "a rail says no headings");
   assert.equal(hover(rowNamed(rail, "Board")), "Board");
 
@@ -381,7 +370,7 @@ test("an open panel that leaves the column too narrow folds the summary to its r
   const hung = card();
   assert.ok(hung, "the card hangs");
   assert.equal(buttonOn(page), true);
-  assert.deepEqual(listed(hung)[0], ["Panels", ["Board", "Transcript"]]);
+  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Transcript"]]);
   assert.equal(modeOf(page), "rail", "the rail stays under the card");
 });
 
@@ -441,7 +430,7 @@ test("the rail's chevron hangs the whole summary as a card, which Escape takes d
   const hung = card();
   assert.ok(hung, "the card hangs");
   assert.equal(chevron.getAttribute("aria-expanded"), "true");
-  assert.deepEqual(listed(hung)[0], ["Panels", ["Board", "Transcript"]]);
+  assert.deepEqual(listed(hung)[0], ["Tabs", ["Board", "Transcript"]]);
   assert.ok(document.activeElement === rowNamed(hung, "Board"), "its first row takes the focus");
 
   const escapeKey = pressEscape();
