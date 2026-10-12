@@ -202,6 +202,8 @@ export function FileTab({
   snippet,
   readFile,
   openGitHub,
+  crumbs,
+  actions,
 }: {
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
@@ -209,6 +211,10 @@ export function FileTab({
   readFile: ReadFileWindow;
   /** Opens a page of GitHub's in the browser, where the heading's button opens the file. */
   openGitHub: (url: string) => void;
+  /** The file's path as breadcrumbs, drawn in the heading in place of the path. */
+  crumbs?: React.ReactNode;
+  /** Controls the heading ends with, after its GitHub button. */
+  actions?: React.ReactNode;
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const held = useRef<FileRead>(read);
@@ -280,11 +286,13 @@ export function FileTab({
   return (
     <section className="file-tab ph-no-capture" aria-label={file.path}>
       <header className="code-card-header file-tab-header">
-        <Tooltip label={file.path}>
-          <span className="code-card-path">
-            <bdi>{file.path}</bdi>
-          </span>
-        </Tooltip>
+        {crumbs ?? (
+          <Tooltip label={file.path}>
+            <span className="code-card-path">
+              <bdi>{file.path}</bdi>
+            </span>
+          </Tooltip>
+        )}
         {label === undefined ? null : <span className="code-card-range">{label}</span>}
         {read.kind === FILE_READ.READY ? (
           <Tooltip label={`Open on GitHub (${read.branch})`}>
@@ -298,6 +306,7 @@ export function FileTab({
             </button>
           </Tooltip>
         ) : null}
+        {actions}
       </header>
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} readWindow={readWindow} />

@@ -17,6 +17,8 @@ import {
   planRevisionsAnswerSchema,
   planSchema,
   planSummarySchema,
+  planTreeFolderSchema,
+  planTreeRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
@@ -557,6 +559,23 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
+
+/** One folder of a plan's repository, as the File tab's tree asks the host for it: the plan, and the folder's path from the root. */
+export const planningTreeParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...planTreeRequestSchema.fields,
+});
+
+export type PlanningTreeParams = typeof planningTreeParamsSchema.Type;
+
+/** The tree's read of a folder, as the window hears it: the folder listed, why it is not, or that the service did not answer. */
+export const planningTreeAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ folder: planTreeFolderSchema }),
+  planFileRefusalSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
 
 /** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({

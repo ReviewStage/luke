@@ -35,6 +35,10 @@ export const ONE_ACT_OF_EACH_KIND = {
       lastLine: 500,
     },
   },
+  [ACT_KIND.PLANNING_TREE]: {
+    kind: ACT_KIND.PLANNING_TREE,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", path: "src" },
+  },
   [ACT_KIND.PLANNING_COLOUR_CODE]: {
     kind: ACT_KIND.PLANNING_COLOUR_CODE,
     payload: { language: "ts", code: "export const seats = 3;" },

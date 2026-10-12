@@ -689,6 +689,8 @@ export const planTreeEntrySchema = EffectSchema.Struct({
   kind: EffectSchema.Literals(Object.values(PLAN_TREE_ENTRY)),
 });
 
+export type PlanTreeEntry = typeof planTreeEntrySchema.Type;
+
 /**
  * A folder of the plan's repository as it stands now on the branch the
  * File tab reads its files on, through the Luke GitHub App: the path, the

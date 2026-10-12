@@ -104,6 +104,11 @@ function fixture() {
           asked.push(`file:${params.path}:${params.firstLine}-${params.lastLine}`);
           return { refusal: PLAN_FILE_REFUSAL.MISSING } as const;
         }),
+      planningTree: (params) =>
+        Effect.sync(() => {
+          asked.push(`tree:${params.path}`);
+          return { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE } as const;
+        }),
       planningRevisions: (params) =>
         Effect.sync(() => {
           asked.push(`revisions:${params.planId}:${params.before}`);
@@ -287,6 +292,34 @@ it.effect(
         reason: ACT[ACT_KIND.PLANNING_FILE].refusal,
       });
       assert.deepEqual(f.asked, ["file:src/gone.ts:1-500"]);
+    }),
+);
+
+it.effect(
+  "a File tab's tree lists a folder through the host from a panel and answers what it answered, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const folder = { planId: PLAN_ID, path: "src" };
+
+      const read = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_TREE, payload: folder },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_TREE, payload: folder },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE },
+      });
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_TREE].refusal,
+      });
+      assert.deepEqual(f.asked, ["tree:src"]);
     }),
 );
 

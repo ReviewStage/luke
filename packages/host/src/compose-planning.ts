@@ -28,6 +28,7 @@ import {
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
+  type PlanningTreeAnswer,
   type PlanningView,
   type PlanShownCode,
   type PlanWorkTurn,
@@ -42,6 +43,7 @@ import {
   planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
+  planningTreeParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
@@ -119,6 +121,7 @@ export type PlanningClient = Pick<
   | "readTranscript"
   | "readWork"
   | "readFile"
+  | "readTree"
   | "readRevisions"
   | "readRevision"
   | "restore"
@@ -664,6 +667,22 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         return carried<PlanningFileAnswer>(
           "file" in answer ? { file: highlightFile(answer.file) } : answer,
         );
+      }),
+    // A folder's listing is answered to the tree that asked and held nowhere:
+    // the tree keeps the folders it has opened.
+    [GATEWAY_METHOD.PLANNING_TREE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningTreeParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("listing a folder names a plan and the folder's path");
+        }
+        if (!gate()) return carried<PlanningTreeAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        const { planId, ...folder } = read.success;
+        const answer = yield* Effect.provide(
+          client.readTree(planId, folder),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningTreeAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
       }),
     // A page of the history, and a revision beside the one before it, are
     // answered to the version history that asked and held nowhere: it keeps
