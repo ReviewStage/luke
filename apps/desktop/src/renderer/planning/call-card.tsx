@@ -58,6 +58,7 @@ function CallCard({
   const { model, ending, usage } = record;
   const endingWord = ending === undefined ? undefined : ENDING_WORD[ending];
   const metered = usage === undefined ? undefined : workingTime(usage.seconds * SECOND_MS);
+  // Note that the two are compared as said, because a row reading what the line already reads tells nothing.
   const meteredRow = metered !== undefined && metered !== workingTime(endedAt - startedAt);
   return (
     <div className="turn-card" data-call-card="">
