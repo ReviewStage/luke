@@ -77,7 +77,12 @@ export const EDITOR_PLACE = {
   ASSUMPTIONS: "assumptions",
   /** After the body, for a section the body does not draw until it holds something. */
   END: "end",
+  /** SPIKE: under the rules, where "New rule" stands, for a rule not written yet. */
+  NEW_RULE: "new-rule",
 } as const;
+
+/** SPIKE: what every block the keyboard moves between wears: an editable unit, or "New rule". */
+export const BLOCK_CLASS = "plan-block";
 
 /** Where an editor stands in the document: in place of a unit, by its id, or a place of its own. */
 export type EditorHost = number | (typeof EDITOR_PLACE)[keyof typeof EDITOR_PLACE];
@@ -471,8 +476,16 @@ function editsOnClick(target: EventTarget): boolean {
 
 /** SPIKE: the keyboard moved to the block before or after this one in the document. */
 function stepBlock(from: HTMLElement, by: 1 | -1): void {
-  const blocks = [...document.querySelectorAll<HTMLElement>(".plan-unit-editable")];
+  const blocks = [...document.querySelectorAll<HTMLElement>(`.${BLOCK_CLASS}`)];
   blocks[blocks.indexOf(from) + by]?.focus();
+}
+
+/** SPIKE: the arrows move to the next or previous block, as they do across a document editor's blocks. */
+function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
+  if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return false;
+  event.preventDefault();
+  stepBlock(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
+  return true;
 }
 
 /**
@@ -484,14 +497,11 @@ function stepBlock(from: HTMLElement, by: 1 | -1): void {
  * move between blocks, Return edits one with the caret at the end, and Esc
  * in its editor saves and selects it again. A block is a labelled group
  * rather than a button, so a screen reader still reads the words inside it.
- * The rules' heading keeps its plus under the pointer, which adds a rule
- * rather than editing one; Return on it does the same.
  */
 export function EditableUnit({
   target,
   host,
   label,
-  adds,
   entry,
   editing,
   children,
@@ -499,7 +509,6 @@ export function EditableUnit({
   target: EditTarget;
   host: EditorHost;
   label: string;
-  adds: boolean;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: FieldEditing;
@@ -523,10 +532,10 @@ export function EditableUnit({
     // biome-ignore lint/a11y/noNoninteractiveTabindex: a block is selected by the keyboard and edited with Return, as a document editor's blocks are.
     <div
       ref={block}
-      className="plan-unit-editable"
+      className={`plan-unit-editable ${BLOCK_CLASS}`}
       role="group"
       tabIndex={entry ? 0 : -1}
-      aria-label={adds ? "Rules" : label}
+      aria-label={label}
       aria-keyshortcuts="Enter"
       onPointerEnter={prefetchFieldEditor}
       onFocus={() => {
@@ -539,30 +548,57 @@ export function EditableUnit({
       }}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
-        if (event.key === "Enter") {
-          event.preventDefault();
-          editing.open(target, host);
-        } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-          event.preventDefault();
-          stepBlock(event.currentTarget, event.key === "ArrowDown" ? 1 : -1);
-        }
+        if (steppedByArrow(event)) return;
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        editing.open(target, host);
       }}
     >
       {children}
-      {adds ? (
-        <button
-          type="button"
-          className="icon-button plan-unit-edit"
-          aria-hidden="true"
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            editing.open(target, host);
-          }}
-        >
-          <PlusIcon />
-        </button>
-      ) : null}
     </div>
+  );
+}
+
+/**
+ * SPIKE: "New rule", standing under the rules, or under the Rules heading in
+ * place of "Unanswered" while there are none. It opens a rule not written yet
+ * where it stands, numbered after the rules standing, and is one of the
+ * blocks the arrows move between; Esc in that editor selects it again, so
+ * Return adds the next.
+ */
+export function NewRuleButton({
+  ruleCount,
+  entry,
+  editing,
+}: {
+  ruleCount: number;
+  entry: boolean;
+  editing: FieldEditing;
+}): React.JSX.Element {
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (editing.editor !== undefined || editing.selecting !== EDITOR_PLACE.NEW_RULE) return;
+    button.current?.focus();
+    editing.selected();
+  });
+  return (
+    <button
+      ref={button}
+      type="button"
+      className={`toolbar-button plan-new-rule ${BLOCK_CLASS}`}
+      tabIndex={entry ? 0 : -1}
+      onPointerEnter={prefetchFieldEditor}
+      onFocus={() => {
+        prefetchFieldEditor();
+        editing.select(EDITOR_PLACE.NEW_RULE);
+      }}
+      onKeyDown={steppedByArrow}
+      onClick={() =>
+        editing.open({ field: PLAN_FIELD.RULES, rule: ruleCount }, EDITOR_PLACE.NEW_RULE)
+      }
+    >
+      <PlusIcon />
+      New rule
+    </button>
   );
 }

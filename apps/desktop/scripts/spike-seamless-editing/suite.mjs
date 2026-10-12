@@ -471,6 +471,72 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${mode}-${name}.png
   await page.close();
 }
 
+// P. "New rule": under the rules, or in place of "Unanswered" while there are none; it writes the next rule where it stands.
+{
+  const page = await open();
+  const layout = await page.evaluate(() => {
+    const button = document.querySelector(".plan-new-rule");
+    const rules = [...document.querySelectorAll(".plan-rule")];
+    const last = rules.at(-1);
+    return {
+      shown: button !== null,
+      afterLastRule:
+        button !== null &&
+        last !== undefined &&
+        (last.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      headingClickable: [...document.querySelectorAll(".plan-unit-editable")].some(
+        (u) => u.textContent.trim() === "Rules",
+      ),
+    };
+  });
+  await page.evaluate(() =>
+    document.querySelector(".plan-new-rule").scrollIntoView({ block: "center" }),
+  );
+  await page.click(".plan-new-rule");
+  await sleep(300);
+  const number = await page.evaluate(
+    () => document.querySelector(".plan-field-editor .plan-rule-number")?.textContent ?? null,
+  );
+  await page.keyboard.type("An invite names the workspace it opens.");
+  await page.keyboard.press("Escape");
+  await sleep(1500);
+  const rules = (await stored(page)).fields.rules;
+  const focusBack = await page.evaluate(
+    () => document.activeElement?.classList.contains("plan-new-rule") ?? false,
+  );
+  await page.keyboard.press("ArrowUp");
+  const upFromButton = await page.evaluate(
+    () => document.activeElement?.getAttribute("aria-label") ?? null,
+  );
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await sleep(300);
+  const enterOpens = await page.evaluate(
+    () => document.querySelector(".plan-field-editor .plan-rule-number")?.textContent ?? null,
+  );
+  await page.close();
+  const empty = await open("norules=1");
+  const none = await empty.evaluate(() => {
+    const rules = [...document.querySelectorAll(".plan-unit")].find((u) =>
+      u.textContent.trim().startsWith("Rules"),
+    );
+    return {
+      unanswered: rules?.textContent.includes("Unanswered") ?? null,
+      button: document.querySelector(".plan-new-rule") !== null,
+    };
+  });
+  await empty.close();
+  results.newRule = {
+    ...layout,
+    number,
+    saved: rules?.length === 3 && rules[2].statement,
+    focusBack,
+    upFromButton,
+    enterOpens,
+    none,
+  };
+}
+
 // K. Session replay: is every editable node inside a blocked subtree?
 {
   const page = await open();

@@ -20,7 +20,7 @@ import { rendererRegistry } from "../renderer-runtime";
 /**
  * SPIKE, not production code. Built from this branch the page edits in
  * place on TipTap; built from a `main` checkout it is today's text boxes.
- * `?long=1` grows the plan to sixty
+ * `?norules=1` opens it with no rules yet; `?long=1` grows the plan to sixty
  * rules and long fields for the latency runs. `window.spike` lets the
  * headless driver play Luke: `lukeWrites(field, text)` is a notetaker save
  * landing on a text field, `lukeDraft(field, text)` a live draft frame.
@@ -148,7 +148,12 @@ const fieldEdits = new Map<PlanField, PlanFieldEdit>([
 
 /** The stored content the fake service holds, which the driver reads. */
 let stored: PlanContent = {
-  fields: params.get("long") === "1" ? longFields() : FIELDS,
+  fields:
+    params.get("long") === "1"
+      ? longFields()
+      : params.get("norules") === "1"
+        ? { ...FIELDS, rules: null }
+        : FIELDS,
   assumptions: [
     { text: "Invites reuse memberships with a pending state." },
     { text: "An invite expires after 7 days." },
