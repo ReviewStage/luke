@@ -1832,6 +1832,7 @@ it.effect(
         file: {
           path: "src/invite.ts",
           repository: "acme/relay",
+          branch: "main",
           firstLine: 1,
           lineCount: 2,
           lines: ["export const DAYS = 7;", ""],

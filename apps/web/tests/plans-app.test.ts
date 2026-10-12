@@ -1146,7 +1146,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a file of the plan's repository reads a window as GitHub holds it on the default branch, on the App's token, each line cut as show_code cuts it; another account's plan reads as none",
+    "a file of the plan's repository reads a window as GitHub holds it on the default branch, naming that branch, on the App's token, each line cut as show_code cuts it; another account's plan reads as none",
     () =>
       Effect.gen(function* () {
         const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
@@ -1168,6 +1168,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           file: {
             path: "src/invite.ts",
             repository: "Acme/Relay",
+            branch: "main",
             firstLine: 2,
             lineCount: 4,
             lines: ["two", "x".repeat(400)],
@@ -1190,6 +1191,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             file: {
               path: "src/invite.ts",
               repository: "Acme/Relay",
+              branch: "main",
               firstLine: 9,
               lineCount: 4,
               lines: [],
@@ -1226,6 +1228,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             file: {
               path: "src/invite.ts",
               repository: "Acme/Relay",
+              branch: "main",
               firstLine: 1,
               lineCount: 4,
               lines: ["one", "two"],

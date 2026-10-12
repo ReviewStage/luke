@@ -596,11 +596,20 @@ button.code-card-path:hover {
   min-height: calc(24px + 2 * var(--space-2));
 }
 
-.file-tab-source {
-  flex: 0 0 auto;
+/* The button that opens the file on GitHub, naming the branch it was read
+   on, keeps to the header's right as a card's actions do. */
+.file-tab-github {
+  min-width: 0;
+  flex: 0 1 auto;
   margin-left: auto;
-  padding-right: var(--space-8);
-  color: var(--text-tertiary);
+  padding: 0 var(--space-8);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.file-tab-github .account-mark {
+  width: 13px;
+  height: 13px;
 }
 
 .file-tab-lines {

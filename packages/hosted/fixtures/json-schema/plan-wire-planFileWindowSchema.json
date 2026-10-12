@@ -8,6 +8,9 @@
       "type": "string",
       "maxLength": 140
     },
+    "branch": {
+      "type": "string"
+    },
     "firstLine": {
       "type": "integer",
       "minimum": 1
@@ -28,6 +31,7 @@
   "required": [
     "path",
     "repository",
+    "branch",
     "firstLine",
     "lineCount",
     "lines"

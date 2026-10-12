@@ -404,6 +404,7 @@ it.effect(
         file: {
           path: "src/invites.ts",
           repository: "acme/web",
+          branch: "main",
           firstLine: 2,
           lineCount: 3,
           lines: ["const DAYS = 7;", "export { DAYS };"],

@@ -1,6 +1,7 @@
 import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { GitHubMark } from "../account-marks";
 import { Tooltip } from "../tooltip";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { rangeLabel } from "./code-pane-model";
@@ -9,6 +10,7 @@ import {
   type FileLines,
   type FileRead,
   type FileWindow,
+  fileUrl,
   holdsLines,
   lastLineOf,
   refusalLine,
@@ -32,15 +34,12 @@ import type { OpenFile } from "./use-side-panel";
  * the checkout the snippet was read from: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
- * showed of it where the plan holds them. Every line here is
+ * showed of it where the plan holds them. Once lines have landed, the
+ * heading's GitHub button names the branch they were read on and opens the
+ * file there, its lit lines marked. Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
-
-/** What the heading says of where the lines come from. */
-const SOURCE_LABEL = "Latest on GitHub";
-const SOURCE_HINT =
-  "The file as it stands now on the repository's default branch, which may have changed since Luke showed it.";
 
 /** What stands over the lines Luke showed, drawn where the file cannot be. */
 const SNIPPET_LABEL = "The lines Luke showed, from his copy of the repository";
@@ -203,11 +202,14 @@ export function FileTab({
   file,
   snippet,
   readFile,
+  openGitHub,
 }: {
   file: OpenFile;
   /** The lines Luke showed of the file, drawn where the file cannot be. */
   snippet: PlanCode | undefined;
   readFile: ReadFileWindow;
+  /** Opens a page of GitHub's in the browser, where the heading's button opens the file. */
+  openGitHub: (url: string) => void;
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
   const held = useRef<FileRead>(read);
@@ -285,9 +287,18 @@ export function FileTab({
           </span>
         </Tooltip>
         {label === undefined ? null : <span className="code-card-range">{label}</span>}
-        <Tooltip label={SOURCE_HINT}>
-          <span className="file-tab-source">{SOURCE_LABEL}</span>
-        </Tooltip>
+        {read.kind === FILE_READ.READY ? (
+          <Tooltip label={`Open on GitHub (${read.branch})`}>
+            <button
+              type="button"
+              className="toolbar-button code-card-action file-tab-github"
+              onClick={() => openGitHub(fileUrl(read, file))}
+            >
+              <GitHubMark />
+              <span className="plan-compose-chip-name">{read.branch}</span>
+            </button>
+          </Tooltip>
+        ) : null}
       </header>
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} readWindow={readWindow} />

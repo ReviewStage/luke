@@ -555,13 +555,14 @@ export type PlanFileRequest = typeof planFileRequestSchema.Type;
 /**
  * A window of a file of the plan's repository as it stands now on its
  * default branch, read through the Luke GitHub App: the path, the
- * repository, the line the first carried line is, how many lines the whole
- * file has, and the lines, each cut as `show_code` cuts it. A window past
- * the file's end carries no lines.
+ * repository and the branch read, the line the first carried line is, how
+ * many lines the whole file has, and the lines, each cut as `show_code`
+ * cuts it. A window past the file's end carries no lines.
  */
 export const planFileWindowSchema = EffectSchema.Struct({
   path: EffectSchema.String,
   repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
   firstLine: codeLineSchema,
   lineCount: EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
   lines: EffectSchema.Array(

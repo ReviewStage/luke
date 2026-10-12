@@ -23,6 +23,7 @@ function numberedFile(lineCount: number) {
       file: {
         path: window.path,
         repository: "acme/relay",
+        branch: "release/2026",
         firstLine: window.firstLine,
         lineCount,
         lines: Array.from({ length: Math.max(0, last - window.firstLine + 1) }, (_, at) => [
@@ -77,6 +78,7 @@ function mounted(
   snippet?: PlanCode,
 ) {
   const asked: string[] = [];
+  const opened: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -89,13 +91,18 @@ function mounted(
   const draw = async (file: OpenFile) => {
     await act(async () => {
       root.render(
-        createElement(FileTab, { file, snippet, readFile: (window) => readFile(window) }),
+        createElement(FileTab, {
+          file,
+          snippet,
+          readFile: (window) => readFile(window),
+          openGitHub: (url) => opened.push(url),
+        }),
       );
       await Promise.resolve();
       await Promise.resolve();
     });
   };
-  return { container, asked, draw };
+  return { container, asked, opened, draw };
 }
 
 /** The numbers of the lines drawn, the lit ones marked. */
@@ -204,6 +211,30 @@ test("a file shortened since its snippet opens on the window holding its last li
     lines.some((line) => line.endsWith("lit")),
     false,
   );
+});
+
+test("the heading's GitHub button names the branch the file was read on and opens it there, its lit lines marked, and stands only over a file read", async () => {
+  watchedRows();
+  const tab = mounted(numberedFile(1_200));
+  const github = () => tab.container.querySelector<HTMLButtonElement>(".file-tab-github");
+
+  await tab.draw({ path: "src/invite #2.ts", range: { startLine: 600, endLine: 604 }, opened: 1 });
+  assert.equal(github()?.textContent, "release/2026");
+  assert.equal(tab.container.querySelector("header")?.textContent?.includes("Latest"), false);
+  act(() => github()?.click());
+  await tab.draw({ path: "src/invite #2.ts", range: { startLine: 7, endLine: 7 }, opened: 2 });
+  act(() => github()?.click());
+  await tab.draw({ path: "src/invite #2.ts", range: undefined, opened: 3 });
+  act(() => github()?.click());
+
+  assert.deepEqual(tab.opened, [
+    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L600-L604",
+    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts#L7",
+    "https://github.com/acme/relay/blob/release/2026/src/invite%20%232.ts",
+  ]);
+  const refused = mounted(() => ({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }));
+  await refused.draw({ path: "src/moved.ts", range: undefined, opened: 1 });
+  assert.equal(refused.container.querySelector(".file-tab-github"), null);
 });
 
 test("a file not on the branch read names the branch over the lines Luke showed of it, which are drawn lit; a read that did not land draws them too, under its offer to read again", async () => {

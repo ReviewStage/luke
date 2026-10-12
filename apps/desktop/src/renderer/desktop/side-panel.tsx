@@ -974,7 +974,7 @@ function TabContent({
   /** Opens a file of the plan's repository in a tab of its own, the reference's lines lit. */
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
-  const { act } = useAct();
+  const { act, tell } = useAct();
   if (isFileTab(tab)) {
     const file = files.find((each) => each.path === tab.file);
     // As a subagent's: the tab stands for a file no longer open only until
@@ -990,6 +990,7 @@ function TabContent({
           file={file}
           snippet={snippetOf(shownCode, file)}
           readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
+          openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
         />
       </Fragment>
     );
