@@ -1641,22 +1641,23 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
   assert.equal(document.activeElement, tabNamed(container, "GPT 5.6 Sol"));
 });
 
-test("closing the chosen tab chooses its neighbour, and closing the last leaves the panel open offering every kind", () => {
+test("closing the chosen tab chooses the tab viewed before it, and closing the last leaves the panel open offering every kind", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   act(() => tabNamed(page, "Code").click());
   press(page, '[aria-label="Close Code"]');
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Transcript", "the tab after it");
+  assert.equal(chosenTab(page), "Board", "the tab shown before it");
   assert.ok(documentShown(page));
 
   act(() => tabNamed(page, "Work").click());
-  press(page, '[aria-label="Close Work"]');
-  assert.equal(chosenTab(page), "Transcript", "the tab before the last");
+  act(() => tabNamed(page, "Board").click());
+  press(page, '[aria-label="Close Board"]');
+  assert.equal(chosenTab(page), "Work", "the tab viewed before it, not the one beside it");
 
   press(page, '[aria-label="Close Transcript"]');
-  press(page, '[aria-label="Close Board"]');
+  press(page, '[aria-label="Close Work"]');
   assert.ok(panelShown(page));
   assert.deepEqual(panelTabs(page), []);
   const rows = page.querySelectorAll<HTMLButtonElement>(".side-panel-no-tabs button");
@@ -2486,11 +2487,12 @@ test("the + lists the plan's coding agents and its subagents in sections of thei
 
 test("an agent's × or Delete closes its tab and nothing of the agent's: it is not stopped, the + lists it as it stands, and picking it there opens the tab again in its place", () => {
   const page = mountAgents();
+  act(() => tabNamed(page, "GPT 5.6 Sol").click());
   act(() => tabNamed(page, "Opus 5.5").click());
 
   press(page, '[aria-label="Close Opus 5.5"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "GPT 5.6 Sol"]);
-  assert.equal(chosenTab(page), "GPT 5.6 Sol", "the agent after it");
+  assert.equal(chosenTab(page), "GPT 5.6 Sol", "the tab viewed before it");
   assert.deepEqual(stops, []);
 
   act(() => addButton(page).click());
@@ -3131,12 +3133,13 @@ it.effect(
     }),
 );
 
-test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the next tab is chosen", () => {
+test("Command-W closes the panel's chosen tab as its menu's Close does, unpinning a pinned one and stopping no agent, and the tab viewed before it is chosen", () => {
   const page = mountAgents();
+  act(() => tabNamed(page, "Work").click());
   act(() => tabNamed(page, "Code").click());
   assert.equal(keydown({ key: "w", metaKey: true }), true);
   assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Opus 5.5", "GPT 5.6 Sol"]);
-  assert.equal(chosenTab(page), "Transcript");
+  assert.equal(chosenTab(page), "Work");
 
   chooseFromTab(tabNamed(page, "Work"), "Pin tab");
   act(() => tabNamed(page, "Work").click());
