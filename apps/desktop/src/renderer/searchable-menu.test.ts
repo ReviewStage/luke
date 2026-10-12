@@ -656,7 +656,7 @@ test("a row's shortcut is printed at its end, and rows sharing a section stand u
         id: "site",
         label: "acme/site",
         section: "Everything",
-        command: APP_COMMAND.SHOW_BOARD,
+        command: APP_COMMAND.TOGGLE_SIDE_PANEL,
       },
     ],
   });
@@ -675,10 +675,10 @@ test("a row's shortcut is printed at its end, and rows sharing a section stand u
     ["Everything", "Everything", ["acme/site"]],
   ]);
   const site = menu.rows()[2];
-  assert.equal(site?.querySelector(".plan-compose-menu-hint")?.textContent, "⌥⌘1");
+  assert.equal(site?.querySelector(".plan-compose-menu-hint")?.textContent, "⌥⌘B");
 
   press("ArrowUp");
-  assert.equal(menu.highlighted(), "acme/site⌥⌘1", "the arrows run on across the headings");
+  assert.equal(menu.highlighted(), "acme/site⌥⌘B", "the arrows run on across the headings");
   type(menu.find<HTMLInputElement>("input[role=combobox]"), "site");
   assert.deepEqual(groups(), [["Everything", "Everything", ["acme/site"]]]);
 });

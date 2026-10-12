@@ -112,6 +112,31 @@ test("the page stands in sections that follow the menu bar, each row a name and 
   );
 });
 
+test("Tabs & panels lists the panes' and the tabs' own shortcuts, and none that opens a side-panel tab", () => {
+  mountPage();
+
+  const tabs = [...document.body.querySelectorAll("section")].find(
+    (section) => section.querySelector("h2")?.textContent === "Tabs & panels",
+  );
+  assert.ok(tabs, "the tabs and panels have a section of their own");
+  assert.deepEqual(
+    [...tabs.querySelectorAll(`[${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}]`)].map((each) =>
+      each.getAttribute(SETTINGS_SEARCH_ANCHOR_ATTRIBUTE),
+    ),
+    [
+      APP_COMMAND.TOGGLE_SIDEBAR,
+      APP_COMMAND.TOGGLE_SIDE_PANEL,
+      APP_COMMAND.TOGGLE_FULL_SCREEN,
+      APP_COMMAND.EXIT_FULL_SCREEN,
+      APP_COMMAND.NEW_TAB,
+      APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.MOVE_TAB_LEFT,
+      APP_COMMAND.MOVE_TAB_RIGHT,
+    ],
+  );
+  assert.doesNotMatch(document.body.textContent ?? "", /Show (board|code|transcript|work)/u);
+});
+
 test("a chord is drawn as one cap per key, in the order a Mac writes them", () => {
   mountPage();
 

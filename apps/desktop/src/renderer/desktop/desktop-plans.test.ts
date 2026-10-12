@@ -434,7 +434,11 @@ test("the panel's tabs hang no pill, their words being enough, while Copy plan's
   press(page, '[aria-label="Show panel"]');
 
   assert.equal(hover(tabNamed(page, "Code")), undefined);
-  assert.equal(tabNamed(page, "Code").getAttribute("aria-keyshortcuts"), "Meta+Alt+2");
+  assert.equal(
+    tabNamed(page, "Code").getAttribute("aria-keyshortcuts"),
+    null,
+    "no tab has a chord",
+  );
 
   // Copy plan stands in the ⋯ menu now, so the toolbar draws no button for
   // it; its chord is still the toolbar's, and Start stands where Copy was.
@@ -1438,17 +1442,18 @@ test("Option-Command-B shows and hides the panel by its key, though Option makes
   assert.equal(panelShown(page), false);
 });
 
-test("Option-Command-1, 2, 3, and 4 open the panel on its tabs in their order", () => {
+test("Option-Command-1, 2, 3, and 4 open no tab, the panel's kinds having no chord of their own", () => {
   const page = mountOpenPlan();
 
-  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.equal(tabNamed(page, "Code").getAttribute("aria-selected"), "true");
-  keydown({ code: "Digit3", key: "£", metaKey: true, altKey: true });
-  assert.equal(tabNamed(page, "Transcript").getAttribute("aria-selected"), "true");
-  keydown({ code: "Digit4", key: "¢", metaKey: true, altKey: true });
-  assert.equal(tabNamed(page, "Work").getAttribute("aria-selected"), "true");
-  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
-  assert.equal(tabNamed(page, "Board").getAttribute("aria-selected"), "true");
+  for (const [code, key] of [
+    ["Digit1", "¡"],
+    ["Digit2", "™"],
+    ["Digit3", "£"],
+    ["Digit4", "¢"],
+  ] as const) {
+    assert.equal(keydown({ code, key, metaKey: true, altKey: true }), false, code);
+  }
+  assert.equal(panelShown(page), false);
 });
 
 test("Shift-Command-C copies the open plan as its toolbar button does", () => {
@@ -1617,6 +1622,12 @@ function kindRows(rows: Iterable<HTMLButtonElement>): [string, string, boolean][
     row.querySelector(".plan-menu-end")?.textContent ?? "",
     !row.disabled,
   ]);
+}
+
+/** Opens the panel's tab of the kind from its "+" menu, as the developer picks it there. */
+function openKind(page: HTMLElement, label: string): void {
+  act(() => addButton(page).click());
+  act(() => addRow(label).click());
 }
 
 /** The "+" menu's rows: each label, what it says at its end, and whether it may be picked. */
@@ -2107,10 +2118,10 @@ test("closing the chosen tab chooses the tab viewed before it, and closing the l
   assert.deepEqual(panelTabs(page), []);
   const rows = page.querySelectorAll<HTMLButtonElement>(".side-panel-no-tabs button");
   assert.deepEqual(kindRows(rows), [
-    ["Board", "⌥⌘1", true],
-    ["Code", "⌥⌘2", true],
-    ["Transcript", "⌥⌘3", true],
-    ["Work", "⌥⌘4", true],
+    ["Board", "", true],
+    ["Code", "", true],
+    ["Transcript", "", true],
+    ["Work", "", true],
   ]);
 
   const code = [...rows].find((row) => row.textContent?.startsWith("Code"));
@@ -2243,17 +2254,17 @@ test("Command-F opens the find bar over the chosen tab of the column holding the
   assert.equal(page.querySelectorAll(".find-bar").length, 2, "the column's bar stays open over it");
   assert.match(focused().closest(".find-scope")?.className ?? "", /side-panel-content/u);
 });
-test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
+test("the + drops the searchable menu over every kind, whether or not it is open, an open one chosen where it stands by a pick and a closed one opened at the strip's end", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
 
   press(page, '[aria-label="Close Code"]');
   act(() => addButton(page).click());
   assert.deepEqual(addRows(), [
-    ["Board", "⌥⌘1", true],
-    ["Code", "⌥⌘2", true],
-    ["Transcript", "⌥⌘3", true],
-    ["Work", "⌥⌘4", true],
+    ["Board", "", true],
+    ["Code", "", true],
+    ["Transcript", "", true],
+    ["Work", "", true],
   ]);
   assert.equal(
     document.activeElement?.getAttribute("placeholder"),
@@ -2271,14 +2282,14 @@ test("the + drops the searchable menu over every kind, each with its shortcut wh
   typeSearch("code");
   key(focused(), "Enter");
   assert.equal(document.querySelector(".tab-add-menu"), null);
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Code");
   assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
 
   act(() => addButton(page).click());
   typeSearch("board");
   key(focused(), "Enter");
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Work", "Code"]);
   assert.equal(chosenTab(page), "Board");
 });
 
@@ -2290,7 +2301,7 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   act(() => addButton(page).click());
 
   typeSearch("wo");
-  assert.deepEqual(addRows(), [["Work", "⌥⌘4", true]]);
+  assert.deepEqual(addRows(), [["Work", "", true]]);
   assert.equal(addHighlighted(), "Work");
   typeSearch("zzz");
   assert.deepEqual(addRows(), []);
@@ -2305,20 +2316,6 @@ test("the + menu's search narrows the kinds as it is typed, and Escape closes th
   assert.equal(document.querySelector(".tab-add-menu"), null);
   assert.ok(panelShown(page), "the panel behind the menu stays");
   assert.equal(document.activeElement, addButton(page));
-});
-
-test("Option-Command-2 opens a closed Code tab again and chooses it, and no kind is ever open twice", () => {
-  const page = mountOpenPlan();
-  press(page, '[aria-label="Show panel"]');
-  press(page, '[aria-label="Close Code"]');
-
-  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
-  assert.equal(chosenTab(page), "Code");
-
-  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
-  keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
 });
 
 test("the next launch opens the panel with the tabs this one left open, in their order", () => {
@@ -2501,13 +2498,13 @@ test("a tab closed under a drag puts the drag back rather than dropping it at a 
   assert.equal(chosenTab(page), "Board");
   assert.deepEqual(tabsMoved(page), []);
 
-  // One closed and opened again stands in its place again, and the drag
+  // One closed and opened again stands at the strip's end, and the drag
   // that passed it is put back all the same.
   dragTab(tabNamed(page, "Board"), 45, [160], DRAG_END.DROP, () => {
     press(page, '[aria-label="Close Code"]');
-    keydown({ code: "Digit2", key: "™", metaKey: true, altKey: true });
+    openKind(page, "Code");
   });
-  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Board", "Transcript", "Code"]);
   assert.equal(chosenTab(page), "Code");
   assert.deepEqual(tabsMoved(page), []);
 });
@@ -2571,7 +2568,7 @@ test("an agent's tab is dragged among the agents' in the plan's column, never be
   const next = mountOpenPlan({ agents });
   assert.deepEqual(columnTabs(next), [PLAN.name, "GPT 5.6 Sol", "Opus 5.5"]);
 });
-test("a subagent's tab is dragged and stepped as any other, closed and opened again stands where it stood, and a launch drops it, leaving the rest where they stood", () => {
+test("a subagent's tab is dragged and stepped as any other, closed and opened again stands at the strip's end, and a launch drops it, leaving the rest where they stood", () => {
   const job = "Compare the two queue libraries.";
   const page = mountOpenPlan({ work: workerWork(job) });
   press(page, '[aria-label="Show panel"]');
@@ -2594,7 +2591,7 @@ test("a subagent's tab is dragged and stepped as any other, closed and opened ag
   assert.deepEqual(panelTabs(page), ["Work", "Board", job, "Code", "Transcript"]);
   press(page, `[aria-label="Close ${job}"]`);
   press(page, "[data-subagent-row]");
-  assert.deepEqual(panelTabs(page), ["Work", "Board", job, "Code", "Transcript"]);
+  assert.deepEqual(panelTabs(page), ["Work", "Board", "Code", "Transcript", job]);
   unmountAll();
 
   const next = mountOpenPlan({ work: workerWork(job) });
@@ -2688,7 +2685,7 @@ test("a tab chosen, or opened, past the strip's shown room is scrolled into view
   assert.ok(tabInView(page, strip, "Board"), "the tab the keys reach is brought into view");
 
   press(page, '[aria-label="Close Work"]');
-  keydown({ code: "Digit4", key: "¢", metaKey: true, altKey: true });
+  openKind(page, "Work");
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
   assert.ok(tabInView(page, strip, "Work"), "a tab opened at the strip's end is brought into view");
 });
@@ -2845,7 +2842,7 @@ test("the strip fades exactly the edges it hides tabs beyond, as it scrolls, res
   assert.deepEqual(fadedEdges(strip), ["end"]);
   press(page, '[aria-label="Close Board"]');
   assert.deepEqual(fadedEdges(strip), [], "a tab closed leaves room for the rest");
-  keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
+  openKind(page, "Board");
   assert.deepEqual(fadedEdges(strip), ["end"], "a tab opened hides one again");
 });
 
