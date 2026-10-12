@@ -16,6 +16,7 @@ import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
+import { agentTabLabel } from "./coding-agent-model";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -74,6 +75,7 @@ import {
 } from "./use-plan-history";
 import {
   isAgentTab,
+  type PinnedTab,
   type PlanHolds,
   SIDE_PANEL_TAB,
   type SidePanelControl,
@@ -172,6 +174,8 @@ export interface PlansControl {
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
+  /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the side panel on the tab. */
+  onOpenPinnedTab: (pin: PinnedTab) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
@@ -397,6 +401,20 @@ export function usePlansTab(input: {
     files,
   );
   panelRef.current = sidePanel;
+  // An agent pinned to the sidebar is named there as its tab is named now,
+  // so a pin made before the agent had its title, or before a rename,
+  // catches up while its plan is open.
+  const pinLabels = useMemo(
+    () =>
+      new Map(
+        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+      ),
+    [agents.agents, agents.models],
+  );
+  const { onRenamePins } = sidePanel;
+  useEffect(() => {
+    if (viewed.activePlanId !== undefined) onRenamePins(viewed.activePlanId, pinLabels);
+  }, [viewed.activePlanId, pinLabels, onRenamePins]);
   // Main hears which agent's tab is on screen, and none while the tab is
   // away, the version history stands in the plan's place, or the panel
   // shows something else; a fixture's staged agents are no one's to announce.
@@ -879,7 +897,13 @@ export function usePlansTab(input: {
     onShowAgent: (planId, agentId) => {
       if (planId !== planning.activePlanId) select(planId);
       setHistoryFor(undefined);
-      sidePanel.onChoose({ agent: agentId });
+      sidePanel.onShow(planId, { agent: agentId });
+    },
+    // A pinned tab is in the side panel too, so a version history over it gives way as well.
+    onOpenPinnedTab: (pin) => {
+      if (pin.plan !== planning.activePlanId) select(pin.plan);
+      setHistoryFor(undefined);
+      sidePanel.onShow(pin.plan, pin.tab);
     },
     repositories: {
       recent: recentRepositories(planning.plans),
