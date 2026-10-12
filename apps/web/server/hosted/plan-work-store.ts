@@ -1,3 +1,4 @@
+import { childConversationId } from "@sidecar/database/models/ids";
 import {
   PLAN_WORK_BOUNDS,
   type PlanShownCode,
@@ -12,7 +13,6 @@ import {
   type SubagentJournal,
   workerSessionCallsOf,
 } from "../voice/plan-work.js";
-import { childConversationId } from "./brain-host/ids.js";
 import { EVE_DELEGATION_TOOL } from "./brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "./brain-tool-set.js";
 import { subagentRecordsByCall } from "./child-models.js";

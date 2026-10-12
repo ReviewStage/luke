@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { PLAN_HEADING } from "@sidecar/hosted/plan-template";
+import { hostTurnId } from "@sidecar/database/models/ids";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { LIVE_BRAIN_SUBMISSION, sidebandOverSocket } from "@sidecar/voice/live-session";
 import { FakeLiveSocket } from "@sidecar/voice/testing";
@@ -11,36 +13,15 @@ import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
 import { MESSAGE_ROLE } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import {
-  EVE_SEND_OUTCOME,
-  type EveMessage,
-  type EveSessions,
-} from "../server/hosted/brain-host/eve-sessions";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
+import { EVE_SEND_OUTCOME, type EveMessage, type EveSessions } from "../server/hosted/brain-host/eve-sessions";
 import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
-import {
-  memoryRelayState,
-  type RelayStanding,
-  StreamRelay,
-} from "../server/hosted/brain-host/relay";
+import { memoryRelayState, type RelayStanding, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
-import {
-  createPlan,
-  deletePlan,
-  openPlanConversation,
-  readPlan,
-} from "../server/hosted/plan-store";
+import { createPlan, deletePlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
-import {
-  LIVE_CLIENT_EVENT,
-  LIVE_CLOSE_REASON,
-  LIVE_SERVER_EVENT,
-  type LiveAppendEvent,
-  type LiveClientEvent,
-  type LiveServerEventType,
-} from "../server/live";
+import { LIVE_CLIENT_EVENT, LIVE_CLOSE_REASON, LIVE_SERVER_EVENT, type LiveAppendEvent, type LiveClientEvent, type LiveServerEventType } from "../server/live";
 import { EXCHANGE_ENDING, hostedLiveExchange } from "../server/voice/live-exchange";
 import type { PlanDraft } from "../server/voice/plan-scribe";
 import { voiceSessionRecord } from "../server/voice/session-record";
@@ -51,11 +32,7 @@ import { delegated, heard, said, sessionStarted } from "./support/live-events";
 import { added } from "./support/plan-contents";
 import { scriptedScribeModel } from "./support/scribe-model";
 import { settled } from "./support/settle";
-import {
-  readMessagesByConversationTyped,
-  readVoiceSessionByLiveSessionId,
-  readVoiceTranscriptSegmentsBySession,
-} from "./support/store-rows";
+import { readMessagesByConversationTyped, readVoiceSessionByLiveSessionId, readVoiceTranscriptSegmentsBySession } from "./support/store-rows";
 
 /**
  * The hosted live exchange composed whole over the real store on PGlite: a

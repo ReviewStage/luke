@@ -1,3 +1,4 @@
+import { hostTurnId } from "@sidecar/database/models/ids";
 import {
   Cause,
   Clock,
@@ -19,7 +20,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
-import { hostTurnId } from "./brain-host/ids.js";
 import { conversationOwnedBy, recordedRuntimeSession } from "./brain-host/recorded-session.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
 import { ASK_DISPATCH_REFUSAL, type AskRecord, type AskRow, type AskVoice } from "./store/asks.js";

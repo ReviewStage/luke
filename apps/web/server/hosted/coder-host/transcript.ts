@@ -1,3 +1,4 @@
+import { childConversationId } from "@sidecar/database/models/ids";
 import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -23,7 +24,6 @@ import {
   storedToolName,
   TURN_STATUS,
 } from "../../core.js";
-import { childConversationId } from "../brain-host/ids.js";
 import {
   awaitingLinesOf,
   type CodingAgent,

@@ -1,4 +1,5 @@
 import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -49,7 +50,6 @@ import {
   SESSION_STANDING,
 } from "./conversation.js";
 import { EVE_MOUNT, eveSessionsComposer } from "./eve-sessions.js";
-import { childConversationId, hostTurnId } from "./ids.js";
 import { meteredModel, openAiBrainModel, summarizedReasoningModel } from "./model.js";
 import {
   EVE_DELEGATION_TOOL,

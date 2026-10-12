@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@sidecar/hosted";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
@@ -19,7 +20,6 @@ import {
   type WireRecord,
 } from "../server/core";
 import { BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   memoryRelayState,
   type RelayStanding,

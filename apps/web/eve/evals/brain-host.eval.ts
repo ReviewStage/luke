@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { db } from "@sidecar/database/core/query";
 import { sqlClientOverUrl } from "@sidecar/database/core/sql-client";
 import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { user } from "@sidecar/database/schemas/auth";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { EXCESS_KEYS } from "@sidecar/wire";
@@ -21,7 +22,6 @@ import {
   unparsedWire,
 } from "../../server/core";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
-import { hostTurnId } from "../../server/hosted/brain-host/ids";
 import {
   EVE_DELEGATION_TOOL,
   planningToolDeclarations,

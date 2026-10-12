@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { hostTurnId, reasoningItemId } from "@sidecar/database/models/ids";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { isTextUIPart, isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
@@ -21,7 +22,6 @@ import {
 import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
-import { hostTurnId, reasoningItemId } from "../server/hosted/brain-host/ids";
 import { EVE_DELEGATION_TOOL } from "../server/hosted/brain-host/planning";
 import {
   FAILURE_DETAIL_BOUNDS,

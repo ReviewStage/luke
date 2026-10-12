@@ -1,3 +1,9 @@
+import {
+  answerMessageId,
+  hostTurnId,
+  reasoningItemId,
+  receivedMessageId,
+} from "@sidecar/database/models/ids";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -42,7 +48,6 @@ import {
   RELAY_TURN,
   type RelayTurn,
 } from "./bounds.js";
-import { answerMessageId, hostTurnId, reasoningItemId, receivedMessageId } from "./ids.js";
 
 /**
  * The relay from eve's stream into the brain's own, which both eve services

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { Effect, Result, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -12,7 +13,6 @@ import {
 } from "../server/hosted/brain-host/bounds";
 import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain-host/conversation";
 import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import {
   PLANNING_INSTRUCTIONS,
   planningToolDeclarations,

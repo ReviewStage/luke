@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { hostTurnId } from "@sidecar/database/models/ids";
 import { Effect, Layer, Option, Result, Schema } from "effect";
 import { routeAuth } from "eve/channels/auth";
 import type { MessageStreamEvent } from "eve/client";
@@ -21,7 +22,6 @@ import {
   brainHost,
   type HostedToolBinding,
 } from "../server/hosted/brain-host/host";
-import { hostTurnId } from "../server/hosted/brain-host/ids";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";

@@ -1,4 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
+import { childConversationId } from "@sidecar/database/models/ids";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
@@ -41,7 +42,6 @@ import {
   type StopOutcome,
   stopAsk,
 } from "../hosted/brain-ask.js";
-import { childConversationId } from "../hosted/brain-host/ids.js";
 import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { subagentRecordsByCall } from "../hosted/child-models.js";
