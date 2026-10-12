@@ -2,6 +2,7 @@ import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { HarnessMark } from "../provider-marks";
 import { type FootRow, type MenuRow, SearchableMenu } from "../searchable-menu";
+import { Spinner } from "../spinner";
 import {
   CONTEXT_WORD,
   choiceModelId,
@@ -47,7 +48,6 @@ import {
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
-  READING: "Reading the models…",
   NONE: "No models are offered right now.",
   NO_MATCH: "No models match",
 } as const;
@@ -215,7 +215,9 @@ export function ModelMenu(props: {
       value={read?.base}
       note={
         models === undefined ? (
-          <p className="plan-compose-menu-note">{MENU_NOTE.READING}</p>
+          <div className="plan-compose-menu-note">
+            <Spinner label="Loading models" />
+          </div>
         ) : models.length === 0 ? (
           <p className="plan-compose-menu-note">{MENU_NOTE.NONE}</p>
         ) : undefined

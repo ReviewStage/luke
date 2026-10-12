@@ -56,7 +56,7 @@ function restoreQuestion(at: number): DialogQuestion {
     title: "Restore this version?",
     body: `The plan will go back to the version from ${versionMoment(at)}. The plan as it stands now stays in the history, so you can restore it again.`,
     verb: "Restore",
-    running: "Restoring…",
+    running: "Restoring",
     tone: DIALOG_TONE.PRIMARY,
   };
 }

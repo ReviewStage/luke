@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { it } from "@effect/vitest";
 import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -10,9 +11,14 @@ import {
   type PlanCodeShowing,
   type PlanningFileAnswer,
 } from "@sidecar/hosted/planning-view";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, onTestFinished, test, vi } from "vitest";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { FileTab } from "./file-tab";
 import { snippetOf } from "./file-tab-model";
 import type { OpenFile } from "./use-side-panel";
@@ -74,10 +80,11 @@ function watchedRows() {
   };
 }
 
-/** The tab drawn over a service that answers `answer`, every window asked written down, with the lines Luke showed of the file where given. */
+/** The tab drawn over a service that answers `answer`, every window asked written down, with the lines Luke showed of the file where given, on the atoms `registry` holds where one is given. */
 function mounted(
   answer: (window: PlanFileRequest) => PlanningFileAnswer | Promise<never>,
   snippet?: PlanCode,
+  registry?: AtomRegistry,
 ) {
   const asked: string[] = [];
   const opened: string[] = [];
@@ -92,14 +99,13 @@ function mounted(
   // Each draw hands the tab a fresh door, as a parent drawing again does.
   const draw = async (file: OpenFile) => {
     await act(async () => {
-      root.render(
-        createElement(FileTab, {
-          file,
-          snippet,
-          readFile: (window) => readFile(window),
-          openGitHub: (url) => opened.push(url),
-        }),
-      );
+      const tab = createElement(FileTab, {
+        file,
+        snippet,
+        readFile: (window) => readFile(window),
+        openGitHub: (url) => opened.push(url),
+      });
+      root.render(registry === undefined ? tab : onRegistry(registry, tab));
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -114,6 +120,25 @@ function drawnLines(container: HTMLElement): string[] {
     return line.getAttribute("data-pointed") === "true" ? `${number} lit` : number;
   });
 }
+
+it.effect(
+  "while the file is first read the tab draws the spinner in its lines' place, saying Loading file to a reader",
+  () =>
+    Effect.gen(function* () {
+      const tab = mounted(
+        () => new Promise<never>(() => undefined),
+        undefined,
+        yield* registryOnTestClock,
+      );
+      yield* Effect.promise(() =>
+        tab.draw({ path: "src/invite.ts", range: { startLine: 1, endLine: 3 }, opened: 1 }),
+      );
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(() => act(async () => undefined));
+      assert.deepEqual(waitsIn(tab.container), [{ says: "Loading file", ring: true }]);
+      assert.doesNotMatch(tab.container.textContent ?? "", /Reading/u);
+    }),
+);
 
 test("a file opens on the window holding its lit lines, and the windows above and below are read as their rows scroll into view, joined into one run", async () => {
   const rows = watchedRows();

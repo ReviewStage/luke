@@ -730,7 +730,7 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
   choose("Permanently delete");
 
   act(() => answer("Permanently delete").click());
-  assert.equal(answer("Deleting…").disabled, true);
+  assert.equal(answer("Permanently delete").disabled, true);
   assert.equal(answer("Cancel").disabled, true);
   key("Escape");
   assert.equal(asking(), true, "an answer already given is not withdrawn");

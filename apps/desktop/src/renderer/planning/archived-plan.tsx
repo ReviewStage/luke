@@ -1,5 +1,6 @@
 import { ArchiveIcon } from "@sidecar/panel";
 import { useState } from "react";
+import { BusyLabel } from "../spinner";
 
 /**
  * archived-plan.tsx -- what an archived plan draws where its actions would stand: the banner over its document, and the note in place of an agent's composer.
@@ -70,7 +71,9 @@ export function ArchivedComposerNote({
           disabled={stopping}
           onClick={() => pressStop(stop)}
         >
-          {stopping ? "Stopping…" : "Stop"}
+          <BusyLabel busy={stopping} label="Stopping">
+            Stop
+          </BusyLabel>
         </button>
       )}
       <button type="button" className="primary-button" onClick={onUnarchive}>

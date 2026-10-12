@@ -15,6 +15,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { BusyLabel, SpinnerRegion } from "../spinner";
 import { useConfirm } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
 
@@ -35,9 +36,8 @@ import { ConfirmSwap } from "./confirm-swap";
  * recording, which masks a field's characters but not their count.
  */
 
-/** What the page says while it reads, while it cannot, and with no account. */
+/** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  READING: "Reading your keys…",
   FAILED: "Your keys could not be read. Try again.",
   SIGNED_OUT: "Sign in to add your own API keys.",
   NOTE: "A coding agent on a provider's model runs on your own key for that provider when you add one, and usage on it is billed to you by that provider. Without one, it runs on Luke's.",
@@ -198,7 +198,9 @@ function ProviderKeyRow({
             onChange={() => setRejection(undefined)}
           />
           <button type="submit" className="toolbar-button" disabled={saving || locked}>
-            {saving ? "Checking…" : "Save"}
+            <BusyLabel busy={saving} label="Checking the key">
+              Save
+            </BusyLabel>
           </button>
           {replacing ? (
             <button
@@ -221,7 +223,7 @@ function ProviderKeyRow({
             question: `Remove your ${name} API key? Agents on ${name} models will run on Luke's key.`,
             stage: removal.stage,
             verb: "Remove",
-            running: "Removing…",
+            running: "Removing",
             onKeep: removal.keep,
             onAct: removal.run,
           }}
@@ -353,9 +355,7 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
           </button>
         </>
       ) : (
-        <p className="settings-note" aria-busy="true">
-          {PAGE_LINE.READING}
-        </p>
+        <SpinnerRegion label="Loading your keys" />
       )}
     </section>
   );

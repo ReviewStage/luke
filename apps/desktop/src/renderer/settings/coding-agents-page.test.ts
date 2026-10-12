@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -10,6 +11,9 @@ import {
   type ModelProvider,
 } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -21,7 +25,9 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { CodingAgentsSection } from "./coding-agents-page";
 
 const MODELS: readonly CatalogModel[] = [
@@ -84,6 +90,8 @@ let refuseDefaultRead = false;
 let ownKeys: readonly ModelProvider[] = [];
 /** How the provider last answered each of those keys. */
 let ownKeyStatus: ProviderKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
+/** Whether the default read is never answered, so the page stands reading. */
+let holdDefaultRead = false;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -96,6 +104,7 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
+      if (holdDefaultRead) return new Promise(() => undefined);
       return Promise.resolve(
         done(
           refuseDefaultRead
@@ -144,6 +153,7 @@ beforeEach(() => {
   refuseDefaultRead = false;
   ownKeys = [];
   ownKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
+  holdDefaultRead = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -161,12 +171,14 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(signedIn = true): Promise<HTMLElement> {
+/** The page, on the atoms `registry` holds where one is given. */
+async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(CodingAgentsSection, { signedIn })));
+  const page = createElement(CodingAgentsSection, { signedIn });
+  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;
 }
@@ -229,6 +241,21 @@ test("the page reads the default and the models as it opens, and draws the model
     ["Max", "false"],
   ]);
 });
+
+it.effect(
+  "while the default is read the page draws the spinner in its rows' place, saying Loading your default to a reader",
+  () =>
+    Effect.gen(function* () {
+      holdDefaultRead = true;
+      const registry = yield* registryOnTestClock;
+      const page = yield* Effect.promise(() => mount(true, registry));
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.deepEqual(waitsIn(page), [{ says: "Loading your default", ring: true }]);
+      assert.equal(page.querySelector(".settings-picker-chip"), null, "no rows before the read");
+      assert.doesNotMatch(page.textContent ?? "", /Reading/u);
+    }),
+);
 
 test("the model menu opens on its search, lists the newest of each family under its harness's mark, and a pick keeps the effort the model lists, else its first", async () => {
   const page = await mount();

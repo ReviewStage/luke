@@ -11,6 +11,7 @@ import { HISTORY_READ } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { VersionSkeleton, VersionView } from "../planning/version-view";
 import { Skeleton, SkeletonRegion } from "../skeleton";
+import { BusyLabel } from "../spinner";
 import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
 import { HistoryButtons, SidebarResizeEdge, useSidebarEdge } from "./desktop-sidebar";
 import type { SidebarCollapse } from "./sidebar-collapse";
@@ -125,11 +126,9 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   };
   return (
     <button type="button" className="version-earlier" disabled={reading} onClick={read}>
-      {reading
-        ? "Reading…"
-        : failed
-          ? "Could not read older versions. Try again"
-          : "Show older versions"}
+      <BusyLabel busy={reading} label="Loading older versions">
+        {failed ? "Could not read older versions. Try again" : "Show older versions"}
+      </BusyLabel>
     </button>
   );
 }

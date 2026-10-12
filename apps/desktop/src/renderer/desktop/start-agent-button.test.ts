@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { StartAgentButton } from "./start-agent-button";
@@ -57,12 +63,14 @@ async function settle(): Promise<void> {
   });
 }
 
-function mount(control: CodingAgentsControl): HTMLElement {
+/** The button over `control`, on the atoms `registry` holds where one is given. */
+function mount(control: CodingAgentsControl, registry?: AtomRegistry): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(StartAgentButton, { control })));
+  const button = createElement(StartAgentButton, { control });
+  act(() => root.render(registry === undefined ? button : onRegistry(registry, button)));
   return container;
 }
 
@@ -431,27 +439,69 @@ test("a stored fast version shows its base model checked with Fast on, and a pic
   assert.ok(page.querySelector(".plan-compose-menu"));
 });
 
-test("the menu says it is reading until the models arrive, and a default the service could not answer checks no row", async () => {
-  const page = mount(
-    codingAgentsControl({
-      models: undefined,
-      start: {
-        available: true,
-        reason: undefined,
-        busy: false,
-        note: undefined,
-        onPress: () => undefined,
-      },
+it.effect(
+  "the menu draws the spinner until the models arrive, and a default the service could not answer checks no row",
+  () =>
+    Effect.gen(function* () {
+      const page = mount(
+        codingAgentsControl({
+          models: undefined,
+          start: {
+            available: true,
+            reason: undefined,
+            busy: false,
+            note: undefined,
+            onPress: () => undefined,
+          },
+        }),
+        yield* registryOnTestClock,
+      );
+      act(() => buttonNamed(page, "Choose a model to start with").click());
+      yield* Effect.promise(settle);
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
+      assert.ok(menu);
+      assert.deepEqual(waitsIn(menu), [{ says: "Loading models", ring: true }]);
+      assert.deepEqual(rowsOf(menu), []);
+      assert.equal(
+        menu.querySelector(".plan-compose-menu-foot"),
+        null,
+        "nothing to start with yet",
+      );
     }),
-  );
-  act(() => buttonNamed(page, "Choose a model to start with").click());
-  await settle();
-  const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
-  assert.ok(menu);
-  assert.equal(menu.querySelector(".plan-compose-menu-note")?.textContent, "Reading the models…");
-  assert.deepEqual(rowsOf(menu), []);
-  assert.equal(menu.querySelector(".plan-compose-menu-foot"), null, "nothing to start with yet");
-});
+);
+
+it.effect(
+  "a Start under way draws the spinner over its words once it has stood, and a further press starts nothing",
+  () =>
+    Effect.gen(function* () {
+      let pressed = 0;
+      const page = mount(
+        codingAgentsControl({
+          start: {
+            available: true,
+            reason: undefined,
+            busy: true,
+            note: undefined,
+            onPress: () => {
+              pressed += 1;
+            },
+          },
+        }),
+        yield* registryOnTestClock,
+      );
+      const start = buttonNamed(page, "Start a coding agent");
+      assert.equal(start.textContent, "Start", "a quick start flashes nothing");
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.ok(start.querySelector(".spinner-ring"));
+      assert.equal(start.getAttribute("aria-busy"), "true");
+      assert.doesNotMatch(start.textContent ?? "", /…/u);
+      act(() => start.click());
+      assert.equal(pressed, 0);
+    }),
+);
 
 test("why the last Start did not start is said beside the button", () => {
   const page = mount(

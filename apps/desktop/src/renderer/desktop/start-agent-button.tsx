@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { choiceLabel } from "../planning/coding-agent-model";
 import { ModelMenu, settledChoice } from "../planning/model-menu";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
+import { BusyLabel } from "../spinner";
 import { Tooltip } from "../tooltip";
 
 /**
@@ -58,7 +59,6 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
   const models = control.models;
   // A default effort the model no longer lists falls to the model's first.
   const chosen = settledChoice(models, choice);
-  const label = start.busy ? "Starting…" : "Start";
   const unavailable = !start.available;
 
   // A change is kept as the default the main part starts on, and drawn at
@@ -95,10 +95,13 @@ export function StartAgentButton({ control }: { control: CodingAgentsControl }):
       className="toolbar-button start-agent-main"
       aria-disabled={unavailable || start.busy ? "true" : undefined}
       aria-label="Start a coding agent"
+      aria-busy={start.busy ? "true" : undefined}
       onClick={press}
     >
-      <PlayIcon />
-      {label}
+      <BusyLabel busy={start.busy} label="Starting">
+        <PlayIcon />
+        Start
+      </BusyLabel>
     </button>
   );
 

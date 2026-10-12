@@ -39,6 +39,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
 import { encodeFeedbackImage, imageFiles } from "./feedback-images";
 import { trappedTab } from "./settings/confirm-dialog";
+import { BusyLabel } from "./spinner";
 import { useStagedFocus } from "./staged-focus";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
@@ -486,7 +487,9 @@ export function FeedbackDialog({
                     disabled={!ready}
                     onClick={() => void send()}
                   >
-                    {busy ? "Sending…" : "Send"}
+                    <BusyLabel busy={busy} label="Sending">
+                      Send
+                    </BusyLabel>
                     <span className="shortcut-glyphs" aria-hidden="true">
                       <span>⌘</span>
                       <span>↩</span>

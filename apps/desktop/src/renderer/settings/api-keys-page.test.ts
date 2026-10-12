@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -9,6 +10,9 @@ import {
   type ProviderKeyRejection,
   type ProviderKeySummary,
 } from "@sidecar/hosted/provider-key-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -20,6 +24,8 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { ApiKeysSection } from "./api-keys-page";
 
 /**
@@ -47,6 +53,8 @@ let sent: Act[] = [];
 let refuseSave: ProviderKeyRejection | undefined;
 /** Whether the read is answered with a failure rather than the keys. */
 let refuseRead = false;
+/** Whether the read is never answered, so the page stands reading. */
+let holdRead = false;
 /** Where a save is held unanswered until the test lets it go, rather than answered at once. */
 let holdSaves: ((answer: ActOutcome) => void)[] | undefined;
 
@@ -60,6 +68,7 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.PROVIDER_KEYS_READ:
+      if (holdRead) return new Promise(() => undefined);
       return Promise.resolve(
         done(refuseRead ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { keys: stored }),
       );
@@ -91,6 +100,7 @@ beforeEach(() => {
   sent = [];
   refuseSave = undefined;
   refuseRead = false;
+  holdRead = false;
   holdSaves = undefined;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
@@ -109,12 +119,14 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(signedIn = true): Promise<HTMLElement> {
+/** The page, on the atoms `registry` holds where one is given. */
+async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(ApiKeysSection, { signedIn })));
+  const page = createElement(ApiKeysSection, { signedIn });
+  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;
 }
@@ -242,6 +254,21 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   );
   assert.equal(signedOut.textContent, "Sign in to add your own API keys.");
 });
+
+it.effect(
+  "while the keys are read the page draws the spinner in their rows' place, saying Loading your keys to a reader",
+  () =>
+    Effect.gen(function* () {
+      holdRead = true;
+      const registry = yield* registryOnTestClock;
+      const page = yield* Effect.promise(() => mount(true, registry));
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.deepEqual(waitsIn(page), [{ says: "Loading your keys", ring: true }]);
+      assert.equal(page.querySelector('input[type="password"]'), null, "no rows before the read");
+      assert.doesNotMatch(page.textContent ?? "", /Reading/u);
+    }),
+);
 
 test("while one row's save is out, the other row waits, so two answers cannot land out of order", async () => {
   holdSaves = [];

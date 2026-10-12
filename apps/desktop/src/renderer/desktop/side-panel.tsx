@@ -80,6 +80,7 @@ import {
   workRowsOf,
 } from "../planning/work-model";
 import type { MenuRow } from "../searchable-menu";
+import { SpinnerRegion } from "../spinner";
 import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState, StateGlyph } from "../state-glyph";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { type MenuAction, MenuItem } from "./action-menu";
@@ -649,7 +650,7 @@ function TabContent({
     // Note that the plan given another repository draws the file afresh,
     // because the lines held were read from the one before.
     return file === undefined ? (
-      <p className="side-panel-empty">Opening the file…</p>
+      <SpinnerRegion label="Loading file" />
     ) : (
       <Fragment key={repository ?? undefined}>
         <FileTab
@@ -682,7 +683,7 @@ function TabContent({
     // The tab stands for a subagent the work no longer holds only until the
     // panel moves back to the board, a render away.
     return worker === undefined ? (
-      <p className="side-panel-empty">Reading the subagent…</p>
+      <SpinnerRegion label="Loading subagent" />
     ) : (
       <SubagentTab key={tab.subagent} worker={worker} shown={shown} />
     );

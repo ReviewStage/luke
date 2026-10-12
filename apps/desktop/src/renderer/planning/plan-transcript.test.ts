@@ -11,6 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanTranscript } from "./plan-transcript";
 import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 
@@ -131,7 +132,7 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
   assert.match(drawn, /Look at/u);
 });
 
-test("the empty, reading, and failed states each say where the transcript stands, and a failure offers Try again", () => {
+test("the empty and failed states each say where the transcript stands, and a failure offers Try again", () => {
   const empty = renderToStaticMarkup(
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.EMPTY },
@@ -139,14 +140,6 @@ test("the empty, reading, and failed states each say where the transcript stands
     }),
   );
   assert.match(empty, /Nothing said yet — start a call and the transcript appears here\./u);
-
-  const reading = renderToStaticMarkup(
-    createElement(PlanTranscript, {
-      region: { kind: TRANSCRIPT_REGION.READING },
-      onRetry: () => undefined,
-    }),
-  );
-  assert.match(reading, /aria-busy="true"/u);
 
   let retried = 0;
   const container = document.createElement("div");
@@ -170,6 +163,34 @@ test("the empty, reading, and failed states each say where the transcript stands
   act(() => container.querySelector<HTMLButtonElement>("button")?.click());
   assert.equal(retried, 1);
 });
+
+it.effect(
+  "a read out draws the spinner in the transcript's place once it has stood, saying Loading transcript to a reader",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(PlanTranscript, {
+              region: { kind: TRANSCRIPT_REGION.READING },
+              onRetry: () => undefined,
+            }),
+          ),
+        ),
+      );
+      assert.deepEqual(waitsIn(container), [{ says: "", ring: false }], "nothing flashes at once");
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* settle;
+      assert.deepEqual(waitsIn(container), [{ says: "Loading transcript", ring: true }]);
+      assert.doesNotMatch(container.textContent ?? "", /Reading/u);
+    }),
+);
 
 test("a new line keeps the list at its newest, unless the developer scrolled up to read", () => {
   const container = document.createElement("div");
