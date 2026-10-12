@@ -8,9 +8,11 @@ import {
 } from "@sidecar/gateway";
 import type {
   HostedPlanClient,
+  HostedWorkspaceClient,
   PlanActivityFrame,
   PlanDraftFrame,
   PlanMarks,
+  WorkspaceCallResult,
 } from "@sidecar/hosted";
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
@@ -32,6 +34,9 @@ import {
   type PlanningStartAnswer,
   type PlanningTreeAnswer,
   type PlanningView,
+  type PlanningWorkspaceJoinAnswer,
+  type PlanningWorkspaceLeaveAnswer,
+  type PlanningWorkspaceMembersAnswer,
   type PlanShownCode,
   type PlanWorkTurn,
   planningArchiveParamsSchema,
@@ -42,18 +47,25 @@ import {
   planningPinParamsSchema,
   planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
+  planningRepositoriesParamsSchema,
   planningRevisionParamsSchema,
   planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
   planningSkillsParamsSchema,
   planningStartRequestSchema,
   planningTreeParamsSchema,
+  planningWorkspaceJoinParamsSchema,
+  planningWorkspaceLeaveParamsSchema,
+  planningWorkspaceMemberRemoveParamsSchema,
+  planningWorkspaceMembersParamsSchema,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Duration, Effect, Queue, Result, Schema, type Scope, Semaphore } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
+import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { AccountComposer } from "./compose-account.js";
 import type { Composer } from "./composer.js";
 import type { HostKernel } from "./host-kernel.js";
@@ -92,6 +104,12 @@ import type { RunMode } from "./run-mode.js";
  * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
+ * The workspaces the account is a member of, and those of the GitHub App
+ * installations it reaches and may join, are read with the list and carried
+ * on the view beside it. A join, a removal of a member, and a leave are
+ * carried to the service on the developer's word, and a workspace's members
+ * are read for the window that asks and held nowhere here; each reads the
+ * list and the workspaces again, so the view says what the service now holds.
  */
 
 /**
@@ -106,10 +124,13 @@ const TRANSCRIPT_SETTLE = Duration.seconds(5);
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
 
+/** A workspace call behind a closed gate, which never reaches the service. */
+const WORKSPACE_UNANSWERED = { failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
+
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
-/** The service's side of the plans, as this concern asks it. */
+/** The service's side of the plans, and the workspaces they live in, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
   | "list"
@@ -134,7 +155,10 @@ export type PlanningClient = Pick<
   | "repositories"
   | "setRepository"
   | "edit"
->;
+> & {
+  /** The account's workspaces, the ones it may join, and their members. */
+  workspaces: Pick<HostedWorkspaceClient, "list" | "join" | "members" | "removeMember" | "leave">;
+};
 
 export interface PlanningDependencies {
   kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
@@ -279,13 +303,18 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   const readList = Effect.gen(function* () {
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
+    const workspaces = yield* Effect.provide(client.workspaces.list(), FetchHttpClient.layer);
     // A failed read keeps the list it last read: the panel says the read
-    // failed beside the plans it already drew rather than emptying them.
-    write(
-      listed.ok
+    // failed beside the plans it already drew rather than emptying them,
+    // and the workspaces those plans name stay as they were read.
+    write({
+      ...(listed.ok
         ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
-        : { listStatus: PLANNING_READ.FAILED },
-    );
+        : { listStatus: PLANNING_READ.FAILED }),
+      ...(workspaces === undefined
+        ? undefined
+        : { workspaces: workspaces.workspaces, available: workspaces.available }),
+    });
   });
 
   // A failed read keeps the pins it last read, as a failed list read keeps the plans.
@@ -604,6 +633,17 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         return { changed: true };
       }),
     );
+  }
+
+  /**
+   * One workspace call, then the list and the workspaces read again, whatever
+   * it answered: a join, a removal, or a leave moves what the account holds,
+   * and a refusal or a members read can find it already moved elsewhere.
+   */
+  function workspaceCall<Answer>(
+    call: Effect.Effect<WorkspaceCallResult<Answer>, never, HttpClient.HttpClient>,
+  ): Effect.Effect<WorkspaceCallResult<Answer>> {
+    return serial(Effect.tap(Effect.provide(call, FetchHttpClient.layer), () => readList));
   }
 
   const methods: GatewayMethodTable = {
@@ -931,12 +971,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     // The list is the service's answer whole, read now and held nowhere: the
     // panel asks again whenever its chip opens, so an App installed meanwhile
     // shows on the next opening.
-    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: () =>
+    [GATEWAY_METHOD.PLANNING_REPOSITORIES]: (params) =>
       Effect.gen(function* () {
+        const read = readEither(planningRepositoriesParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("listing repositories names the workspace they are for, or none");
+        }
         if (!gate()) {
           return carried<PlanningRepositoriesAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
         }
-        const listed = yield* Effect.provide(client.repositories(), FetchHttpClient.layer);
+        const listed = yield* Effect.provide(
+          client.repositories(read.success.workspaceId),
+          FetchHttpClient.layer,
+        );
         return carried<PlanningRepositoriesAnswer>(
           listed.ok ? { repositories: listed.answer } : { failure: listed.failure },
         );
@@ -989,6 +1036,52 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             takeAnswered(answer.plan);
             return carried<PlanningEditAnswer>({ saved: true });
           }),
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_JOIN]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceJoinParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read))
+          return yield* invalid("joining a workspace names its installation");
+        if (!gate()) return carried<PlanningWorkspaceJoinAnswer>(WORKSPACE_UNANSWERED);
+        const joined = yield* workspaceCall(client.workspaces.join(read.success.installationId));
+        return carried<PlanningWorkspaceJoinAnswer>(
+          joined.ok ? { workspace: joined.answer } : { failure: joined.failure },
+        );
+      }),
+    // The members are answered to the window that asked and held nowhere:
+    // it keeps what it read, and reads again as it opens.
+    [GATEWAY_METHOD.WORKSPACES_MEMBERS]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMembersParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("reading members names a workspace");
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const members = yield* workspaceCall(client.workspaces.members(read.success.workspaceId));
+        return carried<PlanningWorkspaceMembersAnswer>(
+          members.ok ? { members: members.answer } : { failure: members.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_MEMBER_REMOVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceMemberRemoveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("removing a member names the workspace and the member");
+        }
+        if (!gate()) return carried<PlanningWorkspaceMembersAnswer>(WORKSPACE_UNANSWERED);
+        const { workspaceId, userId } = read.success;
+        const remaining = yield* workspaceCall(client.workspaces.removeMember(workspaceId, userId));
+        return carried<PlanningWorkspaceMembersAnswer>(
+          remaining.ok ? { members: remaining.answer } : { failure: remaining.failure },
+        );
+      }),
+    [GATEWAY_METHOD.WORKSPACES_LEAVE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningWorkspaceLeaveParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) return yield* invalid("leaving a workspace names it");
+        if (!gate()) return carried<PlanningWorkspaceLeaveAnswer>(WORKSPACE_UNANSWERED);
+        const left = yield* workspaceCall(client.workspaces.leave(read.success.workspaceId));
+        return carried<PlanningWorkspaceLeaveAnswer>(
+          left.ok ? { left: true } : { failure: left.failure },
         );
       }),
     // A save of another plan than the open one is dropped: its board is not drawn.

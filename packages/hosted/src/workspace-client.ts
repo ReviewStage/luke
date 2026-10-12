@@ -28,15 +28,15 @@ import {
  * workspace-client.ts -- the workspaces the signed-in account is a member of, and their members, as the host asks the service for them.
  *
  * Every call is the account call, so the bearer is read fresh per attempt
- * and a 401 is renewed and retried once. A read that did not come back is
+ * and a 401 is renewed and retried once. A list that did not come back is
  * nothing rather than a failure, because the one thing a caller does
- * without it is keep the workspaces, or the members, it last read. A
- * removal and a leave answer a result instead, because a refusal the
+ * without it is keep the workspaces it last read. A join, a members read, a
+ * removal, and a leave answer a result instead, because a refusal the
  * account's role earned is the developer's to be told, apart from a service
  * that did not answer.
  */
 
-/** A removal or a leave: its answer, or why there is none. */
+/** A join, a members read, a removal, or a leave: its answer, or why there is none. */
 export type WorkspaceCallResult<Answer> = PlanCallResult<Answer, WorkspaceCallFailure>;
 
 const UNANSWERED = { ok: false, failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const;
@@ -100,10 +100,13 @@ export class HostedWorkspaceClient {
     );
   }
 
-  /** Joins the workspace of the installation, answered as the account now sees it; nothing where the service refused or did not answer. */
-  join(installationId: number): Effect.Effect<Workspace | undefined, never, HttpClient.HttpClient> {
+  /** Joins the workspace of the installation, answered as the account now sees it; or why it did not. */
+  join(
+    installationId: number,
+  ): Effect.Effect<WorkspaceCallResult<Workspace>, never, HttpClient.HttpClient> {
     return Effect.map(
-      this.#call.ask(
+      refusable(
+        this.#call,
         {
           method: HTTP_METHOD.POST,
           path: HOSTED_SERVICE_PATH.WORKSPACES_JOIN,
@@ -111,21 +114,22 @@ export class HostedWorkspaceClient {
         },
         workspaceJoinAnswerSchema,
       ),
-      (answer) => answer?.workspace,
+      (result) => (result.ok ? succeeded(result.answer.workspace) : result),
     );
   }
 
-  /** One workspace's members; nothing where the service refused or did not answer. */
+  /** One workspace's members; or why there are none. */
   members(
     workspaceId: string,
-  ): Effect.Effect<readonly WorkspaceMember[] | undefined, never, HttpClient.HttpClient> {
+  ): Effect.Effect<WorkspaceCallResult<readonly WorkspaceMember[]>, never, HttpClient.HttpClient> {
     const query = new URLSearchParams({ [WORKSPACE_MEMBERS_QUERY.WORKSPACE_ID]: workspaceId });
     return Effect.map(
-      this.#call.ask(
+      refusable(
+        this.#call,
         { method: HTTP_METHOD.GET, path: `${HOSTED_SERVICE_PATH.WORKSPACES_MEMBERS}?${query}` },
         workspaceMembersAnswerSchema,
       ),
-      (answer) => answer?.members,
+      (result) => (result.ok ? succeeded(result.answer.members) : result),
     );
   }
 

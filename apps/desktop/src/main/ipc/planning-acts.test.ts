@@ -6,10 +6,18 @@ import {
   type CodeLines,
   PLAN_CALL_FAILURE,
   type PlanningStartAnswer,
+  WORKSPACE_CALL_FAILURE,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_ROLE } from "@sidecar/hosted/workspace-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, COLOURED_CODE_MAX_CHARS } from "#shared/messages/acts";
+import {
+  ACT,
+  ACT_KIND,
+  ACT_OUTCOME_STATUS,
+  COLOURED_CODE_MAX_CHARS,
+  WORKSPACE_NOT_PERMITTED_REFUSAL,
+} from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 
@@ -20,6 +28,14 @@ const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: fals
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+const RELAY = { installationId: 4_200_017, name: "relay-labs" };
+const ACME = { id: "workspace-acme", name: "acme", personal: false, role: WORKSPACE_ROLE.MEMBER };
+const GRACE = {
+  userId: "user-grace",
+  name: "Grace Hopper",
+  email: "grace@luke.test",
+  role: WORKSPACE_ROLE.MEMBER,
+};
 const REQUEST = { name: "Teammate invitations", repository: "acme/relay" };
 
 /** The plan the host has open, as the fixture's main process reads it. */
@@ -40,6 +56,12 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
+  /** Whether the host answers a workspace call as the account's role not allowing it. */
+  const host = { notPermitted: false };
+  const refusal = () =>
+    host.notPermitted
+      ? ({ failure: WORKSPACE_CALL_FAILURE.NOT_PERMITTED } as const)
+      : ({ failure: WORKSPACE_CALL_FAILURE.UNANSWERED } as const);
   const start: StartScript = {
     answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
@@ -85,9 +107,9 @@ function fixture() {
           asked.push(`start:${request.repository}`);
           return start.answer;
         }),
-      planningRepositories: () =>
+      planningRepositories: (params) =>
         Effect.sync(() => {
-          asked.push("repositories");
+          asked.push(`repositories:${params.workspaceId}`);
           return { failure: PLAN_CALL_FAILURE.UNANSWERED } as const;
         }),
       planningSetRepository: (params) =>
@@ -133,6 +155,26 @@ function fixture() {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
+      workspaceJoin: (params) =>
+        Effect.sync(() => {
+          asked.push(`join:${params.installationId}`);
+          return params.installationId === RELAY.installationId ? { workspace: ACME } : refusal();
+        }),
+      workspaceMembers: (params) =>
+        Effect.sync(() => {
+          asked.push(`members:${params.workspaceId}`);
+          return params.workspaceId === ACME.id ? { members: [GRACE] } : refusal();
+        }),
+      workspaceMemberRemove: (params) =>
+        Effect.sync(() => {
+          asked.push(`remove:${params.workspaceId}:${params.userId}`);
+          return host.notPermitted ? refusal() : { members: [] };
+        }),
+      workspaceLeave: (params) =>
+        Effect.sync(() => {
+          asked.push(`leave:${params.workspaceId}`);
+          return host.notPermitted ? refusal() : ({ left: true } as const);
+        }),
     },
     openExternal: (url) => {
       opened.push(url);
@@ -149,7 +191,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, opened, view, start };
+  return { router, asked, talked, opened, view, start, host };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -215,17 +257,104 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
 );
 
 it.effect(
+  "the workspace acts reach the host from a panel and answer what it answered, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const joined = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: RELAY.installationId } },
+        PANEL,
+      );
+      const members = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_MEMBERS_READ, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const removed = yield* f.router.performAct(
+        {
+          kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+          payload: { workspaceId: ACME.id, userId: GRACE.userId },
+        },
+        PANEL,
+      );
+      const left = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
+        VOICE,
+      );
+
+      assert.deepEqual(joined, { status: ACT_OUTCOME_STATUS.DONE, value: ACME });
+      assert.deepEqual(members, { status: ACT_OUTCOME_STATUS.DONE, value: [GRACE] });
+      assert.deepEqual(removed, { status: ACT_OUTCOME_STATUS.DONE, value: [] });
+      assert.equal(left.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, [
+        `join:${RELAY.installationId}`,
+        `members:${ACME.id}`,
+        `remove:${ACME.id}:${GRACE.userId}`,
+        `leave:${ACME.id}`,
+      ]);
+    }),
+);
+
+it.effect(
+  "a workspace act the account's role does not allow is refused in words that say so, and one unanswered in its kind's own",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      f.host.notPermitted = true;
+
+      const removed = yield* f.router.performAct(
+        {
+          kind: ACT_KIND.WORKSPACE_MEMBER_REMOVE,
+          payload: { workspaceId: ACME.id, userId: GRACE.userId },
+        },
+        PANEL,
+      );
+      const left = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_LEAVE, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
+      f.host.notPermitted = false;
+      const unjoined = yield* f.router.performAct(
+        { kind: ACT_KIND.WORKSPACE_JOIN, payload: { installationId: 7 } },
+        PANEL,
+      );
+
+      const notPermitted = {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: WORKSPACE_NOT_PERMITTED_REFUSAL,
+      };
+      assert.deepEqual(removed, notPermitted);
+      assert.deepEqual(left, notPermitted);
+      assert.deepEqual(unjoined, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.WORKSPACE_JOIN].refusal,
+      });
+    }),
+);
+
+it.effect(
   "the repository chip's read and a plan's repository reach the host, and answer what it answered",
   () =>
     Effect.gen(function* () {
       const f = fixture();
 
-      const listed = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REPOSITORIES }, PANEL);
+      const listed = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REPOSITORIES, payload: { workspaceId: ACME.id } },
+        PANEL,
+      );
       const changed = yield* f.router.performAct(
         { kind: ACT_KIND.PLANNING_SET_REPOSITORY, payload: { planId: PLAN_ID, repository: null } },
         PANEL,
       );
-      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.PLANNING_REPOSITORIES }, VOICE);
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_REPOSITORIES, payload: {} },
+        VOICE,
+      );
 
       assert.deepEqual(listed, {
         status: ACT_OUTCOME_STATUS.DONE,
@@ -233,7 +362,7 @@ it.effect(
       });
       assert.deepEqual(changed, { status: ACT_OUTCOME_STATUS.DONE, value: { repository: null } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, ["repositories", `repository:${PLAN_ID}:null`]);
+      assert.deepEqual(f.asked, [`repositories:${ACME.id}`, `repository:${PLAN_ID}:null`]);
     }),
 );
 

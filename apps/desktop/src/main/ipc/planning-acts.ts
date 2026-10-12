@@ -10,6 +10,7 @@ import type {
   PlanningPinRepositoryParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
+  PlanningRepositoriesParams,
   PlanningRevisionAnswer,
   PlanningRevisionParams,
   PlanningRevisionsAnswer,
@@ -22,9 +23,18 @@ import type {
   PlanningStartRequest,
   PlanningTreeAnswer,
   PlanningTreeParams,
+  PlanningWorkspaceJoinAnswer,
+  PlanningWorkspaceJoinParams,
+  PlanningWorkspaceLeaveAnswer,
+  PlanningWorkspaceLeaveParams,
+  PlanningWorkspaceMemberRemoveParams,
+  PlanningWorkspaceMembersAnswer,
+  PlanningWorkspaceMembersParams,
+  WorkspaceCallFailure,
 } from "@sidecar/hosted/planning-view";
+import { WORKSPACE_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
-import { ACT, ACT_KIND } from "#shared/messages/acts";
+import { ACT, ACT_KIND, WORKSPACE_NOT_PERMITTED_REFUSAL } from "#shared/messages/acts";
 import { ActRefused, type ActRows, type ActSender } from "../act-router";
 
 /**
@@ -47,7 +57,9 @@ export interface PlanningActsDependencies {
     planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
     planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
-    planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
+    planningRepositories(
+      params: PlanningRepositoriesParams,
+    ): Effect.Effect<PlanningRepositoriesAnswer>;
     planningSetRepository(
       params: PlanningSetRepositoryParams,
     ): Effect.Effect<PlanningSetRepositoryAnswer>;
@@ -60,6 +72,16 @@ export interface PlanningActsDependencies {
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+    workspaceJoin(params: PlanningWorkspaceJoinParams): Effect.Effect<PlanningWorkspaceJoinAnswer>;
+    workspaceMembers(
+      params: PlanningWorkspaceMembersParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceMemberRemove(
+      params: PlanningWorkspaceMemberRemoveParams,
+    ): Effect.Effect<PlanningWorkspaceMembersAnswer>;
+    workspaceLeave(
+      params: PlanningWorkspaceLeaveParams,
+    ): Effect.Effect<PlanningWorkspaceLeaveAnswer>;
   };
   /** Opens an address in the browser; `github.open`'s schema admits GitHub's addresses alone, `web.open`'s any http or https one. */
   openExternal: (url: string) => Promise<void>;
@@ -99,13 +121,39 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
-  | typeof ACT_KIND.PLANNING_RESTORE;
+  | typeof ACT_KIND.PLANNING_RESTORE
+  | typeof ACT_KIND.WORKSPACE_JOIN
+  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_LEAVE;
+
+type WorkspaceActKind =
+  | typeof ACT_KIND.WORKSPACE_JOIN
+  | typeof ACT_KIND.WORKSPACE_MEMBERS_READ
+  | typeof ACT_KIND.WORKSPACE_MEMBER_REMOVE
+  | typeof ACT_KIND.WORKSPACE_LEAVE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: PlanningActKind, sender: ActSender): void {
   if (!sender.panel) {
     throw new ActRefused({ message: ACT[kind].refusal });
   }
+}
+
+/**
+ * A workspace act the host answered without its answer, refused: in words
+ * that say the account's role does not allow it where that is why, in its
+ * kind's own words otherwise.
+ */
+function refusedWorkspace(kind: WorkspaceActKind, failure: WorkspaceCallFailure) {
+  return Effect.fail(
+    new ActRefused({
+      message:
+        failure === WORKSPACE_CALL_FAILURE.NOT_PERMITTED
+          ? WORKSPACE_NOT_PERMITTED_REFUSAL
+          : ACT[kind].refusal,
+    }),
+  );
 }
 
 export function planningActRows(
@@ -160,9 +208,9 @@ export function planningActRows(
       refuseUnlessPanel(ACT_KIND.PLANNING_ARCHIVE, sender);
       return host.planningArchive(params);
     },
-    [ACT_KIND.PLANNING_REPOSITORIES]: (_payload, sender) => {
+    [ACT_KIND.PLANNING_REPOSITORIES]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REPOSITORIES, sender);
-      return host.planningRepositories();
+      return host.planningRepositories(params);
     },
     [ACT_KIND.PLANNING_SET_REPOSITORY]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_SET_REPOSITORY, sender);
@@ -229,6 +277,36 @@ export function planningActRows(
     [ACT_KIND.PLANNING_BOARD_SAVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_BOARD_SAVE, sender);
       return host.planningBoardSave(params);
+    },
+    [ACT_KIND.WORKSPACE_JOIN]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_JOIN, sender);
+      return Effect.flatMap(host.workspaceJoin(params), (answer) =>
+        "workspace" in answer
+          ? Effect.succeed(answer.workspace)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_JOIN, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBERS_READ]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBERS_READ, sender);
+      return Effect.flatMap(host.workspaceMembers(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBERS_READ, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_MEMBER_REMOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_MEMBER_REMOVE, sender);
+      return Effect.flatMap(host.workspaceMemberRemove(params), (answer) =>
+        "members" in answer
+          ? Effect.succeed(answer.members)
+          : refusedWorkspace(ACT_KIND.WORKSPACE_MEMBER_REMOVE, answer.failure),
+      );
+    },
+    [ACT_KIND.WORKSPACE_LEAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.WORKSPACE_LEAVE, sender);
+      return Effect.flatMap(host.workspaceLeave(params), (answer) =>
+        "left" in answer ? Effect.void : refusedWorkspace(ACT_KIND.WORKSPACE_LEAVE, answer.failure),
+      );
     },
   };
 }
