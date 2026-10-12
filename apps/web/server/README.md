@@ -2007,6 +2007,16 @@ Gateway model and its `gh` tool on Vercel Connect, and Luke runs neither.
 `gh` and `git` run through the shell, authenticated at the firewall. The
 session's input tokens are uncapped and compaction is eve's default.
 
+An agent started at a position of the plan's `rollout` field is that pull
+request's worker: `coding_agent.rollout_position` counts it from one and
+`coding_agent.base_branch` names the branch its work bases on, null for the
+repository's default (migration 0097). There is no rollout table; the plan's
+field is the graph and these rows are its state. A plan's agents list its
+workers first by position, and a position's live worker
+(`liveWorkerAtPosition`) is the newest one whose newest turn neither failed
+nor was stopped, so a settled worker waiting on its pull request still holds
+the position and a failed one frees it for a restart.
+
 The worker (`coder/subagents/worker/`) is Luke's own declared subagent, in
 the planning worker's shape (`eve/subagents/worker/`): read-only in the
 agent's own sandbox and checkout, uncommitted edits included

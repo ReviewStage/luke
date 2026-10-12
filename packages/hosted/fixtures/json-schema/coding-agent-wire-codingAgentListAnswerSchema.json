@@ -79,6 +79,10 @@
           "archivedAt": {
             "type": "number",
             "minimum": 0
+          },
+          "position": {
+            "type": "integer",
+            "minimum": 1
           }
         },
         "required": [

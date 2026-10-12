@@ -673,6 +673,13 @@
       "when": 1791450000000,
       "tag": "0096_plan_rollout",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1791460000000,
+      "tag": "0097_coding_agent_rollout",
+      "breakpoints": true
     }
   ]
 }

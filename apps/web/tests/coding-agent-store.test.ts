@@ -8,20 +8,23 @@ import {
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
-import { Duration, Effect, Option } from "effect";
+import { DateTime, Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
+import { TURN_ORIGIN, TURN_STATUS, type TurnStatus } from "../server/core";
 import { user } from "../server/db/auth-schema";
 import { codingAgent } from "../server/db/coding-agent-schema";
 import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
+import { conversations, turns } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import {
+  archiveCodingAgent,
   type CodingAgent,
   type CodingAgentBriefText,
   type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
   listPublishedCodingAgents,
+  liveWorkerAtPosition,
   type NewCodingAgent,
   readCodingAgent,
   readCodingAgentContext,
@@ -105,6 +108,20 @@ const conversationKind = (conversationId: string) =>
       .where(eq(conversations.id, conversationId)),
     (rows) => rows[0],
   );
+
+/** A turn of the agent's own conversation, queued now, so a later one is its newest. */
+const recordTurn = (userId: string, agent: CodingAgent, status: TurnStatus) =>
+  Effect.gen(function* () {
+    const queuedAt = yield* DateTime.nowAsDate;
+    yield* db.insert(turns).values({
+      userId,
+      conversationId: agent.conversationId,
+      origin: TURN_ORIGIN.TYPED,
+      status,
+      queuedAt,
+    });
+    yield* TestClock.adjust(Duration.seconds(1));
+  });
 
 /** A pull request as GitHub answered a read of it. */
 const PULL_REQUEST: CodingAgentPullRequest = {
@@ -312,5 +329,70 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
         assert.notEqual(conversation?.deletedAt, null);
       }
     }),
+  );
+
+  it.effect(
+    "a Start at a rollout position holds its position and base, and the plan lists its workers first by position, then the rest in the order started",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const plain = started(yield* createCodingAgent(userId, start(planId)));
+        yield* TestClock.adjust(Duration.minutes(1));
+        const second = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { position: 2, baseBranch: "luke/teammate-invitations/1-table" }),
+          ),
+        );
+        yield* TestClock.adjust(Duration.minutes(1));
+        const first = started(yield* createCodingAgent(userId, start(planId, { position: 1 })));
+
+        assert.equal(plain.position, null);
+        assert.equal(plain.baseBranch, null);
+        assert.equal(second.position, 2);
+        assert.equal(second.baseBranch, "luke/teammate-invitations/1-table");
+        assert.equal(first.position, 1);
+        assert.equal(first.baseBranch, null);
+        assert.deepEqual(yield* readCodingAgent(userId, second.id), Option.some(second));
+        assert.deepEqual(yield* listCodingAgents(userId, planId), [first, second, plain]);
+      }),
+  );
+
+  it.effect(
+    "a position's live worker is the newest not archived whose newest turn neither failed nor was stopped, and a settled one still holds it",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openUser;
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.none());
+
+        const failed = started(yield* createCodingAgent(userId, start(planId, { position: 1 })));
+        // Before its first turn a worker already holds its position.
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.some(failed));
+        yield* recordTurn(userId, failed, TURN_STATUS.SETTLED);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.some(failed));
+        yield* recordTurn(userId, failed, TURN_STATUS.FAILED);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.none());
+
+        const stopped = started(yield* createCodingAgent(userId, start(planId, { position: 1 })));
+        yield* recordTurn(userId, stopped, TURN_STATUS.RUNNING);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.some(stopped));
+        yield* recordTurn(userId, stopped, TURN_STATUS.CANCELLED);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.none());
+
+        const restarted = started(yield* createCodingAgent(userId, start(planId, { position: 1 })));
+        yield* recordTurn(userId, restarted, TURN_STATUS.SETTLED);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.some(restarted));
+        // Another position, an agent outside the rollout, and another account hold nothing here.
+        started(yield* createCodingAgent(userId, start(planId)));
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 2), Option.none());
+        assert.deepEqual(yield* liveWorkerAtPosition(other, planId, 1), Option.none());
+
+        // A worker the developer archived holds its position no longer, and holds it again once brought back.
+        yield* archiveCodingAgent(userId, restarted.id, true);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.none());
+        yield* archiveCodingAgent(userId, restarted.id, false);
+        assert.deepEqual(yield* liveWorkerAtPosition(userId, planId, 1), Option.some(restarted));
+      }),
   );
 });

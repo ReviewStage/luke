@@ -525,6 +525,35 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
   );
 
   it.effect(
+    "a rollout's worker lists first, carrying its position, and an agent outside the rollout carries none",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan();
+        const plain = yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() }));
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.CREATED, plain);
+        // A Start naming a position is the rollout's to make, so the worker is written to the store directly.
+        yield* createCodingAgent(owner, {
+          planId: plan.id,
+          idempotencyKey: randomUUID(),
+          model: "anthropic/claude-opus-5.5",
+          effort: "high",
+          repository: RELAY_FULL_NAME,
+          planSnapshot: SNAPSHOT,
+          task: null,
+          position: 1,
+        });
+
+        const listed = yield* ask(request(PLAN_AGENTS, owner, { method: "GET", id: plan.id }));
+        assert.deepEqual(
+          readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, listed).agents.map(
+            (each) => each.position,
+          ),
+          [1, undefined],
+        );
+      }),
+  );
+
+  it.effect(
     "a task's files open the session with it, the words first and each file after them, files alone open it with no words part, and files with no task to go with are refused",
     () =>
       Effect.gen(function* () {

@@ -370,6 +370,14 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
   /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
   archivedAt: EffectSchema.optionalKey(countedNumber),
+  /**
+   * The pull request of the plan's rollout the agent works, counted from
+   * one. Absent for an agent started outside a rollout, and from a service
+   * older than the rollout.
+   */
+  position: EffectSchema.optionalKey(
+    EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1)),
+  ),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

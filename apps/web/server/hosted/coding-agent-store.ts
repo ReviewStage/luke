@@ -76,6 +76,14 @@ import {
  * agent by its id still finds it, so its transcript and pull request stand.
  * Every function is an effect over the ambient `SqlClient` and names no
  * database of its own.
+ *
+ * An agent started at a position of the plan's rollout is that pull
+ * request's worker, with the branch its work bases on. A plan's agents list
+ * its workers first, by position, then the rest in the order started. A
+ * worker is live until its newest turn fails or is stopped, which is what
+ * frees its position for another, or until the developer archives it; one
+ * that settled stands, since it is waiting on its pull request rather than
+ * gone.
  */
 
 type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
@@ -106,6 +114,10 @@ export interface CodingAgent {
   readonly title: string | null;
   /** When the developer archived the agent; null while it is not. */
   readonly archivedAt: Date | null;
+  /** The pull request of the plan's rollout the agent works, counted from one; null for an agent started outside a rollout. */
+  readonly position: number | null;
+  /** The branch the agent's work bases on; null for the repository's default branch. */
+  readonly baseBranch: string | null;
   readonly createdAt: Date;
 }
 
@@ -133,6 +145,10 @@ export type NewCodingAgent = CodingAgentBriefText & {
   /** The model's whole window, the long one, where the Start names none. */
   readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
+  /** The pull request of the plan's rollout the agent works, counted from one; none for an agent started outside a rollout. */
+  readonly position?: number | undefined;
+  /** The branch the agent's work bases on; none for the repository's default branch. */
+  readonly baseBranch?: string | undefined;
 };
 
 /** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
@@ -149,6 +165,8 @@ const CODING_AGENT_COLUMNS = {
   branch: codingAgent.branch,
   title: codingAgent.title,
   archivedAt: codingAgent.archivedAt,
+  position: codingAgent.rolloutPosition,
+  baseBranch: codingAgent.baseBranch,
   createdAt: codingAgent.createdAt,
 };
 
@@ -165,6 +183,8 @@ const CodingAgentRowSchema = Schema.Struct({
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
   archivedAt: Schema.NullOr(InstantColumnSchema),
+  position: Schema.NullOr(Schema.Number),
+  baseBranch: Schema.NullOr(Schema.String),
   createdAt: InstantColumnSchema,
 });
 
@@ -218,6 +238,8 @@ const insertAgent = SqlSchema.findOne({
     planSnapshot: Schema.NullOr(Schema.String),
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
+    position: Schema.NullOr(Schema.Number),
+    baseBranch: Schema.NullOr(Schema.String),
     now: Schema.Date,
   }),
   Result: CodingAgentRowSchema,
@@ -234,6 +256,8 @@ const insertAgent = SqlSchema.findOne({
         planSnapshot: write.planSnapshot,
         task: write.task,
         repository: write.repository,
+        rolloutPosition: write.position,
+        baseBranch: write.baseBranch,
         idempotencyKey: write.idempotencyKey,
         createdAt: write.now,
       })
@@ -386,7 +410,32 @@ const findAgentsOfPlan = SqlSchema.findAll({
           includeArchived ? undefined : isNull(codingAgent.archivedAt),
         ),
       )
-      .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+      // Postgres sorts nulls last ascending, so the workers lead by position and the rest follow.
+      .orderBy(asc(codingAgent.rolloutPosition), asc(codingAgent.createdAt), asc(codingAgent.id)),
+});
+
+/** The turn statuses that end a worker, freeing its position for another. */
+const ENDED_WORKER_TURN_STATUSES: ReadonlySet<string> = new Set([
+  TURN_STATUS.FAILED,
+  TURN_STATUS.CANCELLED,
+]);
+
+const findWorkersAtPosition = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String, position: Schema.Number }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, planId, position }) =>
+    db
+      .select(CODING_AGENT_COLUMNS)
+      .from(codingAgent)
+      .where(
+        and(
+          eq(codingAgent.userId, userId),
+          eq(codingAgent.planId, planId),
+          eq(codingAgent.rolloutPosition, position),
+          isNull(codingAgent.archivedAt),
+        ),
+      )
+      .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id)),
 });
 
 const updateAgentPublished = SqlSchema.void({
@@ -526,6 +575,8 @@ export function createCodingAgent(
           planSnapshot: started.planSnapshot,
           task: started.task,
           repository: started.repository,
+          position: started.position ?? null,
+          baseBranch: started.baseBranch ?? null,
           now,
         }).pipe(Effect.catchTag("NoSuchElementError", (missing) => Effect.die(missing)));
         return Option.some({ agent: row, created: true });
@@ -555,13 +606,35 @@ export function discardCodingAgent(
   );
 }
 
-/** Every agent started on the account's plan, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account owns no such plan. */
+/** Every agent started on the account's plan, its rollout's workers first by position, then the rest in the order they were started, the archived ones only where `includeArchived` asks; empty where the account owns no such plan. */
 export function listCodingAgents(
   userId: string,
   planId: string,
   options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
   return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
+}
+
+/** The live worker at this position of the account's plan's rollout, newest started first: one not archived whose newest turn neither failed nor was stopped; nothing where none stands. */
+export function liveWorkerAtPosition(
+  userId: string,
+  planId: string,
+  position: number,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.gen(function* () {
+    const workers = yield* findWorkersAtPosition({ userId, planId, position });
+    const newest = yield* latestTurnsOf(
+      userId,
+      workers.map((worker) => worker.conversationId),
+    );
+    // A worker before its first turn has no newest turn, and already holds its position.
+    return Option.fromNullishOr(
+      workers.find((worker) => {
+        const turn = newest.get(worker.conversationId);
+        return turn === undefined || !ENDED_WORKER_TURN_STATUSES.has(turn.status);
+      }),
+    );
+  });
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */

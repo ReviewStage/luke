@@ -3,7 +3,7 @@ import {
   type CodingAgentPullRequest,
   type ContextWindow,
 } from "@sidecar/hosted/coding-agent-wire";
-import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
 import { plan } from "./plan-schema.js";
@@ -42,6 +42,13 @@ import { conversations } from "./storage-schema.js";
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
+ *
+ * A row with a rollout position is one of a rollout's workers: it was started
+ * on that pull request of the plan's `rollout` field, counted from one, and
+ * its base branch is the one it was cut from, null where that is the
+ * repository's default. There is no rollout table: the plan's field is the
+ * graph, and these rows are its state. A position may hold more than one row
+ * over time, since a worker that failed or was stopped is started again.
  *
  * `idempotency_key` is the Start request's own key, unique per account, so a
  * network retry of one Start finds the agent it already made rather than
@@ -107,6 +114,10 @@ export const codingAgent = pgTable(
     published: jsonb("published").$type<CodingAgentPullRequest>(),
     /** When the developer archived the agent; null while it is not. */
     archivedAt: instant("archived_at"),
+    /** The pull request of the plan's rollout the agent works, counted from one; null for an agent started outside a rollout. */
+    rolloutPosition: integer("rollout_position"),
+    /** The branch the agent's work bases on; null for the repository's default branch. */
+    baseBranch: text("base_branch"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },
