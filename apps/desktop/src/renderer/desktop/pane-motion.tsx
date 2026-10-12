@@ -6,11 +6,12 @@
  * what that moved replays the journey on `transform` and `clip-path`
  * (docs/DESIGN.md, "Whatever its room displaced replays the journey"): the
  * plan's tabs, its document or an agent's tab, and its toolbar's buttons
- * glide from where they were drawn to where they now stand, the side panel and the plan's
- * summary slide in from the window's right, and a panel that grew over the
+ * glide from where they were drawn to where they now stand, and so does the
+ * plan's summary as it is pinned or collapses to its rail, the side panel
+ * slides in from the window's right, and a panel that grew over the
  * document is uncovered from its old edge to its new one. A pane leaving holds itself drawn
- * through its own exit (side-panel.tsx, plan-summary.tsx), so only arrivals
- * and displacement are played here.
+ * through its own exit (side-panel.tsx), so only arrivals and displacement
+ * are played here.
  *
  * Only a change to the panes plays anything. A drag between a pane's bounds
  * changes its width alone, so the edge stays under the pointer frame for
@@ -37,10 +38,8 @@ const PANE = ".side-panel";
 /** The pane that arrives and grows; one leaving runs its own exit and is left to it. */
 const ARRIVING_PANE = ".side-panel:not([data-leaving])";
 
-/** The plan's summary, read before a change as the pane is, and played only as it arrives or moves; one leaving runs its own exit (plan-summary.tsx). */
+/** The plan's summary, which is always drawn while the plan is, so it only ever moves, or arrives with the plan. */
 const SUMMARY = ".plan-summary";
-
-const ARRIVING_SUMMARY = ".plan-summary:not([data-leaving])";
 
 /** Less than this, in CSS pixels, is not a move worth playing. */
 const STILL = 0.5;
@@ -151,7 +150,7 @@ function playPane(
 function play(root: HTMLElement, before: Snapshot): void {
   const timing = paneTiming(root);
   if (timing === undefined) return;
-  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}, ${ARRIVING_SUMMARY}`)];
+  const moved = [...root.querySelectorAll(`${GLIDERS}, ${ARRIVING_PANE}, ${SUMMARY}`)];
   // Note that a motion still under way is stopped before anything is
   // measured, so each element is read where the new layout stands it, and
   // read all at once, so the layout is worked out once rather than per element.

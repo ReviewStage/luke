@@ -165,12 +165,12 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** Lays the plan's area out this wide, the summary and the panel beside the document included; jsdom lays out nothing. */
-function layOutPlanArea(width: number): void {
+/** Lays the plan's column out this wide, the summary beside the document included and the side panel not; jsdom lays out nothing. */
+function layOutColumn(width: number): void {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
     this: HTMLElement,
   ) {
-    return DOMRect.fromRect({ width: this.classList.contains("desktop-plan") ? width : 0 });
+    return DOMRect.fromRect({ width: this.classList.contains("desktop-plan-main") ? width : 0 });
   });
   act(() => relayout());
 }
@@ -182,9 +182,16 @@ function press(page: HTMLElement, selector: string): HTMLElement {
   return control;
 }
 
-/** The summary standing pinned beside the column, if it does. */
-function pinned(page: HTMLElement): HTMLElement | null {
-  return page.querySelector<HTMLElement>('aside[aria-label="Summary"]');
+/** The summary beside the column, which every plan's page draws. */
+function summaryOf(page: HTMLElement): HTMLElement {
+  const summary = page.querySelector<HTMLElement>('aside[aria-label="Summary"]');
+  assert.ok(summary, "the summary is drawn beside the column");
+  return summary;
+}
+
+/** How the summary stands: pinned as a column, or collapsed to its rail. */
+function modeOf(page: HTMLElement): string | null {
+  return summaryOf(page).getAttribute("data-mode");
 }
 
 /** The summary's card, if it hangs. */
@@ -229,11 +236,31 @@ function summaryButton(page: HTMLElement): HTMLElement {
   return button;
 }
 
+/** Whether the toolbar's button is drawn on: pressed while the summary is pinned, expanded while its card hangs. */
+function buttonOn(page: HTMLElement): boolean {
+  const button = summaryButton(page);
+  return (
+    button.getAttribute("aria-pressed") === "true" ||
+    button.getAttribute("aria-expanded") === "true"
+  );
+}
+
+function pressEscape(): KeyboardEvent {
+  const escapeKey = new KeyboardEvent("keydown", {
+    key: "Escape",
+    bubbles: true,
+    cancelable: true,
+  });
+  act(() => {
+    window.dispatchEvent(escapeKey);
+  });
+  return escapeKey;
+}
+
 test("the pinned summary lists what the two pickers open, under their headings, the panel's kinds only where the plan used them", () => {
   const page = mount();
-  const summary = pinned(page);
-  assert.ok(summary, "the summary stands pinned beside the column");
-  assert.equal(summary.getAttribute("data-mode"), "column");
+  const summary = summaryOf(page);
+  assert.equal(modeOf(page), "column");
 
   assert.deepEqual(listed(summary), [
     ["Panels", ["Board", "Transcript"]],
@@ -248,30 +275,29 @@ test("the pinned summary lists what the two pickers open, under their headings, 
   }
 });
 
-test("a panel's row opens the panel on its tab, which takes the pinned summary away", () => {
+test("a panel's row opens the panel on its tab, and a column with room still holds the summary pinned beside it", () => {
   const page = mount();
-  const summary = pinned(page);
-  assert.ok(summary);
+  layOutColumn(1040);
 
-  act(() => rowNamed(summary, "Transcript").click());
+  act(() => rowNamed(summaryOf(page), "Transcript").click());
 
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
     "Transcript",
   );
-  assert.equal(pinned(page), null);
+  assert.equal(modeOf(page), "column");
+  assert.equal(summaryButton(page).getAttribute("aria-pressed"), "true");
+  assert.equal(hover(summaryButton(page)), "Toggle pinned summary");
 });
 
 test("an agent's row chooses its tab in the column, and a file's opens the file in the panel", () => {
   const page = mount();
-  const summary = pinned(page);
-  assert.ok(summary);
 
-  act(() => rowNamed(summary, AGENT.title ?? "").click());
+  act(() => rowNamed(summaryOf(page), AGENT.title ?? "").click());
   assert.ok(page.querySelector(`.desktop-agent[aria-label="${AGENT.title}"]`));
-  assert.equal(page.querySelector(".side-panel"), null);
+  assert.equal(page.querySelector(".side-panel") === null, true);
 
-  act(() => rowNamed(summary, "invite.ts").click());
+  act(() => rowNamed(summaryOf(page), "invite.ts").click());
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
     "invite.ts",
@@ -280,10 +306,8 @@ test("an agent's row chooses its tab in the column, and a file's opens the file 
 
 test("an archived plan's summary still opens what it lists", () => {
   const page = mount(true);
-  const summary = pinned(page);
-  assert.ok(summary);
 
-  act(() => rowNamed(summary, "Board").click());
+  act(() => rowNamed(summaryOf(page), "Board").click());
 
   assert.equal(
     page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent,
@@ -291,22 +315,89 @@ test("an archived plan's summary still opens what it lists", () => {
   );
 });
 
-test("a plan's area too narrow to keep the document at its measure beside the summary folds it to a rail of glyphs", () => {
+test("a column too narrow to keep the document at its measure beside the summary folds it to a rail of the panel's kinds alone", () => {
   const page = mount();
 
-  layOutPlanArea(1039);
-  const rail = pinned(page);
-  assert.equal(rail?.getAttribute("data-mode"), "rail");
-  assert.equal(rail?.querySelector(".plan-summary-heading"), null, "a rail says no headings");
-  assert.equal(hover(rowNamed(page, "Board")), "Board");
+  layOutColumn(1039);
+  const rail = summaryOf(page);
+  assert.equal(modeOf(page), "rail");
+  assert.deepEqual(listed(rail), [["Panels", ["Board", "Transcript"]]]);
+  assert.equal(rail.querySelector(".plan-summary-heading"), null, "a rail says no headings");
+  assert.equal(hover(rowNamed(rail, "Board")), "Board");
 
-  layOutPlanArea(1040);
-  assert.equal(pinned(page)?.getAttribute("data-mode"), "column");
+  layOutColumn(1040);
+  assert.equal(modeOf(page), "column");
+});
+
+test("an open panel that leaves the column too narrow folds the summary to its rail, and the button hangs the card", () => {
+  const page = mount();
+  press(page, '[aria-label="Show panel"]');
+  layOutColumn(800);
+  assert.equal(modeOf(page), "rail");
+  assert.equal(hover(summaryButton(page)), "Toggle summary");
+  assert.equal(summaryButton(page).getAttribute("aria-pressed"), null);
+  assert.equal(buttonOn(page), false);
+
+  act(() => summaryButton(page).click());
+
+  const hung = card();
+  assert.ok(hung, "the card hangs");
+  assert.equal(buttonOn(page), true);
+  assert.deepEqual(listed(hung)[0], ["Panels", ["Board", "Transcript"]]);
+  assert.equal(modeOf(page), "rail", "the rail stays under the card");
+});
+
+test("the button is drawn on exactly while the summary is expanded, pinned or hung as its card", () => {
+  const page = mount();
+  assert.equal(buttonOn(page), true);
+
+  act(() => summaryButton(page).click());
+  assert.equal(modeOf(page), "rail");
+  assert.equal(buttonOn(page), false);
+
+  act(() => summaryButton(page).click());
+  assert.equal(modeOf(page), "column");
+  assert.equal(buttonOn(page), true);
+
+  layOutColumn(900);
+  assert.equal(buttonOn(page), false);
+  act(() => summaryButton(page).click());
+  assert.equal(buttonOn(page), true);
+  act(() => summaryButton(page).click());
+  assert.equal(card() === null, true);
+  assert.equal(buttonOn(page), false);
+});
+
+test("no press hides the summary: the button and the rail's chevron only ever expand or collapse it", () => {
+  const page = mount();
+  const modes: (string | null)[] = [];
+  for (const width of [1200, 900]) {
+    layOutColumn(width);
+    for (let turn = 0; turn < 3; turn += 1) {
+      act(() => summaryButton(page).click());
+      modes.push(modeOf(page));
+      const chevron = page.querySelector<HTMLElement>('[aria-label="Expand summary"]');
+      if (chevron !== null) act(() => chevron.click());
+      modes.push(modeOf(page));
+    }
+  }
+  assert.ok(modes.every((mode) => mode === "column" || mode === "rail"));
+});
+
+test("where the column has room, the rail's chevron pins the summary again", () => {
+  const page = mount();
+  act(() => summaryButton(page).click());
+  assert.equal(modeOf(page), "rail");
+
+  press(page, '[aria-label="Expand summary"]');
+
+  assert.equal(modeOf(page), "column");
+  assert.equal(card() === null, true);
 });
 
 test("the rail's chevron hangs the whole summary as a card, which Escape takes down and hands focus back", () => {
   const page = mount();
-  layOutPlanArea(900);
+  layOutColumn(900);
 
   const chevron = press(page, '[aria-label="Expand summary"]');
   const hung = card();
@@ -315,29 +406,35 @@ test("the rail's chevron hangs the whole summary as a card, which Escape takes d
   assert.deepEqual(listed(hung)[0], ["Panels", ["Board", "Transcript"]]);
   assert.ok(document.activeElement === rowNamed(hung, "Board"), "its first row takes the focus");
 
-  const escapeKey = new KeyboardEvent("keydown", {
-    key: "Escape",
-    bubbles: true,
-    cancelable: true,
-  });
-  act(() => {
-    window.dispatchEvent(escapeKey);
-  });
+  const escapeKey = pressEscape();
   assert.equal(card(), null);
   assert.equal(escapeKey.defaultPrevented, true, "the window does not step back a layer too");
   assert.ok(document.activeElement === chevron, "the chevron takes the focus back");
 });
 
-test("with the panel open the button hangs the summary as a card, which a press in the column takes down", () => {
+test("the card's own chevron collapses it back to the rail", () => {
   const page = mount();
-  press(page, '[aria-label="Show panel"]');
-  assert.equal(pinned(page), null);
-  const button = summaryButton(page);
-  assert.equal(button.getAttribute("aria-expanded"), "false");
+  layOutColumn(900);
+  const chevron = press(page, '[aria-label="Expand summary"]');
+  const hung = card();
+  assert.ok(hung);
 
-  act(() => button.click());
+  const collapse = hung.querySelector<HTMLElement>('[aria-label="Collapse summary"]');
+  assert.ok(collapse, "the card draws its chevron");
+  assert.equal(hover(collapse), "Collapse summary");
+  act(() => collapse.click());
+
+  assert.equal(card(), null);
+  assert.equal(modeOf(page), "rail");
+  assert.equal(chevron.getAttribute("aria-expanded"), "false");
+  assert.ok(document.activeElement === chevron, "the rail's chevron takes the focus");
+});
+
+test("a press in the column takes the card down and still lands where it was pressed", () => {
+  const page = mount();
+  layOutColumn(900);
+  act(() => summaryButton(page).click());
   assert.ok(card(), "the card hangs");
-  assert.equal(button.getAttribute("aria-expanded"), "true");
 
   const body = page.querySelector(".desktop-document .plan-body");
   assert.ok(body);
@@ -351,7 +448,7 @@ test("with the panel open the button hangs the summary as a card, which a press 
 
 test("choosing a row of the card takes it down and opens the row", () => {
   const page = mount();
-  press(page, '[aria-label="Show panel"]');
+  layOutColumn(900);
   act(() => summaryButton(page).click());
   const hung = card();
   assert.ok(hung);
@@ -365,58 +462,53 @@ test("choosing a row of the card takes it down and opens the row", () => {
   );
 });
 
-test("the button's hint says what a press does: the pin while the panel is shut, the card while it is open", () => {
+test("a column grown wide enough to pin the summary takes its card down", () => {
   const page = mount();
-  assert.equal(hover(summaryButton(page)), "Toggle pinned summary");
-  assert.equal(summaryButton(page).getAttribute("aria-pressed"), "true");
-
-  press(page, '[aria-label="Show panel"]');
-
-  assert.equal(hover(summaryButton(page)), "Toggle summary");
-  assert.equal(summaryButton(page).getAttribute("aria-pressed"), null);
-});
-
-test("unpinning takes the summary away and the next launch keeps it away until it is pinned again", () => {
-  const page = mount();
+  layOutColumn(900);
   act(() => summaryButton(page).click());
-  assert.equal(pinned(page), null);
-  assert.equal(summaryButton(page).getAttribute("aria-pressed"), "false");
+  assert.ok(card());
 
-  quit();
-  const relaunched = mount();
-  assert.equal(pinned(relaunched), null);
+  layOutColumn(1200);
 
-  act(() => summaryButton(relaunched).click());
-  assert.ok(pinned(relaunched));
+  assert.equal(card(), null);
+  assert.equal(modeOf(page), "column");
+  assert.equal(summaryButton(page).getAttribute("aria-pressed"), "true");
 });
 
 test("Escape on the card is the card's alone: the window under it hears nothing of it", () => {
   const page = mount();
-  press(page, '[aria-label="Show panel"]');
+  layOutColumn(900);
   act(() => summaryButton(page).click());
   const heard = vi.fn();
   window.addEventListener("keydown", heard);
 
-  act(() => {
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
+  pressEscape();
   window.removeEventListener("keydown", heard);
 
   assert.equal(card(), null);
   assert.equal(heard.mock.calls.length, 0);
 });
 
-test("a card hung over the open panel does not come back when the panel is shut and opened again", () => {
+test("collapsing the summary is kept, and the next launch opens on its rail until it is pinned again", () => {
   const page = mount();
-  press(page, '[aria-label="Show panel"]');
   act(() => summaryButton(page).click());
-  assert.ok(card());
+  assert.equal(modeOf(page), "rail");
 
-  press(page, '[aria-label="Hide panel"]');
-  press(page, '[aria-label="Show panel"]');
+  quit();
+  const relaunched = mount();
+  assert.equal(modeOf(relaunched), "rail");
+  assert.equal(summaryButton(relaunched).getAttribute("aria-pressed"), "false");
 
-  assert.equal(card(), null);
-  assert.equal(summaryButton(page).getAttribute("aria-expanded"), "false");
+  act(() => summaryButton(relaunched).click());
+  assert.equal(modeOf(relaunched), "column");
+});
+
+test("a summary unpinned when unpinning hid it opens collapsed to its rail, not hidden", () => {
+  window.localStorage.setItem("luke.summary-pinned", "false");
+
+  const page = mount();
+
+  assert.equal(modeOf(page), "rail");
 });
 
 test("two files of one name are told apart by their folders, as their picker rows are", () => {
@@ -427,10 +519,8 @@ test("two files of one name are told apart by their folders, as their picker row
     code: { ...CODE, ref: { path, startLine: 1, endLine: 1 } },
   });
   const page = mount(false, [roles("apps/web/roles.ts", 1), roles("apps/desktop/roles.ts", 2)]);
-  const summary = pinned(page);
-  assert.ok(summary);
 
-  const files = [...summary.querySelectorAll('ul[aria-label="Files"] li')].map(
+  const files = [...summaryOf(page).querySelectorAll('ul[aria-label="Files"] li')].map(
     (row) => row.querySelector(".plan-summary-detail")?.textContent,
   );
   assert.deepEqual(files, ["apps/web", "apps/desktop"]);

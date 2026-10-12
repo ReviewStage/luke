@@ -30,7 +30,7 @@ export function usedPlan(id: string): OpenPlan {
   };
 }
 
-/** The plan's summary unpinned, its press ignored, so a page drawn over it draws no summary beside its column. */
+/** The plan's summary unpinned, its press ignored, so a page drawn over it draws the summary as its narrow rail of glyphs. */
 export const UNPINNED_SUMMARY: SummaryPin = { pinned: false, onToggle: ignore };
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
