@@ -20,6 +20,7 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { imageFiles } from "../feedback-images";
+import { RetryButton } from "../retry-button";
 import { Tooltip } from "../tooltip";
 import { AgentContextRing } from "./agent-context";
 import { AgentModelChip } from "./agent-model-chip";
@@ -308,11 +309,7 @@ export function AgentComposer({
       {note !== undefined ? (
         <p className="agent-note agent-composer-note" role="alert">
           <span>{note}</span>
-          {retries ? (
-            <button type="button" className="toolbar-button" onClick={composer.retry}>
-              Retry
-            </button>
-          ) : null}
+          {retries ? <RetryButton onRetry={composer.retry} /> : null}
         </p>
       ) : null}
     </div>

@@ -12,6 +12,7 @@ import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
@@ -175,9 +176,7 @@ function PlanDocument({
             <p role="alert">{line}</p>
           )}
           {region.kind === DOCUMENT_REGION.FAILED ? (
-            <button type="button" className="primary-button" onClick={plans.onRetryDocument}>
-              Try again
-            </button>
+            <RetryButton onRetry={plans.onRetryDocument} />
           ) : null}
           {/* A plan that cannot be drawn offers no menu, so its way back to
               the new-plan page is said here. */}

@@ -36,6 +36,7 @@ import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
+import { RetryButton } from "../retry-button";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { updateInSidebar, updateRow } from "../update-row";
@@ -784,12 +785,10 @@ export function DesktopSidebar({
             own; its name is for a screen reader alone. */}
         <nav className="sidebar-group" aria-label="Plans">
           {plans.listFailed ? (
-            <p className="sidebar-note" role="alert">
-              Your plans could not be read.{" "}
-              <button type="button" className="link-button" onClick={plans.onRetryList}>
-                Try again
-              </button>
-            </p>
+            <div className="sidebar-note sidebar-failure" role="alert">
+              <p>Your plans couldn't be loaded.</p>
+              <RetryButton onRetry={plans.onRetryList} />
+            </div>
           ) : null}
           {plans.signedIn &&
           plans.plans.length === 0 &&

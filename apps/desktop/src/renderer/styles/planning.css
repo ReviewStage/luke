@@ -252,10 +252,12 @@
 }
 
 /* How many sections changed since the last look, under the "Edited by"
-   line in the same muted weight, with its dismissal. */
+   line in the same muted weight, with its dismissal, held to the line's
+   own height so the button does not push the document down. */
 .plan-changed-note {
+  --control-height: 22px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--space-6);
   margin: -6px 0 12px;
   color: var(--text-secondary);
@@ -987,6 +989,14 @@ button.code-card-path:hover {
   margin: 0;
   color: var(--error-text);
   font-size: 12px;
+}
+
+/* A failed read under the transcript: its sentence, and the retry beside it. */
+.agent-failure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-8);
 }
 
 /* The room under the transcript for the composer, with no rule between

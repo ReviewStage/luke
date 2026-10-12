@@ -969,7 +969,7 @@ test("the Work tab reads the turns before its oldest as the row before them scro
   await act(async () => {
     await Promise.resolve();
   });
-  assert.equal(row()?.textContent, "Could not read earlier work. Try again");
+  assert.equal(row()?.textContent, "Could not read earlier work. Retry");
   rows.scrollIntoView();
   assert.deepEqual(asked, ["earlier"]);
 

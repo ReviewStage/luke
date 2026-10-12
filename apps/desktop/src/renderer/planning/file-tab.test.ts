@@ -285,7 +285,7 @@ test("a file not on the branch read names the branch over the lines Luke showed 
   await unanswered.draw(file);
   const alert = unanswered.container.querySelector("[role='alert']");
   assert.equal(alert?.querySelector("p")?.textContent, "The file could not be read.");
-  assert.equal(alert?.querySelector("button")?.textContent, "Try again");
+  assert.equal(alert?.querySelector("button")?.textContent, "Retry");
   assert.deepEqual(drawnLines(unanswered.container), ["7", "8 lit", "9 lit", "10"]);
 });
 

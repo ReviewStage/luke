@@ -404,6 +404,23 @@ body,
   line-height: 1.45;
 }
 
+/* The list's failure: its sentence, then the retry under it, drawn back by
+   its own inset so its glyph starts where the words do. */
+.sidebar-failure {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.sidebar-failure p {
+  margin: 0;
+}
+
+.sidebar-failure .quiet-button {
+  margin-left: calc(-1 * var(--space-8));
+}
+
 .sidebar-plans {
   display: flex;
   flex-direction: column;
@@ -1176,6 +1193,38 @@ body,
 :is(.toolbar-button, .icon-button, .primary-button, .danger-button):focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
+}
+
+/* A small act beside a line of words, a failure's retry
+   (`retry-button.tsx`) or a note's dismissal: a labelled toolbar button in
+   the muted voice of the words it follows, lit like any other on hover, and
+   tighter at its sides, since it stands beside words rather than in a
+   toolbar. A failed row that is itself the button draws the retry's glyph
+   and word in its own colour (`.retry-label`), its hover lighting both. */
+.quiet-button {
+  padding: 0 var(--space-8);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.quiet-button svg {
+  width: 13px;
+  height: 13px;
+}
+
+.retry-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  margin-left: var(--space-4);
+  font-weight: 600;
+}
+
+.retry-label svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  align-self: center;
 }
 
 /* A copy button's glyph (`copy-feedback.tsx`): the copy, the check, and the

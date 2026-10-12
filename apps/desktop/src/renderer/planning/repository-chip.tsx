@@ -1,6 +1,7 @@
 import type { GitHubRepository } from "@sidecar/hosted";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
 import { ExternalIcon } from "@sidecar/panel";
+import { RotateCwIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
 import { RepositoryPicture } from "../repository-picture";
@@ -174,7 +175,8 @@ export function RepositoryChip(props: {
           {repositoryFailureNote(failure)}
         </p>
         <button type="button" className="plan-compose-menu-row" onClick={read}>
-          <span className="plan-compose-menu-name">Try again</span>
+          <RotateCwIcon aria-hidden="true" />
+          <span className="plan-compose-menu-name">Retry</span>
         </button>
       </>
     ) : list === undefined ? (

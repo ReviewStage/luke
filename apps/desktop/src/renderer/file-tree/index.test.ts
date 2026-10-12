@@ -42,7 +42,7 @@ const ROOT: FolderListing = {
   truncated: false,
 };
 
-test("a root that cannot be listed says why in the tree's place, and Try again lists it and draws the tree", async () => {
+test("a root that cannot be listed says why in the tree's place, and Retry lists it and draws the tree", async () => {
   let refusing = true;
   const tree = mounted((path) =>
     path === "" && refusing
@@ -53,7 +53,7 @@ test("a root that cannot be listed says why in the tree's place, and Try again l
   );
   await tree.settled();
 
-  assert.equal(tree.host.textContent, "GitHub could not be read just now.Try again");
+  assert.equal(tree.host.textContent, "GitHub could not be read just now.Retry");
   refusing = false;
   tree.host.querySelector("button")?.click();
   await tree.settled();

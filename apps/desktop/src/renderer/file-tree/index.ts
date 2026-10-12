@@ -72,6 +72,18 @@ const NO_MATCH = "No files match.";
 const CUT_SHORT =
   "Some folders hold more than the tree lists. Open them on GitHub to see the rest.";
 
+/**
+ * The retry's turning arrow, Lucide's `RotateCw` as `retry-button.tsx` draws
+ * it. Note that its paths are written out here, because this bundle carries
+ * no React and so cannot draw Lucide's component.
+ */
+const RETRY_GLYPH_PATHS = [
+  "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8",
+  "M21 3v5h-5",
+] as const;
+
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
 /** The row element a press landed in, through the tree's shadow root. */
 function pressedRow(event: Event): HTMLElement | undefined {
   return event
@@ -80,6 +92,24 @@ function pressedRow(event: Event): HTMLElement | undefined {
       (target): target is HTMLElement =>
         target instanceof HTMLElement && target.dataset.type === ROW.TYPE,
     );
+}
+
+/** The retry's glyph, stroked in the button's colour like every Lucide glyph in the window. */
+function retryGlyph(): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NAMESPACE, "svg");
+  svg.setAttribute("class", "lucide");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of RETRY_GLYPH_PATHS) {
+    const path = document.createElementNS(SVG_NAMESPACE, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
 }
 
 /** The words standing in the tree's place, with a button that lists again where `retry` is given. */
@@ -94,8 +124,8 @@ function notice(text: string, retry: (() => void) | undefined): HTMLElement {
   box.setAttribute("role", "alert");
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "toolbar-button";
-  button.textContent = "Try again";
+  button.className = "toolbar-button quiet-button";
+  button.append(retryGlyph(), "Retry");
   button.addEventListener("click", retry);
   box.append(button);
   return box;

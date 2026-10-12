@@ -159,7 +159,7 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
     <p className="plan-changed-note">
       <span>{changedLine(looks.changed.size)}</span>
       <span aria-hidden="true">·</span>
-      <button type="button" className="link-button" onClick={looks.dismiss}>
+      <button type="button" className="toolbar-button quiet-button" onClick={looks.dismiss}>
         Dismiss
       </button>
     </p>

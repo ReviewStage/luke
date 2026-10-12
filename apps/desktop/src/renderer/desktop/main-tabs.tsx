@@ -28,6 +28,7 @@ import {
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-main-tabs";
 import type { PinnedTab } from "../planning/use-side-panel";
+import { RetryButton } from "../retry-button";
 import { SpinnerRegion } from "../spinner";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import {
@@ -426,9 +427,7 @@ export function MainTabStrip({
         {/* The first read of the plan's agents did not land: nothing is known
             to draw, so the strip offers the read again where the tabs would be. */}
         {agents.listFailed && agents.agents === undefined ? (
-          <button type="button" className="toolbar-button" onClick={agents.onRetryList}>
-            Agents · Try again
-          </button>
+          <RetryButton label="Retry agents" onRetry={agents.onRetryList} />
         ) : null}
       </TabStrip>
       <AddTabButton

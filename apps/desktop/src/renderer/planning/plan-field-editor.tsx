@@ -9,6 +9,7 @@ import { AsyncResult } from "effect/unstable/reactivity";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { rendererRuntime } from "../renderer-runtime";
+import { RetryButton } from "../retry-button";
 import {
   CONFLICT_NOTE,
   type EditTarget,
@@ -210,9 +211,7 @@ function EditorNote({
     return (
       <div className="plan-field-note" role="alert">
         <span>{editor.state.note}</span>
-        <button type="button" className="toolbar-button" onClick={editing.retry}>
-          Try again
-        </button>
+        <RetryButton onRetry={editing.retry} />
       </div>
     );
   }

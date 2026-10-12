@@ -27,6 +27,7 @@ import {
   windowOf,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
+import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { Spinner, SpinnerRegion } from "../spinner";
 import { PickerRow } from "./picker-row";
@@ -54,7 +55,7 @@ import { PickerRow } from "./picker-row";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: "The default could not be read. Try again.",
+  FAILED: "The default could not be read.",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match.",
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
@@ -352,13 +353,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
           <p className="error-message" role="alert">
             {PAGE_LINE.FAILED}
           </p>
-          <button
-            type="button"
-            className="toolbar-button"
-            onClick={() => setAttempt((count) => count + 1)}
-          >
-            Try again
-          </button>
+          <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
         </>
       ) : (
         <SpinnerRegion label="Loading your default" />
