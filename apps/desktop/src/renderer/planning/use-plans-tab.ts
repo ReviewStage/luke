@@ -7,6 +7,7 @@ import {
   type PlanningEditAnswer,
   type PlanningView,
 } from "@sidecar/hosted/planning-view";
+import type { Workspace } from "@sidecar/hosted/workspace-wire";
 import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND, type ActResultFor } from "#shared/messages/acts";
@@ -14,6 +15,7 @@ import type { MicrophoneStatus } from "#shared/messages/audio";
 import { callInProgress, VOICE_COMMAND, type VoiceView } from "#shared/messages/voice-view";
 import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
+import { useChosenWorkspace } from "../desktop/chosen-workspace";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
@@ -120,10 +122,18 @@ export interface PlansControl {
   shown: boolean;
   /** Whether an account is signed in to plan with, or a fixture's plans stand in for one. */
   signedIn: boolean;
-  /** The plans the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
+  /** The plans of the chosen workspace the sidebar lists, in its order: the pinned ones first, newest pinned first, then the rest, newest started first. */
   plans: PlanningView["plans"];
-  /** The archived plans, newest archived first, which the sidebar keeps under Archived. */
+  /** The chosen workspace's archived plans, newest archived first, which the sidebar keeps under Archived. */
   archived: PlanningView["plans"];
+  /** The workspaces the account is a member of, its personal one first; none before the first read lands. */
+  workspaces: readonly Workspace[];
+  /** The workspace the sidebar lists and New plan starts in; absent while none is listed, when every plan is listed. */
+  workspace: Workspace | undefined;
+  /** Lists another of the account's workspaces, and starts the next new plan in it. */
+  onChooseWorkspace: (workspaceId: string) => void;
+  /** Opens the service's Workspaces page in the browser, where workspaces are made and their members added. */
+  onManageWorkspaces: () => void;
   activePlanId: string | undefined;
   /**
    * The plan the tab is on its way to: the one a press asked the host for,
@@ -377,7 +387,15 @@ export function usePlansTab(input: {
     [viewed, accountSignedIn],
   );
   const planning = markedView(renamedView(viewed, renames), marks);
-  const sidebar = sidebarPlans(planning.plans);
+  // The sidebar, and the palette reading it, list the chosen workspace's
+  // plans alone; with none listed yet, every plan stands as it did before.
+  const workspace = useChosenWorkspace(viewed.workspaces, fixture !== undefined);
+  const chosen = workspace.chosen;
+  const sidebar = sidebarPlans(
+    chosen === undefined
+      ? planning.plans
+      : planning.plans.filter((plan) => plan.workspaceId === chosen.id),
+  );
   const signedIn = fixture !== undefined || input.signedIn;
   const page = plansPage(planning);
   const region = documentRegion(planning);
@@ -842,10 +860,13 @@ export function usePlansTab(input: {
   });
 
   // A started plan becomes the host's open one, which turns the page to it.
+  // It starts in the chosen workspace; with none listed the service starts
+  // it in the account's personal one.
   const startPlan = (name: string, repository: string | null): Promise<string | undefined> =>
     act(ACT_KIND.PLANNING_START, {
       name,
       ...(repository === null ? undefined : { repository }),
+      ...(chosen === undefined ? undefined : { workspaceId: chosen.id }),
     }).then(
       (answer) => ("failure" in answer ? repositoryFailureNote(answer.failure) : undefined),
       (refused: Error) => refused.message,
@@ -886,6 +907,13 @@ export function usePlansTab(input: {
     signedIn,
     plans: [...sidebar.pinned, ...sidebar.rest],
     archived: sidebar.archived,
+    workspaces: viewed.workspaces,
+    workspace: chosen,
+    onChooseWorkspace: workspace.choose,
+    // A fixture's workspaces are managed nowhere, as its plans are read from nowhere.
+    onManageWorkspaces: () => {
+      if (fixture === undefined) tell(ACT_KIND.WORKSPACES_MANAGE);
+    },
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
