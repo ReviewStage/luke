@@ -64,7 +64,8 @@ function CopyChord({ copy }: { copy: PlansControl["copy"] }): null {
  * row does not move when one is. It is the column's only tab and never
  * closes: the plan is always the column's content, and the sidebar is the
  * way to another plan. Note that there is no "+" beside it, because the
- * column has no second kind of tab to open.
+ * column has no second kind of tab to open. Being the only tab, it is
+ * quiet: no fill marks it chosen, only the pointer's hover.
  */
 function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
   return (
@@ -110,6 +111,7 @@ function PlanTab({
           icon={<DocumentIcon />}
           label={plan.name}
           selected
+          quiet
           tooltip={plan.repository ?? undefined}
           editor={editor}
           tabRef={tab}
@@ -185,7 +187,15 @@ function PlanDocument({
         <Toolbar
           heading={
             <PlanTabStrip
-              tab={<Tab icon={<DocumentIcon />} label="Plan" selected onSelect={() => undefined} />}
+              tab={
+                <Tab
+                  icon={<DocumentIcon />}
+                  label="Plan"
+                  selected
+                  quiet
+                  onSelect={() => undefined}
+                />
+              }
             />
           }
         />

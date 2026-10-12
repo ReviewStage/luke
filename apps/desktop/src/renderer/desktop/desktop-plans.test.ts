@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
@@ -26,7 +28,7 @@ import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
-import { afterEach, beforeEach, test, vi } from "vitest";
+import { afterEach, beforeEach, onTestFinished, test, vi } from "vitest";
 import {
   ACT_KIND,
   ACT_OUTCOME_STATUS,
@@ -2324,6 +2326,33 @@ test("the strip fades exactly the edges it hides tabs beyond, as it scrolls, res
   assert.deepEqual(fadedEdges(strip), [], "a tab closed leaves room for the rest");
   keydown({ code: "Digit1", key: "¡", metaKey: true, altKey: true });
   assert.deepEqual(fadedEdges(strip), ["end"], "a tab opened hides one again");
+});
+
+test("the plan's tab draws no fill at rest, while the side panel's chosen tab keeps its own", () => {
+  const sheet = document.createElement("style");
+  sheet.textContent = readFileSync(
+    join(import.meta.dirname, "..", "styles", "desktop.css"),
+    "utf8",
+  );
+  document.head.append(sheet);
+  onTestFinished(() => sheet.remove());
+  const page = mountOpenPlan();
+  press(page, '[aria-label="Show panel"]');
+  const fill = (label: string) => {
+    const pill = tabNamed(page, label).closest(".tab");
+    assert.ok(pill instanceof HTMLElement, `no pill for ${label}`);
+    // Note that jsdom leaves a custom property unresolved, so a fill reads as its token.
+    return getComputedStyle(pill).background;
+  };
+  const chosen = page.querySelector('.side-panel [role="tab"][aria-selected="true"]')?.textContent;
+  assert.ok(chosen, "the panel shows a tab");
+
+  assert.equal(fill(PLAN.name), "rgba(0, 0, 0, 0)", "the plan's tab rests on the toolbar's ground");
+  assert.equal(
+    fill(chosen),
+    "var(--raised-strong)",
+    "the panel's chosen tab is told from the rest",
+  );
 });
 
 test("the plan's tab, cut short as its toolbar narrows, says its whole name in its hint", () => {

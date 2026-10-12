@@ -318,6 +318,9 @@ export function TabStrip({
  * tab's role, so a reader reaches it. A label cut short is said whole in
  * the tab's hint, before what `tooltip` adds. `onMenu` opens the tab's own
  * actions where it says, from a right-click or the keyboard's menu keys.
+ * A `quiet` tab draws no fill at rest, chosen or not, and the hover fill
+ * under the pointer: a lone tab, always the chosen one, need not be told
+ * from the others.
  */
 export function Tab({
   icon,
@@ -329,6 +332,7 @@ export function Tab({
   editor,
   tabRef,
   pinned = false,
+  quiet = false,
   onSelect,
   onClose,
   onUnpin,
@@ -345,6 +349,7 @@ export function Tab({
   editor?: React.ReactNode;
   tabRef?: React.Ref<HTMLButtonElement> | undefined;
   pinned?: boolean;
+  quiet?: boolean;
   onSelect: () => void;
   onClose?: (() => void) | undefined;
   onUnpin?: (() => void) | undefined;
@@ -405,6 +410,7 @@ export function Tab({
       data-selected={String(selected)}
       data-closable={String(closes !== undefined)}
       data-pinned={String(pinned)}
+      data-quiet={String(quiet)}
     >
       {editor === undefined ? (
         <Tooltip label={hint}>{tab}</Tooltip>
