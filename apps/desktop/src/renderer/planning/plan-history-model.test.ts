@@ -278,3 +278,43 @@ test("a plan's first revision as one document, after its revisions of the templa
   assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), []);
   assert.ok(diff.units.every((unit) => !unit.words.includes("_Unanswered_")));
 });
+
+test("a document's own first section named as the plan is drawn and compared as a section, not taken for the fields' title", () => {
+  const before = textOf(`# ${DOCUMENT_NAME}\n\nRoll out gradually.\n\n## Goal\n\nShip safely.`);
+  const after = textOf(`# ${DOCUMENT_NAME}\n\nRoll out by team.\n\n## Goal\n\nShip safely.`);
+
+  const diff = versionDiff(before, after, DOCUMENT_NAME);
+
+  assert.deepEqual(
+    diff.units.map((unit) => [unit.key, unit.change]),
+    [
+      [DOCUMENT_NAME, VERSION_CHANGE.CHANGED],
+      ["Goal", VERSION_CHANGE.SAME],
+    ],
+  );
+  assert.deepEqual(
+    versionDiff(null, textOf(`# ${DOCUMENT_NAME}\n\n## Goal`), DOCUMENT_NAME).units.map(
+      (unit) => unit.key,
+    ),
+    [DOCUMENT_NAME, "Goal"],
+    "a title-shaped line alone over a document's own sections stays the document's",
+  );
+});
+
+test("a revision of the template's fields with no assumptions is still drawn with its title as the title and an empty Assumptions section", () => {
+  const before = { body: planBody({ name: DOCUMENT_NAME }, EMPTY_PLAN_FIELDS), assumptions: [] };
+
+  const keys = versionDiff(null, before, DOCUMENT_NAME).units.map((unit) => unit.key);
+
+  assert.deepEqual(keys, [
+    "Context",
+    "Goal",
+    "Approach",
+    "Interfaces",
+    "Hard parts",
+    "Not doing",
+    "Testing",
+    "Open questions",
+    "Assumptions",
+  ]);
+});

@@ -294,6 +294,50 @@ function assumptionsSection(document: PlanDocument): PlanSection {
   return { heading, text: blocks.join("\n\n") };
 }
 
+/** The headings a body of the template's fields holds under its title line, in its order. */
+const FIELD_BODY_HEADINGS = [
+  PLAN_HEADING.CONTEXT,
+  PLAN_HEADING.GOAL,
+  PLAN_HEADING.APPROACH,
+  PLAN_HEADING.INTERFACES,
+  PLAN_HEADING.ALTERNATIVES,
+  PLAN_HEADING.HARD_PARTS,
+  PLAN_HEADING.NOT_DOING,
+  PLAN_HEADING.PLAN_OF_ATTACK,
+  PLAN_HEADING.TESTING,
+  PLAN_HEADING.OPEN_QUESTIONS,
+] as const;
+
+/** The sections a body of the template's fields leaves out while they hold nothing. */
+const OPTIONAL_FIELD_HEADINGS: ReadonlySet<string> = new Set([
+  PLAN_HEADING.ALTERNATIVES,
+  PLAN_HEADING.PLAN_OF_ATTACK,
+]);
+
+/** Whether a section is the `# title` line a body of the template's fields opens with, alone. */
+function isTitleLine(section: PlanSection | undefined, title: string): boolean {
+  return section?.text === `# ${title.replace(WHITESPACE_RUN, " ").trim()}`;
+}
+
+/**
+ * Whether sections are a body of the template's fields as the service
+ * formats one under `title`: the `# title` line alone, then the template's
+ * sections in its order, the optional ones where answered, and nothing else.
+ * Note that we read the whole shape and not the title line alone, because a
+ * document may open with a section of its own named as the plan is.
+ */
+function isFieldBody(sections: readonly PlanSection[], title: string): boolean {
+  const [first, ...rest] = sections;
+  if (!isTitleLine(first, title)) return false;
+  const headings = rest.map((section) => section.heading);
+  const expected = FIELD_BODY_HEADINGS.filter(
+    (heading) => !OPTIONAL_FIELD_HEADINGS.has(heading) || headings.includes(heading),
+  );
+  return (
+    headings.length === expected.length && headings.every((heading, at) => heading === expected[at])
+  );
+}
+
 /**
  * The sections a version draws under a plan that is one document, titled
  * `title`. Note that a version from before the plan was one document opens
@@ -301,13 +345,15 @@ function assumptionsSection(document: PlanDocument): PlanSection {
  * body, because the service formats it under the plan's name as it stands
  * now. That line is the title drawn over every version, and that list is the
  * section the document holds its assumptions in, so it draws what the
- * document would.
+ * document would. A document's own revision has no list, so one with no
+ * list is read as the fields' only where its whole shape is theirs.
  */
 function documentSections(document: PlanDocument, title: string): readonly PlanSection[] {
   const sections = planSections(document.body);
-  const titled = sections[0]?.text === `# ${title.replace(WHITESPACE_RUN, " ").trim()}`;
-  if (!titled && document.assumptions.length === 0) return sections;
-  return [...(titled ? sections.slice(1) : sections), assumptionsSection(document)];
+  const fielded = document.assumptions.length > 0 || isFieldBody(sections, title);
+  if (!fielded) return sections;
+  const body = isTitleLine(sections[0], title) ? sections.slice(1) : sections;
+  return [...body, assumptionsSection(document)];
 }
 
 /**
