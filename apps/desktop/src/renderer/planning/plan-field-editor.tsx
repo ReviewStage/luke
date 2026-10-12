@@ -83,6 +83,8 @@ export const EDITOR_PLACE = {
   ASSUMPTIONS: "assumptions",
   /** After the body, for a section the body does not draw until it holds something. */
   END: "end",
+  /** Under the rules, where "New rule" stands, for a rule not written yet. */
+  NEW_RULE: "new-rule",
 } as const;
 
 /** Where an editor stands in the document: in place of a unit, by its id, or a place of its own. */
@@ -525,15 +527,12 @@ function steppedByArrow(event: React.KeyboardEvent<HTMLElement>): boolean {
  * stop, at the block selected last or `entry`; the arrows move between
  * blocks; Return edits the selected one with the caret at the end; and Esc in
  * its editor saves and selects it again. A block is a labelled group rather
- * than a button, so a screen reader still reads the words inside it. The
- * rules' heading carries a plus under the pointer, which adds a rule, as
- * Return on it does.
+ * than a button, so a screen reader still reads the words inside it.
  */
 export function EditableUnit({
   target,
   host,
   label,
-  adds,
   entry,
   editing,
   children,
@@ -541,7 +540,6 @@ export function EditableUnit({
   target: EditTarget;
   host: EditorHost;
   label: string;
-  adds: boolean;
   /** Whether this block is where Tab enters the document. */
   entry: boolean;
   editing: FieldEditing;
@@ -568,7 +566,7 @@ export function EditableUnit({
       className={`plan-unit-editable ${BLOCK_CLASS}`}
       role="group"
       tabIndex={entry ? 0 : -1}
-      aria-label={adds ? "Rules" : label}
+      aria-label={label}
       aria-keyshortcuts="Enter"
       onPointerEnter={prefetchFieldEditor}
       onFocus={() => {
@@ -589,20 +587,51 @@ export function EditableUnit({
       }}
     >
       {children}
-      {adds ? (
-        <button
-          type="button"
-          className="icon-button plan-unit-edit"
-          aria-hidden="true"
-          tabIndex={-1}
-          onClick={(event) => {
-            event.stopPropagation();
-            editing.open(target, host);
-          }}
-        >
-          <PlusIcon />
-        </button>
-      ) : null}
     </div>
+  );
+}
+
+/**
+ * "New rule", standing under the rules, or under the Rules heading in place of
+ * "Unanswered" while there are none. It opens a rule not written yet where it
+ * stands, numbered after the rules standing, and is one of the blocks the
+ * arrows move between; Esc in that editor selects it again, so Return adds
+ * the next.
+ */
+export function NewRuleButton({
+  ruleCount,
+  entry,
+  editing,
+}: {
+  ruleCount: number;
+  /** Whether this is where Tab enters the document. */
+  entry: boolean;
+  editing: FieldEditing;
+}): React.JSX.Element {
+  const button = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (editing.editor !== undefined || editing.selecting !== EDITOR_PLACE.NEW_RULE) return;
+    button.current?.focus();
+    editing.selected();
+  });
+  return (
+    <button
+      ref={button}
+      type="button"
+      className={`toolbar-button plan-new-rule ${BLOCK_CLASS}`}
+      tabIndex={entry ? 0 : -1}
+      onPointerEnter={prefetchFieldEditor}
+      onFocus={() => {
+        prefetchFieldEditor();
+        editing.select(EDITOR_PLACE.NEW_RULE);
+      }}
+      onKeyDown={steppedByArrow}
+      onClick={() =>
+        editing.open({ field: PLAN_FIELD.RULES, rule: ruleCount }, EDITOR_PLACE.NEW_RULE)
+      }
+    >
+      <PlusIcon />
+      New rule
+    </button>
   );
 }

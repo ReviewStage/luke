@@ -1,4 +1,8 @@
-import { PLAN_FIELD_HEADING, planTextFieldValue } from "@sidecar/hosted/plan-template";
+import {
+  PLAN_EMPTY_TEXT,
+  PLAN_FIELD_HEADING,
+  planTextFieldValue,
+} from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -10,7 +14,7 @@ import {
   type PlanLastEdit,
 } from "@sidecar/hosted/plan-wire";
 import { PlusIcon } from "@sidecar/panel";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
   BLOCK_CLASS,
@@ -18,6 +22,7 @@ import {
   EditableUnit,
   type EditorHost,
   type FieldEditing,
+  NewRuleButton,
   type PlanEditDoor,
   PlanFieldEditor,
   targetLabel,
@@ -313,10 +318,62 @@ function draftedOnly(target: EditTarget, words: string, ruleCount: number): bool
   return "rule" in target && target.rule >= ruleCount && !words.startsWith("## ");
 }
 
+/** The Rules heading, which "New rule" stands under rather than a click on it adding one. */
+const RULES_HEADING = `## ${PLAN_FIELD_HEADING.rules}`;
+
+/** What every rule's unit opens with. */
+const RULE_UNIT = "### Rule ";
+
+/** Whether a unit is the Rules heading's. */
+function rulesHeading(view: UnitView): boolean {
+  return view.words.split("\n", 1)[0] === RULES_HEADING;
+}
+
 /** Whether a unit is drawn as a block the developer can select and edit. */
 function editableView(view: UnitView, ruleCount: number): boolean {
   const target = editTargetOfUnit(view.words, ruleCount);
-  return target !== undefined && !draftedOnly(target, view.words, ruleCount);
+  if (target === undefined || rulesHeading(view)) return false;
+  return !draftedOnly(target, view.words, ruleCount);
+}
+
+/** The last unit of the rules, their heading's where there are none, which "New rule" stands after. */
+function rulesEndOf(views: readonly UnitView[]): number | undefined {
+  const start = views.findIndex(rulesHeading);
+  if (start === -1) return undefined;
+  let end = start;
+  while (views[end + 1]?.words.startsWith(RULE_UNIT)) end += 1;
+  return views[end]?.id;
+}
+
+/** "New rule" under the rules, or the rule it opened, written where the button stood. */
+function NewRule({
+  editing,
+  ruleCount,
+  entry,
+}: {
+  editing: FieldEditing;
+  ruleCount: number;
+  entry: EditorHost | undefined;
+}): React.JSX.Element {
+  const { editor, host } = editing;
+  if (editor !== undefined && host === EDITOR_PLACE.NEW_RULE) {
+    return (
+      <PlanFieldEditor
+        heading={undefined}
+        editor={editor}
+        ruleCount={ruleCount}
+        editing={editing}
+        drawn={null}
+      />
+    );
+  }
+  return (
+    <NewRuleButton
+      ruleCount={ruleCount}
+      entry={entry === EDITOR_PLACE.NEW_RULE}
+      editing={editing}
+    />
+  );
 }
 
 /**
@@ -345,14 +402,21 @@ function BodyUnit({
 }): React.JSX.Element | null {
   const target = editTargetOfUnit(view.words, ruleCount);
   const changed = target !== undefined && marks.changed.has(target.field);
+  // While the plan can be edited, "New rule" stands in for "Unanswered" under the Rules heading.
+  const heading = editable && rulesHeading(view);
+  const words = heading ? view.words.replace(`\n\n${PLAN_EMPTY_TEXT.UNANSWERED}`, "") : view.words;
   const drawn = (
-    <PlanUnitWords words={view.words} className={unitClass(view, changed)} edit={view.edit} />
+    <PlanUnitWords
+      words={words}
+      className={unitClass(view, changed)}
+      edit={words === view.words ? view.edit : undefined}
+    />
   );
   if (target === undefined) return drawn;
   // A rule shares the rules' line, which stands on their heading.
   const opensField = !("rule" in target) || view.words.startsWith("## ");
   const byline = opensField ? bylineOf(marks, target.field) : null;
-  if (!editable || draftedOnly(target, view.words, ruleCount)) {
+  if (!editable || heading || draftedOnly(target, view.words, ruleCount)) {
     return byline === null ? (
       drawn
     ) : (
@@ -376,13 +440,11 @@ function BodyUnit({
     );
   }
   if (editor !== undefined && sameTarget(editor.target, target)) return null;
-  const adds = "rule" in target && target.rule >= ruleCount;
   return (
     <EditableUnit
       target={target}
       host={view.id}
       label={targetLabel(target, ruleCount)}
-      adds={adds}
       entry={entry === view.id}
       editing={editing}
     >
@@ -471,7 +533,6 @@ function PlanAssumptions({
         target={target}
         host={EDITOR_PLACE.ASSUMPTIONS}
         label={PLAN_FIELD_HEADING.assumptions}
-        adds={false}
         entry={entry === EDITOR_PLACE.ASSUMPTIONS}
         editing={editing}
       >
@@ -597,21 +658,26 @@ export function PlanBody({
   // Tab enters the document at the block selected last, or its first block.
   const first = editable ? views.find((view) => editableView(view, ruleCount))?.id : undefined;
   const entry = editing.cursor ?? first ?? (editable ? EDITOR_PLACE.ASSUMPTIONS : undefined);
+  const rulesEnd = editable ? rulesEndOf(views) : undefined;
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <ChangedLine looks={looks} />
       <div className="plan-body">
         {views.map((view) => (
-          <BodyUnit
-            key={view.id}
-            view={view}
-            editable={editable}
-            editing={editing}
-            ruleCount={ruleCount}
-            marks={marks}
-            entry={entry}
-          />
+          <Fragment key={view.id}>
+            <BodyUnit
+              view={view}
+              editable={editable}
+              editing={editing}
+              ruleCount={ruleCount}
+              marks={marks}
+              entry={entry}
+            />
+            {view.id === rulesEnd ? (
+              <NewRule editing={editing} ruleCount={ruleCount} entry={entry} />
+            ) : null}
+          </Fragment>
         ))}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
           <PlanFieldEditor

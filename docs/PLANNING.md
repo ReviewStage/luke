@@ -601,10 +601,10 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
     Then behind a label that is drawn and never typed. Return walks the
     statement to the first Given and each clause to the next, and adds the
     next example after Then; Backspace in an empty example strikes it; Delete
-    rule stands under a rule that exists. The rules' own heading carries a
-    plus, "Add rule", which opens a new rule that saves after the rules
-    standing; Return on that heading does the same. A rule whose statement is
-    left blank is struck, and an example of blank clauses is dropped.
+    rule stands under a rule that exists. "New rule" stands under the rules,
+    in place of "Unanswered" while there are none, and opens a new rule where
+    it stands that saves after the rules standing; the arrows reach it like a
+    block. A rule whose statement is left blank is struck, and an example of blank clauses is dropped.
   - Order and Data and migration, which the body leaves out while they hold
     nothing, are offered after the body as buttons that open their editor
     there.

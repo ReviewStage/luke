@@ -386,10 +386,27 @@ test("a rule opens as its statement and examples, its number kept, and saves as 
   ]);
 });
 
-test("Return on the rules' heading adds a rule after the rules standing; Delete rule strikes one", async () => {
+test("New rule stands under the rules and writes the next one where it stands; Delete rule strikes one", async () => {
   const added = mount(LISTED);
-  edit(added.container, "Rules");
+  const newRule = buttonText(added.container, "New rule");
+  const lastRule = [...added.container.querySelectorAll(".plan-rule")].at(-1);
+  assert.ok(lastRule, "the rules");
+  assert.ok(
+    (lastRule.compareDocumentPosition(newRule) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    "New rule stands after the last rule",
+  );
+  assert.equal(
+    added.container.querySelector('[role="group"][aria-label="Rules"]'),
+    null,
+    "the Rules heading is no block of its own",
+  );
+
+  act(() => newRule.click());
   assert.equal(open().label, "New rule");
+  assert.equal(
+    added.container.querySelector(".plan-field-editor .plan-rule-number")?.textContent,
+    "2.",
+  );
   type({
     kind: FIELD_KIND.RULE,
     rule: { statement: "Invites expire after 7 days.", examples: [] },
@@ -397,6 +414,7 @@ test("Return on the rules' heading adds a rule after the rules standing; Delete 
   finish();
   await settle();
   const addedSent = [...added.sent];
+  const selectedAfter = document.activeElement?.textContent;
 
   const struck = mount(LISTED);
   edit(struck.container, "Rule 1");
@@ -407,8 +425,36 @@ test("Return on the rules' heading adds a rule after the rules standing; Delete 
     RULE,
     { statement: "Invites expire after 7 days.", examples: null },
   ]);
+  assert.equal(selectedAfter, "New rule", "Esc leaves New rule selected, so Return adds the next");
   assert.deepEqual(struck.sent[0]?.value, null);
   assert.equal(struck.container.querySelector(".plan-field-editor"), null);
+});
+
+test("with no rules yet, New rule stands under the Rules heading in place of Unanswered", () => {
+  const { container } = mount(PLAN);
+  const rules = [...container.querySelectorAll(".plan-unit")].find((unit) =>
+    unit.textContent?.trim().startsWith("Rules"),
+  );
+
+  assert.ok(rules, "the Rules heading");
+  assert.equal(rules.textContent?.includes("Unanswered"), false);
+  assert.ok(buttonText(container, "New rule"));
+});
+
+test("the arrows reach New rule from the rules, and it opens the next rule", () => {
+  const { container } = mount(LISTED);
+  act(() => block(container, "Rule 1").focus());
+  pressOn(block(container, "Rule 1"), "ArrowDown");
+
+  const newRule = buttonText(container, "New rule");
+  assert.equal(document.activeElement, newRule);
+  pressOn(newRule, "ArrowUp");
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Rule 1");
+  pressOn(block(container, "Rule 1"), "ArrowDown");
+  assert.equal(document.activeElement, newRule);
+  act(() => newRule.click());
+
+  assert.equal(open().label, "New rule");
 });
 
 test("the open questions open as Markdown items and the assumptions as plain ones, and save a line as an item", async () => {
