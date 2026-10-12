@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import type { ShownCode } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import { test } from "vitest";
-import { codeExcerpt, highlightCode } from "./plan-code.js";
+import { codeExcerpt, highlightCode, highlightSnippet } from "./plan-code.js";
 
 const INVITE = [
   'import { db } from "./db.js";',
@@ -48,6 +48,25 @@ test("a file of no language the highlighter knows is drawn plain, one run per li
   const code = highlightCode(shown("notes.txt", ["first line", "", "third line"]));
 
   assert.deepEqual(code.lines, [[{ text: "first line" }], [], [{ text: "third line" }]]);
+});
+
+test("a transcript's fenced block is coloured as the language its fence names, by the grammar's own aliases too, and drawn plain for a name no grammar answers to", () => {
+  const code = INVITE.join("\n");
+  const named = highlightSnippet("typescript", code);
+  const aliased = highlightSnippet("TS", code);
+  const unknown = highlightSnippet("pseudocode", code);
+
+  assert.deepEqual(
+    named.map((line) => line.map((token) => token.text).join("")),
+    INVITE,
+  );
+  const keyword = named[2]?.find((token) => token.text === "export");
+  assert.ok(keyword?.color && keyword.lightColor, "a keyword is drawn in each appearance's colour");
+  assert.deepEqual(aliased, named);
+  assert.deepEqual(
+    unknown,
+    INVITE.map((text) => (text === "" ? [] : [{ text }])),
+  );
 });
 
 test("a card's part of a window is the lines pointed at with three of the file either side, kept within the window, or a whole file's head", () => {
