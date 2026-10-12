@@ -1233,6 +1233,129 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it, and a receipt no line awaits keeps its words and its files on its own row, a text file read back to a file by its heading",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const play = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
+          );
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        yield* play([started, received]);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* awaitingLine(target, "Plain first.", "k-plain");
+        const withFiles = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Look at these.",
+            clientKey: "k-files",
+            attachments: [
+              { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" },
+              { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" },
+            ],
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(withFiles) && Option.isSome(withFiles.success));
+
+        // eve coalesced the two steers into one message: its summary names the image, its parts hold the words.
+        yield* play([
+          stamped({
+            type: "message.received",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              message:
+                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]",
+              parts: [
+                { type: "text", text: "Plain first." },
+                { type: "text", text: "Look at these." },
+                { type: "text", text: "Attached file: notes.md\n```\n# Notes\n```" },
+                { type: "file", filename: "shot.png", mediaType: "image/png" },
+              ],
+            },
+          }),
+        ]);
+        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
+          { turnId: hostTurnId(sessionId, "turn_0") },
+        ]);
+        assert.equal((yield* developerLines(target)).length, 3);
+
+        // A receipt no line awaits is written as eve received it: the words, then each file.
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
+          stamped({
+            type: "message.received",
+            data: {
+              turnId: "turn_1",
+              sequence: 1,
+              message: "Read the spec.",
+              parts: [
+                { type: "text", text: "Read the spec." },
+                { type: "text", text: "Attached file: a.ts\n````\nconst a = ```x```;\n````" },
+                {
+                  type: "file",
+                  filename: "spec.pdf",
+                  mediaType: "application/pdf",
+                  url: "data:application/pdf;base64,JVBERi0=",
+                },
+                { type: "file", filename: "staged.png", mediaType: "image/png", size: 8 },
+              ],
+            },
+          }),
+        ]);
+        const page = yield* listMessagesPast(
+          target.userId,
+          target.conversationId,
+          CODER_TOOL_SET,
+          CURSOR_START,
+        );
+        assert.ok(page.read.ok);
+        const rows = page.read.value.filter((record) => record.message.role === MESSAGE_ROLE.USER);
+        assert.deepEqual(rows.at(2)?.message.parts, [
+          { type: "text", text: "Look at these.", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "notes.md",
+            url: "data:text/plain;base64,IyBOb3Rlcw==",
+          },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "shot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ]);
+        assert.deepEqual(rows.at(-1)?.message.parts, [
+          { type: "text", text: "Read the spec.", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "a.ts",
+            url: "data:text/plain;base64,Y29uc3QgYSA9IGBgYHhgYGA7",
+          },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "spec.pdf",
+            url: "data:application/pdf;base64,JVBERi0=",
+          },
+          { type: "file", mediaType: "image/png", filename: "staged.png", url: "" },
+        ]);
+      }),
+  );
+
+  it.effect(
     "two awaiting lines with the same words are taken in the order sent, each by the turn that receives it, and a line sent again under its key is the one already standing: nothing is dispatched and no second row is written",
     () =>
       Effect.gen(function* () {

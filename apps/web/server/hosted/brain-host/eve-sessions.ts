@@ -3,6 +3,7 @@
  */
 
 import { readEither } from "@sidecar/wire/effect";
+import type { UserContent } from "ai";
 import { Data, Duration, Effect, Schema as EffectSchema, Redacted, Result, Schedule } from "effect";
 import { FetchHttpClient } from "effect/unstable/http";
 import * as HttpClient from "effect/unstable/http/HttpClient";
@@ -202,7 +203,8 @@ type EveCancelled =
 export interface EveMessage<Turn extends BrainHostTurn = BrainHostTurn> {
   readonly conversationId: string;
   readonly turn: Turn;
-  readonly message: string;
+  /** The words alone, or the AI SDK's user content where a coding agent's message carries files (`attached-files.ts`). */
+  readonly message: string | UserContent;
 }
 
 export interface EveSessions<Turn extends BrainHostTurn = BrainHostTurn> {
@@ -237,7 +239,7 @@ const SESSION_CAPABILITIES = { requestInput: false } as const;
 
 /** What the host posts to eve: the message a turn opens with and, on an open, what the session may do, or the turn a cancel is scoped to. */
 interface EvePostBody {
-  readonly message?: string;
+  readonly message?: string | UserContent;
   readonly capabilities?: typeof SESSION_CAPABILITIES;
   readonly turnId?: string;
 }
