@@ -1,0 +1,130 @@
+// @vitest-environment jsdom
+
+import assert from "node:assert/strict";
+import { gunzipSync } from "node:zlib";
+import { isRecord, jsonRoundTrip, text, valueFromJsonText, type WireValue } from "@sidecar/wire";
+import posthog, { type CaptureResult } from "posthog-js/dist/module.no-external";
+import { afterEach, test, vi } from "vitest";
+import type { SessionReplayBootstrap } from "#shared/messages/session";
+import { SESSION_RECORDER_ASSET } from "./session-recorder/contract";
+import { applySessionReplay } from "./session-replay";
+
+/**
+ * The recorder is a bundle of its own that session replay loads before it
+ * starts the client (`session-recorder/contract.ts`), so the masking `init`
+ * is given has to reach a recorder that arrived after the panel's bundle,
+ * and a stop that arrives while it loads has to hold. This runs the
+ * library's own client and recorder over a page of words, through the
+ * module's public door, and reads what the recording would send.
+ */
+
+// Nothing leaves the test: every request the client makes is answered here.
+// Stubbed before the client is imported, because it keeps the `fetch` it
+// found as it loaded.
+const requests = vi.hoisted(() => {
+  const made: string[] = [];
+  globalThis.fetch = async (url) => {
+    made.push(String(url));
+    return new Response("{}", { status: 200 });
+  };
+  return made;
+});
+
+/** Words the page draws or is typed into it, none of which may leave in a recording. */
+const WORDS = ["Quarterly", "roadmap", "feature-branch", "Delete", "typed-secret", "Folder"];
+
+/** The gzip magic the library opens a compressed snapshot field with, as the binary string it sends. */
+const GZIP_MAGIC = "\u001f\u008b";
+
+function bootstrap(permitted: boolean): SessionReplayBootstrap {
+  return { permitted, appVersion: "1.2.3", accountId: "user-1" };
+}
+
+function drawPage(): void {
+  document.body.innerHTML = `
+    <main>
+      <h1>Quarterly roadmap</h1>
+      <p title="feature-branch" aria-label="Folder">feature-branch</p>
+      <button type="button">Delete</button>
+      <input value="typed-secret" placeholder="Folder" />
+    </main>`;
+}
+
+/** A person using the page: the recorder ships nothing for a page nobody touched. */
+function usePage(): void {
+  const button = document.querySelector("button");
+  button?.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+  const input = document.querySelector("input");
+  if (!input) return;
+  input.value = "typed-secret, again";
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+/**
+ * The recording as rrweb wrote it: the library gzips a full snapshot and a
+ * mutation's nodes into binary strings, which would hide a word from a plain
+ * search as well as from anyone reading the processor's copy.
+ */
+function opened(value: WireValue): WireValue {
+  const asText = text(value);
+  if (asText !== undefined) {
+    return asText.startsWith(GZIP_MAGIC)
+      ? valueFromJsonText(gunzipSync(Buffer.from(asText, "latin1")).toString("utf8"))
+      : value;
+  }
+  if (Array.isArray(value)) return value.map(opened);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, opened(entry)]));
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+test("the recorder loads before anything records, a stop while it loads holds, and what it records has no words", async () => {
+  vi.useFakeTimers();
+  // The packaged project key, which esbuild writes into a real build.
+  vi.stubGlobal("PACKAGED_POSTHOG_PROJECT_API_KEY", "phc_test");
+  drawPage();
+
+  // Recording is wanted, so the recorder's bundle is asked for, and nothing
+  // starts before it has run.
+  applySessionReplay(bootstrap(true));
+  const script = document.head.querySelector<HTMLScriptElement>(
+    `script[src="${SESSION_RECORDER_ASSET.SCRIPT}"]`,
+  );
+  assert.ok(script, "the recorder's bundle was asked for");
+  assert.equal(posthog.sessionRecordingStarted(), false);
+
+  // The account is deleted while it loads: the bundle runs, as the browser
+  // would run the script, and nothing starts and nothing is sent.
+  applySessionReplay(bootstrap(false));
+  await import("posthog-js/dist/posthog-recorder");
+  script.dispatchEvent(new Event("load"));
+  await vi.advanceTimersByTimeAsync(10_000);
+  assert.equal(posthog.sessionRecordingStarted(), false);
+  assert.deepEqual(requests, []);
+
+  // Wanted again, the recorder already there starts at once.
+  applySessionReplay(bootstrap(true));
+  assert.equal(posthog.sessionRecordingStarted(), true);
+  assert.equal(
+    document.head.querySelectorAll(`script[src="${SESSION_RECORDER_ASSET.SCRIPT}"]`).length,
+    1,
+  );
+
+  const sent: CaptureResult[] = [];
+  posthog.on("eventCaptured", (event) => sent.push(event));
+  usePage();
+  await vi.advanceTimersByTimeAsync(10_000);
+  const snapshots = jsonRoundTrip(sent.filter((event) => event.event === "$snapshot"));
+  const recording = JSON.stringify(snapshots === undefined ? undefined : opened(snapshots));
+  // The page was recorded: its elements are there, by tag.
+  for (const tag of ["h1", "button", "input"]) {
+    assert.ok(recording.includes(`"tagName":"${tag}"`), tag);
+  }
+  // And none of its words, in a text node, an attribute, or an input's value.
+  for (const word of WORDS) assert.ok(!recording.includes(word), word);
+});

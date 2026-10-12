@@ -174,6 +174,21 @@ await Promise.all([
     logLevel: "info",
     define: { "process.env.NODE_ENV": '"production"' },
   }),
+  // Session replay's recorder, its own bundle so the bundle every window
+  // parses never carries rrweb; session replay loads it before it starts the
+  // client, in a window that records (`src/renderer/session-recorder/contract.ts`).
+  build({
+    entryPoints: [path.join(appRoot, "src/renderer/session-recorder/index.ts")],
+    outfile: path.join(outputRoot, "renderer/session-recorder.js"),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome140",
+    minify: true,
+    plugins: sentryPlugins(),
+    sourcemap: true,
+    logLevel: "info",
+  }),
   build({
     entryPoints: [path.join(appRoot, "src/renderer/whiteboard/index.css")],
     outfile: path.join(outputRoot, "renderer/whiteboard.css"),

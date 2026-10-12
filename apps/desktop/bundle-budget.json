@@ -1,9 +1,10 @@
 {
   "slack": 0.05,
   "gzipBytes": {
-    "renderer/renderer.js": 771155,
+    "renderer/renderer.js": 709674,
     "renderer/whiteboard.js": 467697,
     "renderer/file-tree.js": 70635,
-    "renderer/plan-editor.js": 161390
+    "renderer/plan-editor.js": 161390,
+    "renderer/session-recorder.js": 61872
   }
 }
