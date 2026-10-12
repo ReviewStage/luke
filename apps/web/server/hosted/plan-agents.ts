@@ -2,14 +2,18 @@ import {
   awaitingLinesOfReached,
   type CodingAgentLatestTurn,
   type CodingAgentStoreEffect,
+  isLiveWorkerTurn,
   latestTurnsOfReached,
   listPublishedCodingAgents,
   type PublishedCodingAgent,
 } from "@sidecar/database/models/coding-agent-store";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   PULL_REQUEST_STATE,
+  ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   PLAN_AGENTS_BOUNDS,
@@ -17,6 +21,8 @@ import {
   type PlanAgentsSummary,
   type PlanPullRequestLine,
   type PlanSummary,
+  ROLLOUT_BASE,
+  type RolloutItem,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
@@ -32,6 +38,11 @@ import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/statu
  * nothing here asks GitHub. A plan with no agent carries nothing, so the
  * list stays as small as it was for every plan nobody has started an agent
  * on.
+ *
+ * A plan's rollout is read the same way, for the planning model rather than
+ * the sidebar: the plan's list is the graph and its workers' rows are its
+ * state, so which pull request may start and which may merge is computed
+ * here from both, and Luke never has to infer it.
  */
 
 /** The statuses under which an agent is at work. */
@@ -137,5 +148,194 @@ export function withPlanAgents(
       const agents = byPlan.get(plan.id);
       return agents === undefined ? plan : { ...plan, agents: summaryOf(agents) };
     });
+  });
+}
+
+/** A rollout worker as its position's line reads it: where it stands, whether it still holds its position, and its pull request as GitHub last answered. */
+export interface RolloutWorker {
+  readonly position: number;
+  readonly status: CodingAgentStatus;
+  /** Whether it holds its position, by the rule a Start at the position is refused under (`isLiveWorkerTurn`). */
+  readonly live: boolean;
+  readonly published: CodingAgentPullRequest | null;
+}
+
+/**
+ * A rollout's agents as its state reads them: the builders, one or more a
+ * position, and the plan's newest keeper's status, undefined where no keeper
+ * was started.
+ */
+export interface RolloutAgents {
+  readonly builders: readonly RolloutWorker[];
+  readonly keeper: CodingAgentStatus | undefined;
+}
+
+/** A builder or the keeper in a word: none started, at work, or how its newest turn ended. */
+const WORKER_WORD = {
+  NONE: "none",
+  WORKING: "working",
+  FINISHED: "finished",
+  FAILED: "failed",
+  STOPPED: "stopped",
+} as const;
+
+const WORKER_WORD_OF_STATUS = {
+  [CODING_AGENT_STATUS.STARTING]: WORKER_WORD.WORKING,
+  [CODING_AGENT_STATUS.RUNNING]: WORKER_WORD.WORKING,
+  [CODING_AGENT_STATUS.COMPLETED]: WORKER_WORD.FINISHED,
+  [CODING_AGENT_STATUS.FAILED]: WORKER_WORD.FAILED,
+  [CODING_AGENT_STATUS.CANCELLED]: WORKER_WORD.STOPPED,
+} as const satisfies Record<CodingAgentStatus, string>;
+
+/** An open pull request's word by its checks: green once every one passed. */
+const OPEN_PULL_REQUEST_WORD = {
+  [CHECK_SUMMARY.PASSING]: "green",
+  [CHECK_SUMMARY.FAILING]: "checks failing",
+  [CHECK_SUMMARY.PENDING]: "open",
+  [CHECK_SUMMARY.NONE]: "open",
+} as const satisfies Record<CodingAgentPullRequest["checks"], string>;
+
+/** The pull request states a later position may build on: its branch is pushed, or it is already on main. */
+const BUILDABLE_STATES: ReadonlySet<CodingAgentPullRequest["state"]> = new Set([
+  PULL_REQUEST_STATE.OPEN,
+  PULL_REQUEST_STATE.DRAFT,
+  PULL_REQUEST_STATE.MERGED,
+]);
+
+/** One position's state: its workers, newest started last, and the newest pull request any of them published. */
+interface PositionState {
+  readonly newest: RolloutWorker | undefined;
+  readonly live: boolean;
+  readonly published: CodingAgentPullRequest | null;
+}
+
+function positionStateOf(workers: readonly RolloutWorker[]): PositionState {
+  const published = workers.findLast((worker) => worker.published !== null)?.published ?? null;
+  return { newest: workers.at(-1), live: workers.some((worker) => worker.live), published };
+}
+
+/** A pull request in words: its number and where it stands, or none. */
+function pullRequestWords(published: CodingAgentPullRequest | null): string {
+  if (published === null) return "none";
+  const words =
+    published.state === PULL_REQUEST_STATE.OPEN
+      ? OPEN_PULL_REQUEST_WORD[published.checks]
+      : published.state;
+  return `#${published.number} ${words}`;
+}
+
+/** Whether a position's base lets it start: main, or an earlier position whose pull request is pushed or merged. */
+function baseBuildable(base: RolloutItem["base"], states: readonly PositionState[]): boolean {
+  if (base === ROLLOUT_BASE.MAIN) return true;
+  const state = states[base - 1]?.published?.state;
+  return state !== undefined && BUILDABLE_STATES.has(state);
+}
+
+/** Whether a position's base is on main already: main itself, or an earlier position whose pull request merged. */
+function baseMerged(base: RolloutItem["base"], states: readonly PositionState[]): boolean {
+  if (base === ROLLOUT_BASE.MAIN) return true;
+  return states[base - 1]?.published?.state === PULL_REQUEST_STATE.MERGED;
+}
+
+/** A worker in its word, none where none was started. */
+function workerWord(status: CodingAgentStatus | undefined): string {
+  return status === undefined ? WORKER_WORD.NONE : WORKER_WORD_OF_STATUS[status];
+}
+
+/** Positions in a line, or none. */
+function positionsWords(positions: readonly number[]): string {
+  return positions.length === 0 ? "none" : positions.join(", ");
+}
+
+/**
+ * The rollout's state, one line per position counted from one: its title,
+ * its base, its newest worker, and the newest pull request a worker at it
+ * published; then the stack keeper, by the newest started, so a keeper that
+ * failed reads as failed rather than as none; then the positions ready to start (base on main or its pull
+ * request pushed, no live worker holding it, and its own not merged) and
+ * those ready to merge (open and green, its base on main already).
+ */
+export function rolloutStateOf(
+  rollout: readonly RolloutItem[],
+  agents: RolloutAgents,
+): readonly string[] {
+  const states = rollout.map((_, at) =>
+    positionStateOf(agents.builders.filter((builder) => builder.position === at + 1)),
+  );
+  const lines = rollout.map((item, at) => {
+    const state = states[at];
+    return `${at + 1}. ${JSON.stringify(item.title)} · base: ${item.base} · worker: ${workerWord(state?.newest?.status)} · pull request: ${pullRequestWords(state?.published ?? null)}`;
+  });
+  const toStart: number[] = [];
+  const toMerge: number[] = [];
+  rollout.forEach((item, at) => {
+    const state = states[at];
+    const published = state?.published ?? null;
+    if (
+      state?.live !== true &&
+      published?.state !== PULL_REQUEST_STATE.MERGED &&
+      baseBuildable(item.base, states)
+    ) {
+      toStart.push(at + 1);
+    }
+    if (
+      published?.state === PULL_REQUEST_STATE.OPEN &&
+      published.checks === CHECK_SUMMARY.PASSING &&
+      baseMerged(item.base, states)
+    ) {
+      toMerge.push(at + 1);
+    }
+  });
+  return [
+    ...lines,
+    `Stack keeper: ${workerWord(agents.keeper)}`,
+    `Ready to start: ${positionsWords(toStart)}`,
+    `Ready to merge: ${positionsWords(toMerge)}`,
+  ];
+}
+
+/** The plan's rollout agents, each read as its line reads it: the builders in the order started, and the newest keeper; none where the plan has none or the account owns no such plan. */
+export function rolloutWorkersOf(
+  userId: string,
+  planId: string,
+): CodingAgentStoreEffect<RolloutAgents> {
+  return Effect.gen(function* () {
+    // An agent started outside the rollout has no role there, and the keeper holds no position.
+    const held = (yield* listPublishedCodingAgents(userId, [planId])).filter(
+      ({ agent }) => agent.role !== null,
+    );
+    const conversationIds = held.map(({ agent }) => agent.conversationId);
+    // The agents were read under the account's reach, so their turns are read as reached too.
+    const turns = yield* latestTurnsOfReached(conversationIds);
+    const awaiting = yield* awaitingLinesOfReached(conversationIds);
+    const now = yield* Clock.currentTimeMillis;
+    const statusOf = (agent: PublishedCodingAgent["agent"]) =>
+      codingAgentStatusOf(turns.get(agent.conversationId), {
+        createdAt: agent.createdAt,
+        now,
+        lineAwaits: awaiting.has(agent.conversationId),
+      });
+    const builders = held.flatMap(({ agent, published }) =>
+      agent.role !== ROLLOUT_ROLE.BUILDER || agent.position === null
+        ? []
+        : [
+            {
+              position: agent.position,
+              status: statusOf(agent),
+              live: isLiveWorkerTurn(
+                agent,
+                {
+                  turn: turns.get(agent.conversationId),
+                  lineAwaits: awaiting.has(agent.conversationId),
+                },
+                new Date(now),
+              ),
+              published,
+            },
+          ],
+    );
+    // The agents read in the order started, so the newest keeper is the last.
+    const keeper = held.findLast(({ agent }) => agent.role === ROLLOUT_ROLE.KEEPER);
+    return { builders, keeper: keeper === undefined ? undefined : statusOf(keeper.agent) };
   });
 }
