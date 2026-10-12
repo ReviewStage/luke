@@ -652,6 +652,13 @@
       "when": 1791420000000,
       "tag": "0093_inbox_item_user_status_updated",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1791430000000,
+      "tag": "0094_inbox_attachment",
+      "breakpoints": true
     }
   ]
 }

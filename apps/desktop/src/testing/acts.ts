@@ -193,6 +193,13 @@ export const ONE_ACT_OF_EACH_KIND = {
       clientKey: "7f9e2c1d-4b3a-4c5d-9e8f-0a1b2c3d4e5f",
     },
   },
+  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
+    kind: ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT,
+    payload: {
+      itemId: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
+      attachmentId: "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+    },
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     kind: ACT_KIND.VOICE_COMMAND,
     payload: { command: "end-call" },

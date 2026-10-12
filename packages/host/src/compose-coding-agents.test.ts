@@ -12,6 +12,7 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -82,6 +83,8 @@ const KEPT: ProviderKeySummary = {
   status: PROVIDER_KEY_STATUS.VERIFIED,
   statusAt: 1,
 };
+
+const ATTACHMENT_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 const ITEM: InboxItem = {
   id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
@@ -221,6 +224,11 @@ function fakeService() {
         asked.push(`inbox:${planId}:${after}`);
         return { items: [ITEM], cursor: "7" };
       }),
+    inboxAttachment: (itemId, attachmentId) =>
+      Effect.sync(() => {
+        asked.push(`attachment:${itemId}:${attachmentId}`);
+        return { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" };
+      }),
     answerInbox: (itemId, request) =>
       Effect.sync(() => {
         asked.push(
@@ -350,6 +358,13 @@ it.effect("each method asks the service once and answers what it said, whole", (
       { items: [ITEM], cursor: "7" },
     );
     assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ATTACHMENT, {
+        itemId: ITEM.id,
+        attachmentId: ATTACHMENT_ID,
+      }),
+      { contentType: INBOX_IMAGE_TYPE.PNG, base64: "iVBORw0KGgo=" },
+    );
+    assert.deepEqual(
       yield* call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
         itemId: ITEM.id,
         revision: 2,
@@ -387,6 +402,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `stop:${AGENT_ID}`,
       `pull-request:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
+      `attachment:${ITEM.id}:${ATTACHMENT_ID}`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
       `account-inbox:${INBOX_CURSOR_START}`,
     ]);

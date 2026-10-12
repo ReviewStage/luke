@@ -1,5 +1,6 @@
 import { isWireBoolean, isWireNumber, isWireString } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
+import { CODING_AGENT_ATTACHMENT_TYPE, CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./plan-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
@@ -49,9 +50,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * what it cannot draw was written for a newer Luke. Version 1 was the
  * fixed kinds, a choice, an approval, a question, and a task, with one
  * Markdown details field; version 2 is blocks and a response; version 3
- * adds the code block.
+ * adds the code block; version 4 adds the image block.
  */
-export const INBOX_WIRE_VERSION = 3;
+export const INBOX_WIRE_VERSION = 4;
 
 export const INBOX_BOUNDS = {
   /** The most characters an item's key may spell: a short slug the agent chooses. */
@@ -66,6 +67,16 @@ export const INBOX_BOUNDS = {
   MAX_URL_CHARS: 2_000,
   /** The most lines a code block points at: the exact lines that matter, never a file. */
   MAX_CODE_LINES: 60,
+  /** The most characters an image's path in the agent's sandbox may spell. */
+  MAX_PATH_CHARS: 1_024,
+  /** The most characters an image's alt words may spell: what the picture shows, in a sentence or two. */
+  MAX_ALT_CHARS: 300,
+  /**
+   * The most bytes one image may hold: the bound an image already has on a
+   * message to an agent, so a picture is one size in either direction, and
+   * one a screenshot at a screen's own scale fits under.
+   */
+  MAX_IMAGE_BYTES: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
   /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
   MAX_LABEL_CHARS: 160,
   /** The most options a choice or a select may offer: a choice a person makes at a glance. */
@@ -110,7 +121,21 @@ export const INBOX_BLOCK = {
   LINK: "link",
   /** Lines of a file of the agent's repository, as they stood at a commit. */
   CODE: "code",
+  /** A picture the agent took in its sandbox, kept as an attachment of the item's. */
+  IMAGE: "image",
 } as const;
+
+/** The pictures an image block may be, by the media type each is kept and served under; the bytes are sniffed for one of these, never trusted by name. */
+export const INBOX_IMAGE_TYPE = {
+  PNG: CODING_AGENT_ATTACHMENT_TYPE.PNG,
+  JPEG: CODING_AGENT_ATTACHMENT_TYPE.JPEG,
+  WEBP: CODING_AGENT_ATTACHMENT_TYPE.WEBP,
+} as const;
+
+export type InboxImageType = (typeof INBOX_IMAGE_TYPE)[keyof typeof INBOX_IMAGE_TYPE];
+
+/** An image's media type as the wire carries it: one of the three the service keeps. */
+export const inboxImageTypeSchema = EffectSchema.Literals(Object.values(INBOX_IMAGE_TYPE));
 
 /** The responses an item asks for, each answered its own way. */
 export const INBOX_RESPONSE = {
@@ -208,14 +233,14 @@ export const inboxKeySchema = EffectSchema.String.check(
 const WEB_ADDRESS = /^https?:\/\/\S+$/u;
 
 /**
- * One block of an item's context: words in Markdown, a link with its label,
- * or the lines of a file the agent points at, in its repository as
- * `owner/name`, from its first line to its last, at the commit it read
- * them at, so the reference never moves under a later push. Note that a
- * code block carries no line of the file: the desktop reads them from
- * GitHub at that commit, as its File tab reads a file.
+ * The blocks an agent writes as they are kept: words in Markdown, a link
+ * with its label, or the lines of a file the agent points at, in its
+ * repository as `owner/name`, from its first line to its last, at the
+ * commit it read them at, so the reference never moves under a later push.
+ * Note that a code block carries no line of the file: the desktop reads
+ * them from GitHub at that commit, as its File tab reads a file.
  */
-export const inboxBlockSchema = EffectSchema.Union([
+const WORD_BLOCKS = [
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.MARKDOWN),
     text: filledText(INBOX_BOUNDS.MAX_MARKDOWN_CHARS),
@@ -236,6 +261,19 @@ export const inboxBlockSchema = EffectSchema.Union([
     endLine: codeLineSchema,
     sha: commitShaSchema,
   }),
+] as const;
+
+/** What an image block says of its picture: the words that stand for it where it cannot be seen. */
+const imageWords = { alt: filledText(INBOX_BOUNDS.MAX_ALT_CHARS) };
+
+/** One block of an item's context as the service keeps it and the desktop reads it: a word block as the agent wrote it, or an image by the attachment the service keeps it as. */
+export const inboxBlockSchema = EffectSchema.Union([
+  ...WORD_BLOCKS,
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
+    attachmentId: wireUuidSchema,
+    ...imageWords,
+  }),
 ]);
 
 export type InboxBlock = typeof inboxBlockSchema.Type;
@@ -251,8 +289,28 @@ export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "end
   );
 }
 
+/** An image block as an item carries one, naming the attachment the desktop fetches. */
+export type InboxImageBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.IMAGE }>;
+
 /** An item's context: its blocks in order, few. */
 export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(
+  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
+);
+
+/** One block as the agent posts it: the word blocks as they are kept, and an image by the path of its file in the agent's sandbox, which the service reads and keeps. */
+export const inboxPostBlockSchema = EffectSchema.Union([
+  ...WORD_BLOCKS,
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.IMAGE),
+    path: filledText(INBOX_BOUNDS.MAX_PATH_CHARS),
+    ...imageWords,
+  }),
+]);
+
+export type InboxPostBlock = typeof inboxPostBlockSchema.Type;
+
+/** An item's context as the agent posts it: its blocks in order, few. */
+export const inboxPostBlocksSchema = EffectSchema.Array(inboxPostBlockSchema).check(
   EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
 );
 
@@ -319,14 +377,15 @@ export type InboxForm = Extract<InboxResponse, { type: typeof INBOX_RESPONSE.FOR
 
 /**
  * What a post's tool part carries as its input: the item's key, a title,
- * the blocks of context under it, the response it asks for, and whether the
- * agent needs to hear back, which it does unless it says not. The model is
- * shown this schema and eve holds the call to it.
+ * the blocks of context under it, an image among them by its path in the
+ * sandbox, the response it asks for, and whether the agent needs to hear
+ * back, which it does unless it says not. The model is shown this schema
+ * and eve holds the call to it.
  */
 export const inboxPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
   title: filledText(INBOX_BOUNDS.MAX_TITLE_CHARS),
-  blocks: EffectSchema.optionalKey(inboxBlocksSchema),
+  blocks: EffectSchema.optionalKey(inboxPostBlocksSchema),
   response: inboxResponseSchema,
   needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
 });

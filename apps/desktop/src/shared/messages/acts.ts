@@ -18,6 +18,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -29,6 +30,8 @@ import {
   codingAgentInboxAnsweredViewSchema,
   codingAgentInboxAnswerParamsSchema,
   codingAgentInboxAnswerViewSchema,
+  codingAgentInboxAttachmentParamsSchema,
+  codingAgentInboxAttachmentViewSchema,
   codingAgentInboxParamsSchema,
   codingAgentListAnswerViewSchema,
   codingAgentListParamsSchema,
@@ -252,6 +255,8 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** One image of an inbox item, fetched by the host under the account, so the window holds no bearer and no address. */
+  CODING_AGENTS_INBOX_ATTACHMENT: "codingAgents.inboxAttachment",
   VOICE_COMMAND: "voice.command",
   /** The call card's way back: Luke's window brought forward on the call's own plan. */
   CALL_SHOW_PLAN: "call.showPlan",
@@ -752,6 +757,13 @@ export const ACT = {
       isReadable(codingAgentInboxAnsweredViewSchema),
     ),
     refusal: "Could not answer the inbox item on this system.",
+  },
+  [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: {
+    payload: actSchema(codingAgentInboxAttachmentParamsSchema),
+    result: wireResult<CodingAgentInboxAttachmentView>(
+      isReadable(codingAgentInboxAttachmentViewSchema),
+    ),
+    refusal: "Could not read the inbox item's image on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

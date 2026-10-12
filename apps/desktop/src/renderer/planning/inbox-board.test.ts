@@ -7,12 +7,15 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
 } from "@sidecar/hosted/coding-agent-view";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_BLOCK,
   INBOX_CURSOR_START,
   INBOX_FIELD,
+  INBOX_IMAGE_TYPE,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
@@ -136,7 +139,7 @@ const NEWER = Schema.decodeUnknownSync(inboxItemSchema)({
     response: { type: INBOX_RESPONSE.NONE },
   }),
   version: INBOX_WIRE_VERSION + 1,
-  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Before Friday." }, { type: "image" }],
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "Before Friday." }, { type: "table" }],
   response: { type: "schedule" },
 });
 
@@ -191,6 +194,24 @@ function fileDoors(answers: Readonly<Record<string, PlanningFileAnswer[]>> = {})
   return { doors, reads, opened };
 }
 
+const ATTACHMENT = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
+
+/** A one-pixel PNG, as the host hands an image's bytes back. */
+const PIXEL =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+
+/** An item with a screenshot the agent took, asking whether it reads right. */
+const SHOT = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000008",
+  key: "landing",
+  title: "Does the landing page read right?",
+  blocks: [
+    { type: INBOX_BLOCK.MARKDOWN, text: "Rendered at 1280 wide." },
+    { type: INBOX_BLOCK.IMAGE, attachmentId: ATTACHMENT, alt: "The landing page at 1280 wide" },
+  ],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+});
+
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -210,10 +231,12 @@ const opened: string[] = [];
 function service(
   pages: CodingAgentInboxAnswerView[],
   answers: ((sent: CodingAgentInboxAnswerParams) => CodingAgentInboxAnsweredView)[],
+  images: CodingAgentInboxAttachmentView[] = [],
 ) {
   const sent: CodingAgentInboxAnswerParams[] = [];
   const reads: string[] = [];
   const listReads: number[] = [];
+  const imageReads: CodingAgentInboxAttachmentParams[] = [];
   const agents = codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
@@ -230,8 +253,13 @@ function service(
         next === undefined ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : next(params),
       );
     },
+    readInboxImage: (params) => {
+      imageReads.push(params);
+      const next = images.shift();
+      return Promise.resolve(next ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    },
   });
-  return { agents, sent, reads, listReads };
+  return { agents, sent, reads, listReads, imageReads };
 }
 
 /**
@@ -843,5 +871,100 @@ it.effect(
       yield* settle;
       assert.equal(notice(RETRIES.id), null);
       assert.equal(card(page, RETRIES.id).querySelectorAll(".code-line").length, 7);
+    }),
+);
+
+it.effect(
+  "an image block is drawn from the bytes the host fetched, read once per attachment however often the inbox is read again, under the agent's words, and a press opens it larger over the window, outside the recording",
+  () =>
+    Effect.gen(function* () {
+      const { agents, imageReads } = service(
+        [
+          { items: [SHOT], cursor: "1" },
+          { items: [{ ...SHOT, revision: 2, updatedAt: 2_000 }], cursor: "2" },
+        ],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const shot = card(page, SHOT.id);
+      const picture = shot.querySelector<HTMLImageElement>("[data-inbox-image] img");
+      assert.ok(picture, "the picture is drawn");
+      assert.equal(picture.src, `data:${INBOX_IMAGE_TYPE.PNG};base64,${PIXEL}`);
+      assert.equal(picture.alt, "The landing page at 1280 wide");
+      assert.deepEqual(imageReads, [{ itemId: SHOT.id, attachmentId: ATTACHMENT }]);
+      assert.ok(picture.closest(".inbox-board.ph-no-capture"), "the recording leaves it out");
+
+      press(buttonNamed(shot, "Open The landing page at 1280 wide"));
+      const viewer = document.body.querySelector(".attachment-viewer-backdrop.ph-no-capture");
+      assert.ok(viewer, "the viewer opens over the window, outside the recording");
+      assert.equal(
+        viewer.querySelector<HTMLImageElement>("img.attachment-viewer-image")?.src,
+        picture.src,
+      );
+      press(viewer.querySelector("img.attachment-viewer-image"));
+      assert.equal(document.body.querySelector(".attachment-viewer-backdrop"), null);
+    }),
+);
+
+it.effect(
+  "an image inside a settled card is not read until the card is opened, and then once",
+  () =>
+    Effect.gen(function* () {
+      const settled = item({
+        ...SHOT,
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "favicon",
+        status: INBOX_STATUS.ANSWERED,
+        answer: { reply: INBOX_REPLY.APPROVED },
+        updatedAt: 5_000,
+      });
+      const { agents, imageReads } = service(
+        [{ items: [settled, QUEUE], cursor: "1" }],
+        [],
+        [{ contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL }],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.deepEqual(imageReads, [], "a folded picture is not asked for");
+
+      press(page.querySelector("[data-inbox-settled] > summary"));
+      press(card(page, settled.id).querySelector("summary"));
+      yield* settle;
+      assert.deepEqual(imageReads, [{ itemId: settled.id, attachmentId: ATTACHMENT }]);
+      assert.ok(
+        card(page, settled.id).querySelector("[data-inbox-image] img"),
+        "the picture is drawn",
+      );
+    }),
+);
+
+it.effect(
+  "an image whose read did not answer says so with Retry, which reads it again and draws it",
+  () =>
+    Effect.gen(function* () {
+      const { agents, imageReads } = service(
+        [{ items: [SHOT], cursor: "1" }],
+        [],
+        [
+          { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+          { contentType: INBOX_IMAGE_TYPE.PNG, base64: PIXEL },
+        ],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      const shot = card(page, SHOT.id);
+      assert.equal(
+        shot.querySelector("[data-inbox-image-failed]")?.textContent,
+        "The image could not be loaded.Retry",
+      );
+      assert.equal(shot.querySelector("[data-inbox-image] img"), null);
+
+      press(buttonNamed(shot, "Retry"));
+      yield* settle;
+      assert.equal(imageReads.length, 2);
+      assert.ok(shot.querySelector("[data-inbox-image] img"), "the picture is drawn");
+      assert.equal(shot.querySelector("[data-inbox-image-failed]"), null);
     }),
 );

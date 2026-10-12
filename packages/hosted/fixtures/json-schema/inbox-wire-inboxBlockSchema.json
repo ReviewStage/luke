@@ -53,39 +53,24 @@
         "type": {
           "type": "string",
           "enum": [
-            "code"
+            "image"
           ]
         },
-        "repo": {
-          "type": "string",
-          "maxLength": 140
-        },
-        "path": {
+        "attachmentId": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 1024
+          "maxLength": 36
         },
-        "startLine": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "endLine": {
-          "type": "integer",
-          "minimum": 1
-        },
-        "sha": {
+        "alt": {
           "type": "string",
-          "minLength": 40,
-          "maxLength": 40
+          "minLength": 1,
+          "maxLength": 300
         }
       },
       "required": [
         "type",
-        "repo",
-        "path",
-        "startLine",
-        "endLine",
-        "sha"
+        "attachmentId",
+        "alt"
       ],
       "additionalProperties": false
     }

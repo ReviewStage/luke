@@ -2032,3 +2032,35 @@ button.subagent-line:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
+
+/* An image block on the Inbox tab (`inbox-board.tsx`): the picture the
+   agent took, at the card's own reading width and no wider than itself, a
+   press on it opening the attached-file viewer. The spinner's room stands
+   in for it while its bytes are read, so the card does not jump. */
+.inbox-image {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--control-radius);
+  background: var(--section-fill);
+  cursor: zoom-in;
+  overflow: clip;
+}
+
+.inbox-image img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.inbox-image:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.inbox-image-pending {
+  display: flex;
+  align-items: center;
+  min-height: var(--space-24);
+}

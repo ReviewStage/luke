@@ -5,7 +5,7 @@ import {
   type WireBoundaryInput,
 } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
-import { Effect, Result, type Schema } from "effect";
+import { Effect, Encoding, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import {
   type AccountCallEffects,
@@ -24,6 +24,7 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentListAnswer,
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
@@ -54,6 +55,7 @@ import {
   inboxAnsweredSchema,
   inboxAnswerRequestSchema,
   inboxAnswerSchema,
+  inboxImageTypeSchema,
 } from "./inbox-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
@@ -78,6 +80,7 @@ import {
   agentStopPath,
   agentSubagentMessagesPath,
   HOSTED_SERVICE_PATH,
+  inboxAttachmentPath,
   inboxItemPath,
   planAgentsPath,
   planInboxPath,
@@ -171,6 +174,25 @@ function refusedAs(payload: UnparsedWireValue, named: NamedRefusals): Failed {
   const refusal = Result.getOrUndefined(readServiceAnswer(hostedErrorSchema)(payload));
   const failure = refusal === undefined ? undefined : named[refusal];
   return failure === undefined ? UNANSWERED : { failure };
+}
+
+/** An image's bytes read whole and spelled in base64 under the type the service named, or unanswered where the type is none an image block may be or the body could not be read. */
+function readImage(response: Response): Effect.Effect<CodingAgentInboxAttachmentView> {
+  const contentType = Result.getOrUndefined(
+    readEither(inboxImageTypeSchema)(unparsedWire(response.headers.get("content-type"))),
+  );
+  if (contentType === undefined) return Effect.succeed(UNANSWERED);
+  return Effect.promise(() =>
+    response
+      .arrayBuffer()
+      .then(
+        (bytes): CodingAgentInboxAttachmentView => ({
+          contentType,
+          base64: Encoding.encodeBase64(new Uint8Array(bytes)),
+        }),
+      )
+      .catch(() => UNANSWERED),
+  );
 }
 
 /**
@@ -489,6 +511,32 @@ export class HostedCodingAgentClient {
         path: `${HOSTED_SERVICE_PATH.INBOX}?${new URLSearchParams({ after })}`,
       }),
       (answer) => readAnswer(answer, accountInboxAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One image of an inbox item, fetched under the account: its bytes in
+   * base64 under the media type the service kept, where the service answered
+   * with one of the types an image block may be; not found where the item or
+   * the attachment is not the account's; unanswered for anything else,
+   * another media type included, so nothing the window draws is a type it
+   * did not expect.
+   */
+  inboxAttachment(
+    itemId: string,
+    attachmentId: string,
+  ): Effect.Effect<CodingAgentInboxAttachmentView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: inboxAttachmentPath(itemId, attachmentId) }),
+      (answer) => {
+        if (!callAnswered(answer)) return Effect.succeed(UNANSWERED);
+        if (!answer.response.ok) {
+          return Effect.map(jsonOf(answer.response), (body) =>
+            refusedAs(unparsedWire(body), ROW_REFUSALS),
+          );
+        }
+        return readImage(answer.response);
+      },
     );
   }
 

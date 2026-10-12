@@ -10,7 +10,12 @@ import {
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
-import { inboxAnsweredSchema, inboxAnswerRequestSchema, inboxAnswerSchema } from "./inbox-wire.js";
+import {
+  inboxAnsweredSchema,
+  inboxAnswerRequestSchema,
+  inboxAnswerSchema,
+  inboxImageTypeSchema,
+} from "./inbox-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   planTemplateAnswerSchema,
@@ -275,3 +280,26 @@ export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentAccountInboxAnswerView = typeof codingAgentAccountInboxAnswerViewSchema.Type;
+/** One image of an inbox item, as the window asks it: the item and the attachment its block names. */
+export const codingAgentInboxAttachmentParamsSchema = EffectSchema.Struct({
+  itemId: EffectSchema.NonEmptyString,
+  attachmentId: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentInboxAttachmentParams = typeof codingAgentInboxAttachmentParamsSchema.Type;
+
+/**
+ * The image, as the window hears it: its bytes in base64 under the media
+ * type the service sniffed and kept, which the window draws from a `data:`
+ * URL of its own making, or why there is none. The host fetched it under
+ * the account, so the window holds no bearer and no address.
+ */
+export const codingAgentInboxAttachmentViewSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    contentType: inboxImageTypeSchema,
+    base64: EffectSchema.String,
+  }),
+  failed,
+]);
+
+export type CodingAgentInboxAttachmentView = typeof codingAgentInboxAttachmentViewSchema.Type;

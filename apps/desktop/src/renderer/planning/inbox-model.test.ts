@@ -206,10 +206,10 @@ test("an item asking a response this build does not know, one a newer service wr
   const read = Schema.decodeUnknownSync(inboxItemSchema)({
     ...item({ id: "a1b2c3d4-0000-4000-8000-000000000009" }),
     version: INBOX_WIRE_VERSION + 1,
-    blocks: [{ type: "image" }],
+    blocks: [{ type: "table" }],
     response: { type: "schedule" },
   });
-  assert.deepEqual(read.blocks, [{ type: "image" }]);
+  assert.deepEqual(read.blocks, [{ type: "table" }]);
   assert.deepEqual(read.response, { type: "schedule" });
   assert.equal(inboxReply(read, { ...EMPTY_INBOX_DRAFT, note: "Hello" }), undefined);
   assert.equal(inboxReply(read, EMPTY_INBOX_DRAFT, INBOX_REPLY.DONE), undefined);

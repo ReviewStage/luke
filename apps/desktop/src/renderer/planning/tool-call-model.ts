@@ -10,6 +10,7 @@ import {
   INBOX_RESPONSE,
   INBOX_TOOL,
   type InboxPost,
+  type InboxPostBlock,
   inboxPostInputSchema,
 } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -264,8 +265,8 @@ function askLines(response: InboxPost["response"]): readonly string[] {
   }
 }
 
-/** One block of a post as the row's body lists it: Markdown as written, a link as its label and address, and code as its path, lines, and commit. */
-function blockLine(block: NonNullable<InboxPost["blocks"]>[number]): string {
+/** One block of a post as the row's body lists it: Markdown as written, a link as its label and address, code as its path, lines, and commit, and an image as its words and the path it was posted from. */
+function blockLine(block: InboxPostBlock): string {
   switch (block.type) {
     case INBOX_BLOCK.MARKDOWN:
       return block.text;
@@ -273,6 +274,8 @@ function blockLine(block: NonNullable<InboxPost["blocks"]>[number]): string {
       return `${block.label}: ${block.url}`;
     case INBOX_BLOCK.CODE:
       return `${block.path}:${block.startLine}-${block.endLine} at ${shortCommit(block.sha)}`;
+    case INBOX_BLOCK.IMAGE:
+      return `Image: ${block.alt} (${block.path})`;
   }
 }
 

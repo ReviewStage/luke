@@ -201,6 +201,11 @@ export function inboxItemPath(itemId: string): string {
   return `/api/inbox/${encodeURIComponent(itemId)}`;
 }
 
+/** One attachment of an inbox item, an image block's picture, as its bytes under its own media type (GET), served to the item's account alone. */
+export function inboxAttachmentPath(itemId: string, attachmentId: string): string {
+  return `${inboxItemPath(itemId)}/attachments/${encodeURIComponent(attachmentId)}`;
+}
+
 /**
  * One agent's messages: its transcript past a cursor (GET), held open while
  * the agent runs, or, with no cursor, a message sent to it (POST).

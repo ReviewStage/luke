@@ -93,7 +93,14 @@ the context the agent wrote for it as Markdown, links, and references to
 lines of the agent's repository (a path, the lines, and the commit it read
 them at, never the lines themselves), and the way it asks to be answered, with any options or form fields it offers, stored under your
 account and readable by our own operators, like the agent's transcript.
-The agent can change or withdraw its items, and our service keeps each one
+An item may carry a picture the agent took in its sandbox, such as a
+screenshot of a page it rendered from your repository: our service reads the
+file from the sandbox, keeps the image itself, up to 1.5 MB, in our database
+beside the item under your account, and serves it only to Luke signed in as
+you; our operators who can read the item can read its pictures. A picture is
+kept as long as the item names it: the agent posting the item again without
+it deletes it, and so does deleting the plan or your account. The agent can
+change or withdraw its items, and our service keeps each one
 as it last stood. When you answer an item in Luke, your Mac sends your answer
 and any note you write to our service, which stores it with the item and,
 where the agent asked to hear back, hands it to the agent as one of your

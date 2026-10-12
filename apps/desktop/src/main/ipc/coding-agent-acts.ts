@@ -6,6 +6,8 @@ import {
   type CodingAgentInboxAnsweredView,
   type CodingAgentInboxAnswerParams,
   type CodingAgentInboxAnswerView,
+  type CodingAgentInboxAttachmentParams,
+  type CodingAgentInboxAttachmentView,
   type CodingAgentInboxParams,
   type CodingAgentListAnswer,
   type CodingAgentListParams,
@@ -82,6 +84,9 @@ export interface CodingAgentActsDependencies {
     codingAgentInboxAnswer(
       params: CodingAgentInboxAnswerParams,
     ): Effect.Effect<CodingAgentInboxAnsweredView>;
+    codingAgentInboxAttachment(
+      params: CodingAgentInboxAttachmentParams,
+    ): Effect.Effect<CodingAgentInboxAttachmentView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -118,7 +123,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.PLAN_TEMPLATE_WRITE
   | typeof ACT_KIND.DICTATION_TRANSCRIBE
   | typeof ACT_KIND.CODING_AGENTS_INBOX
-  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER;
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ANSWER
+  | typeof ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -240,6 +246,10 @@ export function codingAgentActRows(
     [ACT_KIND.CODING_AGENTS_INBOX_ANSWER]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ANSWER, sender);
       return host.codingAgentInboxAnswer(params);
+    },
+    [ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.CODING_AGENTS_INBOX_ATTACHMENT, sender);
+      return host.codingAgentInboxAttachment(params);
     },
   };
 }
