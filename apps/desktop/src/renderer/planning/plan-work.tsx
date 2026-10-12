@@ -1,3 +1,4 @@
+import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import {
   PLAN_WORK_STATE,
   type PlanWorkState,
@@ -35,6 +36,7 @@ import {
   type WorkCallRow,
   type WorkTurnRow,
   type WorkWorkerBlock,
+  workerChoice,
   workerJob,
   workRowsOf,
 } from "./work-model";
@@ -108,16 +110,21 @@ const OpenSubagentContext = createContext<(callId: string) => void>(() => undefi
 /** Whether a running subagent's row counts how long it has worked: while the Work tab is on screen, as its running turn counts. */
 const CountingContext = createContext(false);
 
+/** The catalog a subagent's row names its model from; empty before the first read lands. */
+const ModelsContext = createContext<readonly CatalogModel[]>([]);
+
 /** A subagent's call as the one button every subagent's row is, which opens its tab, counting while it runs from when its task began. */
 function WorkerLine({ worker }: { worker: WorkWorkerBlock }): React.JSX.Element {
   const open = useContext(OpenSubagentContext);
   const counting = useContext(CountingContext);
+  const models = useContext(ModelsContext);
   const { call, session } = worker;
+  const choice = workerChoice(worker);
   return (
     <TranscriptSubagent
       callId={call.id}
       job={workerJob(call)}
-      pair={undefined}
+      pair={choice === undefined ? undefined : { choice, models }}
       state={toolStateOf(call)}
       startedAt={counting ? session?.startedAt : undefined}
       errorText={undefined}
@@ -355,6 +362,7 @@ export function PlanWork({
   onLoadEarlier,
   onOpenSubagent,
   shown,
+  models,
 }: {
   turns: readonly PlanWorkTurn[] | undefined;
   callLive: boolean;
@@ -366,33 +374,37 @@ export function PlanWork({
   onOpenSubagent: (callId: string) => void;
   /** Whether the tab is on screen, which is when a running turn counts how long it has worked. */
   shown: boolean;
+  /** The catalog as last read, which names each subagent's model; none before the first read lands. */
+  models?: readonly CatalogModel[] | undefined;
 }): React.JSX.Element {
   const rows = workRowsOf(turns, callLive);
   const now = Date.now();
   return (
     <section className="plan-work ph-no-capture" aria-label="Work">
       <OpenSubagentContext.Provider value={onOpenSubagent}>
-        <CountingContext.Provider value={shown}>
-          {rows.length === 0 && earlier === undefined ? (
-            <ConversationEmptyState>
-              <p className="m-0">{WORK_EMPTY_LINE}</p>
-            </ConversationEmptyState>
-          ) : (
-            <Conversation>
-              {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
-              <ConversationContent className="pt-0">
-                {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
-                {earlier === undefined ? null : (
-                  <EarlierWork key={earlier} onLoad={onLoadEarlier} />
-                )}
-                {rows.map((turn) => (
-                  <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
-                ))}
-              </ConversationContent>
-              <ConversationScrollButton />
-            </Conversation>
-          )}
-        </CountingContext.Provider>
+        <ModelsContext.Provider value={models ?? []}>
+          <CountingContext.Provider value={shown}>
+            {rows.length === 0 && earlier === undefined ? (
+              <ConversationEmptyState>
+                <p className="m-0">{WORK_EMPTY_LINE}</p>
+              </ConversationEmptyState>
+            ) : (
+              <Conversation>
+                {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}
+                <ConversationContent className="pt-0">
+                  {/* Drawn afresh for each page, which is how a read that did not land is told apart. */}
+                  {earlier === undefined ? null : (
+                    <EarlierWork key={earlier} onLoad={onLoadEarlier} />
+                  )}
+                  {rows.map((turn) => (
+                    <WorkTurn key={turn.key} turn={turn} now={now} counting={shown} />
+                  ))}
+                </ConversationContent>
+                <ConversationScrollButton />
+              </Conversation>
+            )}
+          </CountingContext.Provider>
+        </ModelsContext.Provider>
       </OpenSubagentContext.Provider>
     </section>
   );

@@ -75,6 +75,7 @@ import {
   type WorkTurnRow,
   type WorkWorkerBlock,
   workerCallIds,
+  workerChoice,
   workerJob,
   workerOf,
   workRowsOf,
@@ -359,7 +360,7 @@ function stripTabs(input: {
             movedAt: session?.endedAt,
             state: stateWords,
           }),
-          choice: undefined,
+          choice: worker && workerChoice(worker),
           transcript: worker && workerTranscript(worker),
         };
       }
@@ -753,6 +754,7 @@ function TabContent({
           onLoadEarlier={work.onLoadEarlier}
           onOpenSubagent={onOpenSubagent}
           shown={shown}
+          models={agents.models}
         />
       );
   }
