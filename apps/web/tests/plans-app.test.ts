@@ -58,6 +58,7 @@ import {
   type SentToGitHub,
 } from "./support/github-app-fake";
 import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import { dispatched } from "./support/platform-landing";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -115,12 +116,22 @@ const openAccounts = (github: FakeGitHub = UNREACHED_GITHUB) =>
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
     ]);
-    const ask = (request: Request) => answer(bearers, github, request);
+    const ask = (request: Request, landedAs?: string) => answer(bearers, github, request, landedAs);
     return { owner, other, ask };
   });
 
-/** The group over the test's own database and the GitHub given, answering one request. */
-const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, request: Request) =>
+/**
+ * The group over the test's own database and the GitHub given, answering
+ * one request: at the route's own path, or, where a route key is named, as
+ * a client sends it, landed by the platform on a function holding the group
+ * under that key.
+ */
+const answer = (
+  bearers: ReadonlyMap<string, string>,
+  github: FakeGitHub,
+  request: Request,
+  landedAs?: string,
+) =>
   Effect.gen(function* () {
     const client = yield* SqlClient.SqlClient;
     // The handler runs on the router's own fiber, so it is handed the test's clock: the account rows hang off it.
@@ -138,7 +149,11 @@ const answer = (bearers: ReadonlyMap<string, string>, github: FakeGitHub, reques
       }).pipe(HttpRouter.provideRequest(services)),
       { disableLogger: true },
     );
-    const response = yield* Effect.promise(() => handler(request));
+    const response = yield* Effect.promise(() =>
+      landedAs === undefined
+        ? handler(request)
+        : dispatched(request, new Map([[landedAs, { fetch: (each) => handler(each) }]])),
+    );
     // SAFETY: the group answers JSON; the test compares it as the wire value it is.
     const body = (yield* Effect.promise(() => response.json())) as WireBoundaryInput;
     yield* Effect.promise(() => dispose());
@@ -1185,6 +1200,37 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         assert.deepEqual(
           yield* window(other, "src/invite.ts", "1", "2"),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+      }),
+  );
+
+  it.effect(
+    "a File tab's read as a desktop sends it, its file named in a `path` query, is answered by the file route itself once the platform lands it on its function",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const sent = request(
+          `/api/plans/${planId}/file?path=src%2Finvite.ts&first=1&last=2`,
+          owner,
+        );
+
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* ask(sent, "plans/file")),
+          {
+            file: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              firstLine: 1,
+              lineCount: 4,
+              lines: ["one", "two"],
+            },
+          },
         );
       }),
   );
