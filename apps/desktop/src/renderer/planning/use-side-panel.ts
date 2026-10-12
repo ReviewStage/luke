@@ -106,6 +106,8 @@ const RETIRED_SIDE_PANEL_TAB = {
 
 type RetiredSidePanelTab = (typeof RETIRED_SIDE_PANEL_TAB)[keyof typeof RETIRED_SIDE_PANEL_TAB];
 
+const RETIRED_TABS: ReadonlySet<unknown> = new Set(Object.values(RETIRED_SIDE_PANEL_TAB));
+
 export type FixedSidePanelTab = (typeof SIDE_PANEL_TAB)[keyof typeof SIDE_PANEL_TAB];
 
 /** One coding agent's tab, named by the agent it shows. */
@@ -783,7 +785,7 @@ function withTabAt(held: HeldState, tab: SidePanelTab, to: number, drawn: DrawnT
 
 /** Whether a kept tab is of a kind this version still has: any but a retired fixed kind. */
 function current<T>(tab: T): tab is Exclude<T, RetiredSidePanelTab> {
-  return typeof tab !== "string" || SIDE_PANEL_TABS.some((kind) => kind === tab);
+  return !RETIRED_TABS.has(tab);
 }
 
 /** Each plan's kept choices without the kinds retired since they were kept. */
