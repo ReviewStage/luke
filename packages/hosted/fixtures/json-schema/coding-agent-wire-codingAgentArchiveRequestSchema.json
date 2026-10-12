@@ -1,0 +1,12 @@
+{
+  "type": "object",
+  "properties": {
+    "archived": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "archived"
+  ],
+  "additionalProperties": false
+}

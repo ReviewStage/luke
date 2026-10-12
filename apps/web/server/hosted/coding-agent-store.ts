@@ -70,9 +70,12 @@ import {
  * the transcript, which is what the tab's context ring draws. The pull
  * request from the agent's branch is written as GitHub answered each read
  * of it (`coder-host/published.ts`), and read back beside the agents of
- * every plan the list names, so the list asks GitHub nothing. Every
- * function is an effect over the ambient `SqlClient` and names no database
- * of its own.
+ * every plan the list names, so the list asks GitHub nothing. An agent
+ * the developer archived is a stamp on its row: every list leaves it out
+ * but the plan's own where it asks for archived agents, and a read of the
+ * agent by its id still finds it, so its transcript and pull request stand.
+ * Every function is an effect over the ambient `SqlClient` and names no
+ * database of its own.
  */
 
 type CodingAgentStoreFailure = SqlError | Schema.SchemaError;
@@ -101,6 +104,8 @@ export interface CodingAgent {
   readonly branch: string | null;
   /** The agent's title as its tab shows it; null falls back to the model's name. */
   readonly title: string | null;
+  /** When the developer archived the agent; null while it is not. */
+  readonly archivedAt: Date | null;
   readonly createdAt: Date;
 }
 
@@ -143,6 +148,7 @@ const CODING_AGENT_COLUMNS = {
   repository: codingAgent.repository,
   branch: codingAgent.branch,
   title: codingAgent.title,
+  archivedAt: codingAgent.archivedAt,
   createdAt: codingAgent.createdAt,
 };
 
@@ -158,6 +164,7 @@ const CodingAgentRowSchema = Schema.Struct({
   repository: Schema.String,
   branch: Schema.NullOr(Schema.String),
   title: Schema.NullOr(Schema.String),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
   createdAt: InstantColumnSchema,
 });
 
@@ -278,6 +285,21 @@ const updateAgentTitle = SqlSchema.findOneOption({
       .returning(CODING_AGENT_COLUMNS),
 });
 
+const updateAgentArchived = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    archivedAt: Schema.NullOr(Schema.Date),
+  }),
+  Result: CodingAgentRowSchema,
+  execute: ({ userId, agentId, archivedAt }) =>
+    db
+      .update(codingAgent)
+      .set({ archivedAt })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
+      .returning(CODING_AGENT_COLUMNS),
+});
+
 const fillAgentTitle = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String, title: Schema.String }),
   Result: IdRowSchema,
@@ -347,13 +369,23 @@ const findAgentContext = SqlSchema.findOneOption({
 });
 
 const findAgentsOfPlan = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+  Request: Schema.Struct({
+    userId: Schema.String,
+    planId: Schema.String,
+    includeArchived: Schema.Boolean,
+  }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, planId }) =>
+  execute: ({ userId, planId, includeArchived }) =>
     db
       .select(CODING_AGENT_COLUMNS)
       .from(codingAgent)
-      .where(and(eq(codingAgent.userId, userId), eq(codingAgent.planId, planId)))
+      .where(
+        and(
+          eq(codingAgent.userId, userId),
+          eq(codingAgent.planId, planId),
+          includeArchived ? undefined : isNull(codingAgent.archivedAt),
+        ),
+      )
       .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
 });
 
@@ -380,7 +412,13 @@ const findAgentsOfPlans = SqlSchema.findAll({
     db
       .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
       .from(codingAgent)
-      .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.planId, [...planIds])))
+      .where(
+        and(
+          eq(codingAgent.userId, userId),
+          inArray(codingAgent.planId, [...planIds]),
+          isNull(codingAgent.archivedAt),
+        ),
+      )
       .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
 });
 
@@ -517,12 +555,13 @@ export function discardCodingAgent(
   );
 }
 
-/** Every agent started on the account's plan, in the order they were started; empty where the account owns no such plan. */
+/** Every agent started on the account's plan, in the order they were started, the archived ones only where `includeArchived` asks; empty where the account owns no such plan. */
 export function listCodingAgents(
   userId: string,
   planId: string,
+  options: { readonly includeArchived?: boolean } = {},
 ): CodingAgentStoreEffect<readonly CodingAgent[]> {
-  return findAgentsOfPlan({ userId, planId });
+  return findAgentsOfPlan({ userId, planId, includeArchived: options.includeArchived ?? false });
 }
 
 /** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
@@ -531,7 +570,7 @@ export interface PublishedCodingAgent {
   readonly published: CodingAgentPullRequest | null;
 }
 
-/** Every agent started on the account's plans named, each with what it published, in the order they were started; a plan another account owns names none. */
+/** Every agent standing on the account's plans named, each with what it published, in the order they were started, an archived one left out; a plan another account owns names none. */
 export function listPublishedCodingAgents(
   userId: string,
   planIds: readonly string[],
@@ -614,6 +653,17 @@ export function renameCodingAgent(
   title: string | null,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
   return updateAgentTitle({ userId, agentId, title });
+}
+
+/** The account's agent archived, stamped now, or brought back; its conversation and what it published are kept either way. Nothing for an agent the account does not own. */
+export function archiveCodingAgent(
+  userId: string,
+  agentId: string,
+  archived: boolean,
+): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    updateAgentArchived({ userId, agentId, archivedAt: archived ? now : null }),
+  );
 }
 
 /** The title written where the agent has none yet, so a name the developer gave stands whatever this carries; answers whether it was written. */

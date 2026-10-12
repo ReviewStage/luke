@@ -36,6 +36,9 @@ import { conversations } from "./storage-schema.js";
  * `published` is the pull request from the agent's branch as GitHub last
  * answered a read of it (`coder-host/published.ts`), null before a read
  * found one; the plan list reads it so the sidebar asks GitHub nothing.
+ * `archived_at` is when the developer put the agent away, which leaves it
+ * out of every list but the one that asks for archived agents, and null
+ * while it stands; its conversation and pull request are kept either way.
  * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
@@ -102,6 +105,8 @@ export const codingAgent = pgTable(
     compactedAt: instant("compacted_at"),
     /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
     published: jsonb("published").$type<CodingAgentPullRequest>(),
+    /** When the developer archived the agent; null while it is not. */
+    archivedAt: instant("archived_at"),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },

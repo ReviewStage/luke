@@ -2,8 +2,11 @@ import {
   base64Chars,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
+  CODING_AGENT_LIST_ARCHIVED,
+  CODING_AGENT_LIST_QUERY,
   CODING_AGENT_STATUS,
   type CodingAgentSummary,
+  codingAgentArchiveRequestSchema,
   codingAgentCallIdSchema,
   codingAgentCursorSchema,
   codingAgentMessageRequestSchema,
@@ -71,6 +74,7 @@ import {
   transcriptPast,
 } from "./hosted/coder-host/transcript.js";
 import {
+  archiveCodingAgent,
   awaitingLinesOf,
   type CodingAgent,
   type CodingAgentLatestTurn,
@@ -141,7 +145,12 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * the agent, the one write of the title that covers whatever stands, and an
  * empty title clears it so the tab falls back to the model's name; the
  * title generated from the agent's first exchange as a turn of its ends
- * lands only where none stands, so a rename is never undone. A Stop
+ * lands only where none stands, so a rename is never undone. The same PATCH
+ * carrying `archived` archives the agent or brings it back: an archive
+ * stops a turn still running first, as a Stop does, and refuses where that
+ * Stop could not reach eve; the list leaves an archived agent out unless
+ * `archived=include` asks for it, while its transcript and what it
+ * published still read by its id. A Stop
  * (`POST /api/agents/{id}/stop`) is eve's cancel
  * of the turn under way, named by eve's own id for it, and the row's stamp;
  * the service's hook stops the sandbox as the cancelled turn ends, and
@@ -164,11 +173,11 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  */
 
 const AGENTS_PATH = {
-  /** GET lists the plan's agents, POST starts one; the rewrite moves the path's plan id into the `id` query. */
+  /** GET lists the plan's agents, the archived ones too where `archived=include` asks; POST starts one; the rewrite moves the path's plan id into the `id` query. */
   OF_PLAN: "/api/plans/agents",
   /** GET reads the agent's transcript past `after`, POST sends the agent a message; the rewrite moves the path's agent id into the `id` query. */
   MESSAGES: "/api/agents/messages",
-  /** PATCH changes the agent's model, effort, and context window, or renames it; the rewrite moves the path's agent id into the `id` query. */
+  /** PATCH changes the agent's model, effort, and context window, renames it, or archives it; the rewrite moves the path's agent id into the `id` query. */
   AGENT: "/api/agents/agent",
   /** POST stops the agent; the rewrite moves the path's agent id into the `id` query. */
   STOP: "/api/agents/stop",
@@ -204,7 +213,7 @@ const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
       INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
   2_048;
 
-/** A change names a model, an effort, and a window, or a title, at most, so a body past this is no change. */
+/** A change names a model, an effort, and a window, a title, or an archive, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;
 
 /** A message is its words, its files, and a key: the bound's characters at JSON's widest escape, the files, and room for the keys around them. */
@@ -402,6 +411,12 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   });
 });
 
+/** Whether a list read asks for the archived agents too; a build from before archiving never does. */
+function listsArchived(request: Request): boolean {
+  const asked = new URL(request.url).searchParams.get(CODING_AGENT_LIST_QUERY.ARCHIVED);
+  return asked === CODING_AGENT_LIST_ARCHIVED.INCLUDE;
+}
+
 /** GET lists the plan's agents with their status; POST starts one. */
 const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -418,7 +433,9 @@ const planAgentsEndpoint = /* @__PURE__ */ Effect.fn("web/planAgentsEndpoint")(f
   }
   const plan = yield* hostedStoreOrUnavailable(readPlan(userId, planId));
   if (Option.isNone(plan)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const agents = yield* hostedStoreOrUnavailable(listCodingAgents(userId, planId));
+  const agents = yield* hostedStoreOrUnavailable(
+    listCodingAgents(userId, planId, { includeArchived: listsArchived(request) }),
+  );
   const standing = yield* standingsOf(
     userId,
     agents.map((agent) => agent.conversationId),
@@ -547,49 +564,6 @@ const subagentMessagesEndpoint = /* @__PURE__ */ Effect.fn("web/agentSubagentMes
   },
 );
 
-/**
- * PATCH changes the agent for what follows, and answers it as it then
- * stands. A body naming a title renames it: the title written whole on the
- * row, or cleared where the title is empty, so the tab falls back to the
- * model's name. A body naming a model and effort, and the standard context
- * window where it is chosen, changes what its next step runs on, a body
- * naming no window putting the agent back on the model's whole one: the choice checked
- * against the catalog as a Start checks its own,
- * written on the row the steps read; the account's default is untouched.
- */
-const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
-  seams: CodingAgentsAppSeams,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.PATCH) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent } = yield* ownedAgent(seams, request);
-  const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
-  const rename = readEither(codingAgentRenameRequestSchema)(body);
-  if (Result.isSuccess(rename)) {
-    const { title } = rename.success;
-    const renamed = yield* hostedStoreOrUnavailable(
-      renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
-    );
-    if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: yield* summaryOf(userId, renamed.value),
-    });
-  }
-  const asked = readEither(modelChoiceSchema)(body);
-  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, asked.success));
-  const changed = yield* hostedStoreOrUnavailable(
-    updateCodingAgentChoice(userId, agent.id, choice),
-  );
-  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-    agent: yield* summaryOf(userId, changed.value),
-  });
-});
-
 /** Whether the turn is one a Stop has something to stop: still running, with eve's id to name, and no Stop on it yet. */
 function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgentLatestTurn & {
   readonly eveTurnId: string;
@@ -602,31 +576,19 @@ function stoppable(turn: CodingAgentLatestTurn | undefined): turn is CodingAgent
   );
 }
 
-/** POST stops the agent: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
-const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function* (
+/** eve's cancel of the agent's turn under way, then the row's stamp; nothing where no turn runs that a Stop has to stop. */
+const stoppedTurn = /* @__PURE__ */ Effect.fnUntraced(function* (
   seams: CodingAgentsAppSeams,
   writer: Effect.Effect<StoreWriter>,
-): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
-  const incoming = yield* HttpServerRequest.HttpServerRequest;
-  if (incoming.method !== HTTP_METHOD.POST) {
-    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
-  }
-  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
-  const { userId, agent, target } = yield* ownedAgent(seams, request);
-  const standing = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId);
-  const turn = standing.turn;
-  const now = yield* Clock.currentTimeMillis;
-  if (!stoppable(turn)) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: codingAgentSummary(agent, standing, now),
-    });
-  }
+  request: Request,
+  userId: string,
+  agent: CodingAgent,
+  target: ConversationTarget,
+): Effect.fn.Return<void, HostedRefusal, AgentsServices> {
+  const turn = (yield* standingsOf(userId, [agent.conversationId]))(agent.conversationId).turn;
+  if (!stoppable(turn)) return;
   const sessionId = yield* hostedStoreOrUnavailable(recordedRuntimeSession(target));
-  if (sessionId === undefined) {
-    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
-      agent: codingAgentSummary(agent, standing, now),
-    });
-  }
+  if (sessionId === undefined) return;
   // The cancel names the turn the row was written for, never the session's turn under way, so a
   // turn that ended between the read above and eve's answer is answered `no_active_turn` and
   // nothing newer is stopped in its place.
@@ -651,8 +613,78 @@ const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function
     Effect.flatMap(writer, (write) => write.requestTurnCancel(target, { turnId: turn.id, at })),
   );
   if (Result.isFailure(stamped)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  const summary = yield* summaryOf(userId, agent);
-  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: summary });
+});
+
+/**
+ * PATCH changes the agent for what follows, and answers it as it then
+ * stands. A body naming a title renames it: the title written whole on the
+ * row, or cleared where the title is empty, so the tab falls back to the
+ * model's name. A body naming a model and effort, and the standard context
+ * window where it is chosen, changes what its next step runs on, a body
+ * naming no window putting the agent back on the model's whole one: the choice checked
+ * against the catalog as a Start checks its own,
+ * written on the row the steps read; the account's default is untouched.
+ * A body naming `archived` archives the agent, stopping a turn still
+ * running first as a Stop does, or brings it back.
+ */
+const changeEndpoint = /* @__PURE__ */ Effect.fn("web/agentChangeEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.PATCH) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  const body = yield* readJsonBodyEffect(MAXIMUM_CHOICE_BODY_BYTES);
+  const rename = readEither(codingAgentRenameRequestSchema)(body);
+  if (Result.isSuccess(rename)) {
+    const { title } = rename.success;
+    const renamed = yield* hostedStoreOrUnavailable(
+      renameCodingAgent(userId, agent.id, title.length === 0 ? null : title),
+    );
+    if (Option.isNone(renamed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(userId, renamed.value),
+    });
+  }
+  const archive = readEither(codingAgentArchiveRequestSchema)(body);
+  if (Result.isSuccess(archive)) {
+    const { archived } = archive.success;
+    // An archived agent works on unseen, so a turn still running is stopped before the stamp.
+    if (archived) yield* stoppedTurn(seams, writer, request, userId, agent, target);
+    const changed = yield* hostedStoreOrUnavailable(archiveCodingAgent(userId, agent.id, archived));
+    if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+      agent: yield* summaryOf(userId, changed.value),
+    });
+  }
+  const asked = readEither(modelChoiceSchema)(body);
+  if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const choice = yield* choiceOrInvalid(acceptedAgentChoice(userId, asked.success));
+  const changed = yield* hostedStoreOrUnavailable(
+    updateCodingAgentChoice(userId, agent.id, choice),
+  );
+  if (Option.isNone(changed)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, {
+    agent: yield* summaryOf(userId, changed.value),
+  });
+});
+
+/** POST stops the agent: eve's cancel of the turn under way, then the row's stamp; an agent with no turn running is answered as it stands. */
+const stopEndpoint = /* @__PURE__ */ Effect.fn("web/agentStopEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+  writer: Effect.Effect<StoreWriter>,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.POST) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const { userId, agent, target } = yield* ownedAgent(seams, request);
+  yield* stoppedTurn(seams, writer, request, userId, agent, target);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { agent: yield* summaryOf(userId, agent) });
 });
 
 /** GET reads what the agent published: its branch and pull request as GitHub holds them, from the instance's kept answers. */
@@ -829,7 +861,11 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.MESSAGES,
           hostedRefusing(messagesEndpoint(seams, writer)),
         ),
-        HttpRouter.add(ANY_METHOD, AGENTS_PATH.AGENT, hostedRefusing(changeEndpoint(seams))),
+        HttpRouter.add(
+          ANY_METHOD,
+          AGENTS_PATH.AGENT,
+          hostedRefusing(changeEndpoint(seams, writer)),
+        ),
         HttpRouter.add(ANY_METHOD, AGENTS_PATH.STOP, hostedRefusing(stopEndpoint(seams, writer))),
         HttpRouter.add(
           ANY_METHOD,
