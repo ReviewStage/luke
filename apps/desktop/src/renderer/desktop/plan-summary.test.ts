@@ -554,6 +554,37 @@ test("collapsing the summary is kept, and the next launch opens on its rail unti
   assert.equal(modeOf(relaunched), "column");
 });
 
+test("the pinned summary's own chevron collapses it to its rail, kept as the button's press is", () => {
+  const page = mount();
+  const collapse = summaryOf(page).querySelector<HTMLElement>('[aria-label="Collapse summary"]');
+  assert.ok(collapse, "the pinned summary draws its chevron");
+  assert.equal(hover(collapse), "Collapse summary");
+
+  act(() => collapse.click());
+
+  assert.equal(modeOf(page), "rail");
+  assert.equal(summaryButton(page).getAttribute("aria-pressed"), "false");
+  quit();
+  assert.equal(modeOf(mount()), "rail");
+});
+
+test("the keys reach the pinned summary's chevron, and keep the focus on its spot as it collapses and pins again", () => {
+  const page = mount();
+  const chevron = summaryOf(page).querySelector<HTMLElement>('[aria-label="Collapse summary"]');
+  assert.ok(chevron, "the pinned summary draws its chevron");
+  act(() => chevron.focus());
+  assert.ok(document.activeElement === chevron, "the chevron takes the focus");
+
+  act(() => chevron.click());
+  assert.equal(modeOf(page), "rail");
+  assert.ok(document.activeElement === chevron, "the rail's chevron keeps the focus");
+  assert.equal(chevron.getAttribute("aria-label"), "Expand summary");
+
+  act(() => chevron.click());
+  assert.equal(modeOf(page), "column");
+  assert.ok(document.activeElement === chevron, "the pinned chevron keeps the focus");
+});
+
 test("a summary unpinned when unpinning hid it opens collapsed to its rail, not hidden", () => {
   window.localStorage.setItem("luke.summary-pinned", "false");
 

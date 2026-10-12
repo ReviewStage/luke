@@ -26,7 +26,9 @@ import type { AddEntry } from "./strip-tabs";
  * side panel open or shut, it stands pinned at the column's right, as
  * Cursor's does: borderless on the column's own ground, the document or the
  * agent's transcript, and the call bar's row under them, centred again in
- * the room it leaves. Collapsed, or where the column has no such room, it is
+ * the room it leaves, with a chevron at its top right, shown while the
+ * pointer or the keys are on it, that collapses it from the very spot the
+ * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
  * chevron that pins it again where it fits and otherwise hangs the whole
  * summary as a card over the rail's own footprint, the rail expanding in
@@ -413,6 +415,41 @@ function SummaryCard({
 }
 
 /**
+ * The summary's own chevron at its top right, the one control of the column
+ * and the rail, so a press on it keeps the focus as the summary turns. On
+ * the rail it expands the summary as the toolbar's button does; pinned it
+ * collapses the summary to the rail as that button does, kept as its press
+ * is, drawn while the pointer or the keys are on the summary, on the very
+ * spot of the rail's own, so the pointer that pinned it collapses it again
+ * without moving.
+ */
+function SummaryChevron({
+  layout,
+  cardId,
+}: {
+  layout: SummaryLayout;
+  cardId: string;
+}): React.JSX.Element {
+  const pinned = layout.mode === SUMMARY_MODE.COLUMN;
+  const label = pinned ? "Collapse summary" : "Expand summary";
+  const hangs = !pinned && !(layout.wide && layout.card === undefined);
+  return (
+    <Tooltip label={label}>
+      <button
+        type="button"
+        className="icon-button plan-summary-chevron"
+        aria-label={label}
+        {...(hangs ? cardControl(layout, cardId) : {})}
+        data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
+        onClick={pinned ? layout.onToggle : layout.onExpand}
+      >
+        {pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+      </button>
+    </Tooltip>
+  );
+}
+
+/**
  * The summary in the plan's column, pinned or as its rail, and the card
  * while it hangs. The rail lists the panel's kinds alone, one glyph after
  * another under its chevron at one even step, since a glyph tells an agent,
@@ -433,30 +470,15 @@ export function PlanSummary({
   return (
     <>
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
-        {layout.mode === SUMMARY_MODE.RAIL ? (
-          <>
-            <Tooltip label="Expand summary">
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="Expand summary"
-                {...(layout.wide && layout.card === undefined ? {} : cardControl(layout, cardId))}
-                data-summary-opener={CARD_FROM.RAIL}
-                onClick={layout.onExpand}
-              >
-                <ChevronsLeftIcon />
-              </button>
-            </Tooltip>
-            {kinds.length === 0 ? null : (
-              <ul className="plan-summary-rows" aria-label={PANELS_SECTION}>
-                {kinds.map((entry) => (
-                  <RailRow key={entry.row.id} entry={entry} />
-                ))}
-              </ul>
-            )}
-          </>
-        ) : (
+        <SummaryChevron layout={layout} cardId={cardId} />
+        {layout.mode === SUMMARY_MODE.COLUMN ? (
           <SummaryList sections={sections} />
+        ) : kinds.length === 0 ? null : (
+          <ul className="plan-summary-rows" aria-label={PANELS_SECTION}>
+            {kinds.map((entry) => (
+              <RailRow key={entry.row.id} entry={entry} />
+            ))}
+          </ul>
         )}
       </aside>
       {layout.card === undefined ? null : (

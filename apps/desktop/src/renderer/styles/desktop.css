@@ -2691,7 +2691,12 @@ body,
    document above it is centred in. */
 .desktop-plan-main {
   --summary-width: 240px;
-  --summary-rail-width: calc(var(--control-height) + 2 * var(--space-8));
+  /* The rail stands its controls a column's inset in from its edges, so at
+     the window's right edge its glyphs stand on one line with the side
+     panel's toggle above it, as far in from that edge, and beside an open
+     panel on one line with the toolbar's last button, as far in from the
+     panel's. */
+  --summary-rail-width: calc(var(--control-height) + 2 * var(--column-inset));
   --summary-room: 0px;
 }
 
@@ -2720,15 +2725,16 @@ body,
 
 /* Pinned, it stands as Cursor's does: no border and no fill of its own, on
    the column's ground, its rows a sidebar's in miniature under quiet
-   headings. */
+   headings, the first of them level with its chevron. */
 .plan-summary {
+  position: relative;
   display: flex;
   box-sizing: border-box;
   width: var(--summary-width);
   flex: none;
   flex-direction: column;
   gap: var(--section-gap);
-  padding: var(--space-16) var(--column-inset);
+  padding: var(--column-inset);
   overflow-y: auto;
   background: var(--desktop-ground);
 }
@@ -2743,7 +2749,6 @@ body,
 
 .plan-summary[data-mode="rail"] {
   width: var(--summary-rail-width);
-  padding: var(--space-8);
 }
 
 /* The toolbar's button is drawn on while the summary is pinned, as it is
@@ -2758,7 +2763,8 @@ body,
    as a menu is, and its chevron, shown while the pointer is on it, stands
    on the very spot of the rail's: as far in from the card's outer edges as
    the rail's padding, less the card's border. Its first line is that
-   chevron's height, so the heading on it stands level with it. */
+   chevron's height, so the heading on it stands level with it, as the
+   pinned summary's does. */
 .plan-summary-card {
   --card-edge: 1px;
   position: absolute;
@@ -2771,7 +2777,7 @@ body,
   max-height: 100%;
   flex-direction: column;
   gap: var(--section-gap);
-  padding: calc(var(--space-8) - var(--card-edge)) var(--menu-inset) var(--space-12);
+  padding: calc(var(--column-inset) - var(--card-edge)) var(--menu-inset) var(--space-12);
   overflow-y: auto;
   border: var(--card-edge) solid var(--hairline);
   border-radius: 12px;
@@ -2782,10 +2788,15 @@ body,
   animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
 }
 
+/* The pinned summary's chevron and the card's stand on the rail's own, the
+   pinned one in from the column's edges as the rail's is and the card's less
+   the card's border, and show while the pointer is on the summary, and the
+   pinned one while the keys are in it too. */
+.plan-summary[data-mode="column"] > .plan-summary-chevron,
 .plan-summary-collapse {
   position: absolute;
-  top: calc(var(--space-8) - var(--card-edge));
-  right: calc(var(--space-8) - var(--card-edge));
+  top: var(--column-inset);
+  right: var(--column-inset);
   opacity: 0;
   transition:
     opacity var(--duration-hover) ease,
@@ -2793,11 +2804,18 @@ body,
     color var(--duration-hover) ease;
 }
 
+.plan-summary-collapse {
+  top: calc(var(--column-inset) - var(--card-edge));
+  right: calc(var(--column-inset) - var(--card-edge));
+}
+
+.plan-summary[data-mode="column"]:is(:hover, :has(:focus-visible)) > .plan-summary-chevron,
 .plan-summary-card:hover .plan-summary-collapse,
 .plan-summary-collapse:focus-visible {
   opacity: 1;
 }
 
+.plan-summary[data-mode="column"] > .plan-summary-section:first-of-type > .plan-summary-heading,
 .plan-summary-card > .plan-summary-section:first-of-type > .plan-summary-heading {
   display: flex;
   min-height: var(--control-height);
@@ -2805,6 +2823,7 @@ body,
   margin-bottom: 0;
 }
 
+.plan-summary[data-mode="column"] > .plan-summary-empty,
 .plan-summary-card > .plan-summary-empty {
   padding-top: var(--space-8);
   padding-right: var(--control-height);
