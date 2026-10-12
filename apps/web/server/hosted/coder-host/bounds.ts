@@ -80,6 +80,8 @@ export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
+  NO_FAST_VERSION:
+    "Not run: Luke cannot run the fast version of the agent's model at its provider. Choose the model with Fast off.",
   ACCOUNT_KEY_UNREADABLE:
     "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
   ACCOUNT_KEY_REFUSED:

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { jsonResponse } from "@sidecar/wire/testing";
+import { generateText } from "ai";
 import { Duration, Option, Redacted, Result, Schema } from "effect";
 import { test } from "vitest";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../server/core";
@@ -124,6 +126,67 @@ test("a provider Luke does not run, an account's key that cannot be read, or no 
       WINDOW,
     ),
     Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE),
+  );
+});
+
+/** What reached Anthropic's API: the request's body and its beta header. */
+const readAnthropicRequest = Schema.decodeUnknownSync(
+  Schema.Struct({
+    model: Schema.String,
+    speed: Schema.optional(Schema.String),
+    output_config: Schema.Struct({ effort: Schema.String }),
+  }),
+);
+
+/** Runs one step of the choice against an Anthropic that answers every request, answering what each request asked for. */
+async function anthropicRequestsOf(model: string) {
+  const requests: { readonly body: unknown; readonly betas: string }[] = [];
+  const fetch: typeof globalThis.fetch = async (_input, init) => {
+    requests.push({
+      body: JSON.parse(String(init?.body)),
+      betas: new Headers(init?.headers).get("anthropic-beta") ?? "",
+    });
+    return jsonResponse({
+      id: "msg_fixture",
+      type: "message",
+      role: "assistant",
+      model: "claude-opus-5-5",
+      content: [{ type: "text", text: "Done." }],
+      stop_reason: "end_turn",
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+  };
+  const selected = coderModel({ model, effort: "high" }, { ...KEYS, fetch }, WINDOW);
+  if (Result.isFailure(selected)) return assert.fail(`no model: ${selected.failure}`);
+  const { providerOptions } = selected.success.modelOptions;
+  await generateText({
+    model: selected.success.model,
+    prompt: "Go.",
+    maxRetries: 0,
+    ...(providerOptions === undefined ? undefined : { providerOptions }),
+  });
+  return requests.map((request) => ({
+    ...readAnthropicRequest(request.body),
+    betas: request.betas,
+  }));
+}
+
+test("a fast version runs at Anthropic as its base model asked for fast speed, with fast mode's beta, never as the gateway's slug", async () => {
+  const [fast] = await anthropicRequestsOf("anthropic/claude-opus-5.5-fast");
+  assert.equal(fast?.model, "claude-opus-5-5");
+  assert.equal(fast?.speed, "fast");
+  assert.equal(fast?.output_config.effort, "high");
+  assert.ok(fast?.betas.split(",").includes("fast-mode-2026-02-01"), fast?.betas);
+  const [standard] = await anthropicRequestsOf("anthropic/claude-opus-5.5");
+  assert.equal(standard?.model, "claude-opus-5-5");
+  assert.equal(standard?.speed, undefined);
+  assert.equal(standard?.betas.includes("fast-mode"), false);
+});
+
+test("a fast version whose provider's fast option Luke cannot confirm is refused in words saying so, never run as the slug", () => {
+  assert.deepEqual(
+    coderModel({ model: "openai/gpt-5.5-fast", effort: "high" }, KEYS, WINDOW),
+    Result.fail(CODER_REFUSAL.NO_FAST_VERSION),
   );
 });
 

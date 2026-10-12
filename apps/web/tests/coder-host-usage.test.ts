@@ -11,6 +11,7 @@ import type { OfferedModel } from "../server/hosted/model-catalog";
  */
 
 const OPUS = "anthropic/claude-opus-5.5";
+const OPUS_FAST = "anthropic/claude-opus-5.5-fast";
 const SOL = "openai/gpt-6.1-sol";
 
 /** Two models with prices, and one the catalog lists without any. */
@@ -25,6 +26,18 @@ const OFFERED: readonly OfferedModel[] = [
       outputUsd: 0.00002,
       cachedInputUsd: 0.0000002,
       cacheWriteUsd: 0.000005,
+    },
+  },
+  {
+    id: OPUS_FAST,
+    name: "Claude Opus 5.5 (Fast)",
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    efforts: ["high"],
+    pricing: {
+      inputUsd: 0.000008,
+      outputUsd: 0.00004,
+      cachedInputUsd: 0.0000004,
+      cacheWriteUsd: 0.00001,
     },
   },
   {
@@ -124,4 +137,18 @@ test("the input a provider wrote to its prompt cache is priced at the cache's wr
     OFFERED,
   );
   assert.equal(usage?.costUsd, 0.00468);
+});
+
+test("a turn on a fast version is priced at the fast version's own catalog prices, never its base model's", () => {
+  // The turn row names the agent's catalog id, the fast slug, though the step ran at the provider as the base model.
+  const tokens = {
+    inputTokens: 1000,
+    outputTokens: 100,
+    cachedInputTokens: 400,
+    cacheWriteTokens: 200,
+    reasoningTokens: 0,
+  };
+  // 400 uncached at $8/M, 400 cached at $0.4/M, 200 written at $10/M, 100 out at $40/M: $0.00936.
+  assert.equal(usageOfTurns([{ model: OPUS_FAST, usage: tokens }], OFFERED)?.costUsd, 0.00936);
+  assert.equal(usageOfTurns([{ model: OPUS, usage: tokens }], OFFERED)?.costUsd, 0.00468);
 });

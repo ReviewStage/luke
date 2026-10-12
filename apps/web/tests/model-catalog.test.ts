@@ -360,16 +360,67 @@ it("a catalog id translates to the provider's own: Anthropic's points become das
   assert.deepEqual(providerModelOf("anthropic/claude-opus-5.5"), {
     provider: MODEL_PROVIDER.ANTHROPIC,
     modelId: "claude-opus-5-5",
+    fast: false,
   });
   assert.deepEqual(providerModelOf("anthropic/claude-sonnet-5"), {
     provider: MODEL_PROVIDER.ANTHROPIC,
     modelId: "claude-sonnet-5",
+    fast: false,
   });
   assert.deepEqual(providerModelOf("openai/gpt-6.1-sol"), {
     provider: MODEL_PROVIDER.OPENAI,
     modelId: "gpt-6.1-sol",
+    fast: false,
   });
   assert.equal(providerModelOf("xai/grok-5"), undefined);
   assert.equal(providerModelOf("claude-opus-5.5"), undefined);
   assert.equal(providerModelOf("anthropic/"), undefined);
 });
+
+it("a fast slug is the gateway's name and no provider's: it translates to its base model with fast on", () => {
+  assert.deepEqual(providerModelOf("anthropic/claude-opus-5.5-fast"), {
+    provider: MODEL_PROVIDER.ANTHROPIC,
+    modelId: "claude-opus-5-5",
+    fast: true,
+  });
+  assert.deepEqual(providerModelOf("openai/gpt-5.5-fast"), {
+    provider: MODEL_PROVIDER.OPENAI,
+    modelId: "gpt-5.5",
+    fast: true,
+  });
+});
+
+it.effect(
+  "an Anthropic model's fast version is offered at its own prices, and an OpenAI one is not, since what it stands for at OpenAI is unconfirmed",
+  () =>
+    Effect.gen(function* () {
+      const reasoning = [{ type: "effort", values: OPUS_EFFORTS }];
+      const { layer } = gateway(() =>
+        jsonResponse({
+          object: "list",
+          data: [
+            entry("anthropic/claude-opus-5.5", "Claude Opus 5.5", { reasoning }),
+            entry("anthropic/claude-opus-5.5-fast", "Claude Opus 5.5 (Fast)", {
+              reasoning,
+              pricing: { input: "0.000008", output: "0.00004" },
+            }),
+            entry("openai/gpt-5.5", "GPT 5.5", { reasoning }),
+            entry("openai/gpt-5.5-fast", "GPT 5.5 (Fast)", { reasoning }),
+          ],
+        }),
+      );
+      const offered = yield* readCatalog.pipe(Effect.provide(layer));
+      assert.deepEqual(
+        offered.map((model) => model.id),
+        ["anthropic/claude-opus-5.5", "anthropic/claude-opus-5.5-fast", "openai/gpt-5.5"],
+      );
+      assert.deepEqual(
+        offered.find((model) => model.id === "anthropic/claude-opus-5.5-fast")?.pricing,
+        { inputUsd: 0.000008, outputUsd: 0.00004 },
+      );
+      assert.deepEqual(
+        validateModelChoice(offered, { model: "openai/gpt-5.5-fast", effort: "high" }),
+        Result.fail(MODEL_CHOICE_REFUSAL.UNKNOWN_MODEL),
+      );
+    }),
+);
