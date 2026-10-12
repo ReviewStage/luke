@@ -2299,6 +2299,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           [{ name: "latin1.txt", mediaType: "text/plain", data: "/w==" }],
           [{ ...png, data: `data:image/png;base64,${png.data}` }],
           [{ ...png, name: "  " }],
+          [{ ...png, name: "two\nlines.png" }],
           [{ ...png, data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES) + 4) }],
           [
             {
@@ -2323,12 +2324,18 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
         assert.deepEqual(eve.sent, []);
 
         const widest = "\u0001".repeat(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS);
+        // The bound is on the bytes together: nine one-byte files each padded apart still fit beside the rest.
         const atBound = [
           {
             name: "x".repeat(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
             mediaType: "application/pdf",
-            data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_PDF_BYTES)),
+            data: "A".repeat(base64Chars(CODING_AGENT_BOUNDS.MAX_PDF_BYTES - 9)),
           },
+          ...Array.from({ length: 9 }, (_, index) => ({
+            name: `byte-${String(index)}.txt`,
+            mediaType: "text/plain",
+            data: "eA==",
+          })),
         ];
         readAnswer(
           codingAgentAnswerSchema,

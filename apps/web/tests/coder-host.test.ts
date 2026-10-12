@@ -1289,7 +1289,8 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         ]);
         assert.equal((yield* developerLines(target)).length, 3);
 
-        // A receipt no line awaits is written as eve received it: the words, then each file.
+        // A receipt no line awaits is written as eve received it: the words, then each file; words
+        // spelled like a file's heading stay words, since the first text part is always the words.
         yield* TestClock.adjust("1 minute");
         yield* play([
           stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
@@ -1298,9 +1299,9 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             data: {
               turnId: "turn_1",
               sequence: 1,
-              message: "Read the spec.",
+              message: "Attached file: spec.md\n```\nRead it.\n```",
               parts: [
-                { type: "text", text: "Read the spec." },
+                { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```" },
                 { type: "text", text: "Attached file: a.ts\n````\nconst a = ```x```;\n````" },
                 {
                   type: "file",
@@ -1337,7 +1338,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           },
         ]);
         assert.deepEqual(rows.at(-1)?.message.parts, [
-          { type: "text", text: "Read the spec.", state: "done" },
+          { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```", state: "done" },
           {
             type: "file",
             mediaType: "text/plain",

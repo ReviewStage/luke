@@ -160,6 +160,15 @@ export function base64Chars(bytes: number): number {
   return 4 * Math.ceil(bytes / 3);
 }
 
+/** The bytes standard padded base64 spells, as an attachment's data carries them. */
+export function base64Bytes(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor(base64.length / 4) * 3 - padding;
+}
+
+/** A file's name on one line, which is how the model reads it, under its heading. */
+const ONE_LINE_PATTERN = /^[^\r\n]*$/u;
+
 /** Standard base64, padded, with no data-URL prefix and no line breaks. */
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
 
@@ -186,7 +195,7 @@ function attachmentIsReadable(attachment: {
 }
 
 /**
- * One file a message carries: its own name, never a path; the type it
+ * One file a message carries: its own name on one line, never a path; the type it
  * travels as; and its bytes in base64, bounded by its type, a text file's
  * spelling UTF-8. Nothing beside it says where on the developer's machine
  * it came from.
@@ -195,6 +204,7 @@ const codingAgentAttachmentSchema = EffectSchema.Struct({
   name: EffectSchema.Trim.check(
     EffectSchema.isNonEmpty(),
     EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+    EffectSchema.isPattern(ONE_LINE_PATTERN),
   ),
   mediaType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
   data: EffectSchema.String.check(
@@ -205,13 +215,13 @@ const codingAgentAttachmentSchema = EffectSchema.Struct({
 
 export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
 
-/** The files of one message: bounded in count, and in bytes together. */
+/** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
 const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
   EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
   EffectSchema.makeFilter(
     (attachments) =>
-      attachments.reduce((sum, attachment) => sum + attachment.data.length, 0) <=
-      base64Chars(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES),
+      attachments.reduce((sum, attachment) => sum + base64Bytes(attachment.data), 0) <=
+      CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
   ),
 );
 

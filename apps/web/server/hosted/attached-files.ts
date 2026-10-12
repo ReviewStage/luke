@@ -152,8 +152,12 @@ function inlinedFileOf(text: string): FileUIPart | undefined {
 /**
  * eve's receipt of a message read back. Its text parts joined are what a
  * line is matched by; an eve that projects no parts is read by its
- * summary, which for words alone is the words. A file staged in the
- * sandbox carries no URL, so its part keeps its name and no bytes.
+ * summary, which for words alone is the words. The first text part is
+ * always words, so words spelled like a file's heading stay words. A file
+ * staged in the sandbox carries no URL, so its part keeps its name and no
+ * bytes; a task's files are never staged, because eve stages against a
+ * sandbox that is up and a coding agent's opens on its first sandbox tool
+ * call, after the opening message was received.
  */
 export function receivedMessage(received: {
   readonly message: string;
@@ -168,7 +172,8 @@ export function receivedMessage(received: {
   for (const part of received.parts) {
     if (part.type === "text") {
       texts.push(part.text);
-      const inlined = inlinedFileOf(part.text);
+      // The first text part is the developer's words however they are spelled; a file follows them.
+      const inlined = texts.length === 1 ? undefined : inlinedFileOf(part.text);
       if (inlined === undefined) words.push(part.text);
       else files.push(inlined);
       continue;
