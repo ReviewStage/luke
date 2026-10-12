@@ -2,7 +2,12 @@
 
 import assert from "node:assert/strict";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import { PLAN_TREE_ENTRY, type Plan, type PlanSummary } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_TREE_ENTRY,
+  type Plan,
+  type PlanSummary,
+  type PlanTreeEntry,
+} from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
   PLAN_WORK_PART,
@@ -108,22 +113,22 @@ const WORK: PlansControl["work"] = {
   ],
 };
 
-/** The open plan's repository listed whole, two files under a folder and one at the root, cut short at the wire's bound or not. */
-function listing(truncated: boolean): PlanningTreeAnswer {
+/** The open plan's repository: two files under a folder, and one at the root. */
+const ENTRIES: readonly PlanTreeEntry[] = [
+  { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
+  { name: "src/invites", kind: PLAN_TREE_ENTRY.FOLDER },
+  { name: "src/invites/accept-invite.ts", kind: PLAN_TREE_ENTRY.FILE },
+  { name: "src/invites/invite-email.tsx", kind: PLAN_TREE_ENTRY.FILE },
+  { name: "README.md", kind: PLAN_TREE_ENTRY.FILE },
+];
+
+/** The repository listed whole, cut short at the wire's bound or not. */
+function listing(
+  truncated: boolean,
+  entries: readonly PlanTreeEntry[] = ENTRIES,
+): PlanningTreeAnswer {
   return {
-    folder: {
-      path: "",
-      repository: "acme/docs",
-      branch: "main",
-      entries: [
-        { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
-        { name: "src/invites", kind: PLAN_TREE_ENTRY.FOLDER },
-        { name: "src/invites/accept-invite.ts", kind: PLAN_TREE_ENTRY.FILE },
-        { name: "src/invites/invite-email.tsx", kind: PLAN_TREE_ENTRY.FILE },
-        { name: "README.md", kind: PLAN_TREE_ENTRY.FILE },
-      ],
-      truncated,
-    },
+    folder: { path: "", repository: "acme/docs", branch: "main", entries, truncated },
   };
 }
 
@@ -174,7 +179,7 @@ interface Asked {
 function mountWindow(
   initialTab: PanelTab,
   overrides: Partial<PlansControl> = {},
-  tree: PlanningTreeAnswer = TREE,
+  readTree: () => Promise<PlanningTreeAnswer> = () => Promise.resolve(TREE),
 ): Asked {
   const asked: Asked = {
     selected: [],
@@ -227,7 +232,7 @@ function mountWindow(
         settings: { rows, onViewChange: (view: SettingsView) => asked.views.push(view) },
         readFiles: (planId: string) => {
           asked.reads.push(planId);
-          return Promise.resolve(tree);
+          return readTree();
         },
       }),
     );
@@ -503,7 +508,7 @@ test("a file chosen over the version history opens with the history put away", a
   assert.deepEqual(asked.browsed, [["README.md", true]]);
 });
 
-test("the repository is read once, the first time a file is searched, and All lists its best files", async () => {
+test("the repository is read the first time a file is searched in an opening, once however many searches follow, and All lists its best files", async () => {
   const asked = mountWindow(PANEL_TAB.PLANS);
   let input = openPalette();
   await settle();
@@ -512,13 +517,40 @@ test("the repository is read once, the first time a file is searched, and All li
   await settle();
   assert.deepEqual(asked.reads, [OPEN.id]);
   assert.ok(headings().includes("Files"));
-  assert.ok(rows().includes("README.md"));
+  assert.ok(rows().includes("README.md"), "a file at the root stands without a folder");
+  search(input, "accept");
+  await settle();
+  assert.deepEqual(asked.reads, [OPEN.id], "the listing is kept for the opening's next search");
+  assert.ok(rows().includes("accept-invite.ts · src/invites"));
   press(input, { key: "Escape" });
   input = openPalette();
   search(input, "accept");
   await settle();
-  assert.deepEqual(asked.reads, [OPEN.id], "the listing is kept for the next search");
-  assert.ok(rows().includes("accept-invite.ts · src/invites"));
+  assert.deepEqual(
+    asked.reads,
+    [OPEN.id, OPEN.id],
+    "the next opening reads the branch as it stands",
+  );
+});
+
+test("a read answering after a later one was asked is not kept, since it may list an older branch", async () => {
+  const answers: ((answer: PlanningTreeAnswer) => void)[] = [];
+  mountWindow(
+    PANEL_TAB.PLANS,
+    {},
+    () => new Promise<PlanningTreeAnswer>((answer) => answers.push(answer)),
+  );
+  let input = openPalette();
+  pressFilter("Files");
+  press(input, { key: "Escape" });
+  input = openPalette();
+  pressFilter("Files");
+  const [older, later] = answers;
+  assert.ok(older && later, "each opening asked for the files");
+  later(listing(false, [{ name: "src/new.ts", kind: PLAN_TREE_ENTRY.FILE }]));
+  older(TREE);
+  await settle();
+  assert.deepEqual(rows(), ["new.ts · src"]);
 });
 
 test("with no plan open the Files filter says so quietly and reads nothing", async () => {
@@ -538,7 +570,7 @@ test("with no plan open the Files filter says so quietly and reads nothing", asy
 });
 
 test("a listing cut short at the wire's bound says the search covers only its first entries", async () => {
-  mountWindow(PANEL_TAB.PLANS, {}, listing(true));
+  mountWindow(PANEL_TAB.PLANS, {}, () => Promise.resolve(listing(true)));
   openPalette();
   pressFilter("Files");
   await settle();
@@ -549,7 +581,9 @@ test("a listing cut short at the wire's bound says the search covers only its fi
 });
 
 test("a read that did not land says so, and the next opening asks again", async () => {
-  const asked = mountWindow(PANEL_TAB.PLANS, {}, { failure: PLAN_CALL_FAILURE.UNANSWERED });
+  const asked = mountWindow(PANEL_TAB.PLANS, {}, () =>
+    Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
+  );
   let input = openPalette();
   pressFilter("Files");
   await settle();

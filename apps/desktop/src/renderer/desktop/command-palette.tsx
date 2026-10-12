@@ -490,6 +490,8 @@ export function CommandPalette({
     setSelected(FIRST_ROW);
   };
   const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
+  // The read of the files asked last, by its count: only its answer is kept.
+  const filesAsk = useRef(0);
   const invoker = useRef<HTMLElement | null>(null);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
@@ -502,8 +504,11 @@ export function CommandPalette({
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
-          // A read that did not land is asked again by the next search.
-          setFiles((was) => (was?.read === FILES_READ.MISSED ? undefined : was));
+          // The files are read afresh by the first search of each opening,
+          // since the branch they are listed on moves, and a read still out
+          // from the last opening is not kept.
+          filesAsk.current += 1;
+          setFiles(undefined);
           setOpen(true);
         }
       : undefined,
@@ -584,16 +589,17 @@ export function CommandPalette({
 
   // Note that the repository is read the first time its files are searched
   // rather than as the palette opens, because most of its uses never ask
-  // for a file, and kept while the plan and its repository stay the same.
+  // for a file, and kept for the opening while the plan and its repository
+  // stay the same. A read that answers after a later one was asked is not
+  // kept, since it may list an older branch than the later one does.
   useEffect(() => {
     if (!filesAsked || planId === undefined || repository === null || held !== undefined) return;
+    filesAsk.current += 1;
+    const ask = filesAsk.current;
     setFiles({ planId, repository, read: FILES_READ.READING });
-    const keep = (read: FilesRead) =>
-      setFiles((was) =>
-        was?.planId === planId && was.repository === repository
-          ? { planId, repository, ...read }
-          : was,
-      );
+    const keep = (read: FilesRead) => {
+      if (filesAsk.current === ask) setFiles({ planId, repository, ...read });
+    };
     readFiles(planId).then(
       (answer) => keep(filesOf(answer)),
       () => keep({ read: FILES_READ.MISSED, notice: FILES_MISSED_LINE }),
