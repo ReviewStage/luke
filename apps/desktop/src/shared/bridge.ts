@@ -276,12 +276,19 @@ export const BRIDGE = {
     kind: "subscribe",
     channel: "app:agent-ended",
     args: noArgs,
-    result: result<{ planId: string; agentId: string; words: string; failed: boolean }>(
+    result: result<{
+      planId: string;
+      agentId: string;
+      words: string;
+      detail: string;
+      failed: boolean;
+    }>(
       (value) =>
         isRecord(value) &&
         isWireString(value.planId) &&
         isWireString(value.agentId) &&
         isWireString(value.words) &&
+        isWireString(value.detail) &&
         isWireBoolean(value.failed),
     ),
   }),

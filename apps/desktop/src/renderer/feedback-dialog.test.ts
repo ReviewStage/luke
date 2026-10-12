@@ -241,7 +241,7 @@ test("Command-Enter sends the words signed with the account, closes the dialog, 
     },
   ]);
   assert.equal(dialog(), null);
-  assert.equal(document.querySelector('[role="status"]')?.textContent, "Thanks — sent");
+  assert.equal(document.querySelector(".toast")?.textContent, "Thanks — sent");
   assert.equal(document.activeElement, opener, "focus goes back to what opened the dialog");
 
   // A delivered note is gone: the next opening starts empty.
@@ -383,7 +383,7 @@ test("a refused send keeps the dialog, the words, and says why", async () => {
   assert.ok(dialog(), "the dialog stays");
   assert.equal(error(), "Feedback is turned off for this build.");
   assert.equal(field().value, "It broke");
-  assert.equal(document.querySelector('[role="status"]'), null, "nothing claims it went");
+  assert.equal(document.querySelector(".toast"), null, "nothing claims it went");
 });
 
 test("each kind keeps its own draft, so a note is sent as the kind it was written as", async () => {

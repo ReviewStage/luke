@@ -214,11 +214,12 @@ export function App(): React.JSX.Element {
     [changeTab],
   );
   // An agent's end said in the toast while the window was focused: its View
-  // goes where the notification's click would.
+  // goes where the notification's click would, and it goes with the agent's
+  // unseen dot.
   useAgentEndToasts((planId, agentId) => {
     changeTab(PANEL_TAB.PLANS);
     showAgent.current(planId, agentId);
-  });
+  }, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({
