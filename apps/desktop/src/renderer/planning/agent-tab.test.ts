@@ -285,7 +285,7 @@ const DELEGATING: CodingAgentMessage = {
   ],
 };
 
-test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, a spinner while the worker runs and a check once it answered; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
+test("a delegation draws as a subagent's row on a line of its own, saying the task and the model with its effort dimmed after it and no mark, the agent's own pair where it chose none, a spinner while the worker runs and no mark once it answered, leading with its harness's mark where the catalog names its model and the robot lit while it runs where it does not; running or finished, the row is one button that opens the worker's tab, with nothing to expand and no button of its own", () => {
   const opened: Parameters<NonNullable<DelegationDoors["onOpen"]>>[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -324,9 +324,18 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
     "the effort dimmed after the model",
   );
   assert.equal(done.querySelector("[data-subagent-pair] .provider-mark"), null, "no mark");
-  assert.ok(done.querySelector('[data-tool-state="output-available"]'));
+  const answered = done.querySelector('[data-tool-state="output-available"]');
+  assert.equal(answered?.getAttribute("aria-label"), "Completed");
+  assert.equal(answered?.childElementCount, 0, "no check drawn");
+  assert.ok(done.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'), "Clawd");
+  assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
-  assert.ok(running.querySelector('[data-tool-state="input-available"]'));
+  assert.ok(running.querySelector('[data-tool-state="input-available"] svg.animate-spin'));
+  assert.equal(
+    running.querySelector("[data-subagent-harness]"),
+    null,
+    "Opus is not in the catalog",
+  );
   assert.ok(running.querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
   for (const row of rows) {
     assert.equal(row.tagName, "BUTTON", "the whole row is the button");
@@ -382,7 +391,7 @@ test("a delegation refused before its worker began says why in red under its row
   const row = container.querySelector<HTMLElement>('[data-subagent-row][data-call-id="call_d3"]');
   assert.ok(row);
   assert.equal(row.tagName, "BUTTON");
-  assert.ok(row.querySelector('[data-tool-state="output-error"]'));
+  assert.ok(row.querySelector('[data-tool-state="output-error"] svg.lucide-x.text-danger'));
   assert.equal(container.querySelector('[role="alert"]')?.textContent, refusal);
 });
 
@@ -439,9 +448,9 @@ test("each row says what the call did and where it stands, and the icon and mark
     /Read <\/span><span[^>]*>\/workspace\/repository\/apps\/web\/server\/routes\/invite\.ts</u,
   );
   assert.match(markup, /Edited <\/span><span[^>]*>apps\/web\/server\/db\/schema\.ts</u);
-  assert.match(markup, /data-tool-state="output-available"[^>]*aria-label="Completed"/u);
-  assert.match(markup, /data-tool-state="input-available"[^>]*aria-label="Running"/u);
-  assert.match(markup, /data-tool-state="output-error"[^>]*aria-label="Failed"/u);
+  assert.match(markup, /data-tool-state="output-available"[^>]*aria-label="Completed"><\/span>/u);
+  assert.match(markup, /data-tool-state="input-available"[^>]*aria-label="Running"><svg/u);
+  assert.match(markup, /data-tool-state="output-error"[^>]*aria-label="Failed"><svg[^>]*lucide-x/u);
   // Every svg drawn on a row is the one size, so nothing shifts as a mark changes.
   const icons = markup.match(/<svg[^>]*class="[^"]*"/gu) ?? [];
   assert.ok(icons.length >= 8);

@@ -60,7 +60,7 @@ export function ReasoningTrigger({
 
 export type ReasoningContentProps = FoldBodyProps;
 
-/** The thinking itself, drawn quieter than the reply it led to, and only once opened. */
+/** The thinking itself, drawn quieter than the reply it led to, only once opened, as plain words set in under the line's, as a call's body is. */
 export function ReasoningContent({
   className,
   children,
@@ -69,7 +69,7 @@ export function ReasoningContent({
   return (
     <FoldBody
       className={cn(
-        "mt-1 mb-1 ml-7 border-l-2 border-border pl-3 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        "mt-1 ml-7 text-muted-foreground [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className,
       )}
       {...props}

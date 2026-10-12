@@ -1202,15 +1202,16 @@ svg.lucide {
   stroke-width: 1.9;
 }
 
-/* A subagent's row, on the Work tab and an agent's tab alike: a boxed line,
-   the whole of it the button that opens the subagent's tab, its hover fill
-   on its own radius and its focus ring the one every button of ours draws.
-   Note that it is written here rather than as utilities, because base.css
-   sets every button's font and colour outside the utilities' layer. */
+/* A subagent's row, on the Work tab and an agent's tab alike: a line drawn
+   as a call's row is (ai-elements/tool.tsx), unboxed, the whole of it the
+   button that opens the subagent's tab, with the same hover fill and the
+   focus ring every button of ours draws. Note that it is written here
+   rather than as utilities, because base.css sets every button's font and
+   colour outside the utilities' layer. */
 .subagent-line {
-  padding: 8px 10px;
-  border: 1px solid var(--hairline);
-  border-radius: 8px;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: 6px;
   background: none;
   color: var(--text-primary);
   font-size: 12.5px;
@@ -1220,7 +1221,7 @@ svg.lucide {
 }
 
 button.subagent-line:hover {
-  background: var(--raised);
+  background: var(--raised-strong);
 }
 
 button.subagent-line:focus-visible {

@@ -1,4 +1,4 @@
-import { CheckIcon, LoaderCircleIcon, XIcon } from "lucide-react";
+import { LoaderCircleIcon, XIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, useState } from "react";
 import { CodeBlock } from "./code-block";
 import {
@@ -17,9 +17,9 @@ import { cn } from "./utils";
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
  * the whole of it opens the call: the tool's icon, what the call did in
- * a few words, and where it stands, a spinner while it runs and a quiet
- * check or a red mark once it has ended, each in the same 16px seat so
- * the row never changes shape as the answer lands. There is no chevron:
+ * a few words, and where it stands, a spinner while it runs and a red
+ * mark if it failed, in a 16px seat that stays, empty, once it has ended
+ * well, so the row never changes shape as the answer lands. There is no chevron:
  * the icon leads, and a hover fill says the line opens. The body under
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
@@ -114,7 +114,11 @@ export function Tool({ className, children, ...props }: ToolProps): ReactNode {
   );
 }
 
-/** Where the call stands, in a 16px seat of its own: a spinner, a quiet check, or a red mark. */
+/**
+ * Where the call stands, in a 16px seat of its own: a spinner, a red mark,
+ * or nothing drawn for a call that ended well, since that is every call's
+ * end and a mark on each says nothing. The seat still says it aloud.
+ */
 export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   return (
     <span
@@ -123,9 +127,7 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
       role="img"
       aria-label={STATE_LABEL[state]}
     >
-      {state === TOOL_STATE.OUTPUT_AVAILABLE ? (
-        <CheckIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-      ) : state === TOOL_STATE.OUTPUT_ERROR ? (
+      {state === TOOL_STATE.OUTPUT_AVAILABLE ? null : state === TOOL_STATE.OUTPUT_ERROR ? (
         <XIcon className="size-4 text-danger" aria-hidden="true" />
       ) : (
         <LoaderCircleIcon

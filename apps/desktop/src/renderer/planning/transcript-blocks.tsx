@@ -38,6 +38,7 @@ import {
   ToolStateMark,
 } from "../ai-elements/tool";
 import { cn } from "../ai-elements/utils";
+import { HarnessMark } from "../provider-marks";
 import { useClipped } from "../use-clipped";
 import { ModelLabel } from "./model-label";
 import {
@@ -60,8 +61,8 @@ import {
  * a tool call as one collapsible row wearing its kind's icon and verb
  * (`turn-rows.ts`) that opens onto its input and its answer, a run of
  * calls folded under one line saying how many, a finished turn's lead
- * folded under what it holds, a subagent's row as one boxed line that
- * opens its tab, and a note between the rows. A
+ * folded under what it holds, a subagent's row as one line like a call's
+ * that opens its tab, and a note between the rows. A
  * tab that drew one of these its own way would be a second transcript
  * style, which is what this file is here to refuse.
  */
@@ -89,13 +90,18 @@ export function TranscriptWords({
   );
 }
 
-/** A model's reasoning, folded under one line until opened, its words as they are. */
+/**
+ * A model's reasoning, folded under one line until opened, its words as they
+ * are but for the blank lines a model leaves around them. Note that it is
+ * trimmed, because the words keep their line breaks and a trailing one would
+ * draw as an empty line under the last.
+ */
 export function TranscriptReasoning({ text }: { text: string }): ReactNode {
   return (
     <Reasoning>
       <ReasoningTrigger />
       <ReasoningContent>
-        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</p>
+        <p className="m-0 whitespace-pre-wrap [overflow-wrap:anywhere]">{text.trim()}</p>
       </ReasoningContent>
     </Reasoning>
   );
@@ -184,16 +190,44 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
 };
 
+/** The subagent's glyph: the mark of the harness its model runs in, or the worker's robot, lit while it runs, where no catalog entry names the model. */
+function SubagentGlyph({
+  pair,
+  running,
+}: {
+  pair: SubagentPair | undefined;
+  running: boolean;
+}): ReactNode {
+  const listed = pair?.models.find((model) => model.id === pair.choice.model);
+  if (listed === undefined) {
+    return (
+      <BotIcon
+        className={cn("size-4 shrink-0", running ? "text-luke" : "text-muted-foreground")}
+        aria-hidden="true"
+      />
+    );
+  }
+  return (
+    <span
+      className="flex size-4 shrink-0 items-center justify-center [&>svg]:size-4"
+      data-subagent-harness={listed.provider}
+    >
+      <HarnessMark provider={listed.provider} />
+    </span>
+  );
+}
+
 /**
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
- * or finished: one boxed line wearing the worker's glyph, lit while it
- * runs, the job, fading where the line cuts it, the model and effort it
- * runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
- * row wears for where it stands. The whole line is the one button that
- * opens the subagent's tab, which is where its steps and its answer are
- * read, so it folds nothing open in place. Where it opens no tab it is the
- * same line, pressed by nothing. A call that failed says why in red under
- * the line, open from the start.
+ * or finished: one line drawn as a call's row is, wearing the mark of the
+ * harness its model runs in (the worker's robot, lit while it runs, where
+ * the model is unknown), the job, fading where the line cuts it, the model
+ * and effort it runs on as every pair is drawn (`model-label.tsx`), and the
+ * mark a call's row wears for where it stands. The whole line is the one
+ * button that opens the subagent's tab, which is where its steps and its
+ * answer are read, so it folds nothing open in place. Where it opens no tab
+ * it is the same line, pressed by nothing. A call that failed says why in
+ * red under the line, open from the start.
  */
 export function TranscriptSubagent({
   callId,
@@ -207,10 +241,7 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <BotIcon
-        className={cn("size-4 shrink-0", running ? "text-luke" : "text-muted-foreground")}
-        aria-hidden="true"
-      />
+      <SubagentGlyph pair={pair} running={running} />
       <span ref={words} className="subagent-job min-w-0 flex-1" data-overflow={String(clipped)}>
         {job}
       </span>
@@ -243,9 +274,9 @@ export function TranscriptSubagent({
   return (
     <div>
       {row}
-      {/* Note that the reason sits under the job, past the line's 1px border, 10px padding, glyph, and gap. */}
+      {/* Note that the reason sits under the job, past the line's 4px padding, glyph, and gap. */}
       <p
-        className="m-0 mt-1 ml-[35px] text-[12.5px] text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
+        className="m-0 mt-1 ml-7 text-[12.5px] text-danger whitespace-pre-wrap [overflow-wrap:anywhere]"
         role="alert"
       >
         {errorText}
