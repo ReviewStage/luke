@@ -6,7 +6,7 @@ set -euo pipefail
 #
 #   scripts/preview-address.sh [--sha COMMIT] [--repo OWNER/NAME]
 #
-# The preview is found the way CI's probe finds it (`apps/web/server/preview-deployment.ts`):
+# The preview is found the way the deployed-shape probe finds it (`apps/web/server/preview-deployment.ts`):
 # through the GitHub deployment record Vercel writes for the head commit, since
 # a branch alias keeps serving the previous build until the new one is
 # promoted. The newest Preview record's newest status is read as one of four

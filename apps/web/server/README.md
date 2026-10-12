@@ -272,12 +272,9 @@ their exact codes besides, because on 2026-09-11 five production deploys
 failed in a row while nothing in CI could see the deployed shape (LUKE-164).
 Behind Deployment Protection it needs one of two doors, the bypass secret
 sent as a header or the OPTIONS allowlist, and names which it relies on.
-CI's Preview probe job (`.github/workflows/preview-probe.yml`) runs it
-against a PR's own preview, found through the head commit's GitHub
-deployment record (`server/preview-deployment.ts`), once the repository
-variable `PREVIEW_PROBE_DOOR` names the door; until then the job does not
-run, since a check that cannot see the deployment would be green over
-nothing. The
+It runs by hand, against an address or a commit's preview found through its
+GitHub deployment record (`server/preview-deployment.ts`); CI does not run
+it, since a PR's preview could take twenty minutes to appear or never come. The
 table is its own file so a `vercel.ts` can one day import it and `vercel.json`
 be deleted (LUKE-183); Vercel evaluates a config module in plain Node and
 bundles only its relative imports, which takes a JSON table and not this
