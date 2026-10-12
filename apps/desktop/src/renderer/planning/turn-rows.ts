@@ -12,7 +12,8 @@
  * moved on, and a finished turn folds everything ahead of its last words
  * into one line saying how much it holds, so it reads as its answer. That
  * fold is the one grouping its calls get: a run of calls is folded once,
- * never a group inside the fold that already holds it.
+ * never a group inside the fold that already holds it. A lead with no call
+ * is not folded: its reasoning and words stand as they did while it moved.
  */
 
 /** The kinds of call a row can be, across both wires. */
@@ -206,7 +207,8 @@ function counted<B>(blocks: readonly Keyed<B>[], read: RowReading<B>): [number, 
  * A turn's blocks as the rows a tab draws, folded the Work tab's way:
  * calls grouped, and, once the turn is done, everything ahead of its last
  * words folded into one line saying what it holds, each call inside it on
- * a row of its own.
+ * a row of its own. A lead without a call has no work to fold away, so it
+ * keeps its rows, its reasoning drawn at the top level as on a moving turn.
  */
 export function turnRows<B>(
   blocks: readonly B[],
@@ -226,6 +228,7 @@ export function turnRows<B>(
   // Note that the lead's calls are not grouped, because the fold already holds them and a group inside it would fold the same run twice.
   const lead = keyed.slice(0, last);
   const [calls, messages] = counted(lead, read);
+  if (calls === 0) return groupedRows(keyed, read, turn.moving, turn.grouped);
   return [
     {
       kind: TURN_ROW.FOLDED,

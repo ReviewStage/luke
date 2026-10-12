@@ -34,6 +34,10 @@ function words(text: string): PlanWorkPart {
   return { type: PLAN_WORK_PART.TEXT, text };
 }
 
+function thought(text: string): PlanWorkPart {
+  return { type: PLAN_WORK_PART.REASONING, text };
+}
+
 function turn(state: PlanWorkState, parts: readonly PlanWorkPart[]): PlanWorkTurn {
   return { turnId: "turn-1", startedAt: 0, state, earlierOmitted: false, parts };
 }
@@ -126,6 +130,50 @@ test("a finished turn's calls ahead of its words are folded once, under the lead
       ],
     ],
     [WORK_BLOCK.TEXT, "Both agents are done."],
+  ]);
+});
+
+test("a finished turn with no call ahead of its last words folds nothing: its thought and words stand at the top level", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.DONE, [
+      thought("They said hello."),
+      words("Hello."),
+      thought("Nothing to look up."),
+      words("What are we building?"),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [
+    [WORK_BLOCK.REASONING, "They said hello."],
+    [WORK_BLOCK.TEXT, "Hello."],
+    [WORK_BLOCK.REASONING, "Nothing to look up."],
+    [WORK_BLOCK.TEXT, "What are we building?"],
+  ]);
+});
+
+test("a finished turn's thought between its calls folds with them under the lead's line", () => {
+  const rows = rowsOf([
+    turn(PLAN_WORK_STATE.DONE, [
+      thought("Find the invites."),
+      call("a", PLAN_WORK_TOOL.REPOSITORY, "ls"),
+      thought("Read the one file."),
+      call("b", PLAN_WORK_TOOL.REPOSITORY, "cat invites.ts"),
+      words("Invites live in one file."),
+    ]),
+  ]);
+
+  assert.deepEqual(scanned(rows), [
+    [
+      TURN_ROW.FOLDED,
+      "2 tool calls",
+      [
+        [WORK_BLOCK.REASONING, "Find the invites."],
+        [WORK_BLOCK.CALL, "ls"],
+        [WORK_BLOCK.REASONING, "Read the one file."],
+        [WORK_BLOCK.CALL, "cat invites.ts"],
+      ],
+    ],
+    [WORK_BLOCK.TEXT, "Invites live in one file."],
   ]);
 });
 
