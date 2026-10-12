@@ -5,7 +5,6 @@ import { it } from "@effect/vitest";
 import { BOARD_ELEMENT_TYPE } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import {
   IDLE_PLANNING_VIEW,
@@ -201,27 +200,24 @@ function undoButton(): HTMLButtonElement {
   return undo;
 }
 
-it.effect(
-  "Copy plan puts a plan that is one document on the clipboard as its name for a title over its text",
-  () =>
-    Effect.gen(function* () {
-      const clipboard = installClipboard();
-      const text =
-        "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire.\n";
-      const planning = {
-        ...OPEN,
-        document: {
-          ...OPEN.document,
-          plan: { ...PLAN, document: { body: text, assumptions: [] } },
-        },
-      };
-      const tab = mount({ shown: true, planning }, {}, yield* registryOnTestClock);
+it.effect("Copy plan puts a plan on the clipboard as its name for a title over its text", () =>
+  Effect.gen(function* () {
+    const clipboard = installClipboard();
+    const text = "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire.\n";
+    const planning = {
+      ...OPEN,
+      document: {
+        ...OPEN.document,
+        plan: { ...PLAN, document: { body: text, assumptions: [] } },
+      },
+    };
+    const tab = mount({ shown: true, planning }, {}, yield* registryOnTestClock);
 
-      act(() => tab.control().copy.onPress());
-      yield* landed;
+    act(() => tab.control().copy.onPress());
+    yield* landed;
 
-      assert.deepEqual(clipboard.copied, [`# Teammate invitations\n\n${text}`]);
-    }),
+    assert.deepEqual(clipboard.copied, [`# Teammate invitations\n\n${text}`]);
+  }),
 );
 
 it.effect(
@@ -230,32 +226,18 @@ it.effect(
     Effect.gen(function* () {
       const clipboard = installClipboard();
       const reviewed = {
-        body: "# Teammate invitations\n\n## Open questions\n\n- Who can withdraw an invite?",
-        assumptions: [
-          { text: "Members and admins can both invite." },
-          { text: "An invite expires after 7 days." },
-        ],
+        body: "## Open questions\n\n- Who can withdraw an invite?\n",
+        assumptions: [],
       };
       const planning = {
         ...OPEN,
-        document: {
-          ...OPEN.document,
-          plan: { ...PLAN, document: reviewed, fields: EMPTY_PLAN_FIELDS },
-        },
+        document: { ...OPEN.document, plan: { ...PLAN, document: reviewed } },
       };
       const tab = mount({ shown: true, planning }, {}, yield* registryOnTestClock);
 
       act(() => tab.control().copy.onPress());
       yield* landed;
-      assert.deepEqual(clipboard.copied, [
-        `${reviewed.body}
-
-## Assumptions
-
-- Members and admins can both invite.
-- An invite expires after 7 days.
-`,
-      ]);
+      assert.deepEqual(clipboard.copied, [`# ${PLAN.name}\n\n${reviewed.body}`]);
       assert.equal(toast(), "Plan copied");
       yield* advance(1_499);
       assert.equal(toast(), "Plan copied");

@@ -1,7 +1,7 @@
 import type { Plan } from "@sidecar/hosted/plan-wire";
 
 /**
- * document-plan.ts -- a synthetic plan that is one document, as a service answers one: its text, no fields.
+ * document-plan.ts -- a synthetic plan, as a service answers one: its text, and no assumptions beside it.
  *
  * The text has no title line, since the plan's name is its own; its
  * assumptions are a section like any other; it opens on a `#` section, and
@@ -21,7 +21,7 @@ export const DOCUMENT_TEXT = [
   "- Links are single use.",
 ].join("\n\n");
 
-/** A plan that is one document, its text as `DOCUMENT_TEXT`, nobody's save on it yet. */
+/** A plan, its text as `DOCUMENT_TEXT`, nobody's save on it yet. */
 export const DOCUMENT_PLAN: Plan = {
   id: "5d8e2a61-7c3b-4f0e-9b1a-2c6d4e8f0a13",
   name: DOCUMENT_NAME,

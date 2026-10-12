@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type PlanLastEdit, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
-import { DOCUMENT_NAME, DOCUMENT_TEXT } from "#testing/document-plan";
+import { DOCUMENT_TEXT } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
   authorName,
@@ -35,12 +34,9 @@ function line(overrides: Partial<PlanRevisionLine> = {}): PlanRevisionLine {
   };
 }
 
-/** A plan's document with the body's sections given after its title. */
-function documentOf(sections: readonly string[], assumptions: readonly string[] = []) {
-  return {
-    body: ["# Teammate invitations", ...sections].join("\n\n"),
-    assumptions: assumptions.map((text) => ({ text })),
-  };
+/** A revision's document, as the service answers one: its text of these sections, no list. */
+function documentOf(sections: readonly string[]) {
+  return { body: `${sections.join("\n\n")}\n`, assumptions: [] };
 }
 
 /** The words a unit marks as one kind, in order. */
@@ -177,11 +173,11 @@ test("a version against the one before it marks the words written in and struck 
   assert.ok(diff.changed);
   assert.deepEqual(
     diff.units.map((unit) => unit.change),
-    [VERSION_CHANGE.SAME, VERSION_CHANGE.CHANGED, VERSION_CHANGE.SAME],
+    [VERSION_CHANGE.CHANGED, VERSION_CHANGE.SAME],
   );
   assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), ["Only admins"]);
   assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), ["Any member"]);
-  assert.equal(diff.units[1]?.words, "## Goal\n\nOnly adminsAny member can invite.");
+  assert.equal(diff.units[0]?.words, "## Goal\n\nOnly adminsAny member can invite.");
 });
 
 test("a section struck and another written in its place read as one unit changed, its words marked", () => {
@@ -199,7 +195,6 @@ test("a section struck and another written in its place read as one unit changed
   assert.deepEqual(
     diff.units.map((unit) => [unit.key, unit.change]),
     [
-      ["Teammate invitations", VERSION_CHANGE.SAME],
       ["Context", VERSION_CHANGE.SAME],
       ["Plan of attack", VERSION_CHANGE.CHANGED],
     ],
@@ -216,60 +211,34 @@ test("a unit struck with nothing written in its place is drawn struck whole, and
 
   assert.deepEqual(
     versionDiff(before, after).units.map((unit) => unit.change),
-    [VERSION_CHANGE.SAME, VERSION_CHANGE.SAME, VERSION_CHANGE.REMOVED],
+    [VERSION_CHANGE.SAME, VERSION_CHANGE.REMOVED],
   );
   assert.deepEqual(
     versionDiff(after, before).units.map((unit) => unit.change),
-    [VERSION_CHANGE.SAME, VERSION_CHANGE.SAME, VERSION_CHANGE.ADDED],
-  );
-});
-
-test("the assumptions are compared as a list, a reworded one struck and written again", () => {
-  const before = documentOf([], ["Invites reuse memberships.", "Admins approve invites."]);
-  const after = documentOf([], ["Invites create memberships.", "Admins approve invites."]);
-
-  assert.deepEqual(
-    versionDiff(before, after).assumptions.map((assumption) => [
-      assumption.text,
-      assumption.change,
-    ]),
-    [
-      ["Invites reuse memberships.", VERSION_CHANGE.REMOVED],
-      ["Invites create memberships.", VERSION_CHANGE.ADDED],
-      ["Admins approve invites.", VERSION_CHANGE.SAME],
-    ],
+    [VERSION_CHANGE.SAME, VERSION_CHANGE.ADDED],
   );
 });
 
 test("the first version is drawn as it is against nothing, and a version like its base says it changed nothing", () => {
-  const document = documentOf(["## Goal\n\nInvite by email."], ["Invites expire."]);
+  const document = documentOf(["## Goal\n\nInvite by email."]);
 
   const first = versionDiff(null, document);
   const same = versionDiff(document, document);
 
   assert.equal(first.changed, false);
   assert.ok(first.units.every((unit) => unit.change === VERSION_CHANGE.SAME));
-  assert.deepEqual(
-    first.assumptions.map((assumption) => assumption.change),
-    [VERSION_CHANGE.SAME],
-  );
   assert.equal(same.changed, false);
 });
 
-/** A revision of a plan that is one document, as the service answers one: its text, no list. */
-function textOf(text: string) {
-  return { body: `${text}\n`, assumptions: [] };
-}
-
-test("a revision of a plan that is one document is compared by section under its name, with no list beside it", () => {
-  const before = textOf(DOCUMENT_TEXT);
-  const after = textOf(
+test("a revision is compared by section, its assumptions among them, and a heading inside a fence cuts nothing", () => {
+  const before = documentOf([DOCUMENT_TEXT]);
+  const after = documentOf([
     DOCUMENT_TEXT.replace("Invites land by email.", "Invites land by email or by link.").concat(
       "\n\n# Rollout\n\nBehind a flag.",
     ),
-  );
+  ]);
 
-  const diff = versionDiff(before, after, DOCUMENT_NAME);
+  const diff = versionDiff(before, after);
 
   assert.deepEqual(
     diff.units.map((unit) => [unit.key, unit.change]),
@@ -282,86 +251,8 @@ test("a revision of a plan that is one document is compared by section under its
     ],
   );
   assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [" or by link"]);
-  assert.deepEqual(diff.assumptions, []);
   assert.ok(diff.changed);
 });
-
-test("a plan's first revision as one document, after its revisions of the template's fields, reads as what each draws", () => {
-  const fields = {
-    ...EMPTY_PLAN_FIELDS,
-    context: "Only an admin can add a member today.",
-    goal: "Invites land by email.",
-  };
-  const before = {
-    body: planBody({ name: DOCUMENT_NAME }, fields),
-    assumptions: [{ text: "Links are single use." }],
-  };
-  const after = textOf(
-    [
-      "## Context\n\nOnly an admin can add a member today.",
-      "## Goal\n\nInvites land by email or by link.",
-      "## Approach",
-      "## Interfaces",
-      "## Hard parts",
-      "## Not doing",
-      "## Testing",
-      "## Open questions",
-      "## Assumptions\n\n- Links are single use.",
-    ].join("\n\n"),
-  );
-
-  const diff = versionDiff(before, after, DOCUMENT_NAME);
-
-  assert.deepEqual(
-    diff.units.filter((unit) => unit.change !== VERSION_CHANGE.SAME).map((unit) => unit.key),
-    ["Goal"],
-    "the title line, the list, and the placeholders are drawn as the document draws them",
-  );
-  assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [" or by link"]);
-  assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), []);
-  assert.ok(diff.units.every((unit) => !unit.words.includes("_Unanswered_")));
-});
-
-test("a document's own first section named as the plan is drawn and compared as a section, not taken for the fields' title", () => {
-  const before = textOf(`# ${DOCUMENT_NAME}\n\nRoll out gradually.\n\n## Goal\n\nShip safely.`);
-  const after = textOf(`# ${DOCUMENT_NAME}\n\nRoll out by team.\n\n## Goal\n\nShip safely.`);
-
-  const diff = versionDiff(before, after, DOCUMENT_NAME);
-
-  assert.deepEqual(
-    diff.units.map((unit) => [unit.key, unit.change]),
-    [
-      [DOCUMENT_NAME, VERSION_CHANGE.CHANGED],
-      ["Goal", VERSION_CHANGE.SAME],
-    ],
-  );
-  assert.deepEqual(
-    versionDiff(null, textOf(`# ${DOCUMENT_NAME}\n\n## Goal`), DOCUMENT_NAME).units.map(
-      (unit) => unit.key,
-    ),
-    [DOCUMENT_NAME, "Goal"],
-    "a title-shaped line alone over a document's own sections stays the document's",
-  );
-});
-
-test("a revision of the template's fields with no assumptions is still drawn with its title as the title and an empty Assumptions section", () => {
-  const before = { body: planBody({ name: DOCUMENT_NAME }, EMPTY_PLAN_FIELDS), assumptions: [] };
-
-  const keys = versionDiff(null, before, DOCUMENT_NAME).units.map((unit) => unit.key);
-
-  assert.deepEqual(keys, [
-    "Context",
-    "Goal",
-    "Approach",
-    "Interfaces",
-    "Hard parts",
-    "Not doing",
-    "Testing",
-    "Open questions",
-    "Assumptions",
-  ]);
-});
-
 test("a revision's changed sections are the units its diff marks, in reading order, and the plan's first revision wrote every one", () => {
   const before = {
     body: "## Goal\n\nOnly admins.\n\n## Risks\n\nSpam.\n\n## Notes\n\nNone.",
@@ -372,13 +263,13 @@ test("a revision's changed sections are the units its diff marks, in reading ord
     assumptions: [],
   };
 
-  assert.deepEqual(changedSections(versionDiff(before, after, "Invites"), false), [
+  assert.deepEqual(changedSections(versionDiff(before, after), false), [
     { unit: 0, heading: "Goal", change: VERSION_CHANGE.CHANGED },
     { unit: 1, heading: "Risks", change: VERSION_CHANGE.REMOVED },
     { unit: 3, heading: "Decisions", change: VERSION_CHANGE.ADDED },
   ]);
   assert.deepEqual(
-    changedSections(versionDiff(null, after, "Invites"), true).map((section) => section.change),
+    changedSections(versionDiff(null, after), true).map((section) => section.change),
     [VERSION_CHANGE.ADDED, VERSION_CHANGE.ADDED, VERSION_CHANGE.ADDED],
   );
 });
@@ -390,20 +281,6 @@ test("only a revision of several changes opens its sections: not one change, a r
   assert.equal(
     opensSections(line({ lastEdit: { actor: PLAN_ACTOR.EARLIER, at: NOW, duringCall: false } })),
     false,
-  );
-});
-
-test("a plan of the template's fields lists its assumptions as one section where they changed, and its first revision lists no title line", () => {
-  const before = documentOf(["## Goal\n\nOnly admins."], ["Invites reuse memberships."]);
-  const after = documentOf(["## Goal\n\nOnly admins."], ["Invites create memberships."]);
-  const diff = versionDiff(before, after);
-
-  assert.deepEqual(changedSections(diff, false), [
-    { unit: diff.units.length, heading: "Assumptions", change: VERSION_CHANGE.CHANGED },
-  ]);
-  assert.deepEqual(
-    changedSections(versionDiff(null, after), true).map((section) => section.heading),
-    ["Goal", "Assumptions"],
   );
 });
 

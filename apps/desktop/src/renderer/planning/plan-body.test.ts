@@ -1,27 +1,14 @@
 import assert from "node:assert/strict";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { test } from "vitest";
 import { DOCUMENT_PLAN } from "#testing/document-plan";
 import { agoText, editedLine, PlanBody } from "./plan-body";
-import { NO_ASSUMPTIONS_LINE } from "./planning-model";
 
 const PLAN: Plan = {
-  id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
-  name: "Teammate invitations",
-  createdAt: 1,
-  updatedAt: 2,
-  repository: null,
-  document: {
-    body: "# Teammate invitations\n\n## Goal\nInvite a teammate by email.",
-    assumptions: [
-      { text: "Members and admins can both invite." },
-      { text: "An invite expires after 7 days." },
-    ],
-  },
-  fields: { ...EMPTY_PLAN_FIELDS, goal: "Invite a teammate by email." },
+  ...DOCUMENT_PLAN,
+  document: { body: "## Goal\nInvite a teammate by email.", assumptions: [] },
 };
 
 function bodyMarkup(plan: Plan): string {
@@ -35,52 +22,11 @@ test("the saved body is drawn as Markdown", () => {
   assert.match(markup, /Invite a teammate by email\./u);
 });
 
-test("each assumption is a list item holding its text and nothing to click", () => {
-  const markup = bodyMarkup(PLAN);
-
-  const rows = markup.match(/<li class="plan-assumption">[\s\S]*?<\/li>/gu) ?? [];
-  assert.deepEqual(
-    rows,
-    PLAN.document.assumptions.map(({ text }) => `<li class="plan-assumption">${text}</li>`),
-  );
-  assert.doesNotMatch(markup, /type="checkbox"|Confirmed/u);
-});
-
 test("the document offers no way to write, confirm, or approve anything", () => {
   const markup = bodyMarkup(PLAN);
 
   assert.doesNotMatch(markup, /<textarea|contenteditable|type="text"|<button/u);
   assert.doesNotMatch(markup, /Approve|Version|History|Ready/u);
-});
-
-test("a new plan draws its whole template unanswered, and an assumptions section that says none is recorded", () => {
-  const body = planBody(PLAN, EMPTY_PLAN_FIELDS);
-  const markup = bodyMarkup({ ...PLAN, document: { body, assumptions: [] } });
-
-  const sections = [
-    ...markup.matchAll(/<p class="markdown-heading" data-level="2">([^<]*)<\/p>/gu),
-  ];
-  assert.deepEqual(
-    sections.map((match) => match[1]),
-    [
-      "Context",
-      "Goal",
-      "Approach",
-      "Interfaces",
-      "Hard parts",
-      "Not doing",
-      "Testing",
-      "Open questions",
-    ],
-  );
-  assert.match(markup, /<em>Unanswered<\/em>/u);
-  assert.match(
-    markup,
-    new RegExp(
-      `<h2 class="plan-assumptions-heading">Assumptions</h2><p class="plan-assumptions-none">${NO_ASSUMPTIONS_LINE}</p>`,
-      "u",
-    ),
-  );
 });
 
 test("a plan says who last wrote it above the document; one nobody has written says nothing", () => {
@@ -143,8 +89,11 @@ test("how long ago a save was reads in the shortest words", () => {
   assert.equal(agoText(now - 5 * 24 * 60 * 60_000, now), "5d ago");
 });
 
-test("a plan that is one document draws its name as the title over its text, and no section after it", () => {
-  const markup = bodyMarkup(DOCUMENT_PLAN);
+test("a plan draws its name as the title over its text, and no section after it, even from a service that sends assumptions", () => {
+  const markup = bodyMarkup({
+    ...DOCUMENT_PLAN,
+    document: { ...DOCUMENT_PLAN.document, assumptions: [{ text: "Invites expire." }] },
+  });
 
   assert.match(
     markup,
@@ -165,10 +114,10 @@ test("a plan that is one document draws its name as the title over its text, and
   );
   assert.match(markup, /## Not a section/u, "a heading inside a fence is drawn as code");
   assert.match(markup, /<li>Links are single use\.<\/li>/u);
-  assert.doesNotMatch(markup, /plan-assumptions|plan-assumption"|None recorded/u);
+  assert.doesNotMatch(markup, /Invites expire|None recorded/u);
 });
 
-test("a plan that is one document offers no editor, no section to add, and no placeholder, even with an edit door", () => {
+test("an empty plan draws its title alone, with no editor, no section to add, and no placeholder, even with an edit door", () => {
   const markup = renderToStaticMarkup(
     createElement(PlanBody, {
       plan: { ...DOCUMENT_PLAN, document: { body: "", assumptions: [] } },
@@ -177,7 +126,7 @@ test("a plan that is one document offers no editor, no section to add, and no pl
     }),
   );
 
-  assert.doesNotMatch(markup, /<button|<textarea|plan-unit-edit|plan-add-sections/u);
+  assert.doesNotMatch(markup, /<button|<textarea/u);
   assert.doesNotMatch(markup, /Unanswered|None recorded/u);
   assert.match(markup, /data-level="1">Teammate invitations</u);
 });

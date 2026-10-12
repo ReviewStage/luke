@@ -8,12 +8,10 @@ import {
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
 import { CODING_AGENT_STATUS, type CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
-import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   type Plan,
   type PlanDocument,
-  type PlanFields,
   type PlanRevisionLine,
 } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
@@ -62,35 +60,35 @@ const INVITE_AGENT: CodingAgentSummary = {
 /** The instant the test clock stands at, which the rows count back from. */
 const NOW = 0;
 
-/** A plan's document with the body's sections given after its title. */
-function documentOf(
-  sections: readonly string[],
-  assumptions: readonly string[] = [],
-): PlanDocument {
-  return {
-    body: ["# Teammate invitations", ...sections].join("\n\n"),
-    assumptions: assumptions.map((text) => ({ text })),
-  };
+/** A plan's document as the service answers one: its text of these sections, its assumptions among them. */
+function documentOf(sections: readonly string[]): PlanDocument {
+  return { body: `${sections.join("\n\n")}\n`, assumptions: [] };
 }
 
 /** The plan's three versions, oldest first: Luke's first draft, an agent's, and Luke's again on a call. */
-const FIRST = documentOf(["## Goal\n\nOnly admins can invite."], ["Invites reuse memberships."]);
-const LATEST = documentOf(
-  ["## Goal\n\nAny member can invite.", "## Decisions\n\nInvites expire."],
-  ["Invites create memberships."],
-);
+const FIRST = documentOf([
+  "## Goal\n\nOnly admins can invite.",
+  "## Assumptions\n\n- Invites reuse memberships.",
+]);
+const LATEST = documentOf([
+  "## Goal\n\nAny member can invite.",
+  "## Decisions\n\nInvites expire.",
+  "## Assumptions\n\n- Invites create memberships.",
+]);
 const VERSIONS: readonly PlanDocument[] = [
   FIRST,
-  documentOf(["## Goal\n\nAny member can invite."], ["Invites reuse memberships."]),
+  documentOf([
+    "## Goal\n\nAny member can invite.",
+    "## Assumptions\n\n- Invites reuse memberships.",
+  ]),
   LATEST,
 ];
 
 /**
  * The plan's service, holding its history and its document, which a restore
- * puts a version back into: `versions` oldest first, of a plan kept as the
- * template's fields, or of one that is one document where `oneDocument`.
+ * puts a version back into: `versions` oldest first.
  */
-function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS, oneDocument = false) {
+function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS) {
   const lines: PlanRevisionLine[] = [
     {
       seq: 3,
@@ -124,7 +122,6 @@ function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS, on
   const held: (() => void)[] = [];
   const service = {
     current: versions.at(-1) ?? LATEST,
-    fields: oneDocument ? undefined : EMPTY_PLAN_FIELDS,
     refusing: false,
     /** Whether main refuses every read, as an act it could not carry. */
     unreachable: false,
@@ -178,7 +175,7 @@ let saved: ((at: number) => void) | undefined;
 const shownSources: { planId: string; source: RevisionSource }[] = [];
 
 /** The plan as the window draws it, its document as the service holds it now, archived where asked. */
-function planOf(document: PlanDocument, fields: PlanFields | undefined, archived: boolean): Plan {
+function planOf(document: PlanDocument, archived: boolean): Plan {
   return {
     id: PLAN_ID,
     name: "Teammate invitations",
@@ -186,7 +183,6 @@ function planOf(document: PlanDocument, fields: PlanFields | undefined, archived
     updatedAt: 0,
     repository: null,
     document,
-    ...(fields === undefined ? undefined : { fields }),
     ...(archived ? { archivedAt: 0 } : undefined),
   };
 }
@@ -227,7 +223,7 @@ function mount(
       activePlanId: PLAN_ID,
       region: {
         kind: DOCUMENT_REGION.READY,
-        plan: planOf(service.current, service.fields, archivedNow),
+        plan: planOf(service.current, archivedNow),
       },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
       agents: codingAgentsControl({ agents: [INVITE_AGENT] }),
@@ -393,18 +389,21 @@ it.effect(
 );
 
 it.effect(
-  "it opens on the plan as it stands, with what its last revision changed marked and nothing to restore",
+  "it opens on the plan as it stands under its name, with what its last revision changed marked by section and nothing to restore",
   () =>
     Effect.gen(function* () {
       const page = yield* mount(fakeService(), yield* registryOnTestClock);
 
       assert.equal(chosen(page), "Luke");
+      assert.equal(
+        page.querySelector(".version-page .plan-body > .plan-title")?.textContent,
+        "Teammate invitations",
+      );
       assert.equal(page.querySelector(".version-page .version-tag"), null);
       assert.equal(restoreUnavailable(page), true);
-      assert.deepEqual(marked(page, ".version-added"), [
-        "Decisions\nInvites expire.",
-        "Invites create memberships.",
-      ]);
+      assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
+      assert.deepEqual(marked(page, "del"), ["reuse"]);
+      assert.deepEqual(marked(page, "ins"), ["create"]);
     }),
 );
 
@@ -452,50 +451,8 @@ it.effect(
 
       yield* press(page, "Luke2h2 changes");
       assert.equal(chosen(page), "Luke");
-      assert.deepEqual(marked(page, "del"), []);
-      assert.deepEqual(marked(page, ".version-added"), [
-        "Decisions\nInvites expire.",
-        "Invites create memberships.",
-      ]);
-    }),
-);
-
-/** A plan's versions as one document: its text alone, its assumptions a section of it. */
-function textOf(sections: readonly string[]): PlanDocument {
-  return { body: `${sections.join("\n\n")}\n`, assumptions: [] };
-}
-
-it.effect(
-  "a plan that is one document draws each version under its name, by section, with no list after it, and its first version against the fields before it by what each draws",
-  () =>
-    Effect.gen(function* () {
-      const versions = [
-        FIRST,
-        textOf([
-          "## Goal\n\nAny member can invite.",
-          "## Assumptions\n\n- Invites reuse memberships.",
-        ]),
-        textOf([
-          "## Goal\n\nAny member can invite.",
-          "# Decisions\n\nInvites expire.",
-          "## Assumptions\n\n- Invites create memberships.",
-        ]),
-      ];
-      const page = yield* mount(fakeService(NOW, versions, true), yield* registryOnTestClock);
-      const title = () => page.querySelector(".version-page .plan-body > .plan-title")?.textContent;
-
-      assert.equal(title(), "Teammate invitations");
-      assert.equal(page.querySelector(".version-page .plan-assumptions"), null);
-      assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
       assert.deepEqual(marked(page, "del"), ["reuse"]);
-      assert.deepEqual(marked(page, "ins"), ["create"]);
-
-      yield* press(page, "Invite emails5h1 change");
-      assert.equal(title(), "Teammate invitations");
-      assert.equal(page.querySelector(".version-page .plan-assumptions"), null);
-      assert.deepEqual(marked(page, "del"), ["Only admins"]);
-      assert.deepEqual(marked(page, "ins"), ["Any member"]);
-      assert.deepEqual(marked(page, ".version-added, .version-removed"), []);
+      assert.deepEqual(marked(page, ".version-added"), ["Decisions\nInvites expire."]);
     }),
 );
 
@@ -570,7 +527,7 @@ it.effect(
   "a version's right-click offers its Open and its sections where it has them, and the developer's own one change offers no menu",
   () =>
     Effect.gen(function* () {
-      const service = fakeService(NOW, SECTIONED, true);
+      const service = fakeService(NOW, SECTIONED);
       service.lines.push({
         seq: 4,
         lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
@@ -591,7 +548,7 @@ it.effect(
 
 it.effect("the arrows inside a version's menu are the menu's, and open nothing behind it", () =>
   Effect.gen(function* () {
-    const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+    const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
 
     yield* rightClick(page, "Luke2h2 changes");
     const item = document.querySelector<HTMLElement>('[role="menu"] [role="menuitem"]');
@@ -601,11 +558,11 @@ it.effect("the arrows inside a version's menu are the menu's, and open nothing b
   }),
 );
 
-/** The versions of a plan that is one document whose newest revision changed one section and added another. */
+/** The versions of a plan whose newest revision changed one section and added another. */
 const SECTIONED = [
   FIRST,
-  textOf(["## Goal\n\nAny member can invite."]),
-  textOf(["## Goal\n\nAny member can invite by email.", "## Decisions\n\nInvites expire."]),
+  documentOf(["## Goal\n\nAny member can invite."]),
+  documentOf(["## Goal\n\nAny member can invite by email.", "## Decisions\n\nInvites expire."]),
 ];
 
 /** Each section the open revision changed, as its row reads. */
@@ -647,7 +604,7 @@ it.effect(
   "only a version of several changes offers the sections it changed, never one change, a restore, or the plan before history",
   () =>
     Effect.gen(function* () {
-      const service = fakeService(NOW, SECTIONED, true);
+      const service = fakeService(NOW, SECTIONED);
       service.lines.push({
         seq: 4,
         lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW - 30 * HOUR, duringCall: false },
@@ -668,7 +625,7 @@ it.effect(
   "a version's chevron slides its sections in, under who wrote it and when: each a row by its name, an added one saying so, the first drawn alone",
   () =>
     Effect.gen(function* () {
-      const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+      const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
 
       yield* openSections(page, "Luke2h2 changes");
       assert.equal(sectionsOpen(page), true);
@@ -693,7 +650,7 @@ it.effect(
   "the arrows step through the sections and right opens them, and Escape, the left arrow, and All versions each go back to the versions with the version still chosen",
   () =>
     Effect.gen(function* () {
-      const page = yield* mount(fakeService(NOW, SECTIONED, true), yield* registryOnTestClock);
+      const page = yield* mount(fakeService(NOW, SECTIONED), yield* registryOnTestClock);
 
       yield* arrow("ArrowRight");
       assert.equal(sectionsOpen(page), true);
@@ -726,22 +683,6 @@ it.effect(
     }),
 );
 
-it.effect(
-  "a plan of the template's fields lists its changed assumptions as a section of their own, drawn as the list alone",
-  () =>
-    Effect.gen(function* () {
-      const page = yield* mount(fakeService(), yield* registryOnTestClock);
-      yield* openSections(page, "Luke2h2 changes");
-
-      assert.deepEqual(sectionRows(page), ["DecisionsAdded", "Assumptions"]);
-      yield* press(page, "Assumptions");
-      assert.deepEqual(marked(page, ".plan-assumption.version-added"), [
-        "Invites create memberships.",
-      ]);
-      assert.doesNotMatch(body(page) ?? "", /Invites expire/u);
-    }),
-);
-
 /** Lands a save at the moment given, and lets what it read again land. */
 function landSave(at: number) {
   return Effect.promise(() =>
@@ -756,11 +697,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const versions = [...SECTIONED];
-      const page = yield* mount(fakeService(NOW, versions, true), yield* registryOnTestClock);
+      const page = yield* mount(fakeService(NOW, versions), yield* registryOnTestClock);
       yield* openSections(page, "Luke2h2 changes");
       yield* press(page, "DecisionsAdded");
 
-      versions[2] = textOf([
+      versions[2] = documentOf([
         "## Goal\n\nAny member can invite by email.",
         "## Risks\n\nSpam.",
         "## Decisions\n\nInvites expire.",
@@ -777,12 +718,12 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const versions = [...SECTIONED];
-      const service = fakeService(NOW, versions, true);
+      const service = fakeService(NOW, versions);
       const page = yield* mount(service, yield* registryOnTestClock);
       yield* openSections(page, "Luke2h2 changes");
       assert.equal(sectionsOpen(page), true);
 
-      versions.push(textOf(["## Goal\n\nAnyone can invite."]));
+      versions.push(documentOf(["## Goal\n\nAnyone can invite."]));
       service.lines.unshift({
         seq: 4,
         lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: NOW, duringCall: false },

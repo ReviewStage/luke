@@ -20,7 +20,7 @@ import {
 } from "./document-source";
 
 /**
- * plan-editor.ts -- a plan that is one document, edited in place on TipTap, drawn exactly as the document draws it.
+ * plan-editor.ts -- a plan's text, edited in place on TipTap, drawn exactly as the document draws it.
  *
  * What the text may hold, and every shortcut for writing it, is TipTap's
  * own: StarterKit, `@tiptap/markdown`, task lists, tables, and images;

@@ -266,8 +266,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     document: _document,
     agentEdits: _agentEdits,
     lastEdit: _lastEdit,
-    fields: _fields,
-    fieldEdits: _fieldEdits,
     ...summary
   }: Plan): PlanningView["plans"][number] {
     return summary;
@@ -382,9 +380,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     ) {
       return;
     }
-    // A saved draft carries its save's instant, its fields, and who last
-    // changed each as the service names them, so the copy held is the
-    // save's, written by the notetaker on this call.
+    // A saved draft carries its save's instant and who last changed each
+    // section as the service names them, so the copy held is the save's,
+    // written by the notetaker on this call.
     const plan = {
       ...held,
       document: draft.document,
@@ -394,8 +392,6 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
             updatedAt: draft.savedAt,
             lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: draft.savedAt, duringCall: true },
           }),
-      ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
-      ...(draft.fieldEdits === undefined ? undefined : { fieldEdits: draft.fieldEdits }),
       ...(draft.sectionEdits === undefined ? undefined : { sectionEdits: draft.sectionEdits }),
     };
     write({ document: { status: PLANNING_READ.READY, plan } });

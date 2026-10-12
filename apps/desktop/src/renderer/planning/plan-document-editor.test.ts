@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { PLAN_ACTOR, PLAN_BOUNDS, type Plan } from "@sidecar/hosted/plan-wire";
-import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
+import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -69,7 +69,11 @@ async function settle(): Promise<void> {
   });
 }
 
-/** The document with an edit door that records each edit and answers from the script, and the names it renamed to. */
+/**
+ * The document with an edit door that records each edit and answers from the
+ * script, and the names it renamed to; `render` draws another plan, through
+ * its own door where given.
+ */
 function mount(answers: readonly PlanningEditAnswer[] = []) {
   const sent: PlanEditRequest[] = [];
   const renamed: string[] = [];
@@ -83,10 +87,14 @@ function mount(answers: readonly PlanningEditAnswer[] = []) {
     return Promise.resolve(answers[sent.length - 1] ?? saved);
   };
   const onRename = (name: string) => renamed.push(name);
-  const render = (plan: Plan) =>
-    act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit, onRename })));
+  const render = (plan: Plan, door: typeof onEdit = onEdit) =>
+    act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit: door, onRename })));
   render(DOCUMENT_PLAN);
-  return { container, sent, renamed, render };
+  const unmount = () => {
+    act(() => root.unmount());
+    roots.splice(roots.indexOf(root), 1);
+  };
+  return { container, sent, renamed, render, unmount };
 }
 
 function block(container: HTMLElement, label: string): HTMLElement {
@@ -106,6 +114,12 @@ function open(): PlanEditorProps {
   const editor = mounted.filter((held) => !held.destroyed).at(-1);
   assert.ok(editor, "an open editor");
   return editor.props;
+}
+
+function button(container: HTMLElement, text: string): HTMLButtonElement {
+  const found = [...container.querySelectorAll("button")].find((b) => b.textContent === text);
+  assert.ok(found, text);
+  return found;
 }
 
 function title(container: HTMLElement): HTMLElement {
@@ -231,9 +245,7 @@ test("Luke's change where the developer's words land asks Keep mine or Use Luke'
   await settle();
 
   assert.ok(container.textContent?.includes("Luke changed this section while you were editing."));
-  const keep = [...container.querySelectorAll("button")].find((b) => b.textContent === "Keep mine");
-  assert.ok(keep);
-  act(() => keep.click());
+  act(() => button(container, "Keep mine").click());
   act(() => open().onFinish(1));
   await settle();
 
@@ -241,6 +253,81 @@ test("Luke's change where the developer's words land asks Keep mine or Use Luke'
     sent.map((request) => ("document" in request ? request.document.base : undefined)),
     [BODY, lukes],
   );
+});
+
+test("Use Luke's closes the editor on his words and saves nothing more", async () => {
+  const lukes = BODY.replace("Invites land by email.", "Invites land by link.");
+  const { container, sent } = mount([{ conflict: { current: lukes } }]);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(BODY.replace("Invites land by email.", "Invites land by text.")));
+  act(() => open().onFinish(1));
+  await settle();
+
+  act(() => button(container, "Use Luke's").click());
+  await settle();
+
+  assert.equal(sent.length, 1);
+  assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+test("an editor closed with nothing changed saves nothing", async () => {
+  const { container, sent } = mount();
+  act(() => block(container, "Goal").click());
+
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.deepEqual(sent, []);
+  assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+test("a save that failed says why and keeps the editor open; Retry saves the words", async () => {
+  const { container, sent } = mount([{ failure: PLAN_CALL_FAILURE.UNANSWERED }]);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1));
+  await settle();
+
+  assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
+  assert.ok(container.querySelector(".plan-document-editor"), "the editor stays open");
+  act(() => button(container, "Retry").click());
+  await settle();
+
+  assert.deepEqual(
+    sent.map((request) => ("document" in request ? request.document.value : undefined)),
+    [`${BODY}Mine.\n`, `${BODY}Mine.\n`],
+  );
+  assert.equal(container.querySelector(".plan-document-editor"), null);
+});
+
+test("words handed over and not yet saved are sent when the developer leaves the plan", async () => {
+  const { container, sent, unmount } = mount();
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  unmount();
+  await settle();
+
+  assert.deepEqual(sent, [{ document: { base: BODY, value: `${BODY}Mine.\n` } }]);
+});
+
+test("words typed in one plan are saved to that plan when another opens", async () => {
+  const { container, render } = mount();
+  const doors: string[] = [];
+  const door = (planId: string) => () => {
+    doors.push(planId);
+    return Promise.resolve<PlanningEditAnswer>({ saved: true });
+  };
+  const other = { ...DOCUMENT_PLAN, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
+  render(DOCUMENT_PLAN, door(DOCUMENT_PLAN.id));
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+
+  render(other, door(other.id));
+  await settle();
+
+  assert.deepEqual(doors, [DOCUMENT_PLAN.id]);
+  assert.equal(container.querySelector(".plan-document-editor"), null);
 });
 
 test("the title renames the plan on Return and goes into the text at its start; left empty, it renames nothing", () => {

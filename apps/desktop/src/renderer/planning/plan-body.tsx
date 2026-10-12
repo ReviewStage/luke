@@ -1,13 +1,4 @@
-import { PLAN_FIELD_HEADING, planTextFieldValue } from "@sidecar/hosted/plan-template";
-import {
-  PLAN_ACTOR,
-  PLAN_FIELD,
-  type Plan,
-  type PlanAssumption,
-  type PlanFields,
-  type PlanLastEdit,
-} from "@sidecar/hosted/plan-wire";
-import { PlusIcon } from "@sidecar/panel";
+import { PLAN_ACTOR, type Plan, type PlanLastEdit } from "@sidecar/hosted/plan-wire";
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
@@ -18,15 +9,6 @@ import {
   PlanDocumentEditor,
 } from "./plan-document-editor";
 import {
-  EDITOR_PLACE,
-  EditableUnit,
-  type FieldEditing,
-  type PlanEditDoor,
-  PlanFieldEditor,
-  useFieldEditing,
-} from "./plan-field-editor";
-import { editTargetOfUnit, targetHeading } from "./plan-field-editor-model";
-import {
   type ChaseState,
   chaseBehind,
   chaseOpened,
@@ -36,9 +18,9 @@ import {
   type UnitView,
 } from "./plan-reveal";
 import { useMinute } from "./plan-time";
-import { documentTitleOf, PlanTitle } from "./plan-title";
-import { NO_ASSUMPTIONS_LINE } from "./planning-model";
-import { NO_LOOKS, type PlanLooks, sectionSavesOf } from "./use-plan-looks";
+import { PlanTitle } from "./plan-title";
+import { EDITOR_PLACE, type PlanEditDoor, usePlanEditing } from "./use-plan-editing";
+import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
 
 /**
  * plan-body.tsx -- the open plan's document as it scrolls between the header and the microphone row, typing in each newer document as it arrives.
@@ -47,10 +29,9 @@ import { NO_LOOKS, type PlanLooks, sectionSavesOf } from "./use-plan-looks";
  * target, whether a saved plan or a draft still being written, so a stream of
  * drafts is worked in by one continuous hand rather than restarting on each.
  * The view follows the caret, bringing a jump to the middle, unless the
- * developer has scrolled the document themselves, and lights each unit and new assumption as it settles. Opening
+ * developer has scrolled the document themselves, and lights each unit as it settles. Opening
  * a plan draws it whole, and reduced motion draws each document at once. The
- * fixed template always runs past the panel's ceiling, so the typing grows
- * the scrolled document and never the surface. A plan anyone has written
+ * typing grows the scrolled document and never the surface. A plan anyone has written
  * says who last did in one muted line above the document: the developer,
  * Luke (the notetaker), or a coding agent named as its row names it now,
  * whether it was on a call, and how long ago, moved on once a minute. The
@@ -60,18 +41,14 @@ import { NO_LOOKS, type PlanLooks, sectionSavesOf } from "./use-plan-looks";
  * the revision that save made. The sections changed since the developer
  * last looked at the plan on this Mac wear a still tint, counted under that
  * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
- * A plan kept as the template's fields draws its body, title line and all,
- * then its assumptions as a section of their own. A plan that is one
- * document draws its name as the title over its text (`plan-title.tsx`),
- * and nothing after it: its assumptions are a section of the text, and each
- * section is known by its heading.
+ * The plan's name is drawn as the title over its text (`plan-title.tsx`),
+ * and each section is known by its heading.
  */
 
 /** The document the chase was last aimed at, the last edit it was, and where its typing stands. */
 interface Chase {
   readonly planId: string;
   readonly body: string;
-  readonly assumptions: readonly string[];
   readonly lastEditAt: number | undefined;
   readonly state: ChaseState;
 }
@@ -80,7 +57,6 @@ interface Chase {
 interface PlanChase {
   readonly views: readonly UnitView[];
   readonly behind: boolean;
-  readonly freshAssumptions: ReadonlySet<number>;
   /** How many times the caret has jumped, so the view can bring a jump to the middle. */
   readonly jumps: number;
 }
@@ -183,9 +159,7 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
 /**
  * What each unit says of its section: the save that last changed each, which
  * changed since the last look, the minute it counts from, and the way into
- * the version history where the window offers one. A section is known by its
- * field in a plan of the template's fields, and by its heading in a plan
- * that is one document.
+ * the version history where the window offers one, each by its heading.
  */
 interface SectionMarks {
   readonly edits: ReadonlyMap<string, PlanLastEdit>;
@@ -195,13 +169,13 @@ interface SectionMarks {
 }
 
 /**
- * The section's quiet line: who last changed the section known by `key`, and
- * when, shown while the pointer or the keyboard is on it; none where no save
- * has. Where the window offers the version history, it opens it on the
- * revision that save made. `heading` names the section to a screen reader.
+ * The section's quiet line: who last changed the section under `heading`,
+ * and when, shown while the pointer or the keyboard is on it; none where no
+ * save has. Where the window offers the version history, it opens it on the
+ * revision that save made.
  */
-function bylineOf(marks: SectionMarks, key: string, heading: string): React.JSX.Element | null {
-  const edit = marks.edits.get(key);
+function bylineOf(marks: SectionMarks, heading: string): React.JSX.Element | null {
+  const edit = marks.edits.get(heading);
   if (edit === undefined) return null;
   const line = editedLine(edit, marks.now);
   const { onShowHistory } = marks;
@@ -223,7 +197,7 @@ function bylineOf(marks: SectionMarks, key: string, heading: string): React.JSX.
   );
 }
 
-/** The class of a unit or assumption lit as it settles. */
+/** The class of a unit lit as it settles. */
 const FRESH_CLASS = "plan-fresh";
 
 /** The class of the unit the caret is typing in, whose heading wears the writing mark. */
@@ -238,20 +212,11 @@ const CHANGED_CLASS = "plan-changed";
 /** The presses that say the developer is reading somewhere of their own, which the caret stops following. */
 const SCROLL_INTENT_EVENTS = ["wheel", "pointerdown", "keydown"] as const;
 
-function textsOf(assumptions: readonly PlanAssumption[]): readonly string[] {
-  return assumptions.map((assumption) => assumption.text);
-}
-
-function sameTexts(left: readonly string[], right: readonly string[]): boolean {
-  return left.length === right.length && left.every((text, index) => text === right[index]);
-}
-
 function opened(plan: Plan): Chase {
-  const { body, assumptions } = plan.document;
+  const { body } = plan.document;
   return {
     planId: plan.id,
     body,
-    assumptions: textsOf(assumptions),
     lastEditAt: plan.lastEdit?.at,
     state: chaseOpened(body),
   };
@@ -261,15 +226,13 @@ function opened(plan: Plan): Chase {
 function aimed(chase: Chase, plan: Plan): Chase {
   if (chase.planId !== plan.id) return opened(plan);
   const { body } = plan.document;
-  const assumptions = textsOf(plan.document.assumptions);
-  const added = { before: chase.assumptions, after: assumptions };
   // The developer's own edit lands at once: they watched it being typed already.
   const lastEditAt = plan.lastEdit?.at;
   const ownEdit = plan.lastEdit?.actor === PLAN_ACTOR.DEVELOPER && lastEditAt !== chase.lastEditAt;
   // Read at the retarget rather than held, since it is the one moment it decides anything.
   const aim = { reduced: ownEdit || prefersReducedMotion() };
-  const state = chaseRetargeted(chase.state, body, added, aim);
-  return { planId: plan.id, body, assumptions, lastEditAt, state };
+  const state = chaseRetargeted(chase.state, body, aim);
+  return { planId: plan.id, body, lastEditAt, state };
 }
 
 /**
@@ -280,11 +243,7 @@ function aimed(chase: Chase, plan: Plan): Chase {
 function usePlanChase(plan: Plan, live: boolean): PlanChase {
   const [chase, setChase] = useState(() => opened(plan));
   let current = chase;
-  const moved =
-    chase.planId !== plan.id ||
-    chase.body !== plan.document.body ||
-    !sameTexts(chase.assumptions, textsOf(plan.document.assumptions));
-  if (moved) {
+  if (chase.planId !== plan.id || chase.body !== plan.document.body) {
     current = aimed(chase, plan);
     setChase(current);
   }
@@ -305,7 +264,6 @@ function usePlanChase(plan: Plan, live: boolean): PlanChase {
   return {
     views: chaseView(current.state, live),
     behind,
-    freshAssumptions: current.state.freshAssumptions,
     jumps: current.state.jumps,
   };
 }
@@ -317,26 +275,8 @@ function unitClass(view: UnitView, changed: boolean): string {
   return view.fresh ? `plan-unit ${FRESH_CLASS}${lit}` : `plan-unit${lit}`;
 }
 
-/** One assumption, its text as stored. */
-function AssumptionRow({
-  assumption,
-  fresh,
-}: {
-  assumption: PlanAssumption;
-  fresh: boolean;
-}): React.JSX.Element {
-  return (
-    <li className={fresh ? `plan-assumption ${FRESH_CLASS}` : "plan-assumption"}>
-      {assumption.text}
-    </li>
-  );
-}
-
 /** The door of a document nothing is edited through: every edit answered as unanswered. */
 const NO_EDIT: PlanEditDoor = () => Promise.reject(new Error("This plan cannot be edited here."));
-
-/** The text fields the body draws only once they hold something, which the document offers to add while they do not. */
-const OPTIONAL_FIELDS = [PLAN_FIELD.ALTERNATIVES, PLAN_FIELD.PLAN_OF_ATTACK] as const;
 
 /** A unit drawn with its section's byline, where a save has changed the section. */
 function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null): React.JSX.Element {
@@ -350,155 +290,28 @@ function attributed(drawn: React.JSX.Element, byline: React.JSX.Element | null):
 }
 
 /**
- * One section of a plan that is one document, drawn as the chase has it,
- * tinted where it changed since the last look, and carrying the byline of
- * the save that last changed it, each by its heading.
+ * One section of the text, drawn as the chase has it, tinted where it
+ * changed since the last look, and carrying the byline of the save that
+ * last changed it, each by its heading.
  */
 function DocumentUnit({ view, marks }: { view: UnitView; marks: SectionMarks }): React.JSX.Element {
   const changed = marks.changed.has(view.heading);
   const drawn = (
     <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
   );
-  return attributed(drawn, bylineOf(marks, view.heading, view.heading));
+  return attributed(drawn, bylineOf(marks, view.heading));
 }
 
 /**
- * One unit of a body of the template's fields: drawn as the chase has it,
- * tinted where its field changed since the last look, the editor where it
- * is the one the editor opened from, nothing where it is the field an
- * editor holds elsewhere, and the way into its editor where it can be
- * edited. Every section carries its field's byline.
- */
-function BodyUnit({
-  view,
-  editable,
-  editing,
-  marks,
-}: {
-  view: UnitView;
-  editable: boolean;
-  editing: FieldEditing;
-  marks: SectionMarks;
-}): React.JSX.Element | null {
-  const target = editTargetOfUnit(view.words);
-  const changed = target !== undefined && marks.changed.has(target.field);
-  const drawn = (
-    <MarkdownMessage words={view.words} className={unitClass(view, changed)} edit={view.edit} />
-  );
-  if (target === undefined) return drawn;
-  const byline = bylineOf(marks, target.field, PLAN_FIELD_HEADING[target.field]);
-  if (!editable) return attributed(drawn, byline);
-  const { editor, host } = editing;
-  if (editor !== undefined && host === view.id) {
-    const heading = view.words.split("\n", 1)[0] ?? "";
-    return <PlanFieldEditor heading={heading} editor={editor} editing={editing} />;
-  }
-  if (editor !== undefined && editor.target.field === target.field) return null;
-  return (
-    <EditableUnit target={target} host={view.id} editing={editing}>
-      {drawn}
-      {byline}
-    </EditableUnit>
-  );
-}
-
-/** The sections the body does not draw while they hold nothing, each offered to add. */
-function AddSections({
-  fields,
-  editing,
-}: {
-  fields: PlanFields;
-  editing: FieldEditing;
-}): React.JSX.Element | null {
-  const absent = OPTIONAL_FIELDS.filter(
-    (field) => planTextFieldValue(fields, field) === null && editing.editor?.target.field !== field,
-  );
-  if (absent.length === 0) return null;
-  return (
-    <div className="plan-add-sections">
-      {absent.map((field) => (
-        <button
-          key={field}
-          type="button"
-          className="toolbar-button"
-          onClick={() => editing.open({ field }, EDITOR_PLACE.END)}
-        >
-          <PlusIcon />
-          {PLAN_FIELD_HEADING[field]}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/**
- * The assumptions' section, standing even while the list is empty: the
- * list, the way into its editor where it can be edited, or the editor, under
- * the section's byline and tinted, as a unit is, where it changed since the
- * last look.
- */
-function PlanAssumptions({
-  assumptions,
-  fresh,
-  editable,
-  editing,
-  marks,
-}: {
-  assumptions: readonly PlanAssumption[];
-  fresh: ReadonlySet<number>;
-  editable: boolean;
-  editing: FieldEditing;
-  marks: SectionMarks;
-}): React.JSX.Element {
-  const list =
-    assumptions.length === 0 ? (
-      <p className="plan-assumptions-none">{NO_ASSUMPTIONS_LINE}</p>
-    ) : (
-      <ul>
-        {assumptions.map((assumption, index) => (
-          // An assumption has no id of its own: the list is replaced whole on every save.
-          // oxlint-disable-next-line react/no-array-index-key -- the saved list's order is its identity.
-          <AssumptionRow key={index} assumption={assumption} fresh={fresh.has(index)} />
-        ))}
-      </ul>
-    );
-  const target = { field: PLAN_FIELD.ASSUMPTIONS } as const;
-  const { editor, host } = editing;
-  const body =
-    editor !== undefined && host === EDITOR_PLACE.ASSUMPTIONS ? (
-      <PlanFieldEditor heading={undefined} editor={editor} editing={editing} />
-    ) : editable ? (
-      <EditableUnit target={target} host={EDITOR_PLACE.ASSUMPTIONS} editing={editing}>
-        {list}
-      </EditableUnit>
-    ) : (
-      list
-    );
-  const changed = marks.changed.has(PLAN_FIELD.ASSUMPTIONS);
-  return (
-    <section
-      className={changed ? `plan-assumptions ${CHANGED_CLASS}` : "plan-assumptions"}
-      aria-label="Assumptions"
-    >
-      <h2 className="plan-assumptions-heading">Assumptions</h2>
-      {bylineOf(marks, PLAN_FIELD.ASSUMPTIONS, PLAN_FIELD_HEADING[PLAN_FIELD.ASSUMPTIONS])}
-      {body}
-    </section>
-  );
-}
-
-/**
- * The plan's document: a body of the template's fields and its assumptions,
- * the assumptions' section standing even while the list is empty, or the
- * text of a plan that is one document under its name, the title, with no
- * section after it. `live` is the plan's call in progress, which keeps
- * the caret waiting where the typing last stopped; `onShowHistory` opens the
- * plan's version history from the "Edited by" line, on the plan as it
- * stands, and from a section's, on the revision of the save it names. With
- * `onEdit`, each field of a plan of the template's fields opens in an
- * editor in place; a plan that is one document is drawn read-only.
- * `looks` are the sections changed since the developer last looked, which
- * the plan's region keeps (`use-plan-looks.ts`); without them none are.
+ * The plan's document: its name as the title over its text. `live` is the
+ * plan's call in progress, which keeps the caret waiting where the typing
+ * last stopped; `onShowHistory` opens the plan's version history from the
+ * "Edited by" line, on the plan as it stands, and from a section's, on the
+ * revision of the save it names. With `onEdit`, the text is edited whole in
+ * place, and with `onRename` the title too; without them the document is
+ * drawn read-only. `looks` are the sections changed since the developer last
+ * looked, which the plan's region keeps (`use-plan-looks.ts`); without them
+ * none are.
  */
 export function PlanBody({
   plan,
@@ -512,26 +325,17 @@ export function PlanBody({
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
-  /** Renames the plan, from its title where the plan is one document. */
+  /** Renames the plan, from its title. */
   onRename?: (name: string) => void;
   looks?: PlanLooks;
 }): React.JSX.Element {
-  const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
-  const { fields } = plan;
-  const title = documentTitleOf(plan);
-  // A plan of the template's fields is edited a field at a time; a plan that is one document, whole.
-  const textEditable = onEdit !== undefined && title !== undefined;
-  const content =
-    onEdit === undefined
-      ? undefined
-      : fields !== undefined
-        ? { fields, assumptions: plan.document.assumptions }
-        : { text: plan.document.body };
-  const editable = onEdit !== undefined && fields !== undefined;
-  const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
+  const { views, behind, jumps } = usePlanChase(plan, live);
+  const editable = onEdit !== undefined;
+  const text = editable ? plan.document.body : undefined;
+  const editing = usePlanEditing(plan.id, text, onEdit ?? NO_EDIT);
   const now = useMinute();
   const marks: SectionMarks = {
-    edits: new Map(sectionSavesOf(plan).map(({ section, ...edit }) => [section, edit])),
+    edits: new Map((plan.sectionEdits ?? []).map(({ section, ...edit }) => [section, edit])),
     changed: looks.changed,
     now,
     onShowHistory,
@@ -558,7 +362,7 @@ export function PlanBody({
   // in view going down and the last going up, rather than scroll the page.
   // Note that focus anywhere else keeps its own arrows.
   useEffect(() => {
-    if (!textEditable) return;
+    if (!editable) return;
     const select = (event: KeyboardEvent) => {
       if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
@@ -578,7 +382,7 @@ export function PlanBody({
     };
     window.addEventListener("keydown", select);
     return () => window.removeEventListener("keydown", select);
-  }, [textEditable]);
+  }, [editable]);
 
   // A pause in the typing hands the view back: the next burst is followed again.
   useEffect(() => {
@@ -597,7 +401,6 @@ export function PlanBody({
     scroller.current?.querySelector(".markdown-caret")?.scrollIntoView({ block });
   });
 
-  const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
   // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
   const standing =
@@ -610,7 +413,7 @@ export function PlanBody({
       ? views[0]?.id
       : EDITOR_PLACE.TITLE;
   const sections = views.map((view, section) =>
-    textEditable ? (
+    editable ? (
       <DocumentBlock
         key={view.id}
         host={view.id}
@@ -625,33 +428,24 @@ export function PlanBody({
       <DocumentUnit key={view.id} view={view} marks={marks} />
     ),
   );
-  const textOpen = editing.editor !== undefined && editing.host === EDITOR_PLACE.DOCUMENT;
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <ChangedLine looks={looks} />
       <div className="plan-body">
-        {title === undefined ? null : textEditable && onRename !== undefined ? (
+        {editable && onRename !== undefined ? (
           <EditableTitle
-            name={title}
+            name={plan.name}
             entry={entry === EDITOR_PLACE.TITLE}
             editing={editing}
             onRename={onRename}
           />
         ) : (
-          <PlanTitle name={title} />
+          <PlanTitle name={plan.name} />
         )}
-        {title === undefined ? (
-          views.map((view) => (
-            <BodyUnit
-              key={view.id}
-              view={view}
-              editable={editable}
-              editing={editing}
-              marks={marks}
-            />
-          ))
-        ) : textOpen && editing.editor !== undefined ? (
+        {editing.editor === undefined ? (
+          sections
+        ) : (
           <PlanDocumentEditor
             plan={plan}
             editor={editing.editor}
@@ -659,29 +453,8 @@ export function PlanBody({
             drawn={sections}
             hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
           />
-        ) : (
-          sections
-        )}
-        {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
-          <PlanFieldEditor
-            heading={`## ${targetHeading(editing.editor.target)}`}
-            editor={editing.editor}
-            editing={editing}
-          />
-        ) : null}
-        {fields === undefined || !editable ? null : (
-          <AddSections fields={fields} editing={editing} />
         )}
       </div>
-      {title === undefined ? (
-        <PlanAssumptions
-          assumptions={assumptions}
-          fresh={freshAssumptions}
-          editable={editable}
-          editing={editing}
-          marks={marks}
-        />
-      ) : null}
     </div>
   );
 }

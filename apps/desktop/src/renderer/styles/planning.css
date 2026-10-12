@@ -145,63 +145,17 @@
   }
 }
 
-.plan-assumptions-none {
-  margin: 0;
-  color: var(--text-secondary);
-}
-
-/* Who last edited the plan, over the document in the muted meta weight, the
-   same as an empty assumptions list. */
+/* Who last edited the plan, over the document in the muted meta weight. */
 .plan-edit-note {
   margin: 0 0 12px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-/* A field the developer can edit: its words take the text cursor, a quiet
-   wash says so on hover, and its pencil, the keyboard's way in, shows on
-   hover or focus. Nothing moves: the wash and the pencil fade on opacity. */
-.plan-unit-editable {
-  position: relative;
-  isolation: isolate;
-  border-radius: 6px;
-  cursor: text;
-}
-
-.plan-unit-editable::before {
-  position: absolute;
-  z-index: -1;
-  inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
-  border-radius: 6px;
-  background: var(--raised);
-  content: "";
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.plan-unit-editable:hover::before {
-  opacity: 1;
-}
-
-.plan-unit-edit {
-  position: absolute;
-  top: 0;
-  right: calc(var(--space-6) * -1);
-  opacity: 0;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.plan-unit-editable:hover .plan-unit-edit,
-.plan-unit-edit:focus-visible {
-  opacity: 1;
-}
-
 /* Who last changed a section, and when: a quiet line at the end of its
-   heading's row, shown with the pencil while the pointer or the keyboard is
-   on the section. It fades on opacity alone, so nothing moves. */
-.plan-unit-attributed,
-.plan-assumptions {
+   heading's row, shown while the pointer or the keyboard is on the section.
+   It fades on opacity alone, so nothing moves. */
+.plan-unit-attributed {
   position: relative;
 }
 
@@ -224,11 +178,7 @@
 }
 
 .plan-unit-attributed:hover .plan-unit-byline,
-.plan-unit-attributed:focus-within .plan-unit-byline,
-.plan-unit-editable:hover .plan-unit-byline,
-.plan-unit-editable:focus-within .plan-unit-byline,
-.plan-assumptions:hover > .plan-unit-byline,
-.plan-assumptions:focus-within > .plan-unit-byline {
+.plan-unit-attributed:focus-within .plan-unit-byline {
   opacity: 1;
 }
 
@@ -282,39 +232,13 @@ button.plan-unit-byline:focus-visible {
   font-size: 12px;
 }
 
-/* The field open in its editor: the heading as the document draws it, then
-   a box that grows with its words, in the document's own type, so the words
-   do not jump as it opens or closes. It takes the gap of the unit it stands
-   in for, and opens its box as far under the heading as the unit's words. */
-.plan-field-editor > * + * {
+/* The text open in its editor, in the document's own type, so the words do
+   not jump as it opens or closes. */
+.plan-document-editor > * + * {
   margin-top: 0.5em;
 }
 
-.plan-field-input {
-  width: 100%;
-  min-height: 72px;
-  padding: var(--space-8) var(--space-12);
-  border: 1px solid var(--hairline);
-  border-radius: var(--control-radius);
-  background: var(--desktop-well);
-  color: var(--text-primary);
-  font: inherit;
-  line-height: inherit;
-  field-sizing: content;
-  resize: none;
-  transition: border-color var(--duration-hover) ease;
-}
-
-.plan-field-input::placeholder {
-  color: var(--text-tertiary);
-}
-
-.plan-field-input:focus {
-  border-color: color-mix(in srgb, var(--message-sent) 60%, transparent);
-  outline: none;
-}
-
-/* A plan that is one document (`plan-document-editor.tsx`). Its title and
+/* The plan's document (`plan-document-editor.tsx`). Its title and
    sections are blocks: the words take the text cursor and nothing else marks
    them, since a click into them edits them, and a block the keyboard selects
    wears a soft tint of the focus colour a little past its words, as a
@@ -347,7 +271,7 @@ button.plan-unit-byline:focus-visible {
 }
 
 /* The section between an editor's words and what stands under them. */
-.plan-document-editor > .plan-field-note {
+.plan-document-editor > .plan-editor-note {
   margin-top: 0.5em;
 }
 
@@ -411,18 +335,9 @@ button.plan-unit-byline:focus-visible {
   white-space: pre-wrap;
 }
 
-/* The sections the body leaves out while they hold nothing, offered after
-   it as quiet buttons. */
-.plan-add-sections {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-8);
-  margin-top: var(--space-16);
-}
-
-/* What stands under the box: a save under way, a failed save, or Luke's
-   change and the choice it asks, in the muted meta weight. */
-.plan-field-note {
+/* What stands under the editor: a failed save, or Luke's change and the
+   choice it asks, in the muted meta weight. */
+.plan-editor-note {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -430,25 +345,6 @@ button.plan-unit-byline:focus-visible {
   margin: var(--space-6) 0 0;
   font-size: 12px;
   color: var(--text-secondary);
-}
-
-.plan-assumptions {
-  margin-top: 16px;
-}
-
-.plan-assumptions-heading {
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 680;
-}
-
-.plan-assumptions ul {
-  margin: 0;
-  padding-left: 18px;
-}
-
-.plan-assumption {
-  padding: 3px 0;
 }
 
 /* The Code tab: every code Luke showed on the plan, one card each under the

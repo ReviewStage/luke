@@ -1,7 +1,6 @@
 import { BOARD_ELEMENT_TYPE, DRAWING_ZONE } from "@sidecar/hosted/board-vocabulary";
 import type { Board, DrawingElement } from "@sidecar/hosted/board-wire";
-import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import type { Plan, PlanFields, PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
   type CodeToken,
   PLAN_WORK_PART,
@@ -36,7 +35,7 @@ import {
  * would show only its signed-out line. It draws the synthetic list instead,
  * which is what the expanded capture in `scripts/evidence.sh` shows now that
  * the panel opens on Plans, and under the planning profile it also opens the
- * reference journey's plan from `docs/PLANNING.md`, a draft of the fixed
+ * reference journey's plan from `docs/PLANNING.md`, a draft of the default
  * template partway through with Luke working on the call about it, which is
  * what the planning capture shows. Every name and repository here is
  * invented; nothing is read from an account.
@@ -45,36 +44,45 @@ import {
 /**
  * The reference journey's plan partway through its conversation: the
  * context, the goal, an approach with the pending-membership design settled,
- * its interfaces, one alternative weighed, one hard part, and an open
- * question, with everything else unanswered, as the template shows a draft.
+ * its interfaces, one alternative weighed, one hard part, an open question,
+ * and its assumptions, with every other section still holding the default
+ * template's guidance, as a draft shows it.
  */
-const FIXTURE_FIELDS: PlanFields = {
-  ...EMPTY_PLAN_FIELDS,
-  context:
-    "Only an admin can add someone to a workspace, by creating their account by hand, so " +
+const FIXTURE_TEXT = [
+  "## Context",
+  "Only an admin can add someone to a workspace, by creating their account by hand, so " +
     "members wait on an admin to bring a teammate in.",
-  goal:
-    "- A member invites a teammate by email.\n" +
+  "## Goal",
+  "- A member invites a teammate by email.\n" +
     "- The teammate joins the workspace by opening the link.",
-  approach:
-    "- Model an invite as a `memberships` row with `state = pending` " +
+  "## Approach",
+  "- Model an invite as a `memberships` row with `state = pending` " +
     "(`src/db/schema/memberships.ts`), so removal covers invites and members alike.\n" +
     "- `src/members/invite.ts` (new) sends an invite and accepts one, following " +
     "`src/members/remove.ts`.",
-  interfaces:
-    "`src/members/invite.ts`\n\n" +
-    "```ts\n" +
+  "## Interfaces",
+  "`src/members/invite.ts`",
+  "```ts\n" +
     "export function inviteMember(workspaceId: string, email: string): Promise<Membership>;\n" +
     "export function acceptInvite(token: string): Promise<Membership>;\n" +
     "```",
-  alternatives:
-    "- A separate `invitations` table: lost because removing a member would then have to " +
+  "## Alternatives",
+  "- A separate `invitations` table: lost because removing a member would then have to " +
     "clear two tables.",
-  hardParts:
-    "- A withdrawn or accepted invite link is opened again: the page reads " +
+  "## Hard parts",
+  "- A withdrawn or accepted invite link is opened again: the page reads " +
     '"This invite is no longer valid" and grants nothing.',
-  openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or both?"],
-};
+  "## Not doing",
+  "What is out of scope on purpose, and why.",
+  "## Testing",
+  'The cases that prove the change, each as "When …, then …" with an exact result, then the end-to-end check.',
+  "## Open questions",
+  "- Who can withdraw an invite: the member who sent it, any admin, or both?",
+  "## Assumptions",
+  "- Invites reuse memberships with a pending state.\n" +
+    "- Members and admins can both invite.\n" +
+    "- An invite expires after 7 days.",
+].join("\n\n");
 
 const FIXTURE_PLAN: Plan = {
   id: "0f6a2c4e-8b1d-4e3f-9a57-1c2b3d4e5f60",
@@ -82,15 +90,7 @@ const FIXTURE_PLAN: Plan = {
   createdAt: 1,
   updatedAt: 2,
   repository: "acme/relay",
-  document: {
-    body: planBody({ name: "Teammate invitations" }, FIXTURE_FIELDS),
-    assumptions: [
-      { text: "Invites reuse memberships with a pending state." },
-      { text: "Members and admins can both invite." },
-      { text: "An invite expires after 7 days." },
-    ],
-  },
-  fields: FIXTURE_FIELDS,
+  document: { body: `${FIXTURE_TEXT}\n`, assumptions: [] },
 };
 
 const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [

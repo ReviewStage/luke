@@ -1,4 +1,3 @@
-import { PLAN_EMPTY_TEXT } from "@sidecar/hosted/plan-template";
 import { diffArrays } from "diff";
 
 /**
@@ -10,7 +9,7 @@ import { diffArrays } from "diff";
  * a line added or struck aligned to whole lines. The comparison itself is
  * jsdiff's (`diffArrays`, over this file's words); what is here is how its
  * changes are cut for a hand. The notetaker changes one place at a time
- * (`notesInProgress` in `@sidecar/hosted/plan-template`), so the words
+ * (`textNotesInProgress` in `@sidecar/hosted/plan-template`), so the words
  * compared are always final or still growing at their end. The version
  * history's version view reads the same comparison over the same words whole
  * (`wordChanges`), since a reader compares words rather than letters.
@@ -36,8 +35,6 @@ export interface Hunk {
   readonly to: number;
   readonly insert: string;
 }
-
-const PLACEHOLDERS: ReadonlySet<string> = new Set(Object.values(PLAN_EMPTY_TEXT));
 
 function tokens(words: string): readonly string[] {
   return words.match(TOKEN) ?? [];
@@ -204,9 +201,4 @@ export function wordChanges(old: string, next: string): readonly WordChange[] {
     added: change.added,
     removed: change.removed,
   }));
-}
-
-/** Whether a span of old words is a field's empty placeholder, which is cleared at once rather than kept or erased letter by letter. */
-export function isPlaceholder(words: string): boolean {
-  return PLACEHOLDERS.has(words.trim());
 }

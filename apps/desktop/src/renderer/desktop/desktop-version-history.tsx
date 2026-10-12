@@ -26,7 +26,6 @@ import {
   versionMoment,
 } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
-import { documentTitleOf } from "../planning/plan-title";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ, type ViewedVersion } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -480,13 +479,11 @@ interface OpenedSections {
 function openedSections(
   viewing: ViewedVersion | undefined,
   opened: OpenedSections | undefined,
-  plan: Plan | undefined,
 ): readonly ChangedSection[] | undefined {
   if (opened === undefined || viewing?.line.seq !== opened.seq) return undefined;
   const { read } = viewing;
   if (read.kind !== HISTORY_READ.READY) return undefined;
-  const title = plan === undefined ? undefined : documentTitleOf(plan);
-  return changedSections(versionDiff(read.previous, read.document, title), read.previous === null);
+  return changedSections(versionDiff(read.previous, read.document), read.previous === null);
 }
 
 /**
@@ -513,7 +510,7 @@ function VersionPage({
         shown={plans.shown}
         onRestored={history.onClose}
         restorable={plan?.archivedAt === undefined}
-        title={plan === undefined ? undefined : documentTitleOf(plan)}
+        title={plan?.name}
         section={section}
       />
     );
@@ -593,7 +590,7 @@ export function DesktopVersionHistory({
   // A newer version arriving while another's sections are open moves the
   // history on to it, as it does over the list, so the sections give way.
   if (opened !== undefined && versions.selected !== opened.seq) setOpened(undefined);
-  const sections = openedSections(versions.viewing, opened, plan);
+  const sections = openedSections(versions.viewing, opened);
   const sourceOf = (line: PlanRevisionLine, author: RevisionAuthor): SourceDoor | undefined => {
     const source = revisionSource(line);
     const planId = plans.boundFor;

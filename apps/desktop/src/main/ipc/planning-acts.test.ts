@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { highlightSnippet } from "@sidecar/host";
-import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
+import { PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
 import {
   type CodeLines,
   PLAN_CALL_FAILURE,
@@ -97,9 +97,8 @@ function fixture() {
         }),
       planningEdit: (params) =>
         Effect.sync(() => {
-          asked.push(
-            `edit:${params.planId}:${"field" in params.edit ? params.edit.field : "document"}`,
-          );
+          const value = "document" in params.edit ? params.edit.document.value : "";
+          asked.push(`edit:${params.planId}:${value}`);
           return { saved: true } as const;
         }),
       planningBoardSave: (params) =>
@@ -234,7 +233,7 @@ it.effect(
 );
 
 it.effect(
-  "the developer's edit of a field reaches the host from a panel, and not from the voice window",
+  "the developer's edit of the text reaches the host from a panel, and not from the voice window",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -242,7 +241,7 @@ it.effect(
         kind: ACT_KIND.PLANNING_EDIT,
         payload: {
           planId: PLAN_ID,
-          edit: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
+          edit: { document: { base: "", value: "Invites expire." } },
         },
       } as const;
 
@@ -251,7 +250,7 @@ it.effect(
 
       assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { saved: true } });
       assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
-      assert.deepEqual(f.asked, [`edit:${PLAN_ID}:${PLAN_FIELD.APPROACH}`]);
+      assert.deepEqual(f.asked, [`edit:${PLAN_ID}:Invites expire.`]);
     }),
 );
 

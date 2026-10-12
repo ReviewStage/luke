@@ -2,7 +2,7 @@
  * contract.ts -- what the plan document and the plan editor's bundle say to each other: the text, the one mount call, and nothing that pulls TipTap into the panel.
  *
  * TipTap is too large for the bundle every window parses, so the editor of a
- * plan that is one document ships as a bundle of its own (`plan-editor.js`,
+ * plan's text ships as a bundle of its own (`plan-editor.js`,
  * built from `./index.ts`) that the document loads the first time a section
  * is hovered or selected (`../bundle-loader.ts`), as the whiteboard and a
  * File tab's tree are. That bundle sets one global, `window.lukePlanEditor`,
