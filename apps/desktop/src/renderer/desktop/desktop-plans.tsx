@@ -159,6 +159,13 @@ function PlanDocument({
     };
   }, [area]);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
+  // The latest posted of what waits in the plan's inbox opens its Inbox tab
+  // where the plan has not seen it, without choosing it (`use-main-tabs.ts`).
+  const latestPosted = inbox.board.open.at(-1)?.postedAt;
+  const { onInboxPosted } = plans.mainTabs;
+  useEffect(() => {
+    if (planId !== undefined && latestPosted !== undefined) onInboxPosted(planId, latestPosted);
+  }, [planId, latestPosted, onInboxPosted]);
   const rename = usePlanRename(planId, plans.onRenamePlan);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because

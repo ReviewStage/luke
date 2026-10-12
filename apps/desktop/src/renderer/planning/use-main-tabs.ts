@@ -43,15 +43,22 @@ import {
  * no tab for: a plan opened on an agent shows its document while the list
  * is on its way, and stays on it where the read fails.
  *
- * Once the plan has an agent, its Inbox tab stands second, after the
- * plan's: everything the plan's agents need of the developer, answered in
- * place (`inbox-board.tsx`). Like the plan's, it never closes and never
- * moves, since what an agent posts must have somewhere to land whichever
- * agents' tabs are open.
+ * The plan's Inbox tab, everything its agents need of the developer,
+ * answered in place (`inbox-board.tsx`), stands only once it has something
+ * to show: it is closed on a plan until an item the developer has not seen
+ * is posted there (`onInboxPosted`), and then opens as a tab the "+" opens
+ * does, after every tab standing, chosen. It is a tab like an agent's in
+ * every other way: it closes, and then stays closed on that plan until a
+ * newer item is posted, and it is dragged among the others. The "+" opens it
+ * again at any time, after every tab, and chooses it where it stands open,
+ * moving it nowhere; an item posted while it stands open only counts on
+ * it. Each plan keeps whether its Inbox is open and the latest item it has
+ * seen posted, so a closed Inbox stays closed across a launch. A plan with
+ * no agent has no Inbox, since only an agent posts.
  *
- * The agents' tabs are dragged or moved from the keyboard among
- * themselves and the draft's, and the plan keeps the order from then on: a
- * tab closed and opened again stands where it stood, and one never moved
+ * The tabs after the plan's are dragged or moved from the keyboard among
+ * themselves, and the plan keeps the order from then on: an agent's tab
+ * closed and opened again stands where it stood, and one never moved
  * stands after those that were.
  *
  * These facts are this window's preference rather than anything main
@@ -66,8 +73,8 @@ import {
 
 /**
  * The column's own tabs, each one word beside the agents' and the draft's
- * objects: the plan's, and its Inbox, which stands after it once the plan
- * has an agent to post to it, since only an agent posts.
+ * objects: the plan's, and its Inbox, which stands while open on a plan
+ * with an agent, since only an agent posts.
  */
 export const MAIN_TAB = {
   PLAN: "plan",
@@ -75,15 +82,10 @@ export const MAIN_TAB = {
 } as const;
 
 /** The plan's own tab, or its Inbox. */
-type FixedMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
+type OwnMainTab = (typeof MAIN_TAB)[keyof typeof MAIN_TAB];
 
 /** A tab of the plan's column: the plan's own, its Inbox, one agent's, or the draft agent's. */
-export type MainTab = FixedMainTab | AgentStripTab | DraftStripTab;
-
-/** Whether a tab is one of the column's own, which never closes and never moves. */
-function isFixedTab(tab: MainTab): tab is FixedMainTab {
-  return tab === MAIN_TAB.PLAN || tab === MAIN_TAB.INBOX;
-}
+export type MainTab = OwnMainTab | AgentStripTab | DraftStripTab;
 
 /** Where the preference is kept in the renderer's storage. */
 const STORAGE_KEY = "luke.mainTabs";
@@ -118,10 +120,16 @@ const keptTabSchema = Schema.Union([
   Schema.Struct({ agent: Schema.String }),
 ]);
 
-/** One plan's choices: the tabs viewed on it, the latest last, and its order since a tab was first moved on it. */
+/**
+ * One plan's choices: the tabs viewed on it, the latest last, its order
+ * since a tab was first moved on it, whether its Inbox is open, and when
+ * the latest item its Inbox has seen was posted.
+ */
 const planChoicesSchema = Schema.Struct({
   recent: Schema.optional(Schema.Array(keptTabSchema)),
   order: Schema.optional(Schema.Array(keptTabSchema)),
+  inboxOpen: Schema.optional(Schema.Boolean),
+  inboxSeen: Schema.optional(Schema.Number),
 });
 
 /** The agents whose tabs were closed, every plan's, and each plan's choices, by plan id. */
@@ -136,6 +144,8 @@ type MainTabsState = typeof mainTabsSchema.Type;
 interface PlanChoices {
   readonly recent?: readonly MainTab[] | undefined;
   readonly order?: readonly MainTab[] | undefined;
+  readonly inboxOpen?: boolean | undefined;
+  readonly inboxSeen?: number | undefined;
 }
 
 /** The state the hook holds: the kept one, with a draft's tab possibly among a plan's choices. */
@@ -177,7 +187,7 @@ const NO_TABS: readonly MainTab[] = [];
 
 /** What the column draws and hands back. */
 export interface MainTabsControl {
-  /** The column's tabs in the strip's order: the plan's first, its Inbox where it has an agent, then the open agents' and the draft's. */
+  /** The column's tabs in the strip's order: the plan's first, then the open agents', the draft's, and the Inbox where open, in the plan's order. */
   tabs: readonly MainTab[];
   /** The tab shown. */
   tab: MainTab;
@@ -189,9 +199,11 @@ export interface MainTabsControl {
   onChoose: (tab: MainTab) => void;
   /** Shows the tab on the plan given, as `onChoose` does on the open plan: what a pin, a notification, or the call card asks, the plan opened beside it. */
   onShow: (planId: string, tab: MainTab) => void;
-  /** Closes the tab, and only the view: an agent goes on as it was. The plan's tab and its Inbox never close. */
+  /** Closes the tab, and only the view: an agent goes on as it was, and the Inbox keeps its items. The plan's tab never closes. */
   onClose: (tab: MainTab) => void;
-  /** Moves an agent's or the draft's tab to the place `to` among them, after the plan's, leaving the chosen one chosen. */
+  /** Hears the latest posted of the items waiting in the plan's inbox, opening and choosing its Inbox where it is newer than any the plan has seen. */
+  onInboxPosted: (planId: string, postedAt: number) => void;
+  /** Moves a tab other than the plan's to the place `to` among them, after the plan's, leaving the chosen one chosen. */
   onMove: (tab: MainTab, to: number) => void;
   /** Asks the column's "+" to open its menu, as ⌘T does. */
   onNewTab: () => void;
@@ -239,16 +251,20 @@ function openAgentsOf(held: HeldState, agents: readonly string[] | undefined) {
 }
 
 /**
- * The strip in its order: the plan's tab, its Inbox where it has an
- * agent, open or closed, then the open agents' and the draft's in the
- * plan's order.
+ * The strip in its order: the plan's tab, then the open agents', the
+ * draft's, and the Inbox where open on a plan with an agent, in the plan's
+ * order.
  */
 function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
+  const choices = choicesOn(held, drawn.planId);
   const agents = (openAgentsOf(held, drawn.agents) ?? []).map((agent) => ({ agent }));
   const draft = drawn.draft === undefined ? [] : [{ draft: drawn.draft }];
-  const order = choicesOn(held, drawn.planId).order ?? NO_TABS;
-  const inbox = (drawn.agents?.length ?? 0) === 0 ? [] : [MAIN_TAB.INBOX];
-  return [MAIN_TAB.PLAN, ...inbox, ...inPlanOrder([...agents, ...draft], order, (tab) => tab)];
+  const inbox = choices.inboxOpen === true && (drawn.agents?.length ?? 0) > 0;
+  const order = choices.order ?? NO_TABS;
+  return [
+    MAIN_TAB.PLAN,
+    ...inPlanOrder([...agents, ...draft, ...(inbox ? [MAIN_TAB.INBOX] : [])], order, (tab) => tab),
+  ];
 }
 
 /** Whether the tab stands in the plan's strip now. */
@@ -274,8 +290,36 @@ function withViewed(
   });
 }
 
-/** The state with the agent's tab open, where it was closed. */
-function withOpened(held: HeldState, tab: MainTab): HeldState {
+/**
+ * The plan's order with its Inbox after every tab: the tabs the order held
+ * but the Inbox, then those the strip draws that it did not, as they stand,
+ * so every other tab stays where it stood. Note that on a plan whose agents
+ * are unread the Inbox is only let out of the order, because no strip is
+ * known to stand after, and a tab the order does not hold stands after
+ * those it does.
+ */
+function inboxLast(held: HeldState, drawn: DrawnTabs, was: readonly MainTab[]): readonly MainTab[] {
+  const others = was.filter((tab) => tab !== MAIN_TAB.INBOX);
+  if (drawn.agents === undefined) return others;
+  const unplaced = stripOf(held, drawn).filter(
+    (tab) =>
+      tab !== MAIN_TAB.PLAN && tab !== MAIN_TAB.INBOX && !was.some((other) => sameTab(other, tab)),
+  );
+  return [...others, ...unplaced, MAIN_TAB.INBOX];
+}
+
+/**
+ * The state with the agent's tab, or the plan's Inbox, open, where it was
+ * closed. The Inbox opens after every tab of the plan's strip, wherever it
+ * stood before it closed.
+ */
+function withOpened(held: HeldState, drawn: DrawnTabs, tab: MainTab): HeldState {
+  if (tab === MAIN_TAB.INBOX)
+    return withChoices(held, drawn.planId, (was) =>
+      was.inboxOpen === true
+        ? was
+        : { ...was, inboxOpen: true, order: inboxLast(held, drawn, was.order ?? NO_TABS) },
+    );
   if (!isAgentTab(tab) || !held.closedAgents.includes(tab.agent)) return held;
   return { ...held, closedAgents: held.closedAgents.filter((agent) => agent !== tab.agent) };
 }
@@ -289,23 +333,57 @@ function withOpened(held: HeldState, tab: MainTab): HeldState {
 function withChosen(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
   const shown = shownIn(held, drawn);
   const viewed = sameTab(shown, tab) ? [tab] : [shown, tab];
-  return withViewed(withOpened(held, tab), drawn.planId, viewed);
+  return withViewed(withOpened(held, drawn, tab), drawn.planId, viewed);
+}
+
+/** What a plan other than the open one holds for the tabs, which is unread. */
+function unreadPlan(planId: string): DrawnTabs {
+  return { planId, agents: undefined, draft: undefined };
+}
+
+/**
+ * The state with the tab shown on the plan given: on the open plan as
+ * `withChosen` shows it, and on another as the tab it will open on.
+ */
+function withShown(held: HeldState, on: string, tab: MainTab, drawn: DrawnTabs): HeldState {
+  if (on === drawn.planId) return withChosen(held, tab, drawn);
+  return withViewed(withOpened(held, unreadPlan(on), tab), on, [tab]);
+}
+
+/**
+ * The state with the plan's Inbox opened and chosen where an item posted at
+ * `postedAt` is newer than any it has seen, and that item seen; an Inbox
+ * already open only sees it. Note that a plan that has seen nothing has
+ * seen no item, so its first opens its Inbox.
+ */
+function withInboxPosted(
+  held: HeldState,
+  on: string,
+  postedAt: number,
+  drawn: DrawnTabs,
+): HeldState {
+  const was = choicesOn(held, on);
+  if (was.inboxSeen !== undefined && postedAt <= was.inboxSeen) return held;
+  const seen = withChoices(held, on, (choices) => ({ ...choices, inboxSeen: postedAt }));
+  return was.inboxOpen === true ? seen : withShown(seen, on, MAIN_TAB.INBOX, drawn);
 }
 
 /**
  * The state with the tab closed, gone from those viewed on the plan, and
  * the tab viewed before it, or its neighbour, viewed in its place where it
  * was the one shown. Closing an agent's tab closes nothing of the agent's
- * own, and closing a draft's leaves the draft its owner's to let go.
+ * own, closing a draft's leaves the draft its owner's to let go, and
+ * closing the Inbox keeps what it has seen, so only a newer item opens it.
  */
 function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState {
-  if (isFixedTab(tab)) return held;
+  if (tab === MAIN_TAB.PLAN) return held;
   const closed = isAgentTab(tab)
     ? { ...held, closedAgents: [...held.closedAgents, tab.agent].slice(-CLOSED_AGENTS_KEPT) }
     : held;
   const forgotten = withChoices(closed, drawn.planId, (was) => ({
     ...was,
     recent: (was.recent ?? NO_TABS).filter((each) => !sameTab(each, tab)),
+    ...(tab === MAIN_TAB.INBOX ? { inboxOpen: false } : undefined),
   }));
   if (!sameTab(shownIn(held, drawn), tab)) return forgotten;
   const standing = stripOf(forgotten, drawn).filter((each) => !sameTab(each, tab));
@@ -314,9 +392,9 @@ function withoutTab(held: HeldState, tab: MainTab, drawn: DrawnTabs): HeldState 
   return withViewed(forgotten, drawn.planId, [replacement]);
 }
 
-/** The state with the tab moved to `to` among the tabs after the column's own, kept as the plan's order (`movedOrder`). */
+/** The state with the tab moved to `to` among the tabs after the plan's, kept as the plan's order (`movedOrder`). */
 function withTabAt(held: HeldState, tab: MainTab, to: number, drawn: DrawnTabs): HeldState {
-  const movable = stripOf(held, drawn).filter((each) => !isFixedTab(each));
+  const movable = stripOf(held, drawn).filter((each) => each !== MAIN_TAB.PLAN);
   const was = choicesOn(held, drawn.planId).order ?? NO_TABS;
   const order = movedOrder(was, movable, tab, to);
   return order === undefined
@@ -338,9 +416,9 @@ function stored(held: HeldState): MainTabsState {
   return {
     closedAgents: held.closedAgents,
     plans: Object.fromEntries(
-      Object.entries(held.plans).map(([plan, { recent, order }]) => [
+      Object.entries(held.plans).map(([plan, { recent, order, inboxOpen, inboxSeen }]) => [
         plan,
-        { recent: kept(recent), order: kept(order) },
+        { recent: kept(recent), order: kept(order), inboxOpen, inboxSeen },
       ]),
     ),
   };
@@ -433,14 +511,15 @@ export function useMainTabs(
   // Note that a tab shown on another plan is not counted viewed after the
   // open plan's, because the plan it is viewed on is the one about to open.
   const onShow = useCallback(
-    (on: string, tab: MainTab) =>
-      update((held) =>
-        on === planId ? withChosen(held, tab, drawn) : withViewed(withOpened(held, tab), on, [tab]),
-      ),
-    [update, drawn, planId],
+    (on: string, tab: MainTab) => update((held) => withShown(held, on, tab, drawn)),
+    [update, drawn],
   );
   const onClose = useCallback(
     (tab: MainTab) => update((held) => withoutTab(held, tab, drawn)),
+    [update, drawn],
+  );
+  const onInboxPosted = useCallback(
+    (on: string, postedAt: number) => update((held) => withInboxPosted(held, on, postedAt, drawn)),
     [update, drawn],
   );
   const onMove = useCallback(
@@ -457,6 +536,7 @@ export function useMainTabs(
     onChoose,
     onShow,
     onClose,
+    onInboxPosted,
     onMove,
     onNewTab,
     onNewTabAnswered,

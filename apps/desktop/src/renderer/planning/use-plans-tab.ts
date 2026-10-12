@@ -75,7 +75,7 @@ import {
   transcriptRegion,
 } from "./transcript-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { MAIN_TAB, type MainTabsControl, useMainTabs } from "./use-main-tabs";
+import { MAIN_TAB, type MainTab, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type PlanHistoryControl,
@@ -189,6 +189,8 @@ export interface PlansControl {
   secondCall: { confirm: DialogConfirm; question: DialogQuestion };
   /** Opens a plan on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
   onShowPlan: (planId: string) => void;
+  /** Opens a plan on its Inbox tab the same way, opening the tab where it was closed: what ⌘K's Inbox row asks. */
+  onShowInbox: (planId: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
@@ -939,6 +941,16 @@ export function usePlansTab(input: {
     setHistoryFor({ planId, save });
   };
 
+  // A plan's own tab, its Inbox, and an agent's are in its column, so a
+  // version history over it gives way, and so does a side panel filling the
+  // window over it.
+  const showColumnTab = (planId: string, tab: MainTab) => {
+    if (planId !== planning.activePlanId) select(planId);
+    setHistoryFor(undefined);
+    if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+    mainTabs.onShow(planId, tab);
+  };
+
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
   const back = useCallback((): boolean => {
@@ -1011,25 +1023,14 @@ export function usePlansTab(input: {
       onClose: () => setHistoryFor(undefined),
     },
     onSelect: select,
-    // The agent's tab is in the plan's column, so a version history over it
-    // gives way, and so does a side panel filling the window over it.
-    onShowAgent: (planId, agentId) => {
-      if (planId !== planning.activePlanId) select(planId);
-      setHistoryFor(undefined);
-      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-      mainTabs.onShow(planId, { agent: agentId });
-    },
+    onShowAgent: (planId, agentId) => showColumnTab(planId, { agent: agentId }),
     // The call card's way back lands where the plan's call bar is in sight.
     secondCall: {
       confirm: secondCall,
       question: secondCallQuestion(callCard({ view: voice.view, planning }).planName),
     },
-    onShowPlan: (planId) => {
-      if (planId !== planning.activePlanId) select(planId);
-      setHistoryFor(undefined);
-      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-      mainTabs.onShow(planId, MAIN_TAB.PLAN);
-    },
+    onShowPlan: (planId) => showColumnTab(planId, MAIN_TAB.PLAN),
+    onShowInbox: (planId) => showColumnTab(planId, MAIN_TAB.INBOX),
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
     onOpenPinnedTab: (pin) => {
       const { tab } = pin;

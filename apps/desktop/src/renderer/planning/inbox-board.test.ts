@@ -485,7 +485,7 @@ it.effect(
 );
 
 it.effect(
-  "an inbox that could not be read says so and reads again on Try again; an empty one says nothing waits",
+  "an inbox that could not be read says so and reads again on Try again; an empty one says nothing waits under the Inbox's glyph, drawn large",
   () =>
     Effect.gen(function* () {
       const { agents } = service(
@@ -496,9 +496,13 @@ it.effect(
       yield* settle;
       const failed = page.querySelector('[role="alert"]');
       assert.ok(failed?.textContent?.startsWith("The inbox could not be read."));
+      assert.equal(page.querySelector(".empty-state-icon"), null, "a failure is not empty");
       press(buttonNamed(page, "Retry"));
       yield* settle;
       assert.equal(page.textContent, "Nothing is waiting on you.");
+      const glyph = page.querySelector(".empty-state-icon");
+      assert.equal(glyph?.getAttribute("aria-hidden"), "true");
+      assert.ok(glyph?.querySelector("svg.lucide-inbox"), "the Inbox tab's own glyph");
     }),
 );
 

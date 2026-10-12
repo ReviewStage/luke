@@ -1,11 +1,12 @@
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
+import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { AGENTS_SECTION, agentEntries } from "./main-tabs";
+import { AGENTS_SECTION, agentEntries, inboxEntries } from "./main-tabs";
 import { ADD_SECTION, panelEntries, planWorkers } from "./side-panel";
 import type { AddEntry } from "./strip-tabs";
 
@@ -13,11 +14,12 @@ import type { AddEntry } from "./strip-tabs";
  * plan-summary.tsx -- the open plan's summary at its column's right: everything the plan's two "+" menus open, at a glance, pinned beside the document or folded to a rail of glyphs that expands in place as a card.
  *
  * The summary lists what the side panel's "+" and the plan's column's "+"
- * open, in their rows' words and glyphs (`panelEntries`, `agentEntries`),
- * under quiet headings: the panel's kinds the plan has used, its coding
- * agents, its subagents, and the files Luke showed on it. An agent or a
- * subagent wears where it stands on its glyph, and a failure at the row's
- * end, as its tab does, since no tab stands beside the row to say it, and a file is drawn in a row the
+ * open, in their rows' words and glyphs (`panelEntries`, `inboxEntries`,
+ * `agentEntries`), under quiet headings: the panel's kinds the plan has
+ * used, its Inbox and coding agents, its subagents, and the files Luke
+ * showed on it. An agent or a subagent wears where it stands on its glyph,
+ * and a failure at the row's end, as its tab does, since no tab stands
+ * beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
  * opens what it names exactly as its "+" row does: a kind, a subagent, or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
@@ -265,6 +267,7 @@ function summarySections(plans: PlansControl): SummarySection[] {
       files: shownFiles(plans.shownCode ?? []),
       standing: true,
     }),
+    ...inboxEntries(agents, () => mainTabs.onChoose(MAIN_TAB.INBOX)),
     ...agentEntries(mainTabs, agents, true),
   ];
   return SECTION_ORDER.flatMap((heading) => {
