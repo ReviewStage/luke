@@ -47,8 +47,11 @@ export interface PlanSection {
   readonly text: string;
 }
 
-/** A code fence's opening or closing line: up to three spaces, then three or more backticks or tildes. */
+/** A code fence's opening line: up to three spaces, then three or more backticks or tildes, then any info string. */
 const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/u;
+
+/** A code fence's closing line: up to three spaces, the run, and nothing after it but spaces, since a closing fence takes no info string. */
+const CLOSING_FENCE_LINE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/u;
 
 /** What opens a `#` or `##` heading line: up to three spaces, the hashes, then a space, a tab, or the line's end. */
 const SECTION_OPENER = /^ {0,3}#{1,2}(?=[ \t]|$)/u;
@@ -84,15 +87,16 @@ function headingOf(line: string): string | undefined {
 
 /**
  * The document's sections in order. Note that a fence is closed only by a
- * line of the same character at least as long as the one that opened it, as
- * CommonMark has it, because a shorter run inside a fence is code.
+ * line of the same character at least as long as the one that opened it and
+ * holding nothing after the run, as CommonMark has it, because a shorter
+ * run, or one labelled like an opening, inside a fence is code.
  */
 export function planSections(text: string): readonly PlanSection[] {
   const sections: SectionLines[] = [];
   let open: string | undefined;
   let current: SectionLines = { heading: "", lines: [] };
   for (const line of text.split("\n")) {
-    const fence = FENCE_LINE.exec(line)?.[1];
+    const fence = (open === undefined ? FENCE_LINE : CLOSING_FENCE_LINE).exec(line)?.[1];
     const heading = open === undefined ? headingOf(line) : undefined;
     if (heading !== undefined) {
       if (current.heading !== "" || current.lines.some((each) => each.trim() !== "")) {
@@ -120,16 +124,21 @@ function wordsByHeading(text: string): ReadonlyMap<string, readonly string[]> {
   return byHeading;
 }
 
-/** The headings whose sections a change from `before` to `after` moved, each once, in the order `after` holds them. */
+/**
+ * The headings whose sections a change from `before` to `after` moved, each
+ * once: those `after` holds that differ, in its order, then those only
+ * `before` held, which the change struck.
+ */
 export function changedSections(before: string, after: string): readonly string[] {
   const was = wordsByHeading(before);
+  const now = wordsByHeading(after);
   const changed: string[] = [];
-  for (const [heading, now] of wordsByHeading(after)) {
+  for (const [heading, words] of now) {
     const then = was.get(heading) ?? [];
-    const same = then.length === now.length && now.every((words, at) => words === then[at]);
+    const same = then.length === words.length && words.every((each, at) => each === then[at]);
     if (!same) changed.push(heading);
   }
-  return changed;
+  return [...changed, ...[...was.keys()].filter((heading) => !now.has(heading))];
 }
 
 /**
@@ -144,8 +153,10 @@ export function withSectionWriters(
   who: PlanSectionWriterWho,
   at: number,
 ): readonly PlanSectionWriter[] {
-  const changed = changedSections(change.before, change.after);
   const standing = new Set(planSections(change.after).map((section) => section.heading));
+  const changed = changedSections(change.before, change.after).filter((heading) =>
+    standing.has(heading),
+  );
   const kept = writers.filter(
     (writer) => standing.has(writer.section) && !changed.includes(writer.section),
   );

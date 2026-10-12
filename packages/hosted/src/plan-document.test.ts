@@ -64,6 +64,7 @@ test("the sections a change moved are its changed, added, and second-of-a-name s
     "## Context\n\nAdmins only.\n\n## Goal\n\nInvite by email or link.\n\n## Notes\n\nOne.\n\n## Notes\n\nTwo, again.\n\n## Risks\n\nSpam.\n";
 
   assert.deepEqual(changedSections(before, after), ["Goal", "Notes", "Risks"]);
+  assert.deepEqual(changedSections(after, before), ["Goal", "Notes", "Risks"]);
   assert.deepEqual(changedSections(before, before), []);
 });
 
@@ -99,4 +100,13 @@ test("a heading's closing hashes are no part of its words, and a long run of tab
     `x${tabs}`.slice(0, MAX_HEADING_CHARS),
   );
   assert.equal(planSections(`## x ${"#".repeat(50_000)}`)[0]?.heading, "x");
+});
+
+test("a fence line labelled like an opening is code inside a fence, not its close", () => {
+  const text = "## Approach\n\n```md\n```js\n## Still code\n```\n\n## Testing\n";
+
+  assert.deepEqual(
+    planSections(text).map((section) => section.heading),
+    ["Approach", "Testing"],
+  );
 });
