@@ -7,13 +7,7 @@ import {
 import { LIVE_STATUS } from "@sidecar/live";
 import { test } from "vitest";
 import { IDLE_VOICE_VIEW, type VoiceView } from "#shared/messages/voice-view";
-import {
-  CALL_CARD_TONE,
-  CALL_CARD_UNNAMED,
-  callBarPlanId,
-  callCard,
-  callCardShown,
-} from "./call-card-model";
+import { CALL_CARD_UNNAMED, callBarPlanId, callCard, callCardShown } from "./call-card-model";
 
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -34,41 +28,42 @@ const LISTENING: VoiceView = {
   callPlanId: INVITES,
 };
 
-test("the card names the call's plan, not the one open, and says where the call stands", () => {
+test("the card names the call's plan, not the one open, and hands the call bar its own words for the call", () => {
   const listening = callCard({ view: LISTENING, planning: PLANNING });
   assert.equal(listening.planName, "Teammate invitations");
-  assert.deepEqual(listening.status, { words: "Listening", tone: CALL_CARD_TONE.DEVELOPER });
-  assert.equal(listening.microphoneMuted, false);
-
-  const speaking = { ...LISTENING, voiceStatus: LIVE_STATUS.SPEAKING, lukeSpeaking: true };
-  assert.deepEqual(callCard({ view: speaking, planning: PLANNING }).status, {
-    words: "Luke speaking",
-    tone: CALL_CARD_TONE.LUKE,
+  assert.deepEqual(listening.status, {
+    voiceWord: "Listening",
+    backend: { planner: undefined, notes: false },
   });
+  assert.equal(listening.microphoneMuted, false);
 
   const muted = callCard({
     view: { ...LISTENING, voiceStatus: LIVE_STATUS.MUTED, listening: false },
     planning: PLANNING,
   });
-  assert.deepEqual(muted.status, { words: "Muted", tone: CALL_CARD_TONE.MUTED });
+  assert.equal(muted.status?.voiceWord, "Muted");
   assert.equal(muted.microphoneMuted, true);
 
   const opening = callCard({
     view: { ...LISTENING, voiceStatus: LIVE_STATUS.CONNECTING, listening: false },
     planning: PLANNING,
   });
-  assert.deepEqual(opening.status, { words: "Connecting…", tone: CALL_CARD_TONE.OPENING });
+  assert.equal(opening.status?.voiceWord, "Connecting");
   assert.equal(opening.microphoneMuted, false);
 });
 
-test("Luke writing the call's plan is said under his voice and over the microphone, from the call's own activity", () => {
-  const planner = { ...PLANNING, callActivity: { planner: { action: "ls src" }, notes: false } };
-  const writing = { words: "Writing…", tone: CALL_CARD_TONE.WORKING };
-  assert.deepEqual(callCard({ view: LISTENING, planning: planner }).status, writing);
-  const notes = { ...PLANNING, callActivity: { notes: true } };
-  assert.deepEqual(callCard({ view: LISTENING, planning: notes }).status, writing);
-  const speaking = { ...LISTENING, lukeSpeaking: true };
-  assert.equal(callCard({ view: speaking, planning: planner }).status.words, "Luke speaking");
+test("Luke at work on the call's plan is read off the call's own activity, though another plan is open", () => {
+  const planner = { ...PLANNING, callActivity: { planner: { action: "ls src" }, notes: true } };
+  assert.deepEqual(callCard({ view: LISTENING, planning: planner }).status?.backend, {
+    planner: { action: "ls src" },
+    notes: true,
+  });
+  // The open plan's own activity is not the call's.
+  const other = { ...PLANNING, activity: { planner: { action: "ls src" }, notes: false } };
+  assert.deepEqual(callCard({ view: LISTENING, planning: other }).status?.backend, {
+    planner: undefined,
+    notes: false,
+  });
 });
 
 test("a call's plan the list does not hold is named from the open document, or plainly as a call", () => {

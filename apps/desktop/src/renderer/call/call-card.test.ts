@@ -76,11 +76,16 @@ function press(label: string): HTMLButtonElement {
   return button;
 }
 
-test("in a Luke window the card's first line is the way back, and its controls tell their acts naming no plan", () => {
+test("in a Luke window the card is the call's plan over the call bar itself, its first line the way back and its controls telling their acts naming no plan", () => {
   draw(createElement(CallCard, { ...input(LISTENING), surface: CALL_CARD_SURFACE.SIDEBAR }));
   const title = container.querySelector<HTMLButtonElement>("button.call-card-title");
   assert.ok(title);
-  assert.equal(title.textContent, "Planning call · Listening");
+  assert.equal(title.textContent, "Planning call");
+  // The call bar's own row and words, not a look-alike of them.
+  assert.equal(
+    container.querySelector('.call-bar[data-call="true"] .call-status-word')?.textContent,
+    "Listening",
+  );
   act(() => title.click());
   assert.equal(press("Mute microphone").getAttribute("aria-pressed"), "false");
   assert.equal(press("Mute speaker").getAttribute("aria-pressed"), "false");
@@ -112,7 +117,8 @@ test("in the floating window the first line is the drag handle, so the way back 
     }),
   );
   assert.equal(container.querySelector("button.call-card-title") === null, true);
-  assert.equal(container.querySelector(".call-card-title")?.textContent, "Planning call · Muted");
+  assert.equal(container.querySelector(".call-card-title")?.textContent, "Planning call");
+  assert.equal(container.querySelector(".call-status-word")?.textContent, "Muted");
   assert.equal(press("Unmute microphone").getAttribute("aria-pressed"), "true");
   assert.equal(press("Unmute speaker").getAttribute("aria-pressed"), "true");
   press(RETURN_TO_PLAN_LABEL);
@@ -136,10 +142,7 @@ test("a docked card slides out from the last call it was handed, and is gone onc
   dock(undefined);
   const leaving = container.querySelector<HTMLElement>(".call-card");
   assert.equal(leaving?.dataset.leaving, "true");
-  assert.equal(
-    leaving?.querySelector(".call-card-title")?.textContent,
-    "Planning call · Listening",
-  );
+  assert.equal(leaving?.querySelector(".call-status-word")?.textContent, "Listening");
   // Note that the end is sent under the prefixed name, because React reads
   // jsdom's missing AnimationEvent as an engine that only knows that one.
   act(() => {

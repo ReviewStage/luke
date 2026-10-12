@@ -12,7 +12,6 @@ import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import type { CallCardInput } from "../call/call-card";
-import { CALL_CARD_TONE } from "../call/call-card-model";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE, type PlansPage } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
@@ -221,7 +220,7 @@ test("Settings keeps its page list whatever the fold, and hands the plans back a
 const CALL: CallCardInput = {
   card: {
     planName: "Parser cache migration",
-    status: { words: "Listening", tone: CALL_CARD_TONE.DEVELOPER },
+    status: { voiceWord: "Listening", backend: { planner: undefined, notes: false } },
     microphoneMuted: false,
   },
   speakerMuted: false,
