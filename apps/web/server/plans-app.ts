@@ -33,6 +33,7 @@ import {
   hostedJsonResponse,
   hostedNotFoundRoute,
   hostedRefusing,
+  hostedStoreOrArchived,
   hostedStoreOrUnavailable,
   readJsonBodyEffect,
   type UserIdResolver,
@@ -261,7 +262,7 @@ const updateEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   const changes = update.success;
   const repository =
     "repository" in changes ? yield* reachableRepository(userId, changes.repository) : undefined;
-  const plan = yield* hostedStoreOrUnavailable(
+  const plan = yield* hostedStoreOrArchived(
     updatePlan(userId, planId, {
       ...("name" in changes ? { name: changes.name } : undefined),
       ...(repository === undefined ? undefined : { repository }),
@@ -320,7 +321,7 @@ const boardEndpoint = /* @__PURE__ */ Effect.fn("web/planBoardEndpoint")(functio
   const body = yield* readJsonBodyEffect(MAXIMUM_BOARD_BODY_BYTES);
   const save = readEither(boardSaveRequestSchema)(body);
   if (Result.isFailure(save)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
-  const written = yield* hostedStoreOrUnavailable(
+  const written = yield* hostedStoreOrArchived(
     writeScene(
       userId,
       planId,
@@ -491,6 +492,7 @@ const RESTORE_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, Host
   [PLAN_SAVE_REFUSAL.NO_PLAN, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.NO_REVISION, HOSTED_REFUSAL.NOT_FOUND],
   [PLAN_SAVE_REFUSAL.TOO_LONG, HOSTED_REFUSAL.REQUEST_TOO_LARGE],
+  [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.PLAN_ARCHIVED],
 ]);
 
 /**
@@ -516,10 +518,18 @@ const restoreEndpoint = /* @__PURE__ */ Effect.fn("web/planRestoreEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { plan: restored.plan });
 });
 
+/** What an edit that saved nothing answers, by why, where it is not answered in band; the store out of reach is any other. */
+const EDIT_REFUSAL: ReadonlyMap<string, HostedRefusal> = new Map<string, HostedRefusal>([
+  [PLAN_SAVE_REFUSAL.NO_PLAN, HOSTED_REFUSAL.NOT_FOUND],
+  [PLAN_SAVE_REFUSAL.ARCHIVED, HOSTED_REFUSAL.PLAN_ARCHIVED],
+]);
+
 /**
  * POST saves the developer's edit of one field: answered with the plan as
  * saved, with the field as it now stands where the edit conflicts with it,
- * or as refused where the plan would be longer than a plan may be.
+ * or as refused where the plan would be longer than a plan may be. An
+ * archived plan is refused outright, as no plan is, since a desktop that
+ * knows archiving draws no editor on one.
  */
 const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function* (
   seams: PlansAppSeams,
@@ -544,11 +554,7 @@ const editEndpoint = /* @__PURE__ */ Effect.fn("web/planEditEndpoint")(function*
       if (saved.reason === PLAN_SAVE_REFUSAL.TOO_LONG) {
         return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { refused: PLAN_EDIT_REFUSAL.TOO_LONG });
       }
-      return yield* Effect.fail(
-        saved.reason === PLAN_SAVE_REFUSAL.NO_PLAN
-          ? HOSTED_REFUSAL.NOT_FOUND
-          : HOSTED_REFUSAL.UNAVAILABLE,
-      );
+      return yield* Effect.fail(EDIT_REFUSAL.get(saved.reason) ?? HOSTED_REFUSAL.UNAVAILABLE);
   }
 });
 

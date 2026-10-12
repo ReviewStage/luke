@@ -17,6 +17,7 @@ import {
   MethodNotAllowedRefusal,
   NoRepositoryRefusal,
   NotFoundRefusal,
+  PlanArchivedRefusal,
   PromptTooLargeRefusal,
   QuotaExhaustedRefusal,
   RepositoryNotReachableRefusal,
@@ -136,6 +137,11 @@ const REFUSALS = [
   {
     refusal: HOSTED_REFUSAL.AGENT_RETIRED,
     schema: AgentRetiredRefusal,
+    status: HOSTED_HTTP_STATUS.CONFLICT,
+  },
+  {
+    refusal: HOSTED_REFUSAL.PLAN_ARCHIVED,
+    schema: PlanArchivedRefusal,
     status: HOSTED_HTTP_STATUS.CONFLICT,
   },
 ] as const;

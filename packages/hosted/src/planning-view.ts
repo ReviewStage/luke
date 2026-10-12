@@ -439,6 +439,8 @@ export const PLAN_CALL_FAILURE = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The account must sign in with GitHub again before the service can read GitHub for it. */
   GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
+  /** The plan is archived, so it takes no write until it is brought back. */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
@@ -494,10 +496,11 @@ export const planningEditParamsSchema = EffectSchema.Struct({
 
 export type PlanningEditParams = typeof planningEditParamsSchema.Type;
 
-/** Why an edit saved nothing: the service did not answer, the plan is gone, or the plan would be longer than a plan may be. */
+/** Why an edit saved nothing: the service did not answer, the plan is gone or archived, or the plan would be longer than a plan may be. */
 const EDIT_FAILURES = [
   PLAN_CALL_FAILURE.UNANSWERED,
   PLAN_CALL_FAILURE.NOT_FOUND,
+  PLAN_CALL_FAILURE.PLAN_ARCHIVED,
   PLAN_EDIT_REFUSAL.TOO_LONG,
 ] as const;
 

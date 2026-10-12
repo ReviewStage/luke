@@ -448,6 +448,76 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       }),
   );
 
+  it.effect(
+    "an archived plan takes no edit, restore, scene, rename, or repository of the developer's until it is brought back, while notes under way still land",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const planId = startedId(
+          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
+        );
+        yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
+        const change = (body: WireBoundaryInput) =>
+          ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
+        const edit = () =>
+          ask(
+            request(EDIT, owner, {
+              id: planId,
+              method: "POST",
+              body: { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." },
+            }),
+          );
+        const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED);
+        yield* change({ archived: true });
+
+        assert.deepEqual(
+          [
+            yield* edit(),
+            yield* ask(
+              request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } }),
+            ),
+            yield* ask(
+              request(BOARD, owner, {
+                method: "PUT",
+                id: planId,
+                body: { elements: [NOTE], appliedDrawing: 0 },
+              }),
+            ),
+            yield* change({ name: "Team invites" }),
+            yield* change({ repository: null }),
+          ],
+          [archived, archived, archived, archived, archived],
+        );
+        // The archive takes no new work and loses none under way: a call's notes still land.
+        const noted = yield* saveNotes({ userId: owner, planId }, [
+          added(PLAN_FIELD.DECISIONS, "Invites expire after a week."),
+        ]);
+        assert.equal(noted.status, PLAN_SAVE_STATUS.SAVED);
+        const held = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(ONE_PLAN, owner, { id: planId })),
+        ).plan;
+        assert.equal(held.name, RELAY.name);
+        assert.equal(held.fields?.decisions, "Invites expire after a week.");
+        assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
+          status: HOSTED_HTTP_STATUS.OK,
+          body: { board: { elements: [], appliedDrawing: 0 } },
+        });
+
+        // Brought back in the same change as a rename, it takes both, and the developer's edits again.
+        const back = readAnswer(
+          planAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* change({ archived: false, name: "Team invites" }),
+        ).plan;
+        assert.equal(back.archivedAt, undefined);
+        assert.equal(back.name, "Team invites");
+        const saved = readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* edit());
+        assert.ok("plan" in saved, "the developer's edit is taken again");
+      }),
+  );
+
   it.effect("another account's plan answers as none on every route", () =>
     Effect.gen(function* () {
       const { owner, other, ask } = yield* openAccounts();

@@ -187,6 +187,17 @@ test("a save that failed says why and keeps the words; Try again saves them", as
   assert.equal(container.querySelector(".plan-field-editor"), null);
 });
 
+test("a save the service refused because the plan is archived says so and keeps the words", async () => {
+  const { container } = mount(PLAN, [{ failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED }]);
+  act(() => pencil(container, "Problem").click());
+  typeInto(box(container), "- Only an owner can add a member.");
+  press(box(container), "Escape");
+  await settle();
+
+  assert.ok(container.textContent?.includes("Not saved: this plan is archived."));
+  assert.equal(box(container).value, "- Only an owner can add a member.");
+});
+
 test("words typed and not yet saved are sent when the developer leaves the plan", async () => {
   const { container, sent, root } = mount(PLAN);
   act(() => pencil(container, "Problem").click());

@@ -92,7 +92,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, savePlanDocument } from "../server/hosted/plan-store";
+import { createPlan, savePlanDocument, updatePlan } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
@@ -517,6 +517,42 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           model: "openai/gpt-6.1-sol",
           effort: "low",
         });
+      }),
+  );
+
+  it.effect(
+    "an archived plan starts no agent and opens no session, though a Start made before the archive still answers its agent; brought back, it starts one",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, eve, ask } = yield* openPlan();
+        const key = randomUUID();
+        const first = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key })),
+        );
+        yield* updatePlan(owner, plan.id, { archived: true });
+
+        assert.deepEqual(
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED),
+        );
+        const again = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: key })),
+        );
+        assert.equal(again.agent.id, first.agent.id);
+        assert.equal(eve.opened.length, 1);
+        assert.equal((yield* listCodingAgents(owner, plan.id)).length, 1);
+
+        yield* updatePlan(owner, plan.id, { archived: false });
+        readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        );
+        assert.equal(eve.opened.length, 2);
       }),
   );
 
@@ -1376,6 +1412,29 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           systemPromptTokens: 1_200,
           toolDefinitionTokens: 2_800,
         });
+      }),
+  );
+
+  it.effect(
+    "an archived plan's agent takes no message and eve is handed none, while its turn runs on; brought back, it takes one",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, plan, agent, ask, transcript, sent } = yield* startedAgent(eve, {
+          running: true,
+        });
+        yield* updatePlan(owner, plan.id, { archived: true });
+
+        assert.deepEqual(
+          yield* ask(messageAs(owner, agent.id, { text: "Rename it.", clientKey: randomUUID() })),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED),
+        );
+        assert.deepEqual(eve.sent, []);
+        assert.equal((yield* transcript()).status, CODING_AGENT_STATUS.RUNNING);
+
+        yield* updatePlan(owner, plan.id, { archived: false });
+        yield* sent("Rename it.");
+        assert.equal(eve.sent.length, 1);
       }),
   );
 

@@ -4,7 +4,7 @@ import {
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -18,6 +18,7 @@ import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
+import { PlanArchived } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";
 import {
@@ -154,13 +155,13 @@ const CodingAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The plan row under its own lock, where the account owns it. */
+/** The plan row under its own lock, where the account owns it, with whether it is archived. */
 const lockOwnedPlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
-  Result: IdRowSchema,
+  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
     db
-      .select({ id: plan.id })
+      .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
       .from(plan)
       .where(and(eq(plan.id, planId), eq(plan.userId, userId)))
       .for("update"),
@@ -393,12 +394,18 @@ const deleteConversationRow = SqlSchema.void({
  * the row that binds it to the plan, with the plan text or the task, and
  * the repository, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account owns no such plan.
+ * Nothing where the account owns no such plan. An archived plan starts no
+ * agent, read under the same lock, though a retry still answers the agent
+ * its Start made before the archive.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): CodingAgentStoreEffect<Option.Option<CodingAgentStarted>> {
+): Effect.Effect<
+  Option.Option<CodingAgentStarted>,
+  CodingAgentStoreFailure | PlanArchived,
+  SqlClient.SqlClient
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -411,6 +418,7 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
+        if (owned.value.archived) return yield* new PlanArchived();
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.

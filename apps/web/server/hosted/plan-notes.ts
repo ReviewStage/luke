@@ -70,6 +70,12 @@ import { logStoreFailure, type StoreFailure } from "./store-failure.js";
  * into being, and a save that fails answers as not saved with the prior
  * document standing. Every outcome is a result, never a failure: an unsaved
  * change leaves the notetaker's lines for its next run.
+ *
+ * An archived plan takes no new edit or restore of the developer's, read
+ * under the same lock as the save, so an older desktop or an archive racing
+ * the edit cannot write it. The notes of a call or a coding agent already
+ * running when the plan was archived still land, as revisions in its
+ * history: the archive takes no new work, and loses none under way.
  */
 
 /** The account and plan a planning call writes, as the service bound them. */
@@ -95,6 +101,7 @@ export const PLAN_SAVE_REFUSAL = {
   TOO_LONG: "Not saved: the formatted plan is longer than a plan may be.",
   NO_PLAN: "Not saved: this plan no longer exists.",
   NO_REVISION: "Not saved: this plan has no such revision.",
+  ARCHIVED: "Not saved: this plan is archived.",
   UNAVAILABLE: "Not saved: the service could not reach its store.",
 } as const;
 
@@ -126,6 +133,16 @@ const NO_PLAN_RESULT: PlanNotSaved = {
   status: PLAN_SAVE_STATUS.NOT_SAVED,
   reason: PLAN_SAVE_REFUSAL.NO_PLAN,
 };
+
+const ARCHIVED_RESULT: PlanNotSaved = {
+  status: PLAN_SAVE_STATUS.NOT_SAVED,
+  reason: PLAN_SAVE_REFUSAL.ARCHIVED,
+};
+
+/** Whether the plan as read under its lock is archived, which takes none of the developer's writes. */
+function archived(stored: StoredPlan): boolean {
+  return stored.plan.archivedAt !== undefined;
+}
 
 /** What a change made of the plan's content under its lock: the content to save, how many changes it made, and the agents' journal where it moved. */
 interface PlanTaken {
@@ -300,7 +317,8 @@ export function saveDeveloperEdit(
   binding: PlanDocumentBinding,
   edit: PlanEditRequest,
 ): Effect.Effect<PlanEditSaveResult, never, SqlClient.SqlClient> {
-  const take = (stored: StoredPlan) => {
+  const take = (stored: StoredPlan): Result.Result<PlanTaken, PlanConflict | PlanNotSaved> => {
+    if (archived(stored)) return Result.fail(ARCHIVED_RESULT);
     const outcome = applyDeveloperEdit(contentOf(stored), edit);
     if ("conflict" in outcome) {
       const conflict: PlanConflict = {
@@ -348,11 +366,13 @@ export function restoreRevision(
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.NO_REVISION } as const;
     }
     // A restore's changes are counted by the fields it changes, the assumptions one of them.
-    const take = (stored: StoredPlan) =>
-      Result.succeed({
-        content: content.value,
-        changes: changedFields(contentOf(stored), content.value).length,
-      });
+    const take = (stored: StoredPlan): Result.Result<PlanTaken, PlanNotSaved> =>
+      archived(stored)
+        ? Result.fail(ARCHIVED_RESULT)
+        : Result.succeed({
+            content: content.value,
+            changes: changedFields(contentOf(stored), content.value).length,
+          });
     const saved = yield* savedUnderLock(
       binding,
       { actor: PLAN_ACTOR.DEVELOPER, restoredFrom: seq },

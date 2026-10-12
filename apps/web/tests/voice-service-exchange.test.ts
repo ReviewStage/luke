@@ -26,6 +26,7 @@ import {
   openPlanConversation,
   readPlan,
   savePlanDocument,
+  updatePlan,
 } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -1655,6 +1656,31 @@ it.effect(
       });
       assert.equal(record(await refused.reader.next()).error, HOSTED_API_ERROR.NOT_FOUND);
       assert.equal(context.openAi.creates.length, 2);
+      await context.stop();
+    }),
+);
+
+it.effect(
+  "an archived plan is refused before any session is created or counted, as no call is about it until it is brought back",
+  () =>
+    Effect.promise(async () => {
+      const context = await stand(OFFER.EXCHANGE);
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
+      await database.run(updatePlan(context.target.userId, plan.id, { archived: true }));
+
+      const refused = await connect(context.url(VOICE_SERVICE_PATH.SESSIONS), {
+        authorization: BEARER,
+      });
+      assert.ok("reader" in refused);
+      await send(refused.reader.socket, {
+        type: VOICE_SERVICE_FRAME.SESSION_CREATE,
+        sdp: SDP_OFFER,
+        voice: LIVE_VOICE.MARIN,
+        input: [],
+        planId: plan.id,
+      });
+      assert.equal(record(await refused.reader.next()).error, HOSTED_API_ERROR.PLAN_ARCHIVED);
+      assert.equal(context.openAi.creates.length, 0);
       await context.stop();
     }),
 );

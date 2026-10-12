@@ -249,7 +249,8 @@
             "invalid-choice",
             "message-too-long",
             "agent-not-ready",
-            "agent-retired"
+            "agent-retired",
+            "plan-archived"
           ]
         }
       },

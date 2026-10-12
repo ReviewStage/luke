@@ -101,6 +101,8 @@ export const CODING_AGENT_TOOL_REFUSAL = {
   RETIRED:
     "Not sent: the agent's session has ended for good, so nothing reaches it; only a new agent goes on from here.",
   UNAVAILABLE: "Not sent: the service could not take the message just now.",
+  ARCHIVED:
+    "Not sent: this plan is archived, so its agents take no message until the developer unarchives it.",
 } as const;
 
 /** Why a start made nothing, in words the model can act on; a choice the catalog refused is said with the choices (`choiceRefusal`). */
@@ -116,6 +118,7 @@ export const START_CODING_AGENT_REFUSAL = {
   SIGN_IN_REQUIRED: "Not started: the developer must sign in with GitHub again first.",
   UNAVAILABLE:
     "Not started: the service could not start an agent just now. The call may be made again.",
+  ARCHIVED: "Not started: this plan is archived; the developer unarchives it first.",
 } as const;
 
 /** The start refusal's sentence for each hosted refusal a start may answer; any other is the service down. */
@@ -123,6 +126,7 @@ const START_REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.NO_REPOSITORY, START_CODING_AGENT_REFUSAL.NO_REPOSITORY],
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE, START_CODING_AGENT_REFUSAL.NOT_REACHABLE],
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED, START_CODING_AGENT_REFUSAL.SIGN_IN_REQUIRED],
+  [HOSTED_API_ERROR.PLAN_ARCHIVED, START_CODING_AGENT_REFUSAL.ARCHIVED],
 ]);
 
 /** The refusal's sentence for each hosted refusal a steer may answer; any other is the service down. */
@@ -132,6 +136,7 @@ const REFUSAL_WORDS: ReadonlyMap<string, string> = new Map([
   [HOSTED_API_ERROR.AGENT_NOT_READY, CODING_AGENT_TOOL_REFUSAL.NOT_READY],
   [HOSTED_API_ERROR.AGENT_RETIRED, CODING_AGENT_TOOL_REFUSAL.RETIRED],
   [HOSTED_API_ERROR.NOT_FOUND, CODING_AGENT_TOOL_REFUSAL.NO_AGENT],
+  [HOSTED_API_ERROR.PLAN_ARCHIVED, CODING_AGENT_TOOL_REFUSAL.ARCHIVED],
 ]);
 
 /** What a planning call about the agents runs under: the plan, eve as the deployment acting for the account, the writer, and the key the one message is sent under. */

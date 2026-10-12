@@ -66,6 +66,12 @@ export const HOSTED_API_ERROR = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good: its sandbox cannot be reached again, and only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
+  /**
+   * The plan is archived: it is read, and takes nothing — no edit, no call,
+   * no agent started or sent a message — until it is brought back. Nothing
+   * was written.
+   */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type HostedApiError = (typeof HOSTED_API_ERROR)[keyof typeof HOSTED_API_ERROR];
