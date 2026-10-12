@@ -284,19 +284,18 @@ const storedObjectSchema = verbatimJsonSchema(WireValueSchema, {
  * tool calls with their input and output, step boundaries) and the stored
  * metadata beside them. The parts are carried as the JSON they are rather
  * than declared part by part, because the SDK's vocabulary is the contract
- * and the components that draw them read it directly. Beside them, when the
- * row was written and when it closed, which for one of the agent's turns is
- * when the turn began writing and when it answered or ended, so a tab says
- * how long a finished turn worked.
+ * and the components that draw them read it directly. One of the agent's
+ * turns carries beside them when the turn began and when it answered or
+ * ended, so a tab says how long a finished turn worked.
  */
 export const codingAgentMessageSchema = EffectSchema.Struct({
   id: EffectSchema.String,
   role: EffectSchema.Literals(Object.values(MESSAGE_ROLE)),
   parts: EffectSchema.Array(storedObjectSchema),
   metadata: EffectSchema.optionalKey(storedObjectSchema),
-  /** Epoch milliseconds the row was first written; absent from a service older than it. */
-  createdAt: EffectSchema.optionalKey(countedNumber),
-  /** Epoch milliseconds the row closed: a turn's answer, or its end; absent while it is still written, and from a service older than it. */
+  /** Epoch milliseconds the turn began, as a working line counts it: its start, or its queueing where eve has not started it; absent on the developer's rows, and from a service older than it. */
+  startedAt: EffectSchema.optionalKey(countedNumber),
+  /** Epoch milliseconds the turn answered or ended; absent while it is still written, on the developer's rows, and from a service older than it. */
   finishedAt: EffectSchema.optionalKey(countedNumber),
 });
 

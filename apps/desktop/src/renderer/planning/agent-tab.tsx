@@ -297,7 +297,7 @@ function AgentMessage({
       </Message>
     );
   }
-  const { createdAt, finishedAt } = message;
+  const { startedAt, finishedAt } = message;
   return (
     <Message from={message.role}>
       <MessageContent>
@@ -305,8 +305,8 @@ function AgentMessage({
           {(part) => <AgentPartView part={part} components={components} delegation={delegation} />}
         </TranscriptRows>
       </MessageContent>
-      {moving || createdAt === undefined || finishedAt === undefined ? null : (
-        <WorkedFor startedAt={createdAt} endedAt={finishedAt} />
+      {moving || startedAt === undefined || finishedAt === undefined ? null : (
+        <WorkedFor startedAt={startedAt} endedAt={finishedAt} />
       )}
       {words === "" ? null : <CopyMessageAction words={words} />}
     </Message>

@@ -30,7 +30,7 @@
                 "type": "object",
                 "additionalProperties": true
               },
-              "createdAt": {
+              "startedAt": {
                 "type": "number",
                 "minimum": 0
               },

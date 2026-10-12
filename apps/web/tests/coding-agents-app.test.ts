@@ -1596,7 +1596,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
   );
 
   it.effect(
-    "a turn's row on the transcript says when the turn began writing, and when it answered once it has, so a finished turn says how long it worked",
+    "a turn's row on the transcript says when the turn began, ahead of its first step, and when it answered once it has, so a finished turn says how long it worked as its working line counted it",
     () =>
       Effect.gen(function* () {
         const { owner, agent, ask, target, writer } = yield* startedAgent(fakeEve(), undefined);
@@ -1615,16 +1615,17 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           origin: TURN_ORIGIN.TYPED,
           eveTurnId: "turn_0",
         });
+        const began = yield* Clock.currentTimeMillis;
         yield* writer.consume(target, {
           ...event,
           kind: BRAIN_RUN_EVENT.TURN_STARTED,
           sequence: 1,
           origin: BRAIN_TURN_ORIGIN.TYPED,
           trigger: BRAIN_TURN_TRIGGER.ASK,
-          at: 0,
+          at: began,
         });
+        // The journal opens with the first step, a moment after the turn began.
         yield* TestClock.adjust(Duration.seconds(5));
-        const began = yield* Clock.currentTimeMillis;
         yield* writer.consume(target, {
           ...event,
           kind: BRAIN_RUN_EVENT.STEP_STARTED,
@@ -1632,7 +1633,7 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           step: 1,
         });
         const writing = yield* journalOf();
-        assert.equal(writing?.createdAt, began);
+        assert.equal(writing?.startedAt, began);
         assert.equal(writing?.finishedAt, undefined);
 
         yield* TestClock.adjust(Duration.seconds(78));
@@ -1648,8 +1649,8 @@ it.layer(testSqlClient)("messaging a coding agent", (it) => {
           },
         });
         const answered = yield* journalOf();
-        assert.equal(answered?.createdAt, began);
-        assert.equal(answered?.finishedAt, began + 78_000);
+        assert.equal(answered?.startedAt, began);
+        assert.equal(answered?.finishedAt, began + 83_000);
       }),
   );
 

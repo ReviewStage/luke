@@ -190,7 +190,7 @@ const agentTurn = (finished: boolean) => ({
   id: "turn-1",
   role: MESSAGE_ROLE.ASSISTANT,
   parts: [{ type: "text", text: "Added the tests." }],
-  createdAt: TURN_END - 78 * SECOND,
+  startedAt: TURN_END - 78 * SECOND,
   ...(finished ? { finishedAt: TURN_END } : undefined),
 });
 

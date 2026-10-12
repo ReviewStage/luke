@@ -16,6 +16,7 @@ import type { SqlError } from "effect/unstable/sql/SqlError";
 import {
   isSettledToolPartState,
   isStoredToolPart,
+  MESSAGE_ROLE,
   type StoredUIMessage,
   storedToolName,
 } from "../../core.js";
@@ -37,7 +38,7 @@ import {
   type MessageCursor,
   type StoredMessageRecord,
 } from "../store/index.js";
-import { type LatestTurn, readMessageByClientId } from "../store/message-reads.js";
+import { type LatestTurn, readMessageByClientId, turnsNamed } from "../store/message-reads.js";
 import { CODER } from "./bounds.js";
 import { codingAgentContextOf, contextWindowOf } from "./context.js";
 import {
@@ -70,11 +71,11 @@ import { usageOfTurn, usageOfTurns } from "./usage.js";
  * newest turn, each read once with the page that is answered rather than
  * on every look inside the hold, and on the agent's own transcript what
  * its model's context holds as its newest step left it (`context.ts`) and
- * when each worker its newest turn still waits on began. Each row carries
- * when it was written and when it closed, which for a turn's journal is
- * when the turn began writing and when it answered or ended; the close is
- * written with the journal's last parts, so the page that carries them
- * carries it too.
+ * when each worker its newest turn still waits on began. A turn's journal
+ * carries when the turn began, by the rule the working line counts from,
+ * and when the journal closed: the close is written with the journal's
+ * last parts, so the page that carries them carries it too, where the
+ * turn row's own settling may land a look later.
  * Note that a step's end is written a moment before the next step starts
  * and lands its parts in the journal, so the page that wakes on a step
  * carries the step before it. The wire spells the cursor as the two
@@ -97,9 +98,9 @@ export function cursorToWire(cursor: MessageCursor): string {
 /** The cursor before every message, as the store reads it. */
 export const CURSOR_START: MessageCursor = cursorOfWire(CODING_AGENT_CURSOR_START);
 
-/** One row of the transcript as the route answers it: its message as the store holds it, and when the row was written and closed, which is the wire's `CodingAgentMessage` once serialized. */
+/** One row of the transcript as the route answers it: its message as the store holds it, and for a turn's journal when the turn began and closed, which is the wire's `CodingAgentMessage` once serialized. */
 type TranscriptMessage = StoredUIMessage & {
-  readonly createdAt: number;
+  readonly startedAt?: number;
   readonly finishedAt?: number;
 };
 
@@ -168,11 +169,30 @@ const contextOf = (target: ConversationTarget, own: OwnAgent, offered: readonly 
       : codingAgentContextOf(held.value, contextWindowOf(offered, held.value.model)),
   );
 
-/** A row as the page carries it: its message, with when it was written and, once closed, when. */
-function transcriptMessageOf(record: StoredMessageRecord): TranscriptMessage {
+/**
+ * When each turn whose journal is among the rows began, by the turn: its
+ * start, or its queueing before eve started it, which is what the working
+ * line counted from while it ran (`codingAgentRunStartedAt`).
+ */
+const turnStartsOf = (userId: string, records: readonly StoredMessageRecord[]) => {
+  const journals = records.filter((record) => record.message.role === MESSAGE_ROLE.ASSISTANT);
+  const ids = new Set(journals.flatMap((record) => record.turnId ?? []));
+  return Effect.map(
+    turnsNamed(userId, [...ids]),
+    (turns) => new Map(turns.map((turn) => [turn.id, (turn.startedAt ?? turn.queuedAt).getTime()])),
+  );
+};
+
+/** A row as the page carries it: its message, and for a turn's journal when the turn began and, once the journal closed, when. */
+function transcriptMessageOf(
+  record: StoredMessageRecord,
+  turnStarts: ReadonlyMap<string, number>,
+): TranscriptMessage {
+  const startedAt = record.turnId === undefined ? undefined : turnStarts.get(record.turnId);
+  if (startedAt === undefined) return record.message;
   return {
     ...record.message,
-    createdAt: record.createdAt.getTime(),
+    startedAt,
     ...(record.finishedAt === undefined ? undefined : { finishedAt: record.finishedAt.getTime() }),
   };
 }
@@ -265,9 +285,11 @@ function pagePast(
       CODING_AGENT_BOUNDS.MESSAGES_PAGE,
     );
     const { status, runStartedAt, failureReason, turn } = yield* statusNow(target, createdAt);
+    const records = read.ok ? read.value : [];
+    const turnStarts = yield* turnStartsOf(target.userId, records);
     return {
       page: {
-        messages: read.ok ? read.value.map(transcriptMessageOf) : [],
+        messages: records.map((record) => transcriptMessageOf(record, turnStarts)),
         cursor,
         status,
         ...(runStartedAt === undefined ? undefined : { runStartedAt }),
