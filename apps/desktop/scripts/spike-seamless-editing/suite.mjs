@@ -342,6 +342,56 @@ const shot = (page, name) => page.screenshot({ path: `${out}/${mode}-${name}.png
   await page.close();
 }
 
+// M. Layout shift: how far a field's words move when its editor opens, for every field kind.
+{
+  const shifts = {};
+  for (const [name, needle] of [
+    ["text", "members wait"],
+    ["bullets", "Inviting by email"],
+    ["heading", "Rejected"],
+    ["code", "Effect"],
+    ["numbered", "Invite a teammate from"],
+    ["questions", "Who can withdraw"],
+    ["assumptions", "7 days"],
+    ["rule", "opens the link"],
+  ]) {
+    const page = await open();
+    const at = () =>
+      page.evaluate((needle) => {
+        const walker = document.createTreeWalker(
+          document.querySelector(".plan-document-scroll"),
+          NodeFilter.SHOW_TEXT,
+        );
+        let text = walker.nextNode();
+        while (text && !text.textContent.includes(needle)) text = walker.nextNode();
+        if (!text) return null;
+        const range = document.createRange();
+        const from = text.textContent.indexOf(needle);
+        range.setStart(text, from);
+        range.setEnd(text, from + 1);
+        const r = range.getBoundingClientRect();
+        return { x: r.left, y: r.top };
+      }, needle);
+    await page.evaluate((needle) => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let text = walker.nextNode();
+      while (text && !text.textContent.includes(needle)) text = walker.nextNode();
+      text?.parentElement.scrollIntoView({ block: "center" });
+    }, needle);
+    const before = await at();
+    if (before === null) continue;
+    await page.mouse.click(before.x + 2, before.y + 5);
+    await sleep(300);
+    const after = await at();
+    shifts[name] =
+      after === null
+        ? null
+        : Math.round(Math.hypot(after.x - before.x, after.y - before.y) * 10) / 10;
+    await page.close();
+  }
+  results.layoutShiftPx = shifts;
+}
+
 // K. Session replay: is every editable node inside a blocked subtree?
 {
   const page = await open();

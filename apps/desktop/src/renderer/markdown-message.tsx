@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Markdown, { type AllowElement, type Components, type Options } from "react-markdown";
+import rehypeHighlight from "rehype-highlight";
 import remarkGfm from "remark-gfm";
 
 const SAFE_LINK = /^https?:\/\//i;
@@ -274,7 +275,10 @@ export function MarkdownMessage({
   /** The edit the words are drawn partway through; drawn whole without one. */
   edit?: MarkdownEdit | undefined;
 }): React.JSX.Element {
-  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [];
+  // SPIKE: code is highlighted with the grammars the in-place editor uses, guessed where a fence names none.
+  const rehypePlugins: NonNullable<Options["rehypePlugins"]> = [
+    [rehypeHighlight, { detect: true }],
+  ];
   if (edit !== undefined) rehypePlugins.push([drawEdit, edit, words.length]);
   return (
     <div className={className === undefined ? "markdown" : `markdown ${className}`}>

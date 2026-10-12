@@ -68,7 +68,7 @@ const FIELDS: PlanFields = {
   },
   decisions:
     "Model an invite as a `memberships` row with `state = pending`. Why: removal covers " +
-    "invites and members alike. Rejected: a separate `invitations` table.",
+    "invites and members alike.\n\n## Rejected\n\n- A separate `invitations` table.",
   verification:
     "1. Invite a teammate from the members page.\n2. Open the link in a private window.",
   openQuestions: ["Who can withdraw an invite: the member who sent it, any admin, or *both*?"],

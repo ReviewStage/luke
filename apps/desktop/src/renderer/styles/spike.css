@@ -1,9 +1,39 @@
+/* SPIKE (seamless plan editing): highlight.js's GitHub themes for code, the
+   dark one by default and the light one for the light appearance, as the
+   rest of the palette switches. Only their token colours are used; the code
+   block keeps the document's own box (below). */
+@import "highlight.js/styles/github-dark.css";
+@import "highlight.js/styles/github.css" (prefers-color-scheme: light);
+
 /* SPIKE (seamless plan editing): the in-place field editor. It draws as the
    read view draws, with no box around it, so opening it moves and adds
    nothing: the caret is the only sign the words are being edited, as in a
    document editor. */
 .spike-seamless > * + * {
+  margin-top: 0;
+}
+
+/* The words open where the drawn words stood: directly under the heading,
+   with a gap only above what stands under the editor. */
+.spike-seamless > .plan-field-note {
   margin-top: 0.5em;
+}
+
+/* TipTap draws headings and paragraphs as their own elements, where the read
+   view draws every block as a margin-less paragraph; these give them the
+   read view's box, and a heading the read view's weight through its class. */
+.spike-editor :is(h1, h2, h3, h4, h5, h6),
+.spike-editor p {
+  margin: 0;
+  font-size: inherit;
+}
+
+/* Code takes highlight.js's colours over the document's own code block. */
+.markdown pre code.hljs,
+.spike-editor pre code.hljs {
+  padding: 0;
+  background: transparent;
+  color: inherit;
 }
 
 .spike-editor {
@@ -33,6 +63,11 @@
 
 .plan-rule-body.spike-editor li {
   white-space: normal;
+}
+
+/* A clause is a line of its example, as the read view's lines are, with none of the gap between a list item's blocks. */
+.plan-rule-body.spike-editor li > .spike-clause {
+  margin-top: 0;
 }
 
 .plan-rule-body.spike-editor ul:empty {

@@ -36,16 +36,26 @@ so the fixed template cannot be broken by editing. The editor wears the read
 view's own classes, so nothing moves as it opens. It has no box, and the
 caret is the only sign of editing.
 
-**TipTap's.** All of the editing itself comes from TipTap:
-- StarterKit: paragraphs, lists, code blocks, quotes, bold, italic, strike,
-  inline code, links, undo and redo, and the Markdown typing shortcuts and
-  keys.
+**TipTap's.** All of the editing itself comes from TipTap, with everything
+Markdown can store switched on:
+- StarterKit: paragraphs, headings, lists, quotes, horizontal rules, bold,
+  italic, strike, inline code, links, undo and redo, and the Markdown typing
+  shortcuts and keys.
+- `CodeBlockLowlight`: code blocks, syntax-highlighted.
 - `@tiptap/markdown` reads and writes each field's Markdown.
-- Task lists, tables, and images, so a field holding them survives an edit.
+- Task lists, tables, and images.
 - The placeholder.
 
-**Ours** (`spike/field-editor.tsx`, `spike/rule-extension.ts`, and the glue
-in `plan-field-editor.tsx`):
+The one StarterKit extension switched off is underline: Markdown cannot
+store it and the read view could not draw it. The other TipTap extensions
+(highlight marks, sub- and superscript, text colour and alignment, smart
+typography) have no Markdown form either, so they stay out for the same
+reason.
+
+**Ours** (`spike/field-editor.tsx`, `spike/rule-extension.ts`, the glue in
+`plan-field-editor.tsx`, and a few lines of CSS so TipTap's elements stand
+exactly where the read view's do, measured at 0 px of shift on every field
+kind):
 
 - **The rule's fixed shape.** Six small TipTap nodes: a statement, then
   examples of exactly Given, When, and Then, the labels drawn and never
@@ -61,6 +71,41 @@ in `plan-field-editor.tsx`):
 - **Nothing else.** The save model is untouched: the editor feeds the same
   `typeText` and `typeRule` as the text boxes did, so the merge, the
   conflict, the retry, the hold, and attribution behave as shipped.
+
+**Two changes outside the editor, so it can draw everything it writes:**
+
+- **Headings in a field.** The formatter used to escape a heading in a field
+  (it drew `## Rejected` as those characters), because a field must never
+  open a section of its own. It now moves the heading below the field's own
+  `###` instead: `#` becomes `####`, `##` becomes `#####`, and deeper ones
+  `######` (`packages/hosted/src/plan-template.ts`). Nothing cuts the body at
+  anything below `###`, the stored field keeps the developer's `##`, and the
+  read view draws it as a heading in the field.
+- **Highlighted code in the read view.** `rehype-highlight` in
+  `markdown-message.tsx`, on the same `lowlight` grammars as the editor and
+  guessing the language where a fence names none, as the editor does. So
+  code reads the same before and during an edit, and every Markdown message
+  in the app gains highlighting with it. The colours are highlight.js's
+  GitHub themes, dark and light.
+
+## Should a rule just be a numbered list?
+
+No, not without changing what a rule is. Given/When/Then is the stored shape
+(`examples: [{given, when, then}]` in `plan-wire.ts`), not decoration in
+the editor. The notetaker writes it with its own `addExample` note. The
+formatter turns it into the `### Rule N:` blocks that Copy hands a coding
+agent, and the read view draws it as such. A numbered list in the editor
+would need one of two things:
+
+- **A parser.** Read the list back into rules, which is exactly the
+  body-to-fields parsing the proposal rules out, and brittle the moment a
+  label is deleted.
+- **A new data model.** Store rules as one Markdown field: a migration, the
+  notetaker's notes, the formatter, and what coding agents are told.
+
+The editor's part is about 120 lines of TipTap nodes, so the cheaper path is
+to keep it. Dropping Given/When/Then is a product decision about plans, not
+an editor one.
 
 ## Demo
 
@@ -93,7 +138,8 @@ faster.
 | | Today (textarea) | TipTap in place |
 | --- | --- | --- |
 | Caret where clicked | ✗ start of the box | ✓ |
-| Formatting while editing | ✗ raw Markdown | ✓ |
+| Formatting while editing | ✗ raw Markdown | ✓, headings and highlighted code included |
+| Layout shift as a field opens | the words jump into a box | **0 px** on text, bullets, numbered, heading, code, questions, assumptions, rule |
 | Typing p50 / p95, long plan | 28.4 / 40.1 ms | **4.5 / 17.6 ms** (p95 is one 60 Hz frame) |
 | Same, 4× CPU throttle | 128.6 / 182.4 ms | 16.2 / 24.4 ms |
 | Rule: Enter to next clause, new example | inputs and buttons | ✓ |
@@ -112,13 +158,17 @@ faster.
 | `renderer.js` gz | |
 | --- | --- |
 | `main` (#2086) | 736,347 (baseline 733,811, ceiling 770,501) |
-| With TipTap inside | **905,662 (+169 KB)**, recorded as this branch's baseline so it builds |
+| With TipTap inside | 905,662 (+169 KB) |
+| With syntax highlighting too | **961,262 (+225 KB)**, recorded as this branch's baseline so it builds; `lowlight`'s 37 common languages and `highlight.js` are +55.6 KB of it, shared by the editor and the read view |
 | As a lazy `field-editor.js` instead | `renderer.js` unmoved; the new bundle is ~226 KB gz, since it carries its own React |
 
 What the 169 KB is (minified, before gzip): the editor engine
 (`prosemirror-*` and `@tiptap/core`, ~330 KB), `marked` (88 KB),
 tables (`prosemirror-tables` and the extension, 48 KB), lists (22 KB),
-`@tiptap/markdown` (21 KB), and `linkifyjs` for links (20 KB). Dropping
+`@tiptap/markdown` (21 KB), and `linkifyjs` for links (20 KB), before the
+highlighting above. A smaller language set (`lowlight`'s per-language
+imports) would cut the highlighting cost, at the price of choosing the
+languages ourselves. Dropping
 tables would save about 14 KB gz. The cost is that a field holding a table
 would lose it on its first edit, because the whole field is re-printed.
 
@@ -146,9 +196,9 @@ would lose it on its first edit, because the whole field is re-printed.
   edit lands at once on close.
 - **Live drafts and conflicts (#2022).** The model is unchanged, so the hold,
   Keep mine, and Use Luke's behave as shipped (tested above).
-- **The fixed template.** No editor holds a heading. StarterKit's heading is
-  switched off, so a pasted heading lands as a paragraph, and the formatter
-  still escapes any field line that would open one.
+- **The fixed template.** No editor holds a section's heading; the document
+  draws those. A heading typed into a field is the field's own and is moved
+  below the field's `###` in the body, so it can never open a section.
 - **Session replay.** The editor is a `contenteditable`, so its words are DOM
   text that `mask_all_text` masks. It also stands under `ph-no-capture`,
   because the recorder would otherwise capture one DOM mutation per
@@ -189,7 +239,7 @@ on the same edge cases. In short:
 ## Bundle approval
 
 Dean approved moving the renderer baseline for this branch, where it now
-stands at 905,662. The production PR either records the same move, or ships
+stands at 961,262. The production PR either records the same move, or ships
 the editor lazily, as `whiteboard.js` and `file-tree.js` are, at the cost of
 a loader and a second copy of React in that bundle. That choice is Dean's.
 

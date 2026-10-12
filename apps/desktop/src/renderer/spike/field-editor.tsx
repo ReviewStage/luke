@@ -1,6 +1,7 @@
 // field-editor.tsx -- SPIKE: a plan field edited in place on TipTap, drawn as the document draws it.
 
 import type { Editor, JSONContent } from "@tiptap/core";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
@@ -8,6 +9,7 @@ import { Placeholder } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { common, createLowlight } from "lowlight";
 import { useLayoutEffect, useRef } from "react";
 import { RULE_EXTENSIONS, type RuleParts, ruleDocument, ruleParts } from "./rule-extension";
 
@@ -46,7 +48,15 @@ const PLACEHOLDER = {
   [FIELD_KIND.RULE]: "One sentence that holds in every case",
 } as const;
 
-/** What a field's Markdown may hold. Note that a link opens nothing while it is edited. */
+/** The grammars code blocks are highlighted with, the same set the read view highlights with (`markdown-message.tsx`). */
+const lowlight = createLowlight(common);
+
+/**
+ * What a field's Markdown may hold: everything StarterKit and TipTap's
+ * Markdown-backed extensions give, but underline, which Markdown cannot
+ * store and the read view could not draw. Note that a link opens nothing
+ * while it is edited, and code blocks are TipTap's highlighted ones.
+ */
 function extensionsOf(kind: FieldValue["kind"]) {
   const placeholder = Placeholder.configure({ placeholder: PLACEHOLDER[kind] });
   if (kind === FIELD_KIND.RULE) {
@@ -66,16 +76,20 @@ function extensionsOf(kind: FieldValue["kind"]) {
     });
     return [inline, ...RULE_EXTENSIONS, placeholder];
   }
+  // The assumptions' items wear the read view's own class, so they stand where its items stood.
+  const item = kind === FIELD_KIND.ASSUMPTIONS ? { class: "plan-assumption" } : {};
   const kit = StarterKit.configure({
-    heading: false,
-    horizontalRule: false,
     underline: false,
     trailingNode: false,
+    codeBlock: false,
+    heading: { HTMLAttributes: { class: "markdown-heading" } },
+    listItem: { HTMLAttributes: item },
     link: { openOnClick: false },
   });
   return [
     kit,
     Markdown,
+    CodeBlockLowlight.configure({ lowlight }),
     TaskList,
     TaskItem,
     TableKit,

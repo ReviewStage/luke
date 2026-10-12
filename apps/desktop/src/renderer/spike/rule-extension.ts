@@ -37,6 +37,8 @@ function clause(name: string, label: string) {
       "div",
       { "data-clause": name, class: "spike-clause" },
       ["strong", { contenteditable: "false" }, label],
+      // The space the read view draws between a label and its words.
+      " ",
       ["span", 0],
     ],
   });

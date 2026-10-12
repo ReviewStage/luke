@@ -268,6 +268,13 @@ function inPlaceValue(editor: FieldEditor): FieldValue {
   return { kind: FIELD_KIND.TEXT, text: draft.text };
 }
 
+/** SPIKE: the read view's own classes for the field's words, so the editor's words stand where they stood. */
+function classOf(value: FieldValue): string {
+  if (value.kind === FIELD_KIND.RULE) return "markdown plan-rule-body";
+  if (value.kind === FIELD_KIND.ASSUMPTIONS) return "spike-assumptions";
+  return "markdown plan-unit";
+}
+
 /** SPIKE: how long the typing pauses before the document hears the field's words. */
 const DRAFT_PAUSE = Duration.millis(150);
 
@@ -348,7 +355,7 @@ export function PlanFieldEditor({
       value={value}
       at={editing.at}
       label={label}
-      className={rule ? "markdown plan-rule-body" : "markdown plan-unit"}
+      className={classOf(value)}
       onDraft={onDraft}
       onFinish={onFinish}
     />
