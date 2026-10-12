@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import {
+  CHECK_SUMMARY,
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
 import { count, eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -15,8 +21,12 @@ import {
   type CodingAgentStarted,
   createCodingAgent,
   listCodingAgents,
+  listPublishedCodingAgents,
   type NewCodingAgent,
   readCodingAgent,
+  readCodingAgentContext,
+  recordCodingAgentPublished,
+  updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
@@ -96,7 +106,45 @@ const conversationKind = (conversationId: string) =>
     (rows) => rows[0],
   );
 
+/** A pull request as GitHub answered a read of it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 41,
+  title: "Teammate invitations",
+  url: "https://github.com/reviewstage/luke/pull/41",
+  state: PULL_REQUEST_STATE.DRAFT,
+  checks: CHECK_SUMMARY.PENDING,
+  additions: 120,
+  deletions: 4,
+  changedFiles: 3,
+};
+
 it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
+  it.effect(
+    "the pull request an agent published reads back beside the agents of the plans named, as last recorded, and nothing of another account's is read or written",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const other = yield* openPlan;
+        const agent = started(yield* createCodingAgent(userId, start(planId)));
+        const theirs = started(yield* createCodingAgent(other.userId, start(other.planId)));
+
+        yield* recordCodingAgentPublished(userId, agent.id, PULL_REQUEST);
+        // Another account's write names no agent of theirs, and another account's read names none of this one's.
+        yield* recordCodingAgentPublished(userId, theirs.id, PULL_REQUEST);
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId, other.planId]), [
+          { agent, published: PULL_REQUEST },
+        ]);
+        assert.deepEqual(yield* listPublishedCodingAgents(other.userId, [other.planId]), [
+          { agent: theirs, published: null },
+        ]);
+
+        yield* recordCodingAgentPublished(userId, agent.id, null);
+        assert.deepEqual(yield* listPublishedCodingAgents(userId, [planId]), [
+          { agent, published: null },
+        ]);
+      }),
+  );
+
   it.effect("a Start is one agent on a conversation of its own, holding what it was handed", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
@@ -116,6 +164,40 @@ it.layer(testSqlClient)("the coding agents of an account's plans", (it) => {
       });
       assert.deepEqual(yield* readCodingAgent(userId, agent.id), Option.some(agent));
     }),
+  );
+
+  it.effect(
+    "an agent runs on its model's whole window unless its Start or a later change names the standard one, which a change naming none takes back",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        const long = started(yield* createCodingAgent(userId, start(planId)));
+        assert.equal(long.contextWindow, CONTEXT_WINDOW.LONG);
+
+        const standard = started(
+          yield* createCodingAgent(
+            userId,
+            start(planId, { model: "openai/gpt-5.5", contextWindow: CONTEXT_WINDOW.STANDARD }),
+          ),
+        );
+        assert.equal(standard.contextWindow, CONTEXT_WINDOW.STANDARD);
+        const context = yield* readCodingAgentContext(userId, standard.id);
+        assert.equal(Option.getOrUndefined(context)?.contextWindow, CONTEXT_WINDOW.STANDARD);
+
+        const changed = yield* updateCodingAgentChoice(userId, long.id, {
+          model: "openai/gpt-5.5",
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        });
+        assert.equal(Option.getOrUndefined(changed)?.contextWindow, CONTEXT_WINDOW.STANDARD);
+        yield* updateCodingAgentChoice(userId, long.id, {
+          model: "openai/gpt-5.5",
+          effort: "low",
+        });
+        const read = yield* readCodingAgent(userId, long.id);
+        assert.equal(Option.getOrUndefined(read)?.contextWindow, CONTEXT_WINDOW.LONG);
+        assert.equal(Option.getOrUndefined(read)?.effort, "low");
+      }),
   );
 
   it.effect("a Start on a task holds the task it was handed and no copy of the plan", () =>

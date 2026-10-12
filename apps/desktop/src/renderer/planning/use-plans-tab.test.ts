@@ -40,6 +40,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { ToastHost } from "../toast";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "./planning-model";
 import { messageText, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { MAIN_TAB } from "./use-main-tabs";
 import { type PlansControl, usePlansTab } from "./use-plans-tab";
 import { SIDE_PANEL_TAB, SIDE_PANEL_TABS } from "./use-side-panel";
 
@@ -268,8 +269,11 @@ function revisionLine(seq: number) {
 
 const FIRST_VERSION = { body: "# Teammate invitations\n\n## Goal", assumptions: [] };
 
+/** A plan other than the open one, which the host opens in its place. */
+const OTHER_PLAN_ID = "0c9a3f1e-6b2d-4e8f-a1c7-3d5e7f9a1b2c";
+
 it.effect(
-  "the History tab reads the plan's versions; one chosen stands in the document's place until Escape or another tab, and a restore goes back to the plan and offers its Undo",
+  "Version history opens over the open plan on the plan as it stands with its side panel as it was, opens again on the newest, and a restore offers its Undo",
   () =>
     Effect.gen(function* () {
       const restoredAnswer = { value: false };
@@ -284,16 +288,23 @@ it.effect(
         },
         yield* registryOnTestClock,
       );
-      assert.ok(tab.control().sidePanel.tabs.includes(SIDE_PANEL_TAB.HISTORY));
-      assert.ok(!tab.told.includes(ACT_KIND.PLANNING_REVISIONS), "read only once it shows");
+      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
+      assert.equal(tab.control().history.open, false);
+      assert.ok(!tab.told.includes(ACT_KIND.PLANNING_REVISIONS), "read only once it opens");
 
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
+      act(() => tab.control().history.onOpen(PLAN.id));
       yield* landed;
+      assert.equal(tab.control().history.open, true);
       const { list } = tab.control().history;
       assert.deepEqual(
         list.kind === "ready" ? list.revisions.map(({ seq }) => seq) : list.kind,
         [2, 1],
       );
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "the plan as it stands first");
+      assert.equal(tab.control().history.viewing?.current, true);
+      assert.equal(tab.control().page, PLANS_PAGE.DOCUMENT);
+      assert.equal(tab.control().sidePanel.open, true);
+      assert.equal(tab.control().sidePanel.tab, SIDE_PANEL_TAB.WORK);
 
       act(() => tab.control().history.onSelect(1));
       yield* landed;
@@ -305,24 +316,13 @@ it.effect(
         FIRST_VERSION,
       );
 
-      let stepped = false;
-      act(() => {
-        stepped = tab.control().back();
-      });
-      assert.ok(stepped);
-      assert.equal(tab.control().history.viewing, undefined);
-      assert.equal(
-        tab.control().page,
-        PLANS_PAGE.DOCUMENT,
-        "Escape left the version, not the plan",
-      );
-
-      act(() => tab.control().history.onSelect(1));
+      act(() => tab.control().history.onClose());
+      assert.equal(tab.control().history.open, false);
+      assert.equal(tab.control().sidePanel.tab, SIDE_PANEL_TAB.WORK, "the panel as it was");
+      act(() => tab.control().history.onOpen(PLAN.id));
       yield* landed;
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-      assert.equal(tab.control().history.viewing, undefined, "another tab leaves the version");
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "it opens again on the newest");
 
-      act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY));
       act(() => tab.control().history.onSelect(1));
       yield* landed;
       let refused: ActionResult | undefined;
@@ -354,18 +354,75 @@ it.effect(
       });
       yield* landed;
       assert.equal(restored?.status, ACTION_RESULT_STATUS.ACCEPTED);
-      assert.equal(tab.control().history.viewing, undefined);
-      const undo = document.querySelector<HTMLButtonElement>(".toast button");
-      assert.equal(undo?.textContent, "Undo");
+      const undo = undoButton();
       assert.equal(toast()?.replace("Undo", ""), "Version restored");
 
       // The Undo is itself a restore, and one the service refuses says so.
       restoredAnswer.value = false;
-      act(() => undo?.click());
+      act(() => undo.click());
       yield* landed;
       assert.equal(toast(), "The restore could not be undone. Try again.");
     }),
 );
+
+it.effect(
+  "a save landing while the version history stands moves the view on to it from the newest, and leaves an older version chosen where it is",
+  () =>
+    Effect.gen(function* () {
+      const head = { seq: 2 };
+      const editedAt = (at: number): PlanningView => ({
+        ...EDITED,
+        document: {
+          status: PLANNING_READ.READY,
+          plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true } },
+        },
+      });
+      const tab = mount(
+        { shown: true, planning: editedAt(20) },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({
+              revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
+            }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+
+      head.seq = 3;
+      tab.stand({ planning: editedAt(30) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 3, "the newest followed");
+      assert.equal(tab.control().history.viewing?.current, true);
+
+      act(() => tab.control().history.onSelect(2));
+      yield* landed;
+      head.seq = 4;
+      tab.stand({ planning: editedAt(40) });
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2, "an older version stays chosen");
+      assert.equal(tab.control().history.viewing?.current, false);
+    }),
+);
+
+test("another plan opening leaves the version history, and so does a notification's click onto an agent's tab", () => {
+  const tab = mount({ shown: true, planning: EDITED });
+  act(() => tab.control().history.onOpen(PLAN.id));
+  assert.equal(tab.control().history.open, true);
+
+  tab.stand({ planning: { ...EDITED, activePlanId: OTHER_PLAN_ID } });
+  assert.equal(tab.control().history.open, false);
+  tab.stand({ planning: EDITED });
+  assert.equal(tab.control().history.open, false, "coming back opens the plan, not its history");
+
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().onShowAgent(PLAN.id, "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21"));
+  assert.equal(tab.control().history.open, false);
+});
 
 test("each time the tab shows it reads the plans again, and the tab going away leaves the open plan alone", () => {
   const tab = mount({ planning: OPEN });
@@ -1463,7 +1520,7 @@ async function settle(): Promise<void> {
   });
 }
 
-test("main is told which agent's tab is shown, and none once the panel moves off it or the tab goes away", async () => {
+test("main is told which agent's tab is shown, and none once the column moves off it, the side panel fills the window over it, the version history covers it, or the tab goes away", async () => {
   const tab = mount(
     { shown: true, planning: OPEN },
     { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
@@ -1471,13 +1528,28 @@ test("main is told which agent's tab is shown, and none once the panel moves off
   await settle();
   assert.deepEqual(tab.shownAgents, [null]);
 
-  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   assert.deepEqual(tab.shownAgents, [null, AGENT_ID]);
 
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.PLAN));
+  act(() => tab.control().mainTabs.onChoose({ agent: AGENT_ID }));
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => tab.control().sidePanel.onChoose({ agent: AGENT_ID }));
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().history.onOpen(PLAN.id));
+  act(() => tab.control().history.onClose());
   tab.stand({ shown: false });
-  assert.deepEqual(tab.shownAgents, [null, AGENT_ID, null, AGENT_ID, null]);
+  assert.deepEqual(tab.shownAgents, [
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+    AGENT_ID,
+    null,
+  ]);
 });
 
 /** Luke's start of a coding agent in the open plan's work, as its call stands: still running, or answered. */
@@ -1531,17 +1603,90 @@ test("an agent Luke starts in the call is read into the list as its start answer
   assert.equal(listReads(reopened), 1);
 });
 
-test("a notification's click opens its plan on the agent's tab", () => {
-  const other = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
-  const tab = mount({ shown: true, planning: OPEN });
+test("a notification's click opens its plan on the agent's tab in the plan's column once its agents are read, out from under a side panel filling the window, which it leaves shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
+    },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
 
-  act(() => tab.control().onShowAgent(other, AGENT_ID));
-  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: { agent: AGENT_ID } });
-
-  // The open plan is not opened again.
   act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
   assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  assert.equal(tab.control().mainTabs.tab, MAIN_TAB.PLAN, "the plan open until then shows its own");
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(panelOf(tab).open, false);
+
+  // The open plan is not opened again, and a panel filling the window gives way.
+  act(() => tab.control().mainTabs.onChoose(MAIN_TAB.PLAN));
+  act(() => tab.control().sidePanel.onToggle());
+  act(() => tab.control().sidePanel.onToggleFullScreen());
+  act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
+  assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(tab.control().sidePanel.fullScreen, false);
+});
+
+test("an agent pinned to the sidebar opens its plan on the agent's tab in the plan's column, its closed tab opened again, and leaves the side panel shut", async () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
+  act(() => tab.control().sidePanel.onPin({ agent: AGENT_ID }, "Invite flow"));
+  act(() => tab.control().mainTabs.onClose({ agent: AGENT_ID }));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+  tab.stand({ planning: OPEN });
+  await settle();
+  assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
+  assert.equal(panelOf(tab).open, false);
+});
+
+test("a tab pinned to the sidebar opens its plan and the panel on that tab from another plan, and its tab closed leaves the pin", () => {
+  const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
+  const tab = mount({ shown: true, planning: OPEN });
+  act(() => tab.control().sidePanel.onPin(SIDE_PANEL_TAB.BOARD, "Board"));
+  const [pin] = tab.control().sidePanel.pins;
+  assert.ok(pin);
+  assert.equal(pin.plan, PLAN.id);
+
+  tab.stand({
+    planning: {
+      ...OPEN,
+      activePlanId: other.id,
+      document: { status: PLANNING_READ.READY, plan: other },
+    },
+  });
+  assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
+  act(() => tab.control().onOpenPinnedTab(pin));
+  assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
+
+  // The host opens the plan, and the panel stands open on the board, which the plan holds nothing of.
+  tab.stand({ planning: OPEN });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
+
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
+  assert.deepEqual(panelOf(tab), { open: true, tab: undefined });
+  assert.deepEqual(tab.control().sidePanel.pins, [pin]);
 });
 
 test("an agent main says ended unseen dots its tab beside the arrivals", () => {

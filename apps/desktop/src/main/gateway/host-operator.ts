@@ -37,6 +37,10 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
   codingAgentPullRequestAnswerViewSchema,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
+  providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
@@ -59,6 +63,8 @@ import {
   type PlanningSetRepositoryParams,
   type PlanningStartAnswer,
   type PlanningStartRequest,
+  type PlanningTreeAnswer,
+  type PlanningTreeParams,
   type PlanningView,
   planningEditAnswerSchema,
   planningFileAnswerSchema,
@@ -67,6 +73,7 @@ import {
   planningRevisionsAnswerSchema,
   planningSetRepositoryAnswerSchema,
   planningStartAnswerSchema,
+  planningTreeAnswerSchema,
   planningViewSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
@@ -183,6 +190,7 @@ export interface HostOperator {
   planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
   /** A window of a file of a plan's repository, coloured; or why it is not shown. */
   planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
+  planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
   /** A page of a plan's history; or that the service did not answer. */
   planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
   /** One revision of a plan beside the one before it; or that the service did not answer. */
@@ -215,6 +223,12 @@ export interface HostOperator {
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+  /** The account's own provider keys as hints and statuses; or why there are none. */
+  providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
+  /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
+  providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** One provider's key removed; the keys as they then stand. */
+  providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -453,6 +467,16 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
               )
             : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
       ),
+    planningTree: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_TREE, { planId: params.planId, path: params.path }),
+        (answer): PlanningTreeAnswer =>
+          (answer.ok
+            ? Result.getOrUndefined(
+                readEither(planningTreeAnswerSchema, { excess: EXCESS_KEYS.DROP })(answer.result),
+              )
+            : undefined) ?? { failure: PLAN_CALL_FAILURE.UNANSWERED },
+      ),
     planningRevisions: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_REVISIONS, {
@@ -547,6 +571,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.CODING_AGENTS_DEFAULT_WRITE, {
           model: choice.model,
           effort: choice.effort,
+          ...(choice.contextWindow === undefined
+            ? undefined
+            : { contextWindow: choice.contextWindow }),
         }),
         codingAgentAnswer(codingAgentDefaultAnswerViewSchema),
       ),
@@ -562,7 +589,9 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           idempotencyKey: params.idempotencyKey,
           ...("model" in params ? { model: params.model } : undefined),
           ...("effort" in params ? { effort: params.effort } : undefined),
+          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
           ...("task" in params ? { task: params.task } : undefined),
+          ...("attachments" in params ? { attachments: params.attachments } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -581,6 +610,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           text: params.text,
           clientKey: params.clientKey,
+          ...("attachments" in params ? { attachments: params.attachments } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -590,6 +620,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           agentId: params.agentId,
           model: params.model,
           effort: params.effort,
+          ...("contextWindow" in params ? { contextWindow: params.contextWindow } : undefined),
         }),
         codingAgentAnswer(codingAgentAgentAnswerSchema),
       ),
@@ -610,6 +641,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+      ),
+    providerKeysRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeySave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
+          provider: params.provider,
+          key: params.key,
+        }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeyRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

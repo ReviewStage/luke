@@ -39,8 +39,8 @@ A reviewer can hold the build to these as easily as to the layout:
   the document it is handed, marked as the developer's own words.
 - No Approve button, no readiness meter, no progress or coverage score, and
   no separate export or handoff screen. Earlier versions of the plan are
-  read and restored from its History tab ("History" below), which is the one
-  place a version is compared with another.
+  read and restored from its version history ("History" below), which is the
+  one place a version is compared with another.
 - An assumption is edited like any other field, never confirmed or accepted:
   there is no checkbox, no Accept, and nothing that moves one into a field.
 - The document is the record. What was said on the plan's calls can be read
@@ -236,7 +236,7 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   notetaker. The time moves on once a minute, and a save the notetaker makes
   on the open plan's call moves the line as it lands. A plan nobody has
   written since it started shows no line. A press on the line opens the
-  plan's History tab.
+  plan's version history.
 - Each section says the same of the save that last changed it, in a quiet
   line at the end of its heading's row while the pointer or the keyboard is
   on the section, from the writer the plan keeps for each field (`fieldEdits`
@@ -252,6 +252,17 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
   lights anything. What is kept is the newest save's instant, on the
   service's clock, by plan id in the renderer's own storage; a plan never
   looked at on this Mac lights nothing.
+- The sidebar reads the same marks. A plan's name stands in the body's
+  weight, the open plan's too, whose fill is what marks it; a plan saved
+  after its mark is unread, its name in the heavier weight (and "(unread)"
+  to a screen reader), until a look moves the mark past the save. The plan
+  being looked at is never unread, so a save landing on it while open
+  changes nothing. The first list this Mac reads after unread plans arrived
+  marks every plan in it no look had marked at its last save, once, so the
+  plans from before are not all unread at once, and so does a list none of
+  whose plans has a mark, which is another account's; a plan arriving later
+  with no mark, from another Mac, is unread once anything has been saved in
+  it since it started.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
@@ -314,9 +325,9 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   with the plan's work when the plan opens; `Transcript`, what was said on the
   plan's calls ("Transcript" below); `History`, the plan's versions
   ("History" below), which stands once anyone has written the plan since its
-  history began; and, after them, one tab per coding
-  agent started on the plan, named by its model with a dot for where it
-  stands ("Agent tabs" below). The Work tab, what the planning model wrote
+  history began; and, after them, the subagents opened from the Work tab or
+  an agent's transcript. The coding agents themselves have tabs in the plan's
+  column beside the plan's own ("Agent tabs" below). The Work tab, what the planning model wrote
   and ran on the plan's calls, is told live during a call and read back
   from the plan's conversation when the plan opens
   (`GET /api/plans/{id}/work`, `hosted/plan-work-store.ts`), so a restart
@@ -344,25 +355,36 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
 - **The developer's alone.** The toolbar's toggle and ⌥⌘B show and hide it.
   A closed panel opens on its own only for Luke's first drawing on the
   plan's board, the first code he puts up, each once per plan
-  (`planning/use-panel-arrivals.ts`), and an agent just started, whose tab
-  it opens on; an open panel keeps its tab, and an arrival on another tab
-  marks that tab with a dot until it is shown. Its left edge
+  (`planning/use-panel-arrivals.ts`), and a subagent opened from an agent's
+  transcript, whose tab it opens on; an open panel keeps its tab, and an arrival on another tab
+  sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
   this Mac's preference, kept in the window's own storage rather than in
-  anything main holds. A kept tab naming an agent the open plan has none of
-  reads as the board, so leaving a plan or opening another never shows a tab
-  with nothing behind it. A fixture run stages its own and keeps nothing.
+  anything main holds. A kept tab the open plan does not have reads as its
+  first, so leaving a plan or opening another never shows a tab with nothing
+  behind it. A fixture run stages its own and keeps nothing.
 
 ### Agent tabs
 
-Each coding agent started on the plan has a tab of its own
-(`planning/agent-tab.tsx`, `planning/use-coding-agents.ts`), opened and
-selected the moment its Start lands.
+Each coding agent started on the plan has a tab of its own in the plan's
+column, after the plan's tab (`desktop/main-tabs.tsx`,
+`planning/use-main-tabs.ts`, `planning/agent-tab.tsx`,
+`planning/use-coding-agents.ts`), opened and selected the moment its Start
+lands, and showing its transcript and composer where the document stands.
+The column's strip is the side panel's: tabs drag and step among
+themselves, close by ×, Delete, ⌘W, or Close and Close others, hang their
+cards, and pin to the sidebar. The plan's tab stands first for good: it
+never closes or moves, a press chooses it, and its right-click offers Close
+others and Rename. The tab each plan last showed is kept, so a plan opens
+as it was left. ⌘T and ⌘W answer the column holding the focus, the side
+panel's once the pointer goes into it. A subagent's tab stays in the side
+panel.
 
-- **A new agent from the "+".** The side panel's "+" offers New coding
-  agent, unavailable with Start's own reason while Start could not run. It
+- **A new agent from the "+".** The column's "+" offers New coding
+  agent, unavailable with Start's own reason while Start could not run, and
+  each of the plan's agents, picking one opening its tab again. It
   opens a draft tab (`planning/draft-agent-tab.tsx`): no transcript yet,
   the composer focused, and the model chip on the account's default.
   Nothing reaches the service until the first message, which starts the
@@ -371,8 +393,12 @@ selected the moment its Start lands.
   the draft lets it go with nothing left behind. An agent handed a task
   draws it as the developer's first message rather than as the plan's card.
 
-- **The head.** The model · the effort · the status, with the dot the tab
-  wears: starting or running (pulsing), completed, failed, or cancelled. A
+- **The head.** The model · the effort · the status, which the tab's glyph
+  wears (`state-glyph.tsx`): the mark of the harness the model runs in
+  (Claude Code or Codex), shrunk inside a turning ring while the agent is
+  starting or running, an alert in the danger colour once it failed, and
+  the mark alone once it completed or was stopped; the tab's hint says
+  "Working", "Failed", or "Stopped" beside the model. A
   Stop stands while the agent may still write; it asks the service to cancel
   the turn and stop the sandbox, and anything the agent pushed stays.
 - **What it published.** Once the agent has pushed, the head wears a pill
@@ -428,7 +454,7 @@ selected the moment its Start lands.
   the plan's name, saying the model's name and "finished" or "failed" and
   nothing of the transcript, unless the window is focused on that agent's
   tab; its click brings Luke forward on the plan with that tab open. The
-  agent's tab wears the unseen dot until it is shown or the window comes
+  agent's tab reads in semibold until it is shown or the window comes
   forward on it. A Stop is the developer's own and is not announced, and an
   agent first seen already ended, as after a relaunch, is not either. The
   "opened #N" wording waits on a read of the agent's pull request, and a
@@ -443,7 +469,14 @@ one default, kept on the service with the account preferences
 (`/api/account/preferences`'s `codingAgent` part) and shown on the Coding
 agents page of Settings (`settings/coding-agents-page.tsx`): a model menu
 with each model under its harness's mark (Claude Code's for Anthropic's,
-Codex's for OpenAI's), and the efforts the chosen model lists. The page
+Codex's for OpenAI's), the efforts the chosen model lists, and, for a
+model that offers two context windows (one whose provider prices prompts
+past a boundary apart, such as OpenAI's 272K), the two windows with what the
+whole one costs past the boundary. The whole window is the default; the
+smaller standard one is the opt-in. The Start menu and an agent's chip offer
+the same choice as a Context row beside Effort, and the chip says the window
+after the effort only where it is the opted-in smaller one ("GPT-5.5 High
+272K"). The page
 reads the default as it opens, so a model chosen from Start's chevron, which
 the service keeps as the default too, shows there next. A first-time
 account starts on Claude Opus 5.5 at high.
@@ -618,25 +651,30 @@ save that last changed it: the actor, the coding agent, and whether on a
 call, kept beside the revision by the same locked save, which each section's
 line reads.
 
-The History tab (`planning/history-tab.tsx`, ⌥⌘5) lists the revisions
-newest first, fifty a page (`GET /api/plans/{id}/revisions`), each as who
-wrote it ("Luke", "You", or a coding agent by its row), whether on a call,
-how many changes it made, and how long ago; the newest says it is the
-current one, and the plan from before history reads "Earlier". The list is
-read while the tab is on screen and again whenever the plan is edited
-meanwhile. Choosing a row reads that revision's content and the content
-before it (`GET /api/plans/{id}/revisions/{seq}`), both formatted under the
-plan's name as it stands, and draws the version read-only in the document's
-place (`planning/version-view.tsx`) under a bar: "Viewing version from 2h ago
-· Luke", the comparison, Restore this version, and Back to current. The
-version is drawn against the one before it by default, which is what the
-row's change count describes, or against the plan as it stands, which is
-what a restore would change: each section only one side holds is drawn
+Version history, in the plan's ⋯ menu (the toolbar's and the sidebar row's
+right-click alike) and behind the "Edited by" line, takes the whole window
+the way Settings does (`desktop/desktop-version-history.tsx`): a column as
+wide as the sidebar, with Back at its head, "Version history" and the
+plan's name, and the revisions newest first, fifty a page
+(`GET /api/plans/{id}/revisions`), each as who wrote it ("Luke", "You", or a
+coding agent by its row), whether on a call, how many changes it made, and
+how long ago; the newest is labelled "Current", and the plan from before
+history reads "Earlier". The list is read while the view stands and again
+whenever the plan is edited meanwhile. The chosen revision, the newest when
+the view opens, is read with the content before it
+(`GET /api/plans/{id}/revisions/{seq}`), both formatted under the plan's name
+as it stands, and drawn read-only beside the list
+(`planning/version-view.tsx`) under a bar with its moment and Restore this
+version; the up and down arrows step through the list. Every version, the
+current one included, is drawn against the one just before it, which is what
+the row's change count describes: each section only one side holds is drawn
 whole, added or struck, and each section both hold that differs has its
 words written in on a green wash and struck out on a red one, word by word
 with jsdiff (`planning/plan-history-model.ts`); the assumptions are
-compared as a list. Escape, Back to current, another tab, or another plan
-goes back to the plan.
+compared as a list. The first version has nothing before it and is drawn
+with nothing marked. The view is one step of the window's back and forward
+whichever version is chosen, so Back, Escape, and ⌘[ return to the plan as
+it was left, its side panel untouched.
 
 Restore this version asks first, in the window's dialog, and then puts the
 revision's fields and assumptions back through the plan's one locked save
@@ -646,8 +684,9 @@ revision's fields and assumptions back through the plan's one locked save
 2:14 PM"; it joins no revision and none joins it, so a restore is undone by
 restoring the revision before it, and it is allowed during a call. It takes
 no base: a save that landed after the version was chosen is the revision
-before the restore, and restoring it brings it back. The plan the service
-answers replaces the open document at once, and the window's toast says
+before the restore, and restoring it brings it back. A restore that lands
+leaves the version history for the plan, whose document the service's answer
+replaces at once, and the window's toast says
 "Version restored" with an Undo, which restores the version that stood
 before it. Until the notetaker's next save lands, the host draws no draft
 of the open plan's call, since a turn in flight was written over the
@@ -851,7 +890,7 @@ message and never the plan, and works in the plan's repository the same way. The
 its routes, and what it is told are described in
 `apps/web/server/README.md` under "The coding-agent service" and "The
 coding-agent routes"; the desktop's Start button ("The Plans tab" above),
-the side panel's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
+the column's New coding agent and the agent tabs ("Agent tabs" above), and Settings › Coding agents are how the
 developer starts one, watches it, stops it, and chooses what it runs on.
 
 ## The journey
@@ -1107,7 +1146,7 @@ the exact shape.
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |
 | The call | The hidden `VoiceWindow` and `VoiceHost` / `useVoiceSession` / `LiveCall` (`renderer/voice/`); `LiveVoiceOrchestrator` (`@sidecar/voice`); the sessions route `/api/voice/sessions` with client delegation | The call is associated with the open plan, and the orchestrator gains the Plans tab's toggle beside the held talk key (LUKE-340); the talk key names the open plan while one is open (LUKE-347). |
-| Start, agent tabs, Settings › Coding agents | The toolbar and the side panel (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
+| Start, agent tabs, Settings › Coding agents | The toolbar and the plan's column's tabs (`desktop/main-tabs.tsx`, `planning/use-main-tabs.ts`), on the side panel's strip (`desktop/strip-tabs.tsx`, `planning/tab-strip-model.ts`); the Transcript tab's AI Elements components; the account preferences route | The split button (`desktop/start-agent-button.tsx`), the agent tab (`planning/agent-tab.tsx`), their control (`planning/use-coding-agents.ts`) and the held transcript read (`planning/use-agent-transcript.ts`), and the Settings page (`settings/coding-agents-page.tsx`). |
 | Planning model and document | Hosted storage and the brain host (`apps/web/server/hosted/`); the account client (`packages/hosted`, `packages/credentials`) | The plan record and its one write, `saveNotes` (LUKE-334), the instructions (LUKE-336), research (LUKE-339), the fixed template and its formatter (`packages/hosted/src/plan-template.ts`, LUKE-352), and the notetaker that writes the plan during a call (`apps/web/server/voice/plan-scribe.ts`). |
 
 Two existing rules carry over unchanged:

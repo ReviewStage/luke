@@ -24,11 +24,14 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the agent is idle; it shows in the transcript at once as the developer's
  * own row. Every send carries a key the client made, so a send repeated
  * after a lost answer finds the message it already sent and sends nothing
- * again. An agent's model and effort can be changed while it stands: the
- * change is read at its next step, and the answer is the agent as it then
- * stands. An agent's title is generated once from its plan as it starts,
+ * again. An agent's model, effort, and context window can be changed while
+ * it stands: the change is read at its next step, and the answer is the
+ * agent as it then stands. A context window is named only where it is the
+ * standard one; a choice that names none runs on the model's whole window. An agent's title is generated once from its plan as it starts,
  * and the developer may rename it; a rename is never overwritten, and an
  * empty one clears the title so the tab falls back to the model's name.
+ * Each of its workers is given a title the same way, from the task it was
+ * handed, which no one renames.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -48,7 +51,40 @@ export const CODING_AGENT_BOUNDS = {
   MAX_TITLE_CHARS: 80,
   /** The most messages one page of a transcript carries; a page with fewer holds everything past its cursor as the transcript stood when it was read. */
   MESSAGES_PAGE: 200,
+  /** The most items one to-do list may hold: a long run of work, never a log of every command. */
+  MAX_TODOS: 40,
+  /** The most characters one to-do may spell: a line of the list, not a paragraph. */
+  MAX_TODO_CHARS: 300,
+  /** The most files one message or Start may carry. */
+  MAX_ATTACHMENTS: 10,
+  /** The most characters an attached file's name may spell: its own name, never a path. */
+  MAX_ATTACHMENT_NAME_CHARS: 255,
+  /** The most bytes one image may hold as it travels; the desktop re-encodes a larger one smaller. */
+  MAX_IMAGE_BYTES: 1_500_000,
+  /** The most bytes one PDF may hold. */
+  MAX_PDF_BYTES: 3_000_000,
+  /** The most bytes one text file may hold: about 25,000 tokens of code, inlined whole for the model. */
+  MAX_TEXT_BYTES: 100_000,
+  /** The most bytes every file of one message holds together, which base64 grows by a third and which stays under a function's request body limit. */
+  MAX_ATTACHMENTS_BYTES: 3_000_000,
 } as const;
+
+/**
+ * The context windows a choice may run on: the long one, the model's whole
+ * window, which every choice runs on unless it names the other, and the
+ * standard one, which a model offers apart only where its provider prices
+ * the tokens past it higher (`models-wire.ts`); a model with one window
+ * has the one, whichever a choice names.
+ */
+export const CONTEXT_WINDOW = {
+  STANDARD: "standard",
+  LONG: "long",
+} as const;
+
+export type ContextWindow = (typeof CONTEXT_WINDOW)[keyof typeof CONTEXT_WINDOW];
+
+/** A context window as a choice names it. */
+export const contextWindowSchema = EffectSchema.Literals(Object.values(CONTEXT_WINDOW));
 
 /** What an agent was handed as its first message: the plan's document, or a task the developer wrote in its place. */
 export const CODING_AGENT_BRIEF = {
@@ -86,10 +122,108 @@ export const CODING_AGENT_FAILURE = {
   GITHUB: "github",
   /** The turn ran past its bound and the sweep settled it. */
   ABANDONED: "abandoned",
+  /** The account's own API key for the model's provider was refused, out of quota, or can no longer be read; it is replaced in Settings. */
+  PROVIDER_KEY: "provider_key",
   OTHER: "other",
 } as const;
 
 export type CodingAgentFailure = (typeof CODING_AGENT_FAILURE)[keyof typeof CODING_AGENT_FAILURE];
+
+/**
+ * The files a message may carry, by the media type each travels as: an
+ * image or a PDF, which the model reads as a file, or a text file of any
+ * extension, which travels as its UTF-8 bytes and is inlined for the model
+ * as fenced text under its name.
+ */
+export const CODING_AGENT_ATTACHMENT_TYPE = {
+  PNG: "image/png",
+  JPEG: "image/jpeg",
+  WEBP: "image/webp",
+  PDF: "application/pdf",
+  TEXT: "text/plain",
+} as const;
+
+export type CodingAgentAttachmentType =
+  (typeof CODING_AGENT_ATTACHMENT_TYPE)[keyof typeof CODING_AGENT_ATTACHMENT_TYPE];
+
+/** The most bytes one file of each type may hold. */
+const CODING_AGENT_ATTACHMENT_BYTES = {
+  [CODING_AGENT_ATTACHMENT_TYPE.PNG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.JPEG]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.WEBP]: CODING_AGENT_BOUNDS.MAX_IMAGE_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.PDF]: CODING_AGENT_BOUNDS.MAX_PDF_BYTES,
+  [CODING_AGENT_ATTACHMENT_TYPE.TEXT]: CODING_AGENT_BOUNDS.MAX_TEXT_BYTES,
+} as const satisfies Record<CodingAgentAttachmentType, number>;
+
+/** The characters base64 spells a count of bytes in, padded, as an attachment's data carries them. */
+export function base64Chars(bytes: number): number {
+  return 4 * Math.ceil(bytes / 3);
+}
+
+/** The bytes standard padded base64 spells, as an attachment's data carries them. */
+export function base64Bytes(base64: string): number {
+  const padding = base64.endsWith("==") ? 2 : base64.endsWith("=") ? 1 : 0;
+  return Math.floor(base64.length / 4) * 3 - padding;
+}
+
+/** A file's name on one line, which is how the model reads it, under its heading. */
+const ONE_LINE_PATTERN = /^[^\r\n]*$/u;
+
+/** Standard base64, padded, with no data-URL prefix and no line breaks. */
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
+
+/** Whether base64 spells UTF-8 text, as a text file must to be inlined for the model. */
+function spellsUtf8(base64: string): boolean {
+  try {
+    const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+    new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a file is within its type's bound and, where it is text, spells UTF-8. */
+function attachmentIsReadable(attachment: {
+  readonly mediaType: CodingAgentAttachmentType;
+  readonly data: string;
+}): boolean {
+  if (attachment.data.length > base64Chars(CODING_AGENT_ATTACHMENT_BYTES[attachment.mediaType])) {
+    return false;
+  }
+  return attachment.mediaType !== CODING_AGENT_ATTACHMENT_TYPE.TEXT || spellsUtf8(attachment.data);
+}
+
+/**
+ * One file a message carries: its own name on one line, never a path; the type it
+ * travels as; and its bytes in base64, bounded by its type, a text file's
+ * spelling UTF-8. Nothing beside it says where on the developer's machine
+ * it came from.
+ */
+const codingAgentAttachmentSchema = EffectSchema.Struct({
+  name: EffectSchema.Trim.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENT_NAME_CHARS),
+    EffectSchema.isPattern(ONE_LINE_PATTERN),
+  ),
+  mediaType: EffectSchema.Literals(Object.values(CODING_AGENT_ATTACHMENT_TYPE)),
+  data: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isPattern(BASE64_PATTERN),
+  ),
+}).check(EffectSchema.makeFilter(attachmentIsReadable));
+
+export type CodingAgentAttachment = typeof codingAgentAttachmentSchema.Type;
+
+/** The files of one message: bounded in count, and in the bytes they hold together, each file padded apart. */
+const codingAgentAttachmentsSchema = EffectSchema.Array(codingAgentAttachmentSchema).check(
+  EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_ATTACHMENTS),
+  EffectSchema.makeFilter(
+    (attachments) =>
+      attachments.reduce((sum, attachment) => sum + base64Bytes(attachment.data), 0) <=
+      CODING_AGENT_BOUNDS.MAX_ATTACHMENTS_BYTES,
+  ),
+);
 
 /** A text settled with its ends trimmed, refused when nothing but whitespace stands, and bounded. */
 function trimmedText(maximumChars: number) {
@@ -99,22 +233,27 @@ function trimmedText(maximumChars: number) {
 /**
  * Starting an agent (POST): the request's own key, which a retry carries
  * again, and the model and effort to run on where the developer chose
- * them; both or neither, since a choice is one thing. A task, where the
+ * them; both or neither, since a choice is one thing, and the context
+ * window beside them where it is the standard one. A task, where the
  * developer wrote one, is the agent's first message in the plan's place,
- * bounded as a message is; with none, the agent is handed the plan.
+ * bounded as a message is, with the files the developer attached to it;
+ * with none, the agent is handed the plan, and files go only with a task.
  */
 export const codingAgentStartRequestSchema = EffectSchema.Struct({
   idempotencyKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
   model: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
   effort: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS)),
+  contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   task: EffectSchema.optionalKey(trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS)),
+  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
 });
 
 export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
 
 /**
  * Messaging an agent (POST): the developer's words, trimmed and bounded,
- * and the client's own key for this one send, which a retry carries again
+ * the files they attached, where they did, and the client's own key for
+ * this one send, which a retry carries again
  * so the service answers what the first send did rather than sending the
  * words a second time. The message steers the turn under way, so the model
  * sees it at its next step and a call still generating is cut short and
@@ -125,6 +264,7 @@ export type CodingAgentStartRequest = typeof codingAgentStartRequestSchema.Type;
 export const codingAgentMessageRequestSchema = EffectSchema.Struct({
   text: trimmedText(CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS),
   clientKey: trimmedText(CODING_AGENT_BOUNDS.MAX_KEY_CHARS),
+  attachments: EffectSchema.optionalKey(codingAgentAttachmentsSchema),
 });
 
 export type CodingAgentMessageRequest = typeof codingAgentMessageRequestSchema.Type;
@@ -146,6 +286,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: EffectSchema.String,
   effort: EffectSchema.String,
+  /** The context window the agent runs on where it is the standard one; absent for the model's whole window. */
+  contextWindow: EffectSchema.optionalKey(contextWindowSchema),
   /** The agent's title as its tab shows it; null until one is generated, and after a rename cleared it, when the tab shows the model's name. */
   title: EffectSchema.NullOr(EffectSchema.String),
   /** Epoch milliseconds the agent was started. */
@@ -269,6 +411,45 @@ export const codingAgentDelegationOutputSchema = EffectSchema.Struct({
 });
 
 /**
+ * The tool an agent writes its to-do list with, by the name its tool part
+ * carries in the transcript (`tool-write_todos`). Each call carries the
+ * whole list, so the newest call's input is the list as it stands, and a
+ * tab draws each call where it landed with the older ones folded. Named
+ * to-dos rather than a plan, because the plan is Luke's own document.
+ */
+export const CODING_AGENT_TODOS_TOOL = "write_todos";
+
+/** Where one to-do stands. */
+export const CODING_AGENT_TODO_STATUS = {
+  PENDING: "pending",
+  IN_PROGRESS: "in_progress",
+  DONE: "done",
+} as const;
+
+export type CodingAgentTodoStatus =
+  (typeof CODING_AGENT_TODO_STATUS)[keyof typeof CODING_AGENT_TODO_STATUS];
+
+/**
+ * What a to-do write's tool part carries as its input: the whole list, in
+ * order, each item its words and where it stands. The model is shown this
+ * schema and eve holds the call to it, and a tab reads the stored part
+ * back through it, so the two read one list.
+ */
+export const codingAgentTodosInputSchema = EffectSchema.Struct({
+  todos: EffectSchema.Array(
+    EffectSchema.Struct({
+      content: EffectSchema.String.check(
+        EffectSchema.isNonEmpty(),
+        EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODO_CHARS),
+      ),
+      status: EffectSchema.Literals(Object.values(CODING_AGENT_TODO_STATUS)),
+    }),
+  ).check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TODOS)),
+});
+
+export type CodingAgentTodos = typeof codingAgentTodosInputSchema.Type;
+
+/**
  * One JSON object as the row holds it, read whole: a message part or the
  * metadata beside the parts, whose fields are the AI SDK's own vocabulary
  * and not this wire's to spell. The node shown for it says only that much.
@@ -373,6 +554,14 @@ const codingAgentDelegationStartSchema = EffectSchema.Struct({
 
 export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema.Type;
 
+/** One worker's short title, generated from the task it was handed, by the call that started it. */
+const codingAgentSubagentTitleSchema = EffectSchema.Struct({
+  callId: codingAgentCallIdSchema,
+  title: EffectSchema.String,
+});
+
+export type CodingAgentSubagentTitle = typeof codingAgentSubagentTitleSchema.Type;
+
 /**
  * The messages past a cursor (GET), the cursor to read on from, and where
  * the agent stood as the page was read, so a reader held on a running agent
@@ -384,7 +573,7 @@ export type CodingAgentDelegationStart = typeof codingAgentDelegationStartSchema
  * The page carries the agent's title too, since the title generated as the
  * agent starts lands a moment after the list that opened its tab was read,
  * and what its model's context holds once a step has ended; a worker's
- * page carries no context.
+ * page carries no context, and its `title` is the worker's own.
  */
 export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
   messages: EffectSchema.Array(codingAgentMessageSchema),
@@ -399,6 +588,14 @@ export const codingAgentMessagesAnswerSchema = EffectSchema.Struct({
    * page, while none runs, and from a service older than it.
    */
   delegations: EffectSchema.optionalKey(EffectSchema.Array(codingAgentDelegationStartSchema)),
+  /**
+   * Every worker of the agent's whose title has landed, by the call that
+   * started it, whichever page carried the call: a title is generated
+   * beside the worker's start and lands a page or more after it. Absent on a
+   * worker's page, while no worker has a title, and from a service older
+   * than it.
+   */
+  subagentTitles: EffectSchema.optionalKey(EffectSchema.Array(codingAgentSubagentTitleSchema)),
   title: EffectSchema.NullOr(EffectSchema.String),
   failureReason: EffectSchema.optionalKey(
     EffectSchema.Literals(Object.values(CODING_AGENT_FAILURE)),

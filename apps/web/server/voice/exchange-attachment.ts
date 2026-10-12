@@ -96,6 +96,7 @@ export function exchangeAttachment(deps: ExchangeAttachmentDeps): ExchangeAttach
         ...(session.onCode ? { onCode: session.onCode } : undefined),
         ...(session.onWork ? { onWork: session.onWork } : undefined),
         ...(session.onCallEnding ? { onCallEnding: session.onCallEnding } : undefined),
+        ...(session.onTrace ? { onTrace: session.onTrace } : undefined),
       });
       const adopted = yield* exchange.adopt({
         sessionId: session.sessionId,

@@ -41,6 +41,7 @@ import {
   volumeHintDismissed,
   volumeHintText,
 } from "./volume-hint";
+import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
@@ -130,6 +131,9 @@ export function App(): React.JSX.Element {
       updateSetting(APP_SETTING_SCHEMA.voiceHotkey.field, accelerator),
     [],
   );
+
+  // ⌘+, ⌘−, and ⌘0 write the same setting Settings' Zoom pop-up does.
+  useWindowZoom(settings?.zoom, (zoom) => updateSetting(APP_SETTING_SCHEMA.zoom.field, zoom));
 
   // The stop key, under the same rule: the key the row shows follows the main
   // process's own announcement of what actually registered.
@@ -316,12 +320,13 @@ export function App(): React.JSX.Element {
       // A dialog that took the press for itself is the nearest layer of all.
       if (event.defaultPrevented) return;
       // Otherwise it closes the nearest thing that is open, one layer at a
-      // time: Settings back to wherever it was opened from, then a side panel
-      // filling the window back beside its plan, then an open plan back to
-      // the new-plan page. A menu and the settings search answer their own
-      // Escapes and keep them — the search clearing, then letting go of the
-      // caret — so neither is a layer here.
+      // time: Settings, or a plan's version history, back to wherever it was
+      // opened from, then a side panel filling the window back beside its
+      // plan, then an open plan back to the new-plan page. A menu and the
+      // settings search answer their own Escapes and keep them — the search
+      // clearing, then letting go of the caret — so neither is a layer here.
       if (runAppCommand(APP_COMMAND.EXIT_SETTINGS)) return;
+      if (runAppCommand(APP_COMMAND.EXIT_VERSION_HISTORY)) return;
       // An open plan unwinds to the new-plan page, which leaves it and ends
       // its call. That page is home, so a press there does nothing.
       plans.back();
@@ -436,6 +441,10 @@ export function App(): React.JSX.Element {
             view: settingsView,
             onViewChange: setSettingsView,
             microphone,
+            notifications: {
+              refused: state.notifications.refused,
+              onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+            },
             updates,
             settings,
             onFeedback: setFeedbackKind,

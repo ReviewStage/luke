@@ -86,6 +86,21 @@ service stores its name under your account, with when you pinned it, so the
 pin follows you to every Mac you sign in on. Unpinning it deletes that record,
 and deleting your account removes them all.
 
+**Your own API keys.** If you add an Anthropic or OpenAI API key of your
+own in Settings, your Mac sends it once, over HTTPS, to our service, which
+first checks it with that provider by asking for the provider's list of
+models, a request that costs nothing, and keeps it only if the provider
+accepts it. Our service stores it under your account encrypted with
+AES-256-GCM, under a key drawn for it alone that is itself encrypted under a
+server-only secret held outside the database, so a copy of our database
+alone cannot read it; our operators who hold both could. We keep beside it
+which provider it is for, its first characters and last four (such as
+`sk-ant-…abcd`), when you added it, and whether the provider last accepted
+it. Neither your Mac nor any answer from our service ever holds the key
+again after you save it, and we never log it or send it to our analytics,
+crash reports, or screen recordings. Removing it in Settings deletes it, and
+deleting your account removes it.
+
 **A plan's whiteboard.** Each plan has a whiteboard that Luke's planning model
 and you can both draw on. Our service stores it with the plan, under your
 account: every shape, arrow, line, freehand stroke, and piece of text on it,
@@ -256,8 +271,8 @@ name and its document, a caption of what you or Luke said, your name and email
 address, and anything you type into a field all appear as blocks. The
 feedback form is left out whole, since a screenshot you attach to it is a
 picture of your screen and could carry another app's words, and so are a
-plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's History
-tab and an earlier version of it you are viewing, each coding agent's tab,
+plan's whiteboard, a plan's transcript, a plan's Work tab, a plan's version
+history and the earlier version of it you are viewing, each coding agent's tab,
 and the editor you edit a field of a plan in, as a second line. The whiteboard draws its
 words as pixels, which the text masking cannot reach, so leaving it out is
 its only line, and recording what a canvas draws is switched off. Luke does
@@ -360,8 +375,12 @@ only when you press Send.
 - Anthropic and OpenAI, for a coding agent. When you start a coding agent on
   a plan, our service runs it in a Vercel Sandbox of its own, with a copy of
   the plan's GitHub repository checked out in it, and calls the model you
-  chose, or your account's default, directly on our own key: Anthropic's for
-  a Claude model, OpenAI's for a GPT model. Each call carries the plan's
+  chose, or your account's default, directly on your own key for that
+  provider if you added one in Settings, and otherwise on ours: Anthropic's
+  for a Claude model, OpenAI's for a GPT model. A call on your own key is
+  billed to you by that provider, and if our service can no longer read your
+  key the agent stops and asks you to replace it rather than switching to
+  ours. Each call carries the plan's
   text, the agent's conversation so far, and what it read of the repository,
   and the provider stores the request and its reply under its own retention
   policy. The agent's transcript, its words, reasoning summaries, and tool
@@ -426,7 +445,8 @@ service, usage counts and recordings by PostHog, and crash reports by Sentry.
   and the Keyboard shortcuts page says so.
 - Delete your account from the Account section in Settings. This erases your
   account, your sign-in records, your usage counts, your plans, the
-  conversation our service kept, and everything earlier versions left there
+  conversation our service kept, any API keys of your own you added, and
+  everything earlier versions left there
   (described under "What earlier versions left on our service"), and asks PostHog to erase your usage data
   and recordings. It does not reach a recording that was never attached to your
   account, as described above. Luke stops recording for the rest of the

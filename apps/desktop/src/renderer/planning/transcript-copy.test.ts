@@ -10,6 +10,8 @@ import {
 import { test } from "vitest";
 import {
   agentTranscript,
+  LATEST_ACTIVITY,
+  latestActivity,
   readWholeTranscript,
   TRANSCRIPT_COPY,
   transcriptMarkdown,
@@ -124,6 +126,119 @@ test("the full copy is every block in order: words, reasoning quoted, and each c
       "## Agent",
       "Added `docs/invites.md`.",
     ].join("\n\n")}\n`,
+  );
+});
+
+test("the latest step is the agent's last words as plain text on one line, past the developer's later line, and nothing before the agent said or ran anything", () => {
+  assert.deepEqual(latestActivity(transcript), {
+    kind: LATEST_ACTIVITY.WORDS,
+    text: "Added docs/invites.md.",
+  });
+  const answered = agentTranscript({
+    title: "Invite flow",
+    messages: [
+      ...MESSAGES,
+      {
+        id: "m5",
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "## Done\n\nThe **invite** route [sends mail](https://x.dev).\n\n```ts\nsend()\n```\n- Tests pass",
+          },
+        ],
+      },
+      { id: "m6", role: "user", parts: [{ type: "text", text: "Thanks." }] },
+    ],
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  assert.deepEqual(latestActivity(answered), {
+    kind: LATEST_ACTIVITY.WORDS,
+    text: "Done The invite route sends mail. send() Tests pass",
+  });
+  const planOnly = agentTranscript({
+    title: "Invite flow",
+    messages: MESSAGES.slice(0, 1),
+    brief: CODING_AGENT_BRIEF.PLAN,
+  });
+  assert.equal(latestActivity(planOnly), undefined);
+});
+
+test("the latest step that is a call says it as the concise copy's line does, its reasoning after it passed over", () => {
+  // The turn ends on the plan's turn's call at `at`, and a thought after it.
+  const ending = (at: number) => {
+    const part = MESSAGES[1]?.parts[at];
+    assert.ok(part, `no part at ${at}`);
+    return latestActivity(
+      agentTranscript({
+        title: "Invite flow",
+        messages: [
+          ...MESSAGES.slice(0, 1),
+          {
+            id: "m2",
+            role: "assistant",
+            parts: [part, { type: "reasoning", text: "Next, the docs.", state: "done" }],
+          },
+        ],
+        brief: CODING_AGENT_BRIEF.PLAN,
+      }),
+    );
+  };
+  assert.deepEqual(ending(3), {
+    kind: LATEST_ACTIVITY.CALL,
+    verb: "Ran",
+    subject: "pnpm test",
+    code: true,
+  });
+  assert.deepEqual(ending(4), {
+    kind: LATEST_ACTIVITY.CALL,
+    verb: "Edited",
+    subject: "src/x.ts",
+    code: true,
+  });
+  assert.deepEqual(ending(5), {
+    kind: LATEST_ACTIVITY.CALL,
+    verb: "Asked the worker:",
+    subject: "Find the sweep",
+    code: false,
+  });
+});
+
+test("a write of the agent's to-dos copies as how far the list has got, and in full as the list in checkboxes", () => {
+  const listing = agentTranscript({
+    title: "Invite flow",
+    brief: CODING_AGENT_BRIEF.PLAN,
+    messages: [
+      ...MESSAGES.slice(0, 1),
+      {
+        id: "m2",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-write_todos",
+            toolCallId: "call_t",
+            state: "output-available",
+            input: {
+              todos: [
+                { content: "Read the tests", status: "done" },
+                { content: "Add the route", status: "in_progress" },
+                { content: "Write the docs", status: "pending" },
+              ],
+            },
+            output: "The to-dos are updated.",
+          },
+          { type: "text", text: "On the route." },
+        ],
+      },
+    ],
+  });
+  assert.match(
+    transcriptMarkdown(listing, TRANSCRIPT_COPY.CONCISE),
+    /\n- Updated the to-dos: 1 of 3 done\n\nOn the route\.\n$/u,
+  );
+  assert.match(
+    transcriptMarkdown(listing, TRANSCRIPT_COPY.FULL),
+    /\*\*Updated the to-dos:\*\* 1 of 3 done\n\n```\n- \[x\] Read the tests\n- \[ \] Add the route \(in progress\)\n- \[ \] Write the docs\n```\n\nOn the route\.\n$/u,
   );
 });
 

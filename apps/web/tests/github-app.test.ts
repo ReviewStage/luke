@@ -10,6 +10,7 @@ import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../server/auth-
 import { account, user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import {
+  CI_READ_PERMISSIONS,
   GITHUB_FAILURE,
   GITHUB_REPOSITORY_SELECTION,
   GitHubApp,
@@ -124,6 +125,7 @@ it.effect(
         id: INSTALLATION_ID,
         accountLogin: "octo-org",
         repositorySelection: GITHUB_REPOSITORY_SELECTION.SELECTED,
+        ciReadable: false,
       });
       assert.equal(Option.isNone(missing), true);
       const [read] = fake.sent;
@@ -448,6 +450,7 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
           id: INSTALLATION_ID,
           accountLogin: "octocat",
           repositorySelection: GITHUB_REPOSITORY_SELECTION.ALL,
+          ciReadable: false,
         },
       ]);
       const [read] = fake.sent;
@@ -734,11 +737,17 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
   );
 
   it.effect(
-    "a write token is minted on the same terms, cut to contents and pull requests write, for a coding agent's push and pull request",
+    "a write token is minted on the same terms, cut to contents and pull requests write, for a coding agent's push and pull request, with CI read beside them only where the installation grants it",
     () =>
       Effect.gen(function* () {
         const fake = githubReaching([
           { id: 2, login: "octo-org", repositories: [{ owner: "octo-org", name: "relay" }] },
+          {
+            id: 3,
+            login: "octo-ci",
+            repositories: [{ owner: "octo-ci", name: "relay" }],
+            permissions: { contents: "write", pull_requests: "write", ...CI_READ_PERMISSIONS },
+          },
         ]);
         const userId = yield* openGithubUser();
         const app = yield* GitHubApp;
@@ -746,19 +755,44 @@ it.layer(testSqlClient)("a signed-in user's token off the account row", (it) => 
         const minted = yield* app
           .repositoryWriteToken(userId, "octo-org/relay")
           .pipe(Effect.provide(fake.layer));
+        const readingCi = yield* app
+          .repositoryWriteToken(userId, "octo-ci/relay")
+          .pipe(Effect.provide(fake.layer));
         const unreached = yield* app
           .repositoryWriteToken(userId, "octo-org/ledger")
           .pipe(Effect.provide(fake.layer));
 
         assert.ok(Option.isSome(minted));
         assert.equal(Redacted.value(minted.value.token), GITHUB_FIXTURE_INSTALLATION_TOKEN);
+        assert.ok(Option.isSome(readingCi));
         assert.ok(Option.isNone(unreached));
         const mints = fake.sent.filter((sent) => sent.url.endsWith("/access_tokens"));
-        assert.equal(mints.length, 1);
-        assert.deepEqual(JSON.parse(mints[0]?.body ?? ""), {
-          repositories: ["relay"],
-          permissions: { contents: "write", pull_requests: "write" },
-        });
+        assert.deepEqual(
+          mints.map((mint) => JSON.parse(mint.body)),
+          [
+            { repositories: ["relay"], permissions: { contents: "write", pull_requests: "write" } },
+            {
+              repositories: ["relay"],
+              permissions: {
+                contents: "write",
+                pull_requests: "write",
+                checks: "read",
+                statuses: "read",
+                actions: "read",
+              },
+            },
+          ],
+        );
+        assert.equal(
+          yield* app.repositoryCiReadable(userId, "octo-ci/relay").pipe(Effect.provide(fake.layer)),
+          true,
+        );
+        assert.equal(
+          yield* app
+            .repositoryCiReadable(userId, "octo-org/relay")
+            .pipe(Effect.provide(fake.layer)),
+          false,
+        );
       }).pipe(Effect.provide(GitHubApp.layer(GITHUB_APP_SETTINGS))),
   );
 

@@ -4,7 +4,11 @@ import {
   type CodingAgentDefaultAnswer,
   type CodingAgentModelsAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentAttachment,
+  type CodingAgentSummary,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
@@ -12,8 +16,10 @@ import type { ActHandle } from "../act";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import {
   type AgentRun,
+  choiceRequest,
   MODEL_CHANGE_FAILED,
   RENAME_FAILED,
+  START_ARCHIVED,
   START_FAILED_AWAY,
   START_NEEDS_REPOSITORY,
   STOP_FAILED,
@@ -30,7 +36,7 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * use-coding-agents.ts -- the open plan's coding agents as one control: the agents and their status, the Start button, a draft agent started on a task, the Stop, a message to one, a change of one's model, and the models the menus offer.
  *
  * The agents are read when a plan opens, again after a Start or a Stop,
- * and as the side panel's "+" opens, and never on a clock; an agent's status moves between those reads only
+ * and as the plan's column's "+" opens, and never on a clock; an agent's status moves between those reads only
  * as its own transcript page reports it, or as the service answers a
  * message to it, which is the agent running. A Start mints a key of its own
  * for the press, so a service that did not answer is asked again under the
@@ -47,7 +53,7 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * generated as the agent started reaches a tab the list opened before it
  * landed.
  *
- * A draft is an agent the developer opened from the panel's "+" and has
+ * A draft is an agent the developer opened from the column's "+" and has
  * not yet sent anything: it exists only here, so a draft let go leaves
  * nothing behind on the service. Its first message starts the agent with
  * those words as its task, in the plan's place, under the draft's own key,
@@ -56,6 +62,11 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * most one draft, held with the words written in it and the choice made on
  * its chip, so a draft keeps them while its tab is away and while the
  * developer visits another plan.
+ *
+ * An archived plan starts no agent and sends none a message: Start is
+ * unavailable and says why, and `onUnarchive` stands, which every place
+ * that would have taken words offers instead. An agent already running
+ * finishes the turn it is on, so its Stop stays.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
@@ -66,7 +77,7 @@ export interface CodingAgentsControl {
   agentIds: readonly string[] | undefined;
   /** Whether the last read of the list did not land. */
   listFailed: boolean;
-  /** Reads the list again: after a read that failed, or as the panel's "+" opens, so it says where each agent stands now. */
+  /** Reads the list again: after a read that failed, or as the column's "+" opens, so it says where each agent stands now. */
   onRetryList: () => void;
   /** The models the menu offers, as last read; nothing before the menu first asks. */
   models: readonly CatalogModel[] | undefined;
@@ -82,11 +93,15 @@ export interface CodingAgentsControl {
   onNewDraft: () => string;
   /** Writes the open plan's draft: the words in its box, or the choice on its chip. */
   onDraftChange: (change: Partial<Pick<AgentDraft, "task" | "choice">>) => void;
+  /** Changes the open plan's draft's files from those it holds as the change lands. */
+  onDraftAttachments: (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Lets the draft go; nothing was started, so nothing is left behind. */
   onDiscardDraft: (draftId: string) => void;
   /**
    * Starts the draft's agent with the words as its task, never the plan,
-   * on the choice where one was made and else the account's default; the
+   * and the files attached to them, on the choice where one was made and else the account's default; the
    * agent's tab opens as a Start's does. Answers why it did not start, or
    * nothing once it did.
    */
@@ -94,9 +109,12 @@ export interface CodingAgentsControl {
     draftId: string,
     task: string,
     choice: ModelChoice | undefined,
+    attachments: readonly CodingAgentAttachment[],
   ) => Promise<string | undefined>;
+  /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
+  onUnarchive: (() => void) | undefined;
   start: {
-    /** Whether a Start could run now: the plan names a repository. */
+    /** Whether a Start could run now: the plan names a repository and is not archived. */
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
@@ -125,10 +143,11 @@ export interface CodingAgentsControl {
   readPullRequest: PullRequestReader;
 }
 
-/** An agent not yet started: the key its first message starts it under, the words written so far, and the choice made on its chip, none while it runs on the account's default. */
+/** An agent not yet started: the key its first message starts it under, the words written so far, the files attached to them, and the choice made on its chip, none while it runs on the account's default. */
 export interface AgentDraft {
   readonly id: string;
   readonly task: string;
+  readonly attachments: readonly CodingAgentAttachment[];
   readonly choice: ModelChoice | undefined;
 }
 
@@ -139,8 +158,25 @@ interface PendingStart {
   choice: ModelChoice | undefined;
 }
 
+/** Why a Start cannot run on the open plan, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
+function startReason(
+  planId: string | undefined,
+  repository: string | null,
+  archived: boolean,
+): string | undefined {
+  if (planId === undefined) return undefined;
+  if (archived) return START_ARCHIVED;
+  return repository === null ? START_NEEDS_REPOSITORY : undefined;
+}
+
+/** Whether two choices ask the same of a Start, read as `choiceRequest` sends them: only the standard window is a window apart. */
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
-  return a?.model === b?.model && a?.effort === b?.effort;
+  return (
+    a?.model === b?.model &&
+    a?.effort === b?.effort &&
+    (a?.contextWindow === CONTEXT_WINDOW.STANDARD) ===
+      (b?.contextWindow === CONTEXT_WINDOW.STANDARD)
+  );
 }
 
 export function useCodingAgents(input: {
@@ -149,12 +185,16 @@ export function useCodingAgents(input: {
   planId: string | undefined;
   /** The open plan's repository, or null while it names none. */
   repository: string | null;
+  /** Whether the open plan is archived, which starts nothing on it. */
+  archived: boolean;
+  /** Brings the open plan back from the archive. */
+  onUnarchive: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
-  const { planId, repository } = input;
+  const { planId, repository, archived } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
   const [list, setList] = useState<{
@@ -234,7 +274,7 @@ export function useCodingAgents(input: {
 
   const writeDefault = (choice: ModelChoice): Promise<CodingAgentDefaultAnswer> => {
     setNote(undefined);
-    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choice)
+    return act(ACT_KIND.CODING_AGENTS_DEFAULT_WRITE, choiceRequest(choice))
       .catch((): CodingAgentDefaultAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }))
       .then((answer) => {
         if ("failure" in answer && planId !== undefined)
@@ -275,7 +315,7 @@ export function useCodingAgents(input: {
   };
 
   const pressStart = (choice?: ModelChoice) => {
-    if (planId === undefined || repository === null || starting) return;
+    if (planId === undefined || repository === null || archived || starting) return;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -288,7 +328,7 @@ export function useCodingAgents(input: {
     setNote(undefined);
     askStart(planId, {
       idempotencyKey: key,
-      ...(choice === undefined ? undefined : { model: choice.model, effort: choice.effort }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
     }).then((answer) => {
       if ("failure" in answer) {
         // Only a service that never answered is asked again under the same key.
@@ -316,12 +356,27 @@ export function useCodingAgents(input: {
   const onNewDraft = (): string => {
     if (draft !== undefined) return draft.id;
     const id = mintKey();
-    if (planId !== undefined) withDraft(planId, { id, task: "", choice: undefined });
+    if (planId !== undefined) {
+      withDraft(planId, { id, task: "", attachments: [], choice: undefined });
+    }
     return id;
   };
 
   const onDraftChange = (change: Partial<Pick<AgentDraft, "task" | "choice">>) => {
     if (planId !== undefined && draft !== undefined) withDraft(planId, { ...draft, ...change });
+  };
+
+  // Note that the files are changed from the drafts as they stand when the
+  // change lands, because a file's read lands after the render that began it.
+  const onDraftAttachments = (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => {
+    if (planId === undefined) return;
+    setDrafts((was) => {
+      const held = was.get(planId);
+      if (held === undefined) return was;
+      return new Map(was).set(planId, { ...held, attachments: next(held.attachments) });
+    });
   };
 
   const onDiscardDraft = (draftId: string) => {
@@ -335,12 +390,15 @@ export function useCodingAgents(input: {
     draftId: string,
     task: string,
     choice: ModelChoice | undefined,
+    attachments: readonly CodingAgentAttachment[],
   ): Promise<string | undefined> => {
     if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
+    if (archived) return START_ARCHIVED;
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,
-      ...(choice === undefined ? undefined : { model: choice.model, effort: choice.effort }),
+      ...(attachments.length === 0 ? undefined : { attachments }),
+      ...(choice === undefined ? undefined : choiceRequest(choice)),
     });
     if ("failure" in answer) return startFailureNote(answer.failure);
     withDraft(planId, undefined);
@@ -364,11 +422,12 @@ export function useCodingAgents(input: {
   };
 
   const onMessage = useCallback<MessageSender>(
-    async (agentId, text, clientKey) => {
+    async (agentId, text, clientKey, attachments) => {
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_MESSAGE, {
         agentId,
         text,
         clientKey,
+        ...(attachments.length === 0 ? undefined : { attachments }),
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer)) {
         setList((was) =>
@@ -392,8 +451,7 @@ export function useCodingAgents(input: {
       chooses.current.set(agentId, change);
       const answer: CodingAgentAgentAnswer = await act(ACT_KIND.CODING_AGENTS_CHOOSE, {
         agentId,
-        model: choice.model,
-        effort: choice.effort,
+        ...choiceRequest(choice),
       }).catch((): CodingAgentAgentAnswer => ({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }));
       if (!("failure" in answer) && chooses.current.get(agentId) === change) {
         setList((was) =>
@@ -466,6 +524,7 @@ export function useCodingAgents(input: {
     draft,
     onNewDraft,
     onDraftChange,
+    onDraftAttachments,
     onDiscardDraft,
     startTask,
     listFailed,
@@ -474,9 +533,10 @@ export function useCodingAgents(input: {
     readModels,
     readDefault,
     writeDefault,
+    onUnarchive: planId !== undefined && archived ? input.onUnarchive : undefined,
     start: {
-      available: planId !== undefined && repository !== null,
-      reason: planId !== undefined && repository === null ? START_NEEDS_REPOSITORY : undefined,
+      available: planId !== undefined && repository !== null && !archived,
+      reason: startReason(planId, repository, archived),
       busy: starting,
       note: note !== undefined && note.planId === planId ? note.note : undefined,
       onPress: pressStart,

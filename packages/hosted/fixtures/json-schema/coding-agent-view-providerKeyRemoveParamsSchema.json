@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "enum": [
+        "anthropic",
+        "openai"
+      ]
+    }
+  },
+  "required": [
+    "provider"
+  ],
+  "additionalProperties": false
+}

@@ -13,10 +13,17 @@ import {
   settingsNavRowId,
 } from "../settings-views";
 import { AccountSection } from "./account-section";
+import { ApiKeysSection } from "./api-keys-page";
 import { AppearanceSection } from "./appearance-page";
 import { CodingAgentsSection } from "./coding-agents-page";
-import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./controls";
+import type {
+  MicrophoneControl,
+  NotificationsControl,
+  ShortcutControl,
+  UpdateControl,
+} from "./controls";
 import { FeedbackSection } from "./feedback-section";
+import { NotificationsSection } from "./notifications-section";
 import { SettingsNavRow, SettingsPageHeader } from "./pages";
 import { ShortcutSection, WindowShortcutSections } from "./shortcuts-page";
 import { UpdatesSection } from "./updates";
@@ -44,6 +51,7 @@ export interface SettingsPanelProps {
   view: SettingsView;
   onViewChange: (view: SettingsView) => void;
   microphone: MicrophoneControl;
+  notifications: NotificationsControl;
   updates: UpdateControl;
   settings?: AppSettingsView;
   /** Opens the dialog that writes a note of this kind to the people who make Luke. */
@@ -84,6 +92,7 @@ export function SettingsPanel({
   view,
   onViewChange,
   microphone,
+  notifications,
   updates,
   settings,
   onFeedback,
@@ -159,6 +168,10 @@ export function SettingsPanel({
         <CodingAgentsSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
       ) : null}
 
+      {view === SETTINGS_VIEW.API_KEYS ? (
+        <ApiKeysSection signedIn={account.status === ACCOUNT_STATUS.SIGNED_IN} />
+      ) : null}
+
       {view === SETTINGS_VIEW.SHORTCUTS ? (
         <>
           <ShortcutSection
@@ -173,6 +186,10 @@ export function SettingsPanel({
 
       {view !== SETTINGS_VIEW.ROOT ? null : (
         <>
+          {panelView ? (
+            <NotificationsSection view={panelView} writes={writes} control={notifications} />
+          ) : null}
+
           <UpdatesSection control={updates} />
 
           <FeedbackSection onOpen={onFeedback} />

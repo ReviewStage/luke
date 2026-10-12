@@ -10,6 +10,7 @@ import {
   LIVE_IDLE_WINDOW_MS,
   LIVE_SERVER_EVENT,
   type LiveDelegationId,
+  type LiveDelegationTarget,
   type LiveServerEvent,
   liveErrorCommand,
   liveErrorFields,
@@ -181,6 +182,44 @@ export const END_CALL_BOUNDS = {
 } as const;
 
 /**
+ * What the session traces of the hand-offs a call turns on: each delegation
+ * the voice made, whether the brain took it, and why a run's end of the call
+ * was not passed on. Note that an entry carries a revision, a target, or a
+ * fixed reason and never an id or a word, so a log that keeps every line says
+ * which hand-off happened and nothing of what was said; a call that stays up
+ * then reads as no delegation, a refused one, or a refused end.
+ */
+export const LIVE_SESSION_TRACE = {
+  DELEGATION_ASKED: "delegation-asked",
+  DELEGATION_SENT: "delegation-sent",
+  DELEGATION_REFUSED: "delegation-refused",
+  END_CALL_REFUSED: "end-call-refused",
+} as const;
+
+/** Why a run's end of the call was not passed on; see `#endCall`. */
+export const END_CALL_REFUSAL = {
+  /** The run answers no delegation: the brain opened it of its own. */
+  UNASKED: "unasked",
+  /** A later delegation or the stop key silenced the run. */
+  SILENCED: "silenced",
+  /** A later delegation stands, even one the brain has not yet taken. */
+  SUPERSEDED: "superseded",
+  /** The end came past `END_CALL_BOUNDS` of its delegation. */
+  PAST_BOUND: "past_bound",
+} as const;
+
+export type EndCallRefusal = (typeof END_CALL_REFUSAL)[keyof typeof END_CALL_REFUSAL];
+
+export type LiveSessionTrace =
+  | {
+      readonly event: typeof LIVE_SESSION_TRACE.DELEGATION_ASKED;
+      readonly target: LiveDelegationTarget;
+    }
+  | { readonly event: typeof LIVE_SESSION_TRACE.DELEGATION_SENT; readonly revision: number }
+  | { readonly event: typeof LIVE_SESSION_TRACE.DELEGATION_REFUSED; readonly revision: number }
+  | { readonly event: typeof LIVE_SESSION_TRACE.END_CALL_REFUSED; readonly reason: EndCallRefusal };
+
+/**
  * How long after a fragment lands its row's write is put off, so a burst of
  * deltas is one write rather than one per syllable. Each fragment re-arms it,
  * and silence arms nothing: a row whose write has landed owes the record
@@ -226,6 +265,8 @@ export interface LiveSessionServiceOptions {
    * developer's own hang-up. Told at most once per run.
    */
   onCallEnding?: () => void;
+  /** Each hand-off the session traces, as `LiveSessionTrace` words it; nowhere where nothing listens. */
+  onTrace?: (entry: LiveSessionTrace) => void;
 }
 
 /**
@@ -1035,6 +1076,10 @@ export class LiveSessionService {
         }
         return Effect.void;
       case LIVE_SERVER_EVENT.DELEGATION_CREATED:
+        this.#trace({
+          event: LIVE_SESSION_TRACE.DELEGATION_ASKED,
+          target: event.delegation.target,
+        });
         if (isClientDelegation(event))
           this.#delegation(session, event.delegation.id, event.offset_ms);
         return Effect.void;
@@ -1265,6 +1310,7 @@ export class LiveSessionService {
         .sort((left, right) => left.startMs - right.startMs)
         .map((row) => row.rowId);
       if (submission.outcome === LIVE_BRAIN_SUBMISSION.REFUSED) {
+        this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_REFUSED, revision: asked.revision });
         if (rowIds.length > 0) yield* this.#attachAsk(session, delegationId, rowIds);
         this.#speakInto(session, delegationId, submission.refusal);
         return;
@@ -1281,6 +1327,7 @@ export class LiveSessionService {
       // store failure, which `#attachAsk` reports) changes nothing here: the
       // ask is with the brain either way, and the developer is told nothing of
       // the record.
+      this.#trace({ event: LIVE_SESSION_TRACE.DELEGATION_SENT, revision: asked.revision });
       const exchange = this.#registerExchange(session, submission.runId, delegationId, asked);
       if (rowIds.length > 0) {
         exchange.pendingRecord = true;
@@ -1532,17 +1579,33 @@ export class LiveSessionService {
    * whatever the run returns after would be said over the hang-up.
    */
   #endCall(exchange: Exchange): void {
-    if (exchange.woken || exchange.silenced || exchange.endAsked) return;
-    // A later delegation still on its way to the brain has not silenced this run yet, but it counts.
+    // A session already gone has no call to end, and nothing to trace.
     const session = this.#sessionOf(exchange);
-    if (session === undefined || exchange.revision < session.revisions) return;
-    if (this.#now() - exchange.askedAt > END_CALL_BOUNDS.WITHIN_MS) {
-      this.#options.report("An end of the call came past its bound, and the call stays up");
+    if (exchange.endAsked || session === undefined) return;
+    const refusal = this.#endCallRefusal(exchange, session);
+    if (refusal !== undefined) {
+      this.#trace({ event: LIVE_SESSION_TRACE.END_CALL_REFUSED, reason: refusal });
       return;
     }
     exchange.endAsked = true;
     this.#silence(exchange);
     this.#options.onCallEnding?.();
+  }
+
+  /** Why a run's end of the call is not passed on, or nothing where it is. */
+  #endCallRefusal(exchange: Exchange, session: StandingSession): EndCallRefusal | undefined {
+    if (exchange.woken) return END_CALL_REFUSAL.UNASKED;
+    if (exchange.silenced) return END_CALL_REFUSAL.SILENCED;
+    // A later delegation still on its way to the brain has not silenced this run yet, but it counts.
+    if (exchange.revision < session.revisions) return END_CALL_REFUSAL.SUPERSEDED;
+    if (this.#now() - exchange.askedAt > END_CALL_BOUNDS.WITHIN_MS) {
+      return END_CALL_REFUSAL.PAST_BOUND;
+    }
+    return undefined;
+  }
+
+  #trace(entry: LiveSessionTrace): void {
+    this.#options.onTrace?.(entry);
   }
 
   /** Whether a settled step may be told now, by `PROGRESS_NOTE_BOUNDS`; a silenced or ended exchange tells none. */

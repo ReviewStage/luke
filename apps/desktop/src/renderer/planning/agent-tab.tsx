@@ -1,5 +1,7 @@
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
   type CodingAgentPullRequestAnswer,
@@ -7,6 +9,7 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { TerminalIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon, FileTextIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -22,31 +25,50 @@ import {
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { useCopyToast } from "../copy-feedback";
+import { HarnessMark } from "../provider-marks";
+import { SPINNER_SIZE, Spinner } from "../spinner";
+import { StateGlyph } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
+import type { HeldTranscript } from "./agent-tab-card";
+import { ArchivedComposerNote } from "./archived-plan";
+import { AttachedFileChips, messageFileChips } from "./attached-file-chips";
 import {
   AGENT_PART,
   type AgentPart,
+  agentGlyphState,
   agentLines,
   agentRows,
   agentStillWriting,
   agentTabLabel,
+  dockedTodos,
   endLine,
-  isDelegation,
   messageWords,
+  newestTodos,
   opensOnGitHub,
+  providerOf,
   settledPlanEdits,
   showsPublishedRow,
   workerLines,
   workerStatusOf,
 } from "./coding-agent-model";
 import { CopyMessageAction } from "./copy-message";
-import { cardTitle, delegationView, toolCallView } from "./tool-call-model";
+import {
+  AGENT_TOOL,
+  cardTitle,
+  delegationView,
+  todoFocus,
+  todosSummary,
+  todosView,
+  toolCallView,
+} from "./tool-call-model";
 import {
   TRANSCRIPT_COMPONENTS,
   TranscriptReasoning,
   TranscriptRows,
   TranscriptSubagent,
+  TranscriptTodos,
+  TranscriptTodosDock,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
@@ -58,7 +80,7 @@ import type { CodingAgentsControl } from "./use-coding-agents";
 import { WorkedFor, WorkingLine } from "./working-time";
 
 /**
- * agent-tab.tsx -- one coding agent's tab in the side panel: its transcript live, and the message box under it wearing what it runs on and what it published.
+ * agent-tab.tsx -- one coding agent's tab in the plan's column: its transcript live, and the message box under it wearing what it runs on and what it published.
  *
  * The transcript is drawn as every transcript is (`transcript-blocks.tsx`
  * over `../ai-elements/`), the Transcript and Work tabs alike, from the
@@ -71,7 +93,10 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * an error marked in red, each delegation to a worker a subagent's row on
  * a line of its own, as the Work tab draws its worker's, saying the task
  * and the model and effort the worker runs on, the whole line the one
- * button that opens the worker's own tab (`AgentSubagentTab`), and its
+ * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), each write
+ * of its to-do list the list on a row of its own where it landed, open
+ * while it is the newest and folded once a newer one stands, the newest
+ * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
@@ -91,14 +116,16 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
- * the agent stands is its tab's dot and the transcript's own lines, what
+ * the agent stands is its tab's glyph and the transcript's own lines, what
  * it runs on is the model chip at the box's foot, and what it published
  * is the chip after it. A line the developer sends joins the transcript at
  * once as theirs and is read back from the service's own row, and the
  * Stop is the composer's, the one the tab has. A worker's tab draws the
  * worker's transcript the same way, under the agent and the call that
  * started it, with the task it was handed in the plan card's place and no
- * composer, since nothing is sent to a worker.
+ * composer, since nothing is sent to a worker. Either tab says what it
+ * holds to the plan's page each time it moves (`onHeld`), which its tab's hover
+ * card previews (`agent-tab-card.tsx`).
  */
 
 /** How a transcript opens: what its first row, the developer's, is drawn as, and what stands before any row has landed. */
@@ -211,15 +238,80 @@ function DelegationRow({
   );
 }
 
+/**
+ * One write of the agent's to-do list: the list, open while it is the
+ * newest and folded once a newer one stands, or a call's row where its
+ * input does not read as a list. Note that the row is keyed by whether it
+ * is open, because the fold reads `defaultOpen` once.
+ */
+function TodosRow({
+  part,
+  open,
+}: {
+  part: Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }>;
+  open: boolean;
+}): ReactNode {
+  const todos = todosView(part.input);
+  if (todos === undefined) return <ToolCallView part={part} />;
+  return (
+    <TranscriptTodos
+      key={String(open)}
+      data-call-id={part.callId}
+      defaultOpen={open}
+      state={part.state}
+      subject={todosSummary(todos)}
+      todos={todos}
+      errorText={part.errorText}
+    />
+  );
+}
+
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, and the call whose list is drawn open, none while the list is docked above the composer. */
+interface TodosPlace {
+  readonly kept: string | undefined;
+  readonly open: string | undefined;
+}
+
+/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
+function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
+  const standing = newestTodos(messages);
+  const docked = dockedTodos(standing, working);
+  return { kept: standing?.callId, open: docked === undefined ? standing?.callId : undefined };
+}
+
+/** The list the agent is working through, docked above the composer; nothing where none is (`dockedTodos`). */
+function TodosDock({
+  messages,
+  working,
+}: {
+  messages: readonly CodingAgentMessage[];
+  working: boolean;
+}): ReactNode {
+  const docked = dockedTodos(newestTodos(messages), working);
+  if (docked === undefined) return null;
+  return (
+    <div className="agent-todos-dock">
+      <TranscriptTodosDock
+        key={docked.callId}
+        todos={docked.todos}
+        summary={todosSummary(docked.todos)}
+        focus={todoFocus(docked.todos)}
+      />
+    </div>
+  );
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
   components,
   delegation,
+  todos,
 }: {
   part: AgentPart;
   components: Components;
   delegation: DelegationDoors | undefined;
+  todos: TodosPlace;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
@@ -227,11 +319,14 @@ function AgentPartView({
     case AGENT_PART.REASONING:
       return <TranscriptReasoning text={part.text} />;
     case AGENT_PART.TOOL:
-      return isDelegation(part) ? (
-        <DelegationRow part={part} doors={delegation} />
-      ) : (
-        <ToolCallView part={part} />
-      );
+      switch (part.tool) {
+        case CODING_AGENT_DELEGATE_TOOL:
+          return <DelegationRow part={part} doors={delegation} />;
+        case AGENT_TOOL.WRITE_TODOS:
+          return <TodosRow part={part} open={part.callId === todos.open} />;
+        default:
+          return <ToolCallView part={part} />;
+      }
     // A step boundary is the model's own pacing, and the parts keep one rhythm across it.
     case AGENT_PART.STEP_START:
     case AGENT_PART.OTHER:
@@ -275,6 +370,7 @@ function AgentMessage({
   moving,
   components,
   delegation,
+  todos,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -284,12 +380,14 @@ function AgentMessage({
   moving: boolean;
   components: Components;
   delegation: DelegationDoors | undefined;
+  todos: TodosPlace;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} components={components} />;
   if (message.role === MESSAGE_ROLE.USER) {
     return (
       <Message from={message.role}>
+        <AttachedFileChips files={messageFileChips(message)} />
         <MessageContent>
           <TranscriptWords text={words} components={components} />
         </MessageContent>
@@ -301,8 +399,15 @@ function AgentMessage({
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped)}>
-          {(part) => <AgentPartView part={part} components={components} delegation={delegation} />}
+        <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
+          {(part) => (
+            <AgentPartView
+              part={part}
+              components={components}
+              delegation={delegation}
+              todos={todos}
+            />
+          )}
         </TranscriptRows>
       </MessageContent>
       {moving || startedAt === undefined || finishedAt === undefined ? null : (
@@ -313,14 +418,18 @@ function AgentMessage({
   );
 }
 
-/** The dot that says where an agent stands, pulsing while it may still write. */
-export function AgentStatusDot({ status }: { status: CodingAgentSummary["status"] }) {
+/**
+ * An agent's glyph wearing where it stands: the mark of the harness its
+ * model runs in, or the Coding agents glyph where Luke knows no harness for
+ * it, turning a ring while the agent may still write and giving way to an
+ * alert once its turn failed (`state-glyph.tsx`).
+ */
+export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
+  const provider = providerOf(agent.model);
   return (
-    <span
-      className="agent-status-dot"
-      data-status={status}
-      data-live={String(agentStillWriting(status))}
-      aria-hidden="true"
+    <StateGlyph
+      glyph={provider === undefined ? <TerminalIcon /> : <HarnessMark provider={provider} />}
+      state={agentGlyphState(agent.status)}
     />
   );
 }
@@ -339,6 +448,7 @@ export function AgentTranscriptView({
   onRetry,
   openGitHub,
   footer,
+  overComposer = false,
 }: {
   messages: readonly CodingAgentMessage[];
   /** What the agent was handed first: the plan, drawn as the plan's card, or a task, drawn as the developer's message; nothing reads as the plan. */
@@ -360,9 +470,12 @@ export function AgentTranscriptView({
   openGitHub: (url: string) => void;
   /** What ends the transcript once the agent has: the row summing its pull request up. */
   footer?: ReactNode;
+  /** Whether the composer stands right under the log, which the log's foot then fades into. */
+  overComposer?: boolean;
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
+    const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
     // was handed a task in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
@@ -373,7 +486,11 @@ export function AgentTranscriptView({
     return (
       <Conversation>
         {/* The plan's card stands off the tab row by the gap between a column's groups. */}
-        <ConversationContent className="pt-(--section-gap)">
+        <ConversationContent
+          className={
+            overComposer ? "agent-log-over-composer pt-(--section-gap)" : "pt-(--section-gap)"
+          }
+        >
           {messages.map((message, index) => (
             <AgentMessage
               key={message.id}
@@ -383,6 +500,7 @@ export function AgentTranscriptView({
               moving={working && index === messages.length - 1}
               components={components}
               delegation={delegation}
+              todos={todos}
             />
           ))}
           {working ? <WorkingLine startedAt={startedAt} /> : null}
@@ -406,7 +524,7 @@ export function AgentTranscriptView({
     );
   }
   return (
-    <ConversationEmptyState aria-busy={reading}>
+    <ConversationEmptyState>
       {failed ? (
         <>
           <p className="m-0" role="alert">
@@ -416,9 +534,11 @@ export function AgentTranscriptView({
             Try again
           </button>
         </>
+      ) : reading && ended === undefined ? (
+        <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
-          {ended ?? (reading ? "Reading the transcript…" : lead.startingLine)}
+          {ended ?? lead.startingLine}
         </p>
       )}
     </ConversationEmptyState>
@@ -427,7 +547,9 @@ export function AgentTranscriptView({
 
 /**
  * The tab as drawn from what it holds: the transcript with the lines sent
- * and not yet read back at its end, and the composer under it.
+ * and not yet read back at its end, and the composer under it, or, while
+ * the plan is archived, the note that offers Unarchive in its place, with
+ * the Stop of a turn still running.
  */
 export function AgentTabView({
   agent,
@@ -441,6 +563,7 @@ export function AgentTabView({
   startedAt,
   delegationStarts,
   onStop,
+  onUnarchive,
   onOpenSubagent,
   openGitHub,
 }: {
@@ -458,14 +581,18 @@ export function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
+  /** Brings the plan back from the archive; present exactly while it is archived, when no message is sent. */
+  onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
+  const lines = agentLines(transcript.messages, composer.sent);
+  const working = agentStillWriting(agent.status);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <AgentTranscriptView
-        messages={agentLines(transcript.messages, composer.sent)}
+        messages={lines}
         brief={agent.brief}
         delegation={{
           models,
@@ -475,7 +602,7 @@ export function AgentTabView({
         }}
         reading={transcript.reading}
         failed={transcript.failed}
-        working={agentStillWriting(agent.status)}
+        working={working}
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
@@ -485,24 +612,33 @@ export function AgentTabView({
             <PublishedRow pullRequest={published.pullRequest} openGitHub={openGitHub} />
           ) : null
         }
+        overComposer
       />
       <footer className="agent-tab-foot">
-        <AgentComposer
-          status={agent.status}
-          composer={composer}
-          model={model}
-          models={models}
-          readModels={readModels}
-          usage={transcript.usage}
-          context={transcript.context}
-          brief={agent.brief}
-          published={published}
-          doors={doors}
-          onStop={onStop}
-          // Note that a started agent's conversation always opens on its plan or
-          // task, so the box takes a follow up even before the transcript is read.
-          followsUp
-        />
+        <TodosDock messages={lines} working={working} />
+        {onUnarchive !== undefined ? (
+          <ArchivedComposerNote
+            onUnarchive={onUnarchive}
+            stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+          />
+        ) : (
+          <AgentComposer
+            status={agent.status}
+            composer={composer}
+            model={model}
+            models={models}
+            readModels={readModels}
+            usage={transcript.usage}
+            context={transcript.context}
+            brief={agent.brief}
+            published={published}
+            doors={doors}
+            onStop={onStop}
+            // Note that a started agent's conversation always opens on its plan or
+            // task, so the box takes a follow up even before the transcript is read.
+            followsUp
+          />
+        )}
       </footer>
     </section>
   );
@@ -513,13 +649,16 @@ export function AgentTab({
   control,
   shown,
   onOpenSubagent,
+  onHeld,
 }: {
   agent: CodingAgentSummary;
   control: CodingAgentsControl;
-  /** Whether the tab is on screen: the panel open on it, on the Plans tab. */
+  /** Whether the tab is on screen: the plan's column showing it, on the Plans tab. */
   shown: boolean;
-  /** Opens one of the agent's workers in a tab of the panel's own, by the call that started it. */
+  /** Opens one of the agent's workers in a tab of the side panel's own, by the call that started it. */
   onOpenSubagent: (callId: string, task: string, status: CodingAgentStatus) => void;
+  /** Hears the transcript the tab holds each time it moves, which the tab's hover card previews once the tab is not shown. */
+  onHeld: (agentId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   const transcript = useAgentTranscript({
@@ -530,6 +669,15 @@ export function AgentTab({
     onStatus: control.onStatus,
     onTitle: control.onTitle,
   });
+  const { messages, pageStatus, runStartedAt, subagentTitles } = transcript;
+  // Note that what is held is dated by the page it was read from, never by
+  // the summary, because the summary moves on to a new turn before its
+  // messages land; and nothing is said before a page has landed.
+  useEffect(() => {
+    if (pageStatus === undefined || messages.length === 0) return;
+    const status = pageStatus;
+    onHeld(agent.id, { messages, status, runStartedAt, title: undefined, subagentTitles });
+  }, [onHeld, agent.id, messages, pageStatus, runStartedAt, subagentTitles]);
   // A plan edit that answered has changed the plan the window holds, so the host re-reads it;
   // the edits already on screen when the tab opened are the plan's as it was read.
   const settledEdits = settledPlanEdits(transcript.messages);
@@ -568,6 +716,7 @@ export function AgentTab({
       startedAt={shown ? agent.runStartedAt : undefined}
       delegationStarts={shown ? transcript.delegations : undefined}
       onStop={() => control.onStop(agent.id)}
+      onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
     />
@@ -575,7 +724,7 @@ export function AgentTab({
 }
 
 /**
- * One of an agent's workers in a tab of the panel's own: its transcript,
+ * One of an agent's workers in a tab of the side panel's own: its transcript,
  * read under the agent and the call that started it and followed while
  * the worker runs, drawn as the agent's is with the task it was handed in
  * the plan's place, a working line at its end while it runs, counting
@@ -592,6 +741,7 @@ export function AgentSubagentTab({
   control,
   shown,
   onStatus,
+  onHeld,
 }: {
   agentId: string;
   callId: string;
@@ -601,6 +751,8 @@ export function AgentSubagentTab({
   shown: boolean;
   /** A page said where the worker stands now. */
   onStatus: (status: CodingAgentStatus) => void;
+  /** Hears the transcript the tab holds each time it moves, by the call that started the worker, as an agent's tab says its own. */
+  onHeld: (callId: string, held: HeldTranscript) => void;
 }): React.JSX.Element {
   const { tell } = useAct();
   const transcript = useAgentTranscript({
@@ -613,6 +765,13 @@ export function AgentSubagentTab({
     // A worker's page names the worker's conversation, which is no title of the agent's.
     onTitle: () => undefined,
   });
+  const { messages, pageStatus, runStartedAt, pageTitle } = transcript;
+  // As an agent's: dated by the page it was read from, with the worker's own title.
+  useEffect(() => {
+    if (pageStatus === undefined || messages.length === 0) return;
+    const held = { messages, status: pageStatus, runStartedAt, title: pageTitle };
+    onHeld(callId, { ...held, subagentTitles: new Map() });
+  }, [onHeld, callId, messages, pageStatus, runStartedAt, pageTitle]);
   return (
     <section className="agent-tab ph-no-capture" aria-label={cardTitle(task)}>
       <AgentTranscriptView

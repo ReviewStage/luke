@@ -5,6 +5,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
 import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { Spinner } from "../spinner";
 import { repositoryFailureNote } from "./planning-model";
 
 /**
@@ -64,7 +65,6 @@ const FOOT_ROW = {
 
 /** What the menu says in the list's place. */
 const MENU_NOTE = {
-  READING: "Reading your repositories…",
   NONE_REACHED: "Luke can't see any repository yet.",
   NO_MATCH: "No repositories match",
 } as const;
@@ -178,7 +178,9 @@ export function RepositoryChip(props: {
         </button>
       </>
     ) : list === undefined ? (
-      <p className="plan-compose-menu-note">{MENU_NOTE.READING}</p>
+      <div className="plan-compose-menu-note">
+        <Spinner label="Loading repositories" />
+      </div>
     ) : rows.length === 0 && listed?.installed ? (
       <p className="plan-compose-menu-note">{MENU_NOTE.NONE_REACHED}</p>
     ) : undefined;

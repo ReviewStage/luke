@@ -1,3 +1,4 @@
+import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { planMarkdown } from "@sidecar/hosted/plan-markdown";
 import { Effect, Option } from "effect";
@@ -6,6 +7,7 @@ import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
 import { readAccountPreferences, writeAccountPreferences } from "../account-store.js";
+import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   describeUnreachable,
@@ -13,7 +15,12 @@ import {
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
 import { type CodingAgent, createCodingAgent, discardCodingAgent } from "../coding-agent-store.js";
-import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import {
+  HOSTED_REFUSAL,
+  type HostedRefusal,
+  hostedStoreOrArchived,
+  hostedStoreOrUnavailable,
+} from "../http-effect.js";
 import {
   acceptedModelChoice,
   CODING_AGENT_DEFAULT_CHOICE,
@@ -25,8 +32,9 @@ import { readPlan } from "../plan-store.js";
 /**
  * start.ts -- an agent started on a plan: the one path a Start takes, from the Start button or from Luke's voice.
  *
- * The model and effort are the ask's own where it names them, the account's
- * stored default otherwise, either checked against the catalog, which also
+ * The model, effort, and context window are the ask's own where it names a
+ * model, the account's stored default otherwise, either checked against the
+ * catalog, which also
  * refuses a stored default that has since left it; a refused choice is
  * answered as the catalog's own refusal, so the route can say invalid and
  * the voice tool can say which choices there are. The plan must name a
@@ -34,7 +42,8 @@ import { readPlan } from "../plan-store.js";
  * agent and its conversation are made under the ask's key, and a retry
  * carrying the same key is the same agent and opens nothing again; a new
  * agent's eve session opens with the plan's document as the Markdown Copy
- * would put on the clipboard, or with the ask's task in the plan's place.
+ * would put on the clipboard, or with the ask's task in the plan's place
+ * and the files attached to it, which only a task carries.
  * An eve that did not take the opening leaves no agent behind, so the retry
  * under the same key starts afresh. An ask that named a choice makes it
  * the account's default, so the menu's last choice and the default stay one
@@ -44,12 +53,13 @@ import { readPlan } from "../plan-store.js";
  * (`coder-host/channel.ts`).
  */
 
-/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, and the task where the agent is handed one in the plan's place. */
+/** What a Start asks: the plan, the key a retry carries again, the choice where one was made, and the task where the agent is handed one in the plan's place, with the files attached to it. */
 export interface StartAsk {
   readonly planId: string;
   readonly idempotencyKey: string;
   readonly choice: ModelChoice | undefined;
   readonly task: string | undefined;
+  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
 }
 
 /** What a Start came to: the agent, and whether this ask made it or found it under its key. */
@@ -105,12 +115,13 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     ask.task === undefined
       ? { planSnapshot: planMarkdown(plan.value.plan.document), task: null }
       : { planSnapshot: null, task: ask.task };
-  const started = yield* hostedStoreOrUnavailable(
+  const started = yield* hostedStoreOrArchived(
     createCodingAgent(userId, {
       planId: ask.planId,
       idempotencyKey: ask.idempotencyKey,
       model: choice.model,
       effort: choice.effort,
+      contextWindow: choice.contextWindow,
       ...brief,
       repository,
     }),
@@ -125,7 +136,8 @@ export const startCodingAgent = /* @__PURE__ */ Effect.fn("web/startCodingAgent"
     .open({
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
-      message: brief.task ?? brief.planSnapshot,
+      message:
+        brief.task === null ? brief.planSnapshot : eveContent(brief.task, ask.attachments ?? []),
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>

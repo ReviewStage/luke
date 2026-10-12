@@ -262,6 +262,10 @@
                       },
                       "endedAt": {
                         "type": "number"
+                      },
+                      "title": {
+                        "type": "string",
+                        "maxLength": 80
                       }
                     },
                     "required": [

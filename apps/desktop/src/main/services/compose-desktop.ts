@@ -1,3 +1,4 @@
+import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import {
   type DuplicateGatewayMethod,
   HostAssemblyTag,
@@ -5,6 +6,7 @@ import {
   hostStandingLayer,
   layersInOrder,
 } from "@sidecar/host/effect";
+import { APP_SETTING_SCHEMA } from "@sidecar/settings";
 import { Context, Effect, Layer, Stream } from "effect";
 import { AgentNoticeDoors, type AgentNotices, createAgentNotices } from "../agent-notices";
 import { AppStateStore, initialAppState } from "../app-state";
@@ -57,6 +59,11 @@ export class DesktopTag extends Context.Service<DesktopTag, DesktopServices>()(
   "@luke/desktop/Desktop",
 ) {}
 
+/** Whose account this is, as the host keys it, or nobody: what tells another account from the same one renewed. */
+function accountKey(account: AccountSnapshot): string | undefined {
+  return account.status === ACCOUNT_STATUS.SIGNED_IN ? account.email : undefined;
+}
+
 /**
  * The steps of the launch, in the order it has to keep, each one built into
  * the same scope so the quit is this list closed in reverse.
@@ -97,10 +104,10 @@ const launchSteps = (services: DesktopServices): Layer.Layer<HostTag, never, Hos
     Effect.forkScoped(
       Stream.runForEach(state.changes, () =>
         Effect.catchDefect(
-          // The theme is steered first, so a window handed new settings
-          // already draws under the appearance they name.
+          // The theme and the zoom are steered first, so a window handed new
+          // settings already draws under the appearance they name.
           Effect.andThen(
-            windows.applyTheme(),
+            windows.applyAppearance(),
             Effect.sync(() => windows.publishAppState()),
           ),
           (defect) =>
@@ -205,9 +212,31 @@ export function composeDesktop(
         },
         onUnseenChanged: (unseen) => state.update({ codingAgents: { unseen } }),
         onPanelFocusChanged: windows.onPanelFocusChanged,
-        onAccountChanged: (listener) => operator.host.onAccountChanged(() => listener()),
+        notifying: () =>
+          state.snapshot().settings?.stored.agentNotifications ??
+          APP_SETTING_SCHEMA.agentNotifications.default,
+        signedInAs: () => accountKey(state.snapshot().account),
+        onAccountChanged: (listener) =>
+          operator.host.onAccountChanged((account) => listener(accountKey(account))),
+        // An agent starting or ending, or a new pull request, is read on the sidebar's rows from the list.
+        onPlanAgentsMoved: () => {
+          void run(operator.host.planningRefresh());
+        },
         report: config.report,
-      }).pipe(Effect.provideService(AgentNoticeDoors, electronNoticeDoors(windows.toastAgentEnd)));
+      }).pipe(
+        Effect.provideService(
+          AgentNoticeDoors,
+          electronNoticeDoors({
+            toPanels: windows.toastAgentEnd,
+            onRefused: (refused) => {
+              if (state.snapshot().notifications.refused !== refused) {
+                state.update({ notifications: { refused } });
+              }
+            },
+            report: config.report,
+          }),
+        ),
+      );
       const updates = yield* createUpdateServiceHost({
         config,
         recordProductEvent: telemetry.recordProductEvent,

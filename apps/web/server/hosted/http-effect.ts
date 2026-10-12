@@ -4,6 +4,7 @@ import { HttpApiSchema } from "effect/unstable/httpapi";
 import type { UnparsedWireValue } from "../core.js";
 import { ANY_METHOD, ANY_PATH } from "../route.js";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "./http.js";
+import type { PlanArchived } from "./plan-store.js";
 import { logStoreFailure, type StoreFailure } from "./store-failure.js";
 
 /**
@@ -36,6 +37,7 @@ const HOSTED_REFUSAL_STATUS = {
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: HOSTED_HTTP_STATUS.BAD_REQUEST,
   [HOSTED_API_ERROR.AGENT_NOT_READY]: HOSTED_HTTP_STATUS.CONFLICT,
   [HOSTED_API_ERROR.AGENT_RETIRED]: HOSTED_HTTP_STATUS.CONFLICT,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: HOSTED_HTTP_STATUS.CONFLICT,
 } as const;
 
 type HostedRefusalSlug = keyof typeof HOSTED_REFUSAL_STATUS;
@@ -63,6 +65,7 @@ export const NoRepositoryRefusal = refusalSchema(HOSTED_API_ERROR.NO_REPOSITORY)
 export const MessageTooLongRefusal = refusalSchema(HOSTED_API_ERROR.MESSAGE_TOO_LONG);
 export const AgentNotReadyRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_NOT_READY);
 export const AgentRetiredRefusal = refusalSchema(HOSTED_API_ERROR.AGENT_RETIRED);
+export const PlanArchivedRefusal = refusalSchema(HOSTED_API_ERROR.PLAN_ARCHIVED);
 
 export type HostedRefusal = { readonly error: HostedRefusalSlug };
 
@@ -103,6 +106,8 @@ export const HOSTED_REFUSAL = {
   AGENT_NOT_READY: { error: HOSTED_API_ERROR.AGENT_NOT_READY },
   /** eve no longer runs the agent's session, so nothing reaches its sandbox again; nothing was written. */
   AGENT_RETIRED: { error: HOSTED_API_ERROR.AGENT_RETIRED },
+  /** The plan is archived, so it takes nothing until it is brought back; nothing was written. */
+  PLAN_ARCHIVED: { error: HOSTED_API_ERROR.PLAN_ARCHIVED },
 } as const satisfies Record<string, HostedRefusal>;
 
 /**
@@ -118,6 +123,20 @@ export function hostedStoreOrUnavailable<A, R>(
   return effect.pipe(
     Effect.tapError(logStoreFailure),
     Effect.mapError(() => HOSTED_REFUSAL.UNAVAILABLE),
+  );
+}
+
+/**
+ * A plan write an archive may refuse: the archive answered as its own
+ * refusal, and a store failure as `hostedStoreOrUnavailable` answers one.
+ */
+export function hostedStoreOrArchived<A, R>(
+  effect: Effect.Effect<A, StoreFailure | PlanArchived, R>,
+): Effect.Effect<A, HostedRefusal, R> {
+  return Effect.catch(effect, (failure) =>
+    "_tag" in failure && failure._tag === "PlanArchived"
+      ? Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED)
+      : hostedStoreOrUnavailable(Effect.fail(failure)),
   );
 }
 
@@ -210,14 +229,14 @@ export function hostedMethod(
 }
 
 /**
- * The request's JSON body as the unparsed wire value a schema reads next.
- * The stream is counted as it arrives rather than trusting a Content-Length
- * the sender may omit or misstate, and is left the moment the bound is
- * passed, so an oversized request is never held whole.
+ * The request's body as the bytes it arrived as. The stream is counted as it
+ * arrives rather than trusting a Content-Length the sender may omit or
+ * misstate, and is left the moment the bound is passed, so an oversized
+ * request is never held whole.
  */
-export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
+export const readBodyBytesEffect = /* @__PURE__ */ Effect.fn("web/readBodyBytesEffect")(function* (
   maximumBytes: number,
-): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+): Effect.fn.Return<Uint8Array, HostedRefusal, HttpServerRequest.HttpServerRequest> {
   const request = yield* HttpServerRequest.HttpServerRequest;
   const chunks: Uint8Array[] = [];
   let counted = 0;
@@ -236,10 +255,22 @@ export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEff
     joined.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return yield* Effect.try({
+  return joined;
+});
+
+/** Bytes read as UTF-8 JSON, the unparsed wire value a schema reads next; anything else is an invalid request. */
+export function parseJsonBytes(bytes: Uint8Array): Effect.Effect<UnparsedWireValue, HostedRefusal> {
+  return Effect.try({
     // SAFETY: JSON.parse answers a runtime value; the endpoint's schema is what holds it to a shape.
     try: () =>
-      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(joined)) as UnparsedWireValue,
+      JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)) as UnparsedWireValue,
     catch: () => HOSTED_REFUSAL.INVALID_REQUEST,
   });
+}
+
+/** The request's JSON body as the unparsed wire value a schema reads next, bounded as `readBodyBytesEffect` bounds it. */
+export const readJsonBodyEffect = /* @__PURE__ */ Effect.fn("web/readJsonBodyEffect")(function* (
+  maximumBytes: number,
+): Effect.fn.Return<UnparsedWireValue, HostedRefusal, HttpServerRequest.HttpServerRequest> {
+  return yield* parseJsonBytes(yield* readBodyBytesEffect(maximumBytes));
 });

@@ -36,19 +36,27 @@ export const host: CoderHost = coderHost(seams);
 /**
  * A delegation made under the agent's session: the pair the worker runs on,
  * recorded ahead of its session, or the one sentence refusing the ask,
- * which the delegation tool fails its call with so the agent reads it.
+ * which the delegation tool fails its call with so the agent reads it. A
+ * delegation made is named from its task on a fiber of its own, so the
+ * worker starts without waiting for its title.
  */
 export function makeDelegation(
   auth: SessionAuth,
   sessionId: string,
   callId: string,
+  task: string,
   asked: DelegationAsk,
 ): Promise<Result.Result<ModelChoice, string>> {
   return runWeb(
     Effect.gen(function* () {
       const admitted = yield* host.admit(auth, sessionId);
       if (Result.isFailure(admitted)) return Result.fail(admitted.failure);
-      return yield* host.delegate(admitted.success, callId, asked);
+      const made = yield* host.delegate(admitted.success, callId, asked);
+      // The fiber outlives this step and ends on its own, as the agent's own title's does.
+      if (Result.isSuccess(made)) {
+        yield* Effect.forkDetach(host.delegationTitle(admitted.success, callId, task));
+      }
+      return made;
     }),
   );
 }

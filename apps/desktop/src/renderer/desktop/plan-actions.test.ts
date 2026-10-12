@@ -6,11 +6,12 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
-import { builtStylesheet, cssRules } from "#testing/css-rules";
+import { sheetStyle } from "#testing/css-rules";
 import { plansControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
+import { NO_LOOKS } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopPlans } from "./desktop-plans";
 import { SidebarPlan } from "./plan-actions";
@@ -112,7 +113,7 @@ function mount(element: ReactElement): HTMLElement {
 }
 
 function mountToolbar(plans: PlansControl): HTMLButtonElement {
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   return more;
@@ -131,6 +132,7 @@ function sidebarPlan(
       plans,
       plan,
       current,
+      unread: false,
       repositoryShown: true,
       now: plan.updatedAt,
       onOpen: () => asked.opened.push(plan.id),
@@ -214,6 +216,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -225,9 +228,9 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.doesNotMatch(toolbar?.textContent ?? "", /Copy plan/u);
   assert.match(toolbar?.textContent ?? "", /Start/u);
   assert.doesNotMatch(toolbar?.textContent ?? "", /…/u);
-  // The toolbar is one row: the title alone in its heading, and the plan's
-  // chip in the actions row ahead of Start, waiting on a pick.
-  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  // The toolbar is one row: the plan's tab alone in its heading's strip, and
+  // the plan's chip in the actions row ahead of Start, waiting on a pick.
+  assert.equal(document.querySelectorAll('.desktop-toolbar-heading [role="tab"]').length, 1);
   assert.equal(document.querySelector(".desktop-toolbar-subtitle"), null);
   const chip = document.querySelector(".desktop-toolbar-actions .plan-compose-chip");
   assert.equal(chip?.textContent, "Choose repository");
@@ -243,6 +246,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -257,7 +261,7 @@ test("the open plan's ⋯ offers Copy, Pin and Archive, its repository's actions
   assert.ok(deleteItem?.previousElementSibling instanceof HTMLHRElement);
   // A plan with a repository shows it in the sidebar's row, not in the toolbar.
   assert.equal(document.querySelector(".desktop-toolbar .plan-compose-chip"), null);
-  assert.equal(document.querySelector(".desktop-toolbar-heading")?.children.length, 1);
+  assert.equal(document.querySelectorAll('.desktop-toolbar-heading [role="tab"]').length, 1);
 
   choose("Open on GitHub");
   assert.deepEqual(kept.asked.openedOnGitHub, [PLAN.id]);
@@ -273,6 +277,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   // Copy formats the document drawn, which is the open plan's alone.
   assert.deepEqual(labels(), [
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -288,6 +293,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   assert.deepEqual(labels(), [
     "Copy plan",
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -300,7 +306,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   assert.equal(other.textContent, "Billing exportnowacme/billing");
 });
 
-test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin", () => {
+test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin, rename, or repository", () => {
   const { plans, asked } = openTab();
   const pinned = { ...OTHER, pinnedAt: 7 };
   const archived = { ...OTHER, pinnedAt: 7, archivedAt: 9 };
@@ -318,7 +324,8 @@ test("Pin and Archive mark the plan from either door, and each offers its way ba
   const offered = labels();
   choose("Unarchive");
 
-  assert.deepEqual(offered, ["Rename", "Unarchive", "Change repository…", "Permanently delete"]);
+  // An archived plan takes nothing until it is back, so it is neither renamed nor given a repository.
+  assert.deepEqual(offered, ["Version history", "Unarchive", "Permanently delete"]);
   assert.deepEqual(asked.marked, [
     [PLAN.id, PLAN_MARK.PIN],
     [PLAN.id, PLAN_MARK.ARCHIVE],
@@ -373,6 +380,7 @@ test("a right-click on a sidebar plan's Pin or Archive offers the plan's menu, r
 
   assert.deepEqual(labels(), [
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -392,29 +400,13 @@ test("only the open plan's row names Command-Shift-A on its Archive, the chord a
 });
 
 test("hovered or reached from the keyboard, a sidebar plan's time steps out and its Pin and Archive step into its place", async () => {
-  const rules = cssRules(await builtStylesheet());
+  const styled = await sheetStyle();
   const { plans, asked } = openTab();
   const row = mountSidebarPlan(plans, OTHER, asked);
   const item = row.parentElement;
   const time = row.querySelector(".sidebar-plan-time");
   const marks = rowMarks(row)[0]?.closest("span");
   assert.ok(item && time && marks);
-  // jsdom computes no cascade and hovers nothing, so the sheet's last rule
-  // for the element wins, with the item marked where the sheet says :hover.
-  const styled = (element: Element, property: string) =>
-    rules
-      .filter((rule) => rule.declarations.has(property))
-      .filter((rule) =>
-        rule.selectors.some((selector) => {
-          try {
-            return element.matches(selector.replaceAll(":hover", "[data-hovered]"));
-          } catch {
-            return false;
-          }
-        }),
-      )
-      .at(-1)
-      ?.declarations.get(property);
   const shown = () => [styled(time, "visibility") ?? "visible", styled(marks, "opacity")];
 
   const resting = shown();
@@ -433,6 +425,28 @@ test("hovered or reached from the keyboard, a sidebar plan's time steps out and 
   assert.deepEqual(focused, ["hidden", "1"]);
 });
 
+test("a sidebar plan's Pin and Archive draw no ground under the pointer, only their glyph brightening, as a tab's × does", async () => {
+  const styled = await sheetStyle();
+  const { plans, asked } = openTab();
+  const row = mountSidebarPlan(plans, OTHER, asked);
+  const item = row.parentElement;
+  assert.ok(item);
+  item.dataset.hovered = "true";
+  const drawn = rowMarks(row).map((mark) => {
+    const resting = [styled(mark, "background"), styled(mark, "color")];
+    mark.dataset.hovered = "true";
+    const hovered = [styled(mark, "background"), styled(mark, "color")];
+    delete mark.dataset.hovered;
+    return { resting, hovered };
+  });
+
+  const glyphOnly = {
+    resting: ["none", "var(--text-secondary)"],
+    hovered: ["none", "var(--text-primary)"],
+  };
+  assert.deepEqual(drawn, [glyphOnly, glyphOnly]);
+});
+
 test("Permanently delete on an archived plan asks without pointing at Archive", () => {
   const { plans, asked } = openTab();
   const archived = { ...OTHER, archivedAt: 9 };
@@ -447,22 +461,25 @@ test("Permanently delete on an archived plan asks without pointing at Archive", 
   );
 });
 
-test("an archived plan's page says so quietly over its document, and Unarchive brings it back", () => {
+test("an archived plan's page says so in a banner over its document, whose primary Unarchive brings it back", () => {
   const { plans, asked } = openTab();
   const archived = { ...PLAN, archivedAt: 9 };
   const open = { ...plans, region: { kind: DOCUMENT_REGION.READY, plan: archived } as const };
 
-  const listed = mount(createElement(DesktopPlans, { plans }));
-  assert.equal(listed.querySelector(".desktop-archived-banner"), null);
+  const listed = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
+  assert.equal(listed.querySelector(".archived-banner"), null);
   unmountAll();
-  const banner = mount(createElement(DesktopPlans, { plans: open })).querySelector(
-    ".desktop-archived-banner",
+  const banner = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans: open })).querySelector(
+    ".archived-banner",
   );
-  const unarchive = banner?.querySelector("button");
-  assert.ok(unarchive);
+  const unarchive = banner?.querySelector(".primary-button");
+  assert.ok(unarchive instanceof HTMLButtonElement);
   act(() => unarchive.click());
 
-  assert.equal(banner?.textContent, "This plan is archivedUnarchive");
+  assert.equal(
+    banner?.textContent,
+    "This plan is archivedUnarchive it to edit, talk with Luke, or start agents.Unarchive",
+  );
   assert.deepEqual(asked.marked, [[PLAN.id, PLAN_MARK.UNARCHIVE]]);
 });
 
@@ -529,15 +546,30 @@ test("Rename on a sidebar plan turns its row into a field with the name selected
   assert.deepEqual(escapes, [], "Escape in the field leaves the window's own Escape alone");
 });
 
-test("the plan's tab renames the open plan in place on a press and from the ⋯ menu, and a press elsewhere keeps what was typed", async () => {
+/** Renames the open plan from its tab's right-click, as the developer would. */
+function renameFromTab(tab: HTMLElement): void {
+  rightClick(tab, 40, 12);
+  choose("Rename");
+}
+
+test("a press on the plan's tab only chooses it, while its right-click and the ⋯ menu rename the plan in place, and a press elsewhere keeps what was typed", async () => {
   const { plans, asked } = openTab();
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
 
   assert.equal(title().textContent, "Teammate invitations");
   act(() => title().click());
+  assert.equal(nameField(), null, "a press opens no field");
+  assert.equal(title().getAttribute("aria-selected"), "true");
+
+  rightClick(title(), 40, 12);
+  assert.deepEqual(labels(), ["Close others", "Rename"]);
+  act(() => title().click());
+  assert.deepEqual(labels(), [], "a press on the tab closes its menu");
+  rightClick(title(), 40, 12);
+  choose("Rename");
   const field = type("Team invites");
   await act(async () => leave(field));
 
@@ -555,18 +587,18 @@ test("the plan's tab renames the open plan in place on a press and from the ⋯ 
 
 test("a rename the service refused says so quietly beside the name until the next edit", async () => {
   const { plans, asked } = openTab({}, undefined, () => Promise.resolve(false));
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
   const note = () => container.querySelector('.desktop-toolbar [role="alert"]')?.textContent;
 
-  act(() => title().click());
+  renameFromTab(title());
   type("Team invites");
   await act(async () => key("Enter"));
   assert.equal(note(), "The plan could not be renamed. Try again.");
 
-  act(() => title().click());
+  renameFromTab(title());
   assert.equal(note(), undefined);
   assert.deepEqual(asked.renamed, [[PLAN.id, "Team invites"]]);
 });
@@ -578,12 +610,12 @@ test("the refusal of a rename a newer edit replaced leaves no note beside the ne
       settles.push(resolve);
     });
   const { plans } = openTab({}, undefined, pending);
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const title = () =>
     container.querySelector<HTMLButtonElement>(`.desktop-toolbar [role="tab"]`) ??
     assert.fail("the plan's tab stands");
   const rename = (name: string) => {
-    act(() => title().click());
+    renameFromTab(title());
     type(name);
     key("Enter");
   };
@@ -698,7 +730,7 @@ test("a delete under way stills both answers, and a refusal stays in the dialog 
   choose("Permanently delete");
 
   act(() => answer("Permanently delete").click());
-  assert.equal(answer("Deleting…").disabled, true);
+  assert.equal(answer("Permanently delete").disabled, true);
   assert.equal(answer("Cancel").disabled, true);
   key("Escape");
   assert.equal(asking(), true, "an answer already given is not withdrawn");
@@ -894,7 +926,7 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
       region: { kind },
       onLeavePlan: () => left.push(kind),
     });
-    const container = mount(createElement(DesktopPlans, { plans }));
+    const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
     const close = [...container.querySelectorAll("button")].find(
       (button) => button.textContent === "Close plan",
     );
@@ -909,7 +941,7 @@ test("a plan that cannot be drawn offers its way back to the list", () => {
 function mountToolbarWithKeys(plans: PlansControl): HTMLButtonElement {
   function Toolbar() {
     useAppKeymap(true);
-    return createElement(DesktopPlans, { plans });
+    return createElement(DesktopPlans, { looks: NO_LOOKS, plans });
   }
   const container = mount(createElement(Toolbar));
   const more = container.querySelector('[aria-label="Plan actions"]');
@@ -962,7 +994,7 @@ test("Command-Shift-A archives the open plan, and an archived plan leaves the ch
 
 test("Change repository… from the ⋯ opens the open plan's chip menu over its toolbar", () => {
   const { plans } = openTab({ [PLAN.id]: "acme/relay" });
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
 
@@ -972,6 +1004,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   act(() => {
     roots.at(-1)?.render(
       createElement(DesktopPlans, {
+        looks: NO_LOOKS,
         plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
       }),
     );
@@ -993,7 +1026,7 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
 
 test("Change repository… on a plan that still has its chip hands focus back to the ⋯, not the chip", () => {
   const { plans } = openTab();
-  const container = mount(createElement(DesktopPlans, { plans }));
+  const container = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
   const more = container.querySelector('[aria-label="Plan actions"]');
   assert.ok(more instanceof HTMLButtonElement);
   assert.ok(container.querySelector(".desktop-toolbar-actions .plan-compose-chip"));
@@ -1003,6 +1036,7 @@ test("Change repository… on a plan that still has its chip hands focus back to
   act(() => {
     roots.at(-1)?.render(
       createElement(DesktopPlans, {
+        looks: NO_LOOKS,
         plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
       }),
     );

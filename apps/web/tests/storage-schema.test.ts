@@ -63,6 +63,7 @@ afterAll(() => database.close());
 const DECLARED_TABLES = [
   "account",
   "account_preference",
+  "account_provider_key",
   "account_workspace_preference",
   "admin_favorite",
   "asks",

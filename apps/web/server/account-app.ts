@@ -1,3 +1,4 @@
+import { contextWindowSchema } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { accountPreferencesFromWire } from "@sidecar/settings";
 import { isRecord, type UnparsedWireValue } from "@sidecar/wire";
@@ -45,8 +46,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * token or a session id.
  *
  * The preferences snapshot is two parts: the settings preferences the
- * desktop syncs, and the coding agents' default model and effort beside
- * them, which Settings and the Start menu both write. A write carries either
+ * desktop syncs, and the coding agents' default model, effort, and context
+ * window beside them, which Settings and the Start menu both write. A write carries either
  * part or both, and a coding-agent choice is accepted only as the catalog
  * accepts it (`hosted/model-catalog.ts`), so what is stored is always a
  * choice a Start could run.
@@ -79,6 +80,7 @@ export interface AccountAppSeams {
 const ModelChoiceSchema = Schema.Struct({
   model: Schema.String,
   effort: Schema.String,
+  contextWindow: Schema.optionalKey(contextWindowSchema),
 });
 
 const readModelChoice = readEither(ModelChoiceSchema);

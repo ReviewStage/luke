@@ -1,8 +1,10 @@
+import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import { Effect, Option, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
 import { GitHubApp } from "../../github/github-app.js";
 import { githubUserReadOrRefusal } from "../../github/github-refusal.js";
+import { eveContent } from "../attached-files.js";
 import { BRAIN_HOST_TURN } from "../brain-host/bounds.js";
 import {
   describeUnreachable,
@@ -14,6 +16,7 @@ import { recordedRuntimeSession } from "../brain-host/recorded-session.js";
 import type { CodingAgent } from "../coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
+import { readPlan } from "../plan-store.js";
 import type { StoreWriter } from "../store/index.js";
 import { sentLineStands } from "../store/message-reads.js";
 import { STORE_WRITE_REFUSAL } from "../store/writer.js";
@@ -26,7 +29,8 @@ import { STORE_WRITE_REFUSAL } from "../store/writer.js";
  * once eve has taken them. The hand-over runs inside the conversation's
  * lock, so the turn eve opens on the line finds the row standing when its
  * own first write takes the lock, and an eve that did not take the message
- * leaves no row behind; the writer fences the write against the caller
+ * leaves no row behind. Files the developer attached go with the words,
+ * to eve and onto the row (`attached-files.ts`); the writer fences the write against the caller
  * going away between the two. A send repeated under its key finds the line
  * it already wrote and hands eve nothing again: read once here, before
  * GitHub is asked, and once more by the writer under the lock, so two
@@ -38,13 +42,16 @@ import { STORE_WRITE_REFUSAL } from "../store/writer.js";
  * first step. Who reaches eve is the caller's: the route holds the
  * developer's own bearer, and the voice brain's tool acts as the
  * deployment for the account, which the coder channel's table admits for
- * exactly this message (`coder-host/channel.ts`).
+ * exactly this message (`coder-host/channel.ts`). An archived plan's agents
+ * take no message, so a send to one is refused before eve is asked; a turn
+ * already running when the plan was archived runs on to its end.
  */
 
-/** The developer's words and the key the send is made under, which a repeat carries again. */
+/** The developer's words, the files they attached where they did, and the key the send is made under, which a repeat carries again. */
 export interface SteerLine {
   readonly text: string;
   readonly clientKey: string;
+  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
 }
 
 /** What a steer came to: the line sent and written, or found already sent under its key. */
@@ -79,6 +86,11 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     sentLineStands(userId, agent.conversationId, sentLineId(line.clientKey)),
   );
   if (repeated) return STEER_OUTCOME.REPEATED;
+  const held = yield* hostedStoreOrUnavailable(readPlan(userId, agent.planId));
+  if (Option.isNone(held)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  if (held.value.plan.archivedAt !== undefined) {
+    return yield* Effect.fail(HOSTED_REFUSAL.PLAN_ARCHIVED);
+  }
   const app = yield* GitHubApp;
   const reached = yield* githubUserReadOrRefusal(app.userRepository(userId, agent.repository));
   if (Option.isNone(reached)) return yield* Effect.fail(HOSTED_REFUSAL.REPOSITORY_NOT_REACHABLE);
@@ -90,7 +102,7 @@ export const steerCodingAgent = /* @__PURE__ */ Effect.fn("web/steerCodingAgent"
     .send(sessionId, {
       conversationId: agent.conversationId,
       turn: BRAIN_HOST_TURN.TYPED,
-      message: line.text,
+      message: eveContent(line.text, line.attachments ?? []),
     })
     .pipe(
       Effect.catchTag("EveUnreachable", (failure) =>

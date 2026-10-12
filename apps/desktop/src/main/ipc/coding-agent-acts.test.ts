@@ -4,7 +4,12 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  PULL_REQUEST_STATE,
+} from "@sidecar/hosted/coding-agent-wire";
+import { PROVIDER_KEY_PROVIDER } from "@sidecar/hosted/provider-key-wire";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
 import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
@@ -16,6 +21,9 @@ const SENDER = {} as WebContents;
 
 const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
+
+/** A synthetic provider key, as Settings carries it once. */
+const PROVIDER_KEY = "sk-proj-synthetic-00000000000000000000abcd";
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
@@ -53,6 +61,9 @@ function fixture() {
       },
       observeModels: (models) => {
         noted.push(`models:${models.length}`);
+      },
+      observePublished: (agentId, pullRequest) => {
+        noted.push(`published:${agentId}=${pullRequest?.number ?? "none"}`);
       },
       observePlanGone: (planId) => {
         noted.push(`gone:${planId}`);
@@ -119,7 +130,35 @@ function fixture() {
       codingAgentPullRequest: ({ agentId }) =>
         Effect.sync(() => {
           asked.push(`pull-request:${agentId}`);
-          return { repository: "acme/relay", branch: null, pullRequest: null };
+          return {
+            repository: "acme/relay",
+            branch: "luke/invites",
+            pullRequest: {
+              number: 41,
+              title: "Teammate invitations",
+              url: "https://github.com/acme/relay/pull/41",
+              state: PULL_REQUEST_STATE.OPEN,
+              checks: CHECK_SUMMARY.PASSING,
+              additions: 12,
+              deletions: 3,
+              changedFiles: 2,
+            },
+          };
+        }),
+      providerKeysRead: () =>
+        Effect.sync(() => {
+          asked.push("keys");
+          return { keys: [] };
+        }),
+      providerKeySave: ({ provider, key }) =>
+        Effect.sync(() => {
+          asked.push(`save:${provider}:${key === PROVIDER_KEY ? "the key" : "another"}`);
+          return { keys: [] };
+        }),
+      providerKeyRemove: ({ provider }) =>
+        Effect.sync(() => {
+          asked.push(`remove:${provider}`);
+          return { keys: [] };
         }),
     },
   });
@@ -226,6 +265,21 @@ it.effect(
     }),
 );
 
+it.effect(
+  "what an agent published is noted on its way to the panel, so the sidebar's rows can be read again",
+  () =>
+    Effect.gen(function* () {
+      const { router, noted } = fixture();
+
+      yield* router.performAct(
+        { kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST, payload: { agentId: AGENT_ID } },
+        PANEL,
+      );
+
+      assert.deepEqual(noted, [`published:${AGENT_ID}=41`]);
+    }),
+);
+
 it.effect("a Start naming a model without its effort is refused at the boundary", () =>
   Effect.gen(function* () {
     const { router, asked } = fixture();
@@ -285,5 +339,42 @@ it.effect(
         "shown:null",
       ]);
       assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
+    }),
+);
+
+it.effect(
+  "a panel's provider key reaches the host once, and the voice window can neither read, save, nor remove one",
+  () =>
+    Effect.gen(function* () {
+      const { router, asked } = fixture();
+      const save = {
+        kind: ACT_KIND.PROVIDER_KEYS_SAVE,
+        payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI, key: PROVIDER_KEY },
+      } as const;
+      const remove = {
+        kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
+        payload: { provider: PROVIDER_KEY_PROVIDER.OPENAI },
+      } as const;
+
+      const saved = yield* router.performAct(save, PANEL);
+      yield* router.performAct({ kind: ACT_KIND.PROVIDER_KEYS_READ }, PANEL);
+      yield* router.performAct(remove, PANEL);
+      const refused = [
+        yield* router.performAct(save, VOICE),
+        yield* router.performAct({ kind: ACT_KIND.PROVIDER_KEYS_READ }, VOICE),
+        yield* router.performAct(remove, VOICE),
+      ];
+
+      assert.deepEqual(saved, { status: ACT_OUTCOME_STATUS.DONE, value: { keys: [] } });
+      assert.deepEqual(asked, [
+        `save:${PROVIDER_KEY_PROVIDER.OPENAI}:the key`,
+        "keys",
+        `remove:${PROVIDER_KEY_PROVIDER.OPENAI}`,
+      ]);
+      assert.deepEqual(
+        refused.map((outcome) => outcome.status),
+        [ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED, ACT_OUTCOME_STATUS.REFUSED],
+      );
+      assert.ok(!JSON.stringify(refused).includes(PROVIDER_KEY));
     }),
 );

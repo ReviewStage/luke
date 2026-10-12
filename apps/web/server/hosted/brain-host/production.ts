@@ -1,10 +1,12 @@
 import { BRAIN_OPENAI_DEFAULTS } from "@sidecar/brain";
+import type { LanguageModel } from "ai";
 import { Effect, type Redacted } from "effect";
 import { auth } from "../../auth.js";
 import { unparsedWire, type WireBoundaryInput } from "../../core.js";
 import type { WebStoreRun } from "../../runtime.js";
 import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import { titleModel } from "../coder-host/model.js";
 import { HostedEnvironment } from "../environment.js";
 import { spendHostedMeter } from "../quota.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
@@ -18,7 +20,8 @@ import { deploymentEveOrigin } from "./eve-origin.js";
  * over `HostedEnvironment` so every secret is read once, as the environment
  * is, and travels sealed: the bearer's account through the auth service's
  * own userinfo, the writer over the hosted tool set, Luke's own OpenAI key
- * and model, and the usage meter. The writer is built on first use and kept
+ * and model, the usage meter, and the model a worker's title is generated
+ * on, the coding agents' own on Luke's Anthropic key. The writer is built on first use and kept
  * for the instance, so the agent's discovery, which imports the authored
  * files, touches no database. An authored file hands what it needs here and
  * nothing else.
@@ -42,6 +45,8 @@ export interface BrainHostSeams {
   readonly eveOrigin: () => string | undefined;
   /** Luke's own OpenAI access, or nothing when the deployment holds no key and the hosted brain is off. */
   readonly openAi: () => OpenAiAccess | undefined;
+  /** The model a worker's title is generated on; nothing, where the deployment holds no Anthropic key, leaves every worker untitled. */
+  readonly titleModel: () => LanguageModel | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of OpenAI. */
   readonly scriptedModel: () => boolean;
   /** Counts one hosted use against the account's day. */
@@ -87,6 +92,8 @@ export const productionBrainHostSeams = /* @__PURE__ */ Effect.fn("web/productio
               apiKey: environment.openAiKey,
               modelId: BRAIN_OPENAI_DEFAULTS.MODEL,
             },
+      titleModel: () =>
+        titleModel({ anthropic: environment.anthropicKey, openAi: environment.openAiKey }),
       scriptedModel: () =>
         process.env[BRAIN_HOST_ENVIRONMENT.MODEL_FIXTURE] === BRAIN_HOST_MODEL_FIXTURE.SCRIPTED,
       spend: (userId) => run(Effect.asVoid(spendHostedMeter({ userId, now: Date.now() }))),

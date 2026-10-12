@@ -25,11 +25,9 @@ export interface UpdateRow {
 }
 
 /**
- * Whether a newer release is positively known to exist. This is what marks
- * the Settings tab, so the dot and the row can never disagree about whether
- * there is news. The news stands through the whole install: a release
- * downloading, waiting on its restart, or failed mid-fetch
- * is still one this build is not on.
+ * Whether a newer release is positively known to exist. The news stands
+ * through the whole install: a release downloading, waiting on its restart,
+ * or failed mid-fetch is still one this build is not on.
  */
 export function updateAvailable(update: UpdateSnapshot): boolean {
   return (
@@ -40,14 +38,15 @@ export function updateAvailable(update: UpdateSnapshot): boolean {
 }
 
 /**
- * Whether the sidebar carries the release itself, above the account row: while
- * it downloads and once it waits on its restart, the two states where the
- * row's next step is the release's own. Every other state, a failure
- * included, stays in Settings, and the gear's dot points there.
+ * Whether the sidebar carries the release itself, above the account row:
+ * whenever a newer one is known to a build that installs in place, so the
+ * news is said there alone rather than by a dot on Settings' gear. Its row
+ * offers the release's own next step: wait while it downloads, restart once
+ * it is downloaded, or get it from the releases page once installing it
+ * failed. A build that updates by hand has no news to carry.
  */
 export function updateInSidebar(update: UpdateSnapshot): boolean {
-  const { action } = updateRow(update);
-  return action === UPDATE_ROW_ACTION.DOWNLOADING || action === UPDATE_ROW_ACTION.RESTART;
+  return update.installSupported && updateAvailable(update);
 }
 
 /**

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { CODING_AGENT_TODO_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { EXCESS_KEYS } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, isToolUIPart } from "ai";
@@ -22,6 +23,7 @@ import { conversations } from "../../server/db/storage-schema";
 import { BRAIN_HOST_HEADER, BRAIN_HOST_TURN } from "../../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId } from "../../server/hosted/brain-host/ids";
 import { CODER_MODEL_FIXTURE } from "../../server/hosted/coder-host/bounds";
+import { TODOS_SAVED } from "../../server/hosted/coder-host/todos";
 import { CODER_TOOL } from "../../server/hosted/coder-host/tool-set";
 import { type CodingAgent, createCodingAgent } from "../../server/hosted/coding-agent-store";
 import { createPlan } from "../../server/hosted/plan-store";
@@ -34,6 +36,8 @@ import {
   SCRIPTED_CODER_REPLY,
   SCRIPTED_DELEGATE,
   SCRIPTED_DELEGATED_REPLY,
+  SCRIPTED_TODOS,
+  SCRIPTED_TODOS_REPLY,
   SCRIPTED_WORKER_CHOICE,
 } from "../scripted-model";
 
@@ -47,7 +51,9 @@ import {
  * to delegate, it hands the rest to a worker on a pair of its own choosing
  * and waits: the call is a tool part of its answer naming the pair, the
  * worker's session is recorded under the child conversation that call
- * names, on that pair, and the worker's answer is read back. The
+ * names, on that pair, and the worker's answer is read back. Handed
+ * to-dos, it writes the list, which eve holds to the schema the model is
+ * shown and the writer keeps as a tool part the agent's tab draws. The
  * eve server runs in this process with the database the environment names,
  * so the eval reads the rows back from the same Postgres. Where no database
  * is named the eval skips rather than pretending.
@@ -62,6 +68,7 @@ const PLAN = { name: "Teammate invitations" } as const;
 const PLAN_SNAPSHOT = "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n";
 const REPOSITORY = "acme/relay";
 const DELEGATED_TASK = "Count the invitation routes";
+const TODO_WORDS = "Read the guide; Add the invitation route";
 
 /** How long the eval waits for a turn to settle, in polls of the interval below. */
 const SETTLE_POLLS = 120;
@@ -253,6 +260,32 @@ export default defineEval({
       assert.ok(
         childRows[0]?.parts.some(
           (part) => isTextUIPart(part) && part.text.includes(DELEGATED_TASK),
+        ),
+      );
+
+      // A to-do write is a tool part of the agent's answer holding the
+      // whole list as the model wrote it, answered at once.
+      const listing = await startAgent(run, plan.id);
+      const listed = await openSession(listing.conversationId, `${SCRIPTED_TODOS}${TODO_WORDS}`);
+      (await t.target.attachSession(listed.sessionId)).succeeded();
+      const listingAnswer = (await readMessagesByConversationTyped(run, listing.conversationId)).at(
+        -1,
+      );
+      assert.ok(listingAnswer);
+      const write = listingAnswer.parts.find((part) => isToolUIPart(part));
+      assert.ok(write);
+      assert.equal(write.type, `tool-${CODER_TOOL.WRITE_TODOS}`);
+      assert.equal(write.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
+      assert.deepEqual(write.input, {
+        todos: [
+          { content: "Read the guide", status: CODING_AGENT_TODO_STATUS.IN_PROGRESS },
+          { content: "Add the invitation route", status: CODING_AGENT_TODO_STATUS.PENDING },
+        ],
+      });
+      assert.equal(write.output, TODOS_SAVED);
+      assert.ok(
+        listingAnswer.parts.some(
+          (part) => isTextUIPart(part) && part.text === SCRIPTED_TODOS_REPLY,
         ),
       );
     } finally {

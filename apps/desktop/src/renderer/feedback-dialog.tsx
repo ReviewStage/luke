@@ -37,8 +37,9 @@ import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "./act";
-import { encodeFeedbackImage, imageFiles } from "./feedback-images";
+import { encodeImage, imageFiles } from "./feedback-images";
 import { trappedTab } from "./settings/confirm-dialog";
+import { BusyLabel } from "./spinner";
 import { useStagedFocus } from "./staged-focus";
 import { TOAST_TONE, type ToastNotice, useToast } from "./toast";
 import { Tooltip } from "./tooltip";
@@ -149,7 +150,7 @@ async function takenImages(
   const images: FeedbackImage[] = [];
   let unreadable = false;
   for (const file of files.slice(0, Math.max(0, room))) {
-    const image = await encodeFeedbackImage(file);
+    const image = await encodeImage(file);
     if (image) images.push(image);
     else unreadable = true;
   }
@@ -486,7 +487,9 @@ export function FeedbackDialog({
                     disabled={!ready}
                     onClick={() => void send()}
                   >
-                    {busy ? "Sending…" : "Send"}
+                    <BusyLabel busy={busy} label="Sending">
+                      Send
+                    </BusyLabel>
                     <span className="shortcut-glyphs" aria-hidden="true">
                       <span>⌘</span>
                       <span>↩</span>

@@ -16,6 +16,7 @@ import type { ActHandle } from "../act";
 import { useCopyToast } from "../copy-feedback";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
+import { agentTabLabel } from "./coding-agent-model";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -58,6 +59,7 @@ import {
   unsettledRepositoryPins,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
+import { isAgentTab, type StripTab } from "./tab-strip-model";
 import {
   type HeardCall,
   heardCalls,
@@ -66,6 +68,7 @@ import {
   transcriptRegion,
 } from "./transcript-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
+import { type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type PlanHistoryControl,
@@ -73,11 +76,10 @@ import {
   usePlanHistory,
 } from "./use-plan-history";
 import {
-  isAgentTab,
+  type PinnedTab,
   type PlanHolds,
   SIDE_PANEL_TAB,
   type SidePanelControl,
-  type SidePanelTab,
   useSidePanel,
 } from "./use-side-panel";
 import { startedAgentCallIds, workerCallIds } from "./work-model";
@@ -97,14 +99,17 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * collapse; only Escape, another plan, New plan, archiving it, a delete, or a
  * sign-out leaves it. With none open, the tab is the new-plan page. The open plan's
  * coding agents are the tab's too (`use-coding-agents.ts`): read when the
- * plan opens, started from the toolbar, and each drawn on a tab of the side
- * panel. Main is told which agent's tab is shown, so the notification it
+ * plan opens, started from the toolbar or the column's "+", and each drawn
+ * on a tab of the plan's column beside the plan's own (`use-main-tabs.ts`),
+ * their workers' in the side panel. Main is told which agent's tab is shown, so the notification it
  * posts when an agent ends is held back while the developer is looking at
- * that agent, and the agents main says ended unseen wear a dot until their
+ * that agent, and the agents main says ended unseen read in semibold until their
  * tab is shown (`main/agent-notices.ts`). The open plan's history is the
- * tab's as well (`use-plan-history.ts`): read while its tab is on screen,
- * a version chosen there drawn in the document's place, and restored through
- * the service, answered with the window's toast.
+ * tab's as well (`use-plan-history.ts`): its version history, opened from
+ * the plan's menu or its "Edited by" line, takes the whole window in the
+ * plan's place (`desktop-version-history.tsx`) until it is left or another
+ * plan opens, and a version restored through the service is answered with
+ * the window's toast. The side panel stands as it was behind it.
  */
 
 /** Everything the Plans tab draws and presses, handed to the panel body whole. */
@@ -126,6 +131,8 @@ export interface PlansControl {
    */
   boundFor: string | undefined;
   listFailed: boolean;
+  /** Whether the list drawn is one the service answered, rather than the empty one before the first read lands. */
+  listRead: boolean;
   region: DocumentRegion;
   /** Copies the plan drawn as Markdown, answered with a toast, since its press stands in a menu. */
   copy: { onPress: () => void };
@@ -140,10 +147,12 @@ export interface PlansControl {
   status: CallStatus | undefined;
   /** Whether the open plan's call is in progress, so the plan is still being written. */
   live: boolean;
-  /** The side panel beside the open plan's document: shown or not, its tab, and its width. */
+  /** The plan's column's tabs: the plan's own, then its agents' and its draft's, and which is shown. */
+  mainTabs: MainTabsControl;
+  /** The side panel beside the open plan's column: shown or not, its tab, and its width. */
   sidePanel: SidePanelControl;
-  /** The side panel's tabs holding something that arrived while the panel showed another, and the agents that ended unseen, each until it is shown. */
-  unreadTabs: readonly SidePanelTab[];
+  /** The side panel's tabs holding something that arrived while the panel showed another, and the agents' tabs that ended unseen, each until it is shown. */
+  unreadTabs: readonly StripTab[];
   /** The open plan's whiteboard as main holds it; absent before its first read lands. */
   board: Board | undefined;
   /** Every code Luke showed on the open plan, oldest first: what the service keeps, and each a call shows as it shows it. */
@@ -163,11 +172,13 @@ export interface PlansControl {
   };
   /** The open plan's coding agents: their tabs, the Start, and the Stop. */
   agents: CodingAgentsControl;
-  /** The open plan's history: its versions, the one drawn in the document's place, and its restore. */
-  history: PlanHistoryControl;
+  /** The open plan's version history: whether it stands, its versions, the one drawn, and its restore. */
+  history: VersionHistoryControl;
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
+  /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
+  onOpenPinnedTab: (pin: PinnedTab) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
   repositories: RepositoryChooser;
   /** The ask standing for the open plan's chip to open its menu: which plan it is about, and how many asks so far. */
@@ -225,11 +236,20 @@ export interface PlansControl {
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
    * Steps back one layer, answering whether there was one to step back from:
-   * a side panel filling the window back beside the document, a version
-   * drawn in the document's place back to the plan as it stands, else an
-   * open plan back to the new-plan page.
+   * a side panel filling the window back beside the document, else an open
+   * plan back to the new-plan page.
    */
   back: () => boolean;
+}
+
+/** The open plan's history as the window opens and draws it, over what is read of it. */
+export interface VersionHistoryControl extends PlanHistoryControl {
+  /** Whether the plan's version history takes the window in its place. */
+  open: boolean;
+  /** Opens a plan's version history on the plan as it stands, opening the plan first where it is not the open one. */
+  onOpen: (planId: string) => void;
+  /** Leaves the version history for the plan, its side panel as it was. */
+  onClose: () => void;
 }
 
 /**
@@ -264,17 +284,12 @@ const DELETE_REFUSED: ActionResult = {
   reason: DELETE_REFUSED_NOTE,
 };
 
-/**
- * What the open plan holds of each fixed tab's kind, each unknown until its
- * read lands: the transcript's calls are those heard on it too, and its
- * history any revision, which a plan with a last edit has.
- */
+/** What the open plan holds of each fixed tab's kind, each unknown until its read lands: the transcript's calls are those heard on it too. */
 function planHolds(
-  view: Pick<PlanningView, "board" | "shownCode" | "work" | "document">,
+  view: Pick<PlanningView, "board" | "shownCode" | "work">,
   transcript: TranscriptRegion,
 ): PlanHolds {
   const { board, shownCode, work } = view;
-  const plan = view.document.plan;
   return {
     [SIDE_PANEL_TAB.BOARD]:
       board === undefined
@@ -288,7 +303,6 @@ function planHolds(
           ? false
           : undefined,
     [SIDE_PANEL_TAB.WORK]: work === undefined ? undefined : work.length > 0,
-    [SIDE_PANEL_TAB.HISTORY]: plan === undefined ? undefined : plan.lastEdit !== undefined,
   };
 }
 
@@ -318,14 +332,41 @@ export function usePlansTab(input: {
   const [newPlanPreset, setNewPlanPreset] = useState<PlansControl["newPlan"]["preset"]>(undefined);
   const [repositoryMenu, setRepositoryMenu] = useState<PlansControl["repositoryMenu"]>(undefined);
   const [asked, setAsked] = useState<PlanAsk | undefined>(undefined);
+  /** The plan whose version history stands in the window, which it does only while that plan is the one bound for. */
+  const [historyFor, setHistoryFor] = useState<string | undefined>(undefined);
 
   // A fixture run draws its synthetic plans in place of the account's,
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
   const viewed = fixture ?? input.planning;
-  // A started agent's tab opens selected; the panel is built after the
-  // agents it draws, so the opening reaches it through this late binding.
-  const panelRef = useRef<SidePanelControl | undefined>(undefined);
+  // A name given here stands until main's view carries it, so a rename that
+  // landed never flickers back while main's copy of the view catches up.
+  const [renames, setRenames] = useState<PendingRenames>(new Map());
+  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  // A pin or an archive given here stands until main's view carries it, as a name does.
+  const [marks, setMarks] = useState<PendingMarks>(new Map());
+  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A repository's pin given here stands until main's view carries it, as a
+  // plan's does. Note that a sign-out lets every one go, because a pin names
+  // a repository rather than a row of this account's own, so one left
+  // standing would be drawn on the next account to sign in.
+  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
+  const accountSignedIn = input.signedIn;
+  useEffect(
+    () =>
+      setRepositoryPins((held) =>
+        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
+      ),
+    [viewed, accountSignedIn],
+  );
+  const planning = markedView(renamedView(viewed, renames), marks);
+  const sidebar = sidebarPlans(planning.plans);
+  const signedIn = fixture !== undefined || input.signedIn;
+  const page = plansPage(planning);
+  const region = documentRegion(planning);
+  // A started agent's tab opens selected; the column's tabs are built after
+  // the agents they draw, so the opening reaches them through this late binding.
+  const mainRef = useRef<MainTabsControl | undefined>(undefined);
   const openDocument = viewed.document.plan;
   // A fixture's plans have no agents, as they are read from nowhere.
   const agents = useCodingAgents({
@@ -333,7 +374,13 @@ export function usePlansTab(input: {
     planId: fixture === undefined ? viewed.activePlanId : undefined,
     repository:
       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
-    onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
+    // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
+    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
+    onUnarchive: () => {
+      if (region.kind === DOCUMENT_REGION.READY)
+        markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
+    },
+    onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
   });
   // The calls heard on the open plan, each held past its end until the
   // record's copy catches up; a fixture's open plan is drawn with its own
@@ -379,25 +426,45 @@ export function usePlansTab(input: {
     () => shownFiles(viewed.shownCode ?? []).map((ref) => ref.path),
     [viewed.shownCode],
   );
+  const mainTabs = useMainTabs(
+    fixture !== undefined,
+    viewed.activePlanId,
+    agents.agentIds,
+    agents.draft?.id,
+  );
+  mainRef.current = mainTabs;
   const sidePanel = useSidePanel(
     fixtureSidePanel(input.run),
     { id: viewed.activePlanId, holds: planHolds(viewed, transcript) },
-    agents.agentIds,
+    mainTabs.openAgents,
     workers,
-    agents.draft?.id,
     files,
   );
-  panelRef.current = sidePanel;
+  // An agent pinned to the sidebar is named there as its tab is named now,
+  // so a pin made before the agent had its title, or before a rename,
+  // catches up while its plan is open.
+  const pinLabels = useMemo(
+    () =>
+      new Map(
+        (agents.agents ?? []).map((agent) => [agent.id, agentTabLabel(agent, agents.models)]),
+      ),
+    [agents.agents, agents.models],
+  );
+  const { onRenamePins } = sidePanel;
+  useEffect(() => {
+    if (viewed.activePlanId !== undefined) onRenamePins(viewed.activePlanId, pinLabels);
+  }, [viewed.activePlanId, pinLabels, onRenamePins]);
   // Main hears which agent's tab is on screen, and none while the tab is
-  // away or the panel shows something else; a fixture's staged agents are
-  // no one's to announce.
+  // away, the version history stands in the plan's place, the side panel
+  // fills the window over the column, or the column shows something else; a
+  // fixture's staged agents are no one's to announce.
   const shownAgent =
     shown &&
+    historyFor === undefined &&
     fixture === undefined &&
-    sidePanel.open &&
-    sidePanel.tab !== undefined &&
-    isAgentTab(sidePanel.tab)
-      ? sidePanel.tab.agent
+    !sidePanel.fullScreen &&
+    isAgentTab(mainTabs.tab)
+      ? mainTabs.tab.agent
       : null;
   const reportedAgent = useRef<string | null | undefined>(undefined);
   useEffect(() => {
@@ -405,31 +472,6 @@ export function usePlansTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-  // A name given here stands until main's view carries it, so a rename that
-  // landed never flickers back while main's copy of the view catches up.
-  const [renames, setRenames] = useState<PendingRenames>(new Map());
-  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
-  // A pin or an archive given here stands until main's view carries it, as a name does.
-  const [marks, setMarks] = useState<PendingMarks>(new Map());
-  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  // A repository's pin given here stands until main's view carries it, as a
-  // plan's does. Note that a sign-out lets every one go, because a pin names
-  // a repository rather than a row of this account's own, so one left
-  // standing would be drawn on the next account to sign in.
-  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  const accountSignedIn = input.signedIn;
-  useEffect(
-    () =>
-      setRepositoryPins((held) =>
-        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
-      ),
-    [viewed, accountSignedIn],
-  );
-  const planning = markedView(renamedView(viewed, renames), marks);
-  const sidebar = sidebarPlans(planning.plans);
-  const signedIn = fixture !== undefined || input.signedIn;
-  const page = plansPage(planning);
-  const region = documentRegion(planning);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -447,6 +489,9 @@ export function usePlansTab(input: {
   // back. A fixture's plans are opened nowhere, so nothing is asked of them.
   const openPlanId = planning.activePlanId;
   const boundFor = asked !== undefined && asked.over === openPlanId ? asked.planId : openPlanId;
+  // The version history is the plan's, so another plan, or none, leaves it.
+  if (historyFor !== undefined && historyFor !== boundFor) setHistoryFor(undefined);
+  const historyOpen = historyFor !== undefined && historyFor === boundFor;
   const select = useCallback(
     (planId: string) => {
       const ask = { planId, over: openPlanId };
@@ -646,6 +691,7 @@ export function usePlansTab(input: {
     voiceAvailable: input.voiceAvailable,
     microphoneStatus: input.microphoneStatus,
     activePlanId: planning.activePlanId,
+    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
     listening: voice.listening,
     callPlanId: voice.view.callPlanId,
     voiceStatus: voice.view.voiceStatus,
@@ -669,11 +715,11 @@ export function usePlansTab(input: {
     code: live ? (planning.shownCode?.length ?? 0) > 0 : undefined,
     panel: sidePanel,
   });
-  // An agent that ended unseen dots its tab the way an arrival does; main
+  // An agent that ended unseen marks its tab unread as an arrival does; main
   // clears it once the tab is shown.
-  const unreadTabs: readonly SidePanelTab[] = [
+  const unreadTabs: readonly StripTab[] = [
     ...arrivedTabs,
-    ...input.unseenAgents.map((agent): SidePanelTab => ({ agent })),
+    ...input.unseenAgents.map((agent) => ({ agent })),
   ];
 
   // A fixture's repositories are read from nowhere, as its plans are.
@@ -735,7 +781,7 @@ export function usePlansTab(input: {
       fixture === undefined && region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
     editedAt: region.kind === DOCUMENT_REGION.READY ? region.plan.lastEdit?.at : undefined,
     name: region.kind === DOCUMENT_REGION.READY ? region.plan.name : undefined,
-    shown: shown && sidePanel.open && sidePanel.tab === SIDE_PANEL_TAB.HISTORY,
+    shown: shown && historyOpen,
     // The Undo puts back the version that stood before the restore, itself a restore.
     onRestored: (undo) =>
       toast(
@@ -785,23 +831,20 @@ export function usePlansTab(input: {
     setNewPlanPreset(preset);
   };
 
+  // A plan's version history opens over the plan, so another plan opens first.
+  const openHistory = (planId: string) => {
+    if (planId !== boundFor) select(planId);
+    setHistoryFor(planId);
+  };
+
   // The new-plan page is the tab's home, so only an open plan steps back,
   // and a panel filling the window over it is the nearer layer.
-  const viewingVersion = history.viewing !== undefined;
   const back = useCallback((): boolean => {
     if (page !== PLANS_PAGE.DOCUMENT) return false;
     if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
-    else if (viewingVersion) history.onBack();
     else leavePlan();
     return true;
-  }, [
-    leavePlan,
-    page,
-    sidePanel.fullScreen,
-    sidePanel.onToggleFullScreen,
-    viewingVersion,
-    history.onBack,
-  ]);
+  }, [leavePlan, page, sidePanel.fullScreen, sidePanel.onToggleFullScreen]);
 
   return {
     page,
@@ -812,6 +855,7 @@ export function usePlansTab(input: {
     activePlanId: planning.activePlanId,
     boundFor,
     listFailed: planning.listStatus === PLANNING_READ.FAILED,
+    listRead: planning.listStatus === PLANNING_READ.READY,
     region,
     copy: { onPress: pressCopy },
     edit,
@@ -841,6 +885,7 @@ export function usePlansTab(input: {
     // the fixture's own call rather than a voice window that holds none.
     status: callStatus(reported, planning),
     live,
+    mainTabs,
     sidePanel,
     unreadTabs,
     board: planning.board,
@@ -857,11 +902,32 @@ export function usePlansTab(input: {
       onLoadEarlier: () => act(ACT_KIND.PLANNING_WORK_EARLIER),
     },
     agents,
-    history,
+    history: {
+      ...history,
+      open: historyOpen,
+      onOpen: openHistory,
+      onClose: () => setHistoryFor(undefined),
+    },
     onSelect: select,
+    // The agent's tab is in the plan's column, so a version history over it
+    // gives way, and so does a side panel filling the window over it.
     onShowAgent: (planId, agentId) => {
       if (planId !== planning.activePlanId) select(planId);
-      sidePanel.onChoose({ agent: agentId });
+      setHistoryFor(undefined);
+      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+      mainTabs.onShow(planId, { agent: agentId });
+    },
+    // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
+    onOpenPinnedTab: (pin) => {
+      const { tab } = pin;
+      if (pin.plan !== planning.activePlanId) select(pin.plan);
+      setHistoryFor(undefined);
+      if (!isAgentTab(tab)) {
+        sidePanel.onShow(pin.plan, tab);
+        return;
+      }
+      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+      mainTabs.onShow(pin.plan, tab);
     },
     repositories: {
       recent: recentRepositories(planning.plans),

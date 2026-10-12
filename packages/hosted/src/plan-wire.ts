@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { CHECK_SUMMARY, CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "./coding-agent-wire.js";
 import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -22,6 +23,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * the list leaves out unless asked for it (`PLAN_LIST_QUERY`), so a build
  * that knows nothing of archiving never sees an archived plan. Both are the
  * account's, so they follow it to every Mac it signs in on.
+ * A row of the list also says, in brief, what the plan's coding agents are
+ * doing and what they published (`planAgentsSummarySchema`), so the sidebar
+ * can mark a plan at work or with a pull request without a read per row.
  * The owning account and the conversation a plan resumes in are the
  * service's own and never travel here.
  *
@@ -266,8 +270,75 @@ const planSummaryFields = {
   archivedAt: EffectSchema.optionalKey(countedNumber),
 };
 
-/** One row of the plan list: everything but the document. */
-export const planSummarySchema = EffectSchema.Struct(planSummaryFields);
+/** How much of a plan's coding agents and their pull requests one row of the list names; its counts say how many stand in all. */
+export const PLAN_AGENTS_BOUNDS = {
+  /** The most agents a row names: those at work first, then the newest started. */
+  MAX_AGENTS: 3,
+  /** The most pull requests a row names: the newest agent's first. */
+  MAX_PULL_REQUESTS: 3,
+} as const;
+
+/** One of a plan's coding agents as its row names it: what it is called and runs on, where it stands, and since when. */
+export const planAgentLineSchema = EffectSchema.Struct({
+  id: wireUuidSchema,
+  /** The agent's title; null where it has none, when it is named by its model. */
+  title: EffectSchema.NullOr(EffectSchema.String),
+  /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
+  model: EffectSchema.String,
+  effort: EffectSchema.String,
+  status: EffectSchema.Literals(Object.values(CODING_AGENT_STATUS)),
+  /**
+   * Epoch milliseconds: when its run began while it works, and when its
+   * newest turn ended once it has; absent where neither is known.
+   */
+  at: EffectSchema.optionalKey(countedNumber),
+});
+
+export type PlanAgentLine = typeof planAgentLineSchema.Type;
+
+/** A pull request one of a plan's agents opened, as GitHub last answered the service: where it stands and its size. */
+export const planPullRequestLineSchema = EffectSchema.Struct({
+  number: countedNumber,
+  title: EffectSchema.String,
+  state: EffectSchema.Literals(Object.values(PULL_REQUEST_STATE)),
+  checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
+  additions: countedNumber,
+  deletions: countedNumber,
+});
+
+export type PlanPullRequestLine = typeof planPullRequestLineSchema.Type;
+
+/**
+ * What a plan's coding agents are doing and what they published, in brief:
+ * how many agents it has and how many of them are at work, the few the row
+ * names, and the pull requests they opened, each counted once by its
+ * number. A pull request is as the service last read it from GitHub, so
+ * it may trail GitHub by as long as nothing has asked.
+ */
+export const planAgentsSummarySchema = EffectSchema.Struct({
+  total: countedNumber,
+  /** The agents starting or running now. */
+  working: countedNumber,
+  agents: EffectSchema.Array(planAgentLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_AGENTS),
+  ),
+  pullRequestTotal: countedNumber,
+  pullRequests: EffectSchema.Array(planPullRequestLineSchema).check(
+    EffectSchema.isMaxLength(PLAN_AGENTS_BOUNDS.MAX_PULL_REQUESTS),
+  ),
+});
+
+export type PlanAgentsSummary = typeof planAgentsSummarySchema.Type;
+
+/**
+ * One row of the plan list: everything but the document, and what its
+ * coding agents are doing, which only the list answers, and only for a plan
+ * with an agent.
+ */
+export const planSummarySchema = EffectSchema.Struct({
+  ...planSummaryFields,
+  agents: EffectSchema.optionalKey(planAgentsSummarySchema),
+});
 
 export type PlanSummary = typeof planSummarySchema.Type;
 
@@ -365,7 +436,7 @@ export const PLAN_HISTORY_BOUNDS = {
 export const planRevisionSeqSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
 
 /**
- * One revision as the History tab lists it: its number, who wrote it and
+ * One revision as the version history lists it: its number, who wrote it and
  * when it last moved, when it began, how many changes its saves made, and,
  * for the developer's restore of an earlier revision, which one it brought
  * back and that revision's latest save.
@@ -514,8 +585,9 @@ export const PLAN_FILE_BOUNDS = {
 } as const;
 
 /**
- * Why a file of the plan's repository was not read for the File tab: a
- * secret file, no regular file at the path, a file too large or not text,
+ * Why a file of the plan's repository was not read for the File tab, or a
+ * folder not listed for its tree: a secret file, no regular file (or no
+ * folder) at the path, a file too large or not text,
  * a plan with no repository, a repository the Luke GitHub App does not
  * reach for the account, an account that must sign in with GitHub again,
  * or GitHub not answering just now.
@@ -589,3 +661,58 @@ export const planFileAnswerSchema = EffectSchema.Union([
 ]);
 
 export type PlanFileAnswer = typeof planFileAnswerSchema.Type;
+
+/** What an entry of a folder of the plan's repository is, as the File tab's tree draws it: a folder opens into its own entries, and anything else is a file, read as a File tab reads one. */
+export const PLAN_TREE_ENTRY = {
+  FILE: "file",
+  FOLDER: "folder",
+} as const;
+
+export const PLAN_TREE_BOUNDS = {
+  /** The most entries one folder's listing carries; a folder holding more is listed to here and says it was cut. */
+  MAX_ENTRIES: 5_000,
+} as const;
+
+/** One folder of the plan's repository, as the File tab's tree asks it (GET `/api/plans/{id}/tree`): its path from the repository's root, empty for the root itself. */
+export const planTreeRequestSchema = EffectSchema.Struct({
+  path: EffectSchema.String.check(EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS)),
+});
+
+export type PlanTreeRequest = typeof planTreeRequestSchema.Type;
+
+/** One entry of a folder: its name within the folder, and whether it is a folder or a file. */
+export const planTreeEntrySchema = EffectSchema.Struct({
+  name: EffectSchema.String.check(
+    EffectSchema.isNonEmpty(),
+    EffectSchema.isMaxLength(CODE_PATH_MAX_CHARS),
+  ),
+  kind: EffectSchema.Literals(Object.values(PLAN_TREE_ENTRY)),
+});
+
+export type PlanTreeEntry = typeof planTreeEntrySchema.Type;
+
+/**
+ * A folder of the plan's repository as it stands now on the branch the
+ * File tab reads its files on, through the Luke GitHub App: the path, the
+ * repository and the branch read, its entries in GitHub's order, and
+ * whether there were more than one listing carries. A secret file is
+ * listed by name like any other, since it is its contents that are never
+ * read.
+ */
+export const planTreeFolderSchema = EffectSchema.Struct({
+  path: EffectSchema.String,
+  repository: githubRepositoryFullNameSchema,
+  branch: EffectSchema.String,
+  entries: EffectSchema.Array(planTreeEntrySchema).check(
+    EffectSchema.isMaxLength(PLAN_TREE_BOUNDS.MAX_ENTRIES),
+  ),
+  truncated: EffectSchema.Boolean,
+});
+
+/** The tree's read of one folder answered: its listing, or why it is not listed, in the File tab's own refusals. */
+export const planTreeAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ folder: planTreeFolderSchema }),
+  planFileRefusalSchema,
+]);
+
+export type PlanTreeAnswer = typeof planTreeAnswerSchema.Type;

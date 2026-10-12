@@ -119,6 +119,7 @@ export interface FieldEditor {
 const FAILURE_NOTE = {
   [PLAN_CALL_FAILURE.UNANSWERED]: "Not saved: the service did not answer.",
   [PLAN_CALL_FAILURE.NOT_FOUND]: "Not saved: this plan no longer exists.",
+  [PLAN_CALL_FAILURE.PLAN_ARCHIVED]: "Not saved: this plan is archived.",
   [PLAN_EDIT_REFUSAL.TOO_LONG]: "Not saved: the plan would be longer than a plan may be.",
 } as const satisfies Record<PlanningEditFailure, string>;
 

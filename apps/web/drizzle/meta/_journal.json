@@ -533,6 +533,34 @@
       "when": 1791060000000,
       "tag": "0076_repository_pin",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1791085000000,
+      "tag": "0077_coding_agent_context_window",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791110000000,
+      "tag": "0078_coding_agent_published",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1791135000000,
+      "tag": "0079_coding_agent_delegation_call",
+      "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791160000000,
+      "tag": "0080_account_provider_key",
+      "breakpoints": true
     }
   ]
 }

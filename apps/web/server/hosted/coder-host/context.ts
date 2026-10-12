@@ -1,4 +1,8 @@
-import type { CodingAgentContext } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentContext,
+  type ContextWindow,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { CodingAgentContextRow } from "../coding-agent-store.js";
 import type { OfferedModel } from "../model-catalog.js";
 import { CODER } from "./bounds.js";
@@ -17,12 +21,18 @@ import { CODER } from "./bounds.js";
  * since the routes read it.
  */
 
-/** The window a step on the model is told: the catalog's for it, or the fallback where it lists none. */
-export function contextWindowOf(offered: readonly OfferedModel[], modelId: string): number {
-  return (
-    offered.find((model) => model.id === modelId)?.contextWindow ??
-    CODER.FALLBACK_CONTEXT_WINDOW_TOKENS
-  );
+/** The window a step on the model is told: the one chosen where the model offers two, else the catalog's one for it, or the fallback where it lists none. */
+export function contextWindowOf(
+  offered: readonly OfferedModel[],
+  modelId: string,
+  chosen: ContextWindow,
+): number {
+  const model = offered.find((each) => each.id === modelId);
+  const windows = model?.contextWindows;
+  if (windows !== undefined) {
+    return chosen === CONTEXT_WINDOW.LONG ? windows.longTokens : windows.standardTokens;
+  }
+  return model?.contextWindow ?? CODER.FALLBACK_CONTEXT_WINDOW_TOKENS;
 }
 
 /** The agent's context as the wire carries it, against the window given; nothing before its first step. */

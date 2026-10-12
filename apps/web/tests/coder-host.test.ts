@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import { CODING_AGENT_STATUS, CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { isReasoningUIPart, isTextUIPart, isToolUIPart, type LanguageModel } from "ai";
-import { MockLanguageModelV4 } from "ai/test";
 import { eq } from "drizzle-orm";
 import {
   Clock,
@@ -31,12 +30,13 @@ import {
 } from "../server/core";
 import { db } from "../server/db/query";
 import { turns } from "../server/db/storage-schema";
+import { CI_READ_PERMISSIONS } from "../server/github/github-app";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
-import type { CoderModelSelection } from "../server/hosted/coder-host/model";
+import type { CoderModelSelection, ProviderKeys } from "../server/hosted/coder-host/model";
 import {
   PLAN_EDIT,
   PLAN_EDIT_REFUSAL,
@@ -57,6 +57,7 @@ import {
 } from "../server/hosted/coder-host/transcript";
 import {
   awaitingLinesOf,
+  type CodingAgent,
   type CodingAgentBriefText,
   createCodingAgent,
   fillCodingAgentTitle,
@@ -75,10 +76,11 @@ import {
   storeWriter,
 } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
-import { openGithubUser } from "./support/github-app-fake";
+import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
+import { titleModelAnswering } from "./support/title-model";
 
 /**
  * The coding-agent host through the same functions the coder project's
@@ -114,9 +116,22 @@ const CATALOG: readonly OfferedModel[] = [
   },
 ];
 
-const KEYS = {
-  anthropic: Redacted.make("sk-ant-fixture"),
-  openAi: Redacted.make("sk-openai-fixture"),
+/** The catalog with a model offering two windows beside it: priced apart past 272K, as OpenAI prices its long context. */
+const WINDOWED_CATALOG: readonly OfferedModel[] = [
+  ...CATALOG,
+  {
+    id: "openai/gpt-5.5",
+    name: "GPT-5.5",
+    provider: MODEL_PROVIDER.OPENAI,
+    efforts: ["low", "high"],
+    contextWindow: 1_050_000,
+    contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
+  },
+];
+
+const KEYS: ProviderKeys = {
+  anthropic: { key: Redacted.make("sk-ant-fixture") },
+  openAi: { key: Redacted.make("sk-openai-fixture") },
 };
 
 /** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
@@ -131,33 +146,13 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         ownsConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
-      keys: () => KEYS,
+      keys: () => Effect.succeed(KEYS),
       titleModel: () => titleModel,
       scriptedModel: () => false,
       now: () => NOW,
     };
     return coderHost(seams);
   });
-
-/** A title model answering from a script, each call the next line; one that throws is the provider down. */
-function titleModelAnswering(answers: readonly (string | Error)[]): MockLanguageModelV4 {
-  const queue = [...answers];
-  return new MockLanguageModelV4({
-    doGenerate: async () => {
-      const answer = queue.shift() ?? "";
-      if (answer instanceof Error) throw answer;
-      return {
-        content: [{ type: "text" as const, text: answer }],
-        finishReason: { unified: "stop" as const, raw: "stop" },
-        usage: {
-          inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
-          outputTokens: { total: 1, text: 1, reasoning: 0 },
-        },
-        warnings: [],
-      };
-    },
-  });
-}
 
 function principal(
   id: string,
@@ -222,6 +217,21 @@ const openAgent = (
       admitted: admitted.success,
     };
   });
+
+/** A GitHub where the developer reaches the agent's repository through one installation, granting the App what the test says; the fixture's own grant when unsaid. */
+const reachingRelay = (permissions?: Readonly<Record<string, string>>) =>
+  githubReaching([
+    {
+      id: 7,
+      login: "acme",
+      repositories: [{ owner: "acme", name: "relay" }],
+      ...(permissions === undefined ? undefined : { permissions }),
+    },
+  ]).layer;
+
+/** The prompt the session composes at its start, on an installation granting the App no CI read. */
+const composedPrompt = (host: CoderHost, ...composed: Parameters<CoderHost["prompt"]>) =>
+  host.prompt(...composed).pipe(Effect.provide(reachingRelay()));
 
 const stamped = <Event extends Omit<MessageStreamEvent, "meta">>(event: Event) =>
   stampedEveEvent(event, NOW);
@@ -432,6 +442,18 @@ const driven = <A, E>(fiber: Fiber.Fiber<A, E>, step: Duration.Duration) =>
     return yield* Fiber.join(fiber);
   });
 
+/** The agent's own page from the start, read to the end of the hold a starting agent's read is held for. */
+const ownPage = (target: ConversationTarget, agent: CodingAgent) =>
+  Effect.gen(function* () {
+    const reading = yield* Effect.forkChild(
+      transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+        Effect.provide(modelCatalogOf(CATALOG)),
+      ),
+    );
+    yield* TestClock.adjust(CODER.MESSAGES_HOLD);
+    return yield* driven(reading, CODER.MESSAGES_POLL);
+  });
+
 it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it) => {
   it.effect(
     "a turn's end writes the branch checked out in the sandbox on the agent's row, null for a detached HEAD; a read git cannot answer writes nothing and does not fail, so the stop that follows it runs",
@@ -493,6 +515,72 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.deepEqual(unlisted.success.modelOptions, {
           providerOptions: { openai: { reasoningEffort: "low", reasoningSummary: "auto" } },
         });
+      }),
+  );
+
+  it.effect(
+    "a step on a model with two windows is told its whole window until the agent chooses the standard one, and its context is told against the window chosen",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(
+          host,
+          "openai/gpt-5.5",
+        );
+        const windowNow = Effect.map(
+          host.model(admitted, undefined).pipe(Effect.provide(modelCatalogOf(WINDOWED_CATALOG))),
+          (selected) =>
+            Result.isSuccess(selected)
+              ? selected.success.modelContextWindowTokens
+              : assert.fail("the step was refused"),
+        );
+        const contextNow = Effect.map(
+          transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
+            Effect.provide(modelCatalogOf(WINDOWED_CATALOG)),
+          ),
+          (page) => page.context,
+        );
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const relay = (event: MessageStreamEvent) =>
+          // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+          host.relay(event, admitted, session as never, state, { hash: prompt.hash });
+        const data = { turnId: "turn_0", sequence: 0 };
+        yield* relay(stamped({ type: "turn.started", data }));
+        yield* relay(stamped({ type: "message.received", data: { ...data, message: PLAN_TEXT } }));
+        yield* relay(
+          stamped({
+            type: "step.completed",
+            data: {
+              ...data,
+              stepIndex: 0,
+              finishReason: "tool-calls",
+              usage: { inputTokens: 300_000, outputTokens: 400 },
+            },
+          }),
+        );
+        assert.equal(yield* windowNow, 1_050_000);
+        const long = yield* contextNow;
+        assert.equal(long?.windowTokens, 1_050_000);
+        assert.equal(long?.compactionThresholdTokens, 945_000);
+
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "openai/gpt-5.5",
+          effort: "high",
+          contextWindow: CONTEXT_WINDOW.STANDARD,
+        });
+        assert.equal(yield* windowNow, 272_000);
+        const standard = yield* contextNow;
+        assert.equal(standard?.windowTokens, 272_000);
+        assert.equal(standard?.compactionThresholdTokens, 244_800);
+
+        // A change naming no window is the model's whole window again.
+        yield* updateCodingAgentChoice(userId, agent.id, {
+          model: "openai/gpt-5.5",
+          effort: "low",
+        });
+        assert.equal(yield* windowNow, 1_050_000);
       }),
   );
 
@@ -635,6 +723,59 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
     }),
   );
 
+  it.effect(
+    "a worker's title is generated from the task its delegation handed it, tidied as the agent's is, and written once on its child, which the agent's page then names by the call",
+    () =>
+      Effect.gen(function* () {
+        const model = titleModelAnswering(['"Count the API routes."', "Second title"]);
+        const host = yield* hostOverStore(model);
+        const { agent, target, admitted } = yield* openAgent(host);
+        const made = yield* host
+          .delegate(admitted, "call-3", {})
+          .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+        assert.ok(Result.isSuccess(made));
+        yield* host.delegationTitle(admitted, "call-3", "Count the routes under app/api.");
+        const [asked] = model.doGenerateCalls;
+        assert.ok(asked !== undefined);
+        // The task is what is named; the agent's plan does not ride along.
+        assert.match(JSON.stringify(asked.prompt), /Count the routes under app\/api/u);
+        assert.doesNotMatch(JSON.stringify(asked.prompt), /Teammate invitations/u);
+
+        // A worker already titled is never asked for again.
+        yield* host.delegationTitle(admitted, "call-3", "Count the routes under app/api.");
+        assert.equal(model.doGenerateCalls.length, 1);
+
+        const page = yield* ownPage(target, agent);
+        assert.deepEqual(page.subagentTitles, [
+          { callId: "call-3", title: "Count the API routes" },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "a worker whose title call fails, or that a deployment with no title model delegates, stays untitled, and the agent's page names no title for it",
+    () =>
+      Effect.gen(function* () {
+        const failing = yield* hostOverStore(
+          titleModelAnswering([new Error("fixture: provider down")]),
+        );
+        const { agent, target, admitted } = yield* openAgent(failing);
+        const untitled = yield* hostOverStore();
+        for (const [host, callId] of [
+          [failing, "call-4"],
+          [untitled, "call-5"],
+        ] as const) {
+          const made = yield* host
+            .delegate(admitted, callId, {})
+            .pipe(Effect.provide(modelCatalogOf(CATALOG)));
+          assert.ok(Result.isSuccess(made));
+          yield* host.delegationTitle(admitted, callId, "Count the routes.");
+        }
+        const page = yield* ownPage(target, agent);
+        assert.equal(page.subagentTitles, undefined);
+      }),
+  );
+
   it.effect("a change of the agent's model and effort is what the next step is told", () =>
     Effect.gen(function* () {
       const host = yield* hostOverStore();
@@ -682,13 +823,39 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "the session is told whether its pull request's checks are readable, from what the installation grants the App, and told they are not where GitHub cannot be read",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+
+        const granted = yield* host
+          .prompt(admitted, agent)
+          .pipe(
+            Effect.provide(
+              reachingRelay({ contents: "write", pull_requests: "write", ...CI_READ_PERMISSIONS }),
+            ),
+          );
+        const withheld = yield* composedPrompt(host, admitted, agent);
+        const unread = yield* host.prompt(admitted, agent).pipe(Effect.provide(NO_GITHUB));
+
+        assert.equal(granted.ciReadable, true);
+        assert.ok(granted.text.includes("gh pr checks"));
+        assert.equal(withheld.ciReadable, false);
+        assert.ok(!withheld.text.includes("gh pr checks"));
+        assert.notEqual(granted.hash, withheld.hash);
+        assert.equal(unread.ciReadable, false);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
-        const prompt = host.prompt(agent);
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         for (const event of codingTurn("turn_0", "turn.completed")) {
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
@@ -753,11 +920,12 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         ] as const) {
           const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
           const state = memoryRelayState();
+          const prompt = yield* composedPrompt(host, admitted, agent);
           const session = { id: sessionId, auth, turn: { id: "turn_0" } };
           for (const event of codingTurn("turn_0", end)) {
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
             yield* host.relay(event, admitted, session as never, state, {
-              hash: host.prompt(agent).hash,
+              hash: prompt.hash,
             });
           }
           const turns = yield* latestTurnsOf(target.userId, [target.conversationId]);
@@ -780,10 +948,11 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { userId, agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const relay = (event: MessageStreamEvent) =>
           // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-          host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash });
+          host.relay(event, admitted, session as never, state, { hash: prompt.hash });
         const context = Effect.map(
           transcriptPast(target, CODER_TOOL_SET, CURSOR_START, agent, agent).pipe(
             Effect.provide(modelCatalogOf(CATALOG)),
@@ -884,12 +1053,13 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const events = codingTurn("turn_0", "turn.completed");
         const play = (from: number, to: number) =>
           Effect.forEach(events.slice(from, to), (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const read = (after: MessageCursor) =>
           transcriptPast(target, CODER_TOOL_SET, after, agent).pipe(
@@ -979,11 +1149,12 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const play = (events: readonly MessageStreamEvent[]) =>
           Effect.forEach(events, (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const statusNow = () =>
           Effect.gen(function* () {
@@ -1062,17 +1233,142 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "a line carrying files is taken by the turn whose receipt carries them, coalesced with a plain line before it, and a receipt no line awaits keeps its words and its files on its own row, a text file read back to a file by its heading",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { target, auth, sessionId, admitted, agent } = yield* openAgent(host);
+        const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
+        const session = { id: sessionId, auth, turn: { id: "turn_0" } };
+        const play = (events: readonly MessageStreamEvent[]) =>
+          Effect.forEach(events, (event) =>
+            // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
+          );
+        const [started, received] = codingTurn("turn_0", "turn.completed");
+        assert.ok(started && received);
+        yield* play([started, received]);
+        const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+        yield* awaitingLine(target, "Plain first.", "k-plain");
+        const withFiles = yield* writer.writeAwaitingLine(
+          target,
+          {
+            text: "Look at these.",
+            clientKey: "k-files",
+            attachments: [
+              { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" },
+              { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" },
+            ],
+          },
+          Effect.succeed(true),
+        );
+        assert.ok(Result.isSuccess(withFiles) && Option.isSome(withFiles.success));
+
+        // eve coalesced the two steers into one message: its summary names the image, its parts hold the words.
+        yield* play([
+          stamped({
+            type: "message.received",
+            data: {
+              turnId: "turn_0",
+              sequence: 0,
+              message:
+                "Plain first.\nLook at these.\nAttached file: notes.md\n```\n# Notes\n```\n[file: shot.png (image/png)]",
+              parts: [
+                { type: "text", text: "Plain first." },
+                { type: "text", text: "Look at these." },
+                { type: "text", text: "Attached file: notes.md\n```\n# Notes\n```" },
+                { type: "file", filename: "shot.png", mediaType: "image/png" },
+              ],
+            },
+          }),
+        ]);
+        assert.deepEqual(yield* linesByKey(target, ["k-plain", "k-files"]), [
+          { turnId: hostTurnId(sessionId, "turn_0") },
+          { turnId: hostTurnId(sessionId, "turn_0") },
+        ]);
+        assert.equal((yield* developerLines(target)).length, 3);
+
+        // A receipt no line awaits is written as eve received it: the words, then each file; words
+        // spelled like a file's heading stay words, since the first text part is always the words.
+        yield* TestClock.adjust("1 minute");
+        yield* play([
+          stamped({ type: "turn.started", data: { turnId: "turn_1", sequence: 1 } }),
+          stamped({
+            type: "message.received",
+            data: {
+              turnId: "turn_1",
+              sequence: 1,
+              message: "Attached file: spec.md\n```\nRead it.\n```",
+              parts: [
+                { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```" },
+                { type: "text", text: "Attached file: a.ts\n````\nconst a = ```x```;\n````" },
+                {
+                  type: "file",
+                  filename: "spec.pdf",
+                  mediaType: "application/pdf",
+                  url: "data:application/pdf;base64,JVBERi0=",
+                },
+                { type: "file", filename: "staged.png", mediaType: "image/png", size: 8 },
+              ],
+            },
+          }),
+        ]);
+        const page = yield* listMessagesPast(
+          target.userId,
+          target.conversationId,
+          CODER_TOOL_SET,
+          CURSOR_START,
+        );
+        assert.ok(page.read.ok);
+        const rows = page.read.value.filter((record) => record.message.role === MESSAGE_ROLE.USER);
+        assert.deepEqual(rows.at(2)?.message.parts, [
+          { type: "text", text: "Look at these.", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "notes.md",
+            url: "data:text/plain;base64,IyBOb3Rlcw==",
+          },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "shot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+        ]);
+        assert.deepEqual(rows.at(-1)?.message.parts, [
+          { type: "text", text: "Attached file: spec.md\n```\nRead it.\n```", state: "done" },
+          {
+            type: "file",
+            mediaType: "text/plain",
+            filename: "a.ts",
+            url: "data:text/plain;base64,Y29uc3QgYSA9IGBgYHhgYGA7",
+          },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "spec.pdf",
+            url: "data:application/pdf;base64,JVBERi0=",
+          },
+          { type: "file", mediaType: "image/png", filename: "staged.png", url: "" },
+        ]);
+      }),
+  );
+
+  it.effect(
     "two awaiting lines with the same words are taken in the order sent, each by the turn that receives it, and a line sent again under its key is the one already standing: nothing is dispatched and no second row is written",
     () =>
       Effect.gen(function* () {
         const host = yield* hostOverStore();
         const { agent, target, auth, sessionId, admitted } = yield* openAgent(host);
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         const play = (events: readonly MessageStreamEvent[]) =>
           Effect.forEach(events, (event) =>
             // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
-            host.relay(event, admitted, session as never, state, { hash: host.prompt(agent).hash }),
+            host.relay(event, admitted, session as never, state, { hash: prompt.hash }),
           );
         const [started, received] = codingTurn("turn_0", "turn.completed");
         assert.ok(started && received);
@@ -1141,7 +1437,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
             ownsConversation: () => Promise.resolve(false),
           },
           deploymentSecret: () => undefined,
-          keys: () => ({ anthropic: undefined, openAi: undefined }),
+          keys: () => Effect.succeed({ anthropic: undefined, openAi: undefined }),
           titleModel: () => undefined,
           scriptedModel: () => true,
           now: () => NOW,
@@ -1155,6 +1451,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         assert.equal(selected.success.model, scripted.model);
 
         const state = memoryRelayState();
+        const prompt = yield* composedPrompt(host, admitted, agent);
         const session = { id: sessionId, auth, turn: { id: "turn_0" } };
         // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
         yield* host.relay(
@@ -1162,7 +1459,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
           admitted,
           session as never,
           state,
-          { hash: host.prompt(agent).hash },
+          { hash: prompt.hash },
         );
         const turn = yield* turnRow(hostTurnId(sessionId, "turn_0"));
         assert.equal(turn?.model, CODER_MODEL_FIXTURE.SCRIPTED_MODEL_ID);

@@ -26,8 +26,8 @@ export default defineDynamic({
           if (Result.isFailure(admitted)) return null;
           const agent = yield* host.agent(admitted.success);
           if (Result.isFailure(agent)) return null;
-          const composed = host.prompt(agent.success);
-          prompt.update(() => ({ hash: composed.hash }));
+          const composed = yield* host.prompt(admitted.success, agent.success);
+          prompt.update(() => ({ hash: composed.hash, ciReadable: composed.ciReadable }));
           return defineInstructions({ content: composed.text });
         }),
       );

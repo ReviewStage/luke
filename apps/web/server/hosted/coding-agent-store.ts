@@ -1,5 +1,13 @@
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  type CodingAgentSubagentTitle,
+  type ContextWindow,
+  codingAgentPullRequestSchema,
+  contextWindowSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -13,6 +21,7 @@ import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
+import { PlanArchived } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";
 import {
@@ -38,8 +47,9 @@ import {
  * relay's to write, and the newest turn is what the agent's status is read
  * from. A Start whose eve session could not be opened discards the agent
  * again, rows and conversation, so a retry under the same key starts afresh
- * rather than finding an agent nothing runs. The model and effort on the
- * row are read at every step, so a change to them is the next step's. The
+ * rather than finding an agent nothing runs. The model, effort, and context
+ * window on the row are read at every step, so a change to them is the next
+ * step's. The
  * branch is what stood checked out in the agent's sandbox as its last turn
  * ended, written by the session's turn-end hook (`coder-host/host.ts`) and
  * read where the agent's pull request is looked up (`coder-host/published.ts`). A
@@ -47,7 +57,9 @@ import {
  * worker's session (`coder-host/delegation.ts`) with the model and effort
  * the agent chose for it written beside it here, so the worker's steps read
  * the pair under the child and the tabs read the worker's transcript under
- * the agent's. Note that nothing here reaches the brain host's modules,
+ * the agent's; the worker's title stands on its child conversation
+ * (`child-titles.ts`) and is read back here by the call that delegated it,
+ * which is kept on the delegation for that. Note that nothing here reaches the brain host's modules,
  * because the routes bundle this module and the brain host's modules reach
  * eve, which runs in a service of its own (`function-bundles.ts`). The
  * title is written two ways: filled where none stands, which is how the
@@ -55,7 +67,10 @@ import {
  * developer gave, and renamed, which replaces whatever stands. The newest
  * model step of the agent's own conversation and eve's last compaction of
  * it are written by the coder host as eve tells them, and read back with
- * the transcript, which is what the tab's context ring draws. Every
+ * the transcript, which is what the tab's context ring draws. The pull
+ * request from the agent's branch is written as GitHub answered each read
+ * of it (`coder-host/published.ts`), and read back beside the agents of
+ * every plan the list names, so the list asks GitHub nothing. Every
  * function is an effect over the ambient `SqlClient` and names no database
  * of its own.
  */
@@ -76,6 +91,7 @@ export interface CodingAgent {
   readonly conversationId: string;
   readonly model: string;
   readonly effort: string;
+  readonly contextWindow: ContextWindow;
   /** The plan text the agent was handed; null where it was handed a task instead. */
   readonly planSnapshot: string | null;
   /** The developer's words the agent was handed in the plan's place; null where it was handed the plan. */
@@ -109,6 +125,8 @@ export type NewCodingAgent = CodingAgentBriefText & {
   readonly idempotencyKey: string;
   readonly model: string;
   readonly effort: string;
+  /** The model's whole window, the long one, where the Start names none. */
+  readonly contextWindow?: ContextWindow | undefined;
   readonly repository: string;
 };
 
@@ -119,6 +137,7 @@ const CODING_AGENT_COLUMNS = {
   conversationId: codingAgent.conversationId,
   model: codingAgent.model,
   effort: codingAgent.effort,
+  contextWindow: codingAgent.contextWindow,
   planSnapshot: codingAgent.planSnapshot,
   task: codingAgent.task,
   repository: codingAgent.repository,
@@ -133,6 +152,7 @@ const CodingAgentRowSchema = Schema.Struct({
   conversationId: Schema.String,
   model: Schema.String,
   effort: Schema.String,
+  contextWindow: contextWindowSchema,
   planSnapshot: Schema.NullOr(Schema.String),
   task: Schema.NullOr(Schema.String),
   repository: Schema.String,
@@ -143,13 +163,13 @@ const CodingAgentRowSchema = Schema.Struct({
 
 const IdRowSchema = Schema.Struct({ id: Schema.String });
 
-/** The plan row under its own lock, where the account owns it. */
+/** The plan row under its own lock, where the account owns it, with whether it is archived. */
 const lockOwnedPlan = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
-  Result: IdRowSchema,
+  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
     db
-      .select({ id: plan.id })
+      .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
       .from(plan)
       .where(and(eq(plan.id, planId), eq(plan.userId, userId)))
       .for("update"),
@@ -187,6 +207,7 @@ const insertAgent = SqlSchema.findOne({
     idempotencyKey: Schema.String,
     model: Schema.String,
     effort: Schema.String,
+    contextWindow: contextWindowSchema,
     planSnapshot: Schema.NullOr(Schema.String),
     task: Schema.NullOr(Schema.String),
     repository: Schema.String,
@@ -202,6 +223,7 @@ const insertAgent = SqlSchema.findOne({
         conversationId: write.conversationId,
         model: write.model,
         effort: write.effort,
+        contextWindow: write.contextWindow,
         planSnapshot: write.planSnapshot,
         task: write.task,
         repository: write.repository,
@@ -217,12 +239,13 @@ const updateAgentChoice = SqlSchema.findOneOption({
     agentId: Schema.String,
     model: Schema.String,
     effort: Schema.String,
+    contextWindow: contextWindowSchema,
   }),
   Result: CodingAgentRowSchema,
-  execute: ({ userId, agentId, model, effort }) =>
+  execute: ({ userId, agentId, model, effort, contextWindow }) =>
     db
       .update(codingAgent)
-      .set({ model, effort })
+      .set({ model, effort, contextWindow })
       .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId)))
       .returning(CODING_AGENT_COLUMNS),
 });
@@ -306,6 +329,7 @@ const findAgentContext = SqlSchema.findOneOption({
   Request: Schema.Struct({ userId: Schema.String, agentId: Schema.String }),
   Result: Schema.Struct({
     model: Schema.String,
+    contextWindow: contextWindowSchema,
     lastStep: Schema.NullOr(AgentStepColumnSchema),
     compactedAt: Schema.NullOr(InstantColumnSchema),
   }),
@@ -313,6 +337,7 @@ const findAgentContext = SqlSchema.findOneOption({
     db
       .select({
         model: codingAgent.model,
+        contextWindow: codingAgent.contextWindow,
         lastStep: codingAgent.lastStep,
         compactedAt: codingAgent.compactedAt,
       })
@@ -330,6 +355,51 @@ const findAgentsOfPlan = SqlSchema.findAll({
       .from(codingAgent)
       .where(and(eq(codingAgent.userId, userId), eq(codingAgent.planId, planId)))
       .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+});
+
+const updateAgentPublished = SqlSchema.void({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    agentId: Schema.String,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, agentId, published }) =>
+    db
+      .update(codingAgent)
+      .set({ published })
+      .where(and(eq(codingAgent.id, agentId), eq(codingAgent.userId, userId))),
+});
+
+const findAgentsOfPlans = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, planIds: Schema.Array(Schema.String) }),
+  Result: Schema.Struct({
+    ...CodingAgentRowSchema.fields,
+    published: Schema.NullOr(codingAgentPullRequestSchema),
+  }),
+  execute: ({ userId, planIds }) =>
+    db
+      .select({ ...CODING_AGENT_COLUMNS, published: codingAgent.published })
+      .from(codingAgent)
+      .where(and(eq(codingAgent.userId, userId), inArray(codingAgent.planId, [...planIds])))
+      .orderBy(asc(codingAgent.createdAt), asc(codingAgent.id)),
+});
+
+const findAgentsOnBranches = SqlSchema.findAll({
+  Request: Schema.Struct({
+    repository: Schema.String,
+    branches: Schema.Array(Schema.String),
+    limit: Schema.Number,
+  }),
+  Result: Schema.Struct({ ...CodingAgentRowSchema.fields, userId: Schema.String }),
+  execute: ({ repository, branches, limit }) =>
+    db
+      .select({ ...CODING_AGENT_COLUMNS, userId: codingAgent.userId })
+      .from(codingAgent)
+      .where(
+        and(eq(codingAgent.repository, repository), inArray(codingAgent.branch, [...branches])),
+      )
+      .orderBy(desc(codingAgent.createdAt), asc(codingAgent.id))
+      .limit(limit),
 });
 
 const findAgent = SqlSchema.findOneOption({
@@ -377,12 +447,18 @@ const deleteConversationRow = SqlSchema.void({
  * the row that binds it to the plan, with the plan text or the task, and
  * the repository, as handed. A Start whose key the account has already used answers the agent
  * that Start made, whatever else the retry carries, and writes nothing.
- * Nothing where the account owns no such plan.
+ * Nothing where the account owns no such plan. An archived plan starts no
+ * agent, read under the same lock, though a retry still answers the agent
+ * its Start made before the archive.
  */
 export function createCodingAgent(
   userId: string,
   started: NewCodingAgent,
-): CodingAgentStoreEffect<Option.Option<CodingAgentStarted>> {
+): Effect.Effect<
+  Option.Option<CodingAgentStarted>,
+  CodingAgentStoreFailure | PlanArchived,
+  SqlClient.SqlClient
+> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
@@ -395,6 +471,7 @@ export function createCodingAgent(
         if (Option.isSome(existing)) {
           return Option.some({ agent: existing.value, created: false });
         }
+        if (owned.value.archived) return yield* new PlanArchived();
         const now = yield* DateTime.nowAsDate;
         const conversation = yield* insertAgentConversation({ userId, now }).pipe(
           // An insert that returned no row is the database breaking its own contract, not an outcome.
@@ -407,6 +484,7 @@ export function createCodingAgent(
           idempotencyKey: started.idempotencyKey,
           model: started.model,
           effort: started.effort,
+          contextWindow: started.contextWindow ?? CONTEXT_WINDOW.LONG,
           planSnapshot: started.planSnapshot,
           task: started.task,
           repository: started.repository,
@@ -447,6 +525,56 @@ export function listCodingAgents(
   return findAgentsOfPlan({ userId, planId });
 }
 
+/** One agent, and the pull request from its branch as GitHub last answered; null before a read found one. */
+export interface PublishedCodingAgent {
+  readonly agent: CodingAgent;
+  readonly published: CodingAgentPullRequest | null;
+}
+
+/** Every agent started on the account's plans named, each with what it published, in the order they were started; a plan another account owns names none. */
+export function listPublishedCodingAgents(
+  userId: string,
+  planIds: readonly string[],
+): CodingAgentStoreEffect<readonly PublishedCodingAgent[]> {
+  if (planIds.length === 0) return Effect.succeed([]);
+  return Effect.map(findAgentsOfPlans({ userId, planIds }), (rows) =>
+    rows.map(({ published, ...agent }) => ({ agent, published })),
+  );
+}
+
+/** The pull request from the account's agent's branch as GitHub just answered, or null where it answered none; nothing written for an agent the account does not own. */
+export function recordCodingAgentPublished(
+  userId: string,
+  agentId: string,
+  published: CodingAgentPullRequest | null,
+): CodingAgentStoreEffect<void> {
+  return updateAgentPublished({ userId, agentId, published });
+}
+
+/** One agent and the account that owns it, as a delivery from GitHub that names a repository and a branch finds it. */
+export interface OwnedCodingAgent {
+  readonly userId: string;
+  readonly agent: CodingAgent;
+}
+
+/**
+ * The agents of any account whose row stands on one of the repository's
+ * branches named, newest started first and at most `limit` of them; none for
+ * no branch. This is the one read that names no account, since GitHub's
+ * delivery names a repository and a branch and nothing of who started an
+ * agent on them; what each answers is read again on its owner's own token.
+ */
+export function listCodingAgentsOnBranches(
+  repository: string,
+  branches: readonly string[],
+  limit: number,
+): CodingAgentStoreEffect<readonly OwnedCodingAgent[]> {
+  if (branches.length === 0) return Effect.succeed([]);
+  return Effect.map(findAgentsOnBranches({ repository, branches, limit }), (rows) =>
+    rows.map(({ userId, ...agent }) => ({ userId, agent })),
+  );
+}
+
 /** The account's agent under this id, or nothing for an agent the account does not own. */
 export function readCodingAgent(
   userId: string,
@@ -455,13 +583,19 @@ export function readCodingAgent(
   return findAgent({ userId, agentId });
 }
 
-/** The account's agent given another model and effort, which its next step runs on; nothing for an agent the account does not own. */
+/** The account's agent given another model, effort, and context window, which its next step runs on, the model's whole window where the choice names none; nothing for an agent the account does not own. */
 export function updateCodingAgentChoice(
   userId: string,
   agentId: string,
-  choice: { readonly model: string; readonly effort: string },
+  choice: ModelChoice,
 ): CodingAgentStoreEffect<Option.Option<CodingAgent>> {
-  return updateAgentChoice({ userId, agentId, model: choice.model, effort: choice.effort });
+  return updateAgentChoice({
+    userId,
+    agentId,
+    model: choice.model,
+    effort: choice.effort,
+    contextWindow: choice.contextWindow ?? CONTEXT_WINDOW.LONG,
+  });
 }
 
 /** The branch checked out in the account's agent's sandbox as its turn ended, null for a detached HEAD; nothing written for an agent the account does not own. */
@@ -502,6 +636,7 @@ export function readCodingAgentOfConversation(
 /** What the agent's own conversation holds in its model's context: the model it runs on now, its newest step, and when eve last compacted it; null for each of the last two before it happens. */
 export interface CodingAgentContextRow {
   readonly model: string;
+  readonly contextWindow: ContextWindow;
   readonly lastStep: StoredAgentStep | null;
   readonly compactedAt: Date | null;
 }
@@ -540,13 +675,14 @@ export interface CodingAgentDelegation extends ModelChoice {
 const insertDelegation = SqlSchema.void({
   Request: Schema.Struct({
     childConversationId: Schema.String,
+    callId: Schema.String,
     model: Schema.String,
     effort: Schema.String,
   }),
-  execute: ({ childConversationId, model, effort }) =>
+  execute: ({ childConversationId, callId, model, effort }) =>
     db
       .insert(codingAgentDelegation)
-      .values({ childConversationId, model, effort })
+      .values({ childConversationId, callId, model, effort })
       .onConflictDoNothing({ target: codingAgentDelegation.childConversationId }),
 });
 
@@ -580,12 +716,18 @@ const findDelegation = SqlSchema.findOneOption({
       ),
 });
 
-/** Writes the pair a worker runs on under its child conversation, which must already stand; a pair written twice under one child stands as first written, since the worker may already be reading it. */
+/** Writes the pair a worker runs on under its child conversation, which must already stand, with the call that delegated it; a pair written twice under one child stands as first written, since the worker may already be reading it. */
 export function writeDelegation(
   childConversationId: string,
+  callId: string,
   choice: ModelChoice,
 ): CodingAgentStoreEffect<void> {
-  return insertDelegation({ childConversationId, model: choice.model, effort: choice.effort });
+  return insertDelegation({
+    childConversationId,
+    callId,
+    model: choice.model,
+    effort: choice.effort,
+  });
 }
 
 /** The delegation recorded under this child of the account's conversation, or nothing where none stands: another account's, another agent's, or no delegation at all. */
@@ -638,6 +780,74 @@ export function delegationStartsOf(
       childConversationIds,
     }),
     (rows) => new Map(rows.map((row) => [row.childConversationId, row.createdAt])),
+  );
+}
+
+const findDelegationTitles = SqlSchema.findAll({
+  Request: Schema.Struct({ userId: Schema.String, parentConversationId: Schema.String }),
+  Result: Schema.Struct({ callId: Schema.String, title: Schema.String }),
+  execute: ({ userId, parentConversationId }) =>
+    db
+      .select({ callId: codingAgentDelegation.callId, title: conversations.title })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNotNull(codingAgentDelegation.callId),
+          isNotNull(conversations.title),
+          isNull(conversations.deletedAt),
+        ),
+      )
+      .orderBy(asc(conversations.createdAt)),
+});
+
+/** Every titled worker of the account's conversation by the call that delegated it, oldest first; one recorded before its call was kept reads as untitled. */
+export function delegationTitlesOf(
+  parent: ConversationTarget,
+): CodingAgentStoreEffect<readonly CodingAgentSubagentTitle[]> {
+  return findDelegationTitles({
+    userId: parent.userId,
+    parentConversationId: parent.conversationId,
+  });
+}
+
+const findUntitledDelegations = SqlSchema.findAll({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    parentConversationId: Schema.String,
+    since: Schema.Date,
+  }),
+  Result: Schema.Struct({ childConversationId: Schema.String }),
+  execute: ({ userId, parentConversationId, since }) =>
+    db
+      .select({ childConversationId: codingAgentDelegation.childConversationId })
+      .from(codingAgentDelegation)
+      .innerJoin(conversations, eq(conversations.id, codingAgentDelegation.childConversationId))
+      .where(
+        and(
+          eq(conversations.userId, userId),
+          eq(conversations.parentConversationId, parentConversationId),
+          isNull(conversations.title),
+          gt(conversations.createdAt, since),
+          isNull(conversations.deletedAt),
+        ),
+      ),
+});
+
+/** The children of the account's conversation delegated after `since` that have no title yet, which is where a title may still land. */
+export function untitledDelegationsSince(
+  parent: ConversationTarget,
+  since: Date,
+): CodingAgentStoreEffect<ReadonlySet<string>> {
+  return Effect.map(
+    findUntitledDelegations({
+      userId: parent.userId,
+      parentConversationId: parent.conversationId,
+      since,
+    }),
+    (rows) => new Set(rows.map((row) => row.childConversationId)),
   );
 }
 

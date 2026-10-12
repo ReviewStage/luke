@@ -1,5 +1,6 @@
 import { Schema as EffectSchema } from "effect";
 import { boardSaveRequestSchema, boardSchema } from "./board-wire.js";
+import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
 import {
   githubRepositoriesAnswerSchema,
   githubRepositoryFullNameSchema,
@@ -16,6 +17,8 @@ import {
   planRevisionsAnswerSchema,
   planSchema,
   planSummarySchema,
+  planTreeFolderSchema,
+  planTreeRequestSchema,
   repositoryPinRequestSchema,
   repositoryPinSchema,
   shownCodeSchema,
@@ -206,7 +209,7 @@ const planWorkSessionPartSchema = EffectSchema.Union([
 /**
  * A subagent's session as the Work tab draws it: the newest of what it
  * wrote and called, oldest first, in the same parts as the planning
- * model's, and when its newest task began and ended. Note that it stands one level deep, because the wire shows no
+ * model's, when its newest task began and ended, and its title. Note that it stands one level deep, because the wire shows no
  * recursive declaration and no subagent is offered a subagent of its own.
  */
 const planWorkSessionSchema = EffectSchema.Struct({
@@ -217,6 +220,10 @@ const planWorkSessionSchema = EffectSchema.Struct({
   startedAt: EffectSchema.optionalKey(EffectSchema.Finite),
   /** Epoch milliseconds it answered or ended that task; absent while it runs, and from a service older than it. */
   endedAt: EffectSchema.optionalKey(EffectSchema.Finite),
+  /** Its short title, generated from the first task it was handed; absent until that lands, where none could be generated, and from a service older than it. */
+  title: EffectSchema.optionalKey(
+    EffectSchema.String.check(EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_TITLE_CHARS)),
+  ),
 });
 
 const planWorkPartSchema = EffectSchema.Union([
@@ -263,6 +270,11 @@ const codeTokenSchema = EffectSchema.Struct({
 
 export type CodeToken = typeof codeTokenSchema.Type;
 
+/** Lines of code as the host coloured them, each a line's runs in order. */
+export const codeLinesSchema = EffectSchema.Array(EffectSchema.Array(codeTokenSchema));
+
+export type CodeLines = typeof codeLinesSchema.Type;
+
 /**
  * One code Luke showed on the active plan: what he named, the repository
  * the service read it from, the file's lines as they arrived and this
@@ -277,7 +289,7 @@ const planCodeSchema = EffectSchema.Struct({
   firstLine: EffectSchema.Int,
   /** How many lines the whole file has. */
   lineCount: EffectSchema.Int,
-  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+  lines: codeLinesSchema,
   /** What Luke said the lines are for; absent on code shown before notes were asked for. */
   note: EffectSchema.optionalKey(EffectSchema.String),
 });
@@ -439,6 +451,8 @@ export const PLAN_CALL_FAILURE = {
   REPOSITORY_NOT_REACHABLE: "repository-not-reachable",
   /** The account must sign in with GitHub again before the service can read GitHub for it. */
   GITHUB_SIGN_IN_REQUIRED: "github-sign-in-required",
+  /** The plan is archived, so it takes no write until it is brought back. */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type PlanCallFailure = (typeof PLAN_CALL_FAILURE)[keyof typeof PLAN_CALL_FAILURE];
@@ -494,10 +508,11 @@ export const planningEditParamsSchema = EffectSchema.Struct({
 
 export type PlanningEditParams = typeof planningEditParamsSchema.Type;
 
-/** Why an edit saved nothing: the service did not answer, the plan is gone, or the plan would be longer than a plan may be. */
+/** Why an edit saved nothing: the service did not answer, the plan is gone or archived, or the plan would be longer than a plan may be. */
 const EDIT_FAILURES = [
   PLAN_CALL_FAILURE.UNANSWERED,
   PLAN_CALL_FAILURE.NOT_FOUND,
+  PLAN_CALL_FAILURE.PLAN_ARCHIVED,
   PLAN_EDIT_REFUSAL.TOO_LONG,
 ] as const;
 
@@ -531,7 +546,7 @@ const planFileShownSchema = EffectSchema.Struct({
   branch: EffectSchema.String,
   firstLine: EffectSchema.Int,
   lineCount: EffectSchema.Int,
-  lines: EffectSchema.Array(EffectSchema.Array(codeTokenSchema)),
+  lines: codeLinesSchema,
 });
 
 export type PlanFileShown = typeof planFileShownSchema.Type;
@@ -545,7 +560,24 @@ export const planningFileAnswerSchema = EffectSchema.Union([
 
 export type PlanningFileAnswer = typeof planningFileAnswerSchema.Type;
 
-/** A page of a plan's history, as the History tab asks the host for it: the plan, and the revision the page is read before where it is an older page. */
+/** One folder of a plan's repository, as the File tab's tree asks the host for it: the plan, and the folder's path from the root. */
+export const planningTreeParamsSchema = EffectSchema.Struct({
+  planId: EffectSchema.NonEmptyString,
+  ...planTreeRequestSchema.fields,
+});
+
+export type PlanningTreeParams = typeof planningTreeParamsSchema.Type;
+
+/** The tree's read of a folder, as the window hears it: the folder listed, why it is not, or that the service did not answer. */
+export const planningTreeAnswerSchema = EffectSchema.Union([
+  EffectSchema.Struct({ folder: planTreeFolderSchema }),
+  planFileRefusalSchema,
+  EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
+]);
+
+export type PlanningTreeAnswer = typeof planningTreeAnswerSchema.Type;
+
+/** A page of a plan's history, as the version history asks the host for it: the plan, and the revision the page is read before where it is an older page. */
 export const planningRevisionsParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   before: EffectSchema.optionalKey(planRevisionSeqSchema),
@@ -553,7 +585,7 @@ export const planningRevisionsParamsSchema = EffectSchema.Struct({
 
 export type PlanningRevisionsParams = typeof planningRevisionsParamsSchema.Type;
 
-/** The History tab's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
+/** The version history's read of a page, as the window hears it: the page as the service answered it, or that it did not answer. */
 export const planningRevisionsAnswerSchema = EffectSchema.Union([
   planRevisionsAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),
@@ -561,7 +593,7 @@ export const planningRevisionsAnswerSchema = EffectSchema.Union([
 
 export type PlanningRevisionsAnswer = typeof planningRevisionsAnswerSchema.Type;
 
-/** One revision of a plan, as the History tab names it to read it or to restore it: the plan and the revision's number. */
+/** One revision of a plan, as the version history names it to read it or to restore it: the plan and the revision's number. */
 export const planningRevisionParamsSchema = EffectSchema.Struct({
   planId: EffectSchema.NonEmptyString,
   seq: planRevisionSeqSchema,
@@ -569,7 +601,7 @@ export const planningRevisionParamsSchema = EffectSchema.Struct({
 
 export type PlanningRevisionParams = typeof planningRevisionParamsSchema.Type;
 
-/** The History tab's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
+/** The version history's read of one revision, as the window hears it: the revision beside the one before it, or that the service did not answer. */
 export const planningRevisionAnswerSchema = EffectSchema.Union([
   planRevisionAnswerSchema,
   EffectSchema.Struct({ failure: EffectSchema.Literal(PLAN_CALL_FAILURE.UNANSWERED) }),

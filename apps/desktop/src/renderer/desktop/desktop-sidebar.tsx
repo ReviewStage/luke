@@ -11,6 +11,7 @@ import {
   GearIcon,
   PinIcon,
   PlusIcon,
+  SearchIcon,
   UnpinIcon,
   UpdateIcon,
   UserIcon,
@@ -19,7 +20,7 @@ import { useRef, useState } from "react";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
-import { useAppCommand } from "../app-commands";
+import { runAppCommand, useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
@@ -30,16 +31,20 @@ import {
   repositoryLabel,
   repositoryPageUrl,
 } from "../planning/planning-model";
+import { isAgentTab, sameTab } from "../planning/tab-strip-model";
+import { useUnreadPlans } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
-import { updateAvailable, updateInSidebar, updateRow } from "../update-row";
+import { updateInSidebar, updateRow } from "../update-row";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
 import { SIDEBAR_WIDTH, type SidebarCollapse } from "./sidebar-collapse";
+import { SidebarPinnedTab } from "./sidebar-pinned-tab";
 import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resizable-edge";
 
 /**
@@ -160,9 +165,11 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 /**
  * A newer release on its way in, just above the account row, where a desktop
  * devtool keeps it: a quiet line while it downloads, then the restart that
- * installs it, which is the very act Settings' Restart to update runs. It
- * draws nothing in any other state, so the column carries no control with
- * nothing to do.
+ * installs it, which is the very act Settings' Restart to update runs; or,
+ * once installing it failed, the download from the releases page that
+ * Settings offers in its place, its hint saying what went wrong. It draws
+ * nothing in any other state, so the column carries no control with nothing
+ * to do, and it is the one place outside Settings that says a release waits.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
@@ -186,25 +193,33 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
         </p>
       );
     default:
-      return null;
+      return (
+        <Tooltip label={updateRow(update).detail}>
+          <button
+            type="button"
+            className="sidebar-item sidebar-update"
+            onClick={updates.onOpenLatest}
+          >
+            <UpdateIcon />
+            Download update
+          </button>
+        </Tooltip>
+      );
   }
 }
 
 /**
  * The foot of the column: one row that is who is signed in and the way to
  * Settings at once, the way every desktop devtool keeps it. Signed out it
- * names where it leads instead. The update dot rides on the gear, since
- * Settings is where a release the sidebar does not carry is fetched.
+ * names where it leads instead.
  */
 function AccountButton({
   account,
   current,
-  settingsNote,
   onPress,
 }: {
   account: AccountSnapshot;
   current: boolean;
-  settingsNote: string | undefined;
   onPress: () => void;
 }): React.JSX.Element {
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -222,11 +237,6 @@ function AccountButton({
         </span>
         <span className="sidebar-account-settings">
           <GearIcon />
-          {settingsNote ? (
-            <span className="tab-note" title={settingsNote}>
-              <span className="visually-hidden">({settingsNote})</span>
-            </span>
-          ) : null}
         </span>
       </button>
     </Tooltip>
@@ -238,6 +248,8 @@ interface RowContext {
   readonly plans: PlansControl;
   readonly current: (planId: string) => boolean;
   readonly onOpen: (planId: string) => void;
+  /** Whether a plan was saved since the developer last looked at it on this Mac. */
+  readonly unread: (plan: PlanSummary) => boolean;
   /** The time each row's last update is counted back from. */
   readonly now: number;
   /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
@@ -262,12 +274,123 @@ function PlanRows({
           plans={context.plans}
           plan={plan}
           current={context.current(plan.id)}
+          unread={context.unread(plan)}
           repositoryShown={repositoryShown}
           now={context.now}
           onOpen={() => context.onOpen(plan.id)}
         />
       ))}
     </ul>
+  );
+}
+
+/** One row under Pinned: a pinned plan, or a tab pinned on a listed plan, and when it was pinned. */
+interface PinnedRow {
+  readonly plan: PlanSummary;
+  readonly pin: PinnedTab | undefined;
+  readonly at: number;
+}
+
+/**
+ * The rows under Pinned, newest pinned first: the pinned plans, and the
+ * tabs pinned to the sidebar on plans the list holds. A tab of an archived
+ * or deleted plan is drawn nowhere, its plan being out of the list.
+ */
+function pinnedRows(pinned: readonly PlanSummary[], plans: PlansControl): PinnedRow[] {
+  const planRows = pinned.map((plan) => ({ plan, pin: undefined, at: plan.pinnedAt ?? 0 }));
+  const tabRows = plans.sidePanel.pins.flatMap((pin): PinnedRow[] => {
+    const plan = plans.plans.find((each) => each.id === pin.plan);
+    return plan === undefined ? [] : [{ plan, pin, at: pin.at }];
+  });
+  return [...planRows, ...tabRows].sort((a, b) => b.at - a.at);
+}
+
+/**
+ * The Pinned section's rows, each a plan's or a tab's. A tab's row is keyed
+ * by when it was pinned, which no other pin shares, and a plan's by its id.
+ */
+function PinnedRows({
+  rows,
+  context,
+  onOpenTab,
+}: {
+  rows: readonly PinnedRow[];
+  context: RowContext;
+  onOpenTab: (pin: PinnedTab) => void;
+}): React.JSX.Element {
+  return (
+    <ul className="sidebar-plans">
+      {rows.map(({ plan, pin }) =>
+        pin === undefined ? (
+          <SidebarPlan
+            key={plan.id}
+            plans={context.plans}
+            plan={plan}
+            current={context.current(plan.id)}
+            unread={context.unread(plan)}
+            repositoryShown
+            now={context.now}
+            onOpen={() => context.onOpen(plan.id)}
+          />
+        ) : (
+          <SidebarPinnedTab
+            key={String(pin.at)}
+            plans={context.plans}
+            pin={pin}
+            plan={plan}
+            inSight={context.inSight}
+            onOpen={() => onOpenTab(pin)}
+          />
+        ),
+      )}
+    </ul>
+  );
+}
+
+/**
+ * The Pinned section, its header drawn as a repository's is: the pin in the
+ * picture's place, giving way to the fold's chevron while hovered or reached
+ * from the keyboard, and folded, the count after its name. The fold is kept
+ * across launches as a repository's is, and folded, the open plan, or the
+ * pinned tab on show, still stands under it, as under a repository's fold.
+ */
+function PinnedSection({
+  rows,
+  folds,
+  shown,
+  context,
+  onOpenTab,
+}: {
+  rows: readonly PinnedRow[];
+  folds: FoldedGroups;
+  /** Whether a row is the plan open or the pinned tab on show, which a fold leaves standing. */
+  shown: (row: PinnedRow) => boolean;
+  context: RowContext;
+  onOpenTab: (pin: PinnedTab) => void;
+}): React.JSX.Element {
+  const folded = folds.pinnedFolded;
+  const drawn = folded ? rows.filter(shown) : rows;
+  return (
+    <nav className="sidebar-group" aria-label="Pinned">
+      <div className="sidebar-repository-header">
+        <button
+          type="button"
+          className="sidebar-repository-toggle sidebar-pinned-row"
+          aria-expanded={!folded}
+          onClick={folds.togglePinned}
+        >
+          <span className="sidebar-repository-glyph">
+            <PinIcon />
+            <ChevronRightIcon />
+          </span>
+          <span className="sidebar-repository-name">Pinned</span>
+          {folded ? <FoldedCount count={rows.length} noun={PIN_NOUN} /> : null}
+        </button>
+      </div>
+      {drawn.length === 0 ? null : (
+        <PinnedRows rows={drawn} context={context} onOpenTab={onOpenTab} />
+      )}
+    </nav>
   );
 }
 
@@ -300,6 +423,36 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
     onSelect: () => plans.repositories.openGitHub(repositoryPageUrl(repository)),
   };
   return [[pin, archive], [github]];
+}
+
+/** What a folded group's count is read as, one and many. */
+interface CountNoun {
+  readonly one: string;
+  readonly many: string;
+}
+
+const PLAN_NOUN: CountNoun = { one: "plan", many: "plans" };
+
+/** Pinned holds tabs as well as plans, so its count is read as pins. */
+const PIN_NOUN: CountNoun = { one: "pin", many: "pins" };
+
+/**
+ * A folded group's count of what it holds, shown after its name while the
+ * header is hovered or reached from the keyboard, and read as "n plans".
+ */
+function FoldedCount({
+  count,
+  noun = PLAN_NOUN,
+}: {
+  count: number;
+  noun?: CountNoun;
+}): React.JSX.Element {
+  return (
+    <span className="sidebar-repository-count">
+      {count}
+      <span className="visually-hidden"> {count === 1 ? noun.one : noun.many}</span>
+    </span>
+  );
 }
 
 /**
@@ -377,14 +530,7 @@ function RepositorySection({
                 <span className="visually-hidden">(pinned)</span>
               </span>
             ) : null}
-            {folded ? (
-              <span className="sidebar-repository-count">
-                {group.plans.length}
-                <span className="visually-hidden">
-                  {group.plans.length === 1 ? " plan" : " plans"}
-                </span>
-              </span>
-            ) : null}
+            {folded ? <FoldedCount count={group.plans.length} /> : null}
           </button>
         </Tooltip>
         <span className="sidebar-repository-actions">
@@ -437,12 +583,14 @@ function RepositorySection({
 }
 
 /**
- * The plans under Archived, folded away behind one quiet row that counts
- * them, the way Codex and ChatGPT keep theirs: a press on the row unfolds
- * the list beneath it, and each archived plan opens and offers its actions
- * like any other, flat and naming its repository. It draws nothing while no
- * plan is archived, and it starts folded, because an archived plan is one
- * the developer put out of the way.
+ * The plans under Archived, folded away behind a header drawn as a
+ * repository's is, the way Codex and ChatGPT keep theirs: an archive box in
+ * the picture's place, giving way to the fold's chevron while hovered or
+ * reached from the keyboard, and folded, the count after its name. A press
+ * unfolds the list beneath it, and each archived plan opens and offers its
+ * actions like any other, flat and naming its repository. It draws nothing
+ * while no plan is archived, and it starts folded, because an archived plan
+ * is one the developer put out of the way.
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
@@ -450,25 +598,34 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
-      <button
-        type="button"
-        className="sidebar-archived-row"
-        aria-expanded={unfolded}
-        onClick={() => setUnfolded((was) => !was)}
-      >
-        <ChevronRightIcon />
-        Archived ({archived.length})
-      </button>
+      <div className="sidebar-repository-header">
+        <button
+          type="button"
+          className="sidebar-repository-toggle sidebar-archived-row"
+          aria-expanded={unfolded}
+          onClick={() => setUnfolded((was) => !was)}
+        >
+          <span className="sidebar-repository-glyph">
+            <ArchiveIcon />
+            <ChevronRightIcon />
+          </span>
+          <span className="sidebar-repository-name">Archived</span>
+          {unfolded ? null : <FoldedCount count={archived.length} />}
+        </button>
+      </div>
       {unfolded ? <PlanRows rows={archived} repositoryShown context={context} /> : null}
     </div>
   );
 }
 
 /**
- * The window's left column: Luke, the way to a new plan, every plan the
- * account owns, and the account's row that leads to Settings. The pinned
- * plans stand in a section of their own above the rest while any are pinned,
- * newest pinned first and each naming its repository; the rest are grouped
+ * The window's left column: Luke, the way to a new plan, Search, which
+ * opens the command palette, every plan the account owns, and the account's
+ * row that leads to Settings. The pinned plans, and the side panel tabs
+ * pinned to the sidebar, stand in a section of their own above the rest
+ * while any are pinned, newest pinned first, a plan naming its repository
+ * and a tab its plan, under a header that folds as a repository's does;
+ * the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
  * pinned first, then the group updated most recently first;
  * and the archived ones are folded away under them all.
@@ -511,11 +668,19 @@ export function DesktopSidebar({
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlan();
   };
+  const openPinnedTab = (pin: PinnedTab) => {
+    if (!onPlans) onTabChange(PANEL_TAB.PLANS);
+    plans.onOpenPinnedTab(pin);
+  };
   const newPlanIn = (repository: string) => {
     if (!onPlans) onTabChange(PANEL_TAB.PLANS);
     plans.onNewPlanIn(repository);
   };
   const folds = useFoldedGroups(sidebar.staged);
+  const unread = useUnreadPlans([...plans.plans, ...plans.archived], {
+    listRead: plans.listRead,
+    staged: sidebar.staged,
+  });
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
@@ -523,10 +688,22 @@ export function DesktopSidebar({
     plans,
     current,
     onOpen: openPlan,
+    unread,
     now,
     inSight: !sidebar.collapsed,
   };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
+  const pinnedSection = pinnedRows(pinned, plans);
+  // A pinned tab is on show where its plan is open and its column shows it:
+  // an agent's in the plan's own column, any other in the side panel.
+  const pinnedShown = ({ plan, pin }: PinnedRow) =>
+    current(plan.id) &&
+    (pin === undefined ||
+      (isAgentTab(pin.tab)
+        ? sameTab(plans.mainTabs.tab, pin.tab)
+        : plans.sidePanel.open &&
+          plans.sidePanel.tab !== undefined &&
+          sameTab(plans.sidePanel.tab, pin.tab)));
   // The pinned repositories' groups stand above the rest, newest pinned
   // first, and the rest keep the groups' own order.
   const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
@@ -540,7 +717,7 @@ export function DesktopSidebar({
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.
   const drawn = [
-    ...pinned,
+    ...(folds.pinnedFolded ? pinned.filter((plan) => current(plan.id)) : pinned),
     ...groups.flatMap((group) =>
       folds.folded(group.repository) ? group.plans.filter((plan) => current(plan.id)) : group.plans,
     ),
@@ -556,12 +733,6 @@ export function DesktopSidebar({
     if (plan !== undefined) openPlan(plan.id);
   };
   const listed = plans.signedIn && drawn.length > 0;
-  // Note that the gear's dot wears the update row's own words, so its hover
-  // and the row it leads to tell one story, and that it stands down while the
-  // release has its own control above it, so the news is said once.
-  const { update } = updates;
-  const settingsNote =
-    updateAvailable(update) && !updateInSidebar(update) ? updateRow(update).detail : undefined;
   useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
@@ -583,15 +754,30 @@ export function DesktopSidebar({
         New plan
         <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
       </button>
+      {/* Search is a second door to the command palette, drawn as New plan
+          is, since it heads the list the same way. */}
+      <button
+        type="button"
+        className="sidebar-search"
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+        onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
+      >
+        <SearchIcon />
+        Search
+        <ShortcutGlyphs command={APP_COMMAND.COMMAND_PALETTE} className="row-shortcut" />
+      </button>
 
       {/* One scroller for both sections, so the pinned plans scroll away
           with the rest rather than holding half the column. */}
       <div className="sidebar-section">
-        {plans.signedIn && pinned.length > 0 ? (
-          <nav className="sidebar-group" aria-label="Pinned">
-            <h2 className="sidebar-heading">Pinned</h2>
-            <PlanRows rows={pinned} repositoryShown context={context} />
-          </nav>
+        {plans.signedIn && pinnedSection.length > 0 ? (
+          <PinnedSection
+            rows={pinnedSection}
+            folds={folds}
+            shown={pinnedShown}
+            context={context}
+            onOpenTab={openPinnedTab}
+          />
         ) : null}
         <nav className="sidebar-group" aria-label="Plans">
           <h2 className="sidebar-heading">Plans</h2>
@@ -633,7 +819,6 @@ export function DesktopSidebar({
         <AccountButton
           account={account}
           current={tab === PANEL_TAB.SETTINGS}
-          settingsNote={settingsNote}
           onPress={() => onTabChange(PANEL_TAB.SETTINGS)}
         />
       </div>

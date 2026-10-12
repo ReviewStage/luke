@@ -9,6 +9,7 @@ import {
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import { Effect } from "effect";
@@ -19,7 +20,7 @@ import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { ToastHost } from "../toast";
-import { MODEL_CHANGE_FAILED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
+import { MODEL_CHANGE_FAILED, START_ARCHIVED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -39,6 +40,7 @@ const STARTED: CodingAgentSummary = {
 interface Standing {
   planId: string | undefined;
   repository: string | null;
+  archived?: boolean;
 }
 
 /** One act as the hook asked it. */
@@ -68,6 +70,7 @@ async function settle(): Promise<void> {
 function mount(initial: Standing, registry?: AtomRegistry) {
   const asked: Asked[] = [];
   const started: string[] = [];
+  let unarchives = 0;
   const answers = new Map<ActKind, unknown[]>();
   let keys = 0;
   let control: CodingAgentsControl | undefined;
@@ -91,6 +94,10 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       },
       planId: held.planId,
       repository: held.repository,
+      archived: held.archived === true,
+      onUnarchive: () => {
+        unarchives += 1;
+      },
       onStarted: (agentId) => started.push(agentId),
       mintKey: () => {
         keys += 1;
@@ -106,6 +113,8 @@ function mount(initial: Standing, registry?: AtomRegistry) {
   return {
     asked,
     started,
+    /** How many times the control's Unarchive was pressed. */
+    unarchives: () => unarchives,
     /** Queues the answers one kind gives, in order. */
     answer: (kind: ActKind, ...queued: unknown[]) => {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
@@ -153,6 +162,36 @@ test("the agents are read when a plan opens, and a plan without a repository has
   assert.deepEqual(startPayloads(tab.asked), []);
 });
 
+test("an archived plan starts no agent, by Start or by a draft, and offers Unarchive until it is brought back", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay", archived: true });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await tab.mount();
+
+  assert.equal(tab.control().start.available, false);
+  assert.equal(tab.control().start.reason, START_ARCHIVED);
+  act(() => tab.control().start.onPress());
+  let draft = "";
+  act(() => {
+    draft = tab.control().onNewDraft();
+  });
+  let failed: string | undefined;
+  await act(async () => {
+    failed = await tab.control().startTask(draft, "Rename the subject.", undefined, []);
+  });
+  assert.equal(failed, START_ARCHIVED);
+  assert.deepEqual(startPayloads(tab.asked), []);
+  // The agents already started are still read.
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+
+  act(() => tab.control().onUnarchive?.());
+  assert.equal(tab.unarchives(), 1);
+
+  await tab.stand({ archived: false });
+  assert.equal(tab.control().onUnarchive, undefined);
+  assert.equal(tab.control().start.available, true);
+  assert.equal(tab.control().start.reason, undefined);
+});
+
 test("a press mints one key, a press asked again after no answer carries the same key, and a press of another choice mints its own", async () => {
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
   tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] });
@@ -189,6 +228,36 @@ test("a press mints one key, a press asked again after no answer carries the sam
   assert.deepEqual(startPayloads(tab.asked).slice(2), [
     { planId: PLAN, idempotencyKey: "key-2", ...choice },
     { planId: PLAN, idempotencyKey: "key-3", ...choice },
+  ]);
+});
+
+test("a press asked again after no answer keeps its key when the choice reads the same as sent, the whole window named or not, and mints another for the standard window", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [] }, { agents: [STARTED] });
+  tab.answer(
+    ACT_KIND.CODING_AGENTS_START,
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED },
+    { agent: STARTED },
+  );
+  await tab.mount();
+
+  const choice = { model: "openai/gpt-6.1-sol", effort: "xhigh" };
+  act(() => tab.control().start.onPress({ ...choice, contextWindow: CONTEXT_WINDOW.LONG }));
+  await settle();
+  act(() => tab.control().start.onPress(choice));
+  await settle();
+  act(() => tab.control().start.onPress({ ...choice, contextWindow: CONTEXT_WINDOW.STANDARD }));
+  await settle();
+  assert.deepEqual(startPayloads(tab.asked), [
+    { planId: PLAN, idempotencyKey: "key-1", ...choice },
+    { planId: PLAN, idempotencyKey: "key-1", ...choice },
+    {
+      planId: PLAN,
+      idempotencyKey: "key-2",
+      ...choice,
+      contextWindow: CONTEXT_WINDOW.STANDARD,
+    },
   ]);
 });
 
@@ -255,7 +324,7 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   );
   await tab.mount();
 
-  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1");
+  let answer = await tab.control().onMessage(AGENT, "Also expire them after a week.", "send-1", []);
   await settle();
   assert.deepEqual(answer, { agent: { ...STARTED, status: CODING_AGENT_STATUS.RUNNING } });
   assert.deepEqual(tab.asked[1], {
@@ -264,15 +333,21 @@ test("a message carries the agent, the words, and their delivery, and the agent'
   });
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
-  answer = await tab.control().onMessage(AGENT, "And tests.", "send-2");
+  // Files go with the words where there are any, and no empty list where there are none.
+  const shot = { name: "shot.png", mediaType: "image/png", data: "iVBORw0KGgo=" } as const;
+  answer = await tab.control().onMessage(AGENT, "And tests.", "send-2", [shot]);
   await settle();
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_MESSAGE,
+    payload: { agentId: AGENT, text: "And tests.", clientKey: "send-2", attachments: [shot] },
+  });
   // Nothing was read again: the answer is the status, and a refusal is none.
   assert.equal(tab.asked.filter((each) => each.kind === ACT_KIND.CODING_AGENTS_LIST).length, 1);
   assert.equal(tab.control().agents?.[0]?.status, CODING_AGENT_STATUS.RUNNING);
 
   // A service that never answered reads as unanswered.
-  answer = await tab.control().onMessage(AGENT, "Hello?", "send-3");
+  answer = await tab.control().onMessage(AGENT, "Hello?", "send-3", []);
   assert.deepEqual(answer, { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
 });
 
@@ -387,7 +462,7 @@ it.effect(
       const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
       const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
       const refused = { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
-      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] }, { agents: [STARTED] });
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
       yield* Effect.promise(tab.mount);
 
       tab.answer(ACT_KIND.CODING_AGENTS_STOP, refused);
@@ -455,6 +530,29 @@ test("a change of an agent's model asks the service for that agent alone, and th
   assert.deepEqual(tab.control().agents, [last]);
 });
 
+test("a change names the context window only where it is the standard one, so the model's whole window travels as no field", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay" });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  tab.answer(ACT_KIND.CODING_AGENTS_CHOOSE, { agent: STARTED }, { agent: STARTED });
+  await tab.mount();
+
+  const standard = {
+    model: "openai/gpt-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  };
+  await tab.control().onChoose(AGENT, standard);
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_CHOOSE,
+    payload: { agentId: AGENT, ...standard },
+  });
+  await tab.control().onChoose(AGENT, { ...standard, contextWindow: CONTEXT_WINDOW.LONG });
+  assert.deepEqual(tab.asked.at(-1), {
+    kind: ACT_KIND.CODING_AGENTS_CHOOSE,
+    payload: { agentId: AGENT, model: standard.model, effort: standard.effort },
+  });
+});
+
 test("a draft asks nothing of the service, one per plan, until its first message starts the agent on those words as its task under the draft's key, opening its tab", async () => {
   const OTHER_PLAN = "3c2d1e0f-4a5b-4c6d-8e7f-9a0b1c2d3e4f";
   const tab = mount({ planId: PLAN, repository: "acme/relay" });
@@ -491,23 +589,27 @@ test("a draft asks nothing of the service, one per plan, until its first message
   });
   assert.notEqual(other, draft);
   await tab.stand({ planId: PLAN });
-  assert.deepEqual(tab.control().draft, { id: draft, task, choice });
+  assert.deepEqual(tab.control().draft, { id: draft, task, attachments: [], choice });
 
   let failed: string | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, choice);
+    failed = await tab.control().startTask(draft, task, choice, []);
   });
   assert.equal(failed, "The agent could not be started. Try again.");
   assert.equal(tab.control().draft?.id, draft, "a send that did not start keeps the draft");
   assert.deepEqual(tab.started, []);
 
+  // The files attached to the words are the draft's too, and go with the task.
+  const notes = { name: "notes.md", mediaType: "text/plain", data: "IyBOb3Rlcw==" } as const;
+  act(() => tab.control().onDraftAttachments((held) => [...held, notes]));
+  assert.deepEqual(tab.control().draft?.attachments, [notes]);
   await act(async () => {
-    failed = await tab.control().startTask(draft, task, undefined);
+    failed = await tab.control().startTask(draft, task, undefined, [notes]);
   });
   assert.equal(failed, undefined);
   assert.deepEqual(startPayloads(tab.asked), [
     { planId: PLAN, idempotencyKey: draft, task, ...choice },
-    { planId: PLAN, idempotencyKey: draft, task },
+    { planId: PLAN, idempotencyKey: draft, task, attachments: [notes] },
   ]);
   assert.deepEqual(tab.started, [AGENT]);
   assert.equal(tab.control().draft, undefined, "the started draft is let go");
@@ -535,7 +637,7 @@ test("a draft let go is gone, the next is a new one, and a plan without a reposi
 
   let failed: string | undefined;
   await act(async () => {
-    failed = await tab.control().startTask(second, "Rename the subject.", undefined);
+    failed = await tab.control().startTask(second, "Rename the subject.", undefined, []);
   });
   assert.equal(failed, START_NEEDS_REPOSITORY);
   assert.deepEqual(startPayloads(tab.asked), []);

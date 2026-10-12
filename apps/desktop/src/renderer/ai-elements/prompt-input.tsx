@@ -1,4 +1,4 @@
-import { ArrowUpIcon, Loader2Icon, SquareIcon } from "lucide-react";
+import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
   type ComponentProps,
   type FormEvent,
@@ -8,6 +8,7 @@ import {
   type ReactNode,
   useState,
 } from "react";
+import { SpinnerRing } from "../spinner";
 import { cn } from "./utils";
 
 /**
@@ -185,7 +186,11 @@ export function PromptInputSubmit({
 }: PromptInputSubmitProps): ReactNode {
   let icon = <ArrowUpIcon className="size-[15px]" />;
   if (status === PROMPT_INPUT_STATUS.SUBMITTED) {
-    icon = <Loader2Icon className="size-[15px] animate-spin" />;
+    icon = (
+      <span className="size-[15px]">
+        <SpinnerRing />
+      </span>
+    );
   } else if (status === PROMPT_INPUT_STATUS.STREAMING) {
     // Filled, as every chat draws its Stop; the registry's outline reads as a checkbox at this size.
     icon = <SquareIcon className="size-3.5 fill-current" />;

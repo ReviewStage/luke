@@ -5,13 +5,14 @@ import {
 } from "@sidecar/hosted/coding-agent-view";
 import {
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { modelLabel } from "@sidecar/hosted/model-label";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
 import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
-import { modelLabel } from "#shared/model-label";
 
 /**
  * agent-notices.ts -- tells the developer when a coding agent's turn ends: the ledger of where each agent stands, the poll that keeps it current while no tab does, and the notification posted when one ends.
@@ -30,7 +31,8 @@ import { modelLabel } from "#shared/model-label";
  * the window is focused on that agent's tab; in the window's own toast while
  * the window is focused on anything else, since a notification would come
  * from beside the window the developer is already looking at; and as a
- * notification while the window is behind. A message
+ * notification while the window is behind, unless the developer turned
+ * notifications off, which leaves the dot and the toast. A message
  * to an agent that had ended reads it running under the ended turn's id
  * until eve opens the next turn, which is the old run read again and not
  * a new one: the ledger keeps the end it announced, and on the message's
@@ -41,7 +43,10 @@ import { modelLabel } from "#shared/model-label";
  * is this launch's and this account's, so an agent that ended before Luke
  * watched it, or while Luke was not running, is not announced, a reload of
  * the window announces nothing twice, and an account that signs out takes
- * its agents with it.
+ * its agents with it. Only another account is a change of hands: the
+ * account's own session renewing, which it does mid-run, says the same
+ * account again and keeps the ledger, or an agent running across the
+ * renewal would be first seen again already ended and never announced.
  *
  * The notification says the plan's name, the agent's title or else its
  * model's name, and how the turn ended, and nothing of the transcript; the
@@ -51,6 +56,13 @@ import { modelLabel } from "#shared/model-label";
  * takes it, reads what the agent published once, and posts; an end whose
  * read found nothing, or could not be made, says finished as before. The
  * agent's unseen dot is set as the end is seen, ahead of the read.
+ *
+ * The sidebar's plan rows say which plans have an agent at work and which
+ * a pull request, from the plan list, which is read on no clock. So the
+ * ledger asks for the list again whenever it sees an agent start or end,
+ * and whenever a read of what an agent published, the panel's or the
+ * notice's own, finds a pull request other than the one it last saw for
+ * that agent, since that read is what the service keeps for the list.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
@@ -119,8 +131,14 @@ export interface AgentNoticesDependencies {
   onUnseenChanged: (unseen: readonly string[]) => void;
   /** The panel window coming forward or going behind, for as long as the subscription stands. */
   onPanelFocusChanged: (listener: (focused: boolean) => void) => () => void;
-  /** The account signing in, out, or away, for as long as the subscription stands: the ledger is no one else's. */
-  onAccountChanged: (listener: () => void) => () => void;
+  /** Whether a notification is posted for an end the window is behind for: the developer's setting. */
+  notifying: () => boolean;
+  /** Who is signed in now, by the account's own key, or nobody. */
+  signedInAs: () => string | undefined;
+  /** The account as each change of it says, for as long as the subscription stands: the ledger is no one else's. */
+  onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
+  /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
+  onPlanAgentsMoved: () => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -136,6 +154,8 @@ export interface AgentNotices {
   observeMessaged(agent: CodingAgentSummary): void;
   /** The catalog as the panel last read it, for the model's name. */
   observeModels(models: readonly CatalogModel[]): void;
+  /** What one agent published, as a read of it answered: the pull request, or none. */
+  observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void;
   /** A plan the host no longer holds: its agents are forgotten. */
   observePlanGone(planId: string): void;
   /** The panel said which agent's tab it shows, or none. */
@@ -166,6 +186,22 @@ interface TurnEnd {
 
 function stillWriting(status: CodingAgentStatus): boolean {
   return WRITING_STATUSES.has(status);
+}
+
+/** Whether two reads of what an agent published say the same of it in a plan's row: the same pull request, standing the same, of the same size. */
+function samePublished(
+  a: CodingAgentPullRequest | null,
+  b: CodingAgentPullRequest | null,
+): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.number === b.number &&
+    a.title === b.title &&
+    a.state === b.state &&
+    a.checks === b.checks &&
+    a.additions === b.additions &&
+    a.deletions === b.deletions
+  );
 }
 
 /**
@@ -207,11 +243,15 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const { listAgents, readPullRequest, planName, open, onUnseenChanged, report } = dependencies;
     const doors = yield* AgentNoticeDoors;
     const ledger = new Map<string, HeldAgent>();
+    /** What each agent was last read to have published, by agent. */
+    const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
     const ends = yield* Queue.unbounded<TurnEnd>();
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
+    /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
+    let holder: string | undefined;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -231,16 +271,23 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       Queue.offerUnsafe(ends, { agentId, agent, focused });
     }
 
+    /** A read of what the agent published answered: the list is read again where it found other than the last read did, or a pull request where none was read before. */
+    function observePublished(agentId: string, pullRequest: CodingAgentPullRequest | null): void {
+      const was = published.get(agentId) ?? null;
+      published.set(agentId, pullRequest);
+      if (!samePublished(was, pullRequest)) dependencies.onPlanAgentsMoved();
+    }
+
     /** The pull request a completed turn opened, where the read finds one; nothing for any other end, or a read that did not answer. */
     const pullRequestOf = (end: TurnEnd): Effect.Effect<number | undefined> =>
       end.agent.status !== CODING_AGENT_STATUS.COMPLETED
         ? Effect.succeed(undefined)
         : readPullRequest(end.agentId).pipe(
-            Effect.map((answer) =>
-              "pullRequest" in answer && answer.pullRequest !== null
-                ? answer.pullRequest.number
-                : undefined,
-            ),
+            Effect.map((answer) => {
+              if (!("pullRequest" in answer)) return undefined;
+              observePublished(end.agentId, answer.pullRequest);
+              return answer.pullRequest?.number;
+            }),
             Effect.catchDefect((defect) =>
               Effect.sync(() => {
                 report(
@@ -280,7 +327,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         });
         return;
       }
-      doors.post({ ...text, onClick: () => open(place) });
+      if (dependencies.notifying()) doors.post({ ...text, onClick: () => open(place) });
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
@@ -288,9 +335,11 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
       const was = ledger.get(agentId);
-      // An agent first seen ended ended before Luke watched it.
+      // An agent first seen ended ended before Luke watched it; one first seen at work may have just started.
       if (was === undefined) {
+        if (ledger.size === 0) holder = dependencies.signedInAs();
         ledger.set(agentId, next);
+        if (stillWriting(next.status)) dependencies.onPlanAgentsMoved();
         return;
       }
       // The reads overlap, so a list can land after a newer read moved the
@@ -303,7 +352,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         // message awaiting the next turn, which its own answer says.
         if (!stillWriting(was.status)) return;
         ledger.set(agentId, { ...next, pastTurns: was.pastTurns });
-        if (!stillWriting(next.status)) ended(agentId, next);
+        if (stillWriting(next.status)) return;
+        ended(agentId, next);
+        dependencies.onPlanAgentsMoved();
         return;
       }
       // A new turn: the one before it is left behind, and its own end is the next notice.
@@ -311,6 +362,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       if (was.turnId !== null) pastTurns.add(was.turnId);
       ledger.set(agentId, { ...next, pastTurns });
       if (!stillWriting(next.status)) ended(agentId, next);
+      dependencies.onPlanAgentsMoved();
     }
 
     /** Lets go of every agent `keep` refuses, their dots with them, as a plan deleted or an account left has no tab to clear one. */
@@ -319,6 +371,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       for (const [agentId, agent] of ledger) {
         if (keep(agent)) continue;
         ledger.delete(agentId);
+        published.delete(agentId);
         if (unseen.delete(agentId)) dotted = true;
       }
       if (dotted) publishUnseen();
@@ -358,8 +411,10 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         observe(agent.id, heldOf(agent));
         // The line awaits the turn it opens: the plan is watched until that turn names itself.
         const held = ledger.get(agent.id);
-        if (held !== undefined && !stillWriting(held.status)) {
+        if (held !== undefined && !stillWriting(held.status) && !held.awaiting) {
           ledger.set(agent.id, { ...held, awaiting: true });
+          // The service reads the agent running from the message on, so the list is read again now.
+          dependencies.onPlanAgentsMoved();
         }
       },
       observeStatus: (agentId, status) => {
@@ -373,6 +428,7 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       observeModels: (next) => {
         models = next;
       },
+      observePublished,
       observePlanGone: (planId) => forget((agent) => agent.planId !== planId),
       shown: (agentId) => {
         shownAgent = agentId;
@@ -420,11 +476,16 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
       ),
       (unsubscribe) => Effect.sync(unsubscribe),
     );
-    // The account moving leaves the ledger no one's: nothing of the account
+    // Another account leaves the ledger no one's: nothing of the account
     // that left is announced to whoever signs in next, and an answer still on
     // its way lands as a first sighting, which announces nothing.
     yield* Effect.acquireRelease(
-      Effect.sync(() => dependencies.onAccountChanged(() => forget(() => false))),
+      Effect.sync(() =>
+        dependencies.onAccountChanged((signedInAs) => {
+          if (ledger.size === 0 || signedInAs === holder) return;
+          forget(() => false);
+        }),
+      ),
       (unsubscribe) => Effect.sync(unsubscribe),
     );
     return notices;

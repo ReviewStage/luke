@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
@@ -163,6 +164,7 @@ test("typing in the sidebar search turns the page list into results grouped unde
     "Appearance",
     "Keyboard shortcuts",
     "Coding agents",
+    "API keys",
   ]);
 
   type(field(container), "hotkey");
@@ -215,6 +217,22 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.equal(shownPage(container), first.page);
 });
 
+test("searching for notifications finds the switch on General, and pressing it lands on the switch", () => {
+  const container = mount();
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+  type(field(container), "notifications");
+  assert.deepEqual(results(container), [
+    { page: "General", rows: ["Notify me when a coding agent finishes"] },
+  ]);
+
+  act(() => result(container, "Notify me when a coding agent finishes").click());
+  assert.equal(shownPage(container), "General");
+  const row = container.querySelector(
+    `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.AGENT_NOTIFICATIONS}"]`,
+  );
+  assert.equal(row?.getAttribute("role"), "switch");
+});
+
 test("clearing the query restores the page list, and Escape clears before it lets go", () => {
   const container = mount();
   const input = field(container);
@@ -232,7 +250,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   act(() => clear.click());
   assert.equal(input.value, "");
   assert.equal(document.activeElement, input, "the cleared field keeps the caret");
-  assert.equal(pageList(container).length, 5);
+  assert.equal(pageList(container).length, 6);
 
   type(input, "voice");
   // An Escape spent dismissing an input method's candidates leaves the query.
@@ -240,7 +258,7 @@ test("clearing the query restores the page list, and Escape clears before it let
   assert.equal(input.value, "voice");
   press(input, "Escape");
   assert.equal(input.value, "");
-  assert.equal(pageList(container).length, 5);
+  assert.equal(pageList(container).length, 6);
   assert.equal(document.activeElement, input, "the first Escape only clears");
 
   press(input, "Escape");

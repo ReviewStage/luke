@@ -1,21 +1,34 @@
-import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useCallback, useEffect, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import {
   choiceModelId,
+  choiceOn,
+  contextWindowsOf,
   effortFor,
   effortLabel,
   effortsOf,
   FAST_WORD,
+  longWindowNote,
   modelLabel,
   offeredModels,
   readModelChoice,
   unsearchedModels,
+  windowLabel,
+  windowOf,
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { Spinner, SpinnerRegion } from "../spinner";
 import { PickerRow } from "./picker-row";
 
 /**
@@ -31,37 +44,66 @@ import { PickerRow } from "./picker-row";
  * switch runs the model's fast version, resting where the model has none;
  * the stored id is the catalog's own, the fast version's where the switch
  * is on. The effort row is a segmented control over the efforts the chosen
- * model lists. A write is one ask of the service, the rows resting until
+ * model lists, and for a model that offers two context windows a context
+ * row is one over the two, the whole window the default, saying what it
+ * costs past the standard one; a change of model keeps the standard window
+ * where the next model offers two. A write is one ask of the service, the rows resting until
  * it answers and a refusal worded under them. With no account signed in
  * there is no default to show, and the page says so.
  */
 
-/** What the page says while it reads, while it cannot, and with no account. */
+/** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  READING: "Reading your default…",
   FAILED: "The default could not be read. Try again.",
-  MODELS_READING: "Reading the models…",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match.",
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
   WRITE_FAILED: "The default could not be saved. Try again.",
 } as const;
 
+/** A provider as the model row names the key it runs on. */
+const PROVIDER_NAME = {
+  [MODEL_PROVIDER.ANTHROPIC]: "Anthropic",
+  [MODEL_PROVIDER.OPENAI]: "OpenAI",
+} as const satisfies Record<ModelProvider, string>;
+
+/**
+ * What the model row says under its name: that the default runs on the
+ * account's own key where the provider last accepted it, and that the key
+ * needs a hand where it did not, since such a key fails the agent's steps
+ * rather than letting them fall back to Luke's.
+ */
+function modelRowNote(
+  provider: ModelProvider | undefined,
+  status: ProviderKeyStatus | undefined,
+): string {
+  const plain = "What a click on Start runs an agent on.";
+  if (provider === undefined || status === undefined) return plain;
+  const name = PROVIDER_NAME[provider];
+  return status === PROVIDER_KEY_STATUS.VERIFIED
+    ? `What a click on Start runs an agent on, on your own ${name} key.`
+    : `${plain} Your ${name} key needs attention in Settings › API keys.`;
+}
+
 /** The page's rows, over the default as read: the model's picker and the effort's segments. */
 function DefaultRows({
   choice,
   models,
   modelsFailed,
+  ownKeys,
   busy,
   onChange,
 }: {
   choice: ModelChoice;
   models: readonly CatalogModel[] | undefined;
   modelsFailed: boolean;
+  /** How each provider the account holds a key of its own for last answered it. */
+  ownKeys: ReadonlyMap<ModelProvider, ProviderKeyStatus>;
   busy: boolean;
   onChange: (choice: ModelChoice) => void;
 }): React.JSX.Element {
   const listed = models?.find((model) => model.id === choice.model);
+  const ownKey = listed === undefined ? undefined : ownKeys.get(listed.provider);
   // The stored effort stands alone until the catalog is read, and where the catalog has
   // stopped offering the stored model, so the row never draws nothing.
   const offered = models === undefined ? [] : effortsOf(models, choice.model);
@@ -69,11 +111,18 @@ function DefaultRows({
   const read = readModelChoice(models ?? [], choice.model);
   const base = offeredModels(models ?? []).find((each) => each.model.id === read.base);
   const unsearched = unsearchedModels(models ?? [], read.base);
-  /** The choice at a catalog id, at the stored effort where the model lists it, else its first. */
-  const choiceAt = (modelId: string): ModelChoice => ({
-    model: modelId,
-    effort: effortFor(effortsOf(models ?? [], modelId), choice.effort) ?? choice.effort,
-  });
+  const windows = contextWindowsOf(models ?? [], choice.model);
+  const window = windowOf(models ?? [], choice);
+  /** The choice at a catalog id, at the stored effort where the model lists it, else its first, on the stored window where the model offers it. */
+  const choiceAt = (modelId: string): ModelChoice =>
+    choiceOn(
+      models ?? [],
+      {
+        model: modelId,
+        effort: effortFor(effortsOf(models ?? [], modelId), choice.effort) ?? choice.effort,
+      },
+      choice.contextWindow,
+    );
   return (
     <>
       <PickerRow
@@ -81,7 +130,7 @@ function DefaultRows({
         copy={
           <>
             <strong>Default model</strong>
-            <small>What a click on Start runs an agent on.</small>
+            <small>{modelRowNote(listed?.provider, ownKey)}</small>
           </>
         }
         value={read.base}
@@ -102,9 +151,13 @@ function DefaultRows({
         noMatch={PAGE_LINE.MODELS_NONE_MATCH}
         note={
           models === undefined ? (
-            <span role={modelsFailed ? "alert" : undefined}>
-              {modelsFailed ? PAGE_LINE.MODELS_FAILED : PAGE_LINE.MODELS_READING}
-            </span>
+            modelsFailed ? (
+              <span role="alert">{PAGE_LINE.MODELS_FAILED}</span>
+            ) : (
+              <div className="plan-compose-menu-note">
+                <Spinner label="Loading models" />
+              </div>
+            )
           ) : undefined
         }
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
@@ -159,7 +212,7 @@ function DefaultRows({
               aria-pressed={effort === choice.effort}
               disabled={busy}
               onClick={() => {
-                if (effort !== choice.effort) onChange({ model: choice.model, effort });
+                if (effort !== choice.effort) onChange({ ...choice, effort });
               }}
             >
               {effortLabel(effort)}
@@ -167,6 +220,34 @@ function DefaultRows({
           ))}
         </fieldset>
       </div>
+      {windows === undefined ? null : (
+        <div className="settings-row settings-row-wrapping">
+          <span className="settings-copy">
+            <strong>Default context</strong>
+            <small>{longWindowNote(windows)}</small>
+          </span>
+          <fieldset className="settings-segments">
+            <legend className="visually-hidden">Default context</legend>
+            {[
+              { id: CONTEXT_WINDOW.STANDARD, tokens: windows.standardTokens },
+              { id: CONTEXT_WINDOW.LONG, tokens: windows.longTokens },
+            ].map((each) => (
+              <button
+                key={each.id}
+                type="button"
+                className="settings-segment"
+                aria-pressed={each.id === window}
+                disabled={busy}
+                onClick={() => {
+                  if (each.id !== window) onChange(choiceOn(models ?? [], choice, each.id));
+                }}
+              >
+                {windowLabel(each.tokens)}
+              </button>
+            ))}
+          </fieldset>
+        </div>
+      )}
     </>
   );
 }
@@ -180,6 +261,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
   const [busy, setBusy] = useState(false);
   const [rejection, setRejection] = useState<string | undefined>(undefined);
   const [attempt, setAttempt] = useState(0);
+  const [ownKeys, setOwnKeys] = useState<ReadonlyMap<ModelProvider, ProviderKeyStatus>>(new Map());
 
   // The page opening reads the default the service holds now, which a Start may just have written, and the models beside it.
   useEffect(() => {
@@ -199,6 +281,15 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
       () => {
         if (live) setReadFailed(true);
       },
+    );
+    // Which providers run on the account's own key, for the model row's note; a read that fails says nothing.
+    setOwnKeys(new Map());
+    act(ACT_KIND.PROVIDER_KEYS_READ).then(
+      (answer) => {
+        if (live && !("failure" in answer))
+          setOwnKeys(new Map(answer.keys.map((key) => [key.provider, key.status])));
+      },
+      () => undefined,
     );
     act(ACT_KIND.CODING_AGENTS_MODELS).then(
       (answer) => {
@@ -246,6 +337,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
             choice={choice}
             models={models}
             modelsFailed={modelsFailed}
+            ownKeys={ownKeys}
             busy={busy}
             onChange={write}
           />
@@ -269,9 +361,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
           </button>
         </>
       ) : (
-        <p className="settings-note" aria-busy="true">
-          {PAGE_LINE.READING}
-        </p>
+        <SpinnerRegion label="Loading your default" />
       )}
     </section>
   );

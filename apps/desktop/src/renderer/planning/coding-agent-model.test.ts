@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
+  CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
@@ -19,8 +21,10 @@ import {
   checkoutCommand,
   choiceLabel,
   choiceModelId,
+  choiceOn,
   closesComposer,
   effortFor,
+  endLine,
   followsAgent,
   knownDeveloperRows,
   messageFailureNote,
@@ -165,6 +169,12 @@ test("a message's refusals each say what to do, the agent ended for good closes 
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG), /too long/u);
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.AGENT_RETIRED), /ended for good/u);
   assert.match(messageFailureNote(CODING_AGENT_CALL_FAILURE.NOT_FOUND), /no longer exists/u);
+  // An archive another Mac or a race made is said as such, under the box and beside Start alike.
+  assert.match(
+    messageFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED),
+    /This plan is archived/u,
+  );
+  assert.match(startFailureNote(CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED), /This plan is archived/u);
   assert.equal(
     messageFailureNote(CODING_AGENT_CALL_FAILURE.NO_REPOSITORY),
     messageFailureNote(CODING_AGENT_CALL_FAILURE.INVALID_CHOICE),
@@ -185,6 +195,7 @@ test("a sent line is read back by a developer's row it did not know holding its 
   const sent = (id: string, text: string, known: readonly CodingAgentMessage[]): SentLine => ({
     id,
     text,
+    attachments: [],
     known: knownDeveloperRows(known),
   });
   // The plan already says the same words: the line is not read back by it.
@@ -210,8 +221,8 @@ test("the lines sent and not read back follow the transcript's rows, as the deve
   const plan = developer("m-plan", "Go on.");
   const taken = developer("m-1", "Taken.");
   const lines: SentLine[] = [
-    { id: "sent-1", text: "Soon.", known: new Set() },
-    { id: "sent-2", text: "Later.", known: new Set() },
+    { id: "sent-1", text: "Soon.", attachments: [], known: new Set() },
+    { id: "sent-2", text: "Later.", attachments: [], known: new Set() },
   ];
   const drawn = agentLines([plan, taken], lines);
   assert.deepEqual(
@@ -419,6 +430,56 @@ test("a fast version is folded into its base model by its id, read back as the b
   );
 });
 
+test("a choice names its window after the effort only where it runs on the standard one and the model offers two, and a change of model keeps the standard window only where the next model offers two too", () => {
+  const models = [
+    {
+      id: "openai/gpt-5.5",
+      name: "GPT-5.5",
+      provider: MODEL_PROVIDER.OPENAI,
+      efforts: ["low", "high"],
+      contextWindows: { standardTokens: 272_000, longTokens: 1_050_000 },
+    },
+    {
+      id: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      provider: MODEL_PROVIDER.ANTHROPIC,
+      efforts: ["low", "high"],
+    },
+  ];
+  const standard = {
+    model: "openai/gpt-5.5",
+    effort: "high",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  };
+  assert.equal(choiceLabel(standard, models), "GPT-5.5 High 272K");
+  assert.equal(choiceLabel({ model: "openai/gpt-5.5", effort: "high" }, models), "GPT-5.5 High");
+  assert.equal(
+    choiceLabel({ ...standard, contextWindow: CONTEXT_WINDOW.LONG }, models),
+    "GPT-5.5 High",
+  );
+  assert.equal(
+    choiceLabel({ ...standard, model: "anthropic/claude-opus-5.5" }, models),
+    "Opus 5.5 High",
+  );
+
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.STANDARD),
+    { model: "openai/gpt-5.5", effort: "low", contextWindow: CONTEXT_WINDOW.STANDARD },
+  );
+  assert.deepEqual(
+    choiceOn(
+      models,
+      { model: "anthropic/claude-opus-5.5", effort: "low" },
+      CONTEXT_WINDOW.STANDARD,
+    ),
+    { model: "anthropic/claude-opus-5.5", effort: "low" },
+  );
+  assert.deepEqual(
+    choiceOn(models, { model: "openai/gpt-5.5", effort: "low" }, CONTEXT_WINDOW.LONG),
+    { model: "openai/gpt-5.5", effort: "low" },
+  );
+});
+
 test("an effort carried to a model that lacks it falls to the nearest the model lists at or below it on the scale, else the lowest above, else the model's first", () => {
   assert.equal(effortFor(["low", "medium", "high"], "high"), "high", "listed, kept");
   assert.equal(effortFor(["low", "medium", "high"], "xhigh"), "high", "Extra high lands on High");
@@ -472,4 +533,11 @@ test("the plan edits that have answered are counted, not the ones still out or t
   ];
   assert.equal(settledPlanEdits(messages), 2);
   assert.equal(settledPlanEdits([]), 0);
+});
+
+test("a turn failed on the account's own API key ends saying so and where to replace it", () => {
+  assert.equal(
+    endLine(CODING_AGENT_STATUS.FAILED, CODING_AGENT_FAILURE.PROVIDER_KEY),
+    "Failed: your API key was refused or can't be read; check Settings › API keys",
+  );
 });

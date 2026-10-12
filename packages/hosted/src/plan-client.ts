@@ -36,6 +36,8 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSummary,
+  type PlanTreeAnswer,
+  type PlanTreeRequest,
   type PlanUpdateRequest,
   planAnswerSchema,
   planCreateRequestSchema,
@@ -46,6 +48,8 @@ import {
   planRenameRequestSchema,
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
+  planTreeAnswerSchema,
+  planTreeRequestSchema,
   planUpdateRequestSchema,
   type RepositoryPin,
   repositoryPinRequestSchema,
@@ -69,6 +73,7 @@ import {
   planRevisionPath,
   planRevisionsPath,
   planTranscriptPath,
+  planTreePath,
   planWorkPath,
 } from "./service-paths.js";
 import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./service-wire.js";
@@ -179,7 +184,7 @@ export class HostedPlanClient {
    * Saves the developer's edit of one field, answering the plan as saved,
    * the field as it now stands where the edit no longer lands in it, or why
    * it was refused; or why there is no answer: the service did not answer,
-   * or the plan is gone. An edit the service would refuse by shape is
+   * the plan is gone, or it is archived. An edit the service would refuse by shape is
    * refused here without traveling at all.
    */
   edit(
@@ -188,7 +193,9 @@ export class HostedPlanClient {
   ): Effect.Effect<
     PlanCallResult<
       PlanEditAnswer,
-      typeof PLAN_CALL_FAILURE.UNANSWERED | typeof PLAN_CALL_FAILURE.NOT_FOUND
+      | typeof PLAN_CALL_FAILURE.UNANSWERED
+      | typeof PLAN_CALL_FAILURE.NOT_FOUND
+      | typeof PLAN_CALL_FAILURE.PLAN_ARCHIVED
     >,
     never,
     HttpClient.HttpClient
@@ -208,7 +215,10 @@ export class HostedPlanClient {
         const edited = Result.getOrUndefined(readEither(planEditAnswerSchema)(payload));
         return edited === undefined ? UNANSWERED : succeeded(edited);
       }
-      return refusedAs(payload, { [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND });
+      return refusedAs(payload, {
+        [HOSTED_API_ERROR.NOT_FOUND]: PLAN_CALL_FAILURE.NOT_FOUND,
+        [HOSTED_API_ERROR.PLAN_ARCHIVED]: PLAN_CALL_FAILURE.PLAN_ARCHIVED,
+      });
     });
   }
 
@@ -317,6 +327,23 @@ export class HostedPlanClient {
     return this.#call.ask(
       { method: HTTP_METHOD.GET, path: planFilePath(planId, admitted) },
       planFileAnswerSchema,
+    );
+  }
+
+  /**
+   * One folder of the plan's repository as GitHub holds it now, or why it
+   * is not listed; nothing where the service did not answer, or where the
+   * folder asked is not one the wire admits.
+   */
+  readTree(
+    planId: string,
+    folder: PlanTreeRequest,
+  ): Effect.Effect<PlanTreeAnswer | undefined, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(planTreeRequestSchema)(folder));
+    if (admitted === undefined) return Effect.succeed(undefined);
+    return this.#call.ask(
+      { method: HTTP_METHOD.GET, path: planTreePath(planId, admitted) },
+      planTreeAnswerSchema,
     );
   }
 

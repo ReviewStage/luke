@@ -10,7 +10,7 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { plan, planBoard } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
-import type { PlanStoreEffect } from "./plan-store.js";
+import { PlanArchived, type PlanStoreEffect, type PlanStoreFailure } from "./plan-store.js";
 
 /**
  * board-store.ts -- a plan's whiteboard: read it, write the Mac's scene, and write Luke's drawing.
@@ -68,12 +68,16 @@ const findBoard = SqlSchema.findOneOption({
       .limit(1),
 });
 
-/** The plan's id under its row's lock until the transaction ends; nothing where the account owns no such plan. */
+/** The plan's id and whether it is archived, under its row's lock until the transaction ends; nothing where the account owns no such plan. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
-  Result: Schema.Struct({ id: Schema.String }),
+  Result: Schema.Struct({ id: Schema.String, archived: Schema.Boolean }),
   execute: ({ userId, planId }) =>
-    db.select({ id: plan.id }).from(plan).where(ownedPlan(userId, planId)).for("update"),
+    db
+      .select({ id: plan.id, archived: sql<boolean>`${plan.archivedAt} is not null` })
+      .from(plan)
+      .where(ownedPlan(userId, planId))
+      .for("update"),
 });
 
 /**
@@ -149,18 +153,22 @@ function boardOf(row: BoardRow): Board {
   return { ...board, drawing: { number: row.drawingNumber, elements: row.drawing } };
 }
 
-/** Runs one write under the plan row's lock; nothing where the account owns no such plan. */
+/**
+ * Runs one write under the plan row's lock, handed whether the plan is
+ * archived as the lock read it; nothing where the account owns no such plan.
+ */
 function underPlanLock<E>(
   userId: string,
   planId: string,
-  write: (now: Date) => Effect.Effect<BoardRow, E, SqlClient.SqlClient>,
+  write: (now: Date, archived: boolean) => Effect.Effect<BoardRow, E, SqlClient.SqlClient>,
 ) {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
-        if (Option.isNone(yield* lockPlan({ userId, planId }))) return Option.none<Board>();
+        const locked = yield* lockPlan({ userId, planId });
+        if (Option.isNone(locked)) return Option.none<Board>();
         const now = yield* DateTime.nowAsDate;
-        return Option.some(boardOf(yield* write(now)));
+        return Option.some(boardOf(yield* write(now, locked.value.archived)));
       }),
     ),
   );
@@ -187,19 +195,26 @@ export function readBoardImage(
   );
 }
 
-/** The Mac's scene, written whole with the number of Luke's drawing it holds and any image of it; the board as written. */
+/**
+ * The Mac's scene, written whole with the number of Luke's drawing it holds
+ * and any image of it; the board as written. An archived plan takes no scene
+ * of the developer's, read under the same lock, while a drawing of Luke's on
+ * a call that stood when it was archived still lands.
+ */
 export function writeScene(
   userId: string,
   planId: string,
   elements: readonly BoardElement[],
   appliedDrawing: number,
   image?: string,
-): PlanStoreEffect<Option.Option<Board>> {
-  return underPlanLock(userId, planId, (now) =>
-    upsertScene(
-      elements,
-      image,
-    )({ planId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
+): Effect.Effect<Option.Option<Board>, PlanStoreFailure | PlanArchived, SqlClient.SqlClient> {
+  return underPlanLock(userId, planId, (now, archived) =>
+    archived
+      ? Effect.fail(new PlanArchived())
+      : upsertScene(
+          elements,
+          image,
+        )({ planId, appliedDrawing, now }).pipe(Effect.catchTag("NoSuchElementError", Effect.die)),
   );
 }
 

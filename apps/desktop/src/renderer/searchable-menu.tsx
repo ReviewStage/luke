@@ -61,7 +61,7 @@ interface Section<Row extends MenuRow> {
   rows: { row: Row; index: number }[];
 }
 
-/** Rows a pinned row opens beside itself: the efforts a model lists. */
+/** Rows a pinned row opens beside itself: the efforts a model lists, its context windows. */
 interface Submenu {
   /** What the rows are, for assistive technology. */
   label: string;
@@ -69,6 +69,8 @@ interface Submenu {
   /** The id of the row chosen now, drawn checked. */
   value: string | undefined;
   onPick: (id: string) => void;
+  /** One muted line under the rows, pressed by nothing: what the long context window costs. */
+  note?: string | undefined;
 }
 
 /** A row pinned under the list: a press of its own, a switch, or a submenu beside it. */
@@ -301,17 +303,18 @@ export function SearchableMenu(props: {
 
   // A submenu opens to the right and down from its row, and turns to the
   // left or stands up where the window ends before it does, measured
-  // before it is painted.
-  const opened = open !== undefined;
+  // before it is painted, and again as the pointer moves it to another
+  // row, whose submenu may stand taller.
+  const openAt = open === undefined ? undefined : footAt;
   useLayoutEffect(() => {
-    if (!opened || panel.current === null) return;
+    if (openAt === undefined || panel.current === null) return;
     const bounds = panel.current.getBoundingClientRect();
     const room = document.documentElement;
     setPlace({
       side: bounds.right > room.clientWidth ? SUBMENU_SIDE.LEFT : SUBMENU_SIDE.RIGHT,
       stand: bounds.bottom > room.clientHeight ? SUBMENU_STAND.UP : SUBMENU_STAND.DOWN,
     });
-  }, [opened]);
+  }, [openAt]);
 
   const moveTo = (index: number | undefined) => {
     setHighlight(index);
@@ -554,6 +557,11 @@ export function SearchableMenu(props: {
                         />
                       </button>
                     ))}
+                    {open.note === undefined ? null : (
+                      <p className="plan-compose-menu-foot-note" data-submenu-note="">
+                        {open.note}
+                      </p>
+                    )}
                   </div>
                 ) : null}
               </div>

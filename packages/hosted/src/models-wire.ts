@@ -1,22 +1,32 @@
 import { Schema as EffectSchema } from "effect";
-import { CODING_AGENT_BOUNDS } from "./coding-agent-wire.js";
+import { CODING_AGENT_BOUNDS, contextWindowSchema } from "./coding-agent-wire.js";
+import { countedNumber } from "./service-wire.js";
 
 /**
  * models-wire.ts -- the models a coding agent may run on, and the account's default among them, as the desktop reads and writes them.
  *
  * `GET /api/models` answers the service's filtered read of AI Gateway's
  * public catalog: each model's catalog id, its name, which of the two
- * providers runs it, and the efforts it lists, in the catalog's order. The
- * Start menu and Settings › Coding agents both draw it, and every model row
- * carries its provider's mark, so the provider travels as a word of this
- * wire's own rather than being read off the id.
+ * providers runs it, the efforts it lists, and its two context windows
+ * where it offers a choice of them, in the catalog's order. The Start menu
+ * and Settings › Coding agents both draw it, and every model row carries
+ * its provider's mark, so the provider travels as a word of this wire's own
+ * rather than being read off the id.
  *
  * The account's default is the `codingAgent` part of the preferences
- * snapshot at `/api/account/preferences`: one model and one effort, read
- * beside the settings preferences the desktop syncs through its own client
- * and written on its own, as a body carrying that part alone. A Start that
- * names a model writes the same value on the service, so the menu's last
- * choice and the default are one value.
+ * snapshot at `/api/account/preferences`: one model, one effort, and the
+ * standard context window where it was chosen, read beside the settings
+ * preferences the desktop syncs through its own client and written on its
+ * own, as a body carrying that part alone. A Start that names a model
+ * writes the same value on the service, so the menu's last choice and the
+ * default are one value.
+ *
+ * A choice without a context window runs on the model's whole window, the
+ * long one, which is what every agent ran on before the choice, so a
+ * desktop that predates it names nothing new; the smaller standard window
+ * is the one a choice opts into, and a desktop that has it names the
+ * window only then, so a service that predates it, which refuses a key it
+ * does not know, is sent none for the default.
  */
 
 /** The providers whose models Luke runs coding agents on, as the catalog prefixes their ids. */
@@ -33,7 +43,22 @@ const choiceText = EffectSchema.Trim.check(
   EffectSchema.isMaxLength(CODING_AGENT_BOUNDS.MAX_CHOICE_CHARS),
 );
 
-/** One model the service offers: its catalog id, its name, its provider, and the efforts it lists. */
+/**
+ * A model's two context windows, where it offers a choice of them: each
+ * one's size in tokens, and what a request past the standard window costs
+ * as a multiple of the standard price, input and output each, where the
+ * catalog prices it.
+ */
+export const contextWindowsSchema = EffectSchema.Struct({
+  standardTokens: countedNumber,
+  longTokens: countedNumber,
+  longInputPriceFactor: EffectSchema.optionalKey(countedNumber),
+  longOutputPriceFactor: EffectSchema.optionalKey(countedNumber),
+});
+
+export type ContextWindows = typeof contextWindowsSchema.Type;
+
+/** One model the service offers: its catalog id, its name, its provider, the efforts it lists, and its two windows where it offers them. */
 export const catalogModelSchema = EffectSchema.Struct({
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   id: choiceText,
@@ -41,6 +66,8 @@ export const catalogModelSchema = EffectSchema.Struct({
   provider: EffectSchema.Literals(Object.values(MODEL_PROVIDER)),
   /** The efforts the model lists, in the catalog's order; never empty. */
   efforts: EffectSchema.Array(choiceText).check(EffectSchema.isMinLength(1)),
+  /** Absent for a model with one window, which every choice of it runs on. */
+  contextWindows: EffectSchema.optionalKey(contextWindowsSchema),
 });
 
 export type CatalogModel = typeof catalogModelSchema.Type;
@@ -50,10 +77,11 @@ export const modelsAnswerSchema = EffectSchema.Struct({
   models: EffectSchema.Array(catalogModelSchema),
 });
 
-/** A model and an effort, as a Start names them and the account's default stores them. */
+/** A model, an effort, and the context window where it is not the default long one, as a Start names them and the account's default stores them. */
 export const modelChoiceSchema = EffectSchema.Struct({
   model: choiceText,
   effort: choiceText,
+  contextWindow: EffectSchema.optionalKey(contextWindowSchema),
 });
 
 export type ModelChoice = typeof modelChoiceSchema.Type;

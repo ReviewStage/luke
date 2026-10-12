@@ -23,8 +23,10 @@ import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
+import { askForNotifications } from "../window/notice-doors";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
+import { applyZoomPreference, PanelWindows, zoomFactorOf } from "../window/zoom";
 import type { DesktopConfig } from "./desktop-config";
 import type { NativeNode } from "./native-node";
 import type { OperatorClient } from "./operator-client";
@@ -61,11 +63,12 @@ export interface WindowService extends DesktopService {
    */
   publishAppState: () => void;
   /**
-   * Steers the app to the theme the document holds. Run before every publish,
-   * so a window handed new settings already draws under the appearance they
-   * name, and a write that failed — which moves no settings — steers nothing.
+   * Steers the app to the theme and the zoom the document holds. Run before
+   * every publish, so a window handed new settings already draws under the
+   * appearance they name, and a write that failed — which moves no settings —
+   * steers nothing.
    */
-  applyTheme: () => Effect.Effect<void>;
+  applyAppearance: () => Effect.Effect<void>;
   /**
    * What one window answers for and the document cannot: which surface it
    * draws, how big it stands, and the display under it. Decided here by which
@@ -133,6 +136,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     preloadPath,
     rendererHtmlPath,
     rendererUrl,
+    zoomFactor: () => zoomFactorOf(state.snapshot().settings?.stored.zoom),
     onAllClosed: () => config.quit(),
   });
   /** The hidden window that holds the live conversation. */
@@ -159,10 +163,18 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
   const withNativeTheme = Effect.provideService(NativeTheme, nativeTheme);
   /** What the panels' grounds follow the appearance in; closing it takes the listener back. */
   const appearanceScope = Scope.makeUnsafe();
-  const applyTheme = (): Effect.Effect<void> =>
-    Effect.suspend(() =>
-      applyThemePreference(state.snapshot().settings?.stored.theme).pipe(withNativeTheme),
-    );
+  /** The panel windows standing now, the ones a zoom is applied to. */
+  const withPanelWindows = Effect.provideService(PanelWindows, {
+    standing: () => panels.windows(),
+  });
+  const applyAppearance = (): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      const stored = state.snapshot().settings?.stored;
+      return Effect.andThen(
+        applyThemePreference(stored?.theme).pipe(withNativeTheme),
+        applyZoomPreference(stored?.zoom).pipe(withPanelWindows),
+      );
+    });
 
   function raiseVoiceWindow(): void {
     if (voiceWindowWanted && panels.standing > 0) voiceWindow.open();
@@ -324,7 +336,7 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
     voiceWindow,
     hotkeys,
     publishAppState,
-    applyTheme,
+    applyAppearance,
     windowFactsFor,
     sendToVoice,
     showAgent,
@@ -364,6 +376,12 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
       }
+      // macOS is asked now, while the developer is here to answer, rather
+      // than as the first agent ends behind the window. Note that it is
+      // asked whatever the setting says, because asking posts nothing and
+      // macOS asks only once, and a switch turned on later would otherwise
+      // leave its first notification to ask, and be refused.
+      if (runMode.observesProviders) askForNotifications();
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);
       await hotkeys.reapply(HOTKEY_RANK.TALK);

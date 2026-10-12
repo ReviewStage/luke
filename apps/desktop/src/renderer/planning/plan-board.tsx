@@ -3,11 +3,12 @@ import { LOOK_AT_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
-import * as Atom from "effect/unstable/reactivity/Atom";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
+import { bundleAtom } from "../bundle-loader";
 import { rendererRuntime } from "../renderer-runtime";
+import { SpinnerRegion } from "../spinner";
 import { useAppState } from "../use-app-state";
 import {
   WHITEBOARD_ASSET,
@@ -35,6 +36,10 @@ import { admittedElements } from "./board-scene";
  * canvas saves the scene it holds with its image as well, so a look at a
  * board Luke did not just draw on still finds one.
  *
+ * An archived plan's board is view-only: it shows, and nothing on it is
+ * drawn or saved until the plan is brought back, which mounts the canvas
+ * afresh as an editable one.
+ *
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
  * reach. The image is drawn off the document, so the recording never sees it.
@@ -46,32 +51,11 @@ const SAVE_PAUSE = Duration.millis(800);
 /** Where the board stands while its bundle loads or fails to. */
 const BOARD_LOAD_FAILED = "The board could not be opened.";
 
-/**
- * The whiteboard bundle, loaded once per window: its stylesheet and its
- * script added to the document, answered with what the script set on
- * `window`. Kept alive, so leaving the board and coming back loads nothing.
- */
-const whiteboardModuleAtom = Atom.keepAlive(
-  rendererRuntime.atom(
-    Effect.callback<WhiteboardModule, Error>((resume) => {
-      const loaded = window.lukeWhiteboard;
-      if (loaded !== undefined) {
-        resume(Effect.succeed(loaded));
-        return;
-      }
-      const stylesheet = document.createElement("link");
-      stylesheet.rel = "stylesheet";
-      stylesheet.href = WHITEBOARD_ASSET.STYLESHEET;
-      const script = document.createElement("script");
-      script.src = WHITEBOARD_ASSET.SCRIPT;
-      script.addEventListener("load", () => {
-        const module = window.lukeWhiteboard;
-        resume(module ? Effect.succeed(module) : Effect.fail(new Error(BOARD_LOAD_FAILED)));
-      });
-      script.addEventListener("error", () => resume(Effect.fail(new Error(BOARD_LOAD_FAILED))));
-      document.head.append(stylesheet, script);
-    }),
-  ),
+/** The whiteboard bundle, loaded once per window (`../bundle-loader.ts`). */
+const whiteboardModuleAtom = bundleAtom(
+  { script: WHITEBOARD_ASSET.SCRIPT, stylesheet: WHITEBOARD_ASSET.STYLESHEET },
+  () => window.lukeWhiteboard,
+  BOARD_LOAD_FAILED,
 );
 
 /** One save the canvas asked for: the plan, its scene, the number of Luke's drawing the scene holds, and whether to send the scene's image. */
@@ -112,11 +96,14 @@ function BoardCanvas({
   module,
   planId,
   board,
+  viewOnly,
 }: {
   module: WhiteboardModule;
   planId: string;
   board: Board;
+  viewOnly: boolean;
 }): React.JSX.Element {
+  const mountedViewOnly = useRef(viewOnly);
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<WhiteboardHandle | undefined>(undefined);
   const firstBoard = useRef(board);
@@ -130,6 +117,7 @@ function BoardCanvas({
     if (element === null) return undefined;
     const mounted = module.mount(element, {
       board: firstBoard.current,
+      viewOnly: mountedViewOnly.current,
       onScene: (elements, appliedDrawing) =>
         save({
           planId,
@@ -151,9 +139,10 @@ function BoardCanvas({
   }, [board]);
 
   useEffect(() => {
-    const scene = looking ? handle.current?.scene() : undefined;
+    // A view-only board saves nothing, a look's image included.
+    const scene = looking && !viewOnly ? handle.current?.scene() : undefined;
     if (scene !== undefined) save({ planId, ...scene, module, withImage: true });
-  }, [looking, module, planId, save]);
+  }, [looking, viewOnly, module, planId, save]);
 
   return <div ref={host} className="plan-board-canvas" />;
 }
@@ -165,9 +154,12 @@ function BoardCanvas({
 export function PlanBoard({
   planId,
   board,
+  viewOnly = false,
 }: {
   planId: string;
   board: Board | undefined;
+  /** Whether the board only shows, as an archived plan's does. */
+  viewOnly?: boolean;
 }): React.JSX.Element {
   const loaded = useAtomValue(whiteboardModuleAtom);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -175,10 +167,19 @@ export function PlanBoard({
     <section className="plan-board ph-no-capture" aria-label="Whiteboard">
       {AsyncResult.isFailure(loaded) ? <p role="alert">{BOARD_LOAD_FAILED}</p> : null}
       {module !== undefined && board !== undefined ? (
-        <BoardCanvas key={planId} module={module} planId={planId} board={board} />
+        // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
+        <Fragment key={String(viewOnly)}>
+          <BoardCanvas
+            key={planId}
+            module={module}
+            planId={planId}
+            board={board}
+            viewOnly={viewOnly}
+          />
+        </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <p aria-busy="true">Opening the board…</p>
+        <SpinnerRegion label="Loading board" />
       ) : null}
     </section>
   );

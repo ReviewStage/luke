@@ -17,6 +17,7 @@ import {
   TURN_ORIGIN,
   TURN_STATUS,
 } from "../server/core";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { LOOK_AT_BOARD_STATUS, LOOK_AT_BOARD_TOOL } from "../server/hosted/board-look";
 import { BRAIN_HOST_TURN, type BrainHostTurn } from "../server/hosted/brain-host/bounds";
 import { readRecentMessages } from "../server/hosted/brain-host/context";
@@ -33,6 +34,7 @@ import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
+import { awaitingLinesOf } from "../server/hosted/store/message-reads";
 import { STORE_WRITE_REFUSAL } from "../server/hosted/store/writer";
 import { stampedEveEvent } from "./support/eve-events";
 import { parkedTurn, resumedTurn, spokenTurn } from "./support/eve-turns";
@@ -586,6 +588,52 @@ it.effect(
         ],
       );
       assert.deepEqual(standing.state.get(), { turns: {} });
+      assert.deepEqual(refusals, []);
+    }),
+);
+
+it.effect(
+  "two lines sent to a coding agent's running turn that eve coalesced into one received message, joined by a blank line, are both taken into the turn where they stand and written nowhere again, so neither awaits a turn once it ends",
+  () =>
+    Effect.promise(async () => {
+      const userId = await database.createUser();
+      const conversationId = await insertConversation(database.run, {
+        userId,
+        kind: CONVERSATION_KIND.CODING_AGENT,
+      });
+      const target = { userId, conversationId };
+      const standing = standingFor(target, BRAIN_HOST_TURN.TYPED);
+      refusals.length = 0;
+      await play(parkedTurn("turn_0", 0, NOW), standing);
+      const lines = [
+        "Check the verification map first.",
+        "Then see if you disagree with the plan.",
+      ];
+      for (const text of lines) {
+        const written = await database.run(
+          writer.writeAwaitingLine(target, { text, clientKey: randomUUID() }, Effect.succeed(true)),
+        );
+        assert.ok(Result.isSuccess(written));
+      }
+      await play(steering("turn_0", 0, [], lines.join("\n\n")), standing);
+      await play(resumedTurn("turn_0", 0, 3, NOW), standing);
+
+      const turnId = hostTurnId(standing.sessionId, "turn_0");
+      const { messageRows } = await rows(target);
+      assert.deepEqual(
+        messageRows
+          .filter((row) => row.role === MESSAGE_ROLE.USER)
+          .map((row) => [
+            row.parts.filter((part) => isTextUIPart(part)).map((part) => part.text),
+            row.turnId,
+          ]),
+        [
+          [["compare the two queue libraries"], turnId],
+          [[lines[0]], turnId],
+          [[lines[1]], turnId],
+        ],
+      );
+      assert.deepEqual(await database.run(awaitingLinesOf(userId, [conversationId])), new Set());
       assert.deepEqual(refusals, []);
     }),
 );

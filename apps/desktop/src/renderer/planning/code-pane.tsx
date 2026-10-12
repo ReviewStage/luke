@@ -1,7 +1,7 @@
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
 import type { CodeToken, PlanCode, PlanCodeShowing } from "@sidecar/hosted/planning-view";
 import { cssCustomProperties } from "@sidecar/surface/react-css";
-import { FileInputIcon } from "lucide-react";
+import { AudioLinesIcon, FileInputIcon } from "lucide-react";
 import { type CSSProperties, memo } from "react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
@@ -55,7 +55,7 @@ const OPEN_FILE_LABEL = "Open file";
  * between, so the code follows the appearance without being drawn again;
  * nothing for a run in the theme's own foreground.
  */
-function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
+export function runColours({ color, lightColor }: CodeToken): CSSProperties | undefined {
   if (color === undefined && lightColor === undefined) return undefined;
   const colours: Record<string, string> = {};
   if (color !== undefined) colours["--run-dark"] = color;
@@ -221,7 +221,7 @@ function CodeFeedRun({
         trailing={
           call.live ? (
             <span className="flex items-center gap-1.5 text-developer">
-              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              <AudioLinesIcon className="size-3.5" aria-hidden="true" />
               {LIVE_LABEL}
             </span>
           ) : null

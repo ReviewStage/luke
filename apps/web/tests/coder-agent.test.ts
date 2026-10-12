@@ -17,6 +17,7 @@ import {
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
 import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
+import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { coderInstructions } from "../server/hosted/coder-host/instructions";
 import {
@@ -183,7 +184,7 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
 
 test("the session is told the checkout's commit identity is the developer's and never its own to change", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief);
+    const instructions = coderInstructions("Acme/Relay", brief, false);
     for (const kept of ["user.name", "user.email", "--author", "luke.commitTrailer"]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
@@ -192,7 +193,7 @@ test("the session is told the checkout's commit identity is the developer's and 
 
 test("the session is told its shell and its file tools start in the checkout", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief);
+    const instructions = coderInstructions("Acme/Relay", brief, false);
     for (const kept of [
       "never open a command with a `cd`",
       "relative path is resolved from the checkout",
@@ -215,7 +216,7 @@ test("the worker is hidden behind the delegation tool, authors no token budget o
 
 test("the session is told when to delegate, how to choose a worker's model, and that a worker is read-only", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief);
+    const instructions = coderInstructions("Acme/Relay", brief, false);
     for (const kept of [
       `\`${CODER_TOOL.DELEGATE}\``,
       "run at once",
@@ -227,9 +228,22 @@ test("the session is told when to delegate, how to choose a worker's model, and 
   }
 });
 
+test("the session is told to keep its to-dos for multi-step work, exactly one in progress, written again as each finishes", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const instructions = coderInstructions("Acme/Relay", brief, false);
+    for (const kept of [
+      `\`${CODER_TOOL.WRITE_TODOS}\``,
+      "exactly one item in progress",
+      "as each item finishes",
+    ]) {
+      assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
+    }
+  }
+});
+
 test("the session is told to write a worker's task as Markdown the developer can read, its goal one plain sentence on the first line, which the worker's row and tab are named by", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief);
+    const instructions = coderInstructions("Acme/Relay", brief, false);
     for (const kept of [
       "short Markdown in complete sentences",
       "the goal as one plain sentence on the first line",
@@ -240,15 +254,33 @@ test("the session is told to write a worker's task as Markdown the developer can
 });
 
 test("an agent handed a task is told its job is the developer's task, in the same repository, and is told of no plan", () => {
-  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN);
+  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false);
   assert.ok(planned.includes("implement the plan given as the first message"));
-  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK);
+  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false);
   assert.ok(tasked.includes("carry out the task the developer gave as the first message"));
   assert.ok(tasked.includes("`Acme/Relay`"));
   assert.doesNotMatch(tasked, /\bplan\b/iu);
 });
 
 test("an agent handed the plan is told how to update it, and one handed a task is not", () => {
-  assert.ok(coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN).includes("`edit_plan`"));
-  assert.ok(!coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK).includes("edit_plan"));
+  assert.ok(
+    coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false).includes("`edit_plan`"),
+  );
+  assert.ok(!coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false).includes("edit_plan"));
+});
+
+test("the session is told to watch its pull request's checks for the bounded rounds where its token reads them, and that CI was not watched where it does not", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const watching = coderInstructions("Acme/Relay", brief, true);
+    for (const kept of [
+      "gh pr checks",
+      `${CODER.CI_FIX_ROUNDS} rounds`,
+      "never marks the pull request ready",
+    ]) {
+      assert.ok(watching.includes(kept), `${brief}: ${kept}`);
+    }
+    const blind = coderInstructions("Acme/Relay", brief, false);
+    assert.ok(blind.includes("CI was not watched"), brief);
+    assert.ok(!blind.includes("gh pr checks"), brief);
+  }
 });

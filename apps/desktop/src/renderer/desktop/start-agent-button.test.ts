@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { StartAgentButton } from "./start-agent-button";
@@ -56,12 +63,14 @@ async function settle(): Promise<void> {
   });
 }
 
-function mount(control: CodingAgentsControl): HTMLElement {
+/** The button over `control`, on the atoms `registry` holds where one is given. */
+function mount(control: CodingAgentsControl, registry?: AtomRegistry): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(StartAgentButton, { control })));
+  const button = createElement(StartAgentButton, { control });
+  act(() => root.render(registry === undefined ? button : onRegistry(registry, button)));
   return container;
 }
 
@@ -131,12 +140,15 @@ function hoverLine(page: HTMLElement): string | undefined {
 }
 
 /** A control over the catalog with Opus at high as the default, every Start and every write recorded. */
-function standing(stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" }) {
+function standing(
+  stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" },
+  models: readonly CatalogModel[] = MODELS,
+) {
   const presses: (ModelChoice | undefined)[] = [];
   const writes: ModelChoice[] = [];
   const reads: string[] = [];
   const control = codingAgentsControl({
-    models: MODELS,
+    models,
     readModels: () => reads.push("models"),
     // The service answers the last write, as the real one keeps it.
     readDefault: () => {
@@ -332,6 +344,70 @@ test("the Fast switch keeps the model's fast version as the default without clos
   assert.equal(fastRow(menu).getAttribute("aria-checked"), "false");
 });
 
+/** The catalog with GPT-6.1 Sol offering two windows, priced apart past 272K as OpenAI prices its long context. */
+const WINDOWED: readonly CatalogModel[] = MODELS.map((model) =>
+  model.id === "openai/gpt-6.1-sol"
+    ? {
+        ...model,
+        contextWindows: {
+          standardTokens: 272_000,
+          longTokens: 1_050_000,
+          longInputPriceFactor: 2,
+          longOutputPriceFactor: 1.5,
+        },
+      }
+    : model,
+);
+
+const contextRow = (menu: HTMLElement): HTMLButtonElement | undefined =>
+  [...menu.querySelectorAll<HTMLButtonElement>(".plan-compose-menu-foot button")].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Context",
+  );
+
+test("a Context row stands only for a model offering two windows: it names the window chosen, the whole one by default, opens the two with what the whole one costs under them, and a pick of the standard one keeps it as the default, which the checked row and the hover line then say; a model with one window drops it", async () => {
+  const { writes, control } = standing({ model: "openai/gpt-6.1-sol", effort: "low" }, WINDOWED);
+  const page = mount(control);
+  await settle();
+  assert.equal(hoverLine(page), "GPT-6.1 Sol Low", "the default window says nothing");
+  const menu = await openMenu(page);
+  const context = contextRow(menu);
+  assert.ok(context, "GPT-6.1 Sol offers two windows");
+  assert.equal(context.querySelector(".plan-compose-menu-detail")?.textContent, "1M");
+
+  hover(context);
+  assert.deepEqual(submenuRows(page), [
+    ["272K", null],
+    ["1M", "true"],
+  ]);
+  assert.equal(
+    page.querySelector(".plan-compose-submenu [data-submenu-note]")?.textContent,
+    "On 1M, prompts over 272K tokens cost 2× for input and 1.5× for output.",
+  );
+  const standard = page.querySelectorAll<HTMLElement>(".plan-compose-submenu [role=option]")[0];
+  act(() => standard?.click());
+  assert.deepEqual(writes, [
+    { model: "openai/gpt-6.1-sol", effort: "low", contextWindow: CONTEXT_WINDOW.STANDARD },
+  ]);
+  assert.equal(page.querySelector(".plan-compose-menu"), null, "a pick closes the menu");
+  await settle();
+  assert.equal(hoverLine(page), "GPT-6.1 Sol Low 272K");
+
+  const again = await openMenu(page);
+  const checked = again.querySelector<HTMLElement>('[role="option"][aria-current="true"]');
+  assert.equal(checked?.querySelector(".plan-compose-menu-detail")?.textContent, "Low 272K");
+  assert.equal(contextRow(again)?.querySelector(".plan-compose-menu-detail")?.textContent, "272K");
+
+  // Opus offers one window, so the pick drops the standard one and the menu draws no Context row.
+  const opus = [...again.querySelectorAll<HTMLElement>('[role="option"]')].find(
+    (row) => row.querySelector(".plan-compose-menu-name")?.textContent === "Opus 5.5",
+  );
+  act(() => opus?.click());
+  assert.deepEqual(writes.at(-1), { model: "anthropic/claude-opus-5.5", effort: "low" });
+  const opened = await openMenu(page);
+  assert.equal(contextRow(opened), undefined);
+  assert.equal(opened.querySelectorAll(".plan-compose-menu-foot button").length, 2);
+});
+
 test("a stored fast version shows its base model checked with Fast on, and a pick of a model without a fast version turns Fast off", async () => {
   const { writes, control } = standing({ model: "anthropic/claude-opus-5.5-fast", effort: "high" });
   const page = mount(control);
@@ -363,27 +439,69 @@ test("a stored fast version shows its base model checked with Fast on, and a pic
   assert.ok(page.querySelector(".plan-compose-menu"));
 });
 
-test("the menu says it is reading until the models arrive, and a default the service could not answer checks no row", async () => {
-  const page = mount(
-    codingAgentsControl({
-      models: undefined,
-      start: {
-        available: true,
-        reason: undefined,
-        busy: false,
-        note: undefined,
-        onPress: () => undefined,
-      },
+it.effect(
+  "the menu draws the spinner until the models arrive, and a default the service could not answer checks no row",
+  () =>
+    Effect.gen(function* () {
+      const page = mount(
+        codingAgentsControl({
+          models: undefined,
+          start: {
+            available: true,
+            reason: undefined,
+            busy: false,
+            note: undefined,
+            onPress: () => undefined,
+          },
+        }),
+        yield* registryOnTestClock,
+      );
+      act(() => buttonNamed(page, "Choose a model to start with").click());
+      yield* Effect.promise(settle);
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
+      assert.ok(menu);
+      assert.deepEqual(waitsIn(menu), [{ says: "Loading models", ring: true }]);
+      assert.deepEqual(rowsOf(menu), []);
+      assert.equal(
+        menu.querySelector(".plan-compose-menu-foot"),
+        null,
+        "nothing to start with yet",
+      );
     }),
-  );
-  act(() => buttonNamed(page, "Choose a model to start with").click());
-  await settle();
-  const menu = page.querySelector<HTMLElement>(".plan-compose-menu");
-  assert.ok(menu);
-  assert.equal(menu.querySelector(".plan-compose-menu-note")?.textContent, "Reading the models…");
-  assert.deepEqual(rowsOf(menu), []);
-  assert.equal(menu.querySelector(".plan-compose-menu-foot"), null, "nothing to start with yet");
-});
+);
+
+it.effect(
+  "a Start under way draws the spinner over its words once it has stood, and a further press starts nothing",
+  () =>
+    Effect.gen(function* () {
+      let pressed = 0;
+      const page = mount(
+        codingAgentsControl({
+          start: {
+            available: true,
+            reason: undefined,
+            busy: true,
+            note: undefined,
+            onPress: () => {
+              pressed += 1;
+            },
+          },
+        }),
+        yield* registryOnTestClock,
+      );
+      const start = buttonNamed(page, "Start a coding agent");
+      assert.equal(start.textContent, "Start", "a quick start flashes nothing");
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.ok(start.querySelector(".spinner-ring"));
+      assert.equal(start.getAttribute("aria-busy"), "true");
+      assert.doesNotMatch(start.textContent ?? "", /…/u);
+      act(() => start.click());
+      assert.equal(pressed, 0);
+    }),
+);
 
 test("why the last Start did not start is said beside the button", () => {
   const page = mount(

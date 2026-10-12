@@ -6,9 +6,12 @@ import {
   type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CHECK_SUMMARY,
   CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Duration, Effect, Layer } from "effect";
@@ -30,6 +33,8 @@ const MODEL = "anthropic/claude-opus-5.5";
 const TURN_ID = "3f1c2b7a-9d4e-4a6b-8c1d-2e5f6a7b8c9d";
 const NEXT_TURN_ID = "4a2d3c8b-0e5f-4b7c-9d2e-3f6a7b8c9d0e";
 const WATCH = Duration.seconds(30);
+const ACCOUNT = "dean@example.com";
+const OTHER_ACCOUNT = "sam@example.com";
 
 function agent(
   status: CodingAgentStatus,
@@ -68,7 +73,10 @@ function fixture() {
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
   let focus: ((focused: boolean) => void) | undefined;
-  let accountChanged: (() => void) | undefined;
+  let accountChanged: ((signedInAs: string | undefined) => void) | undefined;
+  let signedInAs: string | undefined = ACCOUNT;
+  let notifying = true;
+  let listReads = 0;
   const notices = createAgentNotices({
     listAgents: (planId) =>
       Effect.sync(() => {
@@ -91,11 +99,16 @@ function fixture() {
         focus = undefined;
       };
     },
+    notifying: () => notifying,
+    signedInAs: () => signedInAs,
     onAccountChanged: (listener) => {
       accountChanged = listener;
       return () => {
         accountChanged = undefined;
       };
+    },
+    onPlanAgentsMoved: () => {
+      listReads += 1;
     },
     watchInterval: WATCH,
     report: () => undefined,
@@ -117,14 +130,83 @@ function fixture() {
       assert.ok(focus, "the notices subscribe to the window's focus");
       focus(focused);
     },
-    changeAccount: () => {
+    /** The account as a change of it says: another one, nobody, or the same one renewed. */
+    changeAccount: (next: string | undefined) => {
       assert.ok(accountChanged, "the notices subscribe to the account");
-      accountChanged();
+      signedInAs = next;
+      accountChanged(next);
+    },
+    /** The developer's setting for notifications. */
+    notify: (on: boolean) => {
+      notifying = on;
     },
     /** What was said, without the clicks. */
     said: () => posted.map(({ title, body }) => ({ title, body })),
+    /** How many times the plan list was asked for again. */
+    listReads: () => listReads,
   };
 }
+
+/** A pull request one of the agents opened, as a read of what it published answers it. */
+const PULL_REQUEST: CodingAgentPullRequest = {
+  number: 41,
+  title: "Teammate invitations",
+  url: "https://github.com/acme/relay/pull/41",
+  state: PULL_REQUEST_STATE.OPEN,
+  checks: CHECK_SUMMARY.PENDING,
+  additions: 12,
+  deletions: 3,
+  changedFiles: 2,
+};
+
+it.effect(
+  "the plan list is asked for again as an agent starts, as its turn ends, and as a message wakes it, and not for an answer that says nothing new",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED)]);
+      assert.equal(f.listReads(), 0);
+
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })]);
+      assert.equal(f.listReads(), 1);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.RUNNING);
+      assert.equal(f.listReads(), 1);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.equal(f.listReads(), 2);
+      notices.observeStatus(AGENT_ID, CODING_AGENT_STATUS.COMPLETED);
+      assert.equal(f.listReads(), 2);
+
+      // A message to the ended agent reads it running under the ended turn, which the list says too.
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID }));
+      assert.equal(f.listReads(), 3);
+      notices.observeMessaged(agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID }));
+      assert.equal(f.listReads(), 3);
+    }),
+);
+
+it.effect(
+  "the plan list is asked for again where a read of what an agent published finds a pull request, or one that moved, and not for the same one read again",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      notices.observePublished(AGENT_ID, null);
+      assert.equal(f.listReads(), 0);
+
+      notices.observePublished(AGENT_ID, PULL_REQUEST);
+      notices.observePublished(AGENT_ID, PULL_REQUEST);
+      assert.equal(f.listReads(), 1);
+      notices.observePublished(AGENT_ID, { ...PULL_REQUEST, checks: CHECK_SUMMARY.FAILING });
+      assert.equal(f.listReads(), 2);
+      notices.observePublished(AGENT_ID, {
+        ...PULL_REQUEST,
+        checks: CHECK_SUMMARY.FAILING,
+        state: PULL_REQUEST_STATE.MERGED,
+      });
+      assert.equal(f.listReads(), 3);
+    }),
+);
 
 it.effect(
   "an agent that ends while the window is behind is announced once, as the plan's name over the model's, and dots its tab",
@@ -483,13 +565,66 @@ it.effect(
       });
       notices.observeAgents([other]);
 
-      f.changeAccount();
+      f.changeAccount(OTHER_ACCOUNT);
       assert.deepEqual(f.unseen.at(-1), []);
       // The answer that was on its way lands as a first sighting.
       notices.observeAgents([{ ...other, status: CODING_AGENT_STATUS.COMPLETED }]);
       yield* TestClock.adjust(WATCH);
       assert.equal(f.posted.length, 1);
       assert.deepEqual(f.listed, []);
+    }),
+);
+
+it.effect(
+  "the account's session renewing mid-run is the same account: its agents stay watched and the end is announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.COMPLETED)] });
+
+      f.changeAccount(ACCOUNT);
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.listed, [PLAN_ID]);
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 finished" }]);
+    }),
+);
+
+it.effect(
+  "with notifications turned off, an end behind the window posts nothing, yet dots its tab, and the window in front still says it",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.notify(false);
+      f.focus(false);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING)]);
+      f.answer(PLAN_ID, { agents: [agent(CODING_AGENT_STATUS.COMPLETED)] });
+      yield* TestClock.adjust(WATCH);
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.unseen.at(-1), [AGENT_ID]);
+
+      // Turned back on, the next end behind the window is posted again.
+      f.notify(true);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { turnId: NEXT_TURN_ID })]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.FAILED, { turnId: NEXT_TURN_ID })]);
+      yield* Effect.yieldNow;
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5 failed" }]);
+
+      // The toast is the window's own, not a notification, so the setting leaves it.
+      f.notify(false);
+      f.focus(true);
+      const other = "a1b2c3d4-0000-4000-8000-000000000021";
+      notices.observeAgents([agent(CODING_AGENT_STATUS.RUNNING, { id: other })]);
+      notices.observeAgents([agent(CODING_AGENT_STATUS.COMPLETED, { id: other })]);
+      yield* Effect.yieldNow;
+      assert.equal(f.posted.length, 1);
+      assert.deepEqual(
+        f.toasted.map(({ words }) => words),
+        ["Opus 5.5 finished"],
+      );
     }),
 );
 

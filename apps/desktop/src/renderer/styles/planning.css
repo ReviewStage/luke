@@ -32,7 +32,7 @@
 /* The document is the record: it reads as text and is selectable, so Cmd-C
    on a selection copies it. Note that it sets its own accent, because
    `--accent` is only ever set by a `data-state` ancestor and nothing above
-   the plan carries one: unset, the caret, the writing dot, and the fresh tint
+   the plan carries one: unset, the caret, the writing ring, and the fresh tint
    all drew nothing. Luke is the one writing, so the accent is his. */
 .plan-document-scroll {
   --accent: var(--voice-luke);
@@ -93,18 +93,21 @@
   animation-play-state: var(--loop-motion);
 }
 
-/* The field the caret is typing in: a small accent dot after its heading,
-   breathing on the skeleton's loop and held by `--loop-motion` like every
-   animation with no end of its own. */
+/* The field the caret is typing in: a small ring in the accent turning after
+   its heading on the window's one spinner turn (`spinner.tsx`), held by
+   `--loop-motion` like every animation with no end of its own and still
+   reading as work under way while held. */
 .plan-writing > .markdown-heading:first-child::after {
   display: inline-block;
-  width: 5px;
-  height: 5px;
+  box-sizing: border-box;
+  width: 9px;
+  height: 9px;
   margin-left: 6px;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 25%, transparent);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  background: var(--accent);
-  vertical-align: 0.15em;
-  animation: skeleton-pulse 1500ms ease-in-out infinite;
+  vertical-align: 0.05em;
+  animation: spinner-turn 900ms linear infinite;
   animation-play-state: var(--loop-motion);
   content: "";
 }
@@ -409,113 +412,6 @@
   padding: 3px 0;
 }
 
-/* The History tab: the plan's versions, newest first, one row each, the
-   row whose version is drawn lit as a chosen sidebar row is (history-tab.tsx). */
-.history-tab {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: var(--space-8) var(--column-inset) var(--space-16);
-  scrollbar-color: var(--scrollbar) transparent;
-  scrollbar-width: thin;
-}
-
-.history-hint {
-  margin: 0 0 var(--space-8);
-  padding: 0 var(--row-inset);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.history-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--list-gap);
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.history-row {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
-  background: none;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-}
-
-.history-row:hover {
-  background: var(--raised);
-}
-
-.history-row[aria-current="true"] {
-  background: var(--raised-strong);
-}
-
-.history-row-head {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.history-row-author {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-row-tag {
-  flex: none;
-  padding: 0 var(--space-6);
-  border-radius: 5px;
-  background: var(--raised-strong);
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  line-height: 16px;
-}
-
-.history-row-time {
-  flex: none;
-  margin-left: auto;
-  color: var(--text-tertiary);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.history-row-summary {
-  overflow: hidden;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.history-earlier {
-  margin-top: var(--space-8);
-  padding: var(--space-8) var(--row-inset);
-  border-radius: 9px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-align: left;
-}
-
-.history-earlier:hover:not(:disabled) {
-  background: var(--raised);
-  color: var(--text-primary);
-}
-
 /* The Code tab: every code Luke showed on the plan, one card each under the
    call it was shown on, in a log that fills the tab (code-pane.tsx). */
 .code-pane {
@@ -621,6 +517,178 @@ button.code-card-path:hover {
   scrollbar-width: thin;
 }
 
+/* A File tab beside its repository's tree: the file takes the room the
+   tree leaves, and the tree keeps to the right, as an editor's explorer
+   docked there does. */
+.file-view {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.file-view > .file-tab {
+  min-width: 0;
+}
+
+/* The heading's path as breadcrumbs: each folder a press that reveals it
+   in the tree, each chevron a menu of the folder's entries. The crumbs
+   give way from the left, so the file's own name stays in sight. */
+.file-breadcrumbs {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow: hidden;
+}
+
+.file-breadcrumbs ol {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-breadcrumbs li {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.file-breadcrumbs li:last-child,
+.file-breadcrumbs li:has(> .file-breadcrumb-chevron) {
+  flex-shrink: 0;
+}
+
+.file-breadcrumb {
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  overflow: hidden;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+button.file-breadcrumb:hover,
+.file-breadcrumb-chevron:hover,
+.file-breadcrumb-chevron[aria-expanded="true"] {
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
+.file-breadcrumb[aria-current="page"] {
+  color: var(--text-primary);
+}
+
+.file-breadcrumb-chevron {
+  display: flex;
+  width: 16px;
+  height: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-tertiary);
+}
+
+.file-breadcrumb-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* The heading's tree toggle keeps to its right, after the GitHub button
+   where that stands, and reads as on while the tree is shown. */
+.file-tree-toggle {
+  margin-left: auto;
+}
+
+.file-tab-github + .file-tree-toggle {
+  margin-left: 0;
+}
+
+.file-tree-toggle[aria-pressed="true"] {
+  color: var(--text-primary);
+}
+
+/* The tree beside a File tab, its heading level with the tab's. */
+.file-tree-pane {
+  display: flex;
+  width: min(264px, 40%);
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-direction: column;
+  border-left: 1px solid var(--hairline);
+}
+
+.file-tree-header {
+  display: flex;
+  min-height: calc(24px + 2 * var(--space-2));
+  align-items: center;
+  gap: var(--control-gap);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  font-size: 11.5px;
+}
+
+.file-tree-title {
+  flex: 1;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.file-tree-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-8);
+  margin: 0;
+  padding: var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Pierre's tree draws in a shadow root of its own, which inherits these:
+   the panel's words, its fills, and its focus ring, so the tree reads as
+   the panel's own list. */
+.file-tree-host {
+  --trees-bg-override: transparent;
+  --trees-bg-muted-override: var(--raised);
+  --trees-fg-override: var(--text-primary);
+  --trees-fg-muted-override: var(--text-secondary);
+  --trees-selected-bg-override: var(--selected);
+  --trees-selected-fg-override: var(--text-primary);
+  --trees-selected-focused-border-color-override: var(--focus-ring);
+  --trees-border-color-override: var(--hairline);
+  --trees-focus-ring-color-override: var(--focus-ring);
+  --trees-font-family-override: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+  --trees-font-size-override: 12.5px;
+  --trees-scrollbar-thumb-override: var(--scrollbar);
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.file-tree-host > * {
+  min-height: 0;
+  flex: 1;
+}
+
+/* The line under the tree saying a folder was listed short of whole. */
+.file-tree-host > .file-tree-cut {
+  flex: none;
+  border-top: 1px solid var(--hairline);
+  font-size: 11.5px;
+}
+
 /* Why the file is not drawn, standing over the lines Luke showed of it. */
 .file-tab-notice {
   display: flex;
@@ -720,15 +788,129 @@ button.code-card-path:hover {
 }
 
 /* Each run carries its colour in both appearances (`code-pane.tsx`); a run
-   in the theme's own foreground carries neither and takes the pane's. */
-.code-line-text > span {
+   in the theme's own foreground carries neither and takes the pane's. A
+   transcript's fenced block is coloured the same way. */
+.code-line-text > span,
+.transcript-code-body span {
   color: var(--run-dark, var(--code-text));
 }
 
 @media (prefers-color-scheme: light) {
-  .code-line-text > span {
+  .code-line-text > span,
+  .transcript-code-body span {
     color: var(--run-light, var(--code-text));
   }
+}
+
+/* A transcript's fenced block (transcript-markdown.tsx), drawn as a Code
+   tab card is: the code's own ground inside a hairline, a header naming
+   the language with the copy at its right, and the lines in the cards'
+   type. The lines keep whole and scroll sideways inside the block, so a
+   long one never widens the transcript. */
+.transcript-code {
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--code-ground);
+}
+
+.transcript-code-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--control-gap);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  background: var(--raised);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.transcript-code-language {
+  min-width: 0;
+  overflow: hidden;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  text-overflow: ellipsis;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
+
+.transcript-code-body {
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  color: var(--code-text);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.6;
+  overflow-wrap: normal;
+  scrollbar-color: var(--scrollbar) transparent;
+  scrollbar-width: thin;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.transcript-code-body > code {
+  font: inherit;
+}
+
+/* An inline span of code: the blocks' type on a subtle fill, no edge. */
+.transcript-inline-code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--raised-strong);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
+}
+
+/* A transcript's table: no box, a hairline under each row, the header in
+   the secondary colour at medium weight, the outer columns flush with the
+   words around it. A table wider than the column scrolls sideways inside
+   its own box. A cell keeps the alignment its column's rule gave it, which
+   it carries as its own style. */
+.transcript-table {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-color: var(--scrollbar) transparent;
+  scrollbar-width: thin;
+}
+
+.transcript-table > table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.transcript-table :is(th, td) {
+  padding: var(--space-6) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+  overflow-wrap: normal;
+  text-align: left;
+  vertical-align: top;
+}
+
+.transcript-table :is(th, td):first-child {
+  padding-left: 0;
+}
+
+.transcript-table :is(th, td):last-child {
+  padding-right: 0;
+}
+
+.transcript-table th {
+  border-bottom-color: var(--hairline-strong);
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.transcript-table tbody tr:last-child > td {
+  border-bottom: 0;
 }
 
 /* The three transcripts: the Transcript tab, the Work tab, and an agent's
@@ -761,48 +943,6 @@ button.code-card-path:hover {
 
 /* Coding agents --------------------------------------------------------- */
 
-/* The dot beside an agent's name, on its tab and at its transcript's head:
-   where the agent stands, in the state colours the rest of the window
-   answers in. While the agent may still write it breathes on the skeleton's
-   loop, an endless motion held by `--loop-motion` like every animation with
-   no end of its own. */
-.agent-status-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-}
-
-.agent-status-dot[data-status="running"],
-.agent-status-dot[data-status="starting"] {
-  background: var(--state-working);
-}
-
-.agent-status-dot[data-status="completed"] {
-  background: var(--state-complete);
-}
-
-.agent-status-dot[data-status="failed"] {
-  background: var(--danger);
-}
-
-.agent-status-dot[data-status="cancelled"] {
-  background: var(--state-attention);
-}
-
-.agent-status-dot[data-live="true"] {
-  animation: skeleton-pulse 1500ms ease-in-out infinite;
-  animation-play-state: var(--loop-motion);
-}
-
-/* An agent's tab in the strip: its dot in its glyph's place, on a glyph's
-   footprint, so the note for an end no one saw sits at the same corner. */
-.tab-icon .agent-status-dot {
-  margin: 4px;
-}
-
 /* The quiet line a transcript ends on once its turn was stopped or failed. */
 .agent-end-line {
   margin: 0;
@@ -824,15 +964,34 @@ button.code-card-path:hover {
   margin-top: auto;
 }
 
+/* An agent's log runs right up to the card's top edge and its words
+   dissolve over `--scroll-fade` just above it, rather than being sliced
+   short of the card: a mask, so they fade into whatever ground the panel
+   stands on in either appearance. Its foot pads past the fade, so the
+   newest line, scrolled to or followed, stands whole above it, and a
+   control focused from below is scrolled in past the fade as well. */
+.agent-log-over-composer {
+  padding-bottom: calc(var(--scroll-fade) + var(--space-4));
+  scroll-padding-bottom: calc(var(--scroll-fade) + var(--space-4));
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
+}
+
+/* The to-do list the agent is working through, docked over the composer
+   on the transcript's own inset, so its card and the composer's line up. */
+.agent-todos-dock {
+  padding: 0 16px 8px;
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
-   card and the column line up. What stands here is the room around the card. */
+   card and the column line up. What stands here is the room around the
+   card, none above it, since the log meets the card itself. */
 .agent-composer {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 16px 12px;
+  padding: 0 16px 12px;
 }
 
 .agent-composer-note {
@@ -840,6 +999,137 @@ button.code-card-path:hover {
   align-items: center;
   gap: 8px;
   padding-left: 4px;
+}
+
+/* The "+" that attaches files, just left of the round Send or Stop. */
+.agent-composer-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Files dragged over the box: the card's edge brightens as it does under
+   focus, so the drop target is the card itself. */
+.agent-composer[data-dropping] form {
+  border-color: var(--selected-edge);
+}
+
+/* The files on a message: a row of chips over the box's words, and over
+   the developer's bubble in the transcript, at its right as the bubble is. */
+.attached-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-composer .attached-files {
+  padding: 12px 12px 0;
+}
+
+.is-user > .attached-files {
+  justify-content: flex-end;
+}
+
+/* An image is its thumbnail; any other file a glyph, its name, and its
+   size, on a chip as tall as the thumbnail. */
+.attached-file {
+  position: relative;
+  display: flex;
+  max-width: 220px;
+  height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--section-fill);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attached-file:has(img) {
+  width: 64px;
+  padding: 0;
+  overflow: visible;
+}
+
+.attached-file img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 7px;
+  object-fit: cover;
+}
+
+.attached-file > svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.attached-file-name {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attached-file-size {
+  flex: none;
+}
+
+/* Its way off sits on the chip's corner, as a feedback screenshot's does. */
+.attached-file-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: flex;
+  width: 18px;
+  height: 18px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 50%;
+  background: var(--surface-popover);
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.attached-file-remove:hover {
+  color: var(--text-primary);
+}
+
+.attached-file-remove svg {
+  width: 8px;
+  height: 8px;
+}
+
+/* An archived plan's agent takes no message, so its composer's place says
+   why on one quiet row, with Unarchive as the press that opens it again. */
+.archived-composer {
+  flex-direction: row;
+  align-items: center;
+}
+
+.archived-composer-line {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.archived-composer-line svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
 }
 
 /* A link in the transcript: the pull request opens in the browser, drawn

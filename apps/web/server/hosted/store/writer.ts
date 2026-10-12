@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import {
   asSchema,
   type ReasoningUIPart,
@@ -52,6 +53,7 @@ import { db } from "../../db/query.js";
 import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
 import { voiceSessions } from "../../db/voice-schema.js";
+import { lineParts, receivedTextOf } from "../attached-files.js";
 import { sentLineId } from "../brain-host/ids.js";
 import {
   EpochMillisColumnSchema,
@@ -59,6 +61,7 @@ import {
   nullable,
   TurnUsageColumnSchema,
 } from "./database.js";
+import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
@@ -296,10 +299,11 @@ type UserMessageWriteResult = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, and the client's key for the send. */
+/** The developer's line to a coding agent as the message route and the queue's drain write it: its words, the files attached to it, and the client's key for the send. */
 interface AwaitingLineWrite {
   readonly text: string;
   readonly clientKey: string;
+  readonly attachments?: readonly CodingAgentAttachment[] | undefined;
 }
 
 /** What writing an awaiting line did: the row, written now or already standing under the key, or nothing where the dispatch answered nothing; or a refusal. */
@@ -308,7 +312,7 @@ type AwaitingLineWritten = Result.Result<
   typeof NO_CONVERSATION | MessageRefused
 >;
 
-/** The line a turn received, as the relay reads it off eve's stream: its words, and the turn that received it. */
+/** The line a turn received, as the relay reads it off eve's stream: its text parts joined (`attached-files.ts`), and the turn that received it. */
 interface AwaitingLineTake {
   readonly text: string;
   readonly turnId: string;
@@ -323,11 +327,8 @@ interface AwaitingLineTake {
  */
 const AWAITING_LINE_DISPATCH_DEADLINE = Duration.seconds(30);
 
-/** The row the turn took, by id; none where no line with those words awaited; or the turn does not stand. */
-type AwaitingLineTaken = Result.Result<
-  Option.Option<string>,
-  typeof NO_CONVERSATION | typeof NO_TURN
->;
+/** The rows the turn took, by id, oldest first; none where no run of lines with those words awaited; or the turn does not stand. */
+type AwaitingLineTaken = Result.Result<readonly string[], typeof NO_CONVERSATION | typeof NO_TURN>;
 
 /**
  * The one path by which a conversation's rows are written, each method an
@@ -399,12 +400,14 @@ export interface StoreWriter {
     dispatch: Effect.Effect<boolean>,
   ): Write<AwaitingLineWritten>;
   /**
-   * Takes into the turn the line awaiting one the receipt is of: the oldest
-   * of the conversation's user rows no turn owns whose words are the ones
-   * received, eve having received the lines in the order they were sent.
-   * The row takes the turn in place at a bumped revision, so a device
+   * Takes into the turn the lines awaiting one the receipt is of: the oldest
+   * run of the conversation's user rows no turn owns whose words, joined as
+   * eve coalesces messages, are the ones received, eve having received the
+   * lines in the order they were sent. A run of one is a line eve handed
+   * the turn alone; a longer run is steers eve folded into one step's input.
+   * Each row takes the turn in place at a bumped revision, so a device
    * reading from its revision sees the line again where it stands, now the
-   * turn's. Answers the row taken, or none where no such line awaits, which
+   * turn's. Answers the rows taken, or none where no such run awaits, which
    * is every line of a conversation that is no coding agent's.
    */
   takeAwaitingLine(target: ConversationTarget, take: AwaitingLineTake): Write<AwaitingLineTaken>;
@@ -1815,7 +1818,8 @@ const attachAskLines = /* @__PURE__ */ Effect.fn("web/attachAskLines")(function*
  * the user rows no turn owns, of a coding agent's conversation, which is
  * the one kind whose developer lines are written ahead of their turn; a
  * planning conversation's turnless user rows are its spoken asks, attached
- * by their own writer, and never match here.
+ * by their own writer, and never match here. A line a turn already received
+ * under another row awaits nothing and is not offered (`noReceiptOfLine`).
  */
 const findAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ conversationId: Schema.String }),
@@ -1831,6 +1835,7 @@ const findAwaitingLines = SqlSchema.findAll({
           eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
           isNull(messages.turnId),
+          noReceiptOfLine(),
         ),
       )
       .orderBy(asc(messages.seq)),
@@ -1853,10 +1858,31 @@ const giveLineToTurn = SqlSchema.void({
   },
 });
 
-/** The words of a line as its one text part holds them; nothing for a row with none. */
-function lineText(parts: Parts): string | undefined {
-  const text = parts.find((part) => part.type === UI_PART_TYPE.TEXT);
-  return text !== undefined && "text" in text ? text.text : undefined;
+/**
+ * The oldest run of consecutive awaiting lines whose text, joined as eve
+ * coalesces them, is the text received; none where no run matches. A
+ * line's text is its words and the text files it carried, as eve was
+ * handed them (`attached-files.ts`). Note
+ * that the run is read oldest first, because every send is a steer eve
+ * receives in the order sent, so two lines sharing their words are taken in
+ * that order.
+ */
+function coalescedRun<Row extends { readonly parts: Parts }>(
+  awaiting: readonly Row[],
+  received: string,
+): readonly Row[] {
+  for (let start = 0; start < awaiting.length; start += 1) {
+    let joined: string | undefined;
+    for (const [offset, row] of awaiting.slice(start).entries()) {
+      const text = receivedTextOf(row.parts);
+      if (text === undefined) break;
+      joined = joined === undefined ? text : `${joined}${COALESCED_LINE_SEPARATOR}${text}`;
+      if (joined === received) return awaiting.slice(start, start + offset + 1);
+      // A run whose words already part from the received ones grows no closer by a longer run.
+      if (!received.startsWith(joined)) break;
+    }
+  }
+  return [];
 }
 
 /**
@@ -1897,7 +1923,7 @@ const writeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
     id: clientId,
     role: MESSAGE_ROLE.USER,
     metadata: { author: MESSAGE_AUTHOR.DEVELOPER, channel: MESSAGE_CHANNEL.TYPED },
-    parts: [{ type: UI_PART_TYPE.TEXT, text: line.text, state: UI_PART_STATE.DONE }],
+    parts: lineParts(line.text, line.attachments ?? []),
   });
   if (Result.isFailure(read)) return Result.fail(read.failure);
   if (!(yield* dispatchedWithinDeadline(dispatch))) return Result.succeed(Option.none());
@@ -1916,16 +1942,15 @@ const takeAwaitingLine = /* @__PURE__ */ Effect.fnUntraced(function* (
 ): Effect.fn.Return<AwaitingLineTaken, WriteFailure, SqlClient.SqlClient> {
   if (Option.isNone(yield* turnRow(context, take.turnId))) return Result.fail(NO_TURN);
   const awaiting = yield* findAwaitingLines({ conversationId: context.target.conversationId });
-  // The oldest line with the words received: every send is a steer, which eve receives in the
-  // order sent, so two lines sharing their words are taken in that order.
-  const line = awaiting.find((row) => lineText(row.parts) === take.text);
-  if (line === undefined) return Result.succeed(Option.none());
-  yield* giveLineToTurn({
-    id: line.id,
-    conversationId: context.target.conversationId,
-    turnId: take.turnId,
-  });
-  return Result.succeed(Option.some(line.id));
+  const run = coalescedRun(awaiting, take.text);
+  for (const line of run) {
+    yield* giveLineToTurn({
+      id: line.id,
+      conversationId: context.target.conversationId,
+      turnId: take.turnId,
+    });
+  }
+  return Result.succeed(run.map((line) => line.id));
 });
 
 /**

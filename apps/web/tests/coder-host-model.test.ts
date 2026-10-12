@@ -10,6 +10,7 @@ import {
   type ProviderKeys,
 } from "../server/hosted/coder-host/model";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../server/hosted/coder-host/status";
+import { PROVIDER_KEY_UNREADABLE } from "../server/hosted/provider-key-seal";
 import { REPOSITORY_REFUSAL } from "../server/hosted/repository-shell";
 
 /**
@@ -21,8 +22,8 @@ import { REPOSITORY_REFUSAL } from "../server/hosted/repository-shell";
  */
 
 const KEYS: ProviderKeys = {
-  anthropic: Redacted.make("sk-ant-fixture"),
-  openAi: Redacted.make("sk-openai-fixture"),
+  anthropic: { key: Redacted.make("sk-ant-fixture") },
+  openAi: { key: Redacted.make("sk-openai-fixture") },
 };
 
 const WINDOW = 400_000;
@@ -95,7 +96,7 @@ test("an OpenAI choice runs the Responses model with the effort as OpenAI takes 
   });
 });
 
-test("a provider Luke does not run, or a key the deployment does not hold, refuses the step by name", () => {
+test("a provider Luke does not run, an account's key that cannot be read, or no key at all refuses the step by name", () => {
   assert.deepEqual(
     coderModel({ model: "google/gemini-3", effort: "high" }, KEYS, WINDOW),
     Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER),
@@ -116,6 +117,14 @@ test("a provider Luke does not run, or a key the deployment does not hold, refus
     ),
     Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY),
   );
+  assert.deepEqual(
+    coderModel(
+      { model: "openai/gpt-6.1-sol", effort: "high" },
+      { ...KEYS, openAi: PROVIDER_KEY_UNREADABLE },
+      WINDOW,
+    ),
+    Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE),
+  );
 });
 
 /** A newest turn as the store answers it, in the status given. */
@@ -130,6 +139,7 @@ function turn(status: string, cancelRequestedAt: Date | null = null) {
     cancelRequestedAt,
     queuedAt: new Date(0),
     startedAt: null,
+    settledAt: null,
     model: null,
     usage: null,
   };
@@ -184,6 +194,18 @@ test.for([
   [
     failed(MODEL, `Not run: ${REPOSITORY_REFUSAL.CHECKOUT_FAILED} fatal`),
     CODING_AGENT_FAILURE.SANDBOX,
+  ],
+  [
+    failed(MODEL, `MODEL_CALL_FAILED ${CODER_REFUSAL.ACCOUNT_KEY_REFUSED}`),
+    CODING_AGENT_FAILURE.PROVIDER_KEY,
+  ],
+  [
+    failed(MODEL, `MODEL_CALL_FAILED ${CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA}`),
+    CODING_AGENT_FAILURE.PROVIDER_KEY,
+  ],
+  [
+    failed(MODEL, `Error ${CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE}`),
+    CODING_AGENT_FAILURE.PROVIDER_KEY,
   ],
   [failed(ABANDONED), CODING_AGENT_FAILURE.ABANDONED],
   [failed(PERSISTENCE), CODING_AGENT_FAILURE.OTHER],

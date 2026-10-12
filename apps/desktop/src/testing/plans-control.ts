@@ -1,12 +1,12 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
-import { VERSION_COMPARE } from "../renderer/planning/plan-history-model";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
-import { HISTORY_READ, type PlanHistoryControl } from "../renderer/planning/use-plan-history";
-import type { PlansControl } from "../renderer/planning/use-plans-tab";
+import { MAIN_TAB } from "../renderer/planning/use-main-tabs";
+import { HISTORY_READ } from "../renderer/planning/use-plan-history";
+import type { PlansControl, VersionHistoryControl } from "../renderer/planning/use-plans-tab";
 import {
   type OpenPlan,
   SIDE_PANEL_TAB,
@@ -16,7 +16,7 @@ import {
 
 const ignore = () => undefined;
 
-/** An open plan that has used every fixed tab but its history, which no test of the strip reads, so its panel draws the other four. */
+/** An open plan that has used every fixed tab, so its panel draws them all. */
 export function usedPlan(id: string): OpenPlan {
   return {
     id,
@@ -29,16 +29,18 @@ export function usedPlan(id: string): OpenPlan {
   };
 }
 
-/** A plan whose history is still being read, no version chosen, every press ignored. */
-function planHistoryControl(overrides: Partial<PlanHistoryControl> = {}): PlanHistoryControl {
+/** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
+export function versionHistoryControl(
+  overrides: Partial<VersionHistoryControl> = {},
+): VersionHistoryControl {
   return {
+    open: false,
+    onOpen: ignore,
+    onClose: ignore,
     list: { kind: HISTORY_READ.READING },
     selected: undefined,
     viewing: undefined,
-    compare: VERSION_COMPARE.PREVIOUS,
     onSelect: ignore,
-    onCompare: ignore,
-    onBack: ignore,
     onRetry: ignore,
     onLoadEarlier: () => Promise.resolve(false),
     onRestore: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
@@ -56,6 +58,7 @@ export function codingAgentsControl(
     draft: undefined,
     onNewDraft: () => "draft",
     onDraftChange: ignore,
+    onDraftAttachments: ignore,
     onDiscardDraft: ignore,
     startTask: () => Promise.resolve(undefined),
     listFailed: false,
@@ -64,6 +67,7 @@ export function codingAgentsControl(
     readModels: ignore,
     readDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
     writeDefault: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
+    onUnarchive: undefined,
     start: { available: false, reason: undefined, busy: false, note: undefined, onPress: ignore },
     onStop: () => Promise.resolve(),
     onMessage: () => Promise.resolve({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED }),
@@ -91,6 +95,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     activePlanId: undefined,
     boundFor: overrides.activePlanId,
     listFailed: false,
+    listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
@@ -99,16 +104,28 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     stop: { shown: false, onPress: ignore },
     status: undefined,
     live: false,
+    mainTabs: {
+      tabs: [MAIN_TAB.PLAN],
+      tab: MAIN_TAB.PLAN,
+      openAgents: undefined,
+      newTabAsked: false,
+      onChoose: ignore,
+      onShow: ignore,
+      onClose: ignore,
+      onMove: ignore,
+      onNewTab: ignore,
+      onNewTabAnswered: ignore,
+    },
     sidePanel: {
       open: false,
       fullScreen: false,
       newTabAsked: false,
       tabs: SIDE_PANEL_TABS,
+      order: [],
       closedTabs: [],
-      pinned: [],
+      pins: [],
       subagents: [],
       files: [],
-      closedAgents: [],
       tab: SIDE_PANEL_TAB.BOARD,
       width: SIDE_PANEL_WIDTH.DEFAULT,
       onToggle: ignore,
@@ -116,11 +133,14 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onNewTab: ignore,
       onNewTabAnswered: ignore,
       onChoose: ignore,
+      onShow: ignore,
       onClose: ignore,
       onMove: ignore,
       onPin: ignore,
       onUnpin: ignore,
+      onRenamePins: ignore,
       onOpenFile: ignore,
+      onBrowseFile: ignore,
       onResize: ignore,
     },
     unreadTabs: [],
@@ -134,9 +154,10 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onLoadEarlier: () => Promise.resolve(),
     },
     agents: codingAgentsControl(),
-    history: planHistoryControl(),
+    history: versionHistoryControl(),
     onSelect: ignore,
     onShowAgent: ignore,
+    onOpenPinnedTab: ignore,
     repositories: {
       recent: [],
       read: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),

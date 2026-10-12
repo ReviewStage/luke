@@ -2,6 +2,7 @@ import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CONTEXT_WINDOW,
   type CodingAgentFailure,
   type CodingAgentStatus,
   type CodingAgentSummary,
@@ -97,6 +98,14 @@ const FAILURE_WORDS: readonly (readonly [CodingAgentFailure, readonly string[]])
     ],
   ],
   [
+    CODING_AGENT_FAILURE.PROVIDER_KEY,
+    [
+      CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE,
+      CODER_REFUSAL.ACCOUNT_KEY_REFUSED,
+      CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA,
+    ],
+  ],
+  [
     CODING_AGENT_FAILURE.SANDBOX,
     [
       REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE,
@@ -144,6 +153,9 @@ export function codingAgentSummary(
     planId: agent.planId,
     model: agent.model,
     effort: agent.effort,
+    ...(agent.contextWindow === CONTEXT_WINDOW.STANDARD
+      ? { contextWindow: agent.contextWindow }
+      : undefined),
     title: agent.title,
     createdAt: agent.createdAt.getTime(),
     status: codingAgentStatusOf(standing.turn, {

@@ -30,6 +30,7 @@ import {
   userMessage,
   userMetadataOf,
 } from "../../core.js";
+import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import type { AskDeliveryBinding } from "../store/asks.js";
 import type { ConversationTarget, StoreWriter } from "../store/index.js";
@@ -458,7 +459,7 @@ export class StreamRelay {
       case "message.received":
         return Effect.andThen(
           this.#joined(event.data.turnId, event.meta.deliveryIds ?? [], standing),
-          this.#received(event.data.turnId, event.data.message, event.meta.id, standing),
+          this.#received(event.data.turnId, receivedMessage(event.data), event.meta.id, standing),
         );
       case "step.started":
         return this.#stepStarted(event.data.turnId, event.data.stepIndex, standing);
@@ -708,7 +709,7 @@ export class StreamRelay {
 
   #received(
     eveTurnId: string,
-    text: string,
+    received: ReceivedMessage,
     eventId: string | undefined,
     standing: RelayStanding,
   ): RelayEffect<void> {
@@ -741,24 +742,27 @@ export class StreamRelay {
         }
         return;
       }
-      // A line the developer sent to a running coding agent already stands in the conversation,
-      // awaiting this turn: the receipt takes it into the turn rather than writing it again, and
-      // the turn's own received-line count still moves, so a later line's row keeps its id.
+      // The lines the developer sent to a running coding agent already stand in the conversation,
+      // awaiting this turn, one or several eve coalesced into this one message: the receipt takes
+      // them into the turn rather than writing them again, and the turn's own received-line count
+      // still moves, so a later line's row keeps its id.
       const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
-        text,
+        text: received.text,
         turnId: hostTurnId(standing.sessionId, eveTurnId),
       });
-      if (Result.isSuccess(taken) && Option.isSome(taken.success)) return;
+      if (Result.isSuccess(taken) && taken.success.length > 0) return;
+      // A message written here keeps its words as its first part and the files it carried after them.
+      const message = userMessage(
+        receivedMessageId(standing.sessionId, eveTurnId, read.count),
+        received.words,
+        userMetadataOf(
+          trigger,
+          turn.kind === BRAIN_HOST_TURN.SPOKEN ? BRAIN_REQUEST_ORIGIN.SPOKEN : undefined,
+        ),
+      );
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
-        message: userMessage(
-          receivedMessageId(standing.sessionId, eveTurnId, read.count),
-          text,
-          userMetadataOf(
-            trigger,
-            turn.kind === BRAIN_HOST_TURN.SPOKEN ? BRAIN_REQUEST_ORIGIN.SPOKEN : undefined,
-          ),
-        ),
+        message: { ...message, parts: [...message.parts, ...received.files] },
       });
       // The hook cannot stop the turn eve already opened, so an ask the store
       // refused is remembered on the turn: its answer is not written, and the

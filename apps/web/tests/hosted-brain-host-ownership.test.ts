@@ -97,6 +97,7 @@ function hostOverTestDatabase(): TestHost {
     deploymentSecret: () => undefined,
     eveOrigin: () => undefined,
     openAi: () => undefined,
+    titleModel: () => undefined,
     scriptedModel: () => false,
     spend: unreached("spend"),
     now: () => NOW,

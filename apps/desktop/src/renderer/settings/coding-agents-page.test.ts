@@ -1,8 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
-import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -14,7 +25,9 @@ import {
   type ActOutcome,
   type ActResultFor,
 } from "#shared/messages/acts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { CodingAgentsSection } from "./coding-agents-page";
 
 const MODELS: readonly CatalogModel[] = [
@@ -51,8 +64,20 @@ const MODELS: readonly CatalogModel[] = [
   },
 ];
 
+/** The catalog with GPT-6.1 Sol offering two windows, priced apart past 272K as OpenAI prices its long context. */
+const WINDOWED: readonly CatalogModel[] = MODELS.map((model) =>
+  model.id === "openai/gpt-6.1-sol"
+    ? {
+        ...model,
+        contextWindows: { standardTokens: 272_000, longTokens: 1_050_000, longInputPriceFactor: 2 },
+      }
+    : model,
+);
+
+/** The catalog the bridge answers. */
+let catalog = MODELS;
 /** The service's default as the test's bridge holds it, written by the page and read back by it. */
-let stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
+let stored: ModelChoice = { model: "anthropic/claude-opus-5.5", effort: "high" };
 /** Every act the page sent, in order. */
 let sent: Act[] = [];
 /** Whether a write is refused as a choice the catalog does not offer. */
@@ -61,6 +86,12 @@ let refuseWrites = false;
 let refuseModels = false;
 /** Whether the default read is answered with a failure rather than the stored choice. */
 let refuseDefaultRead = false;
+/** The providers the account holds a key of its own for, as the keys read answers them. */
+let ownKeys: readonly ModelProvider[] = [];
+/** How the provider last answered each of those keys. */
+let ownKeyStatus: ProviderKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
+/** Whether the default read is never answered, so the page stands reading. */
+let holdDefaultRead = false;
 
 /** A done outcome carrying one kind's own answer. */
 const done = (value: ActResultFor<ActKind>): ActOutcome => ({
@@ -73,6 +104,7 @@ function answer(request: Act): Promise<ActOutcome> {
   sent.push(request);
   switch (request.kind) {
     case ACT_KIND.CODING_AGENTS_DEFAULT_READ:
+      if (holdDefaultRead) return new Promise(() => undefined);
       return Promise.resolve(
         done(
           refuseDefaultRead
@@ -82,7 +114,21 @@ function answer(request: Act): Promise<ActOutcome> {
       );
     case ACT_KIND.CODING_AGENTS_MODELS:
       return Promise.resolve(
-        done(refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: MODELS }),
+        done(
+          refuseModels ? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED } : { models: catalog },
+        ),
+      );
+    case ACT_KIND.PROVIDER_KEYS_READ:
+      return Promise.resolve(
+        done({
+          keys: ownKeys.map((provider) => ({
+            provider,
+            hint: "sk-…test",
+            addedAt: 1,
+            status: ownKeyStatus,
+            statusAt: 1,
+          })),
+        }),
       );
     case ACT_KIND.CODING_AGENTS_DEFAULT_WRITE:
       if (refuseWrites) {
@@ -99,11 +145,15 @@ const roots: Root[] = [];
 
 beforeEach(() => {
   installScrollIntoView();
+  catalog = MODELS;
   stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
   sent = [];
   refuseWrites = false;
   refuseModels = false;
   refuseDefaultRead = false;
+  ownKeys = [];
+  ownKeyStatus = PROVIDER_KEY_STATUS.VERIFIED;
+  holdDefaultRead = false;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -121,12 +171,14 @@ async function settle(): Promise<void> {
   });
 }
 
-async function mount(signedIn = true): Promise<HTMLElement> {
+/** The page, on the atoms `registry` holds where one is given. */
+async function mount(signedIn = true, registry?: AtomRegistry): Promise<HTMLElement> {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(CodingAgentsSection, { signedIn })));
+  const page = createElement(CodingAgentsSection, { signedIn });
+  act(() => root.render(registry === undefined ? page : onRegistry(registry, page)));
   await settle();
   return container;
 }
@@ -174,7 +226,11 @@ test("the page reads the default and the models as it opens, and draws the model
 
   assert.deepEqual(
     sent.map((request) => request.kind),
-    [ACT_KIND.CODING_AGENTS_DEFAULT_READ, ACT_KIND.CODING_AGENTS_MODELS],
+    [
+      ACT_KIND.CODING_AGENTS_DEFAULT_READ,
+      ACT_KIND.PROVIDER_KEYS_READ,
+      ACT_KIND.CODING_AGENTS_MODELS,
+    ],
   );
   assert.equal(chip(page).textContent, "Opus 5.5");
   assert.ok(chip(page).querySelector("svg.provider-mark"), "Claude Code's mark");
@@ -185,6 +241,21 @@ test("the page reads the default and the models as it opens, and draws the model
     ["Max", "false"],
   ]);
 });
+
+it.effect(
+  "while the default is read the page draws the spinner in its rows' place, saying Loading your default to a reader",
+  () =>
+    Effect.gen(function* () {
+      holdDefaultRead = true;
+      const registry = yield* registryOnTestClock;
+      const page = yield* Effect.promise(() => mount(true, registry));
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.deepEqual(waitsIn(page), [{ says: "Loading your default", ring: true }]);
+      assert.equal(page.querySelector(".settings-picker-chip"), null, "no rows before the read");
+      assert.doesNotMatch(page.textContent ?? "", /Reading/u);
+    }),
+);
 
 test("the model menu opens on its search, lists the newest of each family under its harness's mark, and a pick keeps the effort the model lists, else its first", async () => {
   const page = await mount();
@@ -276,6 +347,52 @@ test("choosing an effort writes the default once and draws what the service kept
   assert.equal(
     sent.filter((request) => request.kind === ACT_KIND.CODING_AGENTS_DEFAULT_WRITE).length,
     1,
+  );
+});
+
+test("a model offering two windows draws a context row over the two, its whole window the default and saying what that costs, where the standard one is chosen and kept through an effort change; a model with one draws none", async () => {
+  catalog = WINDOWED;
+  stored = { model: "openai/gpt-6.1-sol", effort: "low" };
+  const page = await mount();
+  const segment = (label: string) =>
+    [...page.querySelectorAll<HTMLElement>(".settings-segment")].find(
+      (each) => each.textContent === label,
+    );
+  assert.deepEqual(efforts(page), [
+    ["Low", "true"],
+    ["Extra high", "false"],
+    ["272K", "false"],
+    ["1M", "true"],
+  ]);
+  assert.ok(page.textContent.includes("On 1M, prompts over 272K tokens cost 2× for input."));
+
+  act(() => segment("272K")?.click());
+  await settle();
+  assert.deepEqual(stored, {
+    model: "openai/gpt-6.1-sol",
+    effort: "low",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  });
+  act(() => segment("Extra high")?.click());
+  await settle();
+  assert.deepEqual(stored, {
+    model: "openai/gpt-6.1-sol",
+    effort: "xhigh",
+    contextWindow: CONTEXT_WINDOW.STANDARD,
+  });
+  assert.deepEqual(efforts(page).slice(2), [
+    ["272K", "true"],
+    ["1M", "false"],
+  ]);
+  act(() => segment("1M")?.click());
+  await settle();
+  assert.deepEqual(stored, { model: "openai/gpt-6.1-sol", effort: "xhigh" });
+
+  stored = { model: "anthropic/claude-opus-5.5", effort: "high" };
+  const other = await mount();
+  assert.equal(
+    [...other.querySelectorAll(".settings-segment")].some((each) => each.textContent === "1M"),
+    false,
   );
 });
 
@@ -383,5 +500,25 @@ test("the model menu lists base models only, and the Fast switch under it stores
   assert.match(
     fastSwitch(reopened).closest(".settings-row")?.textContent ?? "",
     /No fast version of Sonnet 5\.5/u,
+  );
+});
+
+test("the model row says the default runs on the account's own key where the provider accepted one, and that one it did not needs a hand", async () => {
+  ownKeys = [MODEL_PROVIDER.ANTHROPIC];
+  const own = await mount();
+  ownKeys = [MODEL_PROVIDER.OPENAI];
+  const luke = await mount();
+  ownKeys = [MODEL_PROVIDER.ANTHROPIC];
+  ownKeyStatus = PROVIDER_KEY_STATUS.UNREADABLE;
+  const unusable = await mount();
+
+  const note = (page: HTMLElement) =>
+    page.querySelector(".settings-picker-row .settings-copy small, .settings-copy small")
+      ?.textContent;
+  assert.equal(note(own), "What a click on Start runs an agent on, on your own Anthropic key.");
+  assert.equal(note(luke), "What a click on Start runs an agent on.");
+  assert.equal(
+    note(unusable),
+    "What a click on Start runs an agent on. Your Anthropic key needs attention in Settings › API keys.",
   );
 });

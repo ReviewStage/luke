@@ -87,26 +87,34 @@ export function TrashIcon(): React.JSX.Element {
   );
 }
 
-/** A push pin: keeps a plan at the head of the sidebar. */
+/**
+ * A push pin tilted the way 📌 is, as Slack, Notion, and Linear draw theirs:
+ * keeps a plan at the head of the sidebar. Its paths are Tabler Icons'
+ * `pin` (https://tabler.io/icons, MIT licence, copyright (c) 2020-2026
+ * Paweł Kuna), drawn in our stroke.
+ */
 export function PinIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="M12 16.8V21" />
-      <path d="M9 4h6" />
-      <path d="M10 4v6.2l-3.4 3.4a1.3 1.3 0 0 0-.4.9v.9a1.3 1.3 0 0 0 1.3 1.3h9a1.3 1.3 0 0 0 1.3-1.3v-.9a1.3 1.3 0 0 0-.4-.9L14 10.2V4" />
+      <path d="M15 4.5l-4 4l-4 1.5l-1.5 1.5l7 7l1.5 -1.5l1.5 -4l4 -4" />
+      <path d="M9 15l-4.5 4.5" />
+      <path d="M14.5 4l5.5 5.5" />
     </Glyph>
   );
 }
 
-/** A push pin struck through: lets a pinned plan back among the rest. */
+/**
+ * The tilted pin struck through: lets a pinned plan back among the rest. Its
+ * paths are Tabler Icons' `pinned-off` (https://tabler.io/icons, MIT licence,
+ * copyright (c) 2020-2026 Paweł Kuna), drawn in our stroke.
+ */
 export function UnpinIcon(): React.JSX.Element {
   return (
     <Glyph className="icon-button-glyph">
-      <path d="M12 16.8V21" />
-      <path d="M9 4h6" />
-      <path d="M14 4v6.2l3.4 3.4" />
-      <path d="M10 7.6v2.6l-3.4 3.4a1.3 1.3 0 0 0-.4.9v.9a1.3 1.3 0 0 0 1.3 1.3h8.7" />
-      <path d="M3.8 3.8l16.4 16.4" />
+      <path d="M3 3l18 18" />
+      <path d="M15 4.5l-3.249 3.249m-2.57 1.433l-2.181 .818l-1.5 1.5l7 7l1.5 -1.5l.82 -2.186m1.43 -2.563l3.25 -3.251" />
+      <path d="M9 15l-4.5 4.5" />
+      <path d="M14.5 4l5.5 5.5" />
     </Glyph>
   );
 }
@@ -349,6 +357,16 @@ export function MegaphoneIcon(): React.JSX.Element {
   return (
     <Glyph>
       <path d="M3.4 10.2v3.6a1.6 1.6 0 0 0 1.6 1.6h1.8l1.2 4.2a1.3 1.3 0 0 0 1.3 1h.9a1 1 0 0 0 1-1.3l-1.1-3.9h1.7l7.4 3.4a1 1 0 0 0 1.4-.9V6.1a1 1 0 0 0-1.4-.9l-7.4 3.4H5a1.6 1.6 0 0 0-1.6 1.6Z" />
+    </Glyph>
+  );
+}
+
+/** A bell: what the notifications section is for. */
+export function BellIcon(): React.JSX.Element {
+  return (
+    <Glyph>
+      <path d="M6.2 16.6V11a5.8 5.8 0 0 1 11.6 0v5.6l1.6 1.8H4.6Z" />
+      <path d="M10 20.4a2.2 2.2 0 0 0 4 0" />
     </Glyph>
   );
 }

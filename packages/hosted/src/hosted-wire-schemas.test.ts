@@ -15,6 +15,7 @@ import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
+import * as providerKeyWire from "./provider-key-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 
@@ -40,6 +41,7 @@ const EFFECT_MODULE_SCHEMAS = {
     drawingElementsSchema: boardWire.drawingElementsSchema,
   } satisfies RecordedEffectJsonSchemas<typeof boardWire>,
   "coding-agent-wire": {
+    contextWindowSchema: codingAgentWire.contextWindowSchema,
     codingAgentStartRequestSchema: codingAgentWire.codingAgentStartRequestSchema,
     codingAgentMessageRequestSchema: codingAgentWire.codingAgentMessageRequestSchema,
     codingAgentRenameRequestSchema: codingAgentWire.codingAgentRenameRequestSchema,
@@ -56,11 +58,15 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentCallIdSchema: codingAgentWire.codingAgentCallIdSchema,
     codingAgentDelegationInputSchema: codingAgentWire.codingAgentDelegationInputSchema,
     codingAgentDelegationOutputSchema: codingAgentWire.codingAgentDelegationOutputSchema,
+    codingAgentTodosInputSchema: codingAgentWire.codingAgentTodosInputSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentWire>,
   "coding-agent-view": {
     codingAgentModelsAnswerSchema: codingAgentView.codingAgentModelsAnswerSchema,
     codingAgentDefaultAnswerViewSchema: codingAgentView.codingAgentDefaultAnswerViewSchema,
     codingAgentDefaultWriteParamsSchema: codingAgentView.codingAgentDefaultWriteParamsSchema,
+    providerKeysAnswerViewSchema: codingAgentView.providerKeysAnswerViewSchema,
+    providerKeySaveParamsSchema: codingAgentView.providerKeySaveParamsSchema,
+    providerKeyRemoveParamsSchema: codingAgentView.providerKeyRemoveParamsSchema,
     codingAgentListParamsSchema: codingAgentView.codingAgentListParamsSchema,
     codingAgentListAnswerViewSchema: codingAgentView.codingAgentListAnswerViewSchema,
     codingAgentStartParamsSchema: codingAgentView.codingAgentStartParamsSchema,
@@ -96,6 +102,7 @@ const EFFECT_MODULE_SCHEMAS = {
     sessionCreatedFrameSchema: liveContract.sessionCreatedFrameSchema,
   } satisfies RecordedEffectJsonSchemas<typeof liveContract>,
   "models-wire": {
+    contextWindowsSchema: modelsWire.contextWindowsSchema,
     catalogModelSchema: modelsWire.catalogModelSchema,
     modelsAnswerSchema: modelsWire.modelsAnswerSchema,
     modelChoiceSchema: modelsWire.modelChoiceSchema,
@@ -116,6 +123,9 @@ const EFFECT_MODULE_SCHEMAS = {
     planCreateRequestSchema: planWire.planCreateRequestSchema,
     planRenameRequestSchema: planWire.planRenameRequestSchema,
     planUpdateRequestSchema: planWire.planUpdateRequestSchema,
+    planAgentLineSchema: planWire.planAgentLineSchema,
+    planPullRequestLineSchema: planWire.planPullRequestLineSchema,
+    planAgentsSummarySchema: planWire.planAgentsSummarySchema,
     planSummarySchema: planWire.planSummarySchema,
     planLastEditSchema: planWire.planLastEditSchema,
     planFieldEditSchema: planWire.planFieldEditSchema,
@@ -137,7 +147,16 @@ const EFFECT_MODULE_SCHEMAS = {
     planFileWindowSchema: planWire.planFileWindowSchema,
     planFileRefusalSchema: planWire.planFileRefusalSchema,
     planFileAnswerSchema: planWire.planFileAnswerSchema,
+    planTreeRequestSchema: planWire.planTreeRequestSchema,
+    planTreeEntrySchema: planWire.planTreeEntrySchema,
+    planTreeFolderSchema: planWire.planTreeFolderSchema,
+    planTreeAnswerSchema: planWire.planTreeAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
+  "provider-key-wire": {
+    providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,
+    providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
+    providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,
     countedNumber: serviceWire.countedNumber,

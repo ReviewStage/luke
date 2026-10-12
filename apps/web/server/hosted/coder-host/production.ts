@@ -7,9 +7,11 @@ import { oauthUserInfoFromAuthAnswer, type UserInfoEndpoint } from "../bearer.js
 import { conversationOwnedBy, runtimeSessionOwner } from "../brain-host/conversation.js";
 import type { SessionOwnership } from "../brain-host/door.js";
 import { HostedEnvironment } from "../environment.js";
+import type { PlanStoreEffect } from "../plan-store.js";
 import { type StoreWriter, storeWriter } from "../store/index.js";
+import { accountProviderKeys } from "./account-keys.js";
 import { CODER_ENVIRONMENT, CODER_MODEL_FIXTURE } from "./bounds.js";
-import { type ProviderKeys, titleModel } from "./model.js";
+import { type LukeKeys, type ProviderKeys, titleModel } from "./model.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 
 /**
@@ -18,7 +20,9 @@ import { CODER_TOOL_SET } from "./tool-set.js";
  * Built over `HostedEnvironment` so every key is read once, as the
  * environment is, and travels sealed: the bearer's account through the auth
  * service's own userinfo, the writer over the coding agent's tool set, and
- * Luke's own Anthropic and OpenAI keys for the model a step runs on. The
+ * the keys a step runs on — the account's own where it saved one, read
+ * from its rows for every step, and Luke's own Anthropic and OpenAI keys
+ * where it did not. The
  * writer is built on first use and kept for the instance, so the agent's
  * discovery, which imports the authored files, touches no database. An
  * authored file hands what it needs here and nothing else.
@@ -31,8 +35,8 @@ export interface CoderHostSeams {
   readonly ownership: SessionOwnership;
   /** The secret the deployment acts for an account under at eve's door, sealed; nothing while the environment names none. */
   readonly deploymentSecret: () => Redacted.Redacted | undefined;
-  /** Luke's own provider keys, each absent where the deployment holds none. */
-  readonly keys: () => ProviderKeys;
+  /** The keys the account's step runs on: its own where it saved one, Luke's where it did not, each absent where neither stands. */
+  readonly keys: (userId: string) => PlanStoreEffect<ProviderKeys>;
   /** The model an agent's title is generated on; nothing leaves every agent untitled. */
   readonly titleModel: () => LanguageModel | undefined;
   /** Whether the deployment asked for the scripted fixture model in place of the providers. */
@@ -51,7 +55,7 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
   function* (run: WebStoreRun): Effect.fn.Return<CoderHostSeams, never, HostedEnvironment> {
     const environment = yield* HostedEnvironment;
     const writer = yield* Effect.cached(storeWriter({ tools: CODER_TOOL_SET }));
-    const keys: ProviderKeys = {
+    const luke: LukeKeys = {
       anthropic: environment.anthropicKey,
       openAi: environment.openAiKey,
     };
@@ -69,8 +73,9 @@ export const productionCoderHostSeams = /* @__PURE__ */ Effect.fn("web/productio
           const answer = (await auth.api.oauth2UserInfo(input)) as WireBoundaryInput;
           return oauthUserInfoFromAuthAnswer(unparsedWire(answer));
         }),
-      keys: () => keys,
-      titleModel: () => titleModel(keys),
+      keys: (userId) =>
+        accountProviderKeys(userId, { luke, ring: environment.providerKeyEncryptionKeys, run }),
+      titleModel: () => titleModel(luke),
       scriptedModel: () =>
         process.env[CODER_ENVIRONMENT.MODEL_FIXTURE] === CODER_MODEL_FIXTURE.SCRIPTED,
       now: () => Date.now(),

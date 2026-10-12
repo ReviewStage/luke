@@ -54,10 +54,16 @@
   --menu-inset: var(--space-4);
   /* The sidebar's default width; the app stage carries the dragged one. */
   --sidebar-width: 264px;
-  /* The traffic lights, as main places them (`DESKTOP_WINDOW.TRAFFIC_LIGHTS`):
-     where the green one ends, its x plus the three lights' 61px on macOS 26,
-     and the height their middle sits at, its y plus half a 14px light. */
-  --traffic-lights-end: 79px;
+  /* The window's zoom as a factor, which the page draws every pixel at and
+     the renderer keeps here (`window-zoom.ts`). */
+  --zoom: 1;
+  /* The traffic lights, as main places them (`TRAFFIC_LIGHTS` in
+     `main/window/zoom.ts`): where the green one ends, its x plus the three
+     lights' 61px on macOS 26, and the height their middle sits at, its y plus
+     half a 14px light. The lights never scale with the page, so their width
+     is divided by the zoom; main moves them down with it instead, so their
+     middle stays where it is drawn here. */
+  --traffic-lights-end: calc(79px / var(--zoom));
   --traffic-lights-middle: 25px;
   /* The title bar's own buttons beside them, each a toolbar icon button and
      the first this far past the green light: about what the lights leave
@@ -328,20 +334,26 @@ body,
   transform: none;
 }
 
-/* New plan reads as a row of the list it heads: no ground at rest, and the
-   plan rows' own hover and selection, since its page is a place like theirs. */
-.sidebar-new-plan {
+/* New plan reads as a row of the list it heads: no ground at rest, the body's
+   weight a read plan's name takes, and the plan rows' own hover and selection,
+   since its page is a place like theirs. Search beneath it is drawn the same,
+   and the section's gap falls after it. */
+.sidebar-new-plan,
+.sidebar-search {
   display: flex;
   align-items: center;
   gap: var(--glyph-gap);
   height: 36px;
-  margin: 0 0 var(--section-gap);
+  margin: 0 0 var(--list-gap);
   padding: 0 var(--row-inset);
   border-radius: 9px;
   background: none;
   font-size: 13px;
-  font-weight: 600;
   transition: background-color var(--duration-hover) ease;
+}
+
+.sidebar-search {
+  margin-bottom: var(--section-gap);
 }
 
 .sidebar-new-plan:disabled {
@@ -349,6 +361,7 @@ body,
 }
 
 .sidebar-new-plan svg,
+.sidebar-search svg,
 .sidebar-item svg {
   width: var(--control-glyph);
   height: var(--control-glyph);
@@ -410,7 +423,8 @@ body,
    buttons at its end included, and no more than its hover does, so the open
    plan keeps its stronger fill. */
 :where(.sidebar-plan-item:hover) > .sidebar-plan,
-.sidebar-new-plan:hover:not(:disabled) {
+.sidebar-new-plan:hover:not(:disabled),
+.sidebar-search:hover {
   background: var(--raised);
 }
 
@@ -427,8 +441,14 @@ body,
   white-space: nowrap;
 }
 
+/* A plan's name reads in the body's weight, the open one too, whose fill is
+   what marks it; a plan saved since the developer last looked at it on this
+   Mac takes the heavier weight until they do. */
 .sidebar-plan-name {
   font-size: 13px;
+}
+
+.sidebar-plan[data-unread="true"] .sidebar-plan-name {
   font-weight: 600;
 }
 
@@ -445,7 +465,6 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
   outline: none;
 }
 
@@ -473,6 +492,36 @@ body,
   text-align: right;
 }
 
+/* A row's one mark leads its time, so it steps out with the time while the
+   row is hovered: a spinner, in the time's own ink, while an agent works on
+   the plan, else the pull request's glyph in GitHub's colours, open in the
+   success green, a draft in the muted ink, merged in the merged purple, and
+   red where its checks failed. The card reuses the glyphs. */
+.plan-mark-glyph {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  color: var(--text-tertiary);
+  vertical-align: -1.5px; /* off-scale */
+}
+
+.sidebar-plan-time .plan-mark-glyph {
+  margin-right: var(--space-4);
+}
+
+.plan-mark-glyph[data-state="open"] {
+  color: var(--state-complete);
+}
+
+.plan-mark-glyph[data-state="merged"] {
+  color: var(--state-merged);
+}
+
+.plan-mark-glyph[data-failing="true"] {
+  color: var(--danger);
+}
+
 /* Pin and Archive stand in the time's slot, which is always as wide as the
    two of them, while the row is hovered or holds the keyboard: the time
    steps out and they step in over the name's first line, so the name is cut
@@ -495,10 +544,40 @@ body,
   opacity: 0;
 }
 
+/* Note that Pin and Archive draw no ground under the pointer, as the
+   repository header's glyphs do not, because the row under them is already
+   lit by the hover: only the glyph itself brightens. */
 .sidebar-plan-mark {
+  display: inline-flex;
   width: var(--sidebar-plan-mark);
   height: var(--sidebar-plan-mark);
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 6px;
+  background: none;
+  color: var(--text-secondary);
+  transition: color var(--duration-hover) ease;
+}
+
+.sidebar-plan-mark:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.sidebar-plan-mark:disabled {
+  opacity: 0.45;
+}
+
+.sidebar-plan-mark:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px; /* off-scale */
+}
+
+.sidebar-plan-mark svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
+  flex: 0 0 auto;
 }
 
 .sidebar-plan-item:hover > .sidebar-plan-marks,
@@ -518,6 +597,12 @@ body,
    is hovered, holds focus, or has its menu open. */
 .sidebar-repository + .sidebar-repository,
 .sidebar-plans + .sidebar-repository {
+  margin-top: var(--space-8);
+}
+
+/* Archived stands at the foot of the list as one more group, its header a
+   repository's (`ArchivedPlans`). */
+.sidebar-archived {
   margin-top: var(--space-8);
 }
 
@@ -635,13 +720,13 @@ body,
   height: 11px;
 }
 
-/* A folded group's count of its plans, at the toggle's end beside the ⋯,
-   shown with the chevron while the header is hovered or reached from the
+/* A folded group's count of its plans, a small gap after the name, shown
+   with the chevron while the header is hovered or reached from the
    keyboard. It is always laid out while the group is folded, only its
    opacity changing, so the name is cut where it always is. */
 .sidebar-repository-count {
   flex: none;
-  margin-left: auto;
+  margin-left: calc(var(--space-6) - var(--glyph-gap));
   color: var(--text-tertiary);
   font-size: 11.5px;
   font-variant-numeric: tabular-nums;
@@ -696,43 +781,6 @@ body,
   height: var(--control-glyph);
 }
 
-/* Archived plans fold away behind one quiet row at the foot of the list,
-   drawn in the heading's voice so it reads as a way in rather than a plan. */
-.sidebar-archived {
-  margin-top: var(--list-gap);
-}
-
-.sidebar-archived-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  width: 100%;
-  padding: var(--space-6) var(--row-inset);
-  border-radius: 9px;
-  background: none;
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-  text-align: left;
-  transition: background-color var(--duration-hover) ease;
-  -webkit-app-region: no-drag;
-}
-
-.sidebar-archived-row:hover {
-  background: var(--raised);
-}
-
-.sidebar-archived-row svg {
-  width: 12px;
-  height: 12px;
-  flex: none;
-  transition: transform var(--duration-hover) ease;
-}
-
-.sidebar-archived-row[aria-expanded="true"] svg {
-  transform: rotate(90deg);
-}
-
 /* An owner's picture stands in a glyph's slot (`repository-picture.tsx`): the
    slot sizes it, and its corners are rounded and edged so a logo drawn on
    white does not bleed into the ground around it. */
@@ -758,6 +806,53 @@ body,
 .sidebar-plan-repository :is(.repository-picture, .account-mark) {
   width: 12px;
   height: 12px;
+}
+
+/* A side panel tab pinned to the sidebar, in a plan row's shape: the tab's
+   glyph and name, which fades where it is cut short as a tab's does, and
+   its plan's name beneath in the repository's muted place. The name always
+   leaves its Unpin's room at the end, so showing it cuts nothing more. */
+.sidebar-pinned-tab .sidebar-plan-line {
+  align-items: center;
+  gap: var(--space-6);
+  padding-right: var(--sidebar-plan-mark);
+}
+
+.sidebar-pinned-tab-glyph {
+  display: flex;
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.sidebar-pinned-tab-glyph svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-pinned-tab-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.sidebar-pinned-tab-name[data-overflow="true"] {
+  mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+.sidebar-pinned-tab-plan {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A pin whose plan no longer holds what it opens stands dimmed, still
+   answering its hover, its Unpin, and its menu. */
+.sidebar-plan[aria-disabled="true"] :is(.sidebar-plan-line, .sidebar-pinned-tab-plan) {
+  opacity: 0.55;
 }
 
 .sidebar-foot {
@@ -833,7 +928,6 @@ body,
   font-weight: 600;
 }
 
-/* The gear holds the update dot at its corner, where a badge sits on an icon. */
 .sidebar-account-settings {
   position: relative;
   display: flex;
@@ -847,18 +941,10 @@ body,
   color: var(--text-primary);
 }
 
-.sidebar-account-settings .tab-note {
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  margin: 0;
-}
-
 /* A release on its way in, above the account row. Waiting on its restart it
-   is a row tinted the working blue the gear's dot answers in: news, not
-   urgency, so a wash rather than the accent's fill. Downloading it is a
-   quiet line, with nothing yet to press. */
+   is a row tinted the working blue, as is the download offered once
+   installing it failed: news, not urgency, so a wash rather than the
+   accent's fill. Downloading it is a quiet line, with nothing yet to press. */
 .sidebar-update {
   margin-bottom: var(--space-4);
   background: color-mix(in srgb, var(--state-working) 12%, transparent);
@@ -980,6 +1066,7 @@ body,
 .danger-button,
 .desktop-toolbar-actions,
 .sidebar-new-plan,
+.sidebar-search,
 .sidebar-plan,
 .sidebar-item {
   -webkit-app-region: no-drag;
@@ -1065,11 +1152,11 @@ body,
   color: var(--on-accent);
 }
 
-:is(.primary-button, .danger-button):hover:where(:not(:disabled)) {
+:is(.primary-button, .danger-button):hover:where(:not(:disabled, [aria-disabled="true"])) {
   filter: brightness(1.1);
 }
 
-:is(.primary-button, .danger-button):active:where(:not(:disabled)) {
+:is(.primary-button, .danger-button):active:where(:not(:disabled, [aria-disabled="true"])) {
   filter: brightness(0.92);
 }
 
@@ -1135,6 +1222,9 @@ body,
   border-radius: 10px;
   background: var(--surface-popover);
   box-shadow: 0 12px 32px var(--shadow);
+  /* A long menu, as a folder's entries may be, scrolls within the window. */
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
   -webkit-app-region: no-drag;
 }
 
@@ -1250,12 +1340,57 @@ body,
 
 /* An archived plan's quiet line over its document: a hairline strip in the
    secondary voice, with the press that brings the plan back. */
-.desktop-archived-banner {
+/* An archived plan's banner: a card over the document, on the document's
+   own reading width, so the one action the plan takes is the first thing
+   read, the way Notion marks a page in the trash. */
+.archived-banner {
   display: flex;
+  box-sizing: border-box;
+  width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--page-inset);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--space-12);
+  margin: var(--space-16) auto 0;
+  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--desktop-well);
+}
+
+.archived-banner-glyph {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.archived-banner-glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
+.archived-banner-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.archived-banner-words p {
+  margin: 0;
+}
+
+.archived-banner-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.archived-banner-detail {
   color: var(--text-secondary);
   font-size: 12.5px;
 }
@@ -1267,8 +1402,37 @@ body,
   flex-direction: column;
 }
 
-/* The "Edited by" line opens the History tab, so it is a press drawn as the
-   muted line it was, underlined only under the pointer or the keyboard. */
+/* Laid out still, but not drawn, while an agent's tab is the column's
+   chosen one, so the plan is found where it was left. */
+.desktop-document[hidden] {
+  display: none;
+}
+
+/* An agent's or the draft's tab in the plan's column: its transcript and
+   its composer, each keeping to the document's measure in the middle of
+   the column, as they keep to it in a wide side panel. */
+.desktop-agent {
+  --reading-room: calc((100% - var(--reading-width)) / 2);
+  position: relative;
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+}
+
+.desktop-agent [role="log"],
+.desktop-agent .agent-composer {
+  padding-inline: max(var(--content-inset), var(--reading-room));
+}
+
+/* The transcript's way back to its newest line stands on the column's own
+   ground rather than the panel's. */
+.desktop-agent .conversation-scroll {
+  --button-ground: var(--desktop-ground);
+}
+
+/* The "Edited by" line opens the version history, so it is a press drawn as
+   the muted line it was, underlined only under the pointer or the keyboard. */
 .plan-edit-link {
   padding: 0;
   border-radius: 4px;
@@ -1284,48 +1448,7 @@ body,
   text-underline-offset: 0.2em;
 }
 
-/* A version drawn in the document's place (version-view.tsx): the bar over
-   it, whose version and its two presses share the first row and whose
-   comparison stands on its own under them, then the version, read-only. */
-.version-view {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
-}
-
-.version-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-8) var(--space-12);
-  padding: var(--space-8) var(--page-inset);
-  border-bottom: 1px solid var(--hairline);
-  background: var(--desktop-well);
-}
-
-.version-bar-title {
-  min-width: 0;
-  margin: 0;
-  overflow: hidden;
-  color: var(--text-primary);
-  font-size: 12.5px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.version-bar-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--control-gap);
-}
-
-.version-compare {
-  grid-column: 1 / -1;
-  justify-self: start;
-}
-
+/* A line over a version: what it is compared with, or why it is not drawn. */
 .version-note {
   margin-top: 0;
   margin-bottom: var(--space-16);
@@ -2040,11 +2163,15 @@ body,
 
 /* Settings ------------------------------------------------------------------- */
 
-.desktop-settings {
+.desktop-settings,
+.desktop-version-history {
   display: contents;
 }
 
-.settings-pages {
+/* Settings' page list and a plan's version history alike: the column where
+   the plans' sidebar stands, the way back at its head. */
+.settings-pages,
+.version-log {
   position: relative;
   display: flex;
   min-height: 0;
@@ -2054,12 +2181,14 @@ body,
   background: var(--desktop-sidebar);
 }
 
-.settings-pages-back {
+.settings-pages-back,
+.version-log-back {
   width: auto;
   margin-bottom: var(--space-12);
 }
 
-.settings-pages-title {
+.settings-pages-title,
+.version-log-title {
   margin: 0 var(--row-inset) var(--space-12);
   font-size: 20px;
   font-weight: 720;
@@ -2158,7 +2287,8 @@ body,
   list-style: none;
 }
 
-.settings-page {
+.settings-page,
+.version-page {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -2209,6 +2339,155 @@ body,
 .settings-page-scroll .settings-index,
 .settings-page-scroll .settings-header {
   display: none;
+}
+
+/* Version history ------------------------------------------------------------ */
+
+/* The plan the versions are of, under the view's own title, which gives up
+   its gap below to this line. */
+.version-log-title:has(+ .version-log-plan) {
+  margin-bottom: var(--space-2);
+}
+
+.version-log-plan {
+  margin: 0 var(--row-inset) var(--space-12);
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The versions, newest first, one row each, the row whose version is drawn
+   lit as a chosen sidebar row is (desktop-version-history.tsx). */
+.version-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--list-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.version-row {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+.version-row:hover {
+  background: var(--raised);
+}
+
+.version-row[aria-current="true"] {
+  background: var(--raised-strong);
+}
+
+.version-row-head {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+}
+
+.version-row-author {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* "During a call", on a version's row. */
+.version-tag {
+  flex: none;
+  padding: 0 var(--space-6);
+  border-radius: 5px;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 16px;
+}
+
+.version-row[aria-current="true"] .version-tag {
+  background: var(--raised);
+}
+
+.version-row-time {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.version-row-summary {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-earlier {
+  margin-top: var(--space-8);
+  padding: var(--space-8) var(--row-inset);
+  border-radius: 9px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+}
+
+.version-earlier:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+/* The page while a version is read (`version-view.tsx`): each section's
+   heading a block in a heading's type over its lines in the body's, as far
+   apart as the plan's own sections stand. */
+.version-skeleton-section + .version-skeleton-section {
+  margin-top: var(--space-24);
+}
+
+.version-skeleton-heading {
+  margin-bottom: var(--space-8);
+  font-size: 1.35em;
+}
+
+/* The moment's place in the toolbar while the versions are read, in the
+   title's type. */
+.version-skeleton-title {
+  font-size: 15px;
+}
+
+/* A row while the versions are read: the author's block over the summary's,
+   in a row's own type and room, so the rows land where the blocks stood. */
+.version-skeleton-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--row-inset);
+  font-size: 12px;
+}
+
+.version-skeleton-author {
+  font-size: 12.5px;
+}
+
+/* No call bar stands below a version, so it needs no room under its last line. */
+.version-page .desktop-document .plan-document-scroll {
+  padding-bottom: var(--page-inset);
 }
 
 /* Onboarding ----------------------------------------------------------------- */
@@ -2449,14 +2728,16 @@ body,
   flex-direction: column;
 }
 
-/* Every tab but the Board keeps to a column centred in the panel, however
-   wide it is drawn, as the document keeps to its own: words at the
-   document's measure, code at code's. Each scroller still spans the panel,
-   so its bar stays at the panel's edge, and pads in to the column, never by
-   less than the tab's own inset. An agent's composer pads in to the same
-   column as its transcript, so the card, its chips, and the transcript line
-   up; the sticky call headers and the way back to the newest line already
-   keep to the log's column. */
+/* Every tab but the Board and a File tab keeps to a column centred in the
+   panel, however wide it is drawn, as the document keeps to its own: words
+   at the document's measure, the Code feed's cards at code's. Each scroller
+   still spans the panel, so its bar stays at the panel's edge, and pads in
+   to the column, never by less than the tab's own inset. An agent's
+   composer pads in to the same column as its transcript, so the card, its
+   chips, and the transcript line up; the sticky call headers and the way
+   back to the newest line already keep to the log's column. A File tab
+   spans the panel as an editor does: a file's lines are read across all
+   the width the developer gave the panel. */
 .side-panel-content [role="log"],
 .side-panel-content .agent-composer {
   padding-inline: max(var(--space-16), var(--reading-room));
@@ -2468,21 +2749,6 @@ body,
 
 .side-panel-content .history-tab {
   padding-inline: max(var(--column-inset), var(--reading-room));
-}
-
-/* A file's heading keeps its band edge to edge, as the panel's own chrome
-   does, and starts its words at the column's edge. */
-.side-panel-content .file-tab {
-  --file-room: max(0px, var(--code-reading-room));
-}
-
-.side-panel-content .file-tab-header {
-  padding-right: calc(var(--file-room) + var(--space-2));
-  padding-left: calc(var(--file-room) + var(--space-12));
-}
-
-.side-panel-content .file-tab-lines {
-  padding-inline: var(--file-room);
 }
 
 /* The board fills the tab edge to edge: the panel is its frame, so its own
@@ -2625,6 +2891,17 @@ body,
   color: var(--text-primary);
 }
 
+/* A quiet tab, the plan's while it is its column's lone one, wears no fill
+   at rest even chosen, and the hover fill under the pointer, as a title
+   does. */
+.tab[data-quiet="true"]:not(:hover) {
+  background: none;
+}
+
+.tab[data-quiet="true"]:hover {
+  background: var(--raised);
+}
+
 /* A tab being dragged is lifted over the tabs it passes: the chosen tab's
    fill made opaque on the panel's ground, and a shadow beneath. It follows
    the pointer frame for frame, so its own transform eases nothing. */
@@ -2641,8 +2918,7 @@ body,
 /* Only the chosen tab keeps room for its ×, so the strip holds more before
    it scrolls; another tab's × comes over the end of its label, which fades
    beneath it. */
-.tab[data-closable="true"][data-selected="true"],
-.tab[data-pinned="true"] {
+.tab[data-closable="true"][data-selected="true"] {
   --tab-end: calc(var(--tab-close) + 2 * var(--tab-close-inset));
 }
 
@@ -2680,6 +2956,12 @@ body,
   height: var(--control-glyph);
 }
 
+/* A glyph wearing where its work stands takes a glyph's footprint, so an
+   agent's tab and a fixed tab line their labels up alike. */
+.tab-icon .state-glyph {
+  --state-glyph-size: var(--control-glyph);
+}
+
 .tab-label {
   overflow: hidden;
   white-space: nowrap;
@@ -2695,8 +2977,91 @@ body,
 .searchable-menu .plan-compose-menu-name[data-overflow="true"],
 .searchable-menu .plan-compose-menu-detail[data-overflow="true"],
 .subagent-job[data-overflow="true"],
-.agent-published-title[data-overflow="true"] {
+.agent-published-title[data-overflow="true"],
+.tab-card-name[data-untitled][data-overflow="true"],
+.tab-card-preview[data-overflow="true"] {
   mask-image: linear-gradient(to left, transparent, #000 var(--label-fade));
+}
+
+/* An agent's or a subagent's tab hangs a card in its hint's place, as a
+   browser's tab hover card hangs: a small panel of the window's own, light in
+   the light, hung from the tab's start. Its head is the name, wrapped to two
+   lines, or a task standing in for one on a single line faded at its end,
+   with the model under it and the time muted at its right; under the head,
+   one line of the latest step, faded where it is cut short as a tab's
+   label is. */
+.tooltip-card {
+  display: flex;
+  width: 280px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--row-inset);
+  border-color: var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface-popover);
+  box-shadow: 0 12px 32px var(--shadow);
+  color: var(--text-primary);
+  font-weight: 400;
+  white-space: normal;
+}
+
+.tooltip-card[data-side="below"] {
+  transform-origin: top left;
+}
+
+.tab-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.tab-card-title {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.tab-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.tab-card-name[data-untitled] {
+  display: block;
+  white-space: nowrap;
+}
+
+/* The pair in the shared label's own inks, its effort dimmed, a size under the name. */
+.tab-card-model {
+  font-size: 11.5px;
+}
+
+.tab-card-time {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tab-card-preview {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.tab-card-preview code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
 }
 
 /* Renamed in place, the label gives way to a field in the same type,
@@ -2743,19 +3108,6 @@ body,
   opacity: 1;
 }
 
-/* A pinned tab wears its pin where the × would be, standing whether or not
-   the tab is chosen or under the pointer, as VS Code's pinned editor does,
-   and drawn a size down so it reads as a mark on the tab rather than a
-   control beside it. */
-.tab[data-pinned="true"] .tab-pin {
-  opacity: 1;
-}
-
-.tab-close.tab-pin svg {
-  width: 12px;
-  height: 12px;
-}
-
 /* Note that the × draws no ground under the pointer, because it is a glyph
    on a pill that is already raised: only the glyph itself brightens. */
 .tab-close:hover {
@@ -2768,22 +3120,37 @@ body,
   flex: 0 0 auto;
 }
 
-/* Something arrived on a tab while another was chosen: a dot on its glyph's
-   corner until the tab is chosen, as the gear carries the update's. It rides
-   the glyph, so an unchosen tab's × stands at the pill's other end. */
-.tab .tab-note {
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  margin: 0;
+/* Something arrived on a tab while another was chosen: its label reads in
+   semibold, in the primary colour, until the tab is chosen, as a plan saved
+   unseen reads in the sidebar. */
+.tab[data-unread="true"] {
+  color: var(--text-primary);
 }
 
-/* The plan's column holds its one tab, so the tab takes the room the
-   heading has rather than a most of its own, and gives way to the toolbar's
-   buttons by truncating its label, down to a few of its characters, rather
-   than by scrolling. */
-.desktop-toolbar-heading .tab {
+.tab[data-unread="true"] .tab-label {
+  font-weight: 680;
+}
+
+/* The plan's column's tabs and their "+" take what the toolbar leaves
+   beside the plan's actions, as the side panel's row's do beside its
+   full-screen button: the strip scrolls its tabs within that room and the
+   "+" stands pinned after it. */
+.main-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--list-gap);
+}
+
+/* A tab dragged in the plan's column is lifted on the column's ground. */
+.main-tabs .tab[data-dragging="true"] {
+  background: linear-gradient(var(--raised-strong), var(--raised-strong)), var(--desktop-ground);
+}
+
+/* The plan's tab alone in its column takes the room the heading has rather
+   than a most of its own, and gives way to the toolbar's buttons by
+   truncating its label, down to a few of its characters, rather than by
+   scrolling. Beside an agent's it is a tab like any other. */
+.desktop-toolbar-heading .tab[data-quiet="true"] {
   min-width: calc(
     var(--tab-start) +
     var(--control-glyph) +
@@ -3317,4 +3684,112 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   from {
     transform: translateX(-50%) translateY(var(--space-8));
   }
+}
+
+/* A sidebar plan's card: its name wrapped to two lines with how long ago it
+   was updated at the head's right, its repository under the name, then a
+   few lines each for its agents and its pull requests, each list under a
+   hairline, a glyph column at their start and a muted corner at their end. */
+.plan-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.plan-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-8);
+}
+
+.plan-card-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.plan-card-time,
+.plan-card-corner,
+.plan-card-more {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plan-card-time,
+.plan-card-corner {
+  flex: none;
+}
+
+.plan-card-repository {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.plan-card-repository :is(.repository-picture, .account-mark) {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.plan-card-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin: 0;
+  padding: var(--space-6) 0 0;
+  border-top: 1px solid var(--hairline);
+  list-style: none;
+}
+
+.plan-card-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-6);
+  font-size: 12px;
+}
+
+/* An agent's line leads with its harness's mark wearing where it stands, as
+   its tab does, a size up from the pull request's glyph so the mark still
+   reads inside the working ring. */
+.plan-card-glyph {
+  display: inline-flex;
+  width: 14px;
+  flex: none;
+  justify-content: center;
+  --state-glyph-size: 14px;
+}
+
+.plan-card-label {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Beside a title, the model steps back to the muted ink, its effort with it. */
+.plan-card-model,
+.plan-card-model :is(.model-label-name, .model-label-detail) {
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.plan-card-state {
+  color: var(--text-tertiary);
+}
+
+.plan-card-more {
+  padding-left: calc(12px + var(--space-6));
 }

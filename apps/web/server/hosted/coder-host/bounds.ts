@@ -38,10 +38,18 @@ export const CODER = {
   CHECKOUT_PATH: REPOSITORY_SANDBOX_CONTRACT.PATH.CHECKOUT,
   /** The branches an agent works on; an instruction to the model, enforced by nothing. */
   BRANCH_PREFIX: "luke/",
+  /** The most times an agent fixes a failing check on its pull request and pushes again before it stops and says so; an instruction to the model, enforced by nothing. */
+  CI_FIX_ROUNDS: 3,
   /** How long a transcript read is held open for a new message while the agent runs, inside the function's own duration. */
   MESSAGES_HOLD: Duration.seconds(20),
   /** How often a held transcript read looks for a new message. */
   MESSAGES_POLL: Duration.millis(500),
+  /**
+   * How long a title call may take before its agent or worker goes untitled
+   * (`title.ts`), which is also how long after a delegation a read of an
+   * ended agent, or of the worker, waits for the worker's title to land.
+   */
+  TITLE_TIMEOUT: Duration.seconds(20),
   /** How long one instance keeps what an agent published before asking GitHub again; a tab asks beside every page of a held read. */
   PUBLISHED_TTL: Duration.seconds(30),
   /**
@@ -70,6 +78,12 @@ export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
+  ACCOUNT_KEY_UNREADABLE:
+    "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
+  ACCOUNT_KEY_REFUSED:
+    "Not run: the provider refused your own API key for the agent's model. Replace it in Settings.",
+  ACCOUNT_KEY_NO_QUOTA:
+    "Not run: the provider refused the work for your own API key's billing or quota.",
   SIGN_IN_REQUIRED:
     "Not run: the developer must sign in with GitHub again before the repository can be checked out.",
   NOT_REACHABLE:

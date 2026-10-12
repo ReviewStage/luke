@@ -6,28 +6,40 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   CODING_AGENT_FAILURE,
   CODING_AGENT_STATUS,
+  CODING_AGENT_TODO_STATUS,
+  CONTEXT_WINDOW,
+  type CodingAgentAttachment,
   type CodingAgentFailure,
   type CodingAgentMessage,
   type CodingAgentPullRequest,
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentSummary,
+  type CodingAgentTodos,
   type CodingAgentUsage,
+  type ContextWindow,
   PULL_REQUEST_STATE,
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
+import {
+  type CatalogModel,
+  type ContextWindows,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
-import { CATALOG_ID_SEPARATOR, modelLabel } from "#shared/model-label";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
-import { AGENT_TOOL } from "./tool-call-model";
+import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
+import { AGENT_TOOL, todosView } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
 /**
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
- * what its status dot says, what line ends a transcript whose turn failed
+ * what its tab's glyph says of where it stands, what line ends a transcript whose turn failed
  * or was stopped, whether its transcript is still followed, how
  * a page of its messages joins the ones held, how a stored message's parts
  * are read for drawing, which of its rows wait above the composer rather
@@ -85,6 +97,8 @@ const AGENT_FAILURE_WORDS = {
   [CODING_AGENT_FAILURE.SANDBOX]: "the sandbox or checkout failed",
   [CODING_AGENT_FAILURE.GITHUB]: "GitHub refused or could not be reached",
   [CODING_AGENT_FAILURE.ABANDONED]: "the turn ran past its bound and was ended",
+  [CODING_AGENT_FAILURE.PROVIDER_KEY]:
+    "your API key was refused or can't be read; check Settings › API keys",
   [CODING_AGENT_FAILURE.OTHER]: undefined,
 } as const satisfies Record<CodingAgentFailure, string | undefined>;
 
@@ -120,6 +134,23 @@ export function agentStillWriting(status: CodingAgentStatus): boolean {
 }
 
 /**
+ * Where an agent stands as its tab's glyph wears it: working while it may
+ * still write, failed once its turn failed, and at rest once it finished
+ * or the developer stopped it, since a stop is the developer's own doing.
+ */
+export function agentGlyphState(status: CodingAgentStatus): GlyphState {
+  if (agentStillWriting(status)) return GLYPH_STATE.WORKING;
+  return status === CODING_AGENT_STATUS.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
+}
+
+/** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
+export function agentStateWords(status: CodingAgentStatus): string | undefined {
+  return status === CODING_AGENT_STATUS.CANCELLED
+    ? "Stopped"
+    : GLYPH_STATE_WORDS[agentGlyphState(status)];
+}
+
+/**
  * Whether an agent's transcript is read on the held long-poll now: only
  * while its tab is on screen and the agent may still write. A tab hidden,
  * a plan left, and an agent that ended each stop the reads.
@@ -131,6 +162,9 @@ export function followsAgent(input: { shown: boolean; status: CodingAgentStatus 
 /** What the Start button says while it cannot start: the plan names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
+/** Why Start, and a draft's first message, cannot run on an archived plan. */
+export const START_ARCHIVED = "Unarchive the plan to start a coding agent.";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:
@@ -140,6 +174,7 @@ const SHARED_FAILURE_NOTE = {
     "The agent is still starting. Try again in a moment.",
   [CODING_AGENT_CALL_FAILURE.AGENT_RETIRED]:
     "This agent has ended for good. Start a new one to go on from here.",
+  [CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED]: "This plan is archived. Unarchive it first.",
 } as const;
 
 /** Said beside Start when the model or effort the menu chose could not be kept as the default. */
@@ -159,6 +194,7 @@ export function chooseFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return MODEL_CHANGE_FAILED;
   }
 }
@@ -189,6 +225,7 @@ export function startFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -211,6 +248,7 @@ export function messageFailureNote(failure: CodingAgentCallFailure): string {
     case CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG:
     case CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY:
     case CODING_AGENT_CALL_FAILURE.AGENT_RETIRED:
+    case CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED:
       return SHARED_FAILURE_NOTE[failure];
   }
 }
@@ -222,13 +260,24 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 
 /**
  * A model as a tab or a menu names it, shared with the main process's
- * notifications so one model is never named two ways (`#shared/model-label`).
+ * notifications so one model is never named two ways (`@sidecar/hosted/model-label`).
  */
 export { modelLabel };
 
 /** The agent's tab label: its title, or its model's name until it has one. */
 export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {
   return agent.title ?? modelLabel(agent.model, models);
+}
+
+/**
+ * The provider whose harness runs a model, read from its catalog id, whose
+ * prefix is the provider's word (`models-wire.ts`), so a tab wears its
+ * harness's mark before the catalog itself is read; none for a provider
+ * Luke runs no agent on.
+ */
+export function providerOf(modelId: string): ModelProvider | undefined {
+  const prefix = modelId.slice(0, Math.max(0, modelId.indexOf(CATALOG_ID_SEPARATOR)));
+  return Object.values(MODEL_PROVIDER).find((provider) => provider === prefix);
 }
 
 /** The first run of digits and points in a model's own name, which is its version: `claude-opus-5.5` is 5.5, `gpt-6-astra` is 6. */
@@ -406,9 +455,93 @@ export function choiceModelId(offered: OfferedModel, fast: boolean): string {
   return fast && offered.fast !== undefined ? offered.fast.id : offered.model.id;
 }
 
-/** What a choice says after its model's name: the effort, and Fast where the fast version is on. */
-export function choiceDetail(effort: string, fast: boolean): string {
-  return fast ? `${effortLabel(effort)}${CHOICE_WORD_SEPARATOR}${FAST_WORD}` : effortLabel(effort);
+/**
+ * What a choice says after its model's name: the effort, Fast where the
+ * fast version is on, and the standard window's size where it runs on that,
+ * so the model's whole window, which every choice runs on unless it says,
+ * says nothing.
+ */
+function choiceDetail(effort: string, fast: boolean, standardTokens?: number): string {
+  const words = [effortLabel(effort)];
+  if (fast) words.push(FAST_WORD);
+  if (standardTokens !== undefined) words.push(windowLabel(standardTokens));
+  return words.join(CHOICE_WORD_SEPARATOR);
+}
+
+/** The word the menu's pinned row and the settings row say for the context window. */
+export const CONTEXT_WORD = "Context";
+
+/** The tenth of a million a window's size in millions is cut to. */
+const TENTH_OF_A_MILLION = MILLION / 10;
+
+/** A window's size as a choice says it, cut to the thousand or the tenth of a million below: 272K, 1M for 1,050,000. */
+export function windowLabel(tokens: number): string {
+  if (tokens >= MILLION) return `${Math.floor(tokens / TENTH_OF_A_MILLION) / 10}M`;
+  return `${Math.floor(tokens / THOUSAND)}K`;
+}
+
+/** The two windows the model offers, or nothing for a model with one, or one the catalog does not offer now. */
+export function contextWindowsOf(
+  models: readonly CatalogModel[],
+  modelId: string,
+): ContextWindows | undefined {
+  return models.find((model) => model.id === modelId)?.contextWindows;
+}
+
+/** The window a choice runs on as the catalog stands: the standard one only where it was chosen and the model offers two, else the model's whole window. */
+export function windowOf(models: readonly CatalogModel[], choice: ModelChoice): ContextWindow {
+  return choice.contextWindow === CONTEXT_WINDOW.STANDARD &&
+    contextWindowsOf(models, choice.model) !== undefined
+    ? CONTEXT_WINDOW.STANDARD
+    : CONTEXT_WINDOW.LONG;
+}
+
+/**
+ * A model and effort on the window given, as a request names them: the
+ * standard window only where the model offers two, so a change to a model
+ * with one window drops it, and nothing for the model's whole window, the
+ * default, so a service that predates the window is sent no key it would
+ * refuse.
+ */
+export function choiceOn(
+  models: readonly CatalogModel[],
+  pair: { readonly model: string; readonly effort: string },
+  window: ContextWindow | undefined,
+): ModelChoice {
+  const choice = { model: pair.model, effort: pair.effort };
+  return windowOf(models, { ...choice, contextWindow: window ?? CONTEXT_WINDOW.LONG }) ===
+    CONTEXT_WINDOW.STANDARD
+    ? { ...choice, contextWindow: CONTEXT_WINDOW.STANDARD }
+    : choice;
+}
+
+/** A choice as a request carries it: the model, the effort, and the window only where it is the standard one. */
+export function choiceRequest(choice: ModelChoice): ModelChoice {
+  return choice.contextWindow === CONTEXT_WINDOW.STANDARD
+    ? { model: choice.model, effort: choice.effort, contextWindow: CONTEXT_WINDOW.STANDARD }
+    : { model: choice.model, effort: choice.effort };
+}
+
+/** A price multiple as a note says it: 2×, 1.5×, to the hundredth. */
+function factorLabel(factor: number): string {
+  return `${Number(factor.toFixed(2))}×`;
+}
+
+/**
+ * What the long window costs, as the catalog prices it, said of the long
+ * window by name since only a prompt on it can grow past the standard one:
+ * the multiple of the standard price a prompt past the standard window is
+ * billed at, input and output each where the catalog says, else that it
+ * costs more.
+ */
+export function longWindowNote(windows: ContextWindows): string {
+  const past = `On ${windowLabel(windows.longTokens)}, prompts over ${windowLabel(windows.standardTokens)} tokens cost`;
+  const parts: string[] = [];
+  if (windows.longInputPriceFactor !== undefined)
+    parts.push(`${factorLabel(windows.longInputPriceFactor)} for input`);
+  if (windows.longOutputPriceFactor !== undefined)
+    parts.push(`${factorLabel(windows.longOutputPriceFactor)} for output`);
+  return parts.length === 0 ? `${past} more.` : `${past} ${parts.join(" and ")}.`;
 }
 
 /** A choice as the words it is drawn in: the base model's name, and the detail drawn dimmed after it. */
@@ -419,10 +552,17 @@ export interface ChoiceWords {
 
 export function choiceWords(choice: ModelChoice, models: readonly CatalogModel[]): ChoiceWords {
   const read = readModelChoice(models, choice.model);
-  return { model: modelLabel(read.base, models), detail: choiceDetail(choice.effort, read.fast) };
+  const standard =
+    windowOf(models, choice) === CONTEXT_WINDOW.STANDARD
+      ? contextWindowsOf(models, choice.model)?.standardTokens
+      : undefined;
+  return {
+    model: modelLabel(read.base, models),
+    detail: choiceDetail(choice.effort, read.fast, standard),
+  };
 }
 
-/** A choice as one line, for a hint that holds no markup: "Opus 5.5 High Fast". */
+/** A choice as one line, for a hint that holds no markup: "Opus 5.5 High Fast", "GPT-5.5 High 272K". */
 export function choiceLabel(choice: ModelChoice, models: readonly CatalogModel[]): string {
   const words = choiceWords(choice, models);
   return `${words.model}${CHOICE_WORD_SEPARATOR}${words.detail}`;
@@ -620,13 +760,56 @@ export function isDelegation(
   return part.kind === AGENT_PART.TOOL && part.tool === CODING_AGENT_DELEGATE_TOOL;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation on a row of its own as the Work tab's worker is, and every other call grouped with the calls beside it. */
+/** Whether a tool part is a write of the agent's to-do list, which the tab draws as the list on a row of its own. */
+function isTodos(part: AgentPart): part is Extract<AgentPart, { kind: typeof AGENT_PART.TOOL }> {
+  return part.kind === AGENT_PART.TOOL && part.tool === AGENT_TOOL.WRITE_TODOS;
+}
+
+/** The agent's newest to-do list, and the call that wrote it. */
+export interface StandingTodos {
+  readonly callId: string;
+  readonly todos: CodingAgentTodos["todos"];
+}
+
+/**
+ * The agent's newest to-do list, which its tab keeps out of a finished
+ * turn's fold and draws open, or docks above the composer while it is
+ * worked (`dockedTodos`); nothing before the first. Note that a write whose
+ * input does not yet read as a list is passed over, because while it
+ * streams the list before it is still the one standing.
+ */
+export function newestTodos(messages: readonly CodingAgentMessage[]): StandingTodos | undefined {
+  const writes = messages.flatMap(agentParts).flatMap((part) => {
+    const todos = isTodos(part) ? todosView(part.input) : undefined;
+    return todos === undefined || part.kind !== AGENT_PART.TOOL
+      ? []
+      : [{ callId: part.callId, todos }];
+  });
+  return writes.at(-1);
+}
+
+/**
+ * The list docked above the composer: the newest, while the agent may
+ * still write and an item of it is not done, as Claude Code keeps its list
+ * over the prompt; nothing otherwise, when the transcript's own row is
+ * where it is read.
+ */
+export function dockedTodos(
+  standing: StandingTodos | undefined,
+  working: boolean,
+): StandingTodos | undefined {
+  if (!working || standing === undefined) return undefined;
+  const open = standing.todos.some((todo) => todo.status !== CODING_AGENT_TODO_STATUS.DONE);
+  return open ? standing : undefined;
+}
+
+/** How the fold reads a part: its words, its reasoning as a note, a delegation and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
-    return isDelegation(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    return isDelegation(part) || isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&
@@ -640,17 +823,24 @@ const AGENT_READING: RowReading<AgentPart> = {
  * across them. The turn moves while the agent may still write to it, which
  * is its last message; any other has ended. A worker's session is read for
  * its detail, so its calls stand each on a line of its own and its lead
- * never folds, as the Work tab's worker's do.
+ * never folds, as the Work tab's worker's do. The agent's newest to-do
+ * list, named by the call that wrote it (`newestTodos`), stays out of
+ * a finished turn's fold, so the list standing is never folded away.
  */
 export function agentRows(
   message: CodingAgentMessage,
   moving: boolean,
   grouped = true,
+  newestTodos: string | undefined = undefined,
 ): readonly TurnRow<AgentPart>[] {
   const parts = agentParts(message).filter(
     (part) => part.kind !== AGENT_PART.STEP_START && part.kind !== AGENT_PART.OTHER,
   );
-  return turnRows(parts, AGENT_READING, {
+  const reading: RowReading<AgentPart> = {
+    ...AGENT_READING,
+    kept: (part) => part.kind === AGENT_PART.TOOL && part.callId === newestTodos,
+  };
+  return turnRows(parts, reading, {
     key: message.id,
     moving,
     done: grouped && !moving,
@@ -703,6 +893,8 @@ export interface SentLine {
   readonly id: string;
   /** The words as they went: trimmed, as the service keeps them. */
   readonly text: string;
+  /** The files that went with them, drawn on the line as the service's row will draw them. */
+  readonly attachments: readonly CodingAgentAttachment[];
   /** The developer's rows the transcript held as the line went, which the row written for it is none of. */
   readonly known: ReadonlySet<string>;
 }
@@ -753,10 +945,16 @@ export function unreadSentLines(
 
 /** A sent line as the tab draws it before the service's row lands: the developer's row. */
 function sentLineMessage(line: SentLine): CodingAgentMessage {
+  const files = line.attachments.map((file) => ({
+    type: "file",
+    mediaType: file.mediaType,
+    filename: file.name,
+    url: `data:${file.mediaType};base64,${file.data}`,
+  }));
   return {
     id: line.id,
     role: MESSAGE_ROLE.USER,
-    parts: [{ type: AGENT_PART.TEXT, text: line.text }],
+    parts: [{ type: AGENT_PART.TEXT, text: line.text }, ...files],
   };
 }
 
@@ -823,7 +1021,9 @@ export function pullRequestStateWord(state: PullRequestState): string | undefine
 }
 
 /** The chip's own words for a reader who cannot see it: the number and where it stands. */
-export function pullRequestPillLabel(pullRequest: CodingAgentPullRequest): string {
+export function pullRequestPillLabel(
+  pullRequest: Pick<CodingAgentPullRequest, "number" | "state">,
+): string {
   return `Pull request ${pullRequestNumberLabel(pullRequest)}, ${PULL_REQUEST_STATE_LABEL[pullRequest.state].toLowerCase()}`;
 }
 

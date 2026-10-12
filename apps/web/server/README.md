@@ -212,6 +212,25 @@ next takes focus (`apps/desktop/src/renderer/planning/repository-chip.tsx`).
 Nothing is stored at install time: which installations a user can reach is
 read from GitHub on the user's own token when a repository is chosen.
 
+The App's webhook is `POST /api/github/webhook` (`server/github-webhook-app.ts`),
+which keeps what a coding agent published current on the agent's row
+(`coding_agent.published`) for the plan list while nobody has the agent's tab
+open. GitHub signs every delivery with the App's webhook secret,
+`GITHUB_APP_WEBHOOK_SECRET`, and the route compares `X-Hub-Signature-256`
+against the HMAC-SHA256 of the body's own bytes in constant time before it
+reads anything; a deployment without the secret answers every delivery
+`unavailable` (503), and a signature that does not hold is `invalid-token`
+(401). Only `pull_request` (opened, reopened, closed, edited, synchronize,
+ready_for_review, converted_to_draft), `check_suite`, a completed
+`check_run`, and `status` are read, for the repository's full name and the branches they
+name, and nothing of a delivery is kept or logged: the branch finds the agents
+whose rows stand on it, of whichever account, at most ten, newest first, and
+each one's pull request is read again from GitHub on its owner's own token
+through `agentPublished`, as the agent's tab reads it, which writes the row.
+A redelivery reads the same again. GitHub's `ping` and any other event are
+answered and ignored. `tests/github-webhook-app.test.ts` holds it over a
+scripted GitHub and PGlite.
+
 A Preview's GitHub sign-in still goes through production's OAuth proxy, and
 production is the end that exchanges the code, under its own provider
 client: a Preview carrying the App's client id can complete a sign-in only
@@ -634,7 +653,9 @@ The preferences snapshot carries two parts. `preferences` is the settings
 snapshot the desktop syncs, replaced whole by a write that names it.
 `codingAgent` is the account's default model and effort for a coding agent —
 what a click on Start runs on — as `{ model, effort }` in AI Gateway's catalog
-spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses.
+spelling, `anthropic/claude-opus-5.5` at `high` until the account chooses,
+with `contextWindow: "standard"` beside them where the smaller context window
+of a model offering two was chosen (absent is the model's whole window).
 Settings › Coding agents and the Start menu's chevron both write it, as one
 value rather than two that could disagree. A PUT carries either part or both;
 a part left out stands as it was, so the desktop's settings sync never
@@ -642,24 +663,99 @@ resets the chosen model and the Start menu never touches the voice. A
 `codingAgent` write is accepted only as the instance's model catalog accepts
 it (below): a model it does not offer or an effort that model does not list
 is `invalid-request`, and a catalog the instance cannot read is `unavailable`.
-The store keeps the two columns beside `voice` on `account_preference`, and
-reads a half-written pair as the default. `updated_at` is the preferences
+The store keeps the columns beside `voice` on `account_preference`, and
+reads a half-written pair as the default; `coding_agent_context_window` is
+null for the model's whole window (migration 0077). `updated_at` is the preferences
 part's own instant, nullable since migration 0062 and left null by a write
 that carries only `codingAgent`: the desktop reads the answer's `updatedAt`
 as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the voice it holds.
 
+### Accounts' own provider keys
+
+`server/provider-keys-app.ts` answers `/api/account/provider-keys`, the
+account's own Anthropic and OpenAI API keys, at most one per provider:
+`GET` answers what each is, `PUT` saves one, and `DELETE
+?provider=<provider>` removes one, each answered with the keys as they then
+stand (`@sidecar/hosted/provider-key-wire`). No answer carries a key: what
+the account is shown is the provider, a hint of the key's prefix and last
+four characters (`sk-ant-…abcd`), when it was added, and its status —
+`verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
+below can no longer open it. A save asks the provider first, with one read
+of its model list, which bills nothing (`server/hosted/provider-key-check.ts`):
+a 200 keeps the key as verified, a 401 or 403 keeps nothing and answers
+`rejected: invalid`, anything else keeps nothing and answers `unreachable`,
+and a key spelled as the other provider's is answered `wrong_provider`
+without being sent anywhere. Saves are braked at ten an hour per account
+on each instance, so the endpoint is no oracle for keys that are not the
+caller's. Neither the key nor what the provider said of it is logged.
+
+A key is kept in `account_provider_key` (migration 0080), sealed by
+`server/hosted/provider-key-seal.ts`: AES-256-GCM under a data key drawn
+for that save, the data key wrapped under the deployment's key-encryption
+key, with the account and provider bound as additional data on both seals
+and the version on the wrap, so a sealed key copied onto another row does
+not open. The row holds the version, the wrapped data key, the sealed key,
+the hint, and the status; it is replaced whole by a save, deleted by a
+removal, and cascades with the account. `server/hosted/provider-key-store.ts`
+reads and writes the rows and never sees a key in the clear.
+
+The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
+`HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
+bytes>` entries, the version new saves wrap under first. Production and
+Preview each hold their own. A deployment without it, or with a value that
+is no list, answers every request on the path `unavailable` and logs which
+shape is wrong, never the value. To set one up:
+
+```
+openssl rand -base64 32          # one key; repeat for the other environment
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS production   # value: 1:<key>
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS preview      # value: 1:<another key>
+```
+
+A rotation is two steps. First put a new version at the head of the list,
+`2:<new key>,1:<old key>`, and redeploy: new saves wrap under version 2, and
+rows on version 1 still open. Then ask that deployment for the rewrap:
+
+```
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+```
+
+The script is a `POST /api/maintenance/provider-keys-rewrap` under the
+deployment's `CRON_SECRET`, compared in constant time as the sweep's is, so
+the rewrap (`server/hosted/provider-key-rewrap.ts`) runs on the deployment
+over the ring it holds and the key-encryption keys never leave Vercel. It
+unwraps each older row's data key and wraps it under the head version,
+leaving the sealed key itself untouched, and answers counts: the version,
+moved, already current, changed meanwhile, and unreadable. Run it again
+until nothing is changed meanwhile; once nothing names the old version,
+drop it from the list and redeploy. A row counted unreadable reads
+`unreadable` to its account, which is told to replace it. It is not a
+migration, since a migration holds no key and runs before the deployment
+whose ring it would need.
+
 ## The models group
 
 `server/models-app.ts` answers `GET /api/models`: the models a coding agent
-may run on, as `{ models: [{ id, name, provider, efforts }] }`. The list is
+may run on, as `{ models: [{ id, name, provider, efforts, contextWindows? }] }`. The list is
 `server/hosted/model-catalog.ts`'s read of AI Gateway's public catalog
 (`https://ai-gateway.vercel.sh/v1/models`, no key), Schema-decoded at the
 boundary and kept to the Anthropic and OpenAI models whose tags carry both
 `tool-use` and `reasoning`; each model's efforts are the `values` of the
 `effort` entry among its `reasoning_options`, and a model listing none is
-left out, since no Start could name an effort for it. The read is the
+left out, since no Start could name an effort for it. A model offers two
+context windows, `contextWindows: { standardTokens, longTokens,
+longInputPriceFactor?, longOutputPriceFactor? }`, where its `pricing` tiers
+its input past a boundary inside its `context_window` — OpenAI's 272K on the
+GPT-5.4 line and after, Anthropic's 100K on Claude Haiku 5.5 — and a model
+priced the same across its whole window has the one window; the boundary is
+the standard window, which a choice opts into, and the whole window is the
+long one, which every choice runs on unless it names the standard one, as
+every agent did before the choice existed; the factors are what the tier
+past the boundary costs beside the first. No offered model needs a request
+option for either window, so the choice is the window eve compacts against
+and the context ring reads, nothing more. The read is the
 `ModelCatalog` service `server/runtime.ts` builds once per instance, cached
 for an hour on a success and for no time on a failure, so an outage at the
 gateway is retried on the next request rather than answered for the hour.
@@ -669,7 +765,8 @@ it, though the catalog is public and the same for every account.
 The same module holds the functions the coding-agent routes and the coder
 host stand on: `acceptedModelChoice`, which reads the instance's catalog and,
 through `validateModelChoice`, accepts a `(model, effort)` only for an
-offered model at an effort it lists, and `providerModelOf`, which turns a
+offered model at an effort it lists, keeping the standard window only for a
+model that offers two, and `providerModelOf`, which turns a
 catalog id into the id the provider's own API takes — model calls go to
 Anthropic and OpenAI directly on Luke's keys, never through the gateway — so
 `anthropic/claude-opus-5.5` is `claude-opus-5-5` and an OpenAI id is the
@@ -695,6 +792,14 @@ and their conversations stamped deleted beside the plan's own (`deletePlan`),
 the id moved into
 the query by the rewrite `server/function-rewrites.ts` makes of every
 segment-captured id.
+Each row of the list carries `agents` where the plan has a coding agent
+(`server/hosted/plan-agents.ts`): how many it has and how many are starting
+or running, the three it names (those at work first, then the newest), each
+with its title, model, effort, status, and since when, and the pull requests
+they opened, each number once and at most three, as GitHub last answered a
+read of them. Three statements answer the whole list: the agents of every
+plan listed with `coding_agent.published` (migration 0078), their newest
+turns, and the lines awaiting a turn; the list asks GitHub nothing.
 `packages/hosted/src/plan-wire.ts` declares every request and answer. Each
 endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
@@ -1812,7 +1917,25 @@ agent's and each worker's tab show it as the Work tab shows Luke's:
 `reasoningSummary: "auto"` on OpenAI, as the planning brain asks, and
 adaptive thinking with `display: "summarized"` on a Claude 5 model, which
 thinks whether asked or not. An older Claude is not asked, since the ask
-would start it thinking. Nothing goes through AI Gateway. Reading the row every
+would start it thinking. Nothing goes through AI Gateway.
+
+The key a step runs on is read at every step too
+(`coder-host/account-keys.ts`): the account's own key for the provider where
+it saved one (above, "Accounts' own provider keys"), opened from its row,
+and Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only where it saved
+none. A row the deployment's ring cannot open, or a deployment holding no
+ring, refuses the step with `ACCOUNT_KEY_UNREADABLE` rather than run it on
+Luke's key, so nothing the account meant to pay for is quietly billed to
+Luke. A step on the account's key goes through a middleware that keeps the
+row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
+429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
+`quota_exceeded`, and a call that goes through marks it `verified` again,
+each written only where the row still holds the key the step ran on. The
+first two fail the step with `ACCOUNT_KEY_REFUSED` or
+`ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
+refusals read as the agent's failure `provider_key`, which the desktop
+words as a key to replace in Settings. An agent's title stays on Luke's
+Anthropic key. Reading the row every
 step means a later change to it is the next step's model.
 
 The sandbox (`coder/sandbox.ts`) is one Vercel Sandbox per session at the
@@ -1822,10 +1945,17 @@ beside the image's Node and git. As it opens, the agent's repository is
 checked out whole at its default branch through the same firewall-scoped
 clone the planning checkout makes (`repository-shell.ts`'s
 `cloneRepository`), on a token `repositoryWriteToken` mints for that one
-repository with contents and pull requests write, and the token is then set
-at the firewall for the session's own `gh` and `git` through eve's
+repository with contents and pull requests write, plus checks, statuses, and
+Actions read where the installation has granted the App those
+(`CI_READ_PERMISSIONS`; a mint naming a permission the installation never
+granted fails whole, so they are asked only where granted), and the token is
+then set at the firewall for the session's own `gh` and `git` through eve's
 `authenticateGitHub`; it never enters the sandbox's filesystem or
-environment. A token lasts an hour, so the store hook renews it at the
+environment. The session's instructions say whether that read was granted
+(`host.prompt`, through `repositoryCiReadable`): where it was, the agent
+watches its pull request's checks with `gh pr checks` and fixes what fails
+for at most `CODER.CI_FIX_ROUNDS` rounds; where it was not, it says CI was
+not watched. A token lasts an hour, so the store hook renews it at the
 firewall on the first step past `CODER.GITHUB_TOKEN_REFRESH`.
 
 The store hook (`coder/hooks/store.ts`) relays every event into the store
@@ -1973,7 +2103,9 @@ developer's own App token (`github/pull-requests.ts`): the newest pull
 request from the branch, else whether the branch was pushed at all, with
 the head's check runs and commit statuses read together for the one word,
 and a head whose checks the App may not read reading as `none` with a
-warning rather than failing the answer. The answer is kept
+warning rather than failing the answer. Every answer read is written on the
+agent's row (`coding_agent.published`, the pull request or null), which is
+what the plan list's `agents` reads. The answer is kept
 per agent for `CODER.PUBLISHED_TTL` (thirty seconds) in an Effect `Cache`
 built once with the routes, under a key that says whether the agent had
 ended, so the first read after a turn ends is fresh rather than the running

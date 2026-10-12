@@ -13,6 +13,12 @@ export const HOSTED_SERVICE_PATH = {
    * `@sidecar/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
+  /**
+   * The account's own Anthropic and OpenAI API keys: read what they are
+   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * `provider-key-wire.ts` declares every body.
+   */
+  ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**
@@ -103,6 +109,13 @@ export function planFilePath(
     last: String(window.lastLine),
   });
   return `${planPath(planId)}/file?${query}`;
+}
+
+/** One folder of one plan's repository, as GitHub holds it now (GET): its path from the root, the root itself for an empty one. */
+export function planTreePath(planId: string, folder: { readonly path: string }): string {
+  const path = `${planPath(planId)}/tree`;
+  if (folder.path === "") return path;
+  return `${path}?${new URLSearchParams({ path: folder.path })}`;
 }
 
 /** One plan's history (GET): a page of its revisions, the newest of all or, with `before`, the newest before that revision. */

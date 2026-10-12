@@ -14,6 +14,9 @@ import {
   type CodingAgentRenameParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import { Effect } from "effect";
@@ -30,6 +33,10 @@ import type { AgentNotices } from "../agent-notices";
  * panel's own answer; on its way it is noted by the notices
  * (`main/agent-notices.ts`), which hold where each agent stands so an end
  * the panel is not looking at is still announced. Nothing else is held here.
+ *
+ * The account's own provider keys, which an agent runs on, are asked here
+ * too, from Settings in the same panel: a save's key passes through to the
+ * host once and is noted nowhere.
  */
 export interface CodingAgentActsDependencies {
   host: {
@@ -48,6 +55,9 @@ export interface CodingAgentActsDependencies {
     codingAgentPullRequest(
       params: CodingAgentPullRequestParams,
     ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+    providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
+    providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
+    providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -57,6 +67,7 @@ export interface CodingAgentActsDependencies {
     | "observeTitle"
     | "observeMessaged"
     | "observeModels"
+    | "observePublished"
     | "observePlanGone"
     | "shown"
   >;
@@ -74,7 +85,10 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_RENAME
   | typeof ACT_KIND.CODING_AGENTS_STOP
   | typeof ACT_KIND.CODING_AGENTS_SHOWN
-  | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST;
+  | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
+  | typeof ACT_KIND.PROVIDER_KEYS_READ
+  | typeof ACT_KIND.PROVIDER_KEYS_SAVE
+  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -160,7 +174,21 @@ export function codingAgentActRows(
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);
-      return host.codingAgentPullRequest(params);
+      return noted(host.codingAgentPullRequest(params), (answer) => {
+        if ("pullRequest" in answer) notices.observePublished(params.agentId, answer.pullRequest);
+      });
+    },
+    [ACT_KIND.PROVIDER_KEYS_READ]: (_payload, sender) => {
+      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_READ, sender);
+      return host.providerKeysRead();
+    },
+    [ACT_KIND.PROVIDER_KEYS_SAVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_SAVE, sender);
+      return host.providerKeySave(params);
+    },
+    [ACT_KIND.PROVIDER_KEYS_REMOVE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_REMOVE, sender);
+      return host.providerKeyRemove(params);
     },
   };
 }

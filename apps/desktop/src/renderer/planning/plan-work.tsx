@@ -17,6 +17,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { BusyLabel, Spinner } from "../spinner";
 import {
   TranscriptNote,
   TranscriptReasoning,
@@ -134,7 +135,9 @@ function SubagentRows({ worker }: { worker: WorkWorkerBlock }): React.JSX.Elemen
         <TranscriptNote>Earlier steps are not shown.</TranscriptNote>
       ) : null}
       {session === undefined || session.rows.length === 0 ? (
-        <TranscriptNote>{call.running ? "Starting…" : "Nothing recorded."}</TranscriptNote>
+        <TranscriptNote>
+          {call.running ? <Spinner label="Starting" /> : "Nothing recorded."}
+        </TranscriptNote>
       ) : (
         <WorkTurnRows rows={session.rows} />
       )}
@@ -297,12 +300,11 @@ const EARLIER_READ = {
 
 type EarlierRead = (typeof EARLIER_READ)[keyof typeof EARLIER_READ];
 
-/** What the row before the oldest turn drawn says, by where the read stands. */
+/** What the row before the oldest turn drawn says, by where the read stands; a read out draws the spinner over the row's words. */
 const EARLIER_LINE = {
   [EARLIER_READ.IDLE]: "Show earlier work",
-  [EARLIER_READ.READING]: "Reading earlier work…",
   [EARLIER_READ.FAILED]: "Could not read earlier work. Try again",
-} as const satisfies Record<EarlierRead, string>;
+} as const satisfies Record<Exclude<EarlierRead, typeof EARLIER_READ.READING>, string>;
 
 /**
  * The row standing before the oldest turn drawn while older turns stand:
@@ -339,7 +341,9 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
       disabled={read === EARLIER_READ.READING}
       onClick={() => load.current()}
     >
-      {EARLIER_LINE[read]}
+      <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
+        {EARLIER_LINE[read === EARLIER_READ.FAILED ? EARLIER_READ.FAILED : EARLIER_READ.IDLE]}
+      </BusyLabel>
     </button>
   );
 }

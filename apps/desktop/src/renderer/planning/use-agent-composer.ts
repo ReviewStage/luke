@@ -2,7 +2,7 @@ import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
-import type { CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgentAttachment, CodingAgentMessage } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import {
   type AgentRun,
@@ -27,16 +27,19 @@ import {
  * here, and a message that did not go comes back into the box with why
  * under it and Retry, which sends the words again under the same key, so
  * a send whose answer was lost reaches the agent once; editing the words
- * is a new message under a new key, so Retry goes with the edit. A refusal
+ * is a new message under a new key, so Retry goes with the edit, as it
+ * does with a file put on or taken off. The files go with the words and
+ * come back into the box with them. A refusal
  * that is for good holds the box, disabled, with its reason under it.
  * Another agent's tab starts from nothing of this one's.
  */
 
-/** How one message is sent: the agent, the words, and the key this send is known by, which Retry carries again, answered as the view hears it. */
+/** How one message is sent: the agent, the words, the key this send is known by, which Retry carries again, and the files attached, answered as the view hears it. */
 export type MessageSender = (
   agentId: string,
   text: string,
   clientKey: string,
+  attachments: readonly CodingAgentAttachment[],
 ) => Promise<CodingAgentAgentAnswer>;
 
 /** Everything the composer draws and presses. */
@@ -44,6 +47,12 @@ export interface AgentComposerControl {
   /** The words in the box. */
   draft: string;
   setDraft: (text: string) => void;
+  /** The files that go with the words, in the order attached. */
+  attachments: readonly CodingAgentAttachment[];
+  /** Changes the files from those the box holds as the change lands, which a read that lands late needs. */
+  setAttachments: (
+    next: (held: readonly CodingAgentAttachment[]) => readonly CodingAgentAttachment[],
+  ) => void;
   /** Whether a message is on its way, during which the box takes nothing. */
   sending: boolean;
   /** Why the last message did not go, said under the box beside Retry; nothing while none failed. */
@@ -61,6 +70,7 @@ export interface AgentComposerControl {
 interface Held {
   agentId: string;
   draft: string;
+  attachments: readonly CodingAgentAttachment[];
   sending: boolean;
   /**
    * The last message that did not go: the key it went under, which Retry
@@ -81,6 +91,7 @@ function fresh(agentId: string): Held {
   return {
     agentId,
     draft: "",
+    attachments: [],
     sending: false,
     failed: undefined,
     closed: undefined,
@@ -130,18 +141,20 @@ export function useAgentComposer(input: {
   ) => {
     const text = held.draft.trim();
     if (text === "" || held.sending || held.closed !== undefined) return;
+    const { attachments } = held;
     const id = `${SENT_LINE_PREFIX}${held.count + 1}`;
-    const line: SentLine = { id, text, known };
+    const line: SentLine = { id, text, attachments, known };
     setHeld((was) => ({
       ...was,
       draft: "",
+      attachments: [],
       sending: true,
       failed: undefined,
       sent: [...was.sent, line],
       count: was.count + 1,
     }));
     latest.current
-      .send(agentId, text, clientKey)
+      .send(agentId, text, clientKey, attachments)
       .catch((): CodingAgentAgentAnswer => UNANSWERED)
       .then((answer) => {
         // An answer to another agent's tab, or to a tab since remounted, is nobody's.
@@ -153,9 +166,11 @@ export function useAgentComposer(input: {
             // row stands, so there is nothing to send again and nothing to put back in the box.
             if (!was.sent.some((each) => each.id === id)) return { ...was, sending: false };
             // The words come back into the box, and the line out of the transcript.
+            const empty = was.draft === "" && was.attachments.length === 0;
             return {
               ...was,
-              draft: was.draft === "" ? text : was.draft,
+              draft: empty ? text : was.draft,
+              attachments: empty ? attachments : was.attachments,
               sending: false,
               failed: { clientKey, known, note },
               closed: closesComposer(answer.failure) ? note : was.closed,
@@ -178,6 +193,10 @@ export function useAgentComposer(input: {
         draft: text,
         failed: text === was.draft ? was.failed : undefined,
       })),
+    attachments: held.attachments,
+    // Note that a file put on or taken off lets Retry go too, since the message is another.
+    setAttachments: (next) =>
+      setHeld((was) => ({ ...was, attachments: next(was.attachments), failed: undefined })),
     sending: held.sending,
     note: held.closed === undefined ? held.failed?.note : undefined,
     closed: held.closed,

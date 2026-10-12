@@ -10,6 +10,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@sidecar/panel";
+import { HistoryIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
@@ -22,18 +23,20 @@ import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../setting
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
+import { PlanCard, PlanStatusMark } from "./plan-card";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
 /**
  * plan-actions.tsx -- one plan's actions, offered alike from the toolbar's ⋯ button and from a right-click on the plan in the sidebar.
  *
  * Both doors open the same menu over the same plan, so a plan in the list can
- * be acted on without being opened first, and nothing in the menu moves the
- * window to another plan. The menu is the window's own (`action-menu.tsx`),
+ * be acted on without being opened first. The menu is the window's own (`action-menu.tsx`),
  * so both doors draw it the same way and Permanently delete can be drawn red.
  *
  * Rename edits the name where the door draws it: the sidebar's row turns
- * into a field, and the toolbar's ⋯ opens its title as one. Pin and Archive
+ * into a field, and the toolbar's ⋯ opens its title as one. Version history
+ * opens the plan's versions over the whole window, opening the plan first
+ * where it is not the open one, the one item that moves it. Pin and Archive
  * move the plan in the sidebar at once, and each is undone from the same
  * menu; a sidebar row also offers both as buttons at its end on hover.
  * Permanently delete cannot be undone, so choosing it asks first in a dialog
@@ -87,7 +90,9 @@ function placeActions(plans: PlansControl, plan: PlanSummary | undefined): MenuA
 
 /**
  * Pin and Archive at a sidebar row's end, standing in the time's place while
- * the row is hovered or reached from the keyboard. Each runs what its menu
+ * the row is hovered or reached from the keyboard. Rested on, the row hangs
+ * the plan's card beside it (`plan-card.tsx`): its name in full, its
+ * repository, and its agents and pull requests, read from the list's row. Each runs what its menu
  * item runs, and only the open plan's Archive names ⇧⌘A, because the chord
  * archives the open plan rather than the row under the pointer. They are the
  * row's siblings rather than inside it, so a press on one opens nothing.
@@ -116,7 +121,7 @@ function SidebarPlanMarks({
         >
           <button
             type="button"
-            className="icon-button sidebar-plan-mark"
+            className="sidebar-plan-mark"
             aria-label={label}
             disabled={disabled}
             onClick={() => plans.onMarkPlan(plan.id, mark)}
@@ -133,9 +138,12 @@ function SidebarPlanMarks({
 /**
  * One plan's actions in the groups a rule divides, offering only those that
  * apply to it now. Copy formats the document drawn, so only the open plan
- * offers it, ahead of Rename; Pin and Archive follow; the repository is
+ * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
  * changed from any plan and opened on GitHub where there is one; Permanently
- * delete is last and alone.
+ * delete is last and alone. An archived plan takes nothing until it is
+ * brought back, so it offers neither Rename nor Change repository…, only
+ * what reads it, its version history (which restores nothing), Unarchive,
+ * and Permanently delete.
  */
 function planActionGroups(
   plans: PlansControl,
@@ -145,27 +153,28 @@ function planActionGroups(
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const plan = planOf(plans, planId);
+  const archived = plan?.archivedAt !== undefined;
+  const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress };
   const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
+  const versions: MenuAction = {
+    label: "Version history",
+    icon: <HistoryIcon />,
+    onSelect: () => plans.history.onOpen(planId),
+  };
   const change: MenuAction = {
     label: "Change repository…",
     icon: <GitHubMark />,
     onSelect: () => plans.onChangeRepository(planId),
   };
+  const open: MenuAction = {
+    label: "Open on GitHub",
+    icon: <ExternalIcon />,
+    onSelect: () => plans.onOpenOnGitHub(planId),
+  };
   const groups: MenuAction[][] = [
-    drawn
-      ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename]
-      : [rename],
+    [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
-    (plan?.repository ?? null) === null
-      ? [change]
-      : [
-          change,
-          {
-            label: "Open on GitHub",
-            icon: <ExternalIcon />,
-            onSelect: () => plans.onOpenOnGitHub(planId),
-          },
-        ],
+    [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
     [
       {
         label: "Permanently delete",
@@ -190,7 +199,7 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
     title: "Permanently delete plan?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
     verb: "Permanently delete",
-    running: "Deleting…",
+    running: "Deleting",
   };
 }
 
@@ -277,9 +286,11 @@ export function PlanActionsButton({
 }
 
 /**
- * A plan in the sidebar, pinned, listed, or archived alike: its name, and at
- * the row's end how long ago it was last updated, which Pin and Archive
- * stand in place of while the row is hovered or reached from the keyboard.
+ * A plan in the sidebar, pinned, listed, or archived alike: its name, in the
+ * body's weight unless the plan is unread, and at the row's end how long ago
+ * it was last updated, led by one mark for an agent at work or a pull
+ * request (`plan-card.tsx`), which Pin and Archive stand in place of while
+ * the row is hovered or reached from the keyboard.
  * A press opens it, and a right-click offers its actions where the pointer is. Renamed,
  * the row is its name's field until the edit ends, and a key that ends it
  * hands focus back to the row.
@@ -288,6 +299,7 @@ export function SidebarPlan({
   plans,
   plan,
   current,
+  unread,
   repositoryShown,
   now,
   onOpen,
@@ -296,6 +308,8 @@ export function SidebarPlan({
   plan: PlanSummary;
   /** Whether this is the plan the work column is showing. */
   current: boolean;
+  /** Whether the plan was saved since the developer last looked at it on this Mac. */
+  unread: boolean;
   /** Whether the row names its repository beneath its name: a row under its repository's header leaves it to the header. */
   repositoryShown: boolean;
   /** The time the row's last update is counted back from. */
@@ -344,25 +358,43 @@ export function SidebarPlan({
           {repository}
         </div>
       ) : (
-        <button
-          ref={row}
-          type="button"
-          className="sidebar-plan"
-          aria-current={current ? "page" : undefined}
-          data-menu-open={String(actions.open)}
-          disabled={actions.deletion.busy}
-          onClick={() => {
-            actions.close(false);
-            onOpen();
-          }}
-          onContextMenu={showMenu}
+        <Tooltip
+          label={plan.name}
+          card={
+            <PlanCard
+              plan={plan}
+              models={plans.agents.models ?? []}
+              pictures={plans.repositories.pictures}
+              now={now}
+            />
+          }
+          cardBeside
         >
-          <span className="sidebar-plan-line">
-            <span className="sidebar-plan-name">{plan.name}</span>
-            <span className="sidebar-plan-time">{sinceText(plan.updatedAt, now)}</span>
-          </span>
-          {repository}
-        </button>
+          <button
+            ref={row}
+            type="button"
+            className="sidebar-plan"
+            aria-current={current ? "page" : undefined}
+            data-menu-open={String(actions.open)}
+            data-unread={String(unread)}
+            disabled={actions.deletion.busy}
+            onClick={() => {
+              actions.close(false);
+              onOpen();
+            }}
+            onContextMenu={showMenu}
+          >
+            <span className="sidebar-plan-line">
+              <span className="sidebar-plan-name">{plan.name}</span>
+              {unread ? <span className="visually-hidden">(unread)</span> : null}
+              <span className="sidebar-plan-time">
+                <PlanStatusMark plan={plan} />
+                {sinceText(plan.updatedAt, now)}
+              </span>
+            </span>
+            {repository}
+          </button>
+        </Tooltip>
       )}
       {rename.editing ? null : (
         <SidebarPlanMarks

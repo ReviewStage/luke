@@ -9,6 +9,7 @@ import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
+import { usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
 import type { SettingsPanelProps } from "../settings/settings-panel";
@@ -18,6 +19,7 @@ import { Tooltip } from "../tooltip";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
+import { DesktopVersionHistory } from "./desktop-version-history";
 import type { LukeIdentityProps } from "./luke-identity";
 import { PaneGlide } from "./pane-motion";
 import { SidePanelToggle } from "./side-panel";
@@ -137,7 +139,11 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * keeps its page list whatever the sidebar's collapse says, and hands the
  * plans back folded or not as it found them. The side panel's toggle is the
  * mirror of the sidebar's, at the window's top right on a plan's page, so
- * neither pane carries the button that moves it. Folding the sidebar, or
+ * neither pane carries the button that moves it. A plan's version history
+ * takes the whole window as Settings does, its versions listed where the
+ * sidebar was, and leaves the same way; it is still a stay on the plan, so
+ * what changed since the developer last looked is held here, across it,
+ * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar, or
  * opening, shutting, or growing the side panel, glides the work beside them
  * (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
@@ -172,6 +178,10 @@ export function DesktopShell({
   const shell = useRef<HTMLDivElement>(null);
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
+  const { region } = plans;
+  const looks = usePlanLooks(
+    tab === PANEL_TAB.PLANS && region.kind === DOCUMENT_REGION.READY ? region.plan : undefined,
+  );
   if (gated) {
     return (
       <div className="desktop-onboarding">
@@ -196,6 +206,21 @@ export function DesktopShell({
           history={history}
           settings={settings}
           onExit={history.canGoBack ? history.onBack : () => onTabChange(PANEL_TAB.PLANS)}
+        />
+        <CaptionStrip {...captions} />
+      </div>
+    );
+  }
+  // A plan's version history takes the whole window too, its versions listed
+  // where the sidebar was, and hands the plan back as it found it.
+  if (plans.history.open) {
+    return (
+      <div className="desktop-shell">
+        <DesktopVersionHistory
+          sidebar={sidebar}
+          history={history}
+          plans={plans}
+          onExit={history.canGoBack ? history.onBack : plans.history.onClose}
         />
         <CaptionStrip {...captions} />
       </div>
@@ -229,7 +254,11 @@ export function DesktopShell({
         updates={settings.updates}
       />
       <main className="desktop-main">
-        <DesktopPlans plans={plans} captions={captionsInColumn ? captionStrip : undefined} />
+        <DesktopPlans
+          plans={plans}
+          looks={looks}
+          captions={captionsInColumn ? captionStrip : undefined}
+        />
       </main>
       {captionsInColumn ? null : captionStrip}
       {/* Note that they follow the drag strips they cover, because a later drag region wins. */}
@@ -244,7 +273,6 @@ export function DesktopShell({
           <SidePanelToggle
             panel={plans.sidePanel}
             disabled={plans.region.kind !== DOCUMENT_REGION.READY}
-            viewingVersion={plans.history.viewing !== undefined}
           />
         </div>
       ) : null}

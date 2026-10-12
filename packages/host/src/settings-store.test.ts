@@ -291,6 +291,7 @@ const SAMPLE_VALUE = {
   // System is what an absent theme falls back to, so Dark is the explicit
   // choice that has to survive a reopen as itself.
   theme: THEME.DARK,
+  zoom: 150,
   openAtLogin: false,
   voice: LIVE_VOICE.MARIN,
   voiceCaptions: true,
@@ -298,6 +299,8 @@ const SAMPLE_VALUE = {
   stopHotkey: "Control+Alt+P",
   duckOtherMedia: false,
   preferBuiltInMicrophone: false,
+  // On is the default, so Off is the choice that has to survive a reopen.
+  agentNotifications: false,
 } satisfies { [Field in AppSettingField]: NonNullable<AppSettingValue<Field>> };
 
 /**
@@ -847,6 +850,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   const store = storeIn(directory);
   await store.set(APP_SETTING_SCHEMA.openAtLogin.field, false);
   await store.set(APP_SETTING_SCHEMA.theme.field, THEME.DARK);
+  await store.set(APP_SETTING_SCHEMA.zoom.field, 175);
   await store.set(APP_SETTING_SCHEMA.voice.field, LIVE_VOICE.MARIN);
 
   const { settings, reason } = await store.resetSettings(SETTINGS_RESET_SCOPE.APPEARANCE);
@@ -855,6 +859,7 @@ test("an appearance reset returns Luke's stances without touching the voice page
   assert.equal(appSettingsView(settings).openAtLogin, true);
   // The reset forgets the choice, so the windows follow the Mac again.
   assert.equal(appSettingsView(settings).theme, THEME.SYSTEM);
+  assert.equal(appSettingsView(settings).zoom, 100);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.openAtLogin.field), true);
   // One scope's reset is that scope's alone.
   assert.equal(appSettingsView(settings).voice, LIVE_VOICE.MARIN);
@@ -873,6 +878,12 @@ test("a shortcuts reset forgets both chords at once", async (t) => {
   assert.equal(appSettingsView(settings).stopHotkey, undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.voiceHotkey.field), undefined);
   assert.equal(await storeIn(directory).get(APP_SETTING_SCHEMA.stopHotkey.field), undefined);
+});
+
+test("a Mac that never touched its settings is notified when a coding agent finishes", async (t) => {
+  const store = storeIn(await temporaryDirectory(t, "luke-settings-"));
+
+  assert.equal(appSettingsView(await store.snapshot()).agentNotifications, true);
 });
 
 test("a reset of settings already at their defaults writes nothing", async (t) => {

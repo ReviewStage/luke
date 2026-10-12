@@ -50,7 +50,7 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * says who last did in one muted line above the document: the developer,
  * Luke (the notetaker), or a coding agent named as its row names it now,
  * whether it was on a call, and how long ago, moved on once a minute. The
- * line opens the plan's History tab, where each earlier version is. Each
+ * line opens the plan's version history, where each earlier version is. Each
  * section says the same of the save that last changed it, quietly, while the
  * pointer or the keyboard is on it. The sections changed since the developer
  * last looked at the plan on this Mac wear a still tint, counted under that
@@ -469,7 +469,7 @@ function PlanAssumptions({
  * The plan's body and its assumptions, the assumptions' section standing even
  * while the list is empty. `live` is the plan's call in progress, which keeps
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
- * plan's History tab from the "Edited by" line. With `onEdit`, and fields
+ * plan's version history from the "Edited by" line. With `onEdit`, and fields
  * from a service that sends them, each field opens in an editor in place.
  * `looks` are the sections changed since the developer last looked, which
  * the plan's region keeps (`use-plan-looks.ts`); without them none are.

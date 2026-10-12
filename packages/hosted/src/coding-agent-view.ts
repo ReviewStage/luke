@@ -9,6 +9,11 @@ import {
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
+import {
+  PROVIDER_KEY_PROVIDER,
+  providerKeySaveRequestSchema,
+  providerKeysAnswerSchema,
+} from "./provider-key-wire.js";
 
 /**
  * coding-agent-view.ts -- a plan's coding agents as one Mac's window hears them: each call's answer whole, or why there is none.
@@ -21,6 +26,11 @@ import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
  * reach it, the account must sign in with GitHub again, the choice named is
  * not one the service offers now, or — for a message — the words run past the
  * bound, the agent's session is still coming up, or it has ended for good.
+ *
+ * The account's own provider keys travel here too, since they are what an
+ * agent runs on: the keys as hints and statuses, a save, and a removal. A
+ * save's params carry the key once, into the host and on to the service;
+ * no answer here carries one.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -43,6 +53,8 @@ export const CODING_AGENT_CALL_FAILURE = {
   AGENT_NOT_READY: "agent-not-ready",
   /** The agent's session has ended for good, so no message reaches it; only a new agent goes on from here. */
   AGENT_RETIRED: "agent-retired",
+  /** The plan is archived, so no agent starts on it and none of its agents is sent a message until it is brought back. */
+  PLAN_ARCHIVED: "plan-archived",
 } as const;
 
 export type CodingAgentCallFailure =
@@ -68,6 +80,23 @@ export const codingAgentDefaultAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentDefaultAnswer = typeof codingAgentDefaultAnswerViewSchema.Type;
+
+/** The account's own provider keys, as the window hears them read, saved, or removed: the keys as they stand, or why there are none. */
+export const providerKeysAnswerViewSchema = EffectSchema.Union([providerKeysAnswerSchema, failed]);
+
+export type ProviderKeysAnswerView = typeof providerKeysAnswerViewSchema.Type;
+
+/** Saving a key, as the window asks it: the provider and the key, once. */
+export const providerKeySaveParamsSchema = providerKeySaveRequestSchema;
+
+export type ProviderKeySaveParams = typeof providerKeySaveParamsSchema.Type;
+
+/** Removing a key, as the window asks it: the provider. */
+export const providerKeyRemoveParamsSchema = EffectSchema.Struct({
+  provider: EffectSchema.Literals(Object.values(PROVIDER_KEY_PROVIDER)),
+});
+
+export type ProviderKeyRemoveParams = typeof providerKeyRemoveParamsSchema.Type;
 
 /** Writing the default, as the window asks it: the choice to keep. */
 export const codingAgentDefaultWriteParamsSchema = modelChoiceSchema;

@@ -18,6 +18,16 @@ export interface MicrophoneControl {
 }
 
 /**
+ * Whether macOS refused Luke's last notification, and the one place that
+ * grant can be changed.
+ */
+export interface NotificationsControl {
+  refused: boolean;
+  /** Opens System Settings on its notifications. */
+  onOpenSettings: () => void;
+}
+
+/**
  * Where the app stands against the latest release, and the actions the row can
  * take about that: ask the release manifest now, restart into a build already
  * downloaded, or — where installing in place is impossible or has failed —

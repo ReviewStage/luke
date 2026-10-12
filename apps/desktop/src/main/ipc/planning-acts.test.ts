@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { highlightSnippet } from "@sidecar/host";
 import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "@sidecar/hosted/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningStartAnswer } from "@sidecar/hosted/planning-view";
+import {
+  type CodeLines,
+  PLAN_CALL_FAILURE,
+  type PlanningStartAnswer,
+} from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import type { WebContents } from "electron";
-import { ACT, ACT_KIND, ACT_OUTCOME_STATUS } from "#shared/messages/acts";
+import { ACT, ACT_KIND, ACT_OUTCOME_STATUS, COLOURED_CODE_MAX_CHARS } from "#shared/messages/acts";
 import { type ActRows, type ActSender, createActRouter } from "../act-router";
 import { planningActRows } from "./planning-acts";
 
@@ -99,6 +104,11 @@ function fixture() {
           asked.push(`file:${params.path}:${params.firstLine}-${params.lastLine}`);
           return { refusal: PLAN_FILE_REFUSAL.MISSING } as const;
         }),
+      planningTree: (params) =>
+        Effect.sync(() => {
+          asked.push(`tree:${params.path}`);
+          return { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE } as const;
+        }),
       planningRevisions: (params) =>
         Effect.sync(() => {
           asked.push(`revisions:${params.planId}:${params.before}`);
@@ -124,6 +134,7 @@ function fixture() {
       talked.push(planId);
     },
     voiceReady: () => start.voiceReady,
+    colourCode: highlightSnippet,
   });
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
@@ -285,7 +296,35 @@ it.effect(
 );
 
 it.effect(
-  "the History tab's reads and its restore reach the host from a panel, and never from the voice window",
+  "a File tab's tree lists a folder through the host from a panel and answers what it answered, and not from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const folder = { planId: PLAN_ID, path: "src" };
+
+      const read = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_TREE, payload: folder },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_TREE, payload: folder },
+        VOICE,
+      );
+
+      assert.deepEqual(read, {
+        status: ACT_OUTCOME_STATUS.DONE,
+        value: { refusal: PLAN_FILE_REFUSAL.NOT_REACHABLE },
+      });
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_TREE].refusal,
+      });
+      assert.deepEqual(f.asked, ["tree:src"]);
+    }),
+);
+
+it.effect(
+  "the version history's reads and its restore reach the host from a panel, and never from the voice window",
   () =>
     Effect.gen(function* () {
       const f = fixture();
@@ -318,6 +357,46 @@ it.effect(
         reason: ACT[ACT_KIND.PLANNING_RESTORE].refusal,
       });
       assert.deepEqual(f.asked, [`revisions:${PLAN_ID}:3`, "revision:2", "restore:2"]);
+    }),
+);
+
+it.effect(
+  "a transcript's fenced block is coloured from a panel as its fence's language, refused from the voice window, and a block past the bound is refused at the boundary",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const block = { language: "ts", code: "export const seats = 3;\nseats;" };
+
+      const coloured = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_COLOUR_CODE, payload: block },
+        PANEL,
+      );
+      const fromVoice = yield* f.router.performAct(
+        { kind: ACT_KIND.PLANNING_COLOUR_CODE, payload: block },
+        VOICE,
+      );
+      const tooLong = yield* f.router.performAct(
+        {
+          kind: ACT_KIND.PLANNING_COLOUR_CODE,
+          payload: { language: "ts", code: "a".repeat(COLOURED_CODE_MAX_CHARS + 1) },
+        },
+        PANEL,
+      );
+
+      assert.equal(coloured.status, ACT_OUTCOME_STATUS.DONE);
+      assert.ok(coloured.status === ACT_OUTCOME_STATUS.DONE && Array.isArray(coloured.value));
+      // SAFETY: the router admitted the answer through the kind's own guard, which reads coloured lines.
+      const [first, second] = coloured.value as CodeLines;
+      assert.deepEqual(
+        [first, second].map((line) => line?.map((token) => token.text).join("")),
+        ["export const seats = 3;", "seats;"],
+      );
+      assert.ok(first?.find((token) => token.text === "export")?.color, "the keyword is coloured");
+      assert.deepEqual(fromVoice, {
+        status: ACT_OUTCOME_STATUS.REFUSED,
+        reason: ACT[ACT_KIND.PLANNING_COLOUR_CODE].refusal,
+      });
+      assert.notEqual(tooLong.status, ACT_OUTCOME_STATUS.DONE);
     }),
 );
 

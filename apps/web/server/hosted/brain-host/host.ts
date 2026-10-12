@@ -1,5 +1,5 @@
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
-import type { LanguageModel } from "ai";
+import { isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -12,18 +12,25 @@ import {
   type BrainTurnTrigger,
   isRecord,
   isWireString,
+  MESSAGE_ROLE,
   type UnparsedWireValue,
   type WireRecord,
 } from "../../core.js";
 import type { GitHubApp } from "../../github/github-app.js";
 import { readBoard } from "../board-store.js";
 import { HOSTED_TOOL_SET } from "../brain-tool-set.js";
+import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
 import { toolSetHashOf } from "../store/content-addressed.js";
-import { type ConversationTarget, promptHashOf } from "../store/index.js";
+import {
+  type ConversationTarget,
+  listMessagesPast,
+  type MessageCursor,
+  promptHashOf,
+} from "../store/index.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,
@@ -69,7 +76,9 @@ import { carryStop } from "./stop-carrier.js";
  * a message row. A conversation is a plan's: its turns run under the
  * planning model's instructions, its saved document as the standing context,
  * and the planning tools (`planning.ts`), and every write runs under the
- * conversation the session was admitted for.
+ * conversation the session was admitted for. A worker is named from the
+ * task it is handed by the same small call that names a coding agent
+ * (`coder-host/title.ts`), on its child conversation.
  */
 
 /** The turn a resolver or a tool runs in, as eve names it and as the store keys it; plain data, so a tool may capture it. */
@@ -178,6 +187,14 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+  /**
+   * A subagent's title generated from the first task it received, read from
+   * the child conversation of the call that started it, and written there
+   * where none stands yet; a session with no parent, one the account does
+   * not own, a child whose first task has not landed, a deployment with no
+   * title model, and a failed call each write nothing.
+   */
+  titleChild(session: SessionContext["session"]): HostEffect<void>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -190,6 +207,30 @@ export interface BrainHost {
     SqlError | Schema.SchemaError,
     SqlClient.SqlClient | HttpClient.HttpClient
   >;
+}
+
+/** Where a child's first task is read from: before every row of its conversation. */
+const FROM_THE_START: MessageCursor = { seq: 0, revision: 0 };
+
+/** The rows a child's first task is found among: its first turn's line and that turn's journal, in whichever order the relay wrote them. */
+const FIRST_TASK_ROWS = 2;
+
+/** The first task a subagent received, the line its child conversation opened with; nothing before that line lands, or where it does not read. */
+function firstTaskOf(child: ConversationTarget): HostEffect<string | undefined> {
+  return Effect.map(
+    listMessagesPast(
+      child.userId,
+      child.conversationId,
+      HOSTED_TOOL_SET,
+      FROM_THE_START,
+      FIRST_TASK_ROWS,
+    ),
+    (page) => {
+      if (!page.read.ok) return undefined;
+      const line = page.read.value.find((record) => record.message.role === MESSAGE_ROLE.USER);
+      return line?.message.parts.find(isTextUIPart)?.text;
+    },
+  );
 }
 
 /** The host over the deployment's seams; the research budget it keeps stands for the host's life. */
@@ -417,6 +458,26 @@ export function brainHost(seams: BrainHostSeams): BrainHost {
           turn: RELAY_TURN.CHILD,
           state,
         });
+      }),
+
+    titleChild: (session) =>
+      Effect.gen(function* () {
+        const parent = session.parent;
+        const model = seams.titleModel();
+        if (parent === undefined || model === undefined) return;
+        // Admitted on ownership alone, as the relay of the same session is.
+        const admitted = yield* admitConversation(session.auth, {
+          id: session.id,
+          standing: SESSION_STANDING.DELEGATED,
+        });
+        if (Result.isFailure(admitted)) return;
+        const { target } = admitted.success;
+        const childId = childConversationId(target.conversationId, parent.callId);
+        // Note that the task named is the child's first, whichever task woke this, because a
+        // later task's call racing the first one's must not name the worker for the later.
+        const task = yield* firstTaskOf({ userId: target.userId, conversationId: childId });
+        if (task === undefined) return;
+        yield* titleSubagent(model, target, childId, task);
       }),
   };
 }

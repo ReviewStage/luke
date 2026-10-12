@@ -35,9 +35,15 @@ import {
   codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  type ProviderKeysAnswerView,
+  providerKeyRemoveParamsSchema,
+  providerKeySaveParamsSchema,
+  providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
+  type CodeLines,
+  codeLinesSchema,
   type PlanningEditAnswer,
   type PlanningFileAnswer,
   type PlanningRepositoriesAnswer,
@@ -45,6 +51,7 @@ import {
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
+  type PlanningTreeAnswer,
   planningArchiveParamsSchema,
   planningBoardSaveParamsSchema,
   planningEditAnswerSchema,
@@ -63,6 +70,8 @@ import {
   planningSetRepositoryParamsSchema,
   planningStartAnswerSchema,
   planningStartRequestSchema,
+  planningTreeAnswerSchema,
+  planningTreeParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import type { LiveDiagnostics } from "@sidecar/live";
 import {
@@ -149,9 +158,13 @@ export const ACT_KIND = {
   PLANNING_WORK_EARLIER: "planning.workEarlier",
   /** A File tab's window of a file of the open plan's repository, read from GitHub through the service and coloured by main; answered to the tab, never on the document. */
   PLANNING_FILE: "planning.file",
-  /** The History tab's page of the open plan's history, read from the service; answered to the tab, never on the document. */
+  /** A File tab's tree listing one folder of the open plan's repository, read from GitHub through the service; answered to the tree, never on the document. */
+  PLANNING_TREE: "planning.tree",
+  /** A fenced block of a transcript's markdown, coloured by main as the File tab's lines are: the code and its fence's language go, the lines come back; answered to the block, never on the document. */
+  PLANNING_COLOUR_CODE: "planning.colourCode",
+  /** A page of the open plan's history for its version history, read from the service; answered to the view, never on the document. */
   PLANNING_REVISIONS: "planning.revisions",
-  /** The History tab's revision of the open plan beside the one before it, read from the service; answered to the tab, never on the document. */
+  /** A revision of the open plan beside the one before it for its version history, read from the service; answered to the view, never on the document. */
   PLANNING_REVISION: "planning.revision",
   /** A revision of a plan restored as its content on the service; answers whether it was, and the document arrives as the service answered it. */
   PLANNING_RESTORE: "planning.restore",
@@ -181,6 +194,15 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /**
+   * Settings › API keys: the account's own provider keys read as hints and
+   * statuses, one saved, one removed. The save's payload is the one place a
+   * key crosses from the renderer, once, on its way to the service; no
+   * answer carries one back, and nothing on the way keeps it.
+   */
+  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_SAVE: "providerKeys.save",
+  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -203,6 +225,7 @@ export const ACT_KIND = {
    */
   MICROPHONE_ROUTE: "microphone.route",
   MICROPHONE_OPEN_SETTINGS: "microphone.openSettings",
+  NOTIFICATIONS_OPEN_SETTINGS: "notifications.openSettings",
   WINDOW_FOCUS_PANEL: "window.focusPanel",
   WINDOW_COPY_TEXT: "window.copyText",
   FEEDBACK_SEND: "feedback.send",
@@ -321,6 +344,16 @@ function exactTextAllowingEmpty(max: number): EffectSchema.Codec<string, string>
  * value the host would not hold.
  */
 const exactId = exactText(512);
+
+/**
+ * The longest fenced block a transcript asks main to colour. Note that a
+ * longer one is drawn plain rather than cut, because colouring costs main
+ * a pass over every character and a block that long is a log, not a snippet.
+ */
+export const COLOURED_CODE_MAX_CHARS = 20_000;
+
+/** The longest language name a fence may give for its block to be coloured. */
+export const FENCE_LANGUAGE_MAX_CHARS = 32;
 
 /** The one host the browser is sent to from a plan: a repository's page, or the App's installation page. */
 const GITHUB_ADDRESS = /^https:\/\/github\.com\//u;
@@ -499,6 +532,19 @@ export const ACT = {
     result: wireResult<PlanningFileAnswer>(isReadable(planningFileAnswerSchema)),
     refusal: "Could not read that file on this system.",
   },
+  [ACT_KIND.PLANNING_TREE]: {
+    payload: actSchema(planningTreeParamsSchema),
+    result: wireResult<PlanningTreeAnswer>(isReadable(planningTreeAnswerSchema)),
+    refusal: "Could not list that folder on this system.",
+  },
+  [ACT_KIND.PLANNING_COLOUR_CODE]: {
+    payload: record({
+      language: exactText(FENCE_LANGUAGE_MAX_CHARS),
+      code: exactText(COLOURED_CODE_MAX_CHARS),
+    }),
+    result: wireResult<CodeLines>(isReadable(codeLinesSchema)),
+    refusal: "Could not colour that code on this system.",
+  },
   [ACT_KIND.PLANNING_REVISIONS]: {
     payload: actSchema(planningRevisionsParamsSchema),
     result: wireResult<PlanningRevisionsAnswer>(isReadable(planningRevisionsAnswerSchema)),
@@ -581,6 +627,21 @@ export const ACT = {
     ),
     refusal: "Could not read the agent's pull request on this system.",
   },
+  [ACT_KIND.PROVIDER_KEYS_READ]: {
+    payload: noPayload,
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not read your API keys on this system.",
+  },
+  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
+    payload: actSchema(providerKeySaveParamsSchema),
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not save your API key on this system.",
+  },
+  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
+    payload: actSchema(providerKeyRemoveParamsSchema),
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not remove your API key on this system.",
+  },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
       command: EffectSchema.Literals(Object.values(VOICE_COMMAND)),
@@ -633,6 +694,7 @@ export const ACT = {
     refusal: "Could not read the microphone route on this system.",
   },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
+  [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document is copied through this act, so it admits the

@@ -72,10 +72,11 @@ export type WorkBlock =
 
 export type WorkWorkerBlock = Extract<WorkBlock, { kind: typeof WORK_BLOCK.WORKER }>;
 
-/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, and when its newest task began and ended where the service said. */
+/** A subagent's session as the tab draws it when opened: its rows, whether older ones were left out, when its newest task began and ended, and its title, where the service said. */
 interface WorkSessionRow {
   earlierOmitted: boolean;
   rows: readonly TurnRow<WorkBlock>[];
+  title?: string;
   startedAt?: number;
   endedAt?: number;
 }
@@ -260,6 +261,7 @@ function rowsOf(
               ...(part.session.endedAt === undefined
                 ? undefined
                 : { endedAt: part.session.endedAt }),
+              ...(part.session.title === undefined ? undefined : { title: part.session.title }),
             },
           }),
     };

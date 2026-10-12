@@ -3,7 +3,12 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
-import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "./plan-wire.js";
+import {
+  CODE_PATH_MAX_CHARS,
+  PLAN_FIELD,
+  PLAN_FILE_REFUSAL,
+  PLAN_TREE_ENTRY,
+} from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -447,6 +452,47 @@ it.effect(
 );
 
 it.effect(
+  "a folder of the repository is asked by its path, the root by none, and read as the service answers it, a refusal included; a path the wire refuses is never sent",
+  () =>
+    Effect.gen(function* () {
+      const listing = (path: string) => ({
+        folder: {
+          path,
+          repository: "acme/web",
+          branch: "main",
+          entries: [
+            { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
+            { name: ".env", kind: PLAN_TREE_ENTRY.FILE },
+          ],
+          truncated: false,
+        },
+      });
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/tree`]: {
+          answer: (request) => {
+            const path = request.searchParams.get("path") ?? "";
+            return path === "gone"
+              ? { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }
+              : listing(path);
+          },
+        },
+      });
+      const read = (path: string) =>
+        Effect.provide(client().readTree(PLAN_ID, { path }), api.layer);
+
+      assert.deepEqual(yield* read(""), listing(""));
+      assert.deepEqual(yield* read("src/app"), listing("src/app"));
+      assert.deepEqual(yield* read("gone"), { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" });
+      assert.equal(yield* read("a".repeat(CODE_PATH_MAX_CHARS + 1)), undefined);
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        `GET /api/plans/${PLAN_ID}/tree`,
+        `GET /api/plans/${PLAN_ID}/tree?path=src/app`,
+        `GET /api/plans/${PLAN_ID}/tree?path=gone`,
+      ]);
+    }),
+);
+
+it.effect(
   "the history is read a page at a time, one revision beside the one before it, and a restore answers the plan as it now stands",
   () =>
     Effect.gen(function* () {
@@ -546,6 +592,24 @@ it.effect("an edit of a plan the service does not find reads as not found", () =
     );
 
     assert.deepEqual(edited, { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND });
+  }),
+);
+
+it.effect("an edit of an archived plan reads as archived, which the window says as such", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({
+      [`POST /api/plans/${PLAN_ID}/edit`]: {
+        answer: () => ({ error: HOSTED_API_ERROR.PLAN_ARCHIVED }),
+        status: HTTP_STATUS.CONFLICT,
+      },
+    });
+
+    const edited = yield* Effect.provide(
+      client().edit(PLAN_ID, { field: PLAN_FIELD.DECISIONS, base: null, value: "Invites expire." }),
+      api.layer,
+    );
+
+    assert.deepEqual(edited, { ok: false, failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED });
   }),
 );
 

@@ -108,6 +108,15 @@ interface AppCodingAgentsSlice {
 }
 
 /**
+ * Whether macOS refused the last notification Luke posted, which is the only
+ * word Electron gives of notifications being off for Luke in System Settings:
+ * false until one is refused, and again once one is shown.
+ */
+interface AppNotificationsSlice {
+  refused: boolean;
+}
+
+/**
  * Everything main keeps of what the host tells it and what this machine
  * answers for itself: one document, read whole and replaced a slice at a
  * time, so the state a window is handed and the state main answers a call
@@ -135,6 +144,7 @@ export interface AppState {
    */
   planning: PlanningView;
   codingAgents: AppCodingAgentsSlice;
+  notifications: AppNotificationsSlice;
   sessionReplay: AppSessionReplaySlice;
 }
 

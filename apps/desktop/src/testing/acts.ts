@@ -35,6 +35,14 @@ export const ONE_ACT_OF_EACH_KIND = {
       lastLine: 500,
     },
   },
+  [ACT_KIND.PLANNING_TREE]: {
+    kind: ACT_KIND.PLANNING_TREE,
+    payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", path: "src" },
+  },
+  [ACT_KIND.PLANNING_COLOUR_CODE]: {
+    kind: ACT_KIND.PLANNING_COLOUR_CODE,
+    payload: { language: "ts", code: "export const seats = 3;" },
+  },
   [ACT_KIND.PLANNING_REVISIONS]: {
     kind: ACT_KIND.PLANNING_REVISIONS,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10" },
@@ -131,6 +139,15 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
   },
+  [ACT_KIND.PROVIDER_KEYS_READ]: { kind: ACT_KIND.PROVIDER_KEYS_READ },
+  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
+    kind: ACT_KIND.PROVIDER_KEYS_SAVE,
+    payload: { provider: "anthropic", key: "sk-ant-api03-synthetic-000000000000000000" },
+  },
+  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
+    kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
+    payload: { provider: "anthropic" },
+  },
   [ACT_KIND.CODING_AGENTS_CHOOSE]: {
     kind: ACT_KIND.CODING_AGENTS_CHOOSE,
     payload: {
@@ -179,6 +196,7 @@ export const ONE_ACT_OF_EACH_KIND = {
   [ACT_KIND.MICROPHONE_REQUEST]: { kind: ACT_KIND.MICROPHONE_REQUEST },
   [ACT_KIND.MICROPHONE_ROUTE]: { kind: ACT_KIND.MICROPHONE_ROUTE },
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: { kind: ACT_KIND.MICROPHONE_OPEN_SETTINGS },
+  [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: { kind: ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS },
   [ACT_KIND.WINDOW_FOCUS_PANEL]: { kind: ACT_KIND.WINDOW_FOCUS_PANEL },
   [ACT_KIND.WINDOW_COPY_TEXT]: { kind: ACT_KIND.WINDOW_COPY_TEXT, payload: { words: "checkout" } },
   [ACT_KIND.FEEDBACK_SEND]: {

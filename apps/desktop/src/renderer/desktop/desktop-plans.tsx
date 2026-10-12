@@ -1,41 +1,69 @@
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { ArchivedBanner } from "../planning/archived-plan";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import { CallBar } from "../planning/planning-parts";
 import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
-import { usePlanLooks } from "../planning/use-plan-looks";
+import { MAIN_TAB } from "../planning/use-main-tabs";
+import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { SIDE_PANEL_TAB } from "../planning/use-side-panel";
-import { VersionView } from "../planning/version-view";
+import { SPINNER_SIZE, Spinner } from "../spinner";
+import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
-import { PlanNameField, usePlanRename } from "./plan-name-field";
+import { usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
+import { useTabViews } from "./strip-tabs";
 import { Tab, TabStrip } from "./tab-strip";
 
 /**
- * The work column while Plans is chosen: the open plan's document, with its
- * toolbar above and the call bar below, and the side panel beside all three,
- * the window's full height, while that is open (or over them, while it fills
- * the window); or, with none open, the new-plan page, which is the window's home.
+ * The work column while Plans is chosen: the open plan's column, its
+ * toolbar above and the call bar below, and the side panel beside it, the
+ * window's full height, while that is open (or over it, while it fills the
+ * window); or, with none open, the new-plan page, which is the window's home.
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
- * rest stand. Its one tab is the plan's, named for it, and a press on it
- * renames the plan in place. The toolbar is one row, the side panel's bar's
- * height exactly; the plan's repository is the sidebar's row's to name, so
- * the toolbar draws the repository chip only while the plan has none, and
- * otherwise only the chip's menu, which Change repository… opens.
+ * rest stand. The toolbar is one row, the side panel's bar's height exactly;
+ * the plan's repository is the sidebar's row's to name, so the toolbar draws
+ * the repository chip only while the plan has none, and otherwise only the
+ * chip's menu, which Change repository… opens.
+ *
+ * The column holds tabs as the side panel does (`main-tabs.tsx`): the
+ * plan's own first, showing its document, then one per coding agent,
+ * showing its transcript and its composer at the document's measure, and
+ * the draft agent's. The toolbar's actions are the plan's, and so is the call
+ * bar, so both stand on every tab: a call is about the plan whichever tab is
+ * read. The document stays laid out while an agent's tab is shown, so
+ * coming back to it finds it where it was left.
+ *
+ * ⌘T opens the "+" of the column holding the window's focus, and ⌘W closes
+ * its chosen tab: the side panel's once the pointer or the focus went into
+ * it, else this column's, which a panel shut hands them back to.
+ *
+ * An archived plan reads and takes nothing until it is brought back: its
+ * banner under the toolbar says so with Unarchive as its primary button,
+ * and in the meantime the document is not edited, the plan is not renamed,
+ * no repository is chosen, Start, a new agent, and the call's start are not
+ * drawn, and a version viewed is not restored (`../planning/archived-plan.tsx`).
  */
+
+/** Which of the plan's two columns holds the window's focus, which ⌘T and ⌘W answer to. */
+const COLUMN = {
+  MAIN: "main",
+  SIDE: "side",
+} as const;
+
+type Column = (typeof COLUMN)[keyof typeof COLUMN];
 
 /**
  * The strip across the top of the work column, which is also the window's
- * drag handle: the plan's tab at its left and the plan's actions at its right.
+ * drag handle: the column's tabs at its left and the plan's actions at its right.
  */
 function Toolbar({
   heading,
@@ -61,111 +89,53 @@ function CopyChord({ copy }: { copy: PlansControl["copy"] }): null {
   return null;
 }
 
-/**
- * The plan's one tab, standing while no plan is drawn yet as well, so the
- * row does not move when one is. It is the column's only tab and never
- * closes: the plan is always the column's content, and the sidebar is the
- * way to another plan. Note that there is no "+" beside it, because the
- * column has no second kind of tab to open.
- */
-function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
-  return (
-    <TabStrip label="Plan" className="desktop-toolbar-heading">
-      {tab}
-    </TabStrip>
-  );
+/** ⌘T's offer while a plan is drawn: the "+" of the column holding the window's focus. */
+function NewTabChord({ onNewTab }: { onNewTab: () => void }): null {
+  useAppCommand(APP_COMMAND.NEW_TAB, onNewTab);
+  return null;
 }
 
-/**
- * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
- * opens as its field, and its repository in the hint the pointer resting on
- * it raises. A key that ends the edit hands focus back to the tab.
- */
-function PlanTab({
-  plan,
-  rename,
-}: {
-  plan: PlanSummary;
-  rename: ReturnType<typeof usePlanRename>;
-}): React.JSX.Element {
-  const tab = useRef<HTMLButtonElement | null>(null);
-  const refocus = useRef(false);
-  useEffect(() => {
-    if (rename.editing || !refocus.current) return;
-    refocus.current = false;
-    tab.current?.focus();
-  }, [rename.editing]);
-  const editor = rename.editing ? (
-    <PlanNameField
-      name={plan.name}
-      className="tab-field"
-      onEnd={(edit) => {
-        refocus.current = edit.byKey;
-        rename.end(edit);
-      }}
-    />
-  ) : undefined;
-  return (
-    <PlanTabStrip
-      tab={
-        <Tab
-          icon={<DocumentIcon />}
-          label={plan.name}
-          selected
-          tooltip={plan.repository ?? undefined}
-          editor={editor}
-          tabRef={tab}
-          onSelect={rename.begin}
-        />
-      }
-    />
-  );
-}
+/** What a press on the stand-in tab does: nothing, since it is the column's one tab while no plan is drawn. */
+const CHOOSE_PLAN = () => undefined;
 
 /**
- * The quiet line over an archived plan's document, saying it is archived
- * with the press that brings it back, the way Codex marks an archived task:
- * the plan reads and works as any other, and only the sidebar keeps it away.
- */
-function ArchivedBanner({
-  plans,
-  plan,
-}: {
-  plans: PlansControl;
-  plan: PlanSummary;
-}): React.JSX.Element | null {
-  if (plan.archivedAt === undefined) return null;
-  return (
-    <div className="desktop-archived-banner" role="status">
-      <span>This plan is archived</span>
-      <button
-        type="button"
-        className="link-button"
-        onClick={() => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE)}
-      >
-        Unarchive
-      </button>
-    </div>
-  );
-}
-
-/**
- * The open plan's region: its document, or the state standing in its place.
- * The captions, handed in while the plan is drawn, stand just above the call
- * bar.
+ * The open plan's region: its column, or the state standing in its place,
+ * whose strip holds a stand-in for the plan's tab, so the row does not move
+ * when the plan is drawn. The captions, handed in while the plan is drawn,
+ * stand just above the call bar.
  */
 function PlanDocument({
   plans,
+  looks,
   captions,
 }: {
   plans: PlansControl;
+  looks: PlanLooks;
   captions: React.ReactNode;
 }): React.JSX.Element {
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
+  const views = useTabViews();
+  const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
+  const [area, setArea] = useState<HTMLDivElement | null>(null);
+  // The column the pointer or the focus last went into holds the keys. Note
+  // that it is heard on the plan's area as it bubbles, because the columns
+  // are no controls of their own to hear it.
+  useEffect(() => {
+    if (area === null) return;
+    const hear = (event: Event) => {
+      const side = event.target instanceof Element && event.target.closest(".side-panel") !== null;
+      setFocus(side ? COLUMN.SIDE : COLUMN.MAIN);
+    };
+    area.addEventListener("pointerdown", hear);
+    area.addEventListener("focusin", hear);
+    return () => {
+      area.removeEventListener("pointerdown", hear);
+      area.removeEventListener("focusin", hear);
+    };
+  }, [area]);
   const planId = region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined;
   const rename = usePlanRename(planId, plans.onRenamePlan);
-  const looks = usePlanLooks(region.kind === DOCUMENT_REGION.READY ? region.plan : undefined);
   // A refusal is said beside the chip, under the plan it was about and no
   // other. Note that it is held above the states with no document, because
   // a plan opened from the list is drawn reading before its read lands, and
@@ -174,24 +144,26 @@ function PlanDocument({
   const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
-      region.kind === DOCUMENT_REGION.READING
-        ? "Reading the plan…"
-        : region.kind === DOCUMENT_REGION.FAILED
-          ? "The plan could not be read."
-          : region.kind === DOCUMENT_REGION.MISSING
-            ? "This plan no longer exists."
-            : "Choose a plan, or start a new one.";
+      region.kind === DOCUMENT_REGION.FAILED
+        ? "The plan could not be read."
+        : region.kind === DOCUMENT_REGION.MISSING
+          ? "This plan no longer exists."
+          : "Choose a plan, or start a new one.";
     return (
       <>
         <Toolbar
           heading={
-            <PlanTabStrip
-              tab={<Tab icon={<DocumentIcon />} label="Plan" selected onSelect={() => undefined} />}
-            />
+            <TabStrip label="Plan" className="desktop-toolbar-heading">
+              <Tab icon={<DocumentIcon />} label="Plan" selected quiet onSelect={CHOOSE_PLAN} />
+            </TabStrip>
           }
         />
-        <section className="desktop-empty" aria-busy={region.kind === DOCUMENT_REGION.READING}>
-          <p role={region.kind === DOCUMENT_REGION.READING ? undefined : "alert"}>{line}</p>
+        <section className="desktop-empty">
+          {region.kind === DOCUMENT_REGION.READING ? (
+            <Spinner label="Loading plan" size={SPINNER_SIZE.REGION} />
+          ) : (
+            <p role="alert">{line}</p>
+          )}
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <button type="button" className="primary-button" onClick={plans.onRetryDocument}>
               Try again
@@ -209,7 +181,9 @@ function PlanDocument({
     );
   }
   const { plan } = region;
-  const { sidePanel } = plans;
+  const { mainTabs, sidePanel, agents } = plans;
+  const archived = plan.archivedAt !== undefined;
+  const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;
@@ -221,15 +195,47 @@ function PlanDocument({
   };
   const menuRequest =
     plans.repositoryMenu?.planId === plan.id ? plans.repositoryMenu.request : undefined;
+  // The panel holds the keys while the focus went into it last, or while it
+  // fills the window over this column; shut, it hands them back.
+  const sideFocused = sidePanel.open && (focus === COLUMN.SIDE || sidePanel.fullScreen);
+  const { tab } = mainTabs;
+  // A delegation's row in an agent's transcript opens its worker in the side
+  // panel, where every subagent stands; where the worker stands seeds its glyph.
+  const openDelegation = (
+    agent: string,
+    callId: string,
+    task: string,
+    status: CodingAgentStatus,
+  ) => {
+    views.onWorkerStatus(callId, status);
+    sidePanel.onChoose({ subagent: callId, delegation: { agent, task } });
+  };
   // The panel's toggle is the window's (desktop-shell.tsx); while no panel
   // stands beside the toolbar, the toolbar is the one that leaves it room.
   return (
-    <div className="desktop-plan" data-panel-open={String(sidePanel.open)}>
-      {/* Note that the document is hidden rather than left out while the
+    <div ref={setArea} className="desktop-plan" data-panel-open={String(sidePanel.open)}>
+      {/* Note that the column is hidden rather than left out while the
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar heading={<PlanTab plan={plan} rename={rename} />}>
+        <Toolbar
+          heading={
+            <MainTabStrip
+              plan={plan}
+              main={mainTabs}
+              agents={agents}
+              unread={plans.unreadTabs}
+              views={views}
+              pins={{
+                pinned: sidePanel.pins,
+                onPin: sidePanel.onPin,
+                onUnpin: sidePanel.onUnpin,
+              }}
+              rename={archived ? undefined : rename}
+              keys={plans.shown && !sideFocused}
+            />
+          }
+        >
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
@@ -241,50 +247,75 @@ function PlanDocument({
             </p>
           ) : null}
           <CopyChord copy={plans.copy} />
+          {/* A version drawn in the plan's place is the version's page, which opens no tab. */}
+          {plans.history.viewing === undefined ? (
+            <NewTabChord onNewTab={sideFocused ? sidePanel.onNewTab : mainTabs.onNewTab} />
+          ) : null}
           {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
           <Fragment key={plan.id}>
-            <RepositoryChip
-              place={CHIP_PLACE.TOOLBAR}
-              value={plan.repository}
-              chooser={plans.repositories}
-              onChoose={chooseRepository}
-              openRequest={menuRequest}
-            />
-            <StartAgentButton control={plans.agents} />
+            {archived ? null : (
+              <>
+                <RepositoryChip
+                  place={CHIP_PLACE.TOOLBAR}
+                  value={plan.repository}
+                  chooser={plans.repositories}
+                  onChoose={chooseRepository}
+                  openRequest={menuRequest}
+                />
+                <StartAgentButton control={agents} />
+              </>
+            )}
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
         </Toolbar>
-        <ArchivedBanner plans={plans} plan={plan} />
-        <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
-          {/* A version chosen in the History tab is drawn in the document's
-              place, the way a version history shows it in the page itself. */}
-          {plans.history.viewing === undefined ? (
-            <PlanBody
-              plan={plan}
-              live={plans.live}
-              onShowHistory={() => sidePanel.onChoose(SIDE_PANEL_TAB.HISTORY)}
-              onEdit={(request) => plans.edit(plan.id, request)}
-              looks={looks}
-            />
-          ) : (
-            <VersionView
-              history={plans.history}
-              viewing={plans.history.viewing}
-              current={plan.document}
-              shown={plans.shown}
-            />
-          )}
-        </section>
-        <div className="desktop-call-bar">
-          {captions}
-          <CallBar
-            status={plans.status}
-            microphone={plans.microphone}
-            speaker={plans.speaker}
-            stop={plans.stop}
+        {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+        <section
+          className="desktop-document"
+          role="tabpanel"
+          aria-label={plan.name}
+          hidden={tab !== MAIN_TAB.PLAN}
+        >
+          {/* Keyed by the archive, so an editor still open when the plan is
+              archived elsewhere is let go rather than left taking words. */}
+          <PlanBody
+            key={String(archived)}
+            plan={plan}
+            live={plans.live}
+            onShowHistory={() => plans.history.onOpen(plan.id)}
+            {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
+            looks={looks}
           />
-        </div>
+        </section>
+        {tab === MAIN_TAB.PLAN ? null : (
+          <section
+            className="desktop-agent"
+            role="tabpanel"
+            aria-label={mainTabLabel(tab, agents)}
+            data-popover-room=""
+          >
+            <MainTabContent
+              tab={tab}
+              agents={agents}
+              shown={plans.shown && !sidePanel.fullScreen}
+              views={views}
+              onOpenDelegation={openDelegation}
+            />
+          </section>
+        )}
+        {/* Note that a call of the plan's own still stands, so it can be
+            ended, when only a race left one on a plan just archived. */}
+        {archived && !plans.stop.shown ? null : (
+          <div className="desktop-call-bar">
+            {captions}
+            <CallBar
+              status={plans.status}
+              microphone={plans.microphone}
+              speaker={plans.speaker}
+              stop={plans.stop}
+            />
+          </div>
+        )}
       </div>
       {drawing.panel ? (
         <SidePanel
@@ -297,9 +328,11 @@ function PlanDocument({
           shownCode={plans.shownCode}
           transcript={plans.transcript}
           work={plans.work}
-          agents={plans.agents}
-          history={plans.history}
+          agents={agents}
+          openAgents={mainTabs.openAgents}
+          views={views}
           shown={plans.shown}
+          focused={sideFocused}
         />
       ) : null}
     </div>
@@ -308,15 +341,18 @@ function PlanDocument({
 
 export function DesktopPlans({
   plans,
+  looks,
   captions,
 }: {
   plans: PlansControl;
+  /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
+  looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
 }): React.JSX.Element {
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
-      return <PlanDocument plans={plans} captions={captions} />;
+      return <PlanDocument plans={plans} looks={looks} captions={captions} />;
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (

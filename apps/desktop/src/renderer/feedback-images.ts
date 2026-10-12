@@ -26,12 +26,12 @@ const RECODE_ROUNDS = [
   { maxEdge: 1400, quality: 0.6 },
 ] as const;
 
-function imageIntake(file: { type: string; size: number }): ImageIntake {
+function imageIntake(file: { type: string; size: number }, maxBytes: number): ImageIntake {
   // A format the submission carries natively rides untouched while it fits;
   // past the cap it is re-encoded rather than refused, because the cap exists
   // for a request-body limit the user should never have to think about.
   if (isFeedbackImageType(file.type)) {
-    return file.size <= FEEDBACK_LIMITS.IMAGE_MAX_BYTES ? IMAGE_INTAKE.KEEP : IMAGE_INTAKE.RECODE;
+    return file.size <= maxBytes ? IMAGE_INTAKE.KEEP : IMAGE_INTAKE.RECODE;
   }
   // Anything else the platform can decode — HEIC off a phone, a GIF — still
   // comes, as a re-encode. Only a file that is not an image at all is refused.
@@ -57,7 +57,7 @@ function base64FromBlob(blob: Blob): Promise<string> {
   });
 }
 
-async function recodedImage(file: File): Promise<FeedbackImage | undefined> {
+async function recodedImage(file: File, maxBytes: number): Promise<FeedbackImage | undefined> {
   const bitmap = await createImageBitmap(file);
   try {
     for (const round of RECODE_ROUNDS) {
@@ -72,7 +72,7 @@ async function recodedImage(file: File): Promise<FeedbackImage | undefined> {
         canvas.toBlob(resolve, FEEDBACK_IMAGE_TYPE.WEBP, round.quality),
       );
       if (!blob) return undefined;
-      if (blob.size > FEEDBACK_LIMITS.IMAGE_MAX_BYTES) continue;
+      if (blob.size > maxBytes) continue;
       return {
         name: recodedImageName(file.name),
         mediaType: FEEDBACK_IMAGE_TYPE.WEBP,
@@ -86,18 +86,23 @@ async function recodedImage(file: File): Promise<FeedbackImage | undefined> {
 }
 
 /**
- * Turns one picked or pasted file into an attachment, or nothing if it cannot
- * come. Everything here happens on the user's machine: a file is only read,
- * scaled, and encoded — nothing leaves until the note it belongs to is sent.
+ * Turns one picked or pasted file into an image of at most the bytes given,
+ * or nothing if it cannot come: a feedback note's screenshot, or a file on a
+ * coding agent's message. Everything here happens on the user's machine: a
+ * file is only read, scaled, and encoded — nothing leaves until the message
+ * it belongs to is sent.
  */
-export async function encodeFeedbackImage(file: File): Promise<FeedbackImage | undefined> {
-  const intake = imageIntake(file);
+export async function encodeImage(
+  file: File,
+  maxBytes: number = FEEDBACK_LIMITS.IMAGE_MAX_BYTES,
+): Promise<FeedbackImage | undefined> {
+  const intake = imageIntake(file, maxBytes);
   if (intake === IMAGE_INTAKE.REFUSE) return undefined;
   try {
     if (intake === IMAGE_INTAKE.KEEP && isFeedbackImageType(file.type)) {
       return { name: file.name, mediaType: file.type, base64: await base64FromBlob(file) };
     }
-    return await recodedImage(file);
+    return await recodedImage(file, maxBytes);
   } catch {
     // A file the decoder refused — a corrupt image, a format Chromium cannot
     // read — is a refusal for the composer to word, not an error to surface.

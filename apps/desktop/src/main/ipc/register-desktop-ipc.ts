@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { highlightSnippet } from "@sidecar/host";
 import { BrowserWindow, clipboard, ipcMain } from "electron";
 import { channels } from "#shared/bridge";
 import { ACT_KIND } from "#shared/messages/acts";
@@ -70,6 +71,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
       microphoneRoute: () => state.snapshot().audio.microphoneRoute,
       microphoneRouteWatcher: () => native.microphoneRouteWatcher(),
       recordProductEvent,
+      openExternal: config.openExternal,
     }),
     ...voiceRuntimeActRows(voiceRuntime),
     ...planningActRows({
@@ -86,6 +88,7 @@ export function registerDesktopIpc(services: DesktopServices): void {
           snapshot.audio.microphoneStatus === MICROPHONE_STATUS.GRANTED
         );
       },
+      colourCode: highlightSnippet,
     }),
     ...codingAgentActRows({ host: operator.host, notices }),
     [ACT_KIND.UPDATE_CHECK]: () => updates.check(),

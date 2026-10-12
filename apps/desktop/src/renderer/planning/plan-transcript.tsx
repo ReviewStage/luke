@@ -1,5 +1,6 @@
 import { WingFace } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
+import { AudioLinesIcon } from "lucide-react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -8,6 +9,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { CopyMessageAction } from "./copy-message";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
@@ -90,7 +92,7 @@ function TranscriptCall({
         trailing={
           call.live ? (
             <span className="flex items-center gap-1.5 text-developer">
-              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              <AudioLinesIcon className="size-3.5" aria-hidden="true" />
               {LIVE_LABEL}
             </span>
           ) : null
@@ -143,9 +145,9 @@ export function PlanTranscript({
       {region.kind === TRANSCRIPT_REGION.READY ? (
         <TranscriptCalls region={region} />
       ) : (
-        <ConversationEmptyState aria-busy={region.kind === TRANSCRIPT_REGION.READING}>
+        <ConversationEmptyState>
           {region.kind === TRANSCRIPT_REGION.READING ? (
-            <p className="m-0">Reading the transcript…</p>
+            <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
           ) : null}
           {region.kind === TRANSCRIPT_REGION.EMPTY ? (
             <p className="m-0">{TRANSCRIPT_EMPTY_LINE}</p>

@@ -10,6 +10,7 @@ import {
   type SettingsVisibility,
 } from "./schema-types.js";
 import { isTheme, THEME, THEME_LIST, type Theme } from "./theme.js";
+import { isZoomPercent, ZOOM_ACTUAL_SIZE, ZOOM_PERCENTS } from "./zoom.js";
 
 export {
   SETTING_ROWS,
@@ -64,6 +65,24 @@ export const APP_SETTING_SCHEMA = {
     // snapshot it publishes, so a write that failed steers nothing.
     sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
+  zoom: choiceSetting({
+    field: "zoom",
+    id: APP_SETTING_ID.ZOOM,
+    label: "Zoom",
+    description:
+      "How large Luke's window draws its words and controls. ⌘+ and ⌘− step through the same sizes, and ⌘0 returns to 100%.",
+    values: ZOOM_PERCENTS,
+    token: (percent) => String(percent),
+    optionLabel: (percent) => `${percent}%`,
+    guard: (value: UnparsedWireValue) => optional(value, isZoomPercent),
+    default: ZOOM_ACTUAL_SIZE,
+    page: SETTINGS_PAGE.APPEARANCE,
+    order: 7,
+    resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
+    // Nothing to run per write, as for the theme: main zooms the windows
+    // from every settings snapshot it publishes.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
+  }),
   openAtLogin: toggleSetting({
     field: "openAtLogin",
     id: APP_SETTING_ID.OPEN_AT_LOGIN,
@@ -74,6 +93,20 @@ export const APP_SETTING_SCHEMA = {
     order: 10,
     resetScope: SETTINGS_RESET_SCOPE.APPEARANCE,
     sideEffect: SETTING_SIDE_EFFECT.LOGIN_ITEM,
+  }),
+  agentNotifications: toggleSetting({
+    field: "agentNotifications",
+    id: APP_SETTING_ID.AGENT_NOTIFICATIONS,
+    label: "Notify me when a coding agent finishes",
+    description:
+      "Whether Luke sends a Mac notification when a coding agent finishes, fails, or opens a " +
+      "pull request while his window is behind. In front, the window says so itself either way. " +
+      "Notifications are also allowed or refused for Luke in System Settings.",
+    default: true,
+    page: SETTINGS_PAGE.ROOT,
+    order: 1,
+    // Nothing to run per write: main reads the setting as each end is announced.
+    sideEffect: SETTING_SIDE_EFFECT.NONE,
   }),
   voice: choiceSetting({
     field: "voice",

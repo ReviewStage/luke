@@ -1,0 +1,55 @@
+import { Effect } from "effect";
+import type * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
+import * as Atom from "effect/unstable/reactivity/Atom";
+import { rendererRuntime } from "./renderer-runtime";
+
+/**
+ * bundle-loader.ts -- a bundle of the panel's own that is too large for the one every window parses, loaded the first time it is needed and kept for the window's life.
+ *
+ * The whiteboard (`whiteboard/`) and a File tab's tree (`file-tree/`) each
+ * ship as a script of their own beside `index.html` that sets one global
+ * once it has run. Loading one adds its stylesheet, where it has one, and
+ * its script to the document, and answers with what the script set; the
+ * answer is kept alive, so leaving the surface and coming back loads
+ * nothing.
+ */
+
+/** A bundle's files beside `index.html`: its script, and its stylesheet where it has one. */
+export interface BundleAsset {
+  readonly script: string;
+  readonly stylesheet?: string;
+}
+
+/** The bundle loaded once per window, as what its script set on `window`, or the failure given. */
+export function bundleAtom<A>(
+  asset: BundleAsset,
+  loaded: () => A | undefined,
+  failure: string,
+): Atom.Atom<AsyncResult.AsyncResult<A, Error>> {
+  return Atom.keepAlive(
+    rendererRuntime.atom(
+      Effect.callback<A, Error>((resume) => {
+        const standing = loaded();
+        if (standing !== undefined) {
+          resume(Effect.succeed(standing));
+          return;
+        }
+        const script = document.createElement("script");
+        script.src = asset.script;
+        script.addEventListener("load", () => {
+          const module = loaded();
+          resume(module ? Effect.succeed(module) : Effect.fail(new Error(failure)));
+        });
+        script.addEventListener("error", () => resume(Effect.fail(new Error(failure))));
+        if (asset.stylesheet === undefined) {
+          document.head.append(script);
+          return;
+        }
+        const stylesheet = document.createElement("link");
+        stylesheet.rel = "stylesheet";
+        stylesheet.href = asset.stylesheet;
+        document.head.append(stylesheet, script);
+      }),
+    ),
+  );
+}

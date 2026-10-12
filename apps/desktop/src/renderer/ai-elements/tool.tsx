@@ -1,5 +1,6 @@
-import { LoaderCircleIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, useState } from "react";
+import { SpinnerRing } from "../spinner";
 import { CodeBlock } from "./code-block";
 import {
   Fold,
@@ -130,10 +131,7 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
       {state === TOOL_STATE.OUTPUT_AVAILABLE ? null : state === TOOL_STATE.OUTPUT_ERROR ? (
         <XIcon className="size-4 text-danger" aria-hidden="true" />
       ) : (
-        <LoaderCircleIcon
-          className="size-4 animate-spin text-muted-foreground [animation-play-state:var(--loop-motion)]"
-          aria-hidden="true"
-        />
+        <SpinnerRing className="text-muted-foreground" />
       )}
     </span>
   );

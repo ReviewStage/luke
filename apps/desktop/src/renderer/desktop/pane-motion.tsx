@@ -5,8 +5,8 @@
  * window lands in the layout at once, on the frame it was asked for, and
  * what that moved replays the journey on `transform` and `clip-path`
  * (docs/DESIGN.md, "Whatever its room displaced replays the journey"): the
- * plan's title, its document, and its toolbar's buttons glide from where
- * they were drawn to where they now stand, the side panel slides in from
+ * plan's tabs, its document or an agent's tab, and its toolbar's buttons
+ * glide from where they were drawn to where they now stand, the side panel slides in from
  * the window's right, and a panel that grew over the document is uncovered
  * from its old edge to its new one. A pane leaving holds itself drawn
  * through its own exit (side-panel.tsx), so only arrivals and displacement
@@ -25,6 +25,7 @@ const GLIDERS = [
   ".desktop-toolbar-actions",
   ".desktop-document .plan-body",
   ".desktop-document .plan-assumptions",
+  ".desktop-agent > *",
   ".desktop-call-bar .call-bar",
   ".desktop-empty > *",
   ".desktop-compose > *",

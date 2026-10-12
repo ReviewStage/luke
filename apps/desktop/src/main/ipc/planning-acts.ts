@@ -1,4 +1,5 @@
 import type {
+  CodeLines,
   PlanningArchiveParams,
   PlanningBoardSaveParams,
   PlanningEditAnswer,
@@ -17,6 +18,8 @@ import type {
   PlanningSetRepositoryParams,
   PlanningStartAnswer,
   PlanningStartRequest,
+  PlanningTreeAnswer,
+  PlanningTreeParams,
 } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import { ACT, ACT_KIND } from "#shared/messages/acts";
@@ -50,6 +53,7 @@ export interface PlanningActsDependencies {
     planningBoardSave(params: PlanningBoardSaveParams): Effect.Effect<void>;
     planningWorkEarlier(): Effect.Effect<void>;
     planningFile(params: PlanningFileParams): Effect.Effect<PlanningFileAnswer>;
+    planningTree(params: PlanningTreeParams): Effect.Effect<PlanningTreeAnswer>;
     planningRevisions(params: PlanningRevisionsParams): Effect.Effect<PlanningRevisionsAnswer>;
     planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
     planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
@@ -62,6 +66,8 @@ export interface PlanningActsDependencies {
   talkAboutPlan: (planId: string) => void;
   /** Whether a call could open now: voice set up and the microphone already granted, so opening one asks the developer nothing. */
   voiceReady: () => boolean;
+  /** A transcript's fenced block coloured as its fence's language, by the highlighter the File tab's lines are coloured with. */
+  colourCode: (language: string, code: string) => CodeLines;
 }
 
 type PlanningActKind =
@@ -82,6 +88,8 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_BOARD_SAVE
   | typeof ACT_KIND.PLANNING_WORK_EARLIER
   | typeof ACT_KIND.PLANNING_FILE
+  | typeof ACT_KIND.PLANNING_TREE
+  | typeof ACT_KIND.PLANNING_COLOUR_CODE
   | typeof ACT_KIND.PLANNING_REVISIONS
   | typeof ACT_KIND.PLANNING_REVISION
   | typeof ACT_KIND.PLANNING_RESTORE;
@@ -179,6 +187,14 @@ export function planningActRows(
     [ACT_KIND.PLANNING_FILE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_FILE, sender);
       return host.planningFile(params);
+    },
+    [ACT_KIND.PLANNING_TREE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_TREE, sender);
+      return host.planningTree(params);
+    },
+    [ACT_KIND.PLANNING_COLOUR_CODE]: ({ language, code }, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_COLOUR_CODE, sender);
+      return dependencies.colourCode(language, code);
     },
     [ACT_KIND.PLANNING_REVISIONS]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_REVISIONS, sender);

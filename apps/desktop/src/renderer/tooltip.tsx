@@ -11,8 +11,14 @@
  * the keyboard all take it down. It hangs below its control and turns above it where the window ends,
  * so it never covers what it names.
  *
+ * A control with more to say than a pill holds hangs a card in its place:
+ * the same wait, warm spell, and ways down, drawn as a small light panel
+ * from the control's start, the way a browser's tab hover card hangs
+ * (`card`).
+ *
  * Its words are text like any other, so the session recording masks them
- * with the rest; nothing of it rides an attribute.
+ * with the rest; nothing of it rides an attribute, and a card is left out
+ * of the recording whole.
  */
 
 import { MOTION_DELAY_MS } from "@sidecar/surface";
@@ -21,6 +27,7 @@ import {
   type FocusEventHandler,
   type PointerEventHandler,
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
   useId,
@@ -47,6 +54,8 @@ const WARM_MS = MOTION_DELAY_MS.HINT;
 const TOOLTIP_SIDE = {
   BELOW: "below",
   ABOVE: "above",
+  /** Beside the control, past its end: a card a list row hangs, so it covers none of the rows under it. */
+  END: "end",
 } as const;
 
 type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
@@ -86,13 +95,31 @@ function clampTo(value: number, size: number, room: number): number {
   return Math.max(TOOLTIP_MARGIN, Math.min(value, room - size - TOOLTIP_MARGIN));
 }
 
-/** Where a pill of this size goes for its control: below it, or above where the window ends. */
-function pillPlace(shown: Shown, width: number, height: number): PillPlace {
+/**
+ * Where a pill of this size goes for its control: below it, or above where
+ * the window ends; centred on it, or from its start for a card. A card hung
+ * beside its control stands past the control's end, level with its top and
+ * held inside the window.
+ */
+function pillPlace(
+  shown: Shown,
+  width: number,
+  height: number,
+  card: { readonly beside: boolean } | undefined,
+): PillPlace {
   const anchor = shown.anchor.getBoundingClientRect();
+  if (card?.beside === true) {
+    return {
+      left: clampTo(anchor.right + TOOLTIP_GAP, width, window.innerWidth),
+      top: clampTo(anchor.top, height, window.innerHeight),
+      side: TOOLTIP_SIDE.END,
+    };
+  }
   const below = anchor.bottom + TOOLTIP_GAP;
   const fits = below + height <= window.innerHeight - TOOLTIP_MARGIN;
+  const left = card === undefined ? anchor.left + anchor.width / 2 - width / 2 : anchor.left;
   return {
-    left: clampTo(anchor.left + anchor.width / 2 - width / 2, width, window.innerWidth),
+    left: clampTo(left, width, window.innerWidth),
     top: fits ? below : anchor.top - TOOLTIP_GAP - height,
     side: fits ? TOOLTIP_SIDE.BELOW : TOOLTIP_SIDE.ABOVE,
   };
@@ -128,41 +155,48 @@ function visible(shown: Shown): boolean {
   return shown.instant || performance.now() - shown.since >= MOTION_DELAY_MS.HINT;
 }
 
-/** The pill itself, measured before it is painted so it is drawn once and where it fits. */
+/** The pill itself, or the card in its place, measured before it is painted so it is drawn once and where it fits. */
 function TooltipPill({
   id,
   shown,
   label,
   command,
+  card,
+  cardBeside,
 }: {
   id: string;
   shown: Shown;
   label: string;
   command: KeyedCommand | undefined;
+  card: ReactNode;
+  cardBeside: boolean;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
+  const carded = card !== undefined;
 
   useLayoutEffect(() => {
     const drawn = element.current;
     if (drawn === null) return;
-    const { width, height } = drawn.getBoundingClientRect();
-    setAt(pillPlace(shown, width, height));
-  }, [shown, label]);
+    // Note that its layout size is read rather than its box, because the box
+    // is still scaled short by the fade it waits to play.
+    const placed = carded ? { beside: cardBeside } : undefined;
+    setAt(pillPlace(shown, drawn.offsetWidth, drawn.offsetHeight, placed));
+  }, [shown, label, carded, cardBeside]);
 
   return createPortal(
     <div
       ref={element}
       id={id}
       role="tooltip"
-      className="tooltip"
+      className={carded ? "tooltip tooltip-card ph-no-capture" : "tooltip"}
       data-placed={String(at !== undefined)}
       data-side={at?.side ?? TOOLTIP_SIDE.BELOW}
       data-instant={String(shown.instant)}
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
     >
-      {label}
-      {command === undefined ? null : <ShortcutGlyphs command={command} />}
+      {carded ? card : label}
+      {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
     </div>,
     document.body,
   );
@@ -174,15 +208,22 @@ function TooltipPill({
  * pill describes the control only where its label is not already the
  * control's own name, so a reader is not told the same word twice. With no
  * label it raises no pill, so a control whose hint comes and goes keeps its
- * place, and its focus, while it does.
+ * place, and its focus, while it does. `card`, while given, is drawn in the
+ * pill's place, and always describes the control, since it says more than
+ * the control's name; `cardBeside` hangs it past the control's end rather
+ * than under it, as a list row's card hangs.
  */
 export function Tooltip({
   label,
   command,
+  card,
+  cardBeside = false,
   children,
 }: {
   label: string | undefined;
   command?: KeyedCommand;
+  card?: ReactNode;
+  cardBeside?: boolean;
   children: ReactElement<AnchorProps>;
 }): React.JSX.Element {
   const id = useId();
@@ -195,7 +236,7 @@ export function Tooltip({
       anchor,
       since: now,
       instant: now < warmUntil,
-      describes: name !== label,
+      describes: card !== undefined || name !== label,
     });
   };
   // A pill that was on screen warms the window for the next; one still
@@ -257,7 +298,14 @@ export function Tooltip({
     <>
       {anchor}
       {shown === undefined || label === undefined ? null : (
-        <TooltipPill id={id} shown={shown} label={label} command={command} />
+        <TooltipPill
+          id={id}
+          shown={shown}
+          label={label}
+          command={command}
+          card={card}
+          cardBeside={cardBeside}
+        />
       )}
     </>
   );

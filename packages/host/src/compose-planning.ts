@@ -28,6 +28,7 @@ import {
   type PlanningRevisionsAnswer,
   type PlanningSetRepositoryAnswer,
   type PlanningStartAnswer,
+  type PlanningTreeAnswer,
   type PlanningView,
   type PlanShownCode,
   type PlanWorkTurn,
@@ -42,6 +43,7 @@ import {
   planningRevisionsParamsSchema,
   planningSetRepositoryParamsSchema,
   planningStartRequestSchema,
+  planningTreeParamsSchema,
 } from "@sidecar/hosted/planning-view";
 import { EMPTY_TRANSCRIPT } from "@sidecar/hosted/transcript-wire";
 import { unparsedWire } from "@sidecar/wire";
@@ -83,7 +85,7 @@ import type { RunMode } from "./run-mode.js";
  * given or taken away, are the service's too, asked through here, as are a
  * plan pinned or archived: the list holds the archived plans beside the
  * rest, each flagged, and which the window draws where is the window's. A
- * plan's history is read for the History tab that asks and held nowhere
+ * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
  */
@@ -119,6 +121,7 @@ export type PlanningClient = Pick<
   | "readTranscript"
   | "readWork"
   | "readFile"
+  | "readTree"
   | "readRevisions"
   | "readRevision"
   | "restore"
@@ -553,11 +556,20 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
   /**
    * Draws the pin and the archive `plan` was answered with on its row of the
    * list, and on the open document where it is the one held. Note that the
-   * held document keeps everything else it holds, because a draft drawn
-   * during a call may be ahead of the copy the service answered.
+   * row keeps what the list said of the plan's coding agents, which only the
+   * list answers, and the held document keeps everything else it holds,
+   * because a draft drawn during a call may be ahead of the copy the service
+   * answered.
    */
   function takeMarks(plan: Plan): void {
-    const plans = view.plans.map((row) => (row.id === plan.id ? summaryOf(plan) : row));
+    const plans = view.plans.map((row) =>
+      row.id !== plan.id
+        ? row
+        : {
+            ...summaryOf(plan),
+            ...(row.agents === undefined ? undefined : { agents: row.agents }),
+          },
+    );
     const held = heldPlanOf(plan.id);
     if (held === undefined) {
       write({ plans });
@@ -656,8 +668,24 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           "file" in answer ? { file: highlightFile(answer.file) } : answer,
         );
       }),
+    // A folder's listing is answered to the tree that asked and held nowhere:
+    // the tree keeps the folders it has opened.
+    [GATEWAY_METHOD.PLANNING_TREE]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningTreeParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("listing a folder names a plan and the folder's path");
+        }
+        if (!gate()) return carried<PlanningTreeAnswer>({ failure: PLAN_CALL_FAILURE.UNANSWERED });
+        const { planId, ...folder } = read.success;
+        const answer = yield* Effect.provide(
+          client.readTree(planId, folder),
+          FetchHttpClient.layer,
+        );
+        return carried<PlanningTreeAnswer>(answer ?? { failure: PLAN_CALL_FAILURE.UNANSWERED });
+      }),
     // A page of the history, and a revision beside the one before it, are
-    // answered to the History tab that asked and held nowhere: the tab keeps
+    // answered to the version history that asked and held nowhere: it keeps
     // what it read, and reads again as the plan moves on.
     [GATEWAY_METHOD.PLANNING_REVISIONS]: (params) =>
       Effect.gen(function* () {

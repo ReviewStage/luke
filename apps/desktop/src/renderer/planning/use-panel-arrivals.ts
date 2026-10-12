@@ -19,7 +19,7 @@ import { SIDE_PANEL_TAB, type SidePanelControl, type SidePanelTab } from "./use-
  *
  * A closed panel opens on the arrival's tab, which the arrival has just
  * added to the strip (`use-side-panel.ts`). An open one is left as it is,
- * its tab and full screen included, and the arrival's tab carries a dot
+ * its tab and full screen included, and the arrival's tab reads in semibold
  * until it is shown. A tab the developer closed on the plan stays closed,
  * so nothing arrives on it. Nothing here moves focus.
  *
@@ -95,7 +95,7 @@ function lukeDrew(board: Board): boolean {
   return (board.drawing?.elements.length ?? 0) > 0;
 }
 
-/** The unread tabs with one more, the plan's alone: another plan's dots are not this one's. */
+/** The unread tabs with one more, the plan's alone: another plan's news is not this one's. */
 function withUnread(was: Unread, planId: string, tab: SidePanelTab): Unread {
   if (was.planId !== planId) return { planId, tabs: [tab] };
   return was.tabs.includes(tab) ? was : { planId, tabs: [...was.tabs, tab] };

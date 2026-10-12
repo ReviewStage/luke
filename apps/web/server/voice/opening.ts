@@ -26,9 +26,7 @@ import {
   liveSessionConfig,
   RENDERER_CLIENT_EVENTS,
   RENDERER_SERVER_EVENTS,
-  SEED_ROLE,
   seedItemTokens,
-  spokenSeedItem,
   startupPrefix,
   startupTokens,
   withinStartupBound,
@@ -181,43 +179,51 @@ function planSeedText(plan: Plan, talkedAbout: boolean): string {
   ].join("\n");
 }
 
-const EARLIER_CALLS_NOTE = `${EARLIER_CALLS_MARKER} What was said on earlier calls about this plan, oldest first. This call picks up where the last one left off.`;
+/**
+ * The note the earlier calls' transcript opens with. Note that the lines are
+ * quoted inside this one developer message rather than replayed as the
+ * developer's and Luke's own turns, because the history carries no
+ * delegation: a voice seeded with Luke's lines as its own turns read a call
+ * where every answer and the closing goodbye came with no delegation as how
+ * it behaves, said "See you around" and "Sure thing" to two requests to end
+ * the call, and delegated neither.
+ */
+const EARLIER_CALLS_NOTE = `${EARLIER_CALLS_MARKER} What was said on earlier calls about this plan, oldest first. This call picks up where the last one left off. Only the words are shown, not what was delegated to the backend, so delegate as your instructions say rather than as these lines look.`;
 
-/** An earlier call's line as the history a session is created with: the developer's words as the user's, Luke's as the assistant's. */
-function earlierItem(line: EarlierCallLine): InitialItem {
-  return spokenSeedItem(
-    line.role === VOICE_SEGMENT_ROLE.USER ? SEED_ROLE.USER : SEED_ROLE.ASSISTANT,
-    line.text,
-  );
+/** How the transcript names each speaker. */
+const EARLIER_SPEAKER = {
+  [VOICE_SEGMENT_ROLE.USER]: "Developer",
+  [VOICE_SEGMENT_ROLE.ASSISTANT]: "Luke",
+} as const satisfies Record<EarlierCallLine["role"], string>;
+
+/** An earlier call's line as one line of the transcript: its speaker, then their words. */
+function earlierLine(line: EarlierCallLine): string {
+  return `${EARLIER_SPEAKER[line.role]}: ${line.text.trim()}`;
 }
 
 /**
- * The newest of the earlier lines that fit within the tokens and messages
- * given, oldest first. The GPT Live guide's way to continue a conversation
- * in a new session is the saved text history at startup, and the end of it
- * is what the next words follow from, so the oldest lines are the ones left out.
+ * The newest of the earlier lines that fit within the tokens given, oldest
+ * first, each as one line of the transcript. The GPT Live guide's way to
+ * continue a conversation in a new session is the saved text history at
+ * startup, and the end of it is what the next words follow from, so the
+ * oldest lines are the ones left out.
  */
-function newestWithin(
-  lines: readonly EarlierCallLine[],
-  tokens: number,
-  messages: number,
-): InitialItem[] {
-  const kept: InitialItem[] = [];
+function newestWithin(lines: readonly EarlierCallLine[], tokens: number): string[] {
+  const kept: string[] = [];
   let spent = 0;
   for (const line of [...lines].reverse()) {
-    if (kept.length >= messages) break;
     if (line.text.trim().length === 0) continue;
-    const item = earlierItem(line);
-    const cost = seedItemTokens([item]);
+    const text = earlierLine(line);
+    const cost = startupTokens(`${text}\n`);
     if (spent + cost > tokens) {
       // Note that a newest line too long for the room is cut rather than
       // dropped, because one long stretch of talk would otherwise leave the
       // call with no history at all.
-      const cut = kept.length === 0 ? startupPrefix(line.text, tokens) : "";
-      if (cut.trim().length > 0) kept.push(earlierItem({ ...line, text: cut }));
+      const cut = kept.length === 0 ? startupPrefix(text, tokens) : "";
+      if (cut.trim().length > 0) kept.push(cut);
       break;
     }
-    kept.push(item);
+    kept.push(text);
     spent += cost;
   }
   return kept.reverse();
@@ -225,12 +231,12 @@ function newestWithin(
 
 /**
  * The input a call is created with, under the API's bounds: the plan's seed
- * first, then what was said on its earlier calls, then the device's own
- * input. The device's input is kept whole, and the plan takes what is left
- * beside it down to `PLAN_SEED_FLOOR_TOKENS` when the history wants the
- * room, cut from its end so the name and the top of the document are what a
- * long plan keeps. The history takes the rest, newest lines first. Nothing
- * is added where there is no room.
+ * first, then what was said on its earlier calls as one quoted transcript,
+ * then the device's own input. The device's input is kept whole, and the
+ * plan takes what is left beside it down to `PLAN_SEED_FLOOR_TOKENS` when
+ * the history wants the room, cut from its end so the name and the top of
+ * the document are what a long plan keeps. The history takes the rest,
+ * newest lines first. Nothing is added where there is no room.
  */
 function startupInput(
   input: readonly InitialItem[],
@@ -239,14 +245,14 @@ function startupInput(
 ): readonly InitialItem[] {
   if (input.length >= LIVE_INPUT_BOUNDS.MESSAGES) return input;
   const room = LIVE_INPUT_BOUNDS.TOKENS - seedItemTokens(input);
-  const note = developerSeedItem(EARLIER_CALLS_NOTE);
   const planFloor = Math.min(room, PLAN_SEED_FLOOR_TOKENS, startupTokens(planSeedText(plan, true)));
-  const said = newestWithin(
-    earlier,
-    room - planFloor - seedItemTokens([note]),
-    LIVE_INPUT_BOUNDS.MESSAGES - input.length - 2,
-  );
-  const history = said.length === 0 ? [] : [note, ...said];
+  // The plan's seed and the transcript are one message each, and the plan's is kept first.
+  const said =
+    input.length + 2 > LIVE_INPUT_BOUNDS.MESSAGES
+      ? []
+      : newestWithin(earlier, room - planFloor - startupTokens(`${EARLIER_CALLS_NOTE}\n\n`));
+  const history =
+    said.length === 0 ? [] : [developerSeedItem(`${EARLIER_CALLS_NOTE}\n\n${said.join("\n")}`)];
   const seed = startupPrefix(planSeedText(plan, said.length > 0), room - seedItemTokens(history));
   const planItems = seed.length <= PLAN_SEED_MARKER.length ? [] : [developerSeedItem(seed)];
   return [...planItems, ...history, ...input];
@@ -315,7 +321,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * bearer resolved, the plan it named read from the plans the account
    * holds, and only then a session counted. A plan the account does not hold
    * is refused before the count, so a claim on someone else's plan counts
-   * nothing and creates nothing.
+   * nothing and creates nothing, and so is an archived plan, which no call is
+   * about until it is brought back.
    */
   const admitAccount = (
     admission: Admission,
@@ -327,6 +334,7 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       const accountId = account.value;
       const plan = yield* record.heldPlan({ userId: accountId, planId });
       if (plan === undefined) return refused(HOSTED_API_ERROR.NOT_FOUND);
+      if (plan.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
       yield* accounts.spend(accountId);
       return { accountId, plan };
     });
@@ -409,7 +417,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
    * this deployment never created, or another account's, is refused as the
    * bearer's own failure rather than as a hint that the id exists. The plan
    * the call is bound to is read off the same row, so the re-attached
-   * exchange lands in the plan the session was created about.
+   * exchange lands in the plan the session was created about; a plan
+   * archived since takes the call back no more.
    */
   const openAttached = (
     upstream: LiveUpstream,
@@ -427,6 +436,8 @@ export function sessionOpener(options: SessionOpenerOptions): SessionOpener {
       // A session no plan was bound to is no call this service still runs.
       if (owned.planId === undefined) return refused(HOSTED_API_ERROR.INVALID_REQUEST);
       const accountId = account.value;
+      const plan = yield* record.heldPlan({ userId: accountId, planId: owned.planId });
+      if (plan?.archivedAt !== undefined) return refused(HOSTED_API_ERROR.PLAN_ARCHIVED);
       const sideband = yield* attach(upstream, frame.sessionId);
       if (sideband === undefined) return refused(HOSTED_API_ERROR.UPSTREAM_ERROR);
       // A connection holds the session again, so the orphan sweep leaves it be

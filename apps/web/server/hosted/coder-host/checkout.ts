@@ -95,6 +95,33 @@ const commitIdentity = /* @__PURE__ */ Effect.fn("web/agentCommitIdentity")(func
 });
 
 /**
+ * Whether the agent's token will read its pull request's CI: the
+ * installation the developer reaches the repository through grants the App
+ * the read (`github-app.ts`'s `CI_READ_PERMISSIONS`). Told to the session
+ * as it starts, so a read that fails is logged and reads as not readable
+ * rather than failing the start: the checkout refuses on its own terms when
+ * the sandbox opens.
+ */
+export const agentCiReadable = /* @__PURE__ */ Effect.fn("web/agentCiReadable")(function* (
+  target: ConversationTarget,
+  agent: CodingAgent,
+): Effect.fn.Return<boolean, never, CheckoutServices> {
+  const app = yield* GitHubApp;
+  return yield* app
+    .repositoryCiReadable(target.userId, agent.repository)
+    .pipe(
+      Effect.catch((failure) =>
+        Effect.as(
+          Effect.logWarning(
+            `Whether conversation ${target.conversationId} reads its CI was not read: ${failure._tag}`,
+          ),
+          false,
+        ),
+      ),
+    );
+});
+
+/**
  * A write token for the agent's repository, minted as the App where the
  * developer still reaches the repository, with the repository as GitHub
  * spells it.

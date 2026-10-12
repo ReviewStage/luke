@@ -12,6 +12,7 @@ import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import { IDLE_VOICE_VIEW } from "#shared/messages/voice-view";
 import { VOICE_KEYLESS_NOTE } from "../microphone-access";
 import {
+  ARCHIVED_CALL_LABEL,
   callStatus,
   DOCUMENT_REGION,
   documentRegion,
@@ -173,6 +174,7 @@ test("the microphone asks for the permission first, then for a plan, and then ta
     voiceAvailable: true,
     microphoneStatus: MICROPHONE_STATUS.GRANTED,
     activePlanId: INVITES,
+    archived: false,
     listening: false,
     callPlanId: undefined,
     voiceStatus: LIVE_STATUS.IDLE,
@@ -236,6 +238,41 @@ test("the microphone asks for the permission first, then for a plan, and then ta
       "Talk about this plan",
     );
   }
+});
+
+test("an archived plan opens no call, and its own call still standing is still muted and heard again", () => {
+  const input = {
+    voiceAvailable: true,
+    microphoneStatus: MICROPHONE_STATUS.GRANTED,
+    activePlanId: INVITES,
+    archived: true,
+    listening: false,
+    callPlanId: undefined,
+    voiceStatus: LIVE_STATUS.IDLE,
+  };
+  assert.deepEqual(microphoneButton(input), {
+    press: MICROPHONE_PRESS.NONE,
+    label: ARCHIVED_CALL_LABEL,
+    muted: false,
+  });
+  // Another plan's call heard would be hung up for this one, which an archive refuses too.
+  assert.equal(
+    microphoneButton({
+      ...input,
+      listening: true,
+      callPlanId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+    }).press,
+    MICROPHONE_PRESS.NONE,
+  );
+  assert.deepEqual(
+    microphoneButton({
+      ...input,
+      listening: true,
+      callPlanId: INVITES,
+      voiceStatus: LIVE_STATUS.LISTENING,
+    }),
+    { press: MICROPHONE_PRESS.TALK, label: "Mute the microphone", muted: false },
+  );
 });
 
 test("a planning call in progress holds the panel open, and a desk call or a finished one does not", () => {

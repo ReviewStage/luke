@@ -12,7 +12,15 @@
  * delegation before the developer's first words waits for them anyway. Note
  * that the goodbye is delegated as it starts rather than after, because the
  * backend's `end_call` then lands while the goodbye plays and the developer's
- * Mac hangs up as it ends instead of a turn later.
+ * Mac hangs up as it ends instead of a turn later. Note that the call's tool
+ * line says a goodbye alone hangs nothing up, the rule says every time, and
+ * answering from the conversation stops being a reason not to delegate once
+ * the developer is ending the call, because a goodbye is the one answer the
+ * conversation always holds: a voice told `end_call` "hangs up once your
+ * goodbye has played" said "See you around" and "Sure thing" to two requests
+ * to end the call right after starting a coding agent and delegated neither,
+ * and on a live eval the exception alone took the end requests delegated
+ * from 9 of 24 to 17 of 24.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -20,7 +28,7 @@ Backend tools:
 - Research: search_web and read_web_page, which can search the Internet.
 - The whiteboard: draw_on_board, which draws on the board the developer sees beside the plan.
 - The plan's coding agents: list_coding_agents, read_coding_agent, message_coding_agent, and start_coding_agent, which say how an agent building the plan is doing, pass the developer's instruction to one, and start a new one on the plan or on a task.
-- The call: end_call, which hangs up once your goodbye has played.
+- The call: end_call, the only way the call hangs up. A goodbye you say without delegating leaves the call up.
 
 Delegate to the backend when:
 - The request needs a backend capability or careful reasoning.
@@ -30,10 +38,10 @@ Delegate to the backend when:
 - The developer asks to see something drawn, or mentions something they drew on the board.
 - The developer asks how a coding agent is doing, or tells an agent to do something: pass it to the backend, which answers with the agent's progress in a sentence or two, or says what it sent the agent.
 - The developer asks to start a coding agent ("start an agent on this", "start Sonnet on fixing the invite emails"): pass it to the backend, which starts one and says in a sentence what it started; never start one they did not ask for, and ask first only when it is unclear whether they want one or what it should do.
-- The developer clearly says they are done with the call ("bye", "that's all", "thanks, I'm done", "let's stop here"): say a one-line goodbye and delegate as you start it, so the backend can end the call. Never on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, or because the plan looks complete.
+- The developer asks you to end the call, or clearly says they are done with it ("can you end the call", "bye", "see ya", "that's all", "thanks, I'm done", "let's stop here"): say a one-line goodbye and delegate as you start it, so the backend can end the call. Do it every time, even right after another request or while a coding agent works; never answer "sure" or say goodbye without delegating. Never on a bare "okay" or "thanks" mid-conversation, while the developer is mid-sentence, when they ask for it later ("end the call when the agent finishes"), or because the plan looks complete.
 
 Do not delegate to the backend when:
-- You can answer from the conversation or a still-current result.
+- You can answer from the conversation or a still-current result, unless the developer is ending the call.
 - You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
@@ -41,7 +49,7 @@ Do not guess the result while waiting.`;
 
 /**
  * The Live prompting guide's starter template, cut to who is speaking and
- * how, the two policies about holding a conversation, and the delegation
+ * how, the two policies about holding a conversation, who hangs up, and the delegation
  * policy that says when the backend is asked. The guide's instruction for a migration
  * from Realtime is to start from the template and only add a rule once
  * listening shows a behavior that needs changing; none of its optional
@@ -69,6 +77,17 @@ const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation
 
 `;
 
+/**
+ * The policy that says who hangs up, beside the policies about holding the
+ * call, added because listening showed the voice answering "Sure thing" to
+ * "Can you end the call?" as though saying it ended the call: with the
+ * delegation rule alone a live eval delegated that request 3 times in 8, and
+ * with this line every end request in 18.
+ */
+const PLANNING_ENDING_POLICY = `Ending policy: You cannot hang up the call yourself; only the backend can. When the developer asks you to end the call or says goodbye, delegate to the backend as you start a one-line goodbye.
+
+`;
+
 const PLANNING_INSTRUCTIONS = `${PLANNING_ROLE}
 Speak warmly and naturally, at an unhurried pace. Be clear and direct, not overly cheerful.
 If the user is frustrated, acknowledge it briefly and focus on the next helpful step.
@@ -77,7 +96,7 @@ Backchannel policy: Use moderate backchannels. Acknowledge naturally without com
 
 Interruption policy: Stop speaking when the user interrupts. Listen to what they say.
 
-${PLANNING_CONVERSATION_POLICY}${PLANNING_DELEGATION_POLICY}`;
+${PLANNING_ENDING_POLICY}${PLANNING_CONVERSATION_POLICY}${PLANNING_DELEGATION_POLICY}`;
 
 /** The `instructions` a planning call is created with. */
 export function sessionInstructions(): string {

@@ -25,6 +25,9 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
   type CodingAgentMessageRequest,
@@ -45,6 +48,11 @@ import {
   modelChoiceSchema,
   modelsAnswerSchema,
 } from "./models-wire.js";
+import {
+  PROVIDER_KEY_QUERY,
+  providerKeySaveRequestSchema,
+  providerKeysAnswerSchema,
+} from "./provider-key-wire.js";
 import {
   agentMessagesPath,
   agentPath,
@@ -91,6 +99,7 @@ const START_REFUSALS = {
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
   [HOSTED_API_ERROR.INVALID_REQUEST]: CODING_AGENT_CALL_FAILURE.INVALID_CHOICE,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals a call that names one row can answer with. */
@@ -98,7 +107,7 @@ const ROW_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
 } satisfies NamedRefusals;
 
-/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, and the two the turn's checkout needs mended first. */
+/** The refusals a message can answer with: the agent gone, the words past the bound, a session still coming up or ended for good, its plan archived, and the two the turn's checkout needs mended first. */
 const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.NOT_FOUND]: CODING_AGENT_CALL_FAILURE.NOT_FOUND,
   [HOSTED_API_ERROR.MESSAGE_TOO_LONG]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
@@ -106,6 +115,7 @@ const MESSAGE_REFUSALS = {
   [HOSTED_API_ERROR.AGENT_RETIRED]: CODING_AGENT_CALL_FAILURE.AGENT_RETIRED,
   [HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE]: CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE,
   [HOSTED_API_ERROR.GITHUB_SIGN_IN_REQUIRED]: CODING_AGENT_CALL_FAILURE.GITHUB_SIGN_IN_REQUIRED,
+  [HOSTED_API_ERROR.PLAN_ARCHIVED]: CODING_AGENT_CALL_FAILURE.PLAN_ARCHIVED,
 } satisfies NamedRefusals;
 
 /** The refusals writing the default can answer with: a choice the catalog does not offer. */
@@ -212,6 +222,49 @@ export class HostedCodingAgentClient {
         Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, DEFAULT_REFUSALS), (read) =>
           "failure" in read ? read : { choice: read.codingAgent },
         ),
+    );
+  }
+
+  /** The account's own provider keys, as hints and statuses. */
+  readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One key saved for its provider, answering the keys as they then stand
+   * and, where the service kept nothing, why; a key the service would
+   * refuse by shape is refused here without traveling at all.
+   */
+  saveProviderKey(
+    params: ProviderKeySaveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    );
+  }
+
+  /** One provider's key removed, answering the keys as they then stand. */
+  removeProviderKey(
+    params: ProviderKeyRemoveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    // The provider rides in the query, since a DELETE carries no body.
+    const query = new URLSearchParams({ [PROVIDER_KEY_QUERY.PROVIDER]: params.provider });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.DELETE,
+        path: `${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}?${query}`,
+      }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
     );
   }
 

@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hosted/planning-view";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { NewPlanForm } from "./new-plan-form";
 import type { RepositoryChooser } from "./repository-chip";
 import type { PlansControl } from "./use-plans-tab";
@@ -42,8 +48,12 @@ const LISTED: PlanningRepositoriesAnswer = {
 
 type NewPlan = PlansControl["newPlan"];
 
-/** A new-plan page over a fake host that keeps every start it was asked for. */
-function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser> = {}) {
+/** A new-plan page over a fake host that keeps every start it was asked for, on the atoms `registry` holds where one is given. */
+function mount(
+  patch: Partial<NewPlan> = {},
+  chooser: Partial<RepositoryChooser> = {},
+  registry?: AtomRegistry,
+) {
   const started: [string, string | null][] = [];
   const opened: string[] = [];
   let newPlan: NewPlan = {
@@ -65,7 +75,10 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
-  const render = () => root.render(createElement(NewPlanForm, { newPlan, repositories }));
+  const render = () => {
+    const page = createElement(NewPlanForm, { newPlan, repositories });
+    root.render(registry === undefined ? page : onRegistry(registry, page));
+  };
   act(render);
   const find = <Element extends HTMLElement>(selector: string): Element => {
     const found = container.querySelector<Element>(selector);
@@ -304,18 +317,30 @@ test("Enter in a search that matches nothing starts no plan and keeps the menu",
   assert.ok(page.menu(), "the menu stands");
 });
 
-test("the menu says it is reading while the list is out, with the recent repositories already listed", async () => {
-  const page = mount({}, { recent: [RELAY], read: () => new Promise(() => undefined) });
-  await settle();
+it.effect(
+  "the menu draws the spinner while the list is out, with the recent repositories already listed",
+  () =>
+    Effect.gen(function* () {
+      const page = mount(
+        {},
+        { recent: [RELAY], read: () => new Promise(() => undefined) },
+        yield* registryOnTestClock,
+      );
+      yield* Effect.promise(settle);
 
-  act(() => page.chip().click());
-  assert.deepEqual(
-    page.rows().map((row) => row.textContent),
-    [RELAY],
-  );
-  assert.equal(page.note(), "Reading your repositories…");
-  assert.equal(page.container.querySelector(".plan-compose-menu-foot"), null);
-});
+      act(() => page.chip().click());
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.deepEqual(
+        page.rows().map((row) => row.textContent),
+        [RELAY],
+      );
+      assert.deepEqual(waitsIn(page.find(".plan-compose-menu-note")), [
+        { says: "Loading repositories", ring: true },
+      ]);
+      assert.equal(page.container.querySelector(".plan-compose-menu-foot"), null);
+    }),
+);
 
 test("with the App installed nowhere, the chip offers installing Luke on GitHub instead of a menu", async () => {
   const page = mount(

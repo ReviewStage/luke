@@ -698,18 +698,113 @@ body,
   --bar-height: 23px;
 }
 
-/* The dot the Settings tab wears while a newer release is waiting. News, not
-   urgency, so it takes the working blue the Download button answers in rather
-   than the attention orange. Absolutely positioned with auto insets: it holds
-   its inline spot just past the label without re-centring the word under a
-   pointer the moment the news lands. */
-.tab-note {
+/* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
+   the glyph shrinks inside the window's one spinner ring turning around it.
+   Failed, the alert in the danger colour stands in the glyph's place at the
+   glyph's size. */
+.state-glyph {
+  position: relative;
+  display: inline-flex;
+  width: var(--state-glyph-size, 16px);
+  height: var(--state-glyph-size, 16px);
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+}
+
+.state-glyph > svg,
+.state-glyph > img {
+  width: 100%;
+  height: 100%;
+}
+
+.state-glyph[data-state="working"] > :not(.spinner-ring) {
+  transform: scale(0.56);
+}
+
+.state-glyph[data-state="failed"] {
+  color: var(--danger);
+}
+
+.state-glyph > .spinner-ring {
   position: absolute;
-  width: 4px;
-  height: 4px;
-  margin: 1px 0 0 3px;
+  inset: 0;
+}
+
+/* The window's one spinner (`spinner.tsx`): an arc in the ink around it over
+   a faint track, filling whatever box holds it. An endless motion held by
+   `--loop-motion` like every animation with no end of its own, and still
+   reading as a wait while held. */
+.spinner-ring {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  border: var(--spinner-stroke, 1.5px) solid color-mix(in srgb, currentColor 22%, transparent);
+  border-top-color: currentColor;
   border-radius: 50%;
-  background: var(--state-working);
+  animation: spinner-turn 900ms linear infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+@keyframes spinner-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A wait: 16px beside words or inside a control, 22px alone in a region, in
+   the secondary ink a wait is said in everywhere else. */
+.spinner {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+}
+
+.spinner[data-size="region"] {
+  --spinner-stroke: 2px;
+  width: 22px;
+  height: 22px;
+}
+
+/* A region still being read holds its ring at the centre of the room it fills. */
+.spinner-region {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  align-self: stretch;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-24);
+}
+
+/* A control's words and the ring share one cell, so the ring stands over the
+   words' own room rather than taking a width of its own. */
+.busy-label {
+  display: inline-grid;
+  align-items: center;
+  gap: inherit;
+  justify-items: center;
+}
+
+.busy-label > :not(.visually-hidden) {
+  grid-area: 1 / 1;
+}
+
+.busy-label-words {
+  display: inline-flex;
+  align-items: center;
+  gap: inherit;
+}
+
+.busy-label[data-shown="true"] > .busy-label-words {
+  visibility: hidden;
+}
+
+.busy-label > .spinner {
+  color: inherit;
 }
 
 /* Session primitives ----------------------------------------------------- */

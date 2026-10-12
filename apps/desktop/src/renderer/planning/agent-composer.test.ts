@@ -8,7 +8,9 @@ import {
   type CodingAgentAgentAnswer,
 } from "@sidecar/hosted/coding-agent-view";
 import {
+  CODING_AGENT_BOUNDS,
   CODING_AGENT_STATUS,
+  type CodingAgentAttachment,
   type CodingAgentContext,
   type CodingAgentMessage,
   type CodingAgentStatus,
@@ -113,6 +115,7 @@ interface Standing {
 interface Sent {
   text: string;
   clientKey: string;
+  attachments: readonly CodingAgentAttachment[];
   answer: (answer: CodingAgentAgentAnswer) => void;
 }
 
@@ -167,9 +170,9 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     const composer = useAgentComposer({
       agentId: AGENT_ID,
       messages: held.messages,
-      send: (_agentId, text, clientKey) =>
+      send: (_agentId, text, clientKey, attachments) =>
         new Promise((answer) => {
-          sends.push({ text, clientKey, answer });
+          sends.push({ text, clientKey, attachments, answer });
         }),
       onStatus: (_agentId, { status }) => {
         statuses.push(status);
@@ -189,6 +192,9 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
         turnUsage: undefined,
         context: held.context,
         runStartedAt: undefined,
+        pageStatus: undefined,
+        pageTitle: undefined,
+        subagentTitles: new Map(),
         delegations: new Map(),
         reading: false,
         failed: false,
@@ -289,7 +295,12 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     control: () => {
       const buttons = [
         ...container.querySelectorAll<HTMLButtonElement>(".agent-composer button"),
-      ].filter((each) => !each.matches(".plan-compose-chip, .agent-model-button"));
+      ].filter(
+        (each) =>
+          !each.matches(
+            ".plan-compose-chip, .agent-model-button, .agent-composer-attach, .attached-file-remove",
+          ),
+      );
       const [one] = buttons.filter((each) => each.textContent !== "Retry");
       assert.equal(buttons.filter((each) => each.textContent !== "Retry").length, 1);
       if (one === undefined) return undefined;
@@ -299,6 +310,70 @@ function mount(initial: Omit<Standing, "choice"> & { choice?: ModelChoice }) {
     },
     stop: () =>
       container.querySelector<HTMLButtonElement>('.agent-composer button[aria-label="Stop"]'),
+    /** The files the system's picker hands the box, as the hidden input's change carries them. */
+    pickFiles: async (files: readonly File[]) => {
+      const input = container.querySelector<HTMLInputElement>('.agent-composer input[type="file"]');
+      assert.ok(input, "the box holds a file picker");
+      Object.defineProperty(input, "files", { value: files, configurable: true });
+      act(() => {
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    },
+    /** Files pasted into the box; whether the box left the paste to the browser. */
+    paste: async (files: readonly File[]): Promise<boolean> => {
+      const event = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { files, types: ["Files"] } });
+      act(() => {
+        field().dispatchEvent(event);
+      });
+      await settle();
+      return !event.defaultPrevented;
+    },
+    /** Files dragged over the card, then dropped on it; whether the card took the drag as a drop target. */
+    drop: async (files: readonly File[]): Promise<boolean> => {
+      const card = container.querySelector(".agent-composer");
+      assert.ok(card);
+      const dragged = (type: string) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "dataTransfer", { value: { files, types: ["Files"] } });
+        return event;
+      };
+      const over = dragged("dragover");
+      act(() => {
+        card.dispatchEvent(over);
+      });
+      const dropping = card.hasAttribute("data-dropping");
+      act(() => {
+        card.dispatchEvent(dragged("drop"));
+      });
+      await settle();
+      assert.equal(card.hasAttribute("data-dropping"), false, "a drop puts the highlight away");
+      return over.defaultPrevented && dropping;
+    },
+    /** The chips over the box's words: an image by its thumbnail's name, any other file by its words. */
+    chips: () =>
+      [...container.querySelectorAll(".agent-composer .attached-file")].map(
+        (each) => each.querySelector("img")?.alt ?? each.textContent,
+      ),
+    /** The chips over the developer's bubbles in the transcript, read the same way. */
+    sentChips: () =>
+      [...container.querySelectorAll('[role="log"] .attached-file')].map(
+        (each) => each.querySelector("img")?.alt ?? each.textContent,
+      ),
+    /** Waits for files being read on this machine to land, as the check given reads them. */
+    landed: (check: () => void) =>
+      vi.waitFor(async () => {
+        await settle();
+        check();
+      }),
+    /** Takes the chip of the name off the box. */
+    unattach: (name: string) => {
+      const remove = container.querySelector<HTMLButtonElement>(
+        `.agent-composer button[aria-label="Remove ${name}"]`,
+      );
+      assert.ok(remove, `${name} has its way off`);
+      act(() => remove.click());
+    },
     note: () => container.querySelector('[role="alert"]')?.textContent ?? undefined,
     retry: () => container.querySelector<HTMLButtonElement>('[role="alert"] button'),
   };
@@ -571,6 +646,40 @@ test("no bar stands between the transcript and the box: nothing that holds the c
   assert.deepEqual(drawn, []);
 });
 
+test("the log runs right up to the card's top edge and fades over `--scroll-fade` there, its foot padded past the fade so the newest line, or a control focused from below, stands whole above it", async () => {
+  const rules = cssRules(await builtStylesheet());
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  const log = tab.container.querySelector('[role="log"]');
+  const composer = tab.container.querySelector(".agent-composer");
+  assert.ok(log && composer);
+  /** What the sheet's unlayered rules, which outrank every utility, give the box. */
+  const own = (element: Element, property: string) =>
+    ownDeclarations(rules, element)
+      .filter((each) => each.property === property)
+      .filter((each) =>
+        rules.some((rule) => rule.layer === undefined && rule.selectors.includes(each.selector)),
+      )
+      .map((each) => each.value);
+  // Nothing stands between the log's foot and the card: the room around the card gives none above it.
+  const room = composer.parentElement;
+  assert.ok(room);
+  assert.equal(own(composer, "padding")[0]?.split(" ")[0], "0");
+  for (const box of [composer, room]) {
+    assert.deepEqual(own(box, "padding-top"), []);
+    assert.deepEqual(
+      own(box, "margin-top").filter((value) => value !== "auto"),
+      [],
+    );
+  }
+  // The log's foot fades out over the fade's length and pads past it.
+  const [mask] = own(log, "mask-image");
+  assert.match(mask ?? "", /#000 calc\(100% - var\(--scroll-fade\)\), transparent\)$/u);
+  const [foot] = own(log, "padding-bottom");
+  assert.match(foot ?? "", /^calc\(var\(--scroll-fade\) \+ var\(--space-\d+\)\)$/u);
+  // A control focused from below is scrolled in past the fade too, not just to the log's edge.
+  assert.deepEqual(own(log, "scroll-padding-bottom"), [foot]);
+});
+
 /** A step that read 620k of a 1M window whose compaction is at 900k. */
 const CONTEXT: CodingAgentContext = {
   windowTokens: 1_000_000,
@@ -668,7 +777,7 @@ function placeOf(layer: Element | null | undefined) {
   };
 }
 
-test("each composer popover opens right above the button that opened it, from the model chip's leading edge and the ring's trailing edge where that stays inside the panel, pushed back inside where it would not, and Escape hands focus back to the button", async () => {
+test("each composer popover opens right above the button that opened it, from its leading edge, from its trailing edge where the leading one would run past the panel's right, pushed back inside where neither stays inside, and Escape hands focus back to the button", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   tab.container.setAttribute("data-popover-room", "");
   await tab.stand({ context: CONTEXT });
@@ -696,19 +805,25 @@ test("each composer popover opens right above the button that opened it, from th
     assert.equal(menuLayer(), null);
     assert.equal(document.activeElement, chip, "focus goes back to the chip");
 
-    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in to the panel's inset.
+    // Neither of the ring's edges leaves the popover inside a 400px panel, so it is pushed in from the panel's right inset.
     act(() => ring.click());
-    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 608 - 754, width: 340 });
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 992 - 340 - 754, width: 340 });
     pressEscape(document.activeElement);
     assert.equal(document.activeElement, ring, "focus goes back to the ring");
 
-    // Full screen there is room, and the popover ends where the ring does.
+    // Full screen there is room to the ring's right, and the popover starts where the ring does, as the menu starts at its chip.
     boxes.room = new DOMRect(0, 0, 1024, 768);
     boxes.ring = new DOMRect(400, 700, 28, 28);
     act(() => ring.click());
-    const wide = placeOf(ringLayer());
-    assert.equal(wide.side, "above");
-    assert.equal(wide.left + wide.width, 28, "the popover's trailing edge is the ring's");
+    assert.deepEqual(placeOf(ringLayer()), { side: "above", left: 0, width: 340 });
+    pressEscape(document.activeElement);
+
+    // A ring too near the panel's right for the popover to start at it, which ends where the ring does instead.
+    boxes.ring = new DOMRect(800, 700, 28, 28);
+    act(() => ring.click());
+    const flipped = placeOf(ringLayer());
+    assert.equal(flipped.side, "above");
+    assert.equal(flipped.left + flipped.width, 28, "the popover's trailing edge is the ring's");
   } finally {
     restore();
   }
@@ -826,11 +941,138 @@ test("in a full-screen panel whose composer keeps to a centred column, each popo
     const popover = tab.container.querySelector(".anchored-popover");
     assert.ok(popover);
     assert.equal(positionedFrom(popover), "agent-context", "measured from the ring's own box");
-    const place = placeOf(popover);
-    assert.equal(place.side, "above");
-    assert.equal(place.left + place.width, 28, "the popover's trailing edge is the ring's");
+    assert.deepEqual(placeOf(popover), { side: "above", left: 0, width: 340 });
   } finally {
     restore();
     sheet.remove();
   }
+});
+
+/** A file as the system's picker, the clipboard, or a drag hands one over. */
+function file(name: string, bytes: readonly number[] | Uint8Array, type = ""): File {
+  return new File([Uint8Array.from(bytes)], name, { type });
+}
+
+/** A PNG's signature, which is all a thumbnail here needs. */
+const PNG = file("design.png", [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a], "image/png");
+
+/** A Markdown file: "# Notes" in UTF-8, under a type the picker leaves empty. */
+const NOTES = file("notes.md", [0x23, 0x20, 0x4e, 0x6f, 0x74, 0x65, 0x73]);
+
+test('"Attach files" is the "+" just left of Send, opening the system\'s picker: picked files stand as chips over the words, one that cannot come says why, files with no words keep Send disabled and ask for a message, and the send carries them, draws them on its line at once, and brings them back with the words when it did not go', async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  assert.deepEqual(
+    [...tab.container.querySelectorAll(".agent-composer-actions button")].map((each) =>
+      each.getAttribute("aria-label"),
+    ),
+    ["Attach files", "Send"],
+  );
+  const picker = tab.container.querySelector<HTMLInputElement>('input[type="file"]');
+  assert.ok(picker);
+  let opened = 0;
+  picker.click = () => {
+    opened += 1;
+  };
+  act(() => tab.container.querySelector<HTMLButtonElement>(".agent-composer-attach")?.click());
+  assert.equal(opened, 1);
+
+  await tab.pickFiles([PNG, NOTES, file("tool.bin", [0x00, 0x01, 0x02])]);
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["design.png", "notes.md1 KB"]));
+  assert.equal(tab.note(), "tool.bin can't be attached. Attach images, PDFs, or text files.");
+  assert.equal(tab.field().placeholder, "Add a message to send these files");
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+
+  tab.unattach("notes.md");
+  assert.deepEqual(tab.chips(), ["design.png"]);
+  assert.equal(tab.note(), undefined);
+  tab.type("Match this design.");
+  tab.key({ key: "Enter" });
+  const shot = { name: "design.png", mediaType: "image/png", data: "iVBORw0KGgo=" };
+  assert.deepEqual(tab.sends[0]?.attachments, [shot]);
+  assert.deepEqual(tab.chips(), []);
+  assert.deepEqual(tab.sentChips(), ["design.png"]);
+
+  await tab.answer(0, { failure: CODING_AGENT_CALL_FAILURE.AGENT_NOT_READY });
+  assert.equal(tab.field().value, "Match this design.");
+  assert.deepEqual(tab.chips(), ["design.png"]);
+  assert.deepEqual(tab.sentChips(), []);
+  const retry = tab.retry();
+  assert.ok(retry);
+  act(() => retry.click());
+  assert.deepEqual(tab.sends[1]?.attachments, [shot]);
+  assert.equal(tab.sends[1]?.clientKey, tab.sends[0]?.clientKey);
+});
+
+test("an image pasted into the box is taken, while any other paste is left to the browser, and files dropped on the card are taken, the card lighting as the drop target while they are over it", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  assert.equal(await tab.paste([PNG]), false);
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["design.png"]));
+  assert.equal(await tab.paste([NOTES]), true);
+  assert.equal(await tab.drop([NOTES]), true);
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["design.png", "notes.md1 KB"]));
+});
+
+test("a message holds ten files, and an empty file and a PDF past its bound are refused, each saying why under the card while the files that fit still come", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  await tab.pickFiles([file("empty.txt", [])]);
+  await tab.landed(() => assert.equal(tab.note(), "empty.txt is empty."));
+  assert.deepEqual(tab.chips(), []);
+  await tab.pickFiles([
+    file("big.pdf", new Uint8Array(CODING_AGENT_BOUNDS.MAX_PDF_BYTES + 1), "application/pdf"),
+  ]);
+  await tab.landed(() => assert.equal(tab.note(), "big.pdf is too large to attach."));
+  assert.deepEqual(tab.chips(), []);
+  const many = Array.from({ length: CODING_AGENT_BOUNDS.MAX_ATTACHMENTS + 1 }, (_, index) =>
+    file(`note-${String(index)}.txt`, [0x68, 0x69]),
+  );
+  await tab.pickFiles(many);
+  await tab.landed(() => assert.equal(tab.chips().length, CODING_AGENT_BOUNDS.MAX_ATTACHMENTS));
+  assert.equal(tab.note(), "A message can carry up to 10 files.");
+});
+
+test("the developer's row read back from the service draws its files over the bubble: an image as its thumbnail, any other file by its name and size, and one the service kept no bytes of by its name", () => {
+  const tab = mount({
+    status: CODING_AGENT_STATUS.COMPLETED,
+    messages: [
+      PLAN,
+      {
+        id: "m-files",
+        role: "user",
+        parts: [
+          { type: "text", text: "Read these." },
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "shot.png",
+            url: "data:image/png;base64,iVBORw0KGgo=",
+          },
+          {
+            type: "file",
+            mediaType: "application/pdf",
+            filename: "spec.pdf",
+            url: `data:application/pdf;base64,${"A".repeat(2_000_000)}`,
+          },
+          { type: "file", mediaType: "image/png", filename: "staged.png", url: "" },
+        ],
+      },
+    ],
+  });
+  assert.deepEqual(tab.sentChips(), ["shot.png", "spec.pdf1.5 MB", "staged.png"]);
+  assert.deepEqual(tab.bubbles().at(-1)?.endsWith("Read these."), true);
+});
+
+test("files are taken after whatever the box holds as their read lands: two hand-offs read at once both stand, a chip taken off while another file is read stays off, and Send waits while a file is still being read", async () => {
+  const tab = mount({ status: CODING_AGENT_STATUS.COMPLETED, messages: [PLAN] });
+  tab.type("Look at these.");
+  await tab.pickFiles([PNG]);
+  // The screenshot is still being read, so the words wait for it rather than going without it.
+  assert.deepEqual(tab.control(), { label: "Send", disabled: true, type: "submit" });
+  await tab.pickFiles([NOTES]);
+  await tab.landed(() => assert.deepEqual([...tab.chips()].sort(), ["design.png", "notes.md1 KB"]));
+  assert.deepEqual(tab.control(), { label: "Send", disabled: false, type: "submit" });
+
+  tab.unattach("design.png");
+  await tab.pickFiles([file("shot.png", [0x89, 0x50, 0x4e, 0x47], "image/png")]);
+  tab.unattach("notes.md");
+  await tab.landed(() => assert.deepEqual(tab.chips(), ["shot.png"]));
 });

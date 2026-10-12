@@ -1,26 +1,31 @@
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import { AgentComposer } from "./agent-composer";
+import { ArchivedComposerNote } from "./archived-plan";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
 /**
  * draft-agent-tab.tsx -- the tab of a coding agent not yet started: an empty transcript and the composer, whose first message starts the agent on it.
  *
- * Opened from the side panel's "+", it is drawn as an agent's tab is with
+ * Opened from the plan's column's "+", it is drawn as an agent's tab is with
  * nothing yet said: nothing where the transcript would be, since the
  * composer's placeholder is the one prompt, and at the tab's foot the
  * composer, focused as the tab opens, with the model
  * chip on the account's default once that is read. Nothing reaches the
  * service until the first send, which starts the agent with those words as
- * its task, never the plan, on the model the chip names where the developer
+ * its task, never the plan, with the files attached to them, on the model
+ * the chip names where the developer
  * changed it and else on the account's default, in the plan's repository;
  * the tab then gives way to the agent's own. The words and the choice are
- * the draft's, held by its owner, so they wait while the tab is away. A
+ * the draft's, held by its owner, as are the files, so they wait while the
+ * tab is away. A
  * send that did not start it
  * leaves the words in the box with why under it and Retry, which asks again
  * under the draft's own key. Closing the tab lets the draft go, and since
- * nothing was started, nothing is left behind.
+ * nothing was started, nothing is left behind. While the plan is archived,
+ * nothing starts on it, so the box gives way to the note that offers
+ * Unarchive, and the words written wait in the draft until it is back.
  */
 
 /** What a draft agent's tab is named until its first message starts it. */
@@ -61,7 +66,7 @@ export function DraftAgentTab({
     if (task === "" || sending) return;
     setSending(true);
     setNote(undefined);
-    latest.current.startTask(draft.id, task, draft.choice).then((failed) => {
+    latest.current.startTask(draft.id, task, draft.choice, draft.attachments).then((failed) => {
       setSending(false);
       setNote(failed);
     });
@@ -69,6 +74,8 @@ export function DraftAgentTab({
   const composer: AgentComposerControl = {
     draft: draft.task,
     setDraft: (task) => control.onDraftChange({ task }),
+    attachments: draft.attachments,
+    setAttachments: control.onDraftAttachments,
     sending: sending || control.start.busy,
     note,
     closed: undefined,
@@ -77,6 +84,15 @@ export function DraftAgentTab({
     sent: [],
   };
   const choice = draft.choice ?? fallback;
+  if (control.onUnarchive !== undefined) {
+    return (
+      <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
+        <footer className="agent-tab-foot">
+          <ArchivedComposerNote onUnarchive={control.onUnarchive} />
+        </footer>
+      </section>
+    );
+  }
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>

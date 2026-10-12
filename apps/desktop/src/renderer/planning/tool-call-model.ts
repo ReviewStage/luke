@@ -1,6 +1,13 @@
+import {
+  CODING_AGENT_TODO_STATUS,
+  CODING_AGENT_TODOS_TOOL,
+  type CodingAgentTodos,
+  codingAgentTodosInputSchema,
+} from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
+import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
 import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
 
@@ -15,10 +22,12 @@ import { CALL_KIND, type CallKind, pageName } from "./turn-rows";
  * (a command, a patch, a file's words) where the tool is one eve gives the
  * agent, and as their JSON where it is not. A delegation's row is read the
  * same way from the part S1's `delegate` tool stores: the task, the pair
- * the worker runs on, and its answer once it has one. Nothing here draws.
+ * the worker runs on, and its answer once it has one. A to-do write's list
+ * is read through the wire's own schema, since its input is the list the
+ * row draws item by item. Nothing here draws.
  */
 
-/** The tools a coding agent has, eve's and Luke's own notes on the plan, by the names its parts carry. */
+/** The tools a coding agent has, eve's and Luke's own notes on the plan and to-do list, by the names its parts carry. */
 export const AGENT_TOOL = {
   BASH: "bash",
   READ_FILE: "read_file",
@@ -29,6 +38,7 @@ export const AGENT_TOOL = {
   WEB_FETCH: "web_fetch",
   WEB_SEARCH: "web_search",
   EDIT_PLAN: "edit_plan",
+  WRITE_TODOS: CODING_AGENT_TODOS_TOOL,
 } as const;
 
 export interface ToolCallView {
@@ -158,6 +168,58 @@ function planEditSummary(input: WireValue | undefined): string {
     .join(", ");
 }
 
+const readTodos = Schema.decodeUnknownOption(codingAgentTodosInputSchema);
+
+/** The list a to-do write carries, or nothing where its input does not read as one, as while it streams. */
+export function todosView(input: WireValue | undefined): CodingAgentTodos["todos"] | undefined {
+  return Option.getOrUndefined(readTodos(input))?.todos;
+}
+
+/** How far a list has got: "2 of 5 done". */
+export function todosSummary(todos: CodingAgentTodos["todos"]): string {
+  const done = todos.filter((todo) => todo.status === CODING_AGENT_TODO_STATUS.DONE).length;
+  return `${done} of ${todos.length} done`;
+}
+
+/** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */
+export function todoFocus(todos: CodingAgentTodos["todos"]): string | undefined {
+  const current =
+    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS) ??
+    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.PENDING);
+  return current?.content;
+}
+
+/** One item of a list as words, where the list is copied or drawn as a call's input: a markdown checkbox, the item in progress saying so. */
+function todoLine(todo: CodingAgentTodos["todos"][number]): string {
+  switch (todo.status) {
+    case CODING_AGENT_TODO_STATUS.PENDING:
+      return `- [ ] ${todo.content}`;
+    case CODING_AGENT_TODO_STATUS.IN_PROGRESS:
+      return `- [ ] ${todo.content} (in progress)`;
+    case CODING_AGENT_TODO_STATUS.DONE:
+      return `- [x] ${todo.content}`;
+  }
+}
+
+/** A to-do write's row: how far the list has got, and the list as checkboxes, or its JSON where it does not read. Its answer only says the list was taken, so none is shown. */
+function todosToolView(input: WireValue | undefined): ToolCallView {
+  const todos = todosView(input);
+  if (todos === undefined) {
+    return {
+      kind: CALL_KIND.TODOS,
+      subject: "",
+      input: input === undefined ? textBlock("") : jsonBlock(input),
+      output: undefined,
+    };
+  }
+  return {
+    kind: CALL_KIND.TODOS,
+    subject: todosSummary(todos),
+    input: textBlock(todos.map(todoLine).join("\n")),
+    output: undefined,
+  };
+}
+
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
 function knownToolView(
   tool: string,
@@ -226,6 +288,8 @@ function knownToolView(
         input: input === undefined ? textBlock("") : jsonBlock(input),
         output: output === undefined ? undefined : jsonBlock(output),
       };
+    case AGENT_TOOL.WRITE_TODOS:
+      return todosToolView(input);
     default:
       return undefined;
   }
@@ -310,7 +374,26 @@ const LINK = /\[([^\]]*)\]\([^)]*\)/gu;
  */
 export function cardTitle(text: string): string {
   const first = text.split("\n").find((line) => line.trim().length > 0);
-  return first === undefined
-    ? ""
-    : first.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
+  return first === undefined ? "" : plainLine(first);
+}
+
+/** A markdown fence's opening or closing line, which plain words leave out. */
+const FENCE_LINE = /^\s*(?:```|~~~)/u;
+
+function plainLine(line: string): string {
+  return line.trim().replace(LINE_MARKS, "").replace(LINK, "$1").replace(INLINE_MARKS, "").trim();
+}
+
+/**
+ * The whole of a message's markdown as plain words on one line, as a
+ * preview too short to draw markdown reads it: each line as a title reads
+ * its first, fences left out, joined by spaces.
+ */
+export function plainWords(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !FENCE_LINE.test(line))
+    .map(plainLine)
+    .filter((line) => line.length > 0)
+    .join(" ");
 }

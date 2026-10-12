@@ -20,7 +20,7 @@ import {
   planFieldsSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
-import { DateTime, Effect, Option, Schema } from "effect";
+import { Data, DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { codingAgent } from "../db/coding-agent-schema.js";
@@ -54,6 +54,9 @@ export type PlanStoreFailure = SqlError | Schema.SchemaError;
 
 /** What a plan store operation answers: an effect over the ambient client, composed into whatever called it. */
 export type PlanStoreEffect<A> = Effect.Effect<A, PlanStoreFailure, SqlClient.SqlClient>;
+
+/** The plan is archived, so it takes the write asked of it only once it is brought back; nothing was written. */
+export class PlanArchived extends Data.TaggedError("PlanArchived") {}
 
 /** One save a coding agent made, with the agent named as its row names it now. */
 export interface LabelledAgentEdit extends PlanAgentEdit {
@@ -602,18 +605,23 @@ function stampOf(asked: boolean, standing: Date | null, now: Date): Date | null 
  * the wire's rules, and a repository already confirmed reachable. A change is
  * not a save: the document's `updatedAt` and the list's order stand. A pin
  * and an archive are kept apart, so a pinned plan archived and brought back
- * is pinned again.
+ * is pinned again. An archived plan is neither renamed nor given another
+ * repository, read under the same lock, unless the same change brings it
+ * back; its pin and its archive still change.
  */
 export function updatePlan(
   userId: string,
   planId: string,
   changes: PlanChanges,
-): PlanStoreEffect<Option.Option<Plan>> {
+): Effect.Effect<Option.Option<Plan>, PlanStoreFailure | PlanArchived, SqlClient.SqlClient> {
   return Effect.flatMap(SqlClient.SqlClient, (client) =>
     client.withTransaction(
       Effect.gen(function* () {
         const locked = yield* lockPlan({ userId, planId });
         if (Option.isNone(locked)) return Option.none();
+        const stillArchived = locked.value.archivedAt !== null && changes.archived !== false;
+        const reworded = changes.name !== undefined || changes.repository !== undefined;
+        if (stillArchived && reworded) return yield* new PlanArchived();
         const now = yield* DateTime.nowAsDate;
         const row = yield* applyChanges({
           userId,

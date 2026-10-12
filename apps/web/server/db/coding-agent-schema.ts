@@ -1,3 +1,8 @@
+import {
+  CONTEXT_WINDOW,
+  type CodingAgentPullRequest,
+  type ContextWindow,
+} from "@sidecar/hosted/coding-agent-wire";
 import { index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
 import { instant } from "./instant.js";
@@ -9,8 +14,11 @@ import { conversations } from "./storage-schema.js";
  *
  * A coding agent is a `coding_agent` conversation: its transcript is that
  * conversation's `messages` rows and its status its latest `turns` row, so
- * this row holds only what the conversation does not. The model and effort
- * are read on every step, so switching later is a row update; the snapshot
+ * this row holds only what the conversation does not. The model, effort,
+ * and context window are read on every step, so switching later is a row
+ * update; the window is the model's whole one unless the developer chose
+ * the smaller standard one, which is also what an agent started before the
+ * window could be chosen ran on and keeps; the snapshot
  * is the exact plan text the agent was handed, kept whole because the plan
  * keeps being edited after, or where the developer started it on a task of
  * their own, the snapshot is null and the task is what it was handed, so
@@ -24,8 +32,11 @@ import { conversations } from "./storage-schema.js";
  * newest model step of the agent's own conversation, with the estimates of
  * what it read that no provider counts apart (`StoredAgentStep`), and
  * `compacted_at` when eve last compacted that conversation; both are null
- * until it happens, and both are what the tab's context ring reads. There
- * is no commit column: the
+ * until it happens, and both are what the tab's context ring reads.
+ * `published` is the pull request from the agent's branch as GitHub last
+ * answered a read of it (`coder-host/published.ts`), null before a read
+ * found one; the plan list reads it so the sidebar asks GitHub nothing.
+ * There is no commit column: the
  * checkout's own output is in the transcript, and the pull request on
  * GitHub records its base.
  *
@@ -70,6 +81,11 @@ export const codingAgent = pgTable(
     /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
     model: text("model").notNull(),
     effort: text("effort").notNull(),
+    /** Which of the model's context windows the agent runs on; a model with one window runs on it whatever this says. */
+    contextWindow: text("context_window")
+      .$type<ContextWindow>()
+      .notNull()
+      .default(CONTEXT_WINDOW.LONG),
     /** The plan's document exactly as the agent was given it; null for an agent handed a task instead. */
     planSnapshot: text("plan_snapshot"),
     /** The developer's own words the agent was handed in the plan's place; null for an agent handed the plan. */
@@ -84,6 +100,8 @@ export const codingAgent = pgTable(
     lastStep: jsonb("last_step").$type<StoredAgentStep>(),
     /** When eve last compacted the agent's own conversation; null where it never has. */
     compactedAt: instant("compacted_at"),
+    /** The pull request from the agent's branch as GitHub last answered; null before a read found one. */
+    published: jsonb("published").$type<CodingAgentPullRequest>(),
     idempotencyKey: text("idempotency_key").notNull(),
     createdAt: instant("created_at").notNull().defaultNow(),
   },
@@ -101,13 +119,18 @@ export const codingAgent = pgTable(
  * recorded in, which is a function of the agent's conversation and the call
  * that started the worker (`brain-host/ids.ts`). The worker's own steps
  * read the pair here, since eve hands a child's resolvers no lineage and the
- * pair is per call rather than per agent. The row goes with its
- * conversation, which goes with the agent's.
+ * pair is per call rather than per agent. The call's own id is kept beside
+ * it, since the child's id is a digest no reader can turn back into the
+ * call its tool part names, and the agent's page names each worker's title
+ * by that call. The row goes with its conversation, which goes with the
+ * agent's.
  */
 export const codingAgentDelegation = pgTable("coding_agent_delegation", {
   childConversationId: uuid("child_conversation_id")
     .primaryKey()
     .references(() => conversations.id, { onDelete: "cascade" }),
+  /** eve's id for the delegation call; null on a row recorded before migration 0079 kept it. */
+  callId: text("call_id"),
   /** AI Gateway's catalog id, such as `anthropic/claude-opus-5.5`. */
   model: text("model").notNull(),
   effort: text("effort").notNull(),
