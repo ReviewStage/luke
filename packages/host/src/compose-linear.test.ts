@@ -64,8 +64,8 @@ it.effect("a Connect opens the sign-in in the browser and tells the window only 
     const { call, opened } = yield* subject({ status: LINEAR_STATUS.DISCONNECTED });
 
     const answer = yield* call(GATEWAY_METHOD.LINEAR_CONNECT);
+    // The answer is exactly whether the browser was sent; the address went to the browser alone.
     assert.deepEqual(answer, { opened: true });
-    assert.ok(!JSON.stringify(answer).includes(SIGN_IN));
     assert.deepEqual(opened, [SIGN_IN]);
   }),
 );
