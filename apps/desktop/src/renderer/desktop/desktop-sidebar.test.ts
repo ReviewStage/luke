@@ -589,7 +589,7 @@ test("resting on a plan's row hangs its card beside the row, naming its agents a
   assert.equal(card.querySelector(".plan-card-name")?.textContent, "Invites");
   assert.deepEqual(
     [...card.querySelectorAll('[aria-label="Pull requests"] > li')].map((line) => line.textContent),
-    ["#128 · Invite by email+12 −3"],
+    ["#128 Invite by email+12 −3"],
   );
 });
 

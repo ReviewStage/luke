@@ -1,9 +1,5 @@
-import { CODING_AGENT_STATUS, PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
-import type {
-  PlanAgentLine,
-  PlanAgentsSummary,
-  PlanPullRequestLine,
-} from "@sidecar/hosted/plan-wire";
+import { PULL_REQUEST_STATE } from "@sidecar/hosted/coding-agent-wire";
+import type { PlanAgentsSummary, PlanPullRequestLine } from "@sidecar/hosted/plan-wire";
 
 /**
  * plan-agents-model.ts -- what a plan's coding agents say on its sidebar row and its hover card: the row's one mark, and the card's lines.
@@ -12,7 +8,7 @@ import type {
  * while any agent works on the plan, else the pull request that matters
  * most, an open or draft one first and else a merged one, and else none.
  * A closed pull request marks nothing, since nothing is left to do with it.
- * The card names the few agents and pull requests the list carried and
+ * The card names a few of the agents and pull requests the list carried and
  * counts the rest, so it is read from the list alone and never fetched.
  */
 
@@ -46,38 +42,8 @@ export function planRowMark(agents: PlanAgentsSummary | undefined): PlanRowMark 
   return pullRequest === undefined ? NO_MARK : { kind: PLAN_ROW_MARK.PULL_REQUEST, pullRequest };
 }
 
-/** What a card's agent line says at its end: the working count, or the word for how it ended and how long ago. */
-export const AGENT_LINE_CORNER = {
-  WORKING: "working",
-  ENDED: "ended",
-} as const;
-
-export type AgentLineCorner =
-  | { readonly kind: typeof AGENT_LINE_CORNER.WORKING; readonly startedAt: number | undefined }
-  | {
-      readonly kind: typeof AGENT_LINE_CORNER.ENDED;
-      readonly word: string;
-      readonly at: number | undefined;
-    };
-
-/** How a card says each way an agent's turn ended. */
-const ENDED_WORD = {
-  [CODING_AGENT_STATUS.COMPLETED]: "Done",
-  [CODING_AGENT_STATUS.FAILED]: "Failed",
-  [CODING_AGENT_STATUS.CANCELLED]: "Stopped",
-} as const;
-
-/** What an agent's line says at its end: working since its run began, or how it ended and when. */
-export function agentLineCorner(agent: PlanAgentLine): AgentLineCorner {
-  const { status } = agent;
-  if (status === CODING_AGENT_STATUS.STARTING || status === CODING_AGENT_STATUS.RUNNING) {
-    return { kind: AGENT_LINE_CORNER.WORKING, startedAt: agent.at };
-  }
-  return { kind: AGENT_LINE_CORNER.ENDED, word: ENDED_WORD[status], at: agent.at };
-}
-
-/** What a card says after the lines it draws: how many more stand than it names, or nothing. */
+/** What a card says after the rows it draws: how many more stand than it names, or nothing. */
 export function moreText(total: number, shown: number): string | undefined {
   const more = total - shown;
-  return more > 0 ? `and ${more} more` : undefined;
+  return more > 0 ? `${more} more` : undefined;
 }

@@ -9,18 +9,10 @@ import {
 } from "lucide-react";
 import { GitHubMark } from "../account-marks";
 import { AgentGlyph } from "../planning/agent-tab";
-import { pullRequestPillLabel, pullRequestStateWord } from "../planning/coding-agent-model";
-import { ModelLabel } from "../planning/model-label";
-import {
-  AGENT_LINE_CORNER,
-  agentLineCorner,
-  moreText,
-  PLAN_ROW_MARK,
-  planRowMark,
-} from "../planning/plan-agents-model";
+import { agentTabLabel, pullRequestPillLabel } from "../planning/coding-agent-model";
+import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { sinceText } from "../planning/plan-time";
 import { repositoryPageUrl } from "../planning/planning-model";
-import { WorkingTime } from "../planning/working-time";
 import { RepositoryPicture } from "../repository-picture";
 import { WorkingMark } from "../working-mark";
 
@@ -31,10 +23,12 @@ import { WorkingMark } from "../working-mark";
  * (`working-mark.tsx`), held mid-lap where motion is reduced, else the pull request's glyph in GitHub's colours for
  * where it stands, red where its checks failed, else nothing
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
- * how long ago it was updated at its head, then a line for each agent the
- * list named, working with its count or how it ended and when, and a line
- * for each pull request with its size and the word for where it stands,
- * each list counting what it leaves out. Everything is read from the plan
+ * how long ago it was updated at its head, then a row for each of a few
+ * agents, drawn as its tab draws it: its harness's mark wearing where it
+ * stands and its tab's label, with no word for where it stands, since no
+ * agent anywhere else in the window says one. Then a row for each of a few
+ * pull requests, its glyph coloured for where it stands, and its size.
+ * Each list counts what it leaves out. Everything is read from the plan
  * list's row, so the card fetches nothing.
  *
  * Three of its lines are buttons, as a GitHub hover card's are: the
@@ -44,8 +38,11 @@ import { WorkingMark } from "../working-mark";
  * request. The rest are facts, left as text.
  */
 
-/** What a working agent's line says before its count. */
-const WORKING_WORD = "Working…";
+/** The most rows each of the card's lists draws before it counts the rest. */
+const CARD_ROWS = {
+  AGENTS: 3,
+  PULL_REQUESTS: 2,
+} as const;
 
 /** The glyph a pull request is drawn with for where it stands. */
 const PULL_REQUEST_GLYPH = {
@@ -97,59 +94,32 @@ export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Eleme
   }
 }
 
-/** One agent's line: its harness's mark wearing where it stands, as its tab wears it (`AgentGlyph`), its name, its model where the name is its title, and its corner. */
+/** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`) and its tab's label. */
 function AgentLine({
   agent,
   models,
-  now,
   onShow,
 }: {
   agent: PlanAgentLine;
   models: readonly CatalogModel[];
-  now: number;
   onShow: () => void;
 }): React.JSX.Element {
-  const corner = agentLineCorner(agent);
-  const choice = { model: agent.model, effort: agent.effort };
   return (
     <li data-plan-card-agent="">
       <button type="button" className="plan-card-line" onClick={onShow}>
         <span className="plan-card-glyph">
           <AgentGlyph agent={agent} />
         </span>
-        <span className="plan-card-label">
-          {agent.title === null ? (
-            <ModelLabel choice={choice} models={models} />
-          ) : (
-            <>
-              <span className="plan-card-title">{agent.title}</span>{" "}
-              <span className="plan-card-model">
-                <ModelLabel choice={choice} models={models} />
-              </span>
-            </>
-          )}
-        </span>
-        <span className="plan-card-corner">
-          {corner.kind === AGENT_LINE_CORNER.WORKING ? (
-            <>
-              {WORKING_WORD}
-              {corner.startedAt === undefined ? null : (
-                <WorkingTime startedAt={corner.startedAt} className="ml-1" />
-              )}
-            </>
-          ) : (
-            `${corner.word}${corner.at === undefined ? "" : ` ${sinceText(corner.at, now)}`}`
-          )}
-        </span>
+        <span className="plan-card-label">{agentTabLabel(agent, models)}</span>
       </button>
     </li>
   );
 }
 
 /**
- * One pull request's line: its glyph, number and title, its size in green
- * and red, and the word for where it stands where that matters. It opens
- * the pull request on GitHub, where the service said its page; a line from
+ * One pull request's row: its glyph, which says where it stands, its
+ * number muted before its title, and its size in green and red. It opens
+ * the pull request on GitHub, where the service said its page; a row from
  * a service before it did is text.
  */
 function PullRequestLine({
@@ -159,7 +129,6 @@ function PullRequestLine({
   pullRequest: PlanPullRequestLine;
   onOpenGitHub: (url: string) => void;
 }): React.JSX.Element {
-  const state = pullRequestStateWord(pullRequest.state);
   const { url } = pullRequest;
   const line = (
     <>
@@ -167,12 +136,11 @@ function PullRequestLine({
         <PullRequestGlyph pullRequest={pullRequest} />
       </span>
       <span className="plan-card-label">
-        #{pullRequest.number} · {pullRequest.title}
+        <span className="plan-card-number">#{pullRequest.number}</span> {pullRequest.title}
       </span>
       <span className="plan-card-corner">
         <span className="agent-published-added">+{pullRequest.additions}</span>{" "}
         <span className="agent-published-removed">−{pullRequest.deletions}</span>
-        {state === undefined ? null : <span className="plan-card-state"> {state}</span>}
       </span>
     </>
   );
@@ -189,7 +157,7 @@ function PullRequestLine({
   );
 }
 
-/** A count of what a list leaves out, under its lines; nothing where it leaves nothing out. */
+/** A count of what a list leaves out, under its rows; nothing where it leaves nothing out. */
 function More({ total, shown }: { total: number; shown: number }): React.JSX.Element | null {
   const words = moreText(total, shown);
   return words === undefined ? null : <li className="plan-card-more">{words}</li>;
@@ -198,7 +166,8 @@ function More({ total, shown }: { total: number; shown: number }): React.JSX.Ele
 /**
  * The card a sidebar plan hangs: its name, wrapped to two lines, and how
  * long ago it was updated at the head's right; its repository under the
- * name; then its agents and its pull requests, a few lines each.
+ * name; then its agents and its pull requests, a few rows each
+ * (`CARD_ROWS`), each list counting the rest the plan holds.
  */
 export function PlanCard({
   plan,
@@ -221,52 +190,55 @@ export function PlanCard({
   onShowAgent: (agentId: string) => void;
 }): React.JSX.Element {
   const { agents, repository } = plan;
+  const agentRows = agents?.agents.slice(0, CARD_ROWS.AGENTS) ?? [];
+  const pullRequestRows = agents?.pullRequests.slice(0, CARD_ROWS.PULL_REQUESTS) ?? [];
   return (
     <div className="plan-card" data-plan-card="">
-      <div className="plan-card-head">
-        <span className="plan-card-name">{plan.name}</span>
-        <time className="plan-card-time" dateTime={new Date(plan.updatedAt).toISOString()}>
-          {sinceText(plan.updatedAt, now)}
-        </time>
+      <div className="plan-card-heading">
+        <div className="plan-card-head">
+          <span className="plan-card-name">{plan.name}</span>
+          <time className="plan-card-time" dateTime={new Date(plan.updatedAt).toISOString()}>
+            {sinceText(plan.updatedAt, now)}
+          </time>
+        </div>
+        {repository === null ? null : (
+          <button
+            type="button"
+            className="plan-card-repository"
+            onClick={() => onOpenGitHub(repositoryPageUrl(repository))}
+          >
+            <RepositoryPicture
+              repository={repository}
+              pictures={pictures}
+              fallback={<GitHubMark />}
+            />
+            {repository}
+          </button>
+        )}
       </div>
-      {repository === null ? null : (
-        <button
-          type="button"
-          className="plan-card-repository"
-          onClick={() => onOpenGitHub(repositoryPageUrl(repository))}
-        >
-          <RepositoryPicture
-            repository={repository}
-            pictures={pictures}
-            fallback={<GitHubMark />}
-          />
-          {repository}
-        </button>
-      )}
-      {agents === undefined || agents.agents.length === 0 ? null : (
+      {agents === undefined || agentRows.length === 0 ? null : (
         <ul className="plan-card-lines" aria-label="Agents">
-          {agents.agents.map((agent) => (
+          {agentRows.map((agent) => (
             <AgentLine
               key={agent.id}
               agent={agent}
               models={models}
-              now={now}
               onShow={() => onShowAgent(agent.id)}
             />
           ))}
-          <More total={agents.total} shown={agents.agents.length} />
+          <More total={agents.total} shown={agentRows.length} />
         </ul>
       )}
-      {agents === undefined || agents.pullRequests.length === 0 ? null : (
+      {agents === undefined || pullRequestRows.length === 0 ? null : (
         <ul className="plan-card-lines" aria-label="Pull requests">
-          {agents.pullRequests.map((pullRequest) => (
+          {pullRequestRows.map((pullRequest) => (
             <PullRequestLine
               key={pullRequest.url ?? pullRequest.number}
               pullRequest={pullRequest}
               onOpenGitHub={onOpenGitHub}
             />
           ))}
-          <More total={agents.pullRequestTotal} shown={agents.pullRequests.length} />
+          <More total={agents.pullRequestTotal} shown={pullRequestRows.length} />
         </ul>
       )}
     </div>

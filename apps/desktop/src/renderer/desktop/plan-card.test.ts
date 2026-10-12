@@ -24,7 +24,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const MINUTE = 60_000;
 const NOW = 60 * MINUTE;
 
-/** A plan with three agents named of five, and two pull requests named of four, as the list carries it. */
+/** A plan with three agents named of five, and three pull requests named of four, as the list carries it. */
 const PLAN: PlanSummary = {
   id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
   name: "Teammate invitations",
@@ -78,6 +78,15 @@ const PLAN: PlanSummary = {
         checks: CHECK_SUMMARY.PASSING,
         additions: 31,
         deletions: 2,
+      },
+      {
+        number: 117,
+        title: "Resend an invitation",
+        state: PULL_REQUEST_STATE.MERGED,
+        checks: CHECK_SUMMARY.PASSING,
+        additions: 58,
+        deletions: 12,
+        url: "https://github.com/acme/relay/pull/117",
       },
     ],
   },
@@ -136,7 +145,7 @@ const drawnCard = (plan: PlanSummary) =>
   });
 
 it.effect(
-  "a plan's card names it, its repository, and when it was updated, then its agents working or ended and its pull requests, counting the rest",
+  "a plan's card names it, its repository, and when it was updated, then its agents by their tabs' labels and two of its pull requests, counting the rest",
   () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(NOW);
@@ -144,19 +153,60 @@ it.effect(
 
       assert.equal(card.head, "Teammate invitations3m");
       assert.equal(card.repository, "acme/relay");
-      assert.deepEqual(card.agents, [
-        "Invite flow Opus 5.5 HighWorking…2m 5s",
-        "GPT 6.1 Sol Extra highDone 3m",
-        "Fix the tests Opus 5.5 HighFailed 1h",
-        "and 2 more",
-      ]);
+      assert.deepEqual(card.agents, ["Invite flow", "GPT 6.1 Sol", "Fix the tests", "2 more"]);
       assert.deepEqual(card.pullRequests, [
-        "#128 · Invite teammates by email+214 −9 Draft",
-        "#120 · Expire invitations after a week+31 −2",
-        "and 2 more",
+        "#128 Invite teammates by email+214 −9",
+        "#120 Expire invitations after a week+31 −2",
+        "2 more",
       ]);
       card.unmount();
     }),
+);
+
+it.effect(
+  "an agent's row says no word for where it stands, working, done, failed, or stopped alike, as no tab does",
+  () =>
+    Effect.gen(function* () {
+      const plan = PLAN.agents;
+      assert.ok(plan !== undefined);
+      const [, done] = plan.agents;
+      assert.ok(done !== undefined);
+      const stopped = { ...done, status: CODING_AGENT_STATUS.CANCELLED };
+      const card = yield* drawnCard({
+        ...PLAN,
+        agents: { ...plan, total: 4, agents: [...plan.agents, stopped] },
+      });
+
+      assert.deepEqual(card.agents, ["Invite flow", "GPT 6.1 Sol", "Fix the tests", "1 more"]);
+      for (const row of card.agents) {
+        assert.doesNotMatch(row ?? "", /Working|Done|Failed|Stopped|ago/u);
+      }
+      card.unmount();
+    }),
+);
+
+it.effect("a plan whose lists fit the card counts nothing more", () =>
+  Effect.gen(function* () {
+    const plan = PLAN.agents;
+    assert.ok(plan !== undefined);
+    const card = yield* drawnCard({
+      ...PLAN,
+      agents: {
+        ...plan,
+        total: 1,
+        agents: plan.agents.slice(0, 1),
+        pullRequestTotal: 2,
+        pullRequests: plan.pullRequests.slice(0, 2),
+      },
+    });
+
+    assert.deepEqual(card.agents, ["Invite flow"]);
+    assert.deepEqual(card.pullRequests, [
+      "#128 Invite teammates by email+214 −9",
+      "#120 Expire invitations after a week+31 −2",
+    ]);
+    card.unmount();
+  }),
 );
 
 it.effect(
@@ -200,7 +250,7 @@ it.effect(
         "the name, the times, a line without a page, and the counts are text",
       );
       assert.equal(repository?.textContent, "acme/relay");
-      assert.equal(pullRequest?.textContent, "#128 · Invite teammates by email+214 −9 Draft");
+      assert.equal(pullRequest?.textContent, "#128 Invite teammates by email+214 −9");
       act(() => {
         for (const line of [repository, pullRequest, invite, done, failed]) line?.click();
       });

@@ -4233,31 +4233,40 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 }
 
 /* A sidebar plan's card: its name wrapped to two lines with how long ago it
-   was updated at the head's right, its repository under the name, then a
-   few lines each for its agents and its pull requests, each list under a
-   hairline, a glyph column at their start and a muted corner at their end.
-   The repository, an agent, and a pull request are buttons that look like
-   the lines around them until the pointer is on one, which washes it as a
-   menu's row is washed, bled into the card's inset so its words stay in
-   line with the rest. */
+   was updated muted at the head's right, its repository under the name, then
+   a few rows each for its agents and its pull requests, each list under a
+   hairline. A row is the plan summary's (`.plan-summary-row`): its height,
+   type size, glyph, and gap, so an agent reads here as it does there, with a
+   muted corner at its end. The repository, an agent, and a pull request are
+   buttons that look like the rows around them until the pointer is on one,
+   which washes it as a menu's row is washed, bled into the card's inset so
+   its words stay in line with the rest. */
 .plan-card {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
+  gap: var(--space-8);
+  padding: var(--space-2) 0;
+}
+
+.plan-card-heading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
 }
 
 .plan-card-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: var(--space-8);
+  gap: var(--space-12);
 }
 
 .plan-card-name {
   display: -webkit-box;
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1.35;
   overflow-wrap: anywhere;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -4267,7 +4276,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-corner,
 .plan-card-more {
   color: var(--text-tertiary);
-  font-size: 11.5px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -4280,19 +4289,22 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-repository {
   display: flex;
   min-width: 0;
+  align-self: flex-start;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-6);
+  height: 22px;
   color: var(--text-secondary);
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .plan-card-repository,
 .plan-card-line {
   margin: 0 calc(-1 * var(--space-6));
-  padding: var(--space-2) var(--space-6);
+  padding: 0 var(--space-6);
   border-radius: 6px;
   background: none;
   text-align: left;
+  transition: background-color var(--duration-hover) ease;
 }
 
 :is(button.plan-card-repository, button.plan-card-line):hover {
@@ -4300,8 +4312,8 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 }
 
 .plan-card-repository :is(.repository-picture, .account-mark) {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   flex: none;
 }
 
@@ -4309,7 +4321,7 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   display: flex;
   flex-direction: column;
   margin: 0;
-  padding: var(--space-4) 0 0;
+  padding: var(--space-6) 0 0;
   border-top: 1px solid var(--hairline);
   list-style: none;
 }
@@ -4317,22 +4329,28 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-line {
   display: flex;
   width: calc(100% + 2 * var(--space-6));
+  height: 28px;
   min-width: 0;
   align-items: center;
-  gap: var(--space-6);
-  font-size: 12px;
+  gap: var(--glyph-gap);
+  color: var(--text-primary);
+  font-size: 13px;
 }
 
-/* An agent's line leads with its harness's mark wearing where it stands, as
-   its tab does, a size up from the pull request's glyph so the harness's
-   mark reads at a glance; the working mark stands centred in the same
-   slot. */
+/* A glyph takes the summary's footprint, the working mark and a harness's
+   mark wearing where it stands alike, so every row's label starts on one
+   edge. */
 .plan-card-glyph {
   display: inline-flex;
-  width: 14px;
+  width: var(--control-glyph);
   flex: none;
   justify-content: center;
-  --state-glyph-size: 14px;
+  --state-glyph-size: var(--control-glyph);
+}
+
+.plan-card-glyph > svg {
+  width: var(--control-glyph);
+  height: var(--control-glyph);
 }
 
 .plan-card-label {
@@ -4343,19 +4361,16 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   white-space: nowrap;
 }
 
-/* Beside a title, the model steps back to the muted ink, its effort with it. */
-.plan-card-model,
-.plan-card-model :is(.model-label-name, .model-label-detail) {
+.plan-card-number {
   color: var(--text-tertiary);
-  font-size: 11.5px;
-}
-
-.plan-card-state {
-  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
 }
 
 .plan-card-more {
-  padding: var(--space-2) 0 0 calc(12px + var(--space-6));
+  display: flex;
+  height: 22px;
+  align-items: center;
+  padding-left: calc(var(--control-glyph) + var(--glyph-gap));
 }
 
 /* A finished turn's card, hung from its "Worked for" line: the model it
