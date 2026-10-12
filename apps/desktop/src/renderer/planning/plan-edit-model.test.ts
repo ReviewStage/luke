@@ -134,6 +134,20 @@ test("a text past the bound a document may hold says so and is never sent; trimm
   });
 });
 
+test("a text grown past the bound while a save was out still says so once that save lands, and holds the editor open", () => {
+  const typed = editorTyped(editorOpened(TEXT), `${TEXT}Mine.\n`);
+  const out = editorCloseAsked(editorSent(typed, saved(typed)));
+  const over = editorTyped(out, "x".repeat(PLAN_BOUNDS.MAX_BODY_CHARS + 1));
+  const landed = editorAnswered(over, { saved: true });
+
+  assert.deepEqual(landed.state, {
+    kind: DOCUMENT_EDITOR_STATE.FAILED,
+    note: "Not saved: the plan would be longer than a plan may be.",
+  });
+  assert.equal(landed.base, `${TEXT}Mine.\n`);
+  assert.equal(editorCloses(landed), false);
+});
+
 test("a text rebased on a save's merged answer saves only what the developer typed since", () => {
   const merged = `${TEXT}Luke's.\nMine.\n`;
   const rebased = editorRebased(editorOpened(TEXT), merged, `${merged}More.\n`);

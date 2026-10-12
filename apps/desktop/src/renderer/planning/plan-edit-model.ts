@@ -130,11 +130,12 @@ export function editorSent(
 export function editorAnswered(editor: DocumentEditor, answer: PlanningEditAnswer): DocumentEditor {
   const { sending: sent, ...rest } = editor;
   if ("saved" in answer) {
-    return {
-      ...rest,
-      base: sent === undefined ? editor.base : sent.document.value,
-      state: { kind: DOCUMENT_EDITOR_STATE.EDITING },
-    };
+    const base = sent === undefined ? editor.base : sent.document.value;
+    // Note that words typed past the bound while the save was out still say so, so they hold the editor open.
+    return editorTyped(
+      { ...rest, base, state: { kind: DOCUMENT_EDITOR_STATE.EDITING } },
+      rest.draft,
+    );
   }
   if ("conflict" in answer) {
     const current = currentOr(editor.base, answer.conflict.current);

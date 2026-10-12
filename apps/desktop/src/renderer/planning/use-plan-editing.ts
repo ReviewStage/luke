@@ -40,6 +40,9 @@ const savePauseAtom = rendererRuntime.fn((stamp: number) =>
   Effect.as(Effect.sleep(SAVE_PAUSE), stamp),
 );
 
+/** A save that failed as a plan was left, which nothing is left to say to. */
+const ignore = () => undefined;
+
 /** How the document saves an edit: what the words were written from, and the developer's. */
 export type PlanEditDoor = (request: PlanDocumentEditRequest) => Promise<PlanningEditAnswer>;
 
@@ -103,6 +106,8 @@ export function usePlanEditing(
   latest.current = editor;
   const stamp = useRef(0);
   const opening = useRef(0);
+  // The save out, which words typed after it wait on as a plan is left.
+  const flight = useRef<Promise<PlanningEditAnswer> | undefined>(undefined);
   // The door of the plan last drawn, moved on after each commit, so a
   // cleanup as another plan opens still holds the door of the one it leaves.
   const door = useRef(edit);
@@ -122,7 +127,8 @@ export function usePlanEditing(
       setEditor((now) => (now !== undefined && opening.current === sentFrom ? next(now) : now));
     latest.current = editorSent(held, request);
     setEditor(latest.current);
-    door.current(request).then(
+    flight.current = door.current(request);
+    flight.current.then(
       (answered) => landed((now) => editorAnswered(now, answered)),
       (refused: Error) => landed((now) => editorRefused(now, refused.message)),
     );
@@ -164,8 +170,15 @@ export function usePlanEditing(
     return () => {
       heldWords.current?.();
       const held = latest.current;
-      const request = held === undefined ? undefined : pendingSave(held);
-      if (request !== undefined) door.current(request).catch(() => undefined);
+      const leaving = door.current;
+      const rest = (now: DocumentEditor) => {
+        const request = pendingSave(now);
+        if (request !== undefined) leaving(request).catch(ignore);
+      };
+      if (held === undefined) return;
+      if (held.sending === undefined) rest(held);
+      // Note that words typed while a save was out go once it lands, from what it saved.
+      else flight.current?.then((answered) => rest(editorAnswered(held, answered)), ignore);
     };
   }, [planId]);
 

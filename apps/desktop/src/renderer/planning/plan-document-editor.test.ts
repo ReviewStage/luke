@@ -311,6 +311,33 @@ test("words handed over and not yet saved are sent when the developer leaves the
   assert.deepEqual(sent, [{ document: { base: BODY, value: `${BODY}Mine.\n` } }]);
 });
 
+test("words typed while a save is out are saved after it, from what it saved, when the developer leaves the plan", async () => {
+  const { container, render, unmount } = mount();
+  const sent: PlanEditRequest[] = [];
+  let answer: (answered: PlanningEditAnswer) => void = () => undefined;
+  const door = (request: PlanEditRequest) => {
+    sent.push(request);
+    if (sent.length > 1) return Promise.resolve<PlanningEditAnswer>({ saved: true });
+    return new Promise<PlanningEditAnswer>((land) => {
+      answer = land;
+    });
+  };
+  render(DOCUMENT_PLAN, door);
+  act(() => block(container, "Goal").click());
+  act(() => open().onDraft(`${BODY}Mine.\n`));
+  act(() => open().onFinish(1));
+  act(() => open().onDraft(`${BODY}Mine, more.\n`));
+
+  unmount();
+  answer({ saved: true });
+  await settle();
+
+  assert.deepEqual(sent, [
+    { document: { base: BODY, value: `${BODY}Mine.\n` } },
+    { document: { base: `${BODY}Mine.\n`, value: `${BODY}Mine, more.\n` } },
+  ]);
+});
+
 test("words typed in one plan are saved to that plan when another opens", async () => {
   const { container, render } = mount();
   const doors: string[] = [];
