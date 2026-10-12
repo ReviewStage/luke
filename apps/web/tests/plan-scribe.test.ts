@@ -14,6 +14,7 @@ import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store"
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
 import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { testSqlClient } from "./support/sql-client";
 
@@ -665,5 +666,26 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         );
       }),
     ),
+  );
+
+  it.effect(
+    "a plan that is one document is not written on its template's fields: no model call, no draft, and its text stands",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openPlan;
+          yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+          const { scribe, asked, drafts } = yield* scribeFor(userId, planId, [
+            { notes: [added(PLAN_FIELD.CONTEXT, PROBLEM)] },
+          ]);
+
+          scribe.observe(heard("Only admins can add people.", 0, 1_500));
+          yield* quiet;
+
+          assert.deepEqual(asked, []);
+          assert.deepEqual(drafts, []);
+          assert.equal(yield* savedBody(userId, planId), INVITATIONS_TEXT);
+        }),
+      ),
   );
 });

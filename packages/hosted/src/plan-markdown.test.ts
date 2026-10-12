@@ -4,6 +4,11 @@ import { planMarkdown } from "./plan-markdown.js";
 import { EMPTY_PLAN_FIELDS, planBody } from "./plan-template.js";
 import type { PlanDocument } from "./plan-wire.js";
 
+/** A plan still kept as the template's fields, holding the document handed. */
+function fieldsPlan(document: PlanDocument) {
+  return { name: "Teammate invitations", document, fields: EMPTY_PLAN_FIELDS };
+}
+
 const BODY = [
   "# Teammate invitations",
   "",
@@ -25,7 +30,7 @@ test("the copy is the body as saved, then every assumption as a list item", () =
   };
 
   assert.equal(
-    planMarkdown(document),
+    planMarkdown(fieldsPlan(document)),
     `${BODY}
 
 ## Assumptions
@@ -38,14 +43,17 @@ test("the copy is the body as saved, then every assumption as a list item", () =
 
 test("the assumptions' section stands on every copy, saying none is recorded while the list is empty", () => {
   assert.equal(
-    planMarkdown({ body: BODY, assumptions: [] }),
+    planMarkdown(fieldsPlan({ body: BODY, assumptions: [] })),
     `${BODY}\n\n## Assumptions\n\n_None recorded_\n`,
   );
   assert.equal(
-    planMarkdown({ body: "", assumptions: [{ text: "Invites are by email." }] }),
+    planMarkdown(fieldsPlan({ body: "", assumptions: [{ text: "Invites are by email." }] })),
     "## Assumptions\n\n- Invites are by email.\n",
   );
-  assert.equal(planMarkdown({ body: "", assumptions: [] }), "## Assumptions\n\n_None recorded_\n");
+  assert.equal(
+    planMarkdown(fieldsPlan({ body: "", assumptions: [] })),
+    "## Assumptions\n\n_None recorded_\n",
+  );
 });
 
 test("a draft of the fixed template copies every section in order, its unanswered fields, and every assumption", () => {
@@ -59,13 +67,15 @@ test("a draft of the fixed template copies every section in order, its unanswere
     },
   );
 
-  const copied = planMarkdown({
-    body,
-    assumptions: [
-      { text: "An accepted invite is never reused." },
-      { text: "An invite expires after 7 days." },
-    ],
-  });
+  const copied = planMarkdown(
+    fieldsPlan({
+      body,
+      assumptions: [
+        { text: "An accepted invite is never reused." },
+        { text: "An invite expires after 7 days." },
+      ],
+    }),
+  );
 
   assert.equal(
     copied,
@@ -93,20 +103,40 @@ test("a draft of the fixed template copies every section in order, its unanswere
 });
 
 test("an assumption spanning lines stays one list item", () => {
-  const copied = planMarkdown({
-    body: BODY,
-    assumptions: [{ text: "Invites expire.\n\nAfter 7 days." }],
-  });
+  const copied = planMarkdown(
+    fieldsPlan({
+      body: BODY,
+      assumptions: [{ text: "Invites expire.\n\nAfter 7 days." }],
+    }),
+  );
 
   assert.ok(copied.endsWith("\n- Invites expire. After 7 days.\n"));
 });
 
 test("a long run of spaces holding no line break is kept as written, however long", () => {
   const spaces = " ".repeat(300_000);
-  const copied = planMarkdown({
-    body: "",
-    assumptions: [{ text: `Invites expire.${spaces}After 7 days.\nEventually.` }],
-  });
+  const copied = planMarkdown(
+    fieldsPlan({
+      body: "",
+      assumptions: [{ text: `Invites expire.${spaces}After 7 days.\nEventually.` }],
+    }),
+  );
 
   assert.equal(copied, `## Assumptions\n\n- Invites expire.${spaces}After 7 days. Eventually.\n`);
+});
+
+test("a plan that is one document copies as its name for a title over its text, which holds its assumptions", () => {
+  const text =
+    "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- An invite expires after 7 days.\n";
+
+  const copied = planMarkdown({
+    name: "Teammate\ninvitations ",
+    document: { body: text, assumptions: [] },
+  });
+
+  assert.equal(copied, `# Teammate invitations\n\n${text}`);
+  assert.equal(
+    planMarkdown({ name: "Teammate invitations", document: { body: "", assumptions: [] } }),
+    "# Teammate invitations\n",
+  );
 });

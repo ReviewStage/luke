@@ -1,3 +1,4 @@
+import { type PlanSectionWriter, planSectionWriterSchema } from "@sidecar/hosted/plan-document";
 import {
   EMPTY_PLAN_FIELDS,
   type PlanAgentEdit,
@@ -14,6 +15,7 @@ import {
   type PlanFieldEdit,
   type PlanFields,
   type PlanLastEdit,
+  type PlanSectionEdit,
   type PlanSummary,
   planAssumptionSchema,
   planFieldsSchema,
@@ -62,16 +64,26 @@ export interface LabelledAgentEdit extends PlanAgentEdit {
   readonly label: string;
 }
 
-/** A plan as the service holds it: what the window reads, the fields its body was formatted from, the saves coding agents made with their notes, and the conversation it resumes in, if one is attached. */
+/**
+ * A plan as the service holds it: what the window reads, the fields its body
+ * was formatted from or, for a plan that is one document, its text, the saves
+ * coding agents made with their notes, and the conversation it resumes in, if
+ * one is attached.
+ */
 export interface StoredPlan {
   readonly plan: Plan;
+  /** The fixed template's fields; the untouched template's for a plan that is one document, which keeps none. */
   readonly fields: PlanFields;
+  /** The whole text of a plan that is one document; undefined for a plan still kept as the template's fields. */
+  readonly text: string | undefined;
   readonly agentEdits: readonly LabelledAgentEdit[];
   readonly conversationId: string | undefined;
   /** Whether the document was ever saved: false for a plan untouched since it started, or since the template's reset. */
   readonly saved: boolean;
-  /** Who last changed each field a save has changed since this was kept. */
+  /** Who last changed each field a save has changed since this was kept; none for a plan that is one document. */
   readonly fieldWriters: readonly PlanFieldWriter[];
+  /** Who last changed each section of a plan that is one document; none for any other plan. */
+  readonly sectionWriters: readonly PlanSectionWriter[];
 }
 
 /** A plan to start: its name, and the repository it is about where one is chosen. */
@@ -114,6 +126,8 @@ const PLAN_COLUMNS = {
   fields: plan.fields,
   agentEdits: plan.agentEdits,
   fieldWriters: plan.fieldWriters,
+  document: plan.document,
+  sectionWriters: plan.sectionWriters,
   conversationId: plan.conversationId,
 };
 
@@ -137,6 +151,8 @@ const PlanRowSchema = Schema.Struct({
   fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
   fieldWriters: Schema.Array(planFieldWriterSchema),
+  document: Schema.NullOr(Schema.String),
+  sectionWriters: Schema.Array(planSectionWriterSchema),
   conversationId: Schema.NullOr(Schema.String),
 });
 
@@ -168,9 +184,10 @@ const findAgentLabels = SqlSchema.findAll({
  * the one they are read under.
  */
 function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string>> {
+  const writers = [...row.fieldWriters, ...row.sectionWriters];
   const named = [
     ...row.agentEdits.map((edit) => edit.agentId),
-    ...row.fieldWriters.flatMap((writer) => (writer.agentId === undefined ? [] : [writer.agentId])),
+    ...writers.flatMap((writer) => (writer.agentId === undefined ? [] : [writer.agentId])),
   ];
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
@@ -181,19 +198,64 @@ function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string
 }
 
 /**
- * Who last changed each field, as the window's section lines read it: a
- * coding agent named by its label, or as an agent whose row is gone, or
- * whose writer was kept before agents were.
+ * Who made a save, as a section's line reads it: a coding agent named by its
+ * label, or as an agent whose row is gone, or whose writer was kept before
+ * agents were.
  */
-function fieldEditOf(writer: PlanFieldWriter, labels: ReadonlyMap<string, string>): PlanFieldEdit {
-  const { field, actor, at } = writer;
+function editOf(
+  writer: PlanFieldWriter | PlanSectionWriter,
+  labels: ReadonlyMap<string, string>,
+): PlanLastEdit {
+  const { actor, at } = writer;
   const label = writer.agentId === undefined ? undefined : labels.get(writer.agentId);
   return {
-    field,
     actor,
     ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
     at,
     duringCall: writer.duringCall === true,
+  };
+}
+
+/** Who last changed one field, as the window's section lines read it. */
+function fieldEditOf(writer: PlanFieldWriter, labels: ReadonlyMap<string, string>): PlanFieldEdit {
+  return { field: writer.field, ...editOf(writer, labels) };
+}
+
+/** Who last changed one section of a document plan, as its line reads it. */
+function sectionEditOf(
+  writer: PlanSectionWriter,
+  labels: ReadonlyMap<string, string>,
+): PlanSectionEdit {
+  return { section: writer.section, ...editOf(writer, labels) };
+}
+
+/**
+ * The document and the writers the window reads for the row. Note that a plan
+ * that is one document answers its text as the body with no assumptions and
+ * no fields, because every desktop edits a field only where `fields` stands,
+ * so a build that knows nothing of documents draws the text and edits
+ * nothing; a plan still kept as fields answers as it always has, its empty
+ * body formatted from the fields so it is always the current template's.
+ */
+function documentOf(
+  row: PlanRow,
+  name: string,
+  labels: ReadonlyMap<string, string>,
+): Pick<Plan, "document" | "fields" | "fieldEdits" | "sectionEdits"> {
+  if (row.document !== null) {
+    return {
+      document: { body: row.document, assumptions: [] },
+      sectionEdits: row.sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+    };
+  }
+  const fields = row.fields ?? EMPTY_PLAN_FIELDS;
+  return {
+    document: {
+      body: row.body === "" ? planBody({ name }, fields) : row.body,
+      assumptions: row.assumptions,
+    },
+    fields,
+    fieldEdits: row.fieldWriters.map((writer) => fieldEditOf(writer, labels)),
   };
 }
 
@@ -207,18 +269,15 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 }
 
 /**
- * The row's document, as the window and the model read it. Note that a plan
- * whose body is still empty, never saved or carried onto a new template,
- * reads as its fields formatted here rather than stored, so it is always the
- * current template's. The row's own account is the one its agents are read under.
- * Its last edit is its newest revision, or, before its history begins, the
- * newest save a coding agent made; each field it has a writer for says who.
+ * The row's document, as the window and the model read it (`documentOf`).
+ * The row's own account is the one its agents are read under. Its last edit
+ * is its newest revision, or, before its history begins, the newest save a
+ * coding agent made; each field or section it has a writer for says who.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const fields = row.fields ?? EMPTY_PLAN_FIELDS;
-    const body = row.body === "" ? planBody({ name: summary.name }, fields) : row.body;
+    const isDocument = row.document !== null;
     const labels = yield* agentLabelsOf(row);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
@@ -230,17 +289,17 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
     return {
       plan: {
         ...summary,
-        document: { body, assumptions: row.assumptions },
         agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
-        fields,
-        fieldEdits: row.fieldWriters.map((writer) => fieldEditOf(writer, labels)),
+        ...documentOf(row, summary.name, labels),
       },
-      fields,
+      fields: isDocument ? EMPTY_PLAN_FIELDS : (row.fields ?? EMPTY_PLAN_FIELDS),
+      text: row.document ?? undefined,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
       saved: row.fields !== null,
-      fieldWriters: row.fieldWriters,
+      fieldWriters: isDocument ? [] : row.fieldWriters,
+      sectionWriters: row.sectionWriters,
     };
   });
 }

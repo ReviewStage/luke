@@ -1,4 +1,5 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
+import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import type { PlanAgentEdit, PlanFieldWriter } from "@sidecar/hosted/plan-template";
 import type { PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
@@ -14,7 +15,9 @@ import { conversations } from "./storage-schema.js";
  * account that started it: its name, whether it is pinned or archived, and the one
  * document the planning model saves, a Markdown body and the assumptions list
  * beside it, with the template's fields the body was formatted from, who last
- * changed each field, and the journal of the saves coding agents made on it. A save
+ * changed each field, and the journal of the saves coding agents made on it;
+ * or, for a plan that is one free document, its whole text and who last
+ * changed each of its sections. A save
  * replaces the document's columns in one statement, so none is left
  * half-written: a save that failed left the row as it stood. What the
  * document held before is kept beside it, in `plan_revision`
@@ -52,6 +55,19 @@ export const plan = pgTable(
     /** Who last changed each field and when, for the fields a save has changed since this was kept; empty until then. */
     fieldWriters: jsonb("field_writers")
       .$type<readonly PlanFieldWriter[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /**
+     * The plan as one free Markdown document, its whole text: no title line,
+     * and its assumptions a section like any other. Non-null is a plan that is
+     * one document, whose body, assumptions, fields, and field writers above
+     * stand for nothing; null is a plan still kept as the fixed template's
+     * fields (`@sidecar/hosted/plan-document`).
+     */
+    document: text("document"),
+    /** Who last changed each section of a document plan and when, by heading; empty for any other plan, and until a save changes one. */
+    sectionWriters: jsonb("section_writers")
+      .$type<readonly PlanSectionWriter[]>()
       .notNull()
       .default(sql`'[]'::jsonb`),
     /**

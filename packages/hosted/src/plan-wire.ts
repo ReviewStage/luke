@@ -15,6 +15,13 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * keeps every save as a revision of the plan under the writer who made it,
  * and a plan carries its newest as `lastEdit`, which is what the window's
  * "Edited by" line reads.
+ * A plan is moving from the fixed template to one free Markdown document
+ * (`plan-document.ts`). A plan that is one document answers its text as the
+ * `body`, with no title line and an empty `assumptions` list, since its
+ * assumptions are a section of the text, and without `fields`: a window
+ * edits a section of a plan only where `fields` stands, so every build
+ * draws a document plan as its text. Who last changed each of its sections
+ * is `sectionEdits`, by heading.
  * A plan may name the GitHub repository it is about, `owner/name` as
  * `github-repositories-wire.ts` spells it, which the service confirms the
  * account reaches through the Luke GitHub App before it keeps it; null is a
@@ -352,6 +359,28 @@ export const planFieldEditSchema = EffectSchema.Struct({
 
 export type PlanFieldEdit = typeof planFieldEditSchema.Type;
 
+/** Bounds on the sections of a plan that is one document, as the window reads who last changed each. */
+export const PLAN_SECTION_BOUNDS = {
+  /** The most characters of a heading a section is known by; a longer heading is known by its first this many. */
+  MAX_HEADING_CHARS: 1_000,
+  /** The most sections a plan names a last save for. */
+  MAX_SECTIONS: 500,
+} as const;
+
+/**
+ * The save that last changed one section of a plan that is one document, as
+ * the section's "Edited by" line reads it: the section is known by its
+ * heading's words, so a renamed heading is a section no save has changed.
+ */
+export const planSectionEditSchema = EffectSchema.Struct({
+  section: EffectSchema.String.check(
+    EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_HEADING_CHARS),
+  ),
+  ...planLastEditSchema.fields,
+});
+
+export type PlanSectionEdit = typeof planSectionEditSchema.Type;
+
 /** One plan with its saved document, its newest revision, who last changed each field, and the saves coding agents made on it, oldest first. */
 export const planSchema = EffectSchema.Struct({
   ...planSummaryFields,
@@ -371,6 +400,16 @@ export const planSchema = EffectSchema.Struct({
   fieldEdits: EffectSchema.optionalKey(
     EffectSchema.Array(planFieldEditSchema).check(
       EffectSchema.isMaxLength(Object.values(PLAN_FIELD).length),
+    ),
+  ),
+  /**
+   * For a plan that is one document, the save that last changed each of its
+   * sections, for the sections a save has changed; absent for a plan still
+   * kept as the fixed template's fields, and from a service before documents.
+   */
+  sectionEdits: EffectSchema.optionalKey(
+    EffectSchema.Array(planSectionEditSchema).check(
+      EffectSchema.isMaxLength(PLAN_SECTION_BOUNDS.MAX_SECTIONS),
     ),
   ),
 });

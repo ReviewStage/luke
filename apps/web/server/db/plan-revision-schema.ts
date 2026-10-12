@@ -13,8 +13,8 @@ import { plan } from "./plan-schema.js";
  * one revision that each save moves on (`hosted/plan-revisions.ts`), so a
  * call is about one row rather than one per pause in the speech. The content
  * is the template's fields and the assumptions, from which the body is
- * formatted again under whatever name the plan has now; a rename is not a
- * revision. A plan from before history starts it with the one revision its
+ * formatted again under whatever name the plan has now, or, for a plan that
+ * is one document, its whole text; a rename is not a revision. A plan from before history starts it with the one revision its
  * first later save found, under `earlier`. The developer restoring an
  * earlier revision writes a revision of its own naming the one it brought
  * back, which nothing joins. Rows go with their plan, and outlive the coding
@@ -33,7 +33,10 @@ export const planRevision = pgTable(
     agentId: uuid("agent_id").references(() => codingAgent.id, { onDelete: "set null" }),
     /** The call the notetaker wrote it on, as `voice_sessions.live_session_id` names it; null for any other writer. */
     liveSessionId: text("live_session_id"),
-    fields: jsonb("fields").$type<PlanFields>().notNull(),
+    /** The template's fields after the revision; null for a revision of a plan that is one document. */
+    fields: jsonb("fields").$type<PlanFields>(),
+    /** The document plan's whole text after the revision; null for a revision of the template's fields. */
+    document: text("document"),
     assumptions: jsonb("assumptions").$type<readonly PlanAssumption[]>().notNull(),
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),

@@ -192,7 +192,8 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
     const heardThrough = ledger.lastActivityMs() ?? cursor.heardThrough;
     const notesRead = notes.length;
     const stored = yield* readPlan(options.userId, options.planId);
-    if (Option.isNone(stored)) return;
+    // Note that a plan that is one document takes no notes on its template's fields, so this notetaker draws and saves nothing on it.
+    if (Option.isNone(stored) || stored.value.text !== undefined) return;
     yield* spendHostedMeter({ userId: options.userId, now: yield* Clock.currentTimeMillis });
     const earlier = ledger
       .utterances()
