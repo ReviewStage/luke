@@ -321,6 +321,7 @@ function PinnedRows({
             plans={context.plans}
             plan={plan}
             current={context.current(plan.id)}
+            unread={context.unread(plan)}
             repositoryShown
             now={context.now}
             onOpen={() => context.onOpen(plan.id)}
