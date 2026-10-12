@@ -24,10 +24,9 @@ import {
  * has on screen, what was said on the plan's calls, and what Luke's
  * planning model wrote and ran on them) stands in a panel at the window's
  * right that the developer opens and closes, as every devtool window's
- * secondary sidebar does. The one thing that opens it on its own is Luke
- * first drawing on a plan's board or first showing its code
- * (`use-panel-arrivals.ts`), once per plan and kind; a subagent's tab opened
- * from an agent's transcript opens it too. Not to be confused with "the
+ * secondary sidebar does. What opens it on its own is Luke drawing on a
+ * plan's board or showing its code (`use-panel-arrivals.ts`), each time he
+ * does; a subagent's tab opened from an agent's transcript opens it too. Not to be confused with "the
  * panel", which in this renderer is Luke's whole surface.
  *
  * A fixed tab stands in the strip only once the open plan has used it: its
@@ -37,7 +36,7 @@ import {
  * chosen one's place. The developer's own choices lie over that, per plan:
  * a tab they open from the "+" or its shortcut stands on that plan though
  * it holds nothing, and one they close stays closed on that plan however
- * much more arrives, until they open it again. The tab chosen is the
+ * much more arrives, until they or Luke's next drawing or snippet open it again. The tab chosen is the
  * window's rather than any plan's, so a chosen tab the open plan does not
  * have reads as the first it does.
  *
@@ -349,7 +348,7 @@ export interface SidePanelControl {
    * (`inPlanOrder`).
    */
   order: readonly SidePanelTab[];
-  /** The fixed tabs the developer closed on the open plan, which stay closed there however much arrives until one is opened again. */
+  /** The fixed tabs the developer closed on the open plan, which stay closed there until one is opened again, by them or by an arrival. */
   closedTabs: readonly FixedSidePanelTab[];
   /** Every plan's tabs pinned to the sidebar, newest pinned first. */
   pins: readonly PinnedTab[];

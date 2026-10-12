@@ -185,7 +185,7 @@ function Window({ code }: { code?: readonly PlanCodeShowing[] | undefined }): Re
     planId: PLAN.id,
     board: undefined,
     // The window stands on a call, which is when code arrives.
-    code: code !== undefined,
+    code: code ?? [],
     panel: sidePanel,
   });
   useAppKeymap(true);

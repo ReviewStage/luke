@@ -712,7 +712,7 @@ export function usePlansTab(input: {
   const arrivedTabs = usePanelArrivals({
     planId: fixture === undefined ? planning.activePlanId : undefined,
     board: planning.board,
-    code: live ? (planning.shownCode?.length ?? 0) > 0 : undefined,
+    code: live ? (planning.shownCode ?? []) : undefined,
     panel: sidePanel,
   });
   // An agent that ended unseen marks its tab unread as an arrival does; main

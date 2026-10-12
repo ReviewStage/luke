@@ -1257,7 +1257,7 @@ const NOTHING_YET: PlanningView = {
   work: [],
 };
 
-test("a new plan has no tab, and each kind's first content adds its tab in its place", () => {
+test("a new plan has no tab, and each kind's first content adds its tab in its place, Luke's drawing showing its own", () => {
   const tab = mount({ shown: true, planning: OPEN });
   assert.deepEqual(tab.control().sidePanel.tabs, [], "nothing read draws nothing");
   tab.stand({ planning: NOTHING_YET });
@@ -1284,14 +1284,10 @@ test("a new plan has no tab, and each kind's first content adds its tab in its p
     },
   });
   assert.deepEqual(tab.control().sidePanel.tabs, SIDE_PANEL_TABS);
-  assert.deepEqual(
-    panelOf(tab),
-    { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT },
-    "a tab added ahead of the one shown does not take its place",
-  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
-test("a first snippet, its read having left the code absent, is added ahead of the Transcript tab shown without taking its place", () => {
+test("a first snippet, its read having left the code absent, is added ahead of the Transcript tab shown and takes its place", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, transcript: ONE_CALL } });
   act(() => tab.control().sidePanel.onToggle());
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
@@ -1299,8 +1295,8 @@ test("a first snippet, its read having left the code absent, is added ahead of t
 
   tab.stand({ planning: { ...OPEN, transcript: ONE_CALL, shownCode: SHOWN } });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.CODE, SIDE_PANEL_TAB.TRANSCRIPT]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
-  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(tab.control().unreadTabs, []);
 });
 
 test("a call's line heard live adds the Transcript tab before the record holds it", () => {
@@ -1336,7 +1332,7 @@ test("each plan draws its own tabs, a tab closed on one stays open on another, a
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
 });
 
-test("Luke's first drawing on the open plan's board opens the panel on the board, and none after it does once closed", () => {
+test("each drawing Luke puts on the open plan's board opens the panel on the board, the panel hidden between them or not", () => {
   const tab = mount({ shown: true, planning: OPEN });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
   act(() => tab.control().sidePanel.onToggle());
@@ -1348,11 +1344,13 @@ test("Luke's first drawing on the open plan's board opens the panel on the board
   assert.equal(tab.control().sidePanel.fullScreen, false);
 
   act(() => tab.control().sidePanel.onToggle());
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
+  assert.equal(tab.control().sidePanel.open, false, "the same drawing read again is not a new one");
   tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
-  assert.equal(tab.control().sidePanel.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
-test("the first code Luke shows on the open plan's call opens the panel on the code, and a later call's code does not once closed", () => {
+test("each snippet Luke shows on the open plan's call opens the panel on the code, the panel hidden between them or not", () => {
   const tab = mount({ shown: true, planning: OPEN });
   tab.stand({ voice: ON_CALL });
   assert.equal(tab.control().sidePanel.open, false);
@@ -1362,15 +1360,33 @@ test("the first code Luke shows on the open plan's call opens the panel on the c
 
   act(() => tab.control().sidePanel.onToggle());
   tab.stand({ planning: { ...OPEN, shownCode: SHOWN_AGAIN } });
-  assert.equal(
-    tab.control().sidePanel.open,
-    false,
-    "a later snippet on the call does not reopen it",
-  );
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+
+  act(() => tab.control().sidePanel.onToggle());
   tab.stand({ voice: IDLE_VOICE_VIEW, planning: OPEN });
   tab.stand({ voice: ON_CALL });
   tab.stand({ planning: { ...OPEN, shownCode: SHOWN } });
-  assert.equal(tab.control().sidePanel.open, false);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+});
+
+test("a snippet Luke shows after the developer closed the Code tab opens it again, over the tab the panel showed", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, work: [TURN] }, voice: ON_CALL });
+  tab.stand({ planning: { ...OPEN, work: [TURN], shownCode: SHOWN } });
+  act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.CODE));
+  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
+  assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.WORK]);
+
+  tab.stand({ planning: { ...OPEN, work: [TURN], shownCode: SHOWN } });
+  assert.deepEqual(
+    panelOf(tab),
+    { open: true, tab: SIDE_PANEL_TAB.WORK },
+    "the same snippet redrawn is not a new one",
+  );
+
+  tab.stand({ planning: { ...OPEN, work: [TURN], shownCode: SHOWN_AGAIN } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(tab.control().sidePanel.closedTabs, []);
+  assert.deepEqual(tab.control().unreadTabs, []);
 });
 
 test("the code shown on the open plan is drawn with no call standing, as after a restart, and a call that starts with it opens no panel", () => {
@@ -1384,12 +1400,13 @@ test("the code shown on the open plan is drawn with no call standing, as after a
   assert.equal(tab.control().sidePanel.open, false);
 });
 
-test("a plan opened with its board already drawn opens no panel, and nothing Luke draws on it later does", () => {
+test("a plan opened with its board already drawn opens no panel, and Luke's next drawing on it does", () => {
   const tab = mount({ shown: true, planning: OPEN });
   tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
-  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
-
   assert.equal(tab.control().sidePanel.open, false);
+
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
 test("a plan left and opened again reads its board afresh, so a drawing made while it was away opens nothing", () => {
@@ -1418,7 +1435,7 @@ test("the developer's own strokes on the board open nothing, and Luke's first dr
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
-test("a plan's first board opens the panel once across a relaunch and a trip to another plan", () => {
+test("a plan relaunched with its board drawn opens no panel until Luke draws again", () => {
   const other = { ...OPEN, activePlanId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" };
   const first = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
   first.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
@@ -1428,49 +1445,41 @@ test("a plan's first board opens the panel once across a relaunch and a trip to 
 
   const relaunched = mount({ shown: true, planning: other });
   relaunched.stand({ planning: OPEN });
-  relaunched.stand({ planning: { ...OPEN, board: EMPTY_BOARD } });
-  relaunched.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  relaunched.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
   assert.equal(relaunched.control().sidePanel.open, false);
+  relaunched.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
+  assert.deepEqual(panelOf(relaunched), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
-test("an arrival while the panel shows another tab leaves it there and dots the arrival's tab until it is shown", () => {
+test("a drawing while the panel shows another tab takes its place, full screen and all", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
   act(() => tab.control().sidePanel.onToggleFullScreen());
 
   tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.TRANSCRIPT });
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.equal(tab.control().sidePanel.fullScreen, true);
-  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
-
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.TRANSCRIPT));
   assert.deepEqual(tab.control().unreadTabs, []);
 });
 
-test("Luke's first drawing adds the Board tab in its place, dotted while the panel shows another", () => {
+test("Luke's first drawing adds the Board tab in its place, and shows it", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD, work: [TURN] } });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.WORK));
 
   tab.stand({ planning: { ...OPEN, board: drawnBoard(1), work: [TURN] } });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.WORK]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.WORK });
-  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
 });
 
-test("a tab the developer closed on a plan stays closed as more arrives there, opens nothing, and opens again from the +", () => {
-  const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD } });
+test("a Board tab the developer closed on a plan opens again on Luke's next drawing", () => {
+  const tab = mount({ shown: true, planning: { ...OPEN, board: drawnBoard(1) } });
   act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
   act(() => tab.control().sidePanel.onClose(SIDE_PANEL_TAB.BOARD));
   act(() => tab.control().sidePanel.onToggle());
-
-  tab.stand({ planning: { ...OPEN, board: drawnBoard(1) } });
-  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
   assert.deepEqual(panelOf(tab), { open: false, tab: undefined });
-  assert.deepEqual(tab.control().sidePanel.tabs, []);
   assert.deepEqual(tab.control().sidePanel.closedTabs, [SIDE_PANEL_TAB.BOARD]);
 
-  act(() => tab.control().sidePanel.onChoose(SIDE_PANEL_TAB.BOARD));
+  tab.stand({ planning: { ...OPEN, board: drawnBoard(2) } });
   assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
   assert.deepEqual(tab.control().sidePanel.closedTabs, []);
 });
@@ -1488,7 +1497,7 @@ test("an arrival on an open panel with every tab closed shows the arrival's tab,
   assert.deepEqual(tab.control().unreadTabs, []);
 });
 
-test("the board and the code arriving on one read of an open panel with every tab closed show the board and dot the code", () => {
+test("the board and the code arriving on one read of an open panel with every tab closed show the code and dot the board", () => {
   const tab = mount({ shown: true, planning: { ...OPEN, board: EMPTY_BOARD }, voice: ON_CALL });
   act(() => tab.control().sidePanel.onToggle());
   for (const closed of SIDE_PANEL_TABS) {
@@ -1497,8 +1506,8 @@ test("the board and the code arriving on one read of an open panel with every ta
 
   tab.stand({ planning: { ...OPEN, board: drawnBoard(1), shownCode: SHOWN } });
   assert.deepEqual(tab.control().sidePanel.tabs, [SIDE_PANEL_TAB.BOARD, SIDE_PANEL_TAB.CODE]);
-  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.BOARD });
-  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.CODE]);
+  assert.deepEqual(panelOf(tab), { open: true, tab: SIDE_PANEL_TAB.CODE });
+  assert.deepEqual(tab.control().unreadTabs, [SIDE_PANEL_TAB.BOARD]);
 });
 
 const AGENT_ID = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
