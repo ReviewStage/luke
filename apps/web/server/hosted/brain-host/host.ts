@@ -1,3 +1,4 @@
+import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -24,7 +25,6 @@ import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
 import { askRecord } from "../store/asks.js";
-import { toolSetHashOf } from "../store/content-addressed.js";
 import {
   type ConversationTarget,
   listMessagesPast,

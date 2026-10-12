@@ -9,6 +9,7 @@
     "./core/query": "./src/core/query.js",
     "./core/sql-client": "./src/core/sql-client.js",
     "./models/columns": "./src/models/columns.js",
+    "./models/content-addressed": "./src/models/content-addressed.js",
     "./models/soft-delete": "./src/models/soft-delete.js",
     "./schemas": "./src/schemas/index.js",
     "./schemas/_helpers": "./src/schemas/_helpers.js",

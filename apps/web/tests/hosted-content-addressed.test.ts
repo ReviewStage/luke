@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { test } from "vitest";
 import {
   type OfferedToolSchema,
   promptHashOf,
   toolSetHashOf,
-} from "../server/hosted/store/content-addressed";
+} from "@sidecar/database/models/content-addressed";
+import { test } from "vitest";
 
 /**
  * The content addresses a turn row carries: a prompt is a hash and nothing
