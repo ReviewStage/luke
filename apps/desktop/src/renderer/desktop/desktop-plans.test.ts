@@ -13,7 +13,8 @@ import {
   type CodingAgentMessage,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
+import type { Plan, PlanFields } from "@sidecar/hosted/plan-wire";
 import type { PlanCode } from "@sidecar/hosted/planning-view";
 import {
   PLAN_WORK_PART,
@@ -42,7 +43,7 @@ import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
-import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
+import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
 import { TRANSCRIPT_REGION } from "../planning/transcript-model";
 import type { TranscriptReader } from "../planning/use-agent-transcript";
 import { type CodingAgentsControl, useCodingAgents } from "../planning/use-coding-agents";
@@ -1656,6 +1657,160 @@ test("a right-click on an agent's tab offers Rename where the pointer is, and Re
   assert.equal(document.activeElement, tabNamed(container, "GPT 5.6 Sol"));
 });
 
+/** An archived plan, its sections written so the document offers its editors where it may. */
+const ARCHIVED_FIELDS: PlanFields = {
+  ...EMPTY_PLAN_FIELDS,
+  goal: { problem: "- Only an admin can add a member.", outcome: null },
+};
+const ARCHIVED_PLAN: Plan = {
+  ...PLAN,
+  repository: "acme/relay",
+  document: { body: planBody({ name: PLAN.name }, ARCHIVED_FIELDS), assumptions: [] },
+  fields: ARCHIVED_FIELDS,
+  archivedAt: 5,
+};
+
+/** The Unarchive presses a page took: the marks its plan was given, and the composer's own. */
+interface Unarchives {
+  marked: [string, PlanMark][];
+  composer: number;
+}
+
+/**
+ * The open plan's page with the panel on its running agent's tab, the plan
+ * archived or brought back as `archived` says, and every Unarchive press,
+ * the banner's and the composer's alike, written down.
+ */
+function mountArchivable(archived: boolean, unarchives: Unarchives) {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const render = (now: boolean) => {
+    const { archivedAt: _archivedAt, ...standing } = ARCHIVED_PLAN;
+    const plan = now ? ARCHIVED_PLAN : standing;
+    act(() =>
+      root.render(
+        createElement(DesktopPlans, {
+          looks: NO_LOOKS,
+          plans: plansControl({
+            page: PLANS_PAGE.DOCUMENT,
+            activePlanId: plan.id,
+            region: { kind: DOCUMENT_REGION.READY, plan },
+            archived: now ? [plan] : [],
+            microphone: {
+              label: "Talk about this plan",
+              enabled: true,
+              muted: false,
+              onPress: () => undefined,
+            },
+            onMarkPlan: (planId, mark) => unarchives.marked.push([planId, mark]),
+            sidePanel: {
+              ...plansControl().sidePanel,
+              open: true,
+              tabs: [SIDE_PANEL_TAB.BOARD],
+              tab: { agent: TITLED_AGENT.id },
+            },
+            agents: codingAgentsControl({
+              agents: [TITLED_AGENT],
+              agentIds: [TITLED_AGENT.id],
+              onUnarchive: now
+                ? () => {
+                    unarchives.composer += 1;
+                  }
+                : undefined,
+              start: {
+                available: !now,
+                reason: undefined,
+                busy: false,
+                note: undefined,
+                onPress: () => undefined,
+              },
+            }),
+          }),
+        }),
+      ),
+    );
+  };
+  render(archived);
+  return { container, render };
+}
+
+/** The labels of the menu standing open. */
+function menuLabels(): string[] {
+  return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map(
+    (item) => item.textContent ?? "",
+  );
+}
+
+test("an archived plan reads but takes nothing: no editor, rename, repository, call, Start, new agent, or message, and its banner and its composer's note offer Unarchive", () => {
+  installScrollIntoView();
+  const unarchives: Unarchives = { marked: [], composer: 0 };
+  const { container } = mountArchivable(true, unarchives);
+
+  const banner = container.querySelector<HTMLElement>('[aria-label="This plan is archived"]');
+  assert.ok(banner, "the banner stands over the document");
+  assert.match(
+    banner.textContent ?? "",
+    /Unarchive it to edit, talk with Luke, or start agents\./u,
+  );
+  assert.equal(container.querySelector(".plan-unit-edit"), null, "no section opens an editor");
+  assert.equal(container.querySelector(".plan-add-sections"), null, "no section is added");
+  assert.equal(container.querySelector(".call-start"), null, "no call is started");
+  assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
+  assert.equal(container.querySelector('[aria-label="Message to the agent"]'), null);
+  const note = container.querySelector<HTMLElement>(".archived-composer");
+  assert.ok(note, "the composer's place says why");
+  assert.match(note.textContent ?? "", /Unarchive to send messages/u);
+  assert.ok(
+    [...note.querySelectorAll("button")].some((button) => button.textContent === "Stop"),
+    "a turn still running can be stopped",
+  );
+
+  // The plan's tab renames nothing.
+  act(() => container.querySelector<HTMLElement>('.desktop-toolbar [role="tab"]')?.click());
+  assert.equal(container.querySelector(".desktop-toolbar input"), null);
+
+  // The ⋯ menu offers what reads the plan, its history among it, Unarchive, and Permanently delete.
+  press(container, '[aria-label="Plan actions"]');
+  assert.deepEqual(menuLabels(), [
+    "Copy plan",
+    "Version history",
+    "Unarchive",
+    "Open on GitHub",
+    "Permanently delete",
+  ]);
+  key(focused(), "Escape");
+
+  // The + offers the tabs to read and no new agent.
+  act(() => addButton(container).click());
+  assert.equal(
+    addRows().some(([label]) => label === "New coding agent"),
+    false,
+  );
+  key(focused(), "Escape");
+
+  press(banner, ".primary-button");
+  const composerUnarchive = [...note.querySelectorAll<HTMLElement>(".primary-button")].at(0);
+  assert.ok(composerUnarchive);
+  act(() => composerUnarchive.click());
+  assert.deepEqual(unarchives, { marked: [[PLAN.id, PLAN_MARK.UNARCHIVE]], composer: 1 });
+});
+
+test("an Unarchive gives an archived plan back everything at once: its editors, its call, Start, and its agent's composer, and the banner goes", () => {
+  installScrollIntoView();
+  const { container, render } = mountArchivable(true, { marked: [], composer: 0 });
+
+  render(false);
+
+  assert.equal(container.querySelector('[aria-label="This plan is archived"]'), null);
+  assert.ok(container.querySelector(".plan-unit-edit"), "the sections open their editors");
+  assert.ok(container.querySelector(".call-start"), "the call starts");
+  assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
+  assert.ok(container.querySelector('[aria-label="Message to the agent"]'));
+  assert.equal(container.querySelector(".archived-composer"), null);
+});
+
 test("closing the chosen tab chooses the tab viewed before it, and closing the last leaves the panel open offering every kind", () => {
   const page = mountOpenPlan();
   press(page, '[aria-label="Show panel"]');
@@ -2635,6 +2790,8 @@ function DraftPage({ repository }: { repository: string | null }) {
     },
     planId: PLAN.id,
     repository,
+    archived: false,
+    onUnarchive: () => undefined,
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });

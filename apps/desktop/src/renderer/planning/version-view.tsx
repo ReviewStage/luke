@@ -147,18 +147,23 @@ function VersionContent({ viewing }: { viewing: ViewedVersion }): React.JSX.Elem
  * The version chosen in the version history, the page beside its list: the
  * bar with when it was saved and its restore, over the version itself.
  * `shown` is whether the window shows it, which the restore's question
- * stands on, and `onRestored` what follows a restore that landed.
+ * stands on, and `onRestored` what follows a restore that landed. An
+ * archived plan's versions are read but not restored, so its bar offers no
+ * restore.
  */
 export function VersionView({
   history,
   viewing,
   shown,
   onRestored,
+  restorable = true,
 }: {
   history: PlanHistoryControl;
   viewing: ViewedVersion;
   shown: boolean;
   onRestored: () => void;
+  /** Whether the version may be restored: not while the plan is archived. */
+  restorable?: boolean;
 }): React.JSX.Element {
   const restore = useConfirmDialog({ subject: true, surfaceOpen: shown }, async () => {
     const result = await history.onRestore();
@@ -174,18 +179,20 @@ export function VersionView({
             {versionMoment(line.lastEdit.at)}
           </h1>
         </div>
-        <div className="desktop-toolbar-actions">
-          <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
-            <button
-              type="button"
-              className="primary-button"
-              aria-disabled={viewing.current ? "true" : undefined}
-              onClick={viewing.current ? undefined : restore.ask}
-            >
-              Restore this version
-            </button>
-          </Tooltip>
-        </div>
+        {restorable ? (
+          <div className="desktop-toolbar-actions">
+            <Tooltip label={viewing.current ? CURRENT_HINT : undefined}>
+              <button
+                type="button"
+                className="primary-button"
+                aria-disabled={viewing.current ? "true" : undefined}
+                onClick={viewing.current ? undefined : restore.ask}
+              >
+                Restore this version
+              </button>
+            </Tooltip>
+          </div>
+        ) : null}
       </header>
       <div className="desktop-document">
         <div className="plan-document-scroll">

@@ -1316,12 +1316,57 @@ body,
 
 /* An archived plan's quiet line over its document: a hairline strip in the
    secondary voice, with the press that brings the plan back. */
-.desktop-archived-banner {
+/* An archived plan's banner: a card over the document, on the document's
+   own reading width, so the one action the plan takes is the first thing
+   read, the way Notion marks a page in the trash. */
+.archived-banner {
   display: flex;
+  box-sizing: border-box;
+  width: min(var(--reading-width), calc(100% - 2 * var(--page-inset)));
   align-items: center;
-  gap: var(--space-8);
-  padding: var(--space-6) var(--page-inset);
-  border-bottom: 1px solid var(--hairline);
+  gap: var(--space-12);
+  margin: var(--space-16) auto 0;
+  padding: var(--space-12) var(--space-12) var(--space-12) var(--space-16);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 12px;
+  background: var(--desktop-well);
+}
+
+.archived-banner-glyph {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-secondary);
+}
+
+.archived-banner-glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
+.archived-banner-words {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.archived-banner-words p {
+  margin: 0;
+}
+
+.archived-banner-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.archived-banner-detail {
   color: var(--text-secondary);
   font-size: 12.5px;
 }

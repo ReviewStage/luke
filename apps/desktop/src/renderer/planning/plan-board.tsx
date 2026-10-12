@@ -4,7 +4,7 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import * as Atom from "effect/unstable/reactivity/Atom";
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
@@ -34,6 +34,10 @@ import { admittedElements } from "./board-scene";
  * carries the image. While the planning model's pending call is a look, the
  * canvas saves the scene it holds with its image as well, so a look at a
  * board Luke did not just draw on still finds one.
+ *
+ * An archived plan's board is view-only: it shows, and nothing on it is
+ * drawn or saved until the plan is brought back, which mounts the canvas
+ * afresh as an editable one.
  *
  * The board's root is left out of the screen recording (`ph-no-capture`),
  * since the canvas draws its words as pixels the recording's masking cannot
@@ -112,11 +116,14 @@ function BoardCanvas({
   module,
   planId,
   board,
+  viewOnly,
 }: {
   module: WhiteboardModule;
   planId: string;
   board: Board;
+  viewOnly: boolean;
 }): React.JSX.Element {
+  const mountedViewOnly = useRef(viewOnly);
   const host = useRef<HTMLDivElement>(null);
   const handle = useRef<WhiteboardHandle | undefined>(undefined);
   const firstBoard = useRef(board);
@@ -130,6 +137,7 @@ function BoardCanvas({
     if (element === null) return undefined;
     const mounted = module.mount(element, {
       board: firstBoard.current,
+      viewOnly: mountedViewOnly.current,
       onScene: (elements, appliedDrawing) =>
         save({
           planId,
@@ -165,9 +173,12 @@ function BoardCanvas({
 export function PlanBoard({
   planId,
   board,
+  viewOnly = false,
 }: {
   planId: string;
   board: Board | undefined;
+  /** Whether the board only shows, as an archived plan's does. */
+  viewOnly?: boolean;
 }): React.JSX.Element {
   const loaded = useAtomValue(whiteboardModuleAtom);
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
@@ -175,7 +186,16 @@ export function PlanBoard({
     <section className="plan-board ph-no-capture" aria-label="Whiteboard">
       {AsyncResult.isFailure(loaded) ? <p role="alert">{BOARD_LOAD_FAILED}</p> : null}
       {module !== undefined && board !== undefined ? (
-        <BoardCanvas key={planId} module={module} planId={planId} board={board} />
+        // Keyed by whether it only shows as well, so an Unarchive mounts an editable canvas.
+        <Fragment key={String(viewOnly)}>
+          <BoardCanvas
+            key={planId}
+            module={module}
+            planId={planId}
+            board={board}
+            viewOnly={viewOnly}
+          />
+        </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
         <p aria-busy="true">Opening the board…</p>

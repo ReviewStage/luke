@@ -129,8 +129,8 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
-/** The plan as the window draws it, its document as the service holds it now. */
-function planOf(document: PlanDocument): Plan {
+/** The plan as the window draws it, its document as the service holds it now, archived where asked. */
+function planOf(document: PlanDocument, archived: boolean): Plan {
   return {
     id: PLAN_ID,
     name: "Teammate invitations",
@@ -138,6 +138,7 @@ function planOf(document: PlanDocument): Plan {
     updatedAt: 0,
     repository: null,
     document,
+    ...(archived ? { archivedAt: 0 } : undefined),
   };
 }
 
@@ -146,7 +147,7 @@ function planOf(document: PlanDocument): Plan {
  * service given, its minute on the test's clock; leaving it draws the plan in
  * its place.
  */
-function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry) {
+function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, archived = false) {
   function Window() {
     const sidebar = useSidebarCollapse(false);
     const [open, setOpen] = useState(true);
@@ -164,7 +165,7 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry) 
     const plans = plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
-      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current) },
+      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current, archived) },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
     });
     return createElement(DesktopVersionHistory, {
@@ -442,6 +443,17 @@ it.effect(
       assert.equal(service.current, FIRST);
       assert.ok(page.querySelector(".plan-as-it-stands"), "back to the plan");
     }),
+);
+
+it.effect("an archived plan's versions are read, and none of them offers a restore", () =>
+  Effect.gen(function* () {
+    const page = yield* mount(fakeService(), yield* registryOnTestClock, true);
+
+    yield* press(page, "Luke1d4 changes");
+
+    assert.equal(chosen(page), "Luke");
+    assert.equal(restoreButton(page), undefined);
+  }),
 );
 
 it.effect("Back leaves the version history for the plan", () =>

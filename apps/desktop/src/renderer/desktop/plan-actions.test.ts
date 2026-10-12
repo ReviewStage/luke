@@ -306,7 +306,7 @@ test("a right-click on a sidebar plan offers that plan's actions at the pointer,
   assert.equal(other.textContent, "Billing exportnowacme/billing");
 });
 
-test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin", () => {
+test("Pin and Archive mark the plan from either door, and each offers its way back: Unpin, and Unarchive with no pin, rename, or repository", () => {
   const { plans, asked } = openTab();
   const pinned = { ...OTHER, pinnedAt: 7 };
   const archived = { ...OTHER, pinnedAt: 7, archivedAt: 9 };
@@ -324,13 +324,8 @@ test("Pin and Archive mark the plan from either door, and each offers its way ba
   const offered = labels();
   choose("Unarchive");
 
-  assert.deepEqual(offered, [
-    "Rename",
-    "Version history",
-    "Unarchive",
-    "Change repository…",
-    "Permanently delete",
-  ]);
+  // An archived plan takes nothing until it is back, so it is neither renamed nor given a repository.
+  assert.deepEqual(offered, ["Version history", "Unarchive", "Permanently delete"]);
   assert.deepEqual(asked.marked, [
     [PLAN.id, PLAN_MARK.PIN],
     [PLAN.id, PLAN_MARK.ARCHIVE],
@@ -466,22 +461,25 @@ test("Permanently delete on an archived plan asks without pointing at Archive", 
   );
 });
 
-test("an archived plan's page says so quietly over its document, and Unarchive brings it back", () => {
+test("an archived plan's page says so in a banner over its document, whose primary Unarchive brings it back", () => {
   const { plans, asked } = openTab();
   const archived = { ...PLAN, archivedAt: 9 };
   const open = { ...plans, region: { kind: DOCUMENT_REGION.READY, plan: archived } as const };
 
   const listed = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans }));
-  assert.equal(listed.querySelector(".desktop-archived-banner"), null);
+  assert.equal(listed.querySelector(".archived-banner"), null);
   unmountAll();
   const banner = mount(createElement(DesktopPlans, { looks: NO_LOOKS, plans: open })).querySelector(
-    ".desktop-archived-banner",
+    ".archived-banner",
   );
-  const unarchive = banner?.querySelector("button");
-  assert.ok(unarchive);
+  const unarchive = banner?.querySelector(".primary-button");
+  assert.ok(unarchive instanceof HTMLButtonElement);
   act(() => unarchive.click());
 
-  assert.equal(banner?.textContent, "This plan is archivedUnarchive");
+  assert.equal(
+    banner?.textContent,
+    "This plan is archivedUnarchive it to edit, talk with Luke, or start agents.Unarchive",
+  );
   assert.deepEqual(asked.marked, [[PLAN.id, PLAN_MARK.UNARCHIVE]]);
 });
 

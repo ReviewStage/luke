@@ -174,17 +174,20 @@ function useVersionKeys(
 /**
  * The version history's page beside the list: the version chosen, or the
  * state standing in its place. A restore that lands leaves for the plan it
- * restored, which is not always the one Back returns to.
+ * restored, which is not always the one Back returns to; an archived plan's
+ * versions are read and not restored.
  */
 function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
-  const { history } = plans;
+  const { history, region } = plans;
   if (history.viewing !== undefined) {
+    const archived = region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined;
     return (
       <VersionView
         history={history}
         viewing={history.viewing}
         shown={plans.shown}
         onRestored={history.onClose}
+        restorable={!archived}
       />
     );
   }

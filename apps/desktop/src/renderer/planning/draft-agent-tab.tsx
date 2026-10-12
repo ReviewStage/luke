@@ -1,6 +1,7 @@
 import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { useEffect, useRef, useState } from "react";
 import { AgentComposer } from "./agent-composer";
+import { ArchivedComposerNote } from "./archived-plan";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
 
@@ -20,7 +21,9 @@ import type { AgentDraft, CodingAgentsControl } from "./use-coding-agents";
  * send that did not start it
  * leaves the words in the box with why under it and Retry, which asks again
  * under the draft's own key. Closing the tab lets the draft go, and since
- * nothing was started, nothing is left behind.
+ * nothing was started, nothing is left behind. While the plan is archived,
+ * nothing starts on it, so the box gives way to the note that offers
+ * Unarchive, and the words written wait in the draft until it is back.
  */
 
 /** What a draft agent's tab is named until its first message starts it. */
@@ -77,6 +80,15 @@ export function DraftAgentTab({
     sent: [],
   };
   const choice = draft.choice ?? fallback;
+  if (control.onUnarchive !== undefined) {
+    return (
+      <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>
+        <footer className="agent-tab-foot">
+          <ArchivedComposerNote onUnarchive={control.onUnarchive} />
+        </footer>
+      </section>
+    );
+  }
 
   return (
     <section className="agent-tab ph-no-capture" aria-label={DRAFT_TAB_LABEL}>

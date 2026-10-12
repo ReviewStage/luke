@@ -336,6 +336,31 @@ export function usePlansTab(input: {
   // signed out as every fixture run is.
   const fixture = fixturePlanningView(input.run);
   const viewed = fixture ?? input.planning;
+  // A name given here stands until main's view carries it, so a rename that
+  // landed never flickers back while main's copy of the view catches up.
+  const [renames, setRenames] = useState<PendingRenames>(new Map());
+  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
+  // A pin or an archive given here stands until main's view carries it, as a name does.
+  const [marks, setMarks] = useState<PendingMarks>(new Map());
+  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A repository's pin given here stands until main's view carries it, as a
+  // plan's does. Note that a sign-out lets every one go, because a pin names
+  // a repository rather than a row of this account's own, so one left
+  // standing would be drawn on the next account to sign in.
+  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
+  const accountSignedIn = input.signedIn;
+  useEffect(
+    () =>
+      setRepositoryPins((held) =>
+        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
+      ),
+    [viewed, accountSignedIn],
+  );
+  const planning = markedView(renamedView(viewed, renames), marks);
+  const sidebar = sidebarPlans(planning.plans);
+  const signedIn = fixture !== undefined || input.signedIn;
+  const page = plansPage(planning);
+  const region = documentRegion(planning);
   // A started agent's tab opens selected; the panel is built after the
   // agents it draws, so the opening reaches it through this late binding.
   const panelRef = useRef<SidePanelControl | undefined>(undefined);
@@ -346,6 +371,12 @@ export function usePlansTab(input: {
     planId: fixture === undefined ? viewed.activePlanId : undefined,
     repository:
       openDocument?.id === viewed.activePlanId ? (openDocument?.repository ?? null) : null,
+    // Read through the marks, so an Unarchive opens the composers at once, as it does the document.
+    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
+    onUnarchive: () => {
+      if (region.kind === DOCUMENT_REGION.READY)
+        markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
+    },
     onStarted: (agentId) => panelRef.current?.onChoose({ agent: agentId }),
   });
   // The calls heard on the open plan, each held past its end until the
@@ -433,31 +464,6 @@ export function usePlansTab(input: {
     reportedAgent.current = shownAgent;
     tell(ACT_KIND.CODING_AGENTS_SHOWN, { agentId: shownAgent });
   }, [shownAgent, tell]);
-  // A name given here stands until main's view carries it, so a rename that
-  // landed never flickers back while main's copy of the view catches up.
-  const [renames, setRenames] = useState<PendingRenames>(new Map());
-  useEffect(() => setRenames((held) => unsettledRenames(held, viewed)), [viewed]);
-  // A pin or an archive given here stands until main's view carries it, as a name does.
-  const [marks, setMarks] = useState<PendingMarks>(new Map());
-  useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
-  // A repository's pin given here stands until main's view carries it, as a
-  // plan's does. Note that a sign-out lets every one go, because a pin names
-  // a repository rather than a row of this account's own, so one left
-  // standing would be drawn on the next account to sign in.
-  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
-  const accountSignedIn = input.signedIn;
-  useEffect(
-    () =>
-      setRepositoryPins((held) =>
-        accountSignedIn ? unsettledRepositoryPins(held, viewed.repositoryPins) : NO_PENDING_PINS,
-      ),
-    [viewed, accountSignedIn],
-  );
-  const planning = markedView(renamedView(viewed, renames), marks);
-  const sidebar = sidebarPlans(planning.plans);
-  const signedIn = fixture !== undefined || input.signedIn;
-  const page = plansPage(planning);
-  const region = documentRegion(planning);
 
   // The tab showing is what asks the host to read the plans again; the open
   // plan and its call stand through it going away, and a call's drafts reach
@@ -677,6 +683,7 @@ export function usePlansTab(input: {
     voiceAvailable: input.voiceAvailable,
     microphoneStatus: input.microphoneStatus,
     activePlanId: planning.activePlanId,
+    archived: region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined,
     listening: voice.listening,
     callPlanId: voice.view.callPlanId,
     voiceStatus: voice.view.voiceStatus,

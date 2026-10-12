@@ -301,13 +301,14 @@ function newerDrawing(board: Board, applied: number) {
 const DRAWING_FONT = `${DRAWING_DEFAULT.FONT_SIZE}px Excalifont`;
 
 interface CanvasProps {
+  readonly viewOnly: boolean;
   readonly onApi: (api: ExcalidrawImperativeAPI) => void;
   readonly onChange: (elements: readonly OrderedExcalidrawElement[], appState: AppState) => void;
   readonly initialData: ExcalidrawInitialDataState;
 }
 
 /** The canvas, in the window's appearance as it stands and as it changes. */
-function Canvas({ onApi, onChange, initialData }: CanvasProps): React.JSX.Element {
+function Canvas({ viewOnly, onApi, onChange, initialData }: CanvasProps): React.JSX.Element {
   const theme = useSyncExternalStore(onAppearance, appearanceTheme);
   return (
     <Excalidraw
@@ -317,6 +318,7 @@ function Canvas({ onApi, onChange, initialData }: CanvasProps): React.JSX.Elemen
       validateEmbeddable={false}
       aiEnabled={false}
       theme={theme}
+      viewModeEnabled={viewOnly}
       UIOptions={UI_OPTIONS}
       initialData={initialData}
     />
@@ -331,7 +333,8 @@ function Canvas({ onApi, onChange, initialData }: CanvasProps): React.JSX.Elemen
  * the first it reports once loaded is the scene it opened on. A newer
  * drawing of Luke's goes in only after that, and after the hand-drawn font
  * has loaded, because the converter measures every label as it makes it and
- * would clip one measured in the fallback font.
+ * would clip one measured in the fallback font. A view-only board is
+ * Excalidraw's view mode, and reports no scene even so.
  */
 function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle {
   const root = createRoot(host);
@@ -364,13 +367,14 @@ function mountBoard(host: HTMLElement, props: WhiteboardProps): WhiteboardHandle
       );
       return;
     }
-    if (signature === held) return;
+    if (signature === held || props.viewOnly) return;
     held = signature;
     props.onScene(elements, applied);
   }
 
   root.render(
     <Canvas
+      viewOnly={props.viewOnly}
       onApi={(ready) => {
         api = ready;
       }}

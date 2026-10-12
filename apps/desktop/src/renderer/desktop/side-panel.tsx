@@ -250,7 +250,8 @@ interface AddEntry {
  * says where it stands, which its tab does. Picking a row whose tab is open
  * chooses that tab rather than opening another, as a browser's tab search
  * does, so no row says it is open; a file not open opens on the newest
- * snippet of it.
+ * snippet of it. An archived plan starts no agent, so its menu offers no
+ * New coding agent, only the tabs to read.
  */
 function addEntries(input: {
   panel: SidePanelControl;
@@ -310,7 +311,8 @@ function addEntries(input: {
       onPick: () => (open ? panel.onChoose({ file: ref.path }) : panel.onOpenFile(ref)),
     };
   });
-  return [...kinds, newAgent, ...agentRows, ...subagentRows, ...fileRows];
+  const starts = agents.onUnarchive === undefined ? [newAgent] : [];
+  return [...kinds, ...starts, ...agentRows, ...subagentRows, ...fileRows];
 }
 
 /**
@@ -563,7 +565,7 @@ function PanelTab({
  * with the model in its hint, and dotted for where the agent stands. Its
  * menu offers Rename beside every tab's actions, which turns the tab into
  * its name's field until the edit ends; a key that ends it hands focus back
- * to the tab.
+ * to the tab. An archived plan's agents are read and not renamed.
  */
 function AgentPanelTab({
   agent,
@@ -599,7 +601,7 @@ function AgentPanelTab({
   return (
     <PanelTab
       look={look}
-      doors={{ ...doors, onRename: rename.begin }}
+      doors={agents.onUnarchive === undefined ? { ...doors, onRename: rename.begin } : doors}
       editor={editor}
       tabRef={tab}
     />
@@ -1056,7 +1058,10 @@ function TabContent({
   }
   switch (tab) {
     case SIDE_PANEL_TAB.BOARD:
-      return <PlanBoard planId={planId} board={board} />;
+      // An archived plan's board only shows, as its agents only read.
+      return (
+        <PlanBoard planId={planId} board={board} viewOnly={agents.onUnarchive !== undefined} />
+      );
     case SIDE_PANEL_TAB.CODE:
       return shownCode === undefined || shownCode.length === 0 ? (
         <p className="side-panel-empty">{NO_CODE_LINE}</p>

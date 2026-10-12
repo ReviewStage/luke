@@ -1,5 +1,6 @@
 import {
   CODING_AGENT_BRIEF,
+  CODING_AGENT_STATUS,
   type CodingAgentBrief,
   type CodingAgentMessage,
   type CodingAgentPullRequestAnswer,
@@ -24,6 +25,7 @@ import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { useCopyToast } from "../copy-feedback";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
+import { ArchivedComposerNote } from "./archived-plan";
 import {
   AGENT_PART,
   type AgentPart,
@@ -434,7 +436,9 @@ export function AgentTranscriptView({
 
 /**
  * The tab as drawn from what it holds: the transcript with the lines sent
- * and not yet read back at its end, and the composer under it.
+ * and not yet read back at its end, and the composer under it, or, while
+ * the plan is archived, the note that offers Unarchive in its place, with
+ * the Stop of a turn still running.
  */
 export function AgentTabView({
   agent,
@@ -448,6 +452,7 @@ export function AgentTabView({
   startedAt,
   delegationStarts,
   onStop,
+  onUnarchive,
   onOpenSubagent,
   openGitHub,
 }: {
@@ -465,6 +470,8 @@ export function AgentTabView({
   /** When each of its running workers began, as their rows count from it; none while the tab is off screen. */
   delegationStarts: ReadonlyMap<string, number> | undefined;
   onStop: () => Promise<void>;
+  /** Brings the plan back from the archive; present exactly while it is archived, when no message is sent. */
+  onUnarchive?: (() => void) | undefined;
   /** Opens one of the agent's workers in a tab of the panel's own; none where the view stands in no panel. */
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
@@ -495,22 +502,29 @@ export function AgentTabView({
         overComposer
       />
       <footer className="agent-tab-foot">
-        <AgentComposer
-          status={agent.status}
-          composer={composer}
-          model={model}
-          models={models}
-          readModels={readModels}
-          usage={transcript.usage}
-          context={transcript.context}
-          brief={agent.brief}
-          published={published}
-          doors={doors}
-          onStop={onStop}
-          // Note that a started agent's conversation always opens on its plan or
-          // task, so the box takes a follow up even before the transcript is read.
-          followsUp
-        />
+        {onUnarchive !== undefined ? (
+          <ArchivedComposerNote
+            onUnarchive={onUnarchive}
+            stop={agent.status === CODING_AGENT_STATUS.RUNNING ? onStop : undefined}
+          />
+        ) : (
+          <AgentComposer
+            status={agent.status}
+            composer={composer}
+            model={model}
+            models={models}
+            readModels={readModels}
+            usage={transcript.usage}
+            context={transcript.context}
+            brief={agent.brief}
+            published={published}
+            doors={doors}
+            onStop={onStop}
+            // Note that a started agent's conversation always opens on its plan or
+            // task, so the box takes a follow up even before the transcript is read.
+            followsUp
+          />
+        )}
       </footer>
     </section>
   );
@@ -576,6 +590,7 @@ export function AgentTab({
       startedAt={shown ? agent.runStartedAt : undefined}
       delegationStarts={shown ? transcript.delegations : undefined}
       onStop={() => control.onStop(agent.id)}
+      onUnarchive={control.onUnarchive}
       onOpenSubagent={onOpenSubagent}
       openGitHub={openGitHub}
     />
