@@ -238,6 +238,8 @@ interface RowContext {
   readonly onOpen: (planId: string) => void;
   /** The time each row's last update is counted back from. */
   readonly now: number;
+  /** Whether the sidebar is in sight: folded away, nothing it opened stands over the window. */
+  readonly inSight: boolean;
 }
 
 /** One section's plans, each a row of the sidebar, naming its repository where nothing above it does. */
@@ -321,7 +323,9 @@ function RepositorySection({
   const { repository } = group;
   const folded = folds.folded(repository);
   const named = repository === null ? NO_REPOSITORY : label;
-  const menu = useActionMenu(context.plans.shown);
+  // The menu is drawn over the window rather than inside the sidebar, so it
+  // closes with the sidebar folding away as well as with the tab hiding.
+  const menu = useActionMenu(context.plans.shown && context.inSight);
   const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
     <div className="sidebar-repository">
@@ -485,7 +489,13 @@ export function DesktopSidebar({
   const now = useMinute();
   const edge = useSidebarEdge(sidebar, sidebar.onToggle);
   const current = (planId: string) => onPlans && !composing && planId === plans.activePlanId;
-  const context: RowContext = { plans, current, onOpen: openPlan, now };
+  const context: RowContext = {
+    plans,
+    current,
+    onOpen: openPlan,
+    now,
+    inSight: !sidebar.collapsed,
+  };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
   const groups = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
   // The rows as the list draws them: the pinned, then each group not folded

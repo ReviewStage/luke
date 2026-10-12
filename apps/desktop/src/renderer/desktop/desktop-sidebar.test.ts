@@ -44,6 +44,9 @@ const READY: UpdateSnapshot = {
 
 const roots: Root[] = [];
 
+/** Each mounted sidebar's way to stand again folded away or back in sight, by its container. */
+const refolds = new WeakMap<HTMLElement, (collapsed: boolean) => void>();
+
 /** Takes down every mounted sidebar, so no keymap outlives its test. */
 function unmountAll(): void {
   act(() => {
@@ -73,11 +76,11 @@ function mount(
     useAppKeymap(true);
     return createElement(DesktopSidebar, props);
   }
-  act(() => {
+  const render = (collapsed: boolean) =>
     root.render(
       createElement(Keyed, {
         sidebar: {
-          collapsed: false,
+          collapsed,
           width: SIDEBAR_WIDTH.DEFAULT,
           onToggle: () => undefined,
           onResize: () => undefined,
@@ -102,7 +105,8 @@ function mount(
         },
       }),
     );
-  });
+  act(() => render(false));
+  refolds.set(container, (collapsed) => act(() => render(collapsed)));
   return container;
 }
 
@@ -662,6 +666,17 @@ test("a repository's ⋯ and a right-click on its header open one menu: Archive 
     ["Archive plans"],
     "the plans with no repository have no page to open",
   );
+});
+
+test("a repository's menu closes when the sidebar folds away, so nothing of a hidden header stands over the window", () => {
+  const container = mount(DEAN, { plans: { plans: [onRepository("Billing", "acme/ledger")] } });
+  openActions(container, "ledger");
+  const opened = menuItems().length;
+
+  refolds.get(container)?.(true);
+
+  assert.ok(opened > 0, "the menu stood open");
+  assert.deepEqual(menuItems(), []);
 });
 
 test("Archive plans archives every plan under the header and no other, and Open on GitHub opens the repository's page", () => {
