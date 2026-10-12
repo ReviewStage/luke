@@ -110,6 +110,27 @@ it.layer(testSqlClient)("a plan's history", (it) => {
   );
 
   it.effect(
+    "a coding agent's revision names the agent that wrote it, and no other writer's does",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* saveNotes({ userId, planId }, notesFor(INVITATIONS_DRAFT), ON_CALL);
+        const agentId = yield* startAgent(userId, planId);
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_FIELD.OPEN_QUESTIONS, "Who may withdraw an invite?")],
+          { actor: PLAN_ACTOR.AGENT, agentId },
+        );
+
+        const revisions = yield* revisionsOf(userId, planId);
+        assert.deepEqual(
+          revisions.map((line) => line.agentId),
+          [agentId, undefined],
+        );
+      }),
+  );
+
+  it.effect(
     "the same writer's saves a few minutes apart are one revision, and later ones another",
     () =>
       Effect.gen(function* () {

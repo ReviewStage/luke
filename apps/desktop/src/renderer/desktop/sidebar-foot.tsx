@@ -9,13 +9,13 @@ import {
   MessageSquareIcon,
   NewspaperIcon,
 } from "lucide-react";
-import { useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { useAct } from "../act";
 import { runAppCommand } from "../app-commands";
+import { PersonAvatar } from "../person-avatar";
 import { ConfirmDialog, DIALOG_TONE, useConfirmDialog } from "../settings/confirm-dialog";
 import type { UpdateControl } from "../settings/controls";
 import { Tooltip } from "../tooltip";
@@ -38,17 +38,8 @@ import { ActionMenu, type MenuEntry, riseAbove, useActionMenu } from "./action-m
 /** Where Contact us > GitHub leads: Luke's own issues, where CONTRIBUTING.md sends bugs and feature requests. */
 const ISSUES_URL = "https://github.com/ReviewStage/luke/issues";
 
-/**
- * The account's face: the provider's photo when one travelled and loads,
- * otherwise the first letter of who it is, otherwise a person glyph while no
- * one is signed in. A photo that fails is remembered by its address for as
- * long as the sidebar stands, so a new address gets its own chance. Note that
- * we let a remount try the address again, because a failure is as often a
- * launch with no network as a dead link, and the empty `alt` means a retry
- * that fails again draws no broken-image glyph.
- */
+/** The account's face: the signed-in person's (`person-avatar.tsx`), or a person glyph while no one is signed in. */
 function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Element {
-  const [failedUrl, setFailedUrl] = useState<string | undefined>(undefined);
   if (account.status !== ACCOUNT_STATUS.SIGNED_IN) {
     return (
       <span className="sidebar-avatar sidebar-avatar-neutral" aria-hidden="true">
@@ -56,24 +47,7 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
       </span>
     );
   }
-  const { pictureUrl } = account;
-  if (pictureUrl !== undefined && pictureUrl !== failedUrl) {
-    return (
-      <img
-        className="sidebar-avatar"
-        src={pictureUrl}
-        alt=""
-        referrerPolicy="no-referrer"
-        draggable={false}
-        onError={() => setFailedUrl(pictureUrl)}
-      />
-    );
-  }
-  return (
-    <span className="sidebar-avatar" aria-hidden="true">
-      {(account.name ?? account.email).slice(0, 1).toUpperCase()}
-    </span>
-  );
+  return <PersonAvatar name={account.name ?? account.email} pictureUrl={account.pictureUrl} />;
 }
 
 /**

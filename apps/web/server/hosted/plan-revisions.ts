@@ -184,6 +184,7 @@ const restored = alias(planRevision, "restored");
 
 const RevisionLineRowSchema = Schema.Struct({
   ...LastEditRowSchema.fields,
+  agentId: Schema.NullOr(Schema.String),
   seq: Schema.Number,
   startedAt: InstantColumnSchema,
   changes: Schema.Number,
@@ -213,6 +214,7 @@ const findRevisionLines = SqlSchema.findAll({
         at: planRevision.at,
         agentModel: codingAgent.model,
         agentTitle: codingAgent.title,
+        agentId: planRevision.agentId,
         seq: planRevision.seq,
         startedAt: planRevision.startedAt,
         changes: planRevision.changes,
@@ -431,6 +433,7 @@ export function listRevisions(
       (row): PlanRevisionLine => ({
         seq: row.seq,
         lastEdit: lastEditOf(row),
+        ...(row.agentId === null ? undefined : { agentId: row.agentId }),
         startedAt: row.startedAt.getTime(),
         changes: row.changes,
         ...(row.restoredFrom === null || row.restoredAt === null
