@@ -1132,7 +1132,8 @@ button.code-card-path:hover {
 }
 
 /* The to-do list the agent is working through, docked over the composer
-   on the transcript's own inset, so its card and the composer's line up. */
+   on the composer's own inset, so its card and the composer's line up; a
+   column or a panel that pads the composer in pads the list in alike. */
 .agent-todos-dock {
   padding: 0 16px 8px;
 }

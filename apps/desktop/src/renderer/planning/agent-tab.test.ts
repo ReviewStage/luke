@@ -25,6 +25,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { sheetStyle } from "#testing/css-rules";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PublishedChip, PublishedRow } from "./agent-published";
 import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
@@ -549,6 +550,23 @@ test("while the agent works through its list, the newest docks over the composer
   for (const row of rows) {
     assert.equal(row.open, false);
     assert.equal(row.closest("[data-turn-fold]"), null);
+  }
+});
+
+test("the docked list keeps the composer's width and place, edge for edge, in the plan's column and in the side panel alike", async () => {
+  const style = await sheetStyle();
+  for (const column of ["desktop-agent", "side-panel-content"]) {
+    const container = document.createElement("div");
+    container.className = column;
+    container.innerHTML = renderToStaticMarkup(
+      tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING]),
+    );
+    const dock = container.querySelector("[data-todos-dock]")?.parentElement;
+    const composer = container.querySelector(".agent-composer");
+    assert.ok(dock && composer);
+    const inset = style(composer, "padding-inline");
+    assert.ok(inset !== undefined, `the ${column} pads the composer in`);
+    assert.equal(style(dock, "padding-inline"), inset, `the ${column} pads the list in alike`);
   }
 });
 
