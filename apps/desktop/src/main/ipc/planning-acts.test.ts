@@ -16,7 +16,7 @@ import { planningActRows } from "./planning-acts";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";

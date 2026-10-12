@@ -29,6 +29,7 @@ const PANEL: ActSender = {
   sender: {} as WebContents,
   panel: true,
   voice: false,
+  call: false,
 };
 
 function rows(overrides: {

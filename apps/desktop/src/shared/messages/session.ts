@@ -8,6 +8,11 @@ export const WINDOW_ROLE = {
   PANEL: "panel",
   /** The one hidden window that will hold the live conversation; it draws nothing. */
   VOICE: "voice",
+  /**
+   * The floating call pill, shown while a call stands and its plan is off
+   * screen: it draws the call and sends its controls, and records nothing.
+   */
+  CALL: "call",
 } as const;
 
 export type WindowRole = (typeof WINDOW_ROLE)[keyof typeof WINDOW_ROLE];

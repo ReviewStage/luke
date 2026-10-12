@@ -10,8 +10,8 @@ import type { ReportHandlers } from "../bridge-host";
 import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
-/** The hidden window the conversation lives in, as much of it as this file needs. */
-interface VoiceWindowSurface {
+/** A window this file sends to or reads the sender of: the hidden voice window, and the call pill. */
+interface WindowSurface {
   current(): BrowserWindow | undefined;
   owns(webContents: WebContents): boolean;
 }
@@ -28,7 +28,11 @@ type LiveSessionActs = Pick<
 
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
-  voiceWindow: VoiceWindowSurface;
+  voiceWindow: WindowSurface;
+  /** The floating call pill, which presses the call's controls and draws its levels. */
+  callWindow: WindowSurface;
+  /** A panel saying which plan it has on screen, which the pill stands down for. */
+  planShown: (sender: WebContents, planId: string | undefined) => void;
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
@@ -41,6 +45,7 @@ export interface VoiceRuntimeDependencies {
 
 type VoiceRuntimeActKind =
   | typeof ACT_KIND.VOICE_COMMAND
+  | typeof ACT_KIND.CALL_SHOW_PLAN
   | typeof ACT_KIND.VOICE_CREATE_LIVE_SESSION
   | typeof ACT_KIND.VOICE_END_LIVE_SESSION
   | typeof ACT_KIND.VOICE_REPORT_LIVE_TRANSPORT
@@ -52,14 +57,22 @@ type VoiceRuntimeActKind =
 export function voiceRuntimeActRows(
   dependencies: VoiceRuntimeDependencies,
 ): Pick<ActRows, VoiceRuntimeActKind> {
-  const { voiceWindow, liveSession } = dependencies;
+  const { panels, voiceWindow, liveSession, state } = dependencies;
   return {
-    // A panel's command to the voice window. The act's schema has already
-    // bounded it; here it is checked to come from a panel — the voice window
-    // does not command itself — and handed on.
-    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel }) => {
-      if (!panel) return;
+    // A panel's or the call pill's command to the voice window. The act's
+    // schema has already bounded it; here it is checked to come from one of
+    // the two — the voice window does not command itself — and handed on.
+    [ACT_KIND.VOICE_COMMAND]: ({ command }, { panel, call }) => {
+      if (!panel && !call) return;
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
+    },
+    // The pill's way back names no plan: the call's is read here, so the
+    // pill cannot bring forward a plan the call is not about.
+    [ACT_KIND.CALL_SHOW_PLAN]: (_payload, { call }) => {
+      const planId = state.snapshot().voice.view?.callPlanId;
+      if (!call || planId === undefined) return;
+      panels.focusExpanded();
+      panels.broadcast(channels.onShowPlan, { planId });
     },
     // The peer is the voice window and nothing else: a panel offering an SDP,
     // or reporting a transport it does not hold, is answered nothing.
@@ -92,8 +105,11 @@ export function voiceRuntimeActRows(
 
 export function voiceRuntimeReports(
   dependencies: VoiceRuntimeDependencies,
-): Pick<ReportHandlers, "reportVoiceView" | "reportVoiceLevel" | "setShortcutCapturing"> {
-  const { panels, voiceWindow } = dependencies;
+): Pick<
+  ReportHandlers,
+  "reportVoiceView" | "reportVoiceLevel" | "reportPlanShown" | "setShortcutCapturing"
+> {
+  const { panels, voiceWindow, callWindow } = dependencies;
   return {
     // The voice window's snapshot: written to the document, from which every
     // panel is told and a late one bootstraps, and read for the one level the
@@ -119,6 +135,11 @@ export function voiceRuntimeReports(
     reportVoiceLevel(context, levels) {
       if (!voiceWindow.owns(context.sender)) return;
       panels.broadcast(channels.onVoiceLevelChanged, levels);
+      callWindow.current()?.webContents.send(channels.onVoiceLevelChanged, levels);
+    },
+    reportPlanShown(context, planId) {
+      if (!panels.owns(context.sender)) return;
+      dependencies.planShown(context.sender, planId);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;

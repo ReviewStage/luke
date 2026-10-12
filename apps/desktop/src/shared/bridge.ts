@@ -133,6 +133,19 @@ export const BRIDGE = {
     args: args<[VoiceLevels]>((v) => v.length === 1 && isVoiceLevels(v[0])),
   }),
   /**
+   * The plan a panel has on screen, or nothing while it shows Settings or the
+   * new-plan page, reported as it changes. The floating call window stands
+   * down while a focused panel shows the call's own plan, and only the panel
+   * knows which page it is drawing.
+   */
+  reportPlanShown: entry({
+    kind: "send",
+    channel: "app:report-plan-shown",
+    args: args<[string | undefined]>(
+      (v) => v.length === 1 && (v[0] === undefined || isWireString(v[0])),
+    ),
+  }),
+  /**
    * Whether a panel is recording a new shortcut, during which the talk key it
    * is capturing must not open a turn. Panel state gating a global key the
    * main process routes, so the main process is told rather than the window.
@@ -266,6 +279,17 @@ export const BRIDGE = {
     result: result<{ planId: string; agentId: string }>(
       (value) => isRecord(value) && isWireString(value.planId) && isWireString(value.agentId),
     ),
+  }),
+  /**
+   * The floating call window's way back pressed: the panel is to show the
+   * call's plan. An event, as a notification's click is, because it is an
+   * ask the window answers once.
+   */
+  onShowPlan: entry({
+    kind: "subscribe",
+    channel: "app:show-plan",
+    args: noArgs,
+    result: result<{ planId: string }>((value) => isRecord(value) && isWireString(value.planId)),
   }),
   /**
    * A coding agent's turn ended while the window was focused: the panel says

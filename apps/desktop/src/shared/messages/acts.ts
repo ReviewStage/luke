@@ -204,6 +204,8 @@ export const ACT_KIND = {
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   VOICE_COMMAND: "voice.command",
+  /** The floating call pill's way back: Luke's window brought forward on the call's own plan. */
+  CALL_SHOW_PLAN: "call.showPlan",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
    * which creates the one session and answers the SDP; the hang-up it asks
@@ -707,6 +709,7 @@ export const ACT = {
   [ACT_KIND.MICROPHONE_OPEN_SETTINGS]: press("Could not open the microphone privacy settings."),
   [ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS]: press("Could not open the notification settings."),
   [ACT_KIND.WINDOW_FOCUS_PANEL]: press("Could not focus the panel on this system."),
+  [ACT_KIND.CALL_SHOW_PLAN]: press("Could not bring the call's plan forward on this system."),
   [ACT_KIND.WINDOW_COPY_TEXT]: {
     // A plan's whole document and a File tab's whole file are copied
     // through this act, so it admits the longer of the two the service

@@ -1,0 +1,191 @@
+/* The floating call pill (`renderer/call/call-pill.tsx`), alone in its own
+   transparent, frameless window: the pill is all of the window anyone sees,
+   centred in it with just enough room around it for its shadow. Last in
+   index.css, because the window's ground has to be no ground at all, over the
+   desktop's own. */
+
+html.call-window,
+html.call-window body,
+html.call-window #root {
+  background: transparent;
+}
+
+html.call-window #root {
+  display: grid;
+  place-items: center;
+}
+
+/* Opaque, on the ground of what floats over a window, rather than blurred: a
+   window's own content cannot blur what lies behind the window, and a pill
+   that let the editor's text show through would be read over it. Everything
+   but the buttons drags the window. */
+.call-pill {
+  --pill-ring: transparent;
+  display: flex;
+  box-sizing: border-box;
+  width: 404px;
+  height: 52px;
+  align-items: center;
+  gap: var(--space-8);
+  padding: 0 10px;
+  border-radius: 26px;
+  background: var(--surface-overlay);
+  box-shadow:
+    0 0 0 0.5px var(--hairline-strong),
+    0 2px 6px var(--shadow);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.3;
+  -webkit-app-region: drag;
+}
+
+/* The ring around the face says whose turn it is in the meters' colours, a
+   mute in the destructive red, and a call still opening in the warning tint. */
+.call-pill[data-tone="luke"],
+.call-pill[data-tone="working"] {
+  --pill-ring: var(--voice-luke);
+}
+.call-pill[data-tone="developer"] {
+  --pill-ring: var(--voice-developer);
+}
+.call-pill[data-tone="muted"] {
+  --pill-ring: var(--danger);
+}
+.call-pill[data-tone="opening"] {
+  --pill-ring: var(--state-attention);
+}
+
+.call-pill-identity {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.call-pill-face {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  box-shadow: 0 0 0 2px var(--pill-ring);
+  transition: box-shadow var(--duration-quick) var(--motion-exit);
+}
+
+.call-pill-face .luke-face {
+  width: 20px;
+  height: 20px;
+}
+
+.call-pill-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.call-pill-plan,
+.call-pill-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.call-pill-plan {
+  font-weight: 600;
+}
+
+.call-pill-status {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.call-pill[data-tone="luke"] .call-pill-status {
+  color: var(--voice-luke);
+}
+.call-pill[data-tone="developer"] .call-pill-status {
+  color: var(--voice-developer);
+}
+.call-pill[data-tone="muted"] .call-pill-status {
+  color: var(--danger-text);
+}
+.call-pill[data-tone="opening"] .call-pill-status {
+  color: var(--state-attention);
+}
+
+/* Drawn at once, as the sidebar's meter beside Luke's name is: the pill is
+   small enough that a meter sliding in reads as the pill jumping. */
+.call-pill .call-pill-meter {
+  flex: 0 0 auto;
+  margin: 0 var(--space-2);
+  animation: none;
+}
+
+.call-pill-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Round, as the call bar's controls are, so the two read as the same call. */
+.call-pill-button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raised-strong);
+  color: var(--text-primary);
+  cursor: default;
+  transition:
+    background var(--duration-hover) ease,
+    opacity var(--duration-hover) ease;
+  -webkit-app-region: no-drag;
+}
+
+.call-pill-button:hover {
+  background: var(--pressed);
+}
+
+.call-pill-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.call-pill-return {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.call-pill-return:hover {
+  background: var(--raised-strong);
+  color: var(--text-primary);
+}
+
+/* A mute that is on is unmistakable at a glance, as on the call bar. */
+.call-pill-toggle[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: var(--danger-text);
+}
+
+.call-pill-end {
+  background: var(--text-primary);
+  color: var(--surface-overlay);
+}
+
+.call-pill-end:hover {
+  background: var(--text-primary);
+  opacity: 0.85;
+}
+
+.call-pill-end svg {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.4;
+}

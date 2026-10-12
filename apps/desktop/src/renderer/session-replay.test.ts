@@ -69,6 +69,14 @@ test("the voice document loads the one bundle and may reach no host at all", () 
   assert.ok(voice.includes('<script src="renderer.js"></script>'));
 });
 
+// The call pill loads the same bundle and never mounts `App` either, and it
+// draws no words; its policy is the voice window's: no host at all.
+test("the call pill's document loads the one bundle and may reach no host at all", () => {
+  const call = readFileSync(new URL("./call.html", import.meta.url), "utf8");
+  assert.equal(call.match(/connect-src ([^;"]+)/)?.[1], "'none'");
+  assert.ok(call.includes('<script src="renderer.js"></script>'));
+});
+
 // The recorder drops a `session_recording` option it does not know without a
 // word, and the preload rests on a global the library does not declare, so a
 // rename of either would look like masking that works or recording that is off.

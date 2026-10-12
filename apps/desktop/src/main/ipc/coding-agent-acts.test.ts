@@ -19,7 +19,7 @@ import { codingAgentActRows } from "./coding-agent-acts";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 /** A synthetic provider key, as Settings carries it once. */

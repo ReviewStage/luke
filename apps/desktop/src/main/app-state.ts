@@ -112,10 +112,10 @@ export function bootstrapPatch(held: AppState, boot: HostBootstrap): AppStatePat
 }
 
 /**
- * The document as the hidden voice window is sent it: the whole of it but
- * the planning turns' work. Note that the work is kept from that window
- * because it draws none, and the work carries the output of commands run in
- * the developer's repository, which nothing there needs.
+ * The document as the hidden voice window and the call pill are sent it: the
+ * whole of it but the planning turns' work. Note that the work is kept from
+ * those windows because they draw none, and the work carries the output of
+ * commands run in the developer's repository, which nothing there needs.
  */
 export function voiceWindowState<State extends Pick<AppState, "planning">>(held: State): State {
   const { work: _work, ...planning } = held.planning;

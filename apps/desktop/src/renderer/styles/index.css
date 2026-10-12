@@ -26,3 +26,5 @@
 /* After everything: the window's own layout restages the shared surface's
    elements, and its overrides have to win. */
 @import "./desktop.css";
+/* The call pill's window, over the desktop's ground, which it must not have. */
+@import "./call.css";

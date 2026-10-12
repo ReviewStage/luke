@@ -22,6 +22,7 @@ import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { PLANS_PAGE } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
 import type { MicrophoneControl, ShortcutControl, UpdateControl } from "./settings/controls";
@@ -213,6 +214,27 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
+  // The call pill's way back: the Plans tab, on the call's plan, opening it
+  // where another plan, or none, is open.
+  const selectPlan = useRef(plans.onSelect);
+  selectPlan.current = plans.onSelect;
+  const boundPlan = useRef(plans.boundFor);
+  boundPlan.current = plans.boundFor;
+  useEffect(
+    () =>
+      window.sidecar.onShowPlan(({ planId }) => {
+        changeTab(PANEL_TAB.PLANS);
+        if (planId !== boundPlan.current) selectPlan.current(planId);
+      }),
+    [changeTab],
+  );
+  // The plan this window has on screen, or none on Settings and the new-plan
+  // page: the call pill stands down while a focused window shows the call's.
+  const planShown =
+    !accountGated && tab === PANEL_TAB.PLANS && plans.page === PLANS_PAGE.DOCUMENT
+      ? state?.planning.activePlanId
+      : undefined;
+  useEffect(() => window.sidecar.reportPlanShown(planShown), [planShown]);
   // An agent's end said in the toast while the window was focused: its View
   // goes where the notification's click would, and it goes with the agent's
   // unseen dot.

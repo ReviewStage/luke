@@ -496,14 +496,19 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
    * shows as pending, and the look waits on the board holding it.
    */
   function showActivity({ type: _type, planId, ...activity }: PlanActivityFrame): void {
-    if (view.activePlanId !== planId) return;
+    // The call's own copy is kept whatever plan is open, for the floating
+    // call window; the panel's is the active plan's alone.
+    if (view.activePlanId !== planId) {
+      write({ callActivity: activity });
+      return;
+    }
     const was = view.activity?.planner;
     const drew = was?.action === DRAW_ON_BOARD_TOOL_NAME && activity.planner?.action !== was.action;
     const stopped = was !== undefined && activity.planner === undefined;
     const looking =
       activity.planner?.action === LOOK_AT_BOARD_TOOL_NAME &&
       was?.action !== LOOK_AT_BOARD_TOOL_NAME;
-    write({ activity });
+    write({ activity, callActivity: activity });
     if (drew || stopped || looking) Queue.offerUnsafe(boardReads, planId);
   }
 
@@ -529,6 +534,9 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   function callEnded(planId: string): void {
     if (telling?.planId === planId) telling = undefined;
+    const { callActivity: _ended, ...rest } = view;
+    view = rest;
+    publish();
     if (view.activePlanId !== planId) return;
     Queue.offerUnsafe(callEndReads, planId);
   }
