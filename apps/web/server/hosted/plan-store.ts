@@ -88,39 +88,56 @@ export interface PlanChanges {
   readonly archived?: boolean;
 }
 
-/** The columns every read and every `returning` projects, so a row decodes one way whatever wrote it. */
-const PLAN_COLUMNS = {
+/**
+ * The columns a line of the list reads: none of the document. Note that the
+ * list projects these alone, because a migration that reshapes the document
+ * lands before the build that reads the new shape is live, and a list that
+ * decoded the document would then refuse every plan rather than just the one
+ * opened.
+ */
+const PLAN_SUMMARY_COLUMNS = {
   id: plan.id,
-  userId: plan.userId,
   name: plan.name,
+  repository: plan.repository,
+  pinnedAt: plan.pinnedAt,
+  archivedAt: plan.archivedAt,
+  createdAt: plan.createdAt,
+  updatedAt: plan.updatedAt,
+};
+
+/** The columns every other read and every `returning` projects, so a row decodes one way whatever wrote it. */
+const PLAN_COLUMNS = {
+  ...PLAN_SUMMARY_COLUMNS,
+  userId: plan.userId,
   body: plan.body,
   assumptions: plan.assumptions,
   fields: plan.fields,
   agentEdits: plan.agentEdits,
   fieldWriters: plan.fieldWriters,
-  repository: plan.repository,
-  pinnedAt: plan.pinnedAt,
-  archivedAt: plan.archivedAt,
   conversationId: plan.conversationId,
-  createdAt: plan.createdAt,
-  updatedAt: plan.updatedAt,
 };
 
-const PlanRowSchema = Schema.Struct({
+const PlanSummaryRowSchema = Schema.Struct({
   id: Schema.String,
-  userId: Schema.String,
   name: Schema.String,
+  repository: Schema.NullOr(Schema.String),
+  pinnedAt: Schema.NullOr(InstantColumnSchema),
+  archivedAt: Schema.NullOr(InstantColumnSchema),
+  createdAt: InstantColumnSchema,
+  updatedAt: InstantColumnSchema,
+});
+
+type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
+
+const PlanRowSchema = Schema.Struct({
+  ...PlanSummaryRowSchema.fields,
+  userId: Schema.String,
   body: Schema.String,
   assumptions: Schema.Array(planAssumptionSchema),
   fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
   fieldWriters: Schema.Array(planFieldWriterSchema),
-  repository: Schema.NullOr(Schema.String),
-  pinnedAt: Schema.NullOr(InstantColumnSchema),
-  archivedAt: Schema.NullOr(InstantColumnSchema),
   conversationId: Schema.NullOr(Schema.String),
-  createdAt: InstantColumnSchema,
-  updatedAt: InstantColumnSchema,
 });
 
 type PlanRow = typeof PlanRowSchema.Type;
@@ -240,7 +257,7 @@ function planOf(row: PlanRow): PlanStoreEffect<Plan> {
  * v0.7.1 is no longer supported. A pin and an archive are answered only where
  * they stand, so a plan that is neither reads as every plan did before them.
  */
-function summaryOf(row: PlanRow): PlanSummary {
+function summaryOf(row: PlanSummaryRow): PlanSummary {
   const createdAt = row.createdAt.getTime();
   return {
     id: row.id,
@@ -283,10 +300,10 @@ const insertPlan = SqlSchema.findOne({
 
 const findPlans = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, includeArchived: Schema.Boolean }),
-  Result: PlanRowSchema,
+  Result: PlanSummaryRowSchema,
   execute: ({ userId, includeArchived }) =>
     db
-      .select(PLAN_COLUMNS)
+      .select(PLAN_SUMMARY_COLUMNS)
       .from(plan)
       .where(and(eq(plan.userId, userId), includeArchived ? undefined : isNull(plan.archivedAt)))
       .orderBy(desc(plan.createdAt), desc(plan.id)),
