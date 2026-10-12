@@ -212,7 +212,9 @@ function settle(stack: ToastStack, now: number): ToastStack {
  * A notice arriving at `now`: it joins the line where it waits and there is
  * no room, takes the place of a toast already saying it, or stands at the
  * bottom, pushing the oldest out where the stack is full, one that would
- * leave by itself before one that persists.
+ * leave by itself before one that persists. Note that one that persists is
+ * only stepped aside, to the head of the line, because it stands until
+ * dismissed, and a notice passing through is no dismissal.
  */
 function arrive(stack: ToastStack, notice: ToastNotice, now: number): ToastStack {
   if (notice.waits === true && staying(stack).length >= TOAST_ROOM) {
@@ -221,10 +223,12 @@ function arrive(stack: ToastStack, notice: ToastNotice, now: number): ToastStack
   const twin = stack.shown.find((toast) => !toast.leaving && sameSaying(toast.notice, notice));
   const unmatched = { ...stack, shown: stack.shown.filter((toast) => toast !== twin) };
   const next = stand(unmatched, notice, now);
-  const standing = staying(next);
-  if (standing.length <= TOAST_ROOM) return next;
-  const oldest = standing.find((toast) => toast.left !== undefined) ?? standing[0];
-  return leave(next, (toast) => toast === oldest, now);
+  const older = staying(next).slice(0, -1);
+  if (older.length < TOAST_ROOM) return next;
+  const oldest = older.find((toast) => toast.left !== undefined) ?? older[0];
+  const pushed = leave(next, (toast) => toast === oldest, now);
+  if (oldest === undefined || oldest.left !== undefined) return pushed;
+  return { ...pushed, waiting: [oldest.notice, ...pushed.waiting] };
 }
 
 /** A toast's hold paused at `now`, keeping what was left of it. */

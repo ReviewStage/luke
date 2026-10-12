@@ -244,6 +244,32 @@ it.effect(
 );
 
 it.effect(
+  "a toast passing through a stack of three that persist steps the oldest aside, and it stands again once there is room",
+  () =>
+    Effect.gen(function* () {
+      const { show } = mount(yield* registryOnTestClock);
+      show(ended("Opus 5.5 finished"));
+      show(ended("GPT 5.6 Sol finished"));
+      show(ended("Fix invitations failed"));
+      yield* landed;
+      show(copied);
+      yield* advance(MOTION_DURATION_MS.EXIT);
+      assert.deepEqual(toasts(), [
+        "GPT 5.6 Sol finishedView",
+        "Fix invitations failedView",
+        "Copied plan",
+      ]);
+
+      yield* advance(Duration.toMillis(TOAST_HOLD.DONE));
+      assert.deepEqual(
+        toasts(),
+        ["GPT 5.6 Sol finishedView", "Fix invitations failedView", "Opus 5.5 finishedView"],
+        "the agent's end is back once the copy has gone",
+      );
+    }),
+);
+
+it.effect(
   "a toast that persists outlasts every hold until its ×, or Escape while focus is in it, dismisses it",
   () =>
     Effect.gen(function* () {
