@@ -14,13 +14,17 @@ import {
   type PlanWorkWorker,
 } from "@sidecar/hosted/planning-view";
 import { isRecord, isWireString, type WireRecord, type WireValue } from "@sidecar/wire";
+import { isTextUIPart } from "ai";
 import { Schema } from "effect";
 import {
   isStoredToolPart,
+  MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   type StoredToolPart,
   type StoredUIMessage,
   storedToolName,
   TOOL_PART_STATE,
+  TURN_ORIGIN,
   TURN_STATUS,
   UI_PART_TYPE,
 } from "../core.js";
@@ -367,6 +371,24 @@ function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "
 }
 
 /**
+ * The fixed first line of each report among a turn's received lines, cut to
+ * the bound, in the order they stand: a report's words open with the line
+ * `reportLine` drew (`reportText`), so the line is read back off the row
+ * rather than kept beside it. A line of any other source is no report.
+ */
+function reportsOf(received: readonly StoredUIMessage[]): string[] {
+  return received.flatMap((message) => {
+    if (message.role !== MESSAGE_ROLE.USER) return [];
+    const { metadata } = message;
+    if (metadata === undefined || !("source" in metadata)) return [];
+    if (metadata.source !== OBSERVATION_SOURCE.REPORT) return [];
+    const words = message.parts.find(isTextUIPart)?.text ?? "";
+    const line = words.split("\n", 1)[0]?.trim() ?? "";
+    return line === "" ? [] : [cut(line, PLAN_WORK_BOUNDS.SUBJECT_CHARS)];
+  });
+}
+
+/**
  * One planning turn's work, from its row and its journal (absent before the
  * turn wrote any): its state, when it started and, once it ended, when, and
  * the newest of its words, reasoning, and calls as the journal holds them.
@@ -383,6 +405,8 @@ function askedOf(asked: readonly SpokenAskRow[]): Pick<PlanWorkTurn, "asked" | "
  * its ask (`asked`, by the ids the voice's ledger minted, and `askedAt`, by
  * where on its call each began), the newest the wire carries, where it took
  * any.
+ * Where a report opened it, the turn carries each report's first line from
+ * the lines it received (`received`), which the tab draws above Luke's reply.
  */
 export function planWorkOf(
   turn: StoredTurnRecord,
@@ -391,6 +415,7 @@ export function planWorkOf(
   titles: ReadonlyMap<string, string> = new Map(),
   records: ReadonlyMap<string, TurnRecord> = new Map(),
   asked: readonly SpokenAskRow[] = [],
+  received: readonly StoredUIMessage[] = [],
 ): PlanWorkTurn {
   const turnState = turnStateOf(turn);
   const ended = turnState === PLAN_WORK_STATE.RUNNING ? null : turn.settledAt;
@@ -418,6 +443,7 @@ export function planWorkOf(
         ...records.get(part.toolCallId),
       };
     });
+  const reports = turn.origin === TURN_ORIGIN.REPORT ? reportsOf(received) : [];
   return {
     turnId: turn.id,
     startedAt: (turn.startedAt ?? turn.queuedAt).getTime(),
@@ -427,6 +453,7 @@ export function planWorkOf(
     journal: wireJournal(shown.parts),
     workers,
     ...askedOf(asked),
+    ...(reports.length === 0 ? undefined : { reports }),
     ...turnRecordOf(turn),
   };
 }

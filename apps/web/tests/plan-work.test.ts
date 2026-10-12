@@ -404,6 +404,42 @@ test("a plan never planned on reads as no work, and a secret file a journal hold
   assert.deepEqual(read.value.code, []);
 });
 
+test("a turn a worker's report opened reads back with the report's first line above Luke's reply, and each report it was steered by after it; a spoken turn carries none", async () => {
+  const target = await planConversation();
+  const spoken = standingFor(target);
+  await play([...opening(FIRST_EVE_TURN), ...answeringStep(FIRST_EVE_TURN, 0, "Noted.")], spoken);
+  await askedAt(spoken, NOW - 60_000);
+  const reported = { ...standingFor(target), turn: BRAIN_HOST_TURN.REPORT };
+  const line = (message: string) =>
+    stamped({
+      type: "message.received",
+      data: { turnId: FIRST_EVE_TURN, sequence: SEQUENCE, message },
+    });
+  await play(
+    [
+      stamped({ type: "turn.started", data: { turnId: FIRST_EVE_TURN, sequence: SEQUENCE } }),
+      line("[worker 3] opened #415\n\nThe migration is in."),
+      line("[worker 2] asks\n\nShould the column be nullable?\n\n- Nullable\n- Default to zero"),
+      ...answeringStep(FIRST_EVE_TURN, 0, "Starting position 4."),
+    ],
+    reported,
+  );
+  await askedAt(reported, NOW);
+
+  const read = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  assert.ok(Option.isSome(read));
+  assert.deepEqual(
+    read.value.turns.map((turn) => {
+      const last = turn.journal.at(-1);
+      return [turn.reports, isRecord(last) ? last.text : undefined];
+    }),
+    [
+      [undefined, "Noted."],
+      [["[worker 3] opened #415", "[worker 2] asks"], "Starting position 4."],
+    ],
+  );
+});
+
 test("a turn carries its own journal as the agent tab reads one, and each worker it delegated to in the background beside it: running while the worker's own session runs though the call answered at its receipt, its session's parts as stored, and done once it answers", async () => {
   const target = await conversation();
   const standing = standingFor(target);
