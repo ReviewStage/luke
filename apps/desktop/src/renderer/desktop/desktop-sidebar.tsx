@@ -542,9 +542,7 @@ export function DesktopSidebar({
   const drawn = [
     ...pinned,
     ...groups.flatMap((group) =>
-      folds.folded(group.repository)
-        ? group.plans.filter((plan) => plan.id === plans.activePlanId)
-        : group.plans,
+      folds.folded(group.repository) ? group.plans.filter((plan) => current(plan.id)) : group.plans,
     ),
   ];
   // Moving up and down the list as it reads, New plan at its head: up from

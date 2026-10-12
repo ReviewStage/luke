@@ -620,6 +620,27 @@ test("the open plan stands under its folded group, the group's other plans do no
   window.localStorage.clear();
 });
 
+test("from the new-plan page, walking down passes over a folded group's last open plan, which the list no longer shows", () => {
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
+  const opened: string[] = [];
+  const container = mount(DEAN, {
+    plans: {
+      page: PLANS_PAGE.NEW,
+      activePlanId: "plan-Billing",
+      plans: [onRepository("Billing", "acme/ledger", 9), onRepository("Search", "acme/relay")],
+      onSelect: (planId) => opened.push(planId),
+    },
+  });
+
+  assert.equal(walk("ArrowDown"), true);
+  assert.deepEqual(groups(container), [
+    ["ledger", []],
+    ["relay", ["Search"]],
+  ]);
+  assert.deepEqual(opened, ["plan-Search"]);
+  window.localStorage.clear();
+});
+
 test("a fixture run's sidebar wears none of the folds this Mac kept, and keeps none of its own", () => {
   window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
   const container = mount(DEAN, {
