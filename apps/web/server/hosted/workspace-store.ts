@@ -76,6 +76,23 @@ const findAccountName = SqlSchema.findOneOption({
   execute: (userId) => db.select({ name: user.name }).from(user).where(eq(user.id, userId)),
 });
 
+const findAccountByEmail = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ id: Schema.String }),
+  execute: (email) => db.select({ id: user.id }).from(user).where(eq(user.email, email)).limit(1),
+});
+
+const findPersonalOwner = SqlSchema.findOneOption({
+  Request: Schema.String,
+  Result: Schema.Struct({ userId: Schema.String }),
+  execute: (organizationId) =>
+    db
+      .select({ userId: personalWorkspace.userId })
+      .from(personalWorkspace)
+      .where(eq(personalWorkspace.organizationId, organizationId))
+      .limit(1),
+});
+
 const findOrganizationBySlug = SqlSchema.findOneOption({
   Request: Schema.String,
   Result: OrganizationIdSchema,
@@ -221,6 +238,23 @@ export function isWorkspaceMember(
   organizationId: string,
 ): WorkspaceStoreEffect<boolean> {
   return Effect.map(findMemberWorkspace({ userId, organizationId }), Option.isSome);
+}
+
+/** Whether the workspace is some account's personal one, which nobody else joins. */
+export function isPersonalWorkspace(organizationId: string): WorkspaceStoreEffect<boolean> {
+  return Effect.map(findPersonalOwner(organizationId), Option.isSome);
+}
+
+/**
+ * The account that signs in with this address, by id; nothing for an address
+ * no account holds. Better Auth stores every address lowercased, so the one
+ * asked for is too.
+ */
+export function accountOfEmail(email: string): WorkspaceStoreEffect<Option.Option<string>> {
+  return Effect.map(
+    findAccountByEmail(email.toLowerCase()),
+    Option.map((row) => row.id),
+  );
 }
 
 /** Every workspace the account is a member of, its personal one first and the rest by name. */
