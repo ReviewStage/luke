@@ -785,8 +785,27 @@ it.effect("a repository read's thinking append says the repository is being read
   }),
 );
 
+/** What each commentary append said, in order. */
+function commentaryOf(sideband: FakeSideband): string[] {
+  return appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND).map((event) =>
+    "content" in event ? event.content : "",
+  );
+}
+
+/** Acknowledges every append sent so far that is still waiting, oldest first, so the next can go. */
+function acknowledgeAll(sideband: FakeSideband) {
+  return Effect.gen(function* () {
+    for (let round = 0; round < 5; round += 1) {
+      sideband.sent.forEach((event, index) => {
+        if (event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND) sideband.acknowledge(index, 0, 0);
+      });
+      yield* settle();
+    }
+  });
+}
+
 it.effect(
-  "every question the planning model queued is handed to the voice as its own commentary under the delegation, in order, without waiting on the settle",
+  "the voice is handed one queued question at a time: the next waits until the developer delegates again, and goes out as soon as the brain takes that ask, before its run says anything",
   () =>
     Effect.gen(function* () {
       const f = yield* fixture();
@@ -806,22 +825,57 @@ it.effect(
           recommendation,
         });
       }
-      yield* settle();
-      // Each commentary append waits on the last one's acknowledgment, as every append does.
-      sideband.acknowledge(
-        sideband.sent.findIndex((event) => event.type === LIVE_CLIENT_EVENT.COMMENTARY_APPEND),
-        1000,
-        1100,
-      );
-      yield* settle();
+      yield* acknowledgeAll(sideband);
+      const first = commentaryOf(sideband);
+      assert.equal(first.length, 1, "only the first question is handed on");
+      assert.ok(first[0]?.includes("After how long?") && first[0].includes("Seven days."));
+
+      sideband.input("A week is fine.", 2000, 2600);
+      sideband.delegation("item_2", 2700);
+      yield* acknowledgeAll(sideband);
       const commentary = appends(sideband, LIVE_CLIENT_EVENT.COMMENTARY_APPEND);
-      assert.deepEqual(
-        commentary.map((event) => ("delegation_id" in event ? event.delegation_id : undefined)),
-        ["item_1", "item_1"],
+      assert.equal(commentary.length, 2);
+      assert.ok(commentaryOf(sideband)[1]?.includes("Can an admin re-send one?"));
+      assert.equal(
+        commentary[1] && "delegation_id" in commentary[1] ? commentary[1].delegation_id : undefined,
+        "item_2",
+        "the next question answers the newest delegation",
       );
-      const contents = commentary.map((event) => ("content" in event ? event.content : ""));
-      assert.ok(contents[0]?.includes("After how long?") && contents[0].includes("Seven days."));
-      assert.ok(contents[1]?.includes("Can an admin re-send one?"));
+    }),
+);
+
+it.effect(
+  "a question queued while the voice holds none is handed on at once, and one the planning model withdrew before it was handed on never is",
+  () =>
+    Effect.gen(function* () {
+      const f = yield* fixture();
+      const sideband = yield* f.open();
+      yield* settle();
+      sideband.input("Invites should expire.", 0, 800);
+      sideband.delegation("item_1", 900);
+      yield* settle();
+      for (const question of ["After how long?", "Email the inviter on expiry?", "Re-send?"]) {
+        f.brain.fire({
+          kind: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
+          runId: "run-1",
+          question,
+          recommendation: "Yes.",
+        });
+      }
+      f.brain.fire({
+        kind: LIVE_BRAIN_RUN_EVENT.QUESTION_WITHDRAWN,
+        runId: "run-1",
+        question: "Email the inviter on expiry?",
+      });
+      yield* acknowledgeAll(sideband);
+      sideband.input("A week.", 2000, 2400);
+      sideband.delegation("item_2", 2500);
+      yield* acknowledgeAll(sideband);
+
+      const commentary = commentaryOf(sideband);
+      assert.equal(commentary.length, 2);
+      assert.ok(commentary[0]?.includes("After how long?"));
+      assert.ok(commentary[1]?.includes("Re-send?"));
     }),
 );
 

@@ -134,6 +134,7 @@ export const PLAN_WORK_TOOL = {
   DRAW_ON_BOARD: "draw-on-board",
   LOOK_AT_BOARD: "look-at-board",
   QUEUE_QUESTION: "queue-question",
+  WITHDRAW_QUESTION: "withdraw-question",
   WORKER: "worker",
   WORKER_WAIT: "worker-wait",
   WORKER_CANCEL: "worker-cancel",

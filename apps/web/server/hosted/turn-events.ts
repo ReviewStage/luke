@@ -16,7 +16,12 @@ import {
   UI_PART_TYPE,
 } from "../core.js";
 import { END_CALL_TOOL, endsCall } from "./end-call.js";
-import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
+import {
+  QUEUE_QUESTION_TOOL,
+  queuedQuestionOf,
+  WITHDRAW_QUESTION_TOOL,
+  withdrawnQuestionOf,
+} from "./queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 import type { StoredTurnRecord } from "./store/index.js";
@@ -78,11 +83,11 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 }
 
 /**
- * What one call tells while the turn runs: a question a planning call queued,
- * code it showed, its ask to end the call, or a repository command, the one
- * slow step. A queued question or an end is told once its input is whole,
- * never while it streams, and
- * shown code once its call has answered with the lines, so neither is told
+ * What one call tells while the turn runs: a question a planning call queued
+ * or withdrew, code it showed, its ask to end the call, or a repository
+ * command, the one slow step. A queued or withdrawn question or an end is told
+ * once its input is whole, never while it streams, and
+ * shown code once its call has answered with the lines, so none is told
  * twice.
  */
 function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
@@ -90,6 +95,12 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   if (name === QUEUE_QUESTION_TOOL.name) {
     const queued = queuedQuestionOf(part);
     return queued === undefined ? undefined : { kind: TURN_EVENT_KIND.QUESTION_QUEUED, ...queued };
+  }
+  if (name === WITHDRAW_QUESTION_TOOL.name) {
+    const question = withdrawnQuestionOf(part);
+    return question === undefined
+      ? undefined
+      : { kind: TURN_EVENT_KIND.QUESTION_WITHDRAWN, question };
   }
   if (name === END_CALL_TOOL.name) {
     return endsCall(part) ? { kind: TURN_EVENT_KIND.CALL_ENDING } : undefined;

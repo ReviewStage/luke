@@ -82,7 +82,7 @@ import {
   SEARCH_WEB_STATUS,
   SEARCH_WEB_TOOL,
 } from "../server/hosted/public-research";
-import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
+import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import {
   REPOSITORY_SHELL_REFUSAL,
   type RepositorySandboxDoor,
@@ -552,6 +552,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
           offered.map((declared) => declared.name),
           [
             QUEUE_QUESTION_TOOL.name,
+            WITHDRAW_QUESTION_TOOL.name,
             SHOW_CODE_TOOL.name,
             RUN_IN_REPOSITORY_TOOL.name,
             SEARCH_WEB_TOOL.name,

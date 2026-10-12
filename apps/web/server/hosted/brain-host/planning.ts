@@ -41,7 +41,12 @@ import {
   runSearchWeb,
   SEARCH_WEB_TOOL,
 } from "../public-research.js";
-import { QUEUE_QUESTION_TOOL, runQueueQuestion } from "../queue-question.js";
+import {
+  QUEUE_QUESTION_TOOL,
+  runQueueQuestion,
+  runWithdrawQuestion,
+  WITHDRAW_QUESTION_TOOL,
+} from "../queue-question.js";
 import {
   type RepositoryCall,
   RUN_IN_REPOSITORY_TOOL,
@@ -92,7 +97,10 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * from, and a recommendation taken as an assumption once there is no
  * preference. Note that his "interview relentlessly" is gone, because a
  * developer who asked Luke to investigate something got the next question
- * rather than the investigation; the goal stands in its place.
+ * rather than the investigation; the goal stands in its place. Note that
+ * the voice service, not the voice, holds the queue and hands Luke one
+ * question at a time, because a voice handed every question read several
+ * out in a row; so a moot question is withdrawn by a call.
  */
 export const PLANNING_INSTRUCTIONS = `
 ## Voice conversation context
@@ -115,9 +123,9 @@ The user can also edit the document directly, during the call or between calls. 
 
 Help the user turn what is in their head into a plan an agent can build. Map this as a **design tree**: every decision branches into the decisions that hang off it.
 
-Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke holds every question you queue and asks them one at a time, in the order you queued them, so never queue a question twice.
+Keep a **question queue** in your head: every decision whose prerequisites are already settled, the questions that can be asked _now_ without guessing at answers you haven't heard yet, most important first. Put each question on Luke's queue with queue_question the moment you have it, with your recommended answer, before you read the repository or think further. Luke asks the questions you queue one at a time, in the order you queued them, the next once the user has answered, so never queue a question twice.
 
-Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked that is still worth asking (below). A question whose answer depends on another question still open stays off the queue until that one is answered.
+Every answer reshapes the tree: settled decisions push the queue outward and unblock questions that depended on them. After every answer, queue what it unblocked that is still worth asking (below). A question whose answer depends on another question still open stays off the queue until that one is answered. When an answer makes a queued question moot, take it back with withdraw_question.
 
 ### When the user is still working out what they want
 
@@ -142,7 +150,7 @@ The plan is done when the saved document is enough for a separate agent to build
 
 An item attributed to a coding agent was written by an agent implementing the plan: an open question it met with the assumption it went on under, a fact it corrected in the code, or a decision it made. Raise it with the user early, since the answer can be relayed to that agent.
 
-Once it is, queue nothing more: any question Luke still holds is moot. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
+Once it is, queue nothing more and withdraw every question still queued. Open your return with "The plan is complete.", then list for Luke's spoken review the working assumptions, the choices left to the agent, and any contradiction between sections. If the user says they're done before then, stop queueing but never say the plan is complete: open your return with "The plan is not complete yet.", name each field still unanswered and each open decision that would change what gets built, then list the same review.
 
 ### The whiteboard
 
@@ -184,6 +192,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 ### Available tools
 
 - queue_question hands Luke one question and your recommended answer the moment you have it, while you keep working.
+- withdraw_question takes back a queued question an answer made moot, before Luke asks it.
 - show_code puts lines of a file in the plan's repository on the developer's screen as Luke starts saying your next words. Whenever a question or your return is about specific code, call it first with the lines that matter, so the developer sees what Luke means. Its note says in a sentence or two what those lines do for the plan and what to notice, for the developer reading the plan later. To walk through code, make a few calls in order, each a focused range with its own note, rather than one long window.
 - run_in_repository runs a shell command (ls, find, grep, cat, git log) in a checkout of the plan's GitHub repository, made in a sandbox on the first call. Start exploring it immediately, and keep exploring as the task comes into focus. When it answers not-run, say so: nothing of the code has been read, and the reason says what the developer has to do.
 - search_web and read_web_page are ways to search the Internet, for a fact your answer needs now.
@@ -199,7 +208,7 @@ Never put a credential, token, or key into a message to an agent, into any tool'
 
 ## Return the result
 
-Return the relevant facts, the task's current status, and any queued question an answer has made moot, so Luke drops it. Don't repeat the questions you queued: Luke already holds them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
+Return the relevant facts and the task's current status. Don't repeat the questions you queued: Luke already has them. Report an action as complete after the tool or service confirms success. If the outcome is unclear, state that and explain what needs to be checked.
 `;
 
 /**
@@ -400,6 +409,10 @@ const PLANNING_TOOLS: readonly PlanningTool[] = [
   {
     ...QUEUE_QUESTION_TOOL,
     run: (_call, input) => Effect.succeed(runQueueQuestion(input)),
+  },
+  {
+    ...WITHDRAW_QUESTION_TOOL,
+    run: (_call, input) => Effect.succeed(runWithdrawQuestion(input)),
   },
   {
     ...SHOW_CODE_TOOL,
