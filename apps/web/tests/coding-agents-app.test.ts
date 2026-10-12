@@ -4,6 +4,8 @@ import { it } from "@effect/vitest";
 import { Database } from "@sidecar/database/core/query";
 import { readAccountPreferences } from "@sidecar/database/models/account-store";
 import { readCodingAgent } from "@sidecar/database/models/coding-agent-store";
+import { sentLineId } from "@sidecar/database/models/ids";
+import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
 import { storeWriter } from "@sidecar/database/models/writer";
@@ -712,6 +714,37 @@ it.layer(getTestDB())("messaging a coding agent", (it) => {
           lines: [SNAPSHOT, "Rename the subject line too."],
           status: CODING_AGENT_STATUS.RUNNING,
         });
+      }),
+  );
+
+  it.effect(
+    "a member steers the running turn of an agent a teammate started: the words reach the starter's session and stand under the starter, so a repeat under the key sends nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const { owner, other, plan, agent, target, sessionId, ask, transcript } =
+          yield* startedAgent(eve, { running: true });
+        yield* joinWorkspace(plan.workspaceId, other);
+        const clientKey = randomUUID();
+        const steer = () =>
+          ask(messageAs(other, agent.id, { text: "Use seven days, not five.", clientKey }));
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        assert.deepEqual(
+          eve.sent.map((each) => [each.authorization, each.sessionId, each.message.conversationId]),
+          [[`Bearer ${other}`, sessionId, target.conversationId]],
+        );
+        assert.equal(
+          yield* sentLineStands(owner, target.conversationId, sentLineId(clientKey)),
+          true,
+        );
+        assert.deepEqual(yield* transcript(), {
+          lines: [SNAPSHOT, "Use seven days, not five."],
+          status: CODING_AGENT_STATUS.RUNNING,
+        });
+
+        readAnswer(codingAgentAnswerSchema, HOSTED_HTTP_STATUS.ACCEPTED, yield* steer());
+        assert.equal(eve.sent.length, 1);
       }),
   );
 
