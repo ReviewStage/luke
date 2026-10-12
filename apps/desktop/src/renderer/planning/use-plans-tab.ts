@@ -754,22 +754,36 @@ export function usePlansTab(input: {
   // A press that would open a call here while one stands about another plan
   // ends that call, so it asks first; the answer is the same Talk press, and
   // Cancel leaves the call standing as it was. The talk key never asks: it
-  // speaks into the call standing, whatever plan is open.
+  // speaks into the call standing, whatever plan is open. The question is the
+  // plan's it was asked on, so it goes the moment another plan opens (the
+  // press would talk about whichever plan the host has open), and its surface
+  // is the plan's page, which a version history covers.
   const callElsewhere =
     callInProgress(voice.view) && voice.view.callPlanId !== planning.activePlanId;
-  const secondCall = useConfirmDialog({ subject: callElsewhere, surfaceOpen: shown }, () =>
-    act(ACT_KIND.PLANNING_TALK).then(
-      (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
-      (refused: Error): ActionResult => ({
-        status: ACTION_RESULT_STATUS.REJECTED,
-        reason: refused.message,
-      }),
-    ),
+  const [askedFor, setAskedFor] = useState<string>();
+  const secondCallFor = callElsewhere && askedFor !== undefined ? askedFor : undefined;
+  const secondCall = useConfirmDialog(
+    { subject: secondCallFor === planning.activePlanId, surfaceOpen: shown && !historyOpen },
+    () =>
+      act(ACT_KIND.PLANNING_TALK).then(
+        (): ActionResult => ({ status: ACTION_RESULT_STATUS.ACCEPTED }),
+        (refused: Error): ActionResult => ({
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: refused.message,
+        }),
+      ),
   );
+  // A started plan asks once it is the plan open, which the host may say
+  // only after the start's own answer has come back.
+  const askOnOpen = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (askOnOpen.current === undefined || askOnOpen.current !== secondCallFor) return;
+    if (secondCallFor !== planning.activePlanId) return;
+    askOnOpen.current = undefined;
+    secondCall.ask();
+  });
   const callingNow = useRef(callElsewhere);
   callingNow.current = callElsewhere;
-  const askSecondCall = useRef(secondCall.ask);
-  askSecondCall.current = secondCall.ask;
   // The press names no plan: main reads the one the host has open, and the
   // voice window, which owns the call, opens it about that plan or toggles it.
   const pressMicrophone = () => {
@@ -777,8 +791,11 @@ export function usePlansTab(input: {
     if (microphone.press === MICROPHONE_PRESS.OPEN_SETTINGS)
       tell(ACT_KIND.MICROPHONE_OPEN_SETTINGS);
     if (microphone.press === MICROPHONE_PRESS.TALK) {
-      if (callElsewhere) secondCall.ask();
-      else tell(ACT_KIND.PLANNING_TALK);
+      if (!callElsewhere) tell(ACT_KIND.PLANNING_TALK);
+      else {
+        setAskedFor(planning.activePlanId);
+        secondCall.ask();
+      }
     }
   };
 
@@ -893,7 +910,10 @@ export function usePlansTab(input: {
     }).then(
       (answer) => {
         if ("failure" in answer) return repositoryFailureNote(answer.failure);
-        if (callingNow.current) askSecondCall.current();
+        if (callingNow.current) {
+          askOnOpen.current = answer.planId;
+          setAskedFor(answer.planId);
+        }
         return undefined;
       },
       (refused: Error) => refused.message,

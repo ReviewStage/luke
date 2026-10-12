@@ -1203,6 +1203,29 @@ test("a Talk press over a call about another plan asks before ending it: Cancel 
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_TALK);
 });
 
+test("the second call's question goes when another plan opens under it or its version history covers the page, and does not come back", () => {
+  const elsewhere: VoiceView = {
+    ...IDLE_VOICE_VIEW,
+    voiceStatus: LIVE_STATUS.LISTENING,
+    callPlanId: OTHER_PLAN_ID,
+  };
+  const tab = mount({ shown: true, planning: OPEN, voice: elsewhere });
+  act(() => tab.control().microphone.onPress());
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.ASKING);
+  // Another window opens a third plan: the press would talk about it, so the question goes.
+  const third = "5a7c9e1b-3d5f-4a7b-9c1d-2e4f6a8b0c1d";
+  tab.stand({ planning: { ...OPEN, activePlanId: third } });
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
+  tab.stand({ planning: OPEN });
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
+
+  act(() => tab.control().microphone.onPress());
+  act(() => tab.control().history.onOpen(PLAN.id));
+  assert.equal(tab.control().secondCall.confirm.standing, false);
+  act(() => tab.control().history.onClose());
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
+});
+
 test("a plan started while a call stands about another asks whether to move the call to it, and a press on the call's own plan never asks", async () => {
   const elsewhere: VoiceView = {
     ...IDLE_VOICE_VIEW,
@@ -1217,6 +1240,9 @@ test("a plan started while a call stands about another asks whether to move the 
   await act(async () => {
     await tab.control().newPlan.start("Teammate invitations", null);
   });
+  // It asks once the host says the started plan is the one open.
+  assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.RESTING);
+  tab.stand({ planning: OPEN });
   assert.equal(tab.control().secondCall.confirm.stage, CONFIRM_STAGE.ASKING);
 
   const own = mount({ shown: true, planning: OPEN, voice: { ...elsewhere, callPlanId: PLAN.id } });
