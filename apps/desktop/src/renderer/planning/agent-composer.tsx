@@ -198,7 +198,8 @@ export function AgentComposer({
       }}
       onDragLeave={(event) => {
         // A drag moving onto one of the card's own children has not left it.
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDropping(false);
+        const into = event.relatedTarget;
+        if (!(into instanceof Node && event.currentTarget.contains(into))) setDropping(false);
       }}
       onDrop={(event) => {
         if (!carriesFiles(event)) return;
