@@ -35,6 +35,9 @@ import {
   codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  type DictationTranscribeAnswerView,
+  dictationTranscribeAnswerViewSchema,
+  dictationTranscribeParamsSchema,
   type ProviderKeysAnswerView,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -203,6 +206,12 @@ export const ACT_KIND = {
   PROVIDER_KEYS_READ: "providerKeys.read",
   PROVIDER_KEYS_SAVE: "providerKeys.save",
   PROVIDER_KEYS_REMOVE: "providerKeys.remove",
+  /**
+   * A clip dictated into a message box, carried once from the panel that
+   * recorded it to the service and answered with its words. Nothing on the
+   * way keeps it.
+   */
+  DICTATION_TRANSCRIBE: "dictation.transcribe",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -652,6 +661,13 @@ export const ACT = {
     payload: actSchema(providerKeyRemoveParamsSchema),
     result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
     refusal: "Could not remove your API key on this system.",
+  },
+  [ACT_KIND.DICTATION_TRANSCRIBE]: {
+    payload: actSchema(dictationTranscribeParamsSchema),
+    result: wireResult<DictationTranscribeAnswerView>(
+      isReadable(dictationTranscribeAnswerViewSchema),
+    ),
+    refusal: "Could not transcribe the recording on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({

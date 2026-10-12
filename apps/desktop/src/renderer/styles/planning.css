@@ -1064,12 +1064,64 @@ button.code-card-path:hover {
   padding-left: 4px;
 }
 
-/* The "+" that attaches files, just left of the round Send or Stop. */
+/* The microphone and the "+" that attaches files, just left of the round
+   Send or Stop; the New Plan card's microphone, left of Start. */
 .agent-composer-actions {
   display: flex;
   flex: none;
   align-items: center;
   gap: 4px;
+}
+
+/* A dictation standing in place of the card's foot: the voice's bars
+   across it, newest at the right, the time so far, and the two ways out,
+   ✓ as round as the Send it stands in for. */
+.dictation-strip {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--text-secondary);
+}
+
+.dictation-wave {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 20px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  overflow: clip;
+}
+
+.dictation-wave-bar {
+  flex: none;
+  width: 2px;
+  height: 100%;
+  border-radius: 999px;
+  background: currentColor;
+  transform: scaleY(0.08);
+}
+
+.dictation-clock {
+  flex: none;
+  min-width: 34px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.dictation-transcribing {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-8);
+  font-size: 12.5px;
 }
 
 /* Files dragged over the box: the card's edge brightens as it does under

@@ -116,6 +116,7 @@ export function DraftAgentTab({
           doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
           followsUp={false}
+          keywords={control.keywords}
         />
       </footer>
     </section>

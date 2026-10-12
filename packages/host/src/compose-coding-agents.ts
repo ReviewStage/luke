@@ -17,6 +17,8 @@ import {
   codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  type DictationTranscribeAnswerView,
+  dictationTranscribeParamsSchema,
   type ProviderKeysAnswerView,
   providerKeyRemoveParamsSchema,
   providerKeySaveParamsSchema,
@@ -31,7 +33,7 @@ import type { Composer } from "./composer.js";
 import type { RunMode } from "./run-mode.js";
 
 /**
- * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published.
+ * compose-coding-agents.ts -- a plan's coding agents, asked of the service on the window's behalf: the models, the account's default and its own provider keys, the agents, one started, one's transcript, one messaged, one's model changed, one stopped, what one published, and a clip dictated into an agent's box heard as words.
  *
  * Nothing is held here. The window holds the agents it draws and the
  * cursor it reads from, asks when a plan opens, when it starts or stops an
@@ -62,6 +64,7 @@ export type CodingAgentClient = Pick<
   | "readProviderKeys"
   | "saveProviderKey"
   | "removeProviderKey"
+  | "transcribeDictation"
 >;
 
 export interface CodingAgentsDependencies {
@@ -132,6 +135,17 @@ function composed(dependencies: CodingAgentsDependencies): CodingAgentsComposer 
         );
         const answer = yield* asked(client.saveProviderKey(save));
         return carried<ProviderKeysAnswerView>(answer);
+      }),
+    [GATEWAY_METHOD.DICTATION_TRANSCRIBE]: (params) =>
+      Effect.gen(function* () {
+        // Note that the sentence names the shape and never the words, because they are the developer's voice.
+        const clip = yield* read(
+          dictationTranscribeParamsSchema,
+          params,
+          "a clip names its audio, its length, and its words",
+        );
+        const answer = yield* asked(client.transcribeDictation(clip));
+        return carried<DictationTranscribeAnswerView>(answer);
       }),
     [GATEWAY_METHOD.PROVIDER_KEYS_REMOVE]: (params) =>
       Effect.gen(function* () {

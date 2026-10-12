@@ -27,8 +27,10 @@ import { AgentModelChip } from "./agent-model-chip";
 import { PublishedChip, type PublishedDoors } from "./agent-published";
 import { AttachedFileChips, attachmentChips } from "./attached-file-chips";
 import { readFiles, withFiles } from "./attached-files";
+import { DictateButton, DictationStrip } from "./dictation-strip";
 import type { AgentComposerControl } from "./use-agent-composer";
 import type { AgentModelControl } from "./use-agent-model";
+import { DICTATION_PHASE, useDictation } from "./use-dictation";
 
 /**
  * agent-composer.tsx -- the message box pinned under an agent's transcript: one card, two chips at its foot, one button, and a note under it when a message or a change did not go.
@@ -70,6 +72,12 @@ import type { AgentModelControl } from "./use-agent-model";
  * cannot come says why under the card while the rest still come
  * (`attached-files.ts`). A message is words, files, or both, as the wire
  * takes it (`hasWordsOrFiles`), so files alone send too.
+ *
+ * Words can be spoken into the box as well: the microphone left of the "+"
+ * records in place of the foot's controls until ✓ or Enter sends the clip
+ * to be heard and the words land at the caret, or ✕ or Escape drops it
+ * (`use-dictation.ts`, `dictation-strip.tsx`). Why a dictation left nothing
+ * is said in the same note a file's refusal is.
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
@@ -115,6 +123,7 @@ export function AgentComposer({
   doors,
   onStop,
   followsUp,
+  keywords = [],
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
@@ -136,6 +145,8 @@ export function AgentComposer({
   onStop: () => Promise<void>;
   /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
   followsUp: boolean;
+  /** The words a dictation is likely to say, read off the plan (`dictation-keywords.ts`). */
+  keywords?: readonly string[] | undefined;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
@@ -162,12 +173,23 @@ export function AgentComposer({
     composer.closed === undefined && refusal === undefined && composer.note !== undefined;
   const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
+  const dictation = useDictation({
+    field,
+    draft: () => latest.current.draft,
+    setDraft: (next) => latest.current.setDraft(next),
+    maxLength: CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS,
+    keywords,
+    onNote: setRefusal,
+  });
+  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
+
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
   useEffect(() => {
     if (!typingElsewhere()) field.current?.focus();
   }, []);
 
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (dictation.onFieldKey(event)) return;
     if (event.key === "Escape") {
       event.stopPropagation();
       event.currentTarget.blur();
@@ -240,6 +262,7 @@ export function AgentComposer({
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           value={composer.draft}
           disabled={held}
+          readOnly={dictating}
           onChange={(event) => composer.setDraft(event.currentTarget.value)}
           onKeyDown={onFieldKey}
           onPaste={(event) => {
@@ -251,59 +274,73 @@ export function AgentComposer({
           }}
         />
         <PromptInputFooter>
-          <PromptInputTools>
-            {model === undefined ? null : (
-              <AgentModelChip model={model} models={models} readModels={readModels} usage={usage} />
-            )}
-            <AgentContextRing context={context} brief={brief} />
-            <PublishedChip published={published} doors={doors} />
-          </PromptInputTools>
-          <div className="agent-composer-actions">
-            <Tooltip label={BUTTON.ATTACH}>
-              <button
-                type="button"
-                className="icon-button agent-composer-attach"
-                aria-label={BUTTON.ATTACH}
-                disabled={held}
-                onClick={() => picker.current?.click()}
-              >
-                <PlusIcon />
-              </button>
-            </Tooltip>
-            <input
-              ref={picker}
-              type="file"
-              multiple
-              hidden
-              onChange={(event) => {
-                const picked = Array.from(event.currentTarget.files ?? []);
-                // Cleared so the same file can be picked again after it was taken off.
-                event.currentTarget.value = "";
-                attach(picked);
-              }}
-            />
-            {showsStop ? (
-              <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
-                <PromptInputSubmit
-                  type="button"
-                  status={stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING}
-                  aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
-                  disabled={stopping}
-                  onClick={stop}
+          {dictating ? (
+            <DictationStrip dictation={dictation} />
+          ) : (
+            <>
+              <PromptInputTools>
+                {model === undefined ? null : (
+                  <AgentModelChip
+                    model={model}
+                    models={models}
+                    readModels={readModels}
+                    usage={usage}
+                  />
+                )}
+                <AgentContextRing context={context} brief={brief} />
+                <PublishedChip published={published} doors={doors} />
+              </PromptInputTools>
+              <div className="agent-composer-actions">
+                <DictateButton dictation={dictation} disabled={held} />
+                <Tooltip label={BUTTON.ATTACH}>
+                  <button
+                    type="button"
+                    className="icon-button agent-composer-attach"
+                    aria-label={BUTTON.ATTACH}
+                    disabled={held}
+                    onClick={() => picker.current?.click()}
+                  >
+                    <PlusIcon />
+                  </button>
+                </Tooltip>
+                <input
+                  ref={picker}
+                  type="file"
+                  multiple
+                  hidden
+                  onChange={(event) => {
+                    const picked = Array.from(event.currentTarget.files ?? []);
+                    // Cleared so the same file can be picked again after it was taken off.
+                    event.currentTarget.value = "";
+                    attach(picked);
+                  }}
                 />
-              </Tooltip>
-            ) : (
-              <Tooltip label={BUTTON.SEND}>
-                <PromptInputSubmit
-                  aria-label={BUTTON.SEND}
-                  status={
-                    composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
-                  }
-                  disabled={held || empty || reading > 0}
-                />
-              </Tooltip>
-            )}
-          </div>
+                {showsStop ? (
+                  <Tooltip label={stopping ? BUTTON.STOPPING : BUTTON.STOP}>
+                    <PromptInputSubmit
+                      type="button"
+                      status={
+                        stopping ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.STREAMING
+                      }
+                      aria-label={stopping ? BUTTON.STOPPING : BUTTON.STOP}
+                      disabled={stopping}
+                      onClick={stop}
+                    />
+                  </Tooltip>
+                ) : (
+                  <Tooltip label={BUTTON.SEND}>
+                    <PromptInputSubmit
+                      aria-label={BUTTON.SEND}
+                      status={
+                        composer.sending ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
+                      }
+                      disabled={held || empty || reading > 0}
+                    />
+                  </Tooltip>
+                )}
+              </div>
+            </>
+          )}
         </PromptInputFooter>
       </PromptInput>
       {note !== undefined ? (

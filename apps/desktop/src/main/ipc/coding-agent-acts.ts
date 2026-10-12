@@ -14,6 +14,8 @@ import {
   type CodingAgentRenameParams,
   type CodingAgentStartParams,
   type CodingAgentStopParams,
+  type DictationTranscribeAnswerView,
+  type DictationTranscribeParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -37,6 +39,9 @@ import type { AgentNotices } from "../agent-notices";
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
  * host once and is noted nowhere.
+ *
+ * So does a clip dictated into an agent's or a new plan's box: only a panel
+ * records one, and it passes through to the host once and is noted nowhere.
  */
 export interface CodingAgentActsDependencies {
   host: {
@@ -58,6 +63,9 @@ export interface CodingAgentActsDependencies {
     providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
     providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
     providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
+    dictationTranscribe(
+      params: DictationTranscribeParams,
+    ): Effect.Effect<DictationTranscribeAnswerView>;
   };
   /** Where every answer's agents are noted, and which agent's tab the panel shows. */
   notices: Pick<
@@ -88,7 +96,8 @@ type CodingAgentActKind =
   | typeof ACT_KIND.CODING_AGENTS_PULL_REQUEST
   | typeof ACT_KIND.PROVIDER_KEYS_READ
   | typeof ACT_KIND.PROVIDER_KEYS_SAVE
-  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE;
+  | typeof ACT_KIND.PROVIDER_KEYS_REMOVE
+  | typeof ACT_KIND.DICTATION_TRANSCRIBE;
 
 /** The refusal a window that draws no Plans tab hears, in its kind's own words. */
 function refuseUnlessPanel(kind: CodingAgentActKind, sender: ActSender): void {
@@ -189,6 +198,10 @@ export function codingAgentActRows(
     [ACT_KIND.PROVIDER_KEYS_REMOVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PROVIDER_KEYS_REMOVE, sender);
       return host.providerKeyRemove(params);
+    },
+    [ACT_KIND.DICTATION_TRANSCRIBE]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.DICTATION_TRANSCRIBE, sender);
+      return host.dictationTranscribe(params);
     },
   };
 }

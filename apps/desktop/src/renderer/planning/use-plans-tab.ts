@@ -17,6 +17,7 @@ import { useCopyToast } from "../copy-feedback";
 import { TOAST_HOLD, TOAST_TONE, UNDO_LABEL, useToast } from "../toast";
 import { shownFiles } from "./code-pane-model";
 import { agentTabLabel } from "./coding-agent-model";
+import { dictationKeywords } from "./dictation-keywords";
 import {
   FIXTURE_PLANNING_CALL,
   fixturePlanningView,
@@ -383,6 +384,18 @@ export function usePlansTab(input: {
   // the agents they draw, so the opening reaches them through this late binding.
   const mainRef = useRef<MainTabsControl | undefined>(undefined);
   const openDocument = viewed.document.plan;
+  // The open plan's own words, which a dictation into one of its agents' boxes listens for.
+  const dictationWords = useMemo(
+    () =>
+      openDocument === undefined || openDocument.id !== viewed.activePlanId
+        ? []
+        : dictationKeywords({
+            repository: openDocument.repository,
+            title: openDocument.name,
+            body: openDocument.document.body,
+          }),
+    [openDocument, viewed.activePlanId],
+  );
   // A fixture's plans have no agents, as they are read from nowhere.
   const agents = useCodingAgents({
     acts: input.acts,
@@ -396,6 +409,7 @@ export function usePlansTab(input: {
         markNow.current(region.plan.id, PLAN_MARK.UNARCHIVE);
     },
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
+    keywords: dictationWords,
   });
   // The calls heard on the open plan, each held past its end until the
   // record's copy catches up; a fixture's open plan is drawn with its own

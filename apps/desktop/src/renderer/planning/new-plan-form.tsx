@@ -9,7 +9,10 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { Tooltip } from "../tooltip";
+import { dictationKeywords } from "./dictation-keywords";
+import { DictateButton, DictationStrip } from "./dictation-strip";
 import { CHIP_PLACE, RepositoryChip, type RepositoryChooser } from "./repository-chip";
+import { DICTATION_PHASE, useDictation } from "./use-dictation";
 import type { PlansControl } from "./use-plans-tab";
 
 /**
@@ -27,8 +30,13 @@ import type { PlansControl } from "./use-plans-tab";
  * chooses which ones Luke can see, and the planning model reads that
  * repository for the plan's whole life. A plan can start with none and be
  * given one later. Enter starts the plan; a refusal keeps the page with the
- * reason under the card, and the button can be pressed again.
+ * reason under the card, and the button can be pressed again. The name
+ * can be dictated with the agent composer's own microphone and strip
+ * (`dictation-strip.tsx`), the repository's name among the words to listen for.
  */
+
+/** The longest name the field takes. */
+const NAME_MAX_CHARS = 200;
 
 /** Everything the page draws, handed in whole so the layout decides nothing. */
 interface NewPlanFormViewProps {
@@ -44,6 +52,8 @@ interface NewPlanFormViewProps {
   onName: (name: string) => void;
   onRepository: (repository: string) => void;
   onStart: () => void;
+  /** Says why a dictation left nothing under the card, or clears it. */
+  onNote: (note: string | undefined) => void;
 }
 
 function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
@@ -51,6 +61,21 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   const nameField = useRef<HTMLTextAreaElement>(null);
   const canStart = props.name.trim().length > 0 && !props.starting;
   const { focusRequest } = props;
+  const latest = useRef(props);
+  latest.current = props;
+  const dictation = useDictation({
+    field: nameField,
+    draft: () => latest.current.name,
+    setDraft: (next) => latest.current.onName(next),
+    maxLength: NAME_MAX_CHARS,
+    keywords: dictationKeywords({
+      repository: props.repository,
+      title: undefined,
+      body: undefined,
+    }),
+    onNote: props.onNote,
+  });
+  const dictating = dictation.phase !== DICTATION_PHASE.IDLE;
 
   // Note that we focus on arrival as well as on each press of New plan,
   // because the page is the window's home and typing the name is its one job.
@@ -62,6 +87,7 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
   // Enter starts the plan with any modifier held, since the name has no second
   // line to begin; an input method still composing keeps its own Enter.
   const onFieldKey = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (dictation.onFieldKey(event)) return;
     if (event.key !== "Enter" || !event.shiftKey || event.nativeEvent.isComposing) return;
     event.preventDefault();
     if (canStart) props.onStart();
@@ -83,27 +109,39 @@ function NewPlanFormView(props: NewPlanFormViewProps): React.JSX.Element {
           aria-label="Plan name"
           value={props.name}
           placeholder="Name the feature, e.g. Dark mode toggle"
-          maxLength={200}
+          maxLength={NAME_MAX_CHARS}
+          readOnly={dictating}
           onChange={(event) => props.onName(event.currentTarget.value)}
           onKeyDown={onFieldKey}
         />
         <PromptInputFooter>
-          <PromptInputTools>
-            <RepositoryChip
-              place={CHIP_PLACE.COMPOSER}
-              value={props.repository}
-              chooser={props.chooser}
-              onChoose={props.onRepository}
-            />
-          </PromptInputTools>
-          <Tooltip label={props.starting ? "Starting…" : "Start plan"}>
-            <PromptInputSubmit
-              aria-label="Start plan"
-              aria-busy={props.starting}
-              status={props.starting ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY}
-              disabled={!canStart}
-            />
-          </Tooltip>
+          {dictating ? (
+            <DictationStrip dictation={dictation} />
+          ) : (
+            <>
+              <PromptInputTools>
+                <RepositoryChip
+                  place={CHIP_PLACE.COMPOSER}
+                  value={props.repository}
+                  chooser={props.chooser}
+                  onChoose={props.onRepository}
+                />
+              </PromptInputTools>
+              <div className="agent-composer-actions">
+                <DictateButton dictation={dictation} disabled={props.starting} />
+                <Tooltip label={props.starting ? "Starting…" : "Start plan"}>
+                  <PromptInputSubmit
+                    aria-label="Start plan"
+                    aria-busy={props.starting}
+                    status={
+                      props.starting ? PROMPT_INPUT_STATUS.SUBMITTED : PROMPT_INPUT_STATUS.READY
+                    }
+                    disabled={!canStart}
+                  />
+                </Tooltip>
+              </div>
+            </>
+          )}
         </PromptInputFooter>
       </PromptInput>
       {props.note !== undefined ? (
@@ -162,6 +200,7 @@ export function NewPlanForm({
       onName={setName}
       onRepository={setChosen}
       onStart={start}
+      onNote={setNote}
     />
   );
 }

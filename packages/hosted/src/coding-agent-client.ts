@@ -25,6 +25,8 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
+  type DictationTranscribeAnswerView,
+  type DictationTranscribeParams,
   type ProviderKeyRemoveParams,
   type ProviderKeySaveParams,
   type ProviderKeysAnswerView,
@@ -41,6 +43,7 @@ import {
   codingAgentRenameRequestSchema,
   codingAgentStartRequestSchema,
 } from "./coding-agent-wire.js";
+import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import {
   codingAgentDefaultAnswerSchema,
   codingAgentDefaultWriteSchema,
@@ -76,7 +79,7 @@ import { HOSTED_API_ERROR, type HostedApiError, hostedErrorSchema } from "./serv
  * outlasts that hold; every other call keeps the account call's usual one.
  */
 
-/** How long a transcript read may stand: the service's hold, and room for the answer to travel after it. */
+/** How long a transcript read or a dictated clip may stand: the service's hold or the model's hearing, and room for the answer to travel after it. */
 const HELD_READ_TIMEOUT_MS = 35_000;
 
 export interface HostedCodingAgentClientOptions extends AccountToken {
@@ -127,6 +130,11 @@ const DEFAULT_REFUSALS = {
 const CHOOSE_REFUSALS = {
   ...ROW_REFUSALS,
   ...DEFAULT_REFUSALS,
+} satisfies NamedRefusals;
+
+/** The refusal a dictated clip can answer with that the window words apart: a clip past the bounds. */
+const DICTATION_REFUSALS = {
+  [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
 } satisfies NamedRefusals;
 
 /** A response's body as JSON, or nothing where it is not JSON at all. */
@@ -250,6 +258,26 @@ export class HostedCodingAgentClient {
         body: JSON.stringify(admitted),
       }),
       (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One dictated clip's words, under the held deadline, since the service
+   * answers only once the model has heard the clip through; a clip the
+   * service would refuse by shape is refused here without traveling at all.
+   */
+  transcribeDictation(
+    params: DictationTranscribeParams,
+  ): Effect.Effect<DictationTranscribeAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(dictationRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#held.send({
+        method: HTTP_METHOD.POST,
+        path: HOSTED_SERVICE_PATH.DICTATION,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, dictationAnswerSchema, DICTATION_REFUSALS),
     );
   }
 

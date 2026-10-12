@@ -54,36 +54,31 @@ interface MicrophoneAccessRow {
    * state where sending someone there is not sending them to look at nothing.
    */
   offerSystemSettings: boolean;
-  /** Whether the microphone is Luke's to open. */
+  /** Whether voice can listen: there is a voice to talk to, and the microphone is Luke's to open. */
   ready: boolean;
 }
 
 /**
- * Reads the row from the system's answer and whether there is anything to talk
+ * Reads the row from the system's answer and whether there is a voice to talk
  * to.
  *
- * The microphone has exactly one use here, so without a voice to answer it the
- * row has nothing to ask for. Asking anyway would raise the macOS prompt — the
- * one place the user agrees to their voice reaching OpenAI — on behalf of a
- * feature that cannot run, and would leave the permission granted for a use
- * that never happens.
+ * The microphone has two uses: talking a plan through with Luke, and
+ * dictating into a message box, whose clip goes through Luke's service to
+ * OpenAI and comes back as words. Either is a use the macOS prompt is the
+ * consent for, so the ask is offered wherever macOS has not answered, voice
+ * or no voice, and System Settings wherever it has. What still waits on voice
+ * is whether the row reports itself ready, since that is what draws the voice
+ * controls beneath it.
  */
 export function microphoneAccessRow(input: {
   voiceAvailable: boolean;
   status: MicrophoneStatus;
 }): MicrophoneAccessRow {
-  if (!input.voiceAvailable) {
-    return {
-      offerAccess: false,
-      offerSystemSettings: false,
-      ready: false,
-    };
-  }
   const row: MicrophoneAccessRow = {
     offerAccess: input.status === MICROPHONE_STATUS.NOT_DETERMINED,
     offerSystemSettings:
       input.status === MICROPHONE_STATUS.GRANTED || input.status === MICROPHONE_STATUS.DENIED,
-    ready: input.status === MICROPHONE_STATUS.GRANTED,
+    ready: input.voiceAvailable && input.status === MICROPHONE_STATUS.GRANTED,
   };
   const detail = microphoneStatusDetail(input.status);
   if (detail !== undefined) row.detail = detail;

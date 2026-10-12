@@ -8,6 +8,7 @@ import {
   codingAgentStartRequestSchema,
   codingAgentSummarySchema,
 } from "./coding-agent-wire.js";
+import { dictationAnswerSchema, dictationRequestSchema } from "./dictation-wire.js";
 import { catalogModelSchema, modelChoiceSchema } from "./models-wire.js";
 import {
   PROVIDER_KEY_PROVIDER,
@@ -31,6 +32,10 @@ import {
  * agent runs on: the keys as hints and statuses, a save, and a removal. A
  * save's params carry the key once, into the host and on to the service;
  * no answer here carries one.
+ *
+ * A clip dictated into an agent's message box travels here too, since the
+ * box is an agent's: the clip and its words to listen for, and the text
+ * back, or why there is none.
  */
 
 /** Why a coding-agent call answered nothing a window can draw. */
@@ -194,3 +199,16 @@ export const codingAgentPullRequestAnswerViewSchema = EffectSchema.Union([
 ]);
 
 export type CodingAgentPullRequestAnswerView = typeof codingAgentPullRequestAnswerViewSchema.Type;
+
+/** A dictated clip, as the window asks for its words: the clip once, its length, and the words to listen for. */
+export const dictationTranscribeParamsSchema = dictationRequestSchema;
+
+export type DictationTranscribeParams = typeof dictationTranscribeParamsSchema.Type;
+
+/** A dictated clip's words, as the window hears them: the text, or why there is none. */
+export const dictationTranscribeAnswerViewSchema = EffectSchema.Union([
+  dictationAnswerSchema,
+  failed,
+]);
+
+export type DictationTranscribeAnswerView = typeof dictationTranscribeAnswerViewSchema.Type;

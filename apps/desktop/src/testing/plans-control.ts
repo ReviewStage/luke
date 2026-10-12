@@ -64,6 +64,7 @@ export function codingAgentsControl(
   return {
     agents: [],
     agentIds: [],
+    keywords: [],
     draft: undefined,
     onNewDraft: () => "draft",
     onDraftChange: ignore,
