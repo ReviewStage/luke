@@ -3,6 +3,7 @@ import type { Board } from "@sidecar/hosted/board-wire";
 import {
   NOTE_KIND,
   PLAN_FIELD,
+  PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
   type PlanNote,
 } from "@sidecar/hosted/plan-template";
@@ -62,6 +63,11 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * document for meaning and never turns a tool result into a requirement.
  */
 
+/** Each section of the plan as the developer reads it, and what it holds, one line apiece for the planning model. */
+const PLAN_SECTIONS = Object.values(PLAN_FIELD)
+  .map((field) => `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}`)
+  .join("\n");
+
 /**
  * The instructions a plan conversation's session runs under. "How to plan"
  * is adapted from Matt Pocock's grilling skill,
@@ -103,17 +109,9 @@ Luke puts your questions to the user himself, one at a time, while you keep work
 
 ## The plan document
 
-The plan is the design doc two engineering teammates would write after talking a task through in a meeting. A coding agent builds the change from it without having heard this conversation, so it must be concrete enough that two agents would build the same thing. Each section is a question a good teammate asks, and the sections are what you ask about:
+The plan is the design doc two engineering teammates would write after talking a task through in a meeting. A coding agent builds the change from it without having heard this conversation, so it must be concrete enough that two agents would build the same thing. Each section answers a question a good teammate asks, and the sections are what you ask about:
 
-- Context: what is going on today, and why now?
-- Goal: what is true once we are done?
-- Approach: how would we build it? The main pieces, the data and interfaces that change, and the existing code to follow.
-- Alternatives: what else could we do, and why not that?
-- Hard parts: what is tricky? Edge cases and how each behaves, failure and retry, limits, risks.
-- Not doing: what are we leaving out on purpose?
-- Plan of attack: how does the work split, and in what order does it land? Migration and rollout where they apply.
-- Testing: how do we know it works?
-- Open questions: what do we still need to find out?
+${PLAN_SECTIONS}
 
 Spend your effort where a teammate adds the most: push on the approach, name an alternative the user has not considered and say which you would pick, and hunt for the hard parts before an agent finds them. Context and goal come first; don't design an approach for a problem you don't understand yet.
 

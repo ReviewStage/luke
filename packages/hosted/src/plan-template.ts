@@ -275,7 +275,26 @@ export const PLAN_FIELD = {
 
 export type PlanField = (typeof PLAN_FIELD)[keyof typeof PLAN_FIELD];
 
-/** What each field holds, in the words the notetaker is told: the question a teammate would ask, and what answers it. */
+/** Each field's heading in the body, so a prompt can name a section as the developer reads it. */
+export const PLAN_FIELD_HEADING = {
+  context: PLAN_HEADING.CONTEXT,
+  goal: PLAN_HEADING.GOAL,
+  approach: PLAN_HEADING.APPROACH,
+  alternatives: PLAN_HEADING.ALTERNATIVES,
+  hardParts: PLAN_HEADING.HARD_PARTS,
+  notDoing: PLAN_HEADING.NOT_DOING,
+  planOfAttack: PLAN_HEADING.PLAN_OF_ATTACK,
+  testing: PLAN_HEADING.TESTING,
+  openQuestions: PLAN_HEADING.OPEN_QUESTIONS,
+  assumptions: PLAN_HEADING.ASSUMPTIONS,
+} as const satisfies Record<PlanField, string>;
+
+/**
+ * What each field holds: the question a teammate would ask, and what answers
+ * it. Note that this is the one statement of a section's meaning, because the
+ * planning model asks from it and the notetaker writes to it, and two copies
+ * would drift into Luke asking for one thing and the notes filing another.
+ */
 export const PLAN_FIELD_PURPOSE = {
   context:
     "What is going on today and why it matters now: the problem, who it affects, and what " +
