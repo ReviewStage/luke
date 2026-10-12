@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { Effect, Option, Result } from "effect";
 import type { SessionAuth, SessionAuthContext } from "eve/context";
 import { afterAll, test } from "vitest";
@@ -9,10 +8,9 @@ import { conversationOwnedBy, runtimeSessionOwner } from "../server/hosted/brain
 import { brainHost } from "../server/hosted/brain-host/host";
 import type { BrainHostSeams } from "../server/hosted/brain-host/production";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { openPlanConversation, savePlanDocument } from "../server/hosted/plan-store";
+import { createPlan, openPlanConversation, savePlanText } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
-import { createFieldsPlan } from "./support/plan-documents";
 import { insertConversation, insertMessage } from "./support/store-rows";
 
 /**
@@ -27,15 +25,15 @@ const NOW = 1_800_000_000_000;
 const PLAN_NAME = "Teammate invitations";
 const SAID = "Any member should be able to invite, not only admins.";
 
-const FIRST: PlanDocument = {
-  body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",
-  assumptions: [],
-};
+const FIRST = "## Open questions\n\n- Who may invite?\n";
 
-const SECOND: PlanDocument = {
-  body: "# Teammate invitations\n\n## Rules\n- Any member may invite.\n",
-  assumptions: [{ text: "Invites reuse `memberships` with a `pending` state." }],
-};
+const SECOND =
+  "## Rules\n\n- Any member may invite.\n\n## Assumptions\n\n- Invites reuse `memberships` with a `pending` state.\n";
+
+/** The saved document as the standing context hands it: the plan's text as its body. */
+function handed(text: string): string {
+  return JSON.stringify({ body: text, assumptions: [] });
+}
 
 const database = await openHostedStoreTestDatabase();
 afterAll(() => database.close());
@@ -117,34 +115,34 @@ async function said(target: ConversationTarget, words: string): Promise<void> {
 
 test("a turn of a plan's conversation is handed the plan's name and the document saved as it starts, and none of the conversation's words", async () => {
   const userId = await database.createUser();
-  const plan = await database.run(createFieldsPlan(userId, { name: PLAN_NAME }));
+  const plan = await database.run(createPlan(userId, { name: PLAN_NAME }));
   const conversationId = Option.getOrThrow(
     await database.run(openPlanConversation(userId, plan.id)),
   );
   const target = { userId, conversationId };
   await said(target, SAID);
-  await database.run(savePlanDocument(userId, plan.id, FIRST));
+  await database.run(savePlanText(userId, plan.id, FIRST));
 
   const first = await standingContextOf(target);
   assert.ok(first.includes(`Name: ${PLAN_NAME}`));
-  assert.ok(first.includes(JSON.stringify(FIRST)));
+  assert.ok(first.includes(handed(FIRST)));
   assert.equal(first.includes(SAID), false);
 
-  await database.run(savePlanDocument(userId, plan.id, SECOND));
+  await database.run(savePlanText(userId, plan.id, SECOND));
 
   const second = await standingContextOf(target);
-  assert.ok(second.includes(JSON.stringify(SECOND)));
-  assert.equal(second.includes(JSON.stringify(FIRST)), false);
+  assert.ok(second.includes(handed(SECOND)));
+  assert.equal(second.includes(handed(FIRST)), false);
 });
 
 test("a conversation no plan names is handed no name and no document", async () => {
   const userId = await database.createUser();
-  const elsewhere = await database.run(createFieldsPlan(userId, { name: PLAN_NAME }));
-  await database.run(savePlanDocument(userId, elsewhere.id, FIRST));
+  const elsewhere = await database.run(createPlan(userId, { name: PLAN_NAME }));
+  await database.run(savePlanText(userId, elsewhere.id, FIRST));
   const target = { userId, conversationId: await insertConversation(database.run, { userId }) };
 
   const context = await standingContextOf(target);
 
   assert.equal(context.includes(PLAN_NAME), false);
-  assert.equal(context.includes(JSON.stringify(FIRST)), false);
+  assert.equal(context.includes(handed(FIRST)), false);
 });

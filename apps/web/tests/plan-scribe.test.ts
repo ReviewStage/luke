@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { NOTE_KIND, PLAN_EMPTY_TEXT, type PlanNote } from "@sidecar/hosted/plan-template";
+import { NOTE_KIND, type PlanNote } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { LIVE_BRAIN_RUN_EVENT } from "@sidecar/voice/live-session";
 import { Duration, Effect, Option } from "effect";
@@ -10,11 +10,11 @@ import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import { listRevisions } from "../server/hosted/plan-revisions";
-import { type NewPlan, readPlan } from "../server/hosted/plan-store";
+import { createPlan, type NewPlan, readPlan } from "../server/hosted/plan-store";
 import { PLAN_SCRIBE, type PlanDraft, planScribe } from "../server/voice/plan-scribe";
 import { heard, said } from "./support/live-events";
-import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
-import { createFieldsPlan, INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
+import { added } from "./support/plan-contents";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { type ScribeAnswer, scriptedScribeModel } from "./support/scribe-model";
 import { testSqlClient } from "./support/sql-client";
 
@@ -38,7 +38,7 @@ const OUTCOME = "A member invites a teammate by email.";
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createFieldsPlan(userId, RELAY_PLAN);
+  const plan = yield* createPlan(userId, RELAY_PLAN);
   return { userId, planId: plan.id };
 });
 
@@ -77,10 +77,13 @@ const settledRead = <A, E, R>(read: Effect.Effect<A, E, R>, expected: (value: A)
 const savedBodyOnce = (userId: string, planId: string, expected: (body: string) => boolean) =>
   settledRead(savedBody(userId, planId), expected);
 
+/** The invitations draft's context, the one line of it a test reads back. */
+const DRAFTED_CONTEXT = "Only an admin can add someone to a workspace today.";
+
 /** A plan already holding the invitations draft, as an earlier run of the call left it. */
 const openDraftedPlan = Effect.gen(function* () {
   const opened = yield* openPlan;
-  yield* saveNotes(opened, notesFor(INVITATIONS_DRAFT));
+  yield* makeDocumentPlan(opened.planId, INVITATIONS_TEXT);
   return opened;
 });
 
@@ -93,15 +96,9 @@ function promptText(asked: string | undefined): string {
   return ask?.content.map((part) => part.text ?? "").join("") ?? assert.fail("no user message");
 }
 
-/** A body's lines that carry words, leaving out the placeholders that give way to an answer's first words. */
+/** A body's lines that carry words. */
 function wordLinesOf(body: string): readonly string[] {
-  const placeholders = Object.values(PLAN_EMPTY_TEXT);
-  return body
-    .split("\n")
-    .filter(
-      (line) =>
-        line.trim().length > 0 && !placeholders.some((placeholder) => line.includes(placeholder)),
-    );
+  return body.split("\n").filter((line) => line.trim().length > 0);
 }
 
 /** The lines of an earlier body a later one no longer shows, where a line still growing counts as shown. */
@@ -225,7 +222,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect(
-    "each draft names the save the run read, and the saved one carries the fields it was formatted from and who last changed each",
+    "each draft names the save the run read, and the saved one carries who last changed each section",
     () =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -244,12 +241,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           const stored = Option.getOrThrow(yield* readPlan(userId, planId));
           assert.ok(drafts.every((draft) => draft.readAt === read.plan.updatedAt));
-          assert.deepEqual(saved?.fields, stored.fields);
-          assert.deepEqual(saved?.fieldEdits, stored.plan.fieldEdits);
+          assert.deepEqual(saved?.sectionEdits, stored.plan.sectionEdits);
           assert.deepEqual(
-            saved?.fieldEdits?.find((edit) => edit.field === PLAN_FIELD.GOAL),
+            saved?.sectionEdits?.find((edit) => edit.section === "Goal"),
             {
-              field: PLAN_FIELD.GOAL,
+              section: "Goal",
               actor: PLAN_ACTOR.NOTETAKER,
               at: saved?.savedAt,
               duringCall: true,
@@ -359,7 +355,8 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
           assert.ok(body.includes(OUTCOME));
-          assert.ok(body.includes(`## Context\n\n${corrected}\n`));
+          assert.ok(body.includes(`\n\n${corrected}\n\n## Goal`));
+          assert.ok(!body.includes(PROBLEM));
         }),
       ),
   );
@@ -605,7 +602,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
 
           const body = yield* savedBodyOnce(userId, planId, (saved) => saved.includes(OUTCOME));
           assert.ok(body.includes(OUTCOME));
-          assert.ok(body.includes(INVITATIONS_DRAFT.fields.context ?? "?"));
+          assert.ok(body.includes(DRAFTED_CONTEXT));
           assert.ok(!body.includes("Everything."));
           assert.deepEqual(reports, [
             "The plan's notetaker named what the plan does not hold: replace context",
@@ -614,41 +611,47 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
       ),
   );
 
-  it.effect("the model is handed the saved plan's fields and assumptions as JSON", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const { userId, planId } = yield* openDraftedPlan;
-        const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
+  it.effect(
+    "the model is handed the saved plan's text behind its marker, and no developer's sections while they wrote none",
+    () =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { userId, planId } = yield* openDraftedPlan;
+          const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
 
-        scribe.observe(heard("Let's keep going.", 0, 1_000));
-        yield* quiet;
-        yield* settledRead(
-          Effect.sync(() => asked.length),
-          (count) => count > 0,
-        );
+          scribe.observe(heard("Let's keep going.", 0, 1_000));
+          yield* quiet;
+          yield* settledRead(
+            Effect.sync(() => asked.length),
+            (count) => count > 0,
+          );
 
-        const lines = promptText(asked[0]).split("\n");
-        const plan = lines[lines.indexOf("[saved plan]") + 1];
-        assert.deepEqual(JSON.parse(plan ?? assert.fail("no plan after its marker")), {
-          fields: INVITATIONS_DRAFT.fields,
-          assumptions: INVITATIONS_DRAFT.assumptions,
-        });
-        assert.ok(!lines.includes("[fields the developer wrote]"));
-      }),
-    ),
+          const prompt = promptText(asked[0]);
+          const marker = prompt.split("\n")[0] ?? "";
+          assert.ok(marker.startsWith("[saved plan, one document"));
+          assert.ok(prompt.startsWith(`${marker}\n${INVITATIONS_TEXT}`));
+          assert.ok(!prompt.includes("[fields the developer wrote]"));
+        }),
+      ),
   );
 
-  it.effect("the model is told which fields hold the developer's own words", () =>
+  it.effect("the model is told which sections hold the developer's own words", () =>
     Effect.scoped(
       Effect.gen(function* () {
         const { userId, planId } = yield* openDraftedPlan;
+        const approach = `${INVITATIONS_TEXT}\n## Approach\n\nInvites expire after 7 days.\n`;
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
+          { document: { base: INVITATIONS_TEXT, value: approach } },
         );
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.INTERFACES, base: null, value: "None: no signature changes." },
+          {
+            document: {
+              base: approach,
+              value: `${approach}\n## Interfaces\n\nNone: no signature changes.\n`,
+            },
+          },
         );
         const { scribe, asked } = yield* scribeFor(userId, planId, [{ notes: [] }]);
 
@@ -662,7 +665,7 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
         const lines = promptText(asked[0]).split("\n");
         assert.equal(
           lines[lines.indexOf("[fields the developer wrote]") + 1],
-          `${PLAN_FIELD.APPROACH}, ${PLAN_FIELD.INTERFACES}`,
+          "Approach, Interfaces",
         );
       }),
     ),
@@ -698,7 +701,6 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
           const saved = drafts.at(-1);
           assert.equal(saved?.document.body, body);
           assert.deepEqual(saved?.document.assumptions, []);
-          assert.equal(saved?.fields, undefined);
           assert.deepEqual(
             saved?.sectionEdits?.map(({ section, actor, duringCall }) => ({
               section,

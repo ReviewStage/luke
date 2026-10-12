@@ -1,25 +1,12 @@
 import { type PlanSectionWriter, planSectionWriterSchema } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
-import {
-  EMPTY_PLAN_FIELDS,
-  type PlanAgentEdit,
-  type PlanFieldWriter,
-  planAgentEditSchema,
-  planBody,
-  planFieldWriterSchema,
-} from "@sidecar/hosted/plan-template";
+import { type PlanAgentEdit, planAgentEditSchema } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
-  PLAN_BOUNDS,
   type Plan,
-  type PlanDocument,
-  type PlanFieldEdit,
-  type PlanFields,
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
-  planAssumptionSchema,
-  planFieldsSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -67,24 +54,19 @@ export interface LabelledAgentEdit extends PlanAgentEdit {
 }
 
 /**
- * A plan as the service holds it: what the window reads, the fields its body
- * was formatted from or, for a plan that is one document, its text, the saves
+ * A plan as the service holds it: what the window reads, its text, the saves
  * coding agents made with their notes, and the conversation it resumes in, if
  * one is attached.
  */
 export interface StoredPlan {
   readonly plan: Plan;
-  /** The fixed template's fields; the untouched template's for a plan that is one document, which keeps none. */
-  readonly fields: PlanFields;
-  /** The whole text of a plan that is one document; undefined for a plan still kept as the template's fields. */
-  readonly text: string | undefined;
+  /** The plan's whole text. */
+  readonly text: string;
   readonly agentEdits: readonly LabelledAgentEdit[];
   readonly conversationId: string | undefined;
-  /** Whether the document was ever saved: false for a plan untouched since it started, or since the template's reset. */
+  /** Whether the text was ever saved since the plan started: false while nobody has written it. */
   readonly saved: boolean;
-  /** Who last changed each field a save has changed since this was kept; none for a plan that is one document. */
-  readonly fieldWriters: readonly PlanFieldWriter[];
-  /** Who last changed each section of a plan that is one document; none for any other plan. */
+  /** Who last changed each section, by heading. */
   readonly sectionWriters: readonly PlanSectionWriter[];
 }
 
@@ -123,11 +105,7 @@ const PLAN_SUMMARY_COLUMNS = {
 const PLAN_COLUMNS = {
   ...PLAN_SUMMARY_COLUMNS,
   userId: plan.userId,
-  body: plan.body,
-  assumptions: plan.assumptions,
-  fields: plan.fields,
   agentEdits: plan.agentEdits,
-  fieldWriters: plan.fieldWriters,
   document: plan.document,
   sectionWriters: plan.sectionWriters,
   conversationId: plan.conversationId,
@@ -148,12 +126,9 @@ type PlanSummaryRow = typeof PlanSummaryRowSchema.Type;
 const PlanRowSchema = Schema.Struct({
   ...PlanSummaryRowSchema.fields,
   userId: Schema.String,
-  body: Schema.String,
-  assumptions: Schema.Array(planAssumptionSchema),
-  fields: Schema.NullOr(planFieldsSchema),
   agentEdits: Schema.Array(planAgentEditSchema),
-  fieldWriters: Schema.Array(planFieldWriterSchema),
-  document: Schema.NullOr(Schema.String),
+  // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
+  document: Schema.String,
   sectionWriters: Schema.Array(planSectionWriterSchema),
   conversationId: Schema.NullOr(Schema.String),
 });
@@ -180,16 +155,17 @@ const findAgentLabels = SqlSchema.findAll({
 });
 
 /**
- * The agents the journal and the fields' writers name, by id, as their rows
+ * The agents the journal and the sections' writers name, by id, as their rows
  * name them now, so a renamed agent reads renamed everywhere: the label is
  * the row's title, or its model while it has none. The row's own account is
  * the one they are read under.
  */
 function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string>> {
-  const writers = [...row.fieldWriters, ...row.sectionWriters];
   const named = [
     ...row.agentEdits.map((edit) => edit.agentId),
-    ...writers.flatMap((writer) => (writer.agentId === undefined ? [] : [writer.agentId])),
+    ...row.sectionWriters.flatMap((writer) =>
+      writer.agentId === undefined ? [] : [writer.agentId],
+    ),
   ];
   const agentIds = [...new Set(named)];
   if (agentIds.length === 0) return Effect.succeed(new Map());
@@ -200,64 +176,22 @@ function agentLabelsOf(row: PlanRow): PlanStoreEffect<ReadonlyMap<string, string
 }
 
 /**
- * Who made a save, as a section's line reads it: a coding agent named by its
- * label, or as an agent whose row is gone, or whose writer was kept before
- * agents were.
+ * Who last changed one section, as its line reads it: a coding agent named by
+ * its label, or as an agent whose row is gone, or whose writer was kept
+ * before agents were.
  */
-function editOf(
-  writer: PlanFieldWriter | PlanSectionWriter,
-  labels: ReadonlyMap<string, string>,
-): PlanLastEdit {
-  const { actor, at } = writer;
-  const label = writer.agentId === undefined ? undefined : labels.get(writer.agentId);
-  return {
-    actor,
-    ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
-    at,
-    duringCall: writer.duringCall === true,
-  };
-}
-
-/** Who last changed one field, as the window's section lines read it. */
-function fieldEditOf(writer: PlanFieldWriter, labels: ReadonlyMap<string, string>): PlanFieldEdit {
-  return { field: writer.field, ...editOf(writer, labels) };
-}
-
-/** Who last changed one section of a document plan, as its line reads it. */
 function sectionEditOf(
   writer: PlanSectionWriter,
   labels: ReadonlyMap<string, string>,
 ): PlanSectionEdit {
-  return { section: writer.section, ...editOf(writer, labels) };
-}
-
-/**
- * The document and the writers the window reads for the row. Note that a plan
- * that is one document answers its text as the body with no assumptions and
- * no fields, because every desktop edits a field only where `fields` stands,
- * so a build that knows nothing of documents draws the text and edits
- * nothing; a plan still kept as fields answers as it always has, its empty
- * body formatted from the fields so it is always the current template's.
- */
-function documentOf(
-  row: PlanRow,
-  name: string,
-  labels: ReadonlyMap<string, string>,
-): Pick<Plan, "document" | "fields" | "fieldEdits" | "sectionEdits"> {
-  if (row.document !== null) {
-    return {
-      document: { body: row.document, assumptions: [] },
-      sectionEdits: row.sectionWriters.map((writer) => sectionEditOf(writer, labels)),
-    };
-  }
-  const fields = row.fields ?? EMPTY_PLAN_FIELDS;
+  const { section, actor, at } = writer;
+  const label = writer.agentId === undefined ? undefined : labels.get(writer.agentId);
   return {
-    document: {
-      body: row.body === "" ? planBody({ name }, fields) : row.body,
-      assumptions: row.assumptions,
-    },
-    fields,
-    fieldEdits: row.fieldWriters.map((writer) => fieldEditOf(writer, labels)),
+    section,
+    actor,
+    ...(actor === PLAN_ACTOR.AGENT ? { label: label ?? UNKNOWN_AGENT_LABEL } : undefined),
+    at,
+    duringCall: writer.duringCall === true,
   };
 }
 
@@ -271,15 +205,17 @@ function journaledEdit(edit: LabelledAgentEdit): PlanLastEdit {
 }
 
 /**
- * The row's document, as the window and the model read it (`documentOf`).
- * The row's own account is the one its agents are read under. Its last edit
- * is its newest revision, or, before its history begins, the newest save a
- * coding agent made; each field or section it has a writer for says who.
+ * The row's plan, as the window and the model read it: its text as the
+ * document's body with no assumptions, since they are a section of the text,
+ * and who last changed each section. The row's own account is the one its
+ * agents are read under. Its last edit is its newest revision, or, before its
+ * history begins, the newest save a coding agent made. A plan is saved once
+ * a save has moved its last save past its start, which no creation and no
+ * carrying over does.
  */
 function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
   return Effect.gen(function* () {
     const summary = summaryOf(row);
-    const isDocument = row.document !== null;
     const labels = yield* agentLabelsOf(row);
     const agentEdits = row.agentEdits.map((edit) => ({
       ...edit,
@@ -293,14 +229,13 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         ...summary,
         agentEdits: agentEdits.map(({ agentId, label, at }) => ({ agentId, label, at })),
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
-        ...documentOf(row, summary.name, labels),
+        document: { body: row.document, assumptions: [] },
+        sectionEdits: row.sectionWriters.map((writer) => sectionEditOf(writer, labels)),
       },
-      fields: isDocument ? EMPTY_PLAN_FIELDS : (row.fields ?? EMPTY_PLAN_FIELDS),
-      text: row.document ?? undefined,
+      text: row.document,
       agentEdits,
       conversationId: row.conversationId ?? undefined,
-      saved: row.fields !== null,
-      fieldWriters: isDocument ? [] : row.fieldWriters,
+      saved: row.updatedAt.getTime() > row.createdAt.getTime(),
       sectionWriters: row.sectionWriters,
     };
   });
@@ -354,7 +289,6 @@ const insertPlan = SqlSchema.findOne({
         name: write.name,
         repository: write.repository,
         document: write.document,
-        assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
       })
@@ -377,33 +311,6 @@ const findPlan = SqlSchema.findOneOption({
   Result: PlanRowSchema,
   execute: ({ userId, planId }) =>
     db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).limit(1),
-});
-
-const replaceDocument = SqlSchema.findOneOption({
-  Request: Schema.Struct({
-    userId: Schema.String,
-    planId: Schema.String,
-    body: Schema.String,
-    assumptions: Schema.Array(planAssumptionSchema),
-    fields: Schema.optionalKey(planFieldsSchema),
-    agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
-    fieldWriters: Schema.optionalKey(Schema.Array(planFieldWriterSchema)),
-    now: Schema.Date,
-  }),
-  Result: PlanRowSchema,
-  execute: ({ userId, planId, body, assumptions, fields, agentEdits, fieldWriters, now }) =>
-    db
-      .update(plan)
-      .set({
-        body,
-        assumptions,
-        ...(fields ? { fields } : undefined),
-        ...(agentEdits ? { agentEdits } : undefined),
-        ...(fieldWriters ? { fieldWriters } : undefined),
-        updatedAt: now,
-      })
-      .where(ownedPlan(userId, planId))
-      .returning(PLAN_COLUMNS),
 });
 
 const replaceText = SqlSchema.findOneOption({
@@ -429,7 +336,7 @@ const replaceText = SqlSchema.findOneOption({
       .returning(PLAN_COLUMNS),
 });
 
-/** The plan row under its own lock, so a rename and a save of notes each format the body the other cannot replace meanwhile. */
+/** The plan row under its own lock, so a change and a save of the same plan run one after the other. */
 const lockPlan = SqlSchema.findOneOption({
   Request: PlanKeySchema,
   Result: PlanRowSchema,
@@ -437,13 +344,12 @@ const lockPlan = SqlSchema.findOneOption({
     db.select(PLAN_COLUMNS).from(plan).where(ownedPlan(userId, planId)).for("update"),
 });
 
-/** The row changed: whichever of the name, the body, the repository, the pin, and the archive the change names, in one statement. */
+/** The row changed: whichever of the name, the repository, the pin, and the archive the change names, in one statement. */
 const applyChanges = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
     planId: Schema.String,
     name: Schema.optionalKey(Schema.String),
-    body: Schema.optionalKey(Schema.String),
     repository: Schema.optionalKey(Schema.NullOr(Schema.String)),
     pinnedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
     archivedAt: Schema.optionalKey(Schema.NullOr(Schema.Date)),
@@ -642,42 +548,6 @@ export function readPlanForUpdate(
   );
 }
 
-/** What a save writes beside the document, each where it is handed. */
-export interface PlanSaveExtras {
-  /** The fields the body was formatted from. */
-  readonly fields?: PlanFields;
-  /** The coding agents' journal. */
-  readonly agentEdits?: readonly PlanAgentEdit[];
-  /** Who last changed each field. */
-  readonly fieldWriters?: readonly PlanFieldWriter[];
-}
-
-/**
- * Replaces the plan's document whole, with the fields its body was formatted
- * from, the agents' journal, and the fields' writers where they are handed,
- * and answers it as saved, or nothing where the account owns no such plan;
- * nothing is ever created here.
- */
-export function savePlanDocument(
-  userId: string,
-  planId: string,
-  document: PlanDocument,
-  extras: PlanSaveExtras = {},
-): PlanStoreEffect<Option.Option<Plan>> {
-  return Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    const row = yield* replaceDocument({
-      userId,
-      planId,
-      body: document.body,
-      assumptions: document.assumptions,
-      ...extras,
-      now,
-    });
-    return yield* Effect.transposeOption(Option.map(row, planOf));
-  });
-}
-
 /** What a save of a document plan's text writes beside it, each where it is handed. */
 export interface PlanTextSaveExtras {
   /** Who last changed each section. */
@@ -703,22 +573,6 @@ export function savePlanText(
     const row = yield* replaceText({ userId, planId, text, ...extras, now });
     return yield* Effect.transposeOption(Option.map(row, planOf));
   });
-}
-
-/**
- * The body a renamed plan keeps. Note that only a body formatted from the
- * stored fields under the old name, as the formatter writes it now or wrote
- * it before it dropped a rule's list markers, is formatted again under the
- * new one, because its heading is the name; an empty body already reads as the
- * template under whatever name stands, and any other body, or one the longer
- * heading would carry past the body's bound, is left as saved until the next
- * save of notes formats it.
- */
-function retitledBody(row: PlanRow, name: string): string {
-  if (row.body === "" || row.fields === null) return row.body;
-  if (row.body !== planBody({ name: row.name }, row.fields)) return row.body;
-  const retitled = planBody({ name }, row.fields);
-  return retitled.length > PLAN_BOUNDS.MAX_BODY_CHARS ? row.body : retitled;
 }
 
 /**
@@ -759,9 +613,7 @@ export function updatePlan(
         const row = yield* applyChanges({
           userId,
           planId,
-          ...(changes.name === undefined
-            ? undefined
-            : { name: changes.name, body: retitledBody(locked.value, changes.name) }),
+          ...(changes.name === undefined ? undefined : { name: changes.name }),
           ...(changes.repository === undefined ? undefined : { repository: changes.repository }),
           ...(changes.pinned === undefined
             ? undefined

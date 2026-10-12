@@ -10,7 +10,6 @@ import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { user } from "../server/db/auth-schema";
 import { db } from "../server/db/query";
 import { readPlan } from "../server/hosted/plan-store";
-import { BULK_IMPORT } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -84,15 +83,15 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** A plan row in the new template written as raw SQL, whatever shape its journal is in. */
+/** A plan row, one empty document, written as raw SQL, whatever shape its journal is in. */
 const insertPlan = (userId: string, edits: StoredEdits) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const planId = randomUUID();
     yield* sql`
-      insert into plan (id, user_id, name, body, fields, agent_edits)
+      insert into plan (id, user_id, name, document, agent_edits)
       values (${planId}, ${userId}, ${"Teammate invitations"}, '',
-        ${JSON.stringify(BULK_IMPORT.fields)}::jsonb, ${JSON.stringify(edits)}::jsonb)
+        ${JSON.stringify(edits)}::jsonb)
     `;
     return planId;
   });

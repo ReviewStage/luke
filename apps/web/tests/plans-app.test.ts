@@ -9,6 +9,7 @@ import {
   type CodingAgentPullRequest,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { PLAN_EDIT_REFUSAL, planEditAnswerSchema } from "@sidecar/hosted/plan-edit";
 import {
   PLAN_ACTOR,
@@ -74,11 +75,10 @@ import {
   openGithubUser,
   type SentToGitHub,
 } from "./support/github-app-fake";
-import { added, INVITATIONS_DRAFT, notesFor } from "./support/plan-contents";
+import { added } from "./support/plan-contents";
 import {
   INVITATIONS_TEXT,
   makeDocumentPlan,
-  makeFieldsPlan,
   recordDocumentRevision,
 } from "./support/plan-documents";
 import { dispatched } from "./support/platform-landing";
@@ -613,7 +613,10 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      const saved = yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
+      const saved = yield* saveNotes({ userId: owner, planId }, [
+        added(PLAN_FIELD.CONTEXT, "Only admins can invite."),
+        added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+      ]);
       assert.equal(saved.status, PLAN_SAVE_STATUS.SAVED);
 
       const listed = yield* ask(request(PLANS, owner));
@@ -768,8 +771,14 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* makeFieldsPlan(planId);
-        yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+        const drafted = yield* saveNotes({ userId: owner, planId }, [
+          added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+        ]);
+        const base =
+          drafted.status === PLAN_SAVE_STATUS.SAVED
+            ? drafted.document.body
+            : assert.fail("the draft did not save");
         const change = (body: WireBoundaryInput) =>
           ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
         const edit = () =>
@@ -777,7 +786,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             request(EDIT, owner, {
               id: planId,
               method: "POST",
-              body: { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." },
+              body: { document: { base, value: base.replace("Only an admin", "Only an owner") } },
             }),
           );
         const archived = refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.PLAN_ARCHIVED);
@@ -812,7 +821,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(ONE_PLAN, owner, { id: planId })),
         ).plan;
         assert.equal(held.name, RELAY.name);
-        assert.equal(held.fields?.approach, "Invites expire after a week.");
+        assert.ok(held.document.body.includes("Invites expire after a week."));
         assert.deepEqual(yield* ask(request(BOARD, owner, { id: planId })), {
           status: HOSTED_HTTP_STATUS.OK,
           body: { board: { elements: [], appliedDrawing: 0 } },
@@ -854,72 +863,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "the developer's edit of a field answers the plan as saved, written by them, and it opens that way",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
-        const planId = startedId(
-          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
-        );
-        yield* makeFieldsPlan(planId);
-
-        const edited = yield* ask(
-          request(EDIT, owner, {
-            id: planId,
-            method: "POST",
-            body: {
-              field: PLAN_FIELD.APPROACH,
-              base: null,
-              value: " Invites expire after 7 days. ",
-            },
-          }),
-        );
-
-        const answered = readAnswer(planEditAnswerSchema, HOSTED_HTTP_STATUS.OK, edited);
-        assert.ok("plan" in answered);
-        assert.equal(answered.plan.fields?.approach, "Invites expire after 7 days.");
-        assert.equal(answered.plan.lastEdit?.actor, PLAN_ACTOR.DEVELOPER);
-        const { plan } = readAnswer(
-          planAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(ONE_PLAN, owner, { id: planId })),
-        );
-        assert.deepEqual(plan.document, answered.plan.document);
-      }),
-  );
-
-  it.effect(
-    "an edit whose base the field no longer holds answers it as it stands; one past the plan's bound is refused",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
-        const planId = startedId(
-          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
-        );
-        yield* makeFieldsPlan(planId);
-        yield* saveNotes({ userId: owner, planId }, notesFor(INVITATIONS_DRAFT));
-        const edit = (body: WireBoundaryInput) =>
-          ask(request(EDIT, owner, { id: planId, method: "POST", body }));
-
-        const conflicted = yield* edit({ field: PLAN_FIELD.CONTEXT, base: null, value: null });
-        const oversized = yield* edit({
-          field: PLAN_FIELD.APPROACH,
-          base: null,
-          value: "x".repeat(PLAN_FIELD_BOUNDS.MAX_ANSWER_CHARS),
-        });
-
-        assert.deepEqual(conflicted, {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { conflict: { current: INVITATIONS_DRAFT.fields.context } },
-        });
-        assert.deepEqual(oversized, {
-          status: HOSTED_HTTP_STATUS.OK,
-          body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
-        });
-      }),
-  );
-
-  it.effect(
     "an edit of another account's plan answers as none, and one that does not read is refused",
     () =>
       Effect.gen(function* () {
@@ -927,7 +870,9 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const body = { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire." };
+        const body = {
+          document: { base: DEFAULT_PLAN_TEMPLATE, value: `${DEFAULT_PLAN_TEMPLATE}Mine now.\n` },
+        };
 
         assert.deepEqual(
           yield* ask(request(EDIT, other, { id: planId, method: "POST", body })),
@@ -973,7 +918,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
     Effect.gen(function* () {
       const { owner, ask } = yield* openAccounts();
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      yield* makeFieldsPlan(planId);
 
       const renamed = yield* ask(
         request(ONE_PLAN, owner, {
@@ -985,7 +929,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
 
       const { plan } = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, renamed);
       assert.equal(plan.name, "Team invites");
-      assert.ok(plan.document.body.startsWith("# Team invites\n"));
+      assert.equal(plan.document.body, DEFAULT_PLAN_TEMPLATE);
       const listed = readAnswer(
         planListAnswerSchema,
         HOSTED_HTTP_STATUS.OK,
@@ -1129,7 +1073,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       ]);
       const { owner, ask } = yield* openAccounts(github);
       const planId = startedId(yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })));
-      yield* makeFieldsPlan(planId);
       const change = (body: WireBoundaryInput) =>
         ask(request(ONE_PLAN, owner, { id: planId, method: "PATCH", body }));
 
@@ -1142,7 +1085,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
       );
       const changed = readAnswer(planAnswerSchema, HOSTED_HTTP_STATUS.OK, both).plan;
       assert.deepEqual([changed.name, changed.repository], ["Billing export", "acme/ledger"]);
-      assert.ok(changed.document.body.startsWith("# Billing export\n"));
     }),
   );
 
@@ -2292,7 +2234,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan that is one document answers its text with no fields, so a desktop draws it and edits no field, and says who changed each section by heading",
+    "a plan answers its text and who changed each section by heading, and a rename leaves the text as it stood",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -2328,8 +2270,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
         ).plans;
 
         assert.deepEqual(plan.document, { body: INVITATIONS_TEXT, assumptions: [] });
-        assert.equal(plan.fields, undefined);
-        assert.equal(plan.fieldEdits, undefined);
         assert.deepEqual(plan.sectionEdits, [
           { section: "Goal", actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true },
           { section: "Context", actor: PLAN_ACTOR.DEVELOPER, at, duringCall: false },
@@ -2344,7 +2284,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a plan that is one document takes no field edit, and Luke's notes land in its sections as a revision naming him on each section they moved",
+    "a plan takes no field edit, and Luke's notes land in its sections as a revision naming him on each section they moved",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -2397,7 +2337,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "the developer's edit of a document plan saves their text as a revision of theirs, naming them on the sections it moved alone",
+    "the developer's edit of a plan saves their text as a revision of theirs, naming them on the sections it moved alone",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
@@ -2450,17 +2390,13 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
-    "a document edit keeps what Luke wrote meanwhile, answers a line he changed as the text stands, refuses a text past the bound, and is refused on a plan of fields",
+    "a document edit keeps what Luke wrote meanwhile, answers a line he changed as the text stands, and refuses a text past the bound",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        const fieldsPlanId = startedId(
-          yield* ask(request(PLANS, owner, { method: "POST", body: LEDGER })),
-        );
-        yield* makeFieldsPlan(fieldsPlanId);
         const lukes = `${INVITATIONS_TEXT}- An accepted invite is never reused.\n`;
         yield* makeDocumentPlan(planId, lukes);
         const edit = (id: string, value: string) =>
@@ -2487,7 +2423,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           planId,
           INVITATIONS_TEXT.replace("Only an admin", "Only a workspace admin"),
         );
-        const onFields = yield* edit(fieldsPlanId, INVITATIONS_TEXT);
 
         assert.ok("plan" in merged);
         const mergedText = lukes.replace("Only an admin", "Only an owner");
@@ -2500,23 +2435,24 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           status: HOSTED_HTTP_STATUS.OK,
           body: { refused: PLAN_EDIT_REFUSAL.TOO_LONG },
         });
-        assert.deepEqual(
-          onFields,
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
-        );
       }),
   );
 
   it.effect(
-    "a document plan takes back a revision of its text, and one kept as the template's fields as the text those fields become",
+    "a plan takes back each revision of its text in turn, each restore a revision of the developer's naming the one it took back",
     () =>
       Effect.gen(function* () {
         const { owner, ask } = yield* openAccounts();
         const planId = startedId(
           yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
         );
-        yield* makeFieldsPlan(planId);
-        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
+        const noted = yield* saveNotes({ userId: owner, planId }, [
+          added(PLAN_FIELD.CONTEXT, "Only admins."),
+        ]);
+        const notedText =
+          noted.status === PLAN_SAVE_STATUS.SAVED
+            ? noted.document.body
+            : assert.fail("the notes did not save");
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         yield* recordDocumentRevision(
           planId,
@@ -2525,7 +2461,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           new Date(yield* Clock.currentTimeMillis),
         );
 
-        const fromFields = readAnswer(
+        const fromNotes = readAnswer(
           planAnswerSchema,
           HOSTED_HTTP_STATUS.OK,
           yield* ask(request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "1" } })),
@@ -2541,9 +2477,8 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* ask(request(REVISIONS, owner, { id: planId })),
         );
 
-        assert.ok(fromFields.document.body.startsWith("## Context\n\nOnly admins.\n\n## Goal\n"));
-        assert.ok(fromFields.document.body.endsWith("## Assumptions\n"));
-        assert.equal(fromFields.fields, undefined);
+        assert.deepEqual(fromNotes.document, { body: notedText, assumptions: [] });
+        assert.ok(notedText.includes("Only admins."));
         assert.deepEqual(fromText.document, { body: INVITATIONS_TEXT, assumptions: [] });
         assert.deepEqual(
           page.revisions.map(({ seq, restoredFrom }) => [seq, restoredFrom?.seq]),
@@ -2553,42 +2488,6 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             [2, undefined],
             [1, undefined],
           ],
-        );
-      }),
-  );
-
-  it.effect(
-    "a revision of a plan that is one document reads as its text, beside the template's revision before it, and a plan of fields does not take it back",
-    () =>
-      Effect.gen(function* () {
-        const { owner, ask } = yield* openAccounts();
-        const planId = startedId(
-          yield* ask(request(PLANS, owner, { method: "POST", body: RELAY })),
-        );
-        yield* makeFieldsPlan(planId);
-        yield* saveNotes({ userId: owner, planId }, [added(PLAN_FIELD.CONTEXT, "Only admins.")]);
-        yield* recordDocumentRevision(
-          planId,
-          2,
-          INVITATIONS_TEXT,
-          new Date(yield* Clock.currentTimeMillis),
-        );
-
-        const { revision } = readAnswer(
-          planRevisionAnswerSchema,
-          HOSTED_HTTP_STATUS.OK,
-          yield* ask(request(REVISION, owner, { id: planId, query: { seq: "2" } })),
-        );
-        const restored = yield* ask(
-          request(RESTORE, owner, { id: planId, method: "POST", query: { seq: "2" } }),
-        );
-
-        assert.deepEqual(revision.document, { body: INVITATIONS_TEXT, assumptions: [] });
-        assert.ok(revision.previous?.body.startsWith("# Teammate invitations\n"));
-        assert.ok(revision.previous?.body.includes("Only admins."));
-        assert.deepEqual(
-          restored,
-          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
         );
       }),
   );

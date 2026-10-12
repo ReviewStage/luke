@@ -528,8 +528,6 @@ export class VoiceService {
             document: draft.document,
             readAt: draft.readAt,
             ...(draft.savedAt === undefined ? undefined : { savedAt: draft.savedAt }),
-            ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
-            ...(draft.fieldEdits === undefined ? undefined : { fieldEdits: draft.fieldEdits }),
             ...(draft.sectionEdits === undefined
               ? undefined
               : { sectionEdits: draft.sectionEdits }),

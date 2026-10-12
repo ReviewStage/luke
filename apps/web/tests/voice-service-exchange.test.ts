@@ -4,6 +4,8 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { it } from "@effect/vitest";
 import { VOICE_SERVICE_FRAME, VOICE_SERVICE_PATH } from "@sidecar/hosted";
+import { NOTE_KIND } from "@sidecar/hosted/plan-template";
+import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import { PLAN_WORK_PART, PLAN_WORK_STATE, VOICE_PHASE } from "@sidecar/hosted/planning-view";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
@@ -21,11 +23,12 @@ import { PLANNING_EXPLORE_ASK } from "../server/hosted/brain-host/planning";
 import { memoryRelayState, StreamRelay } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import { saveNotes } from "../server/hosted/plan-notes";
 import {
   createPlan,
   openPlanConversation,
   readPlan,
-  savePlanDocument,
+  savePlanText,
   updatePlan,
 } from "../server/hosted/plan-store";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
@@ -65,7 +68,6 @@ import {
   sessionStarted,
   thinkingAppended,
 } from "./support/live-events";
-import { createFieldsPlan } from "./support/plan-documents";
 import {
   insertVoiceTranscriptSegment,
   readMessagesByConversationTyped,
@@ -1320,12 +1322,13 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const plan = await database.run(createFieldsPlan(context.target.userId, PLAN));
+      const plan = await database.run(createPlan(context.target.userId, PLAN));
       await database.run(
-        savePlanDocument(context.target.userId, plan.id, {
-          body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
-          assumptions: [{ text: "Invitations expire after seven days." }],
-        }),
+        savePlanText(
+          context.target.userId,
+          plan.id,
+          "## Goal\n\nOwners invite teammates by email.\n\n## Assumptions\n\n- Invitations expire after seven days.\n",
+        ),
       );
       const saved = await openSession(context, plan.id);
       const [seed, ...rest] = seededTexts(context, 0);
@@ -1342,14 +1345,15 @@ it.effect(
       await hangUpConnection(saved.desktop, saved.attach, saved.upstream);
 
       const long = await database.run(
-        createFieldsPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
+        createPlan(context.target.userId, { ...PLAN, name: "Billing export" }),
       );
       const tail = "The last line of a very long plan.";
       await database.run(
-        savePlanDocument(context.target.userId, long.id, {
-          body: `# Billing export\n\n${"Every invoice row is exported. ".repeat(4_000)}\n${tail}\n`,
-          assumptions: [],
-        }),
+        savePlanText(
+          context.target.userId,
+          long.id,
+          `${"Every invoice row is exported. ".repeat(4_000)}\n${tail}\n`,
+        ),
       );
       const cut = await openSession(context, long.id);
       const [longSeed] = seededTexts(context, 1);
@@ -1364,13 +1368,14 @@ it.effect(
       // more than twice the room, where four characters to a token let all of
       // them through.
       const wide = await database.run(
-        createFieldsPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
+        createPlan(context.target.userId, { ...PLAN, name: "請求書の書き出し" }),
       );
       await database.run(
-        savePlanDocument(context.target.userId, wide.id, {
-          body: `# 請求書の書き出し\n\n${"請求書を書き出す。".repeat(2_500)}\n${tail}\n`,
-          assumptions: [],
-        }),
+        savePlanText(
+          context.target.userId,
+          wide.id,
+          `${"請求書を書き出す。".repeat(2_500)}\n${tail}\n`,
+        ),
       );
       const wideCall = await openSession(context, wide.id);
       const [wideSeed, ...wideRest] = seededTexts(context, 2);
@@ -1393,17 +1398,20 @@ it.effect(
   () =>
     Effect.promise(async () => {
       const context = await stand(OFFER.EXCHANGE);
-      const fresh = await database.run(createFieldsPlan(context.target.userId, PLAN));
+      const fresh = await database.run(createPlan(context.target.userId, PLAN));
       const freshCall = await openSession(context, fresh.id);
       const [freshSeed] = seededTexts(context, 0);
       await hangUpConnection(freshCall.desktop, freshCall.attach, freshCall.upstream);
 
-      const saved = await database.run(createFieldsPlan(context.target.userId, PLAN));
+      const saved = await database.run(createPlan(context.target.userId, PLAN));
       await database.run(
-        savePlanDocument(context.target.userId, saved.id, {
-          body: "# Teammate invitations\n\n## Goal\nOwners invite teammates by email.\n",
-          assumptions: [],
-        }),
+        saveNotes({ userId: context.target.userId, planId: saved.id }, [
+          {
+            kind: NOTE_KIND.ADD,
+            field: PLAN_FIELD.GOAL,
+            text: "Owners invite teammates by email.",
+          },
+        ]),
       );
       const savedCall = await openSession(context, saved.id);
       const [savedSeed] = seededTexts(context, 1);
@@ -1518,10 +1526,11 @@ it.effect(
       const context = await stand(OFFER.EXCHANGE);
       const plan = await database.run(createPlan(context.target.userId, PLAN));
       await database.run(
-        savePlanDocument(context.target.userId, plan.id, {
-          body: `# Teammate invitations\n\n${"Owners invite teammates by email. ".repeat(2_000)}\n`,
-          assumptions: [],
-        }),
+        savePlanText(
+          context.target.userId,
+          plan.id,
+          `${"Owners invite teammates by email. ".repeat(2_000)}\n`,
+        ),
       );
       const first = await openSession(context, plan.id);
       const voiceSessionId = String(first.created.voiceSessionId);
