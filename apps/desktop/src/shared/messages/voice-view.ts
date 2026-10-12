@@ -7,7 +7,6 @@ import {
 import {
   isOptionalWireString,
   isRecord,
-  isUnitLevel,
   isWireBoolean,
   isWireString,
   type UnparsedWireValue,
@@ -65,23 +64,6 @@ export interface VoiceView extends VoiceSpeakers {
   lukeEndedCall: string | undefined;
   /** Whether Luke's voice is silenced on this Mac for the standing call, his words still captioned; never while none stands. */
   speakerMuted: boolean;
-}
-
-/**
- * How loud each speaker is right now, in the unit interval. Two readings
- * rather than one because either may be talking under the other, and a panel
- * that draws one of them must not be handed the other's loudness.
- */
-export interface VoiceLevels {
-  developer: number;
-  luke: number;
-}
-
-/** Nobody heard, which is what a panel draws before any reading arrives. */
-export const SILENT_VOICE_LEVELS: VoiceLevels = { developer: 0, luke: 0 };
-
-export function isVoiceLevels(value: UnparsedWireValue): value is VoiceLevels & WireRecord {
-  return isRecord(value) && isUnitLevel(value.developer) && isUnitLevel(value.luke);
 }
 
 /**

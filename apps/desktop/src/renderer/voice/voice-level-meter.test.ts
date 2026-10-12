@@ -4,7 +4,6 @@ import {
   frameLevel,
   startVoiceLevelMeter,
   VOICE_ACTIVITY_HANGOVER_MS,
-  VOICE_LEVEL_REPORT_INTERVAL_MS,
   voiceActiveAt,
 } from "./voice-level-meter";
 
@@ -49,19 +48,17 @@ function fakeAudio(samplesNow: () => number) {
   };
 }
 
-test("the meter reports the voice's edges beside the stream and the level at a bounded rate", () => {
+test("the meter reports the voice's edges beside the stream, and nothing of its loudness", () => {
   let sample = 128;
   let now = 0;
   const frames: Array<() => void> = [];
   const activity: boolean[] = [];
-  const levels: number[] = [];
   const audio = fakeAudio(() => sample);
   const stop = startVoiceLevelMeter({
     // SAFETY: The fake source never reads the stream.
     stream: {} as MediaStream,
     audioContext: audio.context,
     onActivity: (active) => activity.push(active),
-    onLevel: (level) => levels.push(level),
     now: () => now,
     requestFrame: (callback) => frames.push(callback),
     cancelFrame: () => frames.splice(0),
@@ -71,19 +68,13 @@ test("the meter reports the voice's edges beside the stream and the level at a b
     frames.shift()?.();
   };
 
-  // Silence: one level report, no edge.
+  // Silence: no edge.
   tick(0);
   assert.deepEqual(activity, []);
-  assert.equal(levels.length, 1);
-  // Loud frames inside one report interval: the voice edge lands at once, the
-  // level only once the interval has passed.
+  // A loud frame: the voice edge lands at once.
   sample = 255;
   tick(10);
   assert.deepEqual(activity, [true]);
-  assert.equal(levels.length, 1);
-  tick(VOICE_LEVEL_REPORT_INTERVAL_MS);
-  assert.equal(levels.length, 2);
-  assert.equal(levels.at(-1), 1);
   // Quiet again: the voice holds through the hangover, then drops once.
   sample = 128;
   tick(VOICE_ACTIVITY_HANGOVER_MS - 1);
