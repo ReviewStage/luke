@@ -266,7 +266,10 @@ export function closesComposer(failure: CodingAgentCallFailure): boolean {
 export { modelLabel };
 
 /** The agent's tab label: its title, or its model's name until it has one. */
-export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {
+export function agentTabLabel(
+  agent: Pick<CodingAgentSummary, "title" | "model">,
+  models?: readonly CatalogModel[],
+): string {
   return agent.title ?? modelLabel(agent.model, models);
 }
 
