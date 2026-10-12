@@ -575,6 +575,13 @@
       "when": 1791210000000,
       "tag": "0082_organization",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1791235000000,
+      "tag": "0083_personal_workspace",
+      "breakpoints": true
     }
   ]
 }
