@@ -273,7 +273,7 @@ test("a note past the wire's bound is no answer, so the card offers no send for 
   );
 });
 
-test("a code block near the file's top reads from its first line, a file that ends before its lines says so for good, a read that did not land may be read again, and lines of another repository or running backwards are not read", () => {
+test("a code block near the file's top reads from its first line, a file that ends before its lines do says so for good, a read that did not land may be read again, and lines of another repository or running backwards are not read", () => {
   const block = {
     type: INBOX_BLOCK.CODE,
     repo: "acme/relay",
@@ -300,10 +300,15 @@ test("a code block near the file's top reads from its first line, a file that en
   };
   assert.deepEqual(codeReadOf(block, short), {
     kind: CODE_READ.NOTICE,
-    line: "The file ends before these lines at this commit.",
+    line: "The file ends before these lines do at this commit.",
     again: false,
   });
-  assert.equal(codeReadOf({ ...block, startLine: 1 }, short).kind, CODE_READ.READY);
+  assert.equal(
+    codeReadOf({ ...block, startLine: 1 }, short).kind,
+    CODE_READ.NOTICE,
+    "a file ending inside the lines draws none of them, rather than some as if all",
+  );
+  assert.equal(codeReadOf({ ...block, startLine: 1, endLine: 1 }, short).kind, CODE_READ.READY);
   assert.deepEqual(codeReadOf(block, { failure: PLAN_CALL_FAILURE.UNANSWERED }), {
     kind: CODE_READ.NOTICE,
     line: "These lines could not be read.",

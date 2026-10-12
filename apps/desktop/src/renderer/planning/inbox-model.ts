@@ -243,7 +243,7 @@ export function codeNotice(block: InboxCodeBlock, repository: string | null): st
 /**
  * A code block's lines as its card holds them once the read answered: the
  * window the service read at the block's commit, the block's lines lit in
- * it; or why they are not drawn, a file that ends before them included, and
+ * it; or why they are not drawn, a file that ends before they do included, and
  * whether reading again may draw them.
  */
 export function codeReadOf(block: InboxCodeBlock, answer: PlanningFileAnswer): CodeRead {
@@ -256,10 +256,12 @@ export function codeReadOf(block: InboxCodeBlock, answer: PlanningFileAnswer): C
   }
   if (!("file" in answer)) return { kind: CODE_READ.NOTICE, line: CODE_UNREAD, again: true };
   const { file } = answer;
-  if (file.firstLine + file.lines.length <= block.startLine) {
+  // Note that a file ending inside the lines is said too, because a card
+  // drawing some of them would read, and copy, as all the agent meant.
+  if (file.firstLine + file.lines.length <= block.endLine) {
     return {
       kind: CODE_READ.NOTICE,
-      line: "The file ends before these lines at this commit.",
+      line: "The file ends before these lines do at this commit.",
       again: false,
     };
   }
