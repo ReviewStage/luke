@@ -12,12 +12,11 @@ and the `verify.sh` evidence.
 The product decisions behind it are settled in the project specification and
 are not reopened here. The two that shape everything below:
 
-- **One saved document per named plan**, a Markdown `body` and an `assumptions`
-  list of `{ text }`, written by the plan's notetaker, which takes notes into
-  it ("The notetaker" below), by coding agents through the same notes, and by
-  the developer, a field at a time ("Editing" below). The body is always the one fixed
-  template (LUKE-352, "The fixed template" below): the service takes each
-  note into the plan's stored fields and formats the result into the body.
+- **One saved document per named plan**, one free Markdown text started as a
+  copy of the account's template ("The template" below), written by the
+  plan's notetaker, which takes notes into it ("The notetaker" below), by
+  coding agents through the same notes, and by the developer, whose editor
+  is the document itself ("Editing" below).
   Every save that changes the plan is kept as a revision under the writer
   who made it ("History" below); there is no stale-revision rejection, no
   approval state, and no export record.
@@ -26,7 +25,7 @@ are not reopened here. The two that shape everything below:
   planning model never writes the document: it is handed the saved document
   every turn, so Luke keeps talking while the notetaker writes.
   The tab decides nothing; it shows the saved document and the voice state,
-  and saves only the developer's own edits of a field.
+  and saves only the developer's own edits of the text.
 
 ## What the tab is not
 
@@ -553,19 +552,20 @@ A planning call's plan is written by a notetaker beside the call
 react to the transcript on a small model while speech goes on. It keeps both
 speakers' words from the call's sideband and the planning model's replies as
 research notes. Once the developer has been quiet for about a second, it makes
-one `gpt-5.6-luna` call over the plan's saved fields and what was said since
+one `gpt-5.6-luna` call over the plan's saved text and what was said since
 its last note, under its own instructions (`SCRIBE_INSTRUCTIONS`), and saves
 the answer through `saveNotes` (`apps/web/server/hosted/plan-notes.ts`). Its
 runs never overlap, so no run of its own races another, and a run that fails
 moves nothing forward.
 
-The answer is notes, the way a person takes notes on a call, never a field
+The answer is notes, the way a person takes notes on a call, never the text
 written out again:
 
-- `add` puts a new point under a field: a bullet after what a text field
-  holds, or an item at the end of open questions or assumptions.
-- `replace` corrects a phrase copied exactly from the field, and `remove`
-  strikes the line or item holding one.
+- `add` puts a new point at the end of a section, under the heading its
+  field names, or opens that section at the end of the text where it has
+  none.
+- `replace` corrects a phrase copied exactly from the text, standing once in
+  it and touching no heading, and `remove` strikes the line holding one.
 
 A note naming a phrase the plan does not hold is passed over, reported, and
 never guessed into another; a note that does not read under the schema is
@@ -753,8 +753,8 @@ content the restore replaced. The newest revision is the plan as it
 stands, so it offers no restore.
 
 The notes type in while they are written. The call streams its answer, and
-the notes so far are taken over the saved fields and formatted exactly as a
-save would be (`notesInProgress` in `packages/hosted/src/plan-template.ts`):
+the notes so far are taken over the saved text exactly as a save would take
+them (`textNotesInProgress` in `packages/hosted/src/plan-template.ts`):
 every note before the last is whole, and the last is drawn only when it adds
 a point, as its text so far. Each draft is sent to the Mac on the call's own
 socket as a `plan.draft` frame, at most every 150 ms, then once more as saved,
@@ -768,40 +768,20 @@ moves no other words. A
 run that breaks off sends the saved document back, so no half-written draft
 is left standing.
 
-### The fixed template
+### The template
 
-**Plans are now one document.** A plan started since the switch is one free
-Markdown text, a copy of its account's own template (Settings › Plan
-template, `GET`/`PUT /api/account/plan-template`) or `DEFAULT_PLAN_TEMPLATE`
-where the account keeps none, copied as the plan starts so a later edit of
-the template leaves it as it stands. A plan from before the switch keeps the
-fixed template's fields below until the backfill carries it over
-(`POST /api/maintenance/plan-documents` under the deployment's
-`CRON_SECRET`, `scripts/backfill-plan-documents.sh`): its text becomes its
-fields as one document (`planDocumentOf`), who last changed each field
-becomes who last changed the section under its heading, every revision kept
-as fields gets its text beside them, and nothing it carries over is a save,
-so its last edit and the list's order stand. What follows describes the
-fixed template those plans were kept in until then.
-
-Every plan used one fixed template (LUKE-352). There is no configurable
-template, no sections map, and no freeform body: a note names one of the
-fields below (`PLAN_FIELD`) and nothing else. The service keeps the plan's
-fields in the row's `fields` column, takes the notes over them, formats the
-result into the canonical Markdown `body`
-(`packages/hosted/src/plan-template.ts`), checks the formatted body against
-its bound, and saves the fields, the body, and the assumptions together; no
-code parses the body back. The notetaker reads the fields on its next run,
-and the planning model reads the canonical Markdown on its next turn.
-
-Plans are becoming one free Markdown document, each started from its
-account's own starter template. The service already stores and serves that
-template: `GET`/`PUT /api/account/plan-template` reads it or keeps one
-verbatim (null goes back to the default), in `account_preference.plan_template`,
-and an account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
+A plan is one free Markdown document (`packages/hosted/src/plan-document.ts`,
+the row's `plan.document`), with no title line, since the plan's name is its
+own, and its assumptions an ordinary section of the text. Every plan starts
+as a copy of its account's own template, copied as the plan starts so a
+later edit of the template leaves every plan as it stands. The service keeps
+the template in `account_preference.plan_template` and serves it at
+`GET`/`PUT /api/account/plan-template` (null goes back to the default); an
+account that never wrote one gets `DEFAULT_PLAN_TEMPLATE`
 (`packages/hosted/src/plan-document-template.ts`): the sections below as `##`
-headings, each with one plain guidance sentence. Nothing reads it to start a
-plan yet; new plans start from it once the switch to one document lands.
+headings, each with one plain guidance sentence. The template is plain
+Markdown with no convention of its own: whatever guidance it holds is
+ordinary text the developer and Luke both see and write over.
 
 Settings › Plan template is where the developer edits it
 (`apps/desktop/src/renderer/settings/plan-template-page.tsx`), signed in
@@ -819,16 +799,29 @@ as focus leaving does. It is built once on the text it opens with and again
 only for words it did not write, as a reset's, and should its bundle fail to
 load, the template is a plain Markdown textarea instead.
 
+A section is a `#` or `##` heading and what stands under it up to the next,
+a deeper heading inside it and a heading in a code fence no heading at all,
+known by its heading's words (`planSections`). Who last changed each section
+is kept by heading (`plan.section_writers`, `sectionEdits` on the wire), so a
+renamed heading is a section no save has changed. Luke's notes land under the
+developer's headings (`applyNotesToText` in `plan-template.ts`): an addition
+at the end of its section, or as a new section at the end of the text where
+the text has none; a correction or a strike names a phrase standing once in
+the whole text and touching no heading, since the headings are the
+developer's. Every plan the fixed template once kept as fields was carried
+over to its text by a one-time backfill (34 plans and 32 revisions in
+production), each field's words under its heading.
+
 Luke is the developer's teammate: someone to bounce ideas off who is also
-responsible for turning them into a concrete plan. So the template is the
-design doc two engineering teammates would write after talking a task
+responsible for turning them into a concrete plan. So the default template is
+the design doc two engineering teammates would write after talking a task
 through in a meeting, and each section is a question a good teammate asks.
 The sections are what the planning model asks about, so getting them right
-is what shapes Luke's questions. The same
-document is the whole spec a coding agent builds from, so Luke talks like a
-teammate and holds the document to a spec's bar.
+is what shapes Luke's questions. The same document is the whole spec a coding
+agent builds from, so Luke talks like a teammate and holds the document to a
+spec's bar.
 
-Each section is defined once, in `plan-template.ts`: its heading
+Each default section is described once, in `plan-template.ts`: its heading
 (`PLAN_FIELD_HEADING`), what it holds and the form it is written in
 (`PLAN_FIELD_PURPOSE`), and when it is good enough for an agent to build
 from (`PLAN_FIELD_BAR`). The planning model is handed all three; the
@@ -836,79 +829,28 @@ notetaker is handed the purpose alone, since it records what was said
 rather than judging it. `apps/web/tests/planning-instructions.test.ts`
 holds both prompts to those words.
 
-| Section | Field | The question Luke asks |
-| --- | --- | --- |
-| Context | `context` | What is going on today, and why now? The problem, who it affects, and what prompted the work. |
-| Goal | `goal` | What is true once we are done, as outcomes someone could observe? |
-| Approach | `approach` | How would we build it? The main pieces and how they fit, where each lives by path, the code each follows, and each design decision with its reason. |
-| Interfaces | `interfaces` | What boundaries change? Every type, schema, table, route, event, tool, or signature added or changed, as code under its file, never function bodies; "None" with the reason. |
-| Alternatives | `alternatives` | What else could we do, and why not that? |
-| Hard parts | `hardParts` | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
-| Not doing | `notDoing` | What are we leaving out on purpose, and why? |
-| Plan of attack | `planOfAttack` | How does the work split, and in what order does it land? Migration and rollout where they apply. |
-| Testing | `testing` | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
-| Open questions | `openQuestions` | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
-| Assumptions | `assumptions` | The existing `{ text }` list: what Luke proposed and the developer had no preference on. |
+| Section | The question Luke asks |
+| --- | --- |
+| Context | What is going on today, and why now? The problem, who it affects, and what prompted the work. |
+| Goal | What is true once we are done, as outcomes someone could observe? |
+| Approach | How would we build it? The main pieces and how they fit, where each lives by path, the code each follows, and each design decision with its reason. |
+| Interfaces | What boundaries change? Every type, schema, table, route, event, tool, or signature added or changed, as code under its file, never function bodies; "None" with the reason. |
+| Alternatives | What else could we do, and why not that? |
+| Hard parts | What is tricky? Each case as the situation and exactly what the change does: edge cases, failure, cancellation, retry, concurrency, permission, privacy, and performance, and risks. |
+| Not doing | What are we leaving out on purpose, and why? |
+| Plan of attack | How does the work split, and in what order does it land? Migration and rollout where they apply. |
+| Testing | How do we know it works? Each case as "When <situation>, then <exact result>", covering every goal and hard part, then the end-to-end check. |
+| Open questions | What do we still need to find out, including a question a coding agent met while implementing, with the assumption it went on under? |
+| Assumptions | What Luke proposed and the developer had no preference on. |
 
-- **Types.** Every field but the two lists is `null` or nonblank text; it is
-  `null` until a note first answers it, or again once every line of it is
-  struck, and a core section renders "Unanswered" while it is.
-  `alternatives` and `planOfAttack` are optional: the body leaves them out
-  while null. `openQuestions` is always a list, rendering "No additional
-  questions recorded" while empty.
 - **Decisions live where they answer.** There is no Decisions section. A
   choice of how to build is written under Approach, the option it beat under
   Alternatives, and an edge case's behavior under Hard parts. A proposal of
   Luke's the developer had no view on is an assumption.
-- **Order and containment.** The formatter owns every heading and its order,
-  so the body's order is the template's whatever order notes arrive in.
-  Field text is contained where it stands: a line that would open a heading
-  or an HTML block is escaped, and a code fence left open is closed at the
-  end of its field, so no answer can impersonate a section or swallow the
-  ones after it.
-- **A new plan** is the template with every field unanswered, no open
-  question, and no assumption; its `fields` column is null and its `body`
-  empty until the first save, and the store formats an empty body from the
-  row's fields when it reads it. Migration 0082 carried every plan written
-  under the earlier template (Goal, Scope, Rules, Implementation, Decisions,
-  Verification, Left to the agent, Data and migration) onto this one, and
-  its revisions with it: contracts became Interfaces whole, and every other
-  old field's words sit under a bold label in the section that now holds
-  them.
-- **Saving and resuming** go through the same save, so a plan written in the
-  template resumes with its answers and its assumptions intact.
-- **One document, on its way.** Plans are moving from these fields to one
-  free Markdown text started from the account's own template. The store
-  already reads a plan that is one document (`plan.document` non-null): it
-  answers the text as the `body`, with no title line, no `assumptions`
-  (they are a section of the text), and no `fields`, so every desktop draws
-  it and edits no field, and it names who last changed each section by its
-  heading (`sectionEdits`, from `plan.section_writers`). A revision of one is
-  its text (`plan_revision.document`). The developer edits it whole:
-  `POST /api/plans/{id}/edit` takes `{ document: { base, value } }`, laid
-  over what Luke wrote since `base` line by line as a field's edit is, or
-  answered as a conflict with the text as it stands, and each section the
-  save moved names the developer as its last writer
-  (`packages/hosted/src/plan-document.ts`). A restore puts back any of its
-  revisions, one kept as the template's fields as the text those fields
-  become (`planDocumentOf`: each section under its heading, an unanswered
-  one its heading alone, the assumptions last). It takes no field edit.
-  Luke's notes land in its text (`applyNotesToText` in `plan-template.ts`): a
-  note still names a field, and lands in the section under that field's
-  heading, an addition at the end of the section, or as a new section at the
-  end of the text where it has none; a correction or a strike names a phrase
-  standing once in the whole text and touching no heading, since the
-  headings are the developer's. The notetaker is handed the text rather than
-  the fields, its drafts are the text with the notes so far, and a saved
-  draft names who last changed each section (`sectionEdits` on `plan.draft`);
-  the planning model and the notetaker are told the sections the developer
-  wrote by heading; and a call about a document plan nobody has written yet
-  opens it as a new plan. Nothing makes a plan one document yet.
-- **Structure is the tool's; agreement is the model's.** The schema
-  guarantees that every field is present and well formed, not that an answer
-  is understood, true, or agreed. Resolving each section, or agreeing that one
+- **Agreement is the model's.** Nothing in the text says a section is
+  understood, true, or agreed. Resolving each section, or agreeing that one
   does not apply, is Luke's work, and every proposal Luke takes without the
-  developer's view is recorded as an assumption. A populated template is not
+  developer's view is recorded as an assumption. A filled-in template is not
   evidence that the developer agreed.
 
 The template replaced one built for the coding agent alone (requirements as

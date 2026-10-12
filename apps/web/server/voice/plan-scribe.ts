@@ -1,10 +1,6 @@
 import {
-  applyNotes,
   applyNotesToText,
-  notesInProgress,
-  type PlanContent,
   type PlanNote,
-  planBody,
   planNotesSchema,
   readNotes,
   textNotesInProgress,
@@ -13,8 +9,6 @@ import {
   PLAN_ACTOR,
   PLAN_BOUNDS,
   type PlanDocument,
-  type PlanFieldEdit,
-  type PlanFields,
   type PlanSectionEdit,
 } from "@sidecar/hosted/plan-wire";
 import {
@@ -55,7 +49,7 @@ import { spendHostedMeter } from "../hosted/quota.js";
  * under the call, so the plan's history keeps the call's saves as one
  * revision.
  * While the model writes, the notes so far go to the device as a draft of the
- * plan (`notesInProgress`), each draft differing from the last only where the
+ * plan (`textNotesInProgress`), each draft differing from the last only where the
  * newest note lands, so the Plans tab types each note in as it is taken. It is the plan's only writer and its
  * runs never overlap, one fiber reading the debounced stream in turn, so no
  * save races another. A run that fails, is refused, or saves nothing moves no
@@ -84,8 +78,7 @@ export const PLAN_SCRIBE = {
 
 /** The markers each part of the scribe's ask rides behind, so the model reads what follows as data. */
 const ASK_MARKER = {
-  PLAN: "[saved plan]",
-  /** A plan that is one document, whose sections stand under the template's headings for the fields a note names. */
+  /** The plan's text, whose sections stand under the template's headings for the fields a note names. */
   DOCUMENT: "[saved plan, one document: a note's field is the section under that field's heading]",
   EARLIER: "[earlier lines]",
   LATEST: "[latest lines]",
@@ -114,7 +107,7 @@ export interface PlanScribeOptions {
 
 /**
  * The plan's document as the notetaker has it now: a draft, or with the
- * instant of its save and the fields it was formatted from once it is saved.
+ * instant of its save and who last changed each section once it is saved.
  * Each names the save the run read before it wrote, so a window that saved an
  * edit of its own since can tell a draft that does not hold it.
  */
@@ -123,10 +116,7 @@ export interface PlanDraft {
   /** Epoch milliseconds of the save the run read. */
   readonly readAt: number;
   readonly savedAt?: number;
-  readonly fields?: PlanFields;
-  /** The save that last changed each field, as the plan names them once this one is saved. */
-  readonly fieldEdits?: readonly PlanFieldEdit[];
-  /** The save that last changed each section of a document plan, once this one is saved. */
+  /** The save that last changed each section, once this one is saved. */
   readonly sectionEdits?: readonly PlanSectionEdit[];
 }
 
@@ -143,25 +133,6 @@ interface NotedPlan {
   readonly taken: (notes: readonly PlanNote[]) => {
     readonly changed: boolean;
     readonly missed: readonly PlanNote[];
-  };
-}
-
-/** A plan kept as the template's fields: handed as its fields and assumptions in JSON, and drawn as the save formats them. */
-function notedFields(name: string, content: PlanContent): NotedPlan {
-  return {
-    marker: ASK_MARKER.PLAN,
-    asked: JSON.stringify(content),
-    drafted: (partial) => {
-      const noted = notesInProgress(content, partial);
-      const body = planBody({ name }, noted.fields);
-      return body.length > PLAN_BOUNDS.MAX_BODY_CHARS
-        ? undefined
-        : { body, assumptions: noted.assumptions };
-    },
-    taken: (notes) => {
-      const noted = applyNotes(content, notes);
-      return { changed: noted.content !== content, missed: noted.missed };
-    },
   };
 }
 
@@ -193,7 +164,7 @@ class ScribeModelError extends Data.TaggedError("ScribeModelError")<{
   readonly reason: string;
 }> {}
 
-/** What one run hands the model: the saved plan, the fields or sections the developer wrote, the lines around the cursor, and the notes since it. */
+/** What one run hands the model: the saved plan, the sections the developer wrote, the lines around the cursor, and the notes since it. */
 function askText(input: {
   readonly plan: NotedPlan;
   readonly developerFields: readonly string[];
@@ -218,13 +189,10 @@ function missedNote(note: PlanNote): string {
   return `${note.kind} ${note.field}`;
 }
 
-/** What the developer wrote last, as the model is told it: a plan's fields by name, or a document's sections by heading. */
+/** The sections the developer wrote last, by heading, as the model is told them. */
 function developerWritten(stored: StoredPlan): readonly string[] {
-  const writers = stored.text === undefined ? stored.fieldWriters : stored.sectionWriters;
-  return writers.flatMap((writer) =>
-    writer.actor !== PLAN_ACTOR.DEVELOPER
-      ? []
-      : ["field" in writer ? writer.field : writer.section],
+  return stored.sectionWriters.flatMap((writer) =>
+    writer.actor === PLAN_ACTOR.DEVELOPER ? [writer.section] : [],
   );
 }
 
@@ -248,7 +216,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
    * One run over what was said since the cursor. The lines and the notes are
    * read before the model is asked, so words heard during the call are left
    * past the cursor for the next run rather than skipped. While the model
-   * writes, the notes so far are taken over the stored fields and formatted
+   * writes, the notes so far are taken over the stored text and drawn
    * exactly as a save would be, and sent to the device as a draft at most
    * once a beat; the save's own document follows it, and a run that saves
    * nothing sends the stored document back so no half-written draft is left
@@ -266,12 +234,9 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
       .utterances()
       .filter((line) => line.endMs <= cursor.heardThrough)
       .slice(-PLAN_SCRIBE.CONTEXT_LINES);
-    const { plan, fields, text } = stored.value;
+    const { plan, text } = stored.value;
     const developerFields = developerWritten(stored.value);
-    const noted =
-      text === undefined
-        ? notedFields(plan.name, { fields, assumptions: plan.document.assumptions })
-        : notedText(text);
+    const noted = notedText(text);
     const drafted = { at: Number.NEGATIVE_INFINITY, landed: false };
 
     const draft = (partial: UnparsedWireValue) =>
@@ -354,11 +319,7 @@ export const planScribe = /* @__PURE__ */ Effect.fn("web/planScribe")(function* 
                 document: saved.document,
                 readAt: plan.updatedAt,
                 savedAt: saved.savedAt,
-                ...(saved.fields === undefined ? undefined : { fields: saved.fields }),
-                ...(saved.fieldEdits === undefined ? undefined : { fieldEdits: saved.fieldEdits }),
-                ...(saved.sectionEdits === undefined
-                  ? undefined
-                  : { sectionEdits: saved.sectionEdits }),
+                sectionEdits: saved.sectionEdits,
               }
             : { document: saved.document, readAt: plan.updatedAt },
         );

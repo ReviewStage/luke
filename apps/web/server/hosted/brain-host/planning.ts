@@ -329,23 +329,13 @@ function agentEditsText(edits: readonly LabelledAgentEdit[]): readonly string[] 
   ];
 }
 
-/**
- * The fields the developer wrote last, or a document plan's sections, by
- * heading, each with when; nothing where the developer wrote none.
- */
+/** The sections the developer wrote last, by heading, each with when; nothing where the developer wrote none. */
 function developerFieldsText(stored: StoredPlan): readonly string[] {
-  const written = (
-    stored.text === undefined
-      ? stored.fieldWriters.map((writer) => ({
-          ...writer,
-          heading: PLAN_FIELD_HEADING[writer.field],
-        }))
-      : stored.sectionWriters.map((writer) => ({ ...writer, heading: writer.section }))
-  ).filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
+  const written = stored.sectionWriters.filter((writer) => writer.actor === PLAN_ACTOR.DEVELOPER);
   if (written.length === 0) return [];
   return [
     DEVELOPER_FIELDS_MARKER,
-    ...written.map((writer) => `- ${writer.heading}, ${new Date(writer.at).toISOString()}`),
+    ...written.map((writer) => `- ${writer.section}, ${new Date(writer.at).toISOString()}`),
   ];
 }
 

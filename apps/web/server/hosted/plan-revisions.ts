@@ -1,9 +1,4 @@
-import {
-  EMPTY_PLAN_FIELDS,
-  type PlanContent,
-  type PlanFieldWriterWho,
-  planBody,
-} from "@sidecar/hosted/plan-template";
+import type { PlanSectionWriterWho } from "@sidecar/hosted/plan-document";
 import {
   PLAN_ACTOR,
   PLAN_HISTORY_BOUNDS,
@@ -12,8 +7,6 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionLine,
   type PlanRevisionsAnswer,
-  planAssumptionSchema,
-  planFieldsSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -32,8 +25,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * The plan's one write (`plan-notes.ts`) records each save that changed the
  * plan here, inside the transaction that holds the plan's row, so the plan
  * and its history never disagree. A revision is the plan's content after it,
- * whole, the template's fields or a document's text, so reading one or going
- * back to one is a read and never a replay.
+ * its whole text, so reading one or going back to one is a read and never a
+ * replay.
  * Saves the same writer makes one after another are one revision, moved on
  * by each: the notetaker's on one call, a coding agent's, or the developer's,
  * each while the revision's latest save is a few minutes old at most. A plan
@@ -69,15 +62,14 @@ export type PlanWriter =
   | { readonly actor: typeof PLAN_ACTOR.AGENT; readonly agentId: string }
   | { readonly actor: typeof PLAN_ACTOR.DEVELOPER; readonly restoredFrom?: number };
 
-/** A plan's content as a revision keeps it: the template's fields and assumptions, or the whole text of a plan that is one document. */
-export type RevisionContent = PlanContent | { readonly text: string };
-
 /** One save to record: the plan, its writer, its content before and after, and how many changes it made. */
 export interface PlanSaveRecord {
   readonly planId: string;
   readonly writer: PlanWriter;
-  readonly before: RevisionContent;
-  readonly after: RevisionContent;
+  /** The plan's text before the save. */
+  readonly before: string;
+  /** Its text after it. */
+  readonly after: string;
   readonly changes: number;
   /** The plan's last save before this one, where it has been saved; none for a plan never written. */
   readonly savedBefore: Option.Option<Date>;
@@ -124,24 +116,21 @@ const insertRevision = SqlSchema.void({
     actor: Schema.Literals(Object.values(PLAN_ACTOR)),
     agentId: Schema.NullOr(Schema.String),
     liveSessionId: Schema.NullOr(Schema.String),
-    fields: Schema.NullOr(planFieldsSchema),
-    assumptions: Schema.Array(planAssumptionSchema),
-    document: Schema.NullOr(Schema.String),
+    document: Schema.String,
     changes: Schema.Number,
     startedAt: Schema.Date,
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  execute: (revision) => db.insert(planRevision).values(revision),
+  // The template's fields and assumptions are written empty: their columns stand, the assumptions not null, until the migration that drops them.
+  execute: (revision) => db.insert(planRevision).values({ ...revision, assumptions: [] }),
 });
 
 const moveRevisionOn = SqlSchema.void({
   Request: Schema.Struct({
     planId: Schema.String,
     seq: Schema.Number,
-    fields: Schema.NullOr(planFieldsSchema),
-    assumptions: Schema.Array(planAssumptionSchema),
-    document: Schema.NullOr(Schema.String),
+    document: Schema.String,
     changes: Schema.Number,
     at: Schema.Date,
   }),
@@ -241,13 +230,9 @@ const findRevisionLines = SqlSchema.findAll({
 
 const RevisionContentRowSchema = Schema.Struct({
   seq: Schema.Number,
-  name: Schema.String,
-  fields: Schema.NullOr(planFieldsSchema),
-  assumptions: Schema.Array(planAssumptionSchema),
-  document: Schema.NullOr(Schema.String),
+  // Every revision is the plan's text since the backfill, so a row with none is the store breaking its own contract.
+  document: Schema.String,
 });
-
-type RevisionContentRow = typeof RevisionContentRowSchema.Type;
 
 /** The content of the account's plan at each revision named, with the plan's name as it stands now. */
 const findRevisionContents = SqlSchema.findAll({
@@ -261,9 +246,6 @@ const findRevisionContents = SqlSchema.findAll({
     db
       .select({
         seq: planRevision.seq,
-        name: plan.name,
-        fields: planRevision.fields,
-        assumptions: planRevision.assumptions,
         document: planRevision.document,
       })
       .from(planRevision)
@@ -276,13 +258,6 @@ const findRevisionContents = SqlSchema.findAll({
         ),
       ),
 });
-
-/** The columns a revision keeps its content in: the fields and assumptions, or the text with neither. */
-function contentColumns(content: RevisionContent) {
-  return "text" in content
-    ? { fields: null, assumptions: [], document: content.text }
-    : { fields: content.fields, assumptions: content.assumptions, document: null };
-}
 
 /** A revision's writer and latest save as the window reads them, a coding agent named as its row names it now. */
 function lastEditOf(row: LastEditRow): PlanLastEdit {
@@ -346,7 +321,7 @@ function recordEarlier(
           actor: PLAN_ACTOR.EARLIER,
           agentId: null,
           liveSessionId: null,
-          ...contentColumns(record.before),
+          document: record.before,
           changes: 0,
           startedAt: at,
           at,
@@ -357,8 +332,8 @@ function recordEarlier(
   });
 }
 
-/** The writer as each field their save changed keeps them: the actor, the agent where one wrote, and whether on a call. */
-export function fieldWriterOf(writer: PlanWriter): PlanFieldWriterWho {
+/** The writer as each section their save changed keeps them: the actor, the agent where one wrote, and whether on a call. */
+export function writerOf(writer: PlanWriter): PlanSectionWriterWho {
   const agentId = agentOf(writer);
   return {
     actor: writer.actor,
@@ -384,7 +359,7 @@ export function recordRevision(
       return yield* moveRevisionOn({
         planId: record.planId,
         seq: newest.value.seq,
-        ...contentColumns(after),
+        document: after,
         changes: newest.value.changes + record.changes,
         at: now,
       });
@@ -396,7 +371,7 @@ export function recordRevision(
       actor: writer.actor,
       agentId: agentOf(writer),
       liveSessionId: callOf(writer),
-      ...contentColumns(after),
+      document: after,
       changes: record.changes,
       startedAt: now,
       at: now,
@@ -448,39 +423,21 @@ export function listRevisions(
   });
 }
 
-/** The account's plan's content at one revision; nothing where it has no such revision, or the account owns no such plan. */
+/** The account's plan's text at one revision; nothing where it has no such revision, or the account owns no such plan. */
 export function readRevisionContent(
   userId: string,
   planId: string,
   seq: number,
-): Effect.Effect<Option.Option<RevisionContent>, RevisionFailure, SqlClient.SqlClient> {
+): Effect.Effect<Option.Option<string>, RevisionFailure, SqlClient.SqlClient> {
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq] }), (rows) =>
-    Option.map(
-      Option.fromNullishOr(rows[0]),
-      ({ fields, assumptions, document }): RevisionContent =>
-        document !== null
-          ? { text: document }
-          : { fields: fields ?? EMPTY_PLAN_FIELDS, assumptions },
-    ),
+    Option.map(Option.fromNullishOr(rows[0]), (row) => row.document),
   );
-}
-
-/**
- * A revision as the History tab reads it: a document plan's text as its body,
- * or the template's fields formatted under the plan's name as it stands now.
- */
-function revisionDocument(row: RevisionContentRow): PlanDocument {
-  if (row.document !== null) return { body: row.document, assumptions: [] };
-  return {
-    body: planBody({ name: row.name }, row.fields ?? EMPTY_PLAN_FIELDS),
-    assumptions: row.assumptions,
-  };
 }
 
 /**
  * One revision of the account's plan as the History tab shows it: the plan
  * after it and before it, the first revision having nothing before it, each
- * as `revisionDocument` reads it; nothing where the plan
+ * its text as the document's body; nothing where the plan
  * has no such revision, or the account owns no such plan.
  */
 export function readRevision(
@@ -495,7 +452,7 @@ export function readRevision(
   return Effect.map(findRevisionContents({ userId, planId, seqs: [seq - 1, seq] }), (rows) => {
     const documentAt = (at: number): PlanDocument | null => {
       const row = rows.find((each) => each.seq === at);
-      return row === undefined ? null : revisionDocument(row);
+      return row === undefined ? null : { body: row.document, assumptions: [] };
     };
     const document = documentAt(seq);
     return document === null

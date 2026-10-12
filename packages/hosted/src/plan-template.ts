@@ -469,14 +469,11 @@ export const planAgentEditSchema = EffectSchema.Struct({
 export type PlanAgentEdit = typeof planAgentEditSchema.Type;
 
 /**
- * Who last changed one field of a plan, and when: kept for every field a save
- * changes, so the planning model and the notetaker know which fields hold the
- * developer's own words, and the window can say who wrote each section. A
- * field no save has changed since this was first kept has none. The agent and
- * the call were kept from later on, so a writer kept before them names
- * neither.
+ * Who last changed one field of a plan, and when, as the fixed template kept
+ * it; the type the `plan.field_writers` column still names until the
+ * migration that drops it.
  */
-export const planFieldWriterSchema = EffectSchema.Struct({
+const planFieldWriterSchema = EffectSchema.Struct({
   field: EffectSchema.Literals(Object.values(PLAN_FIELD)),
   actor: EffectSchema.Literals(Object.values(PLAN_ACTOR)),
   /** The coding agent's id, where a coding agent made the save. */
@@ -488,26 +485,6 @@ export const planFieldWriterSchema = EffectSchema.Struct({
 });
 
 export type PlanFieldWriter = typeof planFieldWriterSchema.Type;
-
-/** Who made a save, as each field it changed keeps them. */
-export type PlanFieldWriterWho = Omit<PlanFieldWriter, "field" | "at">;
-
-/**
- * The fields' writers after a save by `who` at `at` that took the content
- * from `before` to `after`: each field it changed now names it, and every
- * other field keeps the writer it had.
- */
-export function withFieldWriters(
-  writers: readonly PlanFieldWriter[],
-  change: { readonly before: PlanContent; readonly after: PlanContent },
-  who: PlanFieldWriterWho,
-  at: number,
-): readonly PlanFieldWriter[] {
-  const changed = changedFields(change.before, change.after);
-  if (changed.length === 0) return writers;
-  const kept = writers.filter((writer) => !changed.includes(writer.field));
-  return [...kept, ...changed.map((field) => ({ field, ...who, at }))];
-}
 
 /** The journal with one more save on its end, the oldest let go past the bound. */
 export function withAgentEdit(
@@ -555,28 +532,6 @@ export function withPlanTextField(
   value: string | null,
 ): PlanFields {
   return { ...fields, [field]: value };
-}
-
-/** What one field of a plan's content holds: an answer or a list. */
-type PlanFieldValue = string | null | PlanFields["openQuestions"] | readonly PlanAssumption[];
-
-/** What one field of a plan's content holds, whatever its kind. */
-function planFieldValue(content: PlanContent, field: PlanField): PlanFieldValue {
-  if (field === PLAN_FIELD.ASSUMPTIONS) return content.assumptions;
-  return content.fields[field];
-}
-
-/**
- * The fields whose words differ from one content to another. Note that the
- * words are compared rather than the objects, because a note taken into a
- * field builds the field anew even where its words come out the same.
- */
-export function changedFields(before: PlanContent, after: PlanContent): readonly PlanField[] {
-  return Object.values(PLAN_FIELD).filter(
-    (field) =>
-      JSON.stringify(planFieldValue(before, field)) !==
-      JSON.stringify(planFieldValue(after, field)),
-  );
 }
 
 function escapedPattern(word: string): string {

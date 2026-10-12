@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { EMPTY_PLAN_FIELDS, NOTE_KIND, planBody } from "@sidecar/hosted/plan-template";
+import { NOTE_KIND, type PlanNote } from "@sidecar/hosted/plan-template";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -24,10 +24,15 @@ import {
   saveDeveloperEdit,
   saveNotes,
 } from "../server/hosted/plan-notes";
-import { listRevisions, PLAN_REVISION, type PlanWriter } from "../server/hosted/plan-revisions";
-import { deletePlan, readPlan, savePlanDocument } from "../server/hosted/plan-store";
-import { added, INVITATIONS_DRAFT, notesFor, SMALL_FEATURE } from "./support/plan-contents";
-import { createFieldsPlan } from "./support/plan-documents";
+import {
+  listRevisions,
+  PLAN_REVISION,
+  type PlanWriter,
+  readRevision,
+} from "../server/hosted/plan-revisions";
+import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
+import { added } from "./support/plan-contents";
+import { INVITATIONS_TEXT } from "./support/plan-documents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -42,10 +47,17 @@ const CALL = "rtc-session-history";
 const AGENT_MODEL = "anthropic/claude-opus-5.5";
 const ON_CALL: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: CALL };
 
+/** Notes that write a draft into a plan, each in a section of its own. */
+const DRAFT_NOTES: readonly PlanNote[] = [
+  added(PLAN_FIELD.CONTEXT, "A member cannot bring a teammate in without an admin."),
+  added(PLAN_FIELD.HARD_PARTS, "- A withdrawn invite's link never grants access."),
+  added(PLAN_FIELD.OPEN_QUESTIONS, "Who can withdraw an invite?"),
+];
+
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createFieldsPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 
@@ -88,7 +100,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
   it.effect("every save that changes the plan is a revision under the writer who made it", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
-      yield* saveNotes({ userId, planId }, notesFor(INVITATIONS_DRAFT), ON_CALL);
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
       const agentId = yield* startAgent(userId, planId);
       yield* saveNotes(
         { userId, planId },
@@ -103,7 +115,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           actor: PLAN_ACTOR.NOTETAKER,
           label: undefined,
           duringCall: true,
-          changes: notesFor(INVITATIONS_DRAFT).length,
+          changes: DRAFT_NOTES.length,
         },
       ]);
     }),
@@ -114,7 +126,11 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
-        yield* saveNotes({ userId, planId }, notesFor(INVITATIONS_DRAFT), ON_CALL);
+        yield* saveNotes(
+          { userId, planId },
+          [added(PLAN_FIELD.CONTEXT, "Only admins can invite.")],
+          ON_CALL,
+        );
         const agentId = yield* startAgent(userId, planId);
         yield* saveNotes(
           { userId, planId },
@@ -221,7 +237,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     }),
   );
 
-  it.effect("a correction that takes a field to the words it already held is no revision", () =>
+  it.effect("a correction that takes the text to the words it already held is no revision", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
       yield* saveNotes(
@@ -254,17 +270,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
         yield* TestClock.adjust(Duration.hours(1));
-        const before = Option.getOrThrow(
-          yield* savePlanDocument(
-            userId,
-            planId,
-            {
-              body: planBody({ name: "Teammate invitations" }, SMALL_FEATURE.fields),
-              assumptions: SMALL_FEATURE.assumptions,
-            },
-            { fields: SMALL_FEATURE.fields },
-          ),
-        );
+        const before = Option.getOrThrow(yield* savePlanText(userId, planId, INVITATIONS_TEXT));
         yield* TestClock.adjust(Duration.hours(1));
         yield* saveNotes(
           { userId, planId },
@@ -281,13 +287,17 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           ],
         );
         assert.equal(revisions[1]?.lastEdit.at, before.updatedAt);
+        assert.equal(
+          Option.getOrThrow(yield* readRevision(userId, planId, 1)).document.body,
+          INVITATIONS_TEXT,
+        );
       }),
   );
 
   it.effect("a plan's first save after it started is its first revision, with none before it", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
-      yield* saveNotes({ userId, planId }, notesFor(SMALL_FEATURE), ON_CALL);
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
 
       assert.deepEqual(
         (yield* revisionsOf(userId, planId)).map(({ seq, lastEdit }) => [seq, lastEdit.actor]),
@@ -339,12 +349,9 @@ it.layer(testSqlClient)("a plan's history", (it) => {
         const journaledAt =
           (yield* Clock.currentTimeMillis) + Duration.toMillis(Duration.minutes(2));
         yield* TestClock.adjust(Duration.minutes(2));
-        yield* savePlanDocument(
-          userId,
-          planId,
-          { body: planBody({ name: "Teammate invitations" }, EMPTY_PLAN_FIELDS), assumptions: [] },
-          { fields: EMPTY_PLAN_FIELDS, agentEdits: [{ agentId, at: journaledAt, notes: [] }] },
-        );
+        yield* savePlanText(userId, planId, INVITATIONS_TEXT, {
+          agentEdits: [{ agentId, at: journaledAt, notes: [] }],
+        });
 
         assert.deepEqual(yield* lastEditOf(userId, planId), {
           actor: PLAN_ACTOR.AGENT,
@@ -356,7 +363,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
   );
 
   it.effect(
-    "each field names the save that last changed it: Luke on a call, a coding agent by its label, or the developer",
+    "each section names the save that last changed it: Luke on a call, a coding agent by its label, or the developer",
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;
@@ -380,22 +387,30 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           },
         );
         yield* TestClock.adjust(Duration.minutes(3));
+        const base = Option.getOrThrow(yield* readPlan(userId, planId)).text;
         yield* saveDeveloperEdit(
           { userId, planId },
-          { field: PLAN_FIELD.GOAL, base: null, value: "An invited teammate can sign in." },
+          {
+            document: {
+              base,
+              value: base.replace("## Goal\n\n", "## Goal\n\nAn invited teammate can sign in.\n\n"),
+            },
+          },
         );
 
         const stored = Option.getOrThrow(yield* readPlan(userId, planId));
-        const byField = new Map(stored.plan.fieldEdits?.map(({ field, ...edit }) => [field, edit]));
-        assert.deepEqual(Object.fromEntries(byField), {
-          [PLAN_FIELD.CONTEXT]: { actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
-          [PLAN_FIELD.APPROACH]: {
+        const bySection = new Map(
+          stored.plan.sectionEdits?.map(({ section, ...edit }) => [section, edit]),
+        );
+        assert.deepEqual(Object.fromEntries(bySection), {
+          Context: { actor: PLAN_ACTOR.NOTETAKER, at: start, duringCall: true },
+          Approach: {
             actor: PLAN_ACTOR.AGENT,
             label: AGENT_MODEL,
             at: start + Duration.toMillis(Duration.minutes(3)),
             duringCall: false,
           },
-          [PLAN_FIELD.GOAL]: {
+          Goal: {
             actor: PLAN_ACTOR.DEVELOPER,
             at: start + Duration.toMillis(Duration.minutes(6)),
             duringCall: false,
@@ -408,7 +423,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
       const intruder = yield* openPlan;
-      yield* saveNotes({ userId, planId }, notesFor(SMALL_FEATURE), ON_CALL);
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
 
       assert.deepEqual(yield* revisionsOf(intruder.userId, planId), []);
       assert.equal((yield* revisionsOf(userId, planId)).length, 1);
@@ -420,7 +435,7 @@ it.layer(testSqlClient)("a plan's history", (it) => {
   it.effect("deleting a plan deletes its history", () =>
     Effect.gen(function* () {
       const { userId, planId } = yield* openPlan;
-      yield* saveNotes({ userId, planId }, notesFor(SMALL_FEATURE), ON_CALL);
+      yield* saveNotes({ userId, planId }, DRAFT_NOTES, ON_CALL);
       assert.ok(yield* deletePlan(userId, planId));
 
       const left = yield* db
@@ -447,13 +462,10 @@ it.layer(testSqlClient)("a plan's history", (it) => {
     );
 
   const contentOf = (userId: string, planId: string) =>
-    Effect.map(readPlan(userId, planId), (stored) => {
-      const { fields, plan } = Option.getOrThrow(stored);
-      return { fields, assumptions: plan.document.assumptions };
-    });
+    Effect.map(readPlan(userId, planId), (stored) => Option.getOrThrow(stored).text);
 
   it.effect(
-    "restoring a revision puts its content back as a new revision of the developer's, counted by the fields it changes",
+    "restoring a revision puts its text back as a new revision of the developer's, counted by the sections it changes",
     () =>
       Effect.gen(function* () {
         const { userId, planId } = yield* openPlan;

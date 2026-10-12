@@ -14,9 +14,6 @@ export const MAINTENANCE_SWEEP_PATH = "/api/maintenance/sweep";
 /** The rotation's rewrap of every stored provider key (`provider-key-rewrap.ts`), asked by hand under the same secret. */
 export const MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH = "/api/maintenance/provider-keys-rewrap";
 
-/** The switch's carrying over of every plan still kept as fields to one document (`plan-backfill.ts`), asked by hand under the same secret. */
-export const MAINTENANCE_PLAN_DOCUMENTS_PATH = "/api/maintenance/plan-documents";
-
 export const CRON_ENVIRONMENT = {
   /**
    * Vercel sends this as the bearer on every scheduled call once it is set,

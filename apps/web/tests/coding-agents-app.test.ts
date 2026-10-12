@@ -28,8 +28,6 @@ import {
   inboxAnswerSchema,
 } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { planMarkdown } from "@sidecar/hosted/plan-markdown";
-import { EMPTY_PLAN_FIELDS } from "@sidecar/hosted/plan-template";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { isTextUIPart, type UIMessage } from "ai";
@@ -109,7 +107,7 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { savePlanDocument, updatePlan } from "../server/hosted/plan-store";
+import { createPlan, savePlanText, updatePlan } from "../server/hosted/plan-store";
 import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import { sentLineStands } from "../server/hosted/store/message-reads";
 import {
@@ -118,7 +116,6 @@ import {
   openGithubUser,
   type RepositoryScript,
 } from "./support/github-app-fake";
-import { createFieldsPlan } from "./support/plan-documents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -145,17 +142,11 @@ const RELAY = { owner: "Acme", name: "Relay" } as const;
 const RELAY_FULL_NAME = `${RELAY.owner}/${RELAY.name}`;
 const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as const;
 
-const SAVED = {
-  body: "# Teammate invitations\n\n## Goal\n\nInvite a teammate by email.\n",
-  assumptions: [{ text: "Invites expire after 7 days." }],
-};
+const SAVED =
+  "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, which is what an agent started on the plan is handed. */
-const SNAPSHOT = planMarkdown({
-  name: "Teammate invitations",
-  document: SAVED,
-  fields: EMPTY_PLAN_FIELDS,
-});
+/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the plan is handed. */
+const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
 
 const SOL = "openai/gpt-6.1-sol";
 
@@ -418,11 +409,11 @@ const openPlan = (
   Effect.gen(function* () {
     const owner = yield* openGithubUser();
     const other = yield* openGithubUser();
-    const plan = yield* createFieldsPlan(owner, {
+    const plan = yield* createPlan(owner, {
       name: "Teammate invitations",
       repository: options.repository === undefined ? RELAY_FULL_NAME : options.repository,
     });
-    yield* savePlanDocument(owner, plan.id, SAVED);
+    yield* savePlanText(owner, plan.id, SAVED);
     const bearers = new Map([
       [`Bearer ${owner}`, owner],
       [`Bearer ${other}`, other],
@@ -739,7 +730,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(startAs(undefined, plan.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
         );
-        const unreachable = yield* createFieldsPlan(owner, {
+        const unreachable = yield* createPlan(owner, {
           name: "Ledger",
           repository: "Acme/Ledger",
         });
@@ -747,7 +738,7 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
           yield* ask(startAs(owner, unreachable.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.FORBIDDEN, HOSTED_API_ERROR.REPOSITORY_NOT_REACHABLE),
         );
-        const bare = yield* createFieldsPlan(owner, { name: "Bare" });
+        const bare = yield* createPlan(owner, { name: "Bare" });
         assert.deepEqual(
           yield* ask(startAs(owner, bare.id, { idempotencyKey: randomUUID() })),
           refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.NO_REPOSITORY),

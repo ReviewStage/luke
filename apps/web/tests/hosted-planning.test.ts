@@ -71,10 +71,11 @@ import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { modelCatalogOf } from "../server/hosted/model-catalog";
 import { saveDeveloperEdit, saveNotes } from "../server/hosted/plan-notes";
 import {
+  createPlan,
   deletePlan,
   openPlanConversation,
   readPlan,
-  savePlanDocument,
+  savePlanText,
 } from "../server/hosted/plan-store";
 import {
   READ_WEB_PAGE_TOOL,
@@ -98,7 +99,7 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
-import { createFieldsPlan, INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
 
@@ -124,10 +125,11 @@ const RELAY_PLAN = {
   name: "Teammate invitations",
 } as const;
 
-const SAVED: PlanDocument = {
-  body: "# Teammate invitations\n\n## Open questions\n- Who may invite?\n",
-  assumptions: [{ text: "Invites reuse `memberships` with a `pending` state." }],
-};
+const SAVED_TEXT =
+  "## Open questions\n\n- Who may invite?\n\n## Assumptions\n\n- Invites reuse `memberships` with a `pending` state.\n";
+
+/** The saved text as the window opens it and the model is handed it: the document's body. */
+const SAVED: PlanDocument = { body: SAVED_TEXT, assumptions: [] };
 
 const CORRECTION = "Any member should be able to invite, not only admins.";
 
@@ -261,7 +263,7 @@ const openUser = Effect.gen(function* () {
 const savedPlanWithConversation = () =>
   Effect.gen(function* () {
     const userId = yield* openUser;
-    const started = yield* createFieldsPlan(userId, RELAY_PLAN);
+    const started = yield* createPlan(userId, RELAY_PLAN);
     const host = yield* planningHost();
     const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
     return { host, userId, planId: started.id, conversationId };
@@ -517,7 +519,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     () =>
       Effect.gen(function* () {
         const userId = yield* openUser;
-        const started = yield* createFieldsPlan(userId, RELAY_PLAN);
+        const started = yield* createPlan(userId, RELAY_PLAN);
 
         const first = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
         const again = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
@@ -532,7 +534,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     Effect.gen(function* () {
       const owner = yield* openUser;
       const stranger = yield* openUser;
-      const started = yield* createFieldsPlan(owner, RELAY_PLAN);
+      const started = yield* createPlan(owner, RELAY_PLAN);
 
       assert.ok(Option.isNone(yield* openPlanConversation(stranger, started.id)));
       const stored = Option.getOrThrow(yield* readPlan(owner, started.id));
@@ -626,50 +628,23 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
   );
 
   it.effect(
-    "the fields the developer wrote reach the planning model by heading, until Luke writes one again",
-    () =>
-      Effect.gen(function* () {
-        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
-        const session = yield* startSession(host, userId, conversationId);
-        const standing = yield* admitted(host, session);
-        assert.doesNotMatch(yield* host.standingContext(standing), /fields the developer wrote/u);
-        yield* saveDeveloperEdit(
-          { userId, planId },
-          { field: PLAN_FIELD.APPROACH, base: null, value: "Invites expire after 7 days." },
-        );
-        yield* saveDeveloperEdit(
-          { userId, planId },
-          { field: PLAN_FIELD.TESTING, base: null, value: "An expired link says so." },
-        );
-
-        const written = (yield* host.standingContext(standing)).split("\n");
-        yield* saveNotes({ userId, planId }, [
-          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.APPROACH, text: "- Owners can resend." },
-        ]);
-        const rewritten = (yield* host.standingContext(standing)).split("\n");
-
-        const at = written.indexOf("[fields the developer wrote]");
-        assert.notEqual(at, -1);
-        assert.match(written[at + 1] ?? "", /^- Approach, \d{4}-\d{2}-\d{2}T/u);
-        assert.match(written[at + 2] ?? "", /^- Testing, \d{4}-\d{2}-\d{2}T/u);
-        const after = rewritten.indexOf("[fields the developer wrote]");
-        assert.match(rewritten[after + 1] ?? "", /^- Testing, /u);
-        assert.ok(!rewritten.some((line) => line.startsWith("- Approach, ")));
-      }),
-  );
-
-  it.effect(
-    "the sections of a document plan the developer wrote reach the planning model by heading, until Luke writes one again",
+    "the sections the developer wrote reach the planning model by heading, until Luke writes one again",
     () =>
       Effect.gen(function* () {
         const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
         const session = yield* startSession(host, userId, conversationId);
         const standing = yield* admitted(host, session);
-        const changedGoal = INVITATIONS_TEXT.replace("by email", "by email or link");
+        assert.doesNotMatch(yield* host.standingContext(standing), /fields the developer wrote/u);
+        const changedContext = INVITATIONS_TEXT.replace("today.", "today, by hand.");
+        const changedGoal = changedContext.replace("by email", "by email or link");
         yield* saveDeveloperEdit(
           { userId, planId },
-          { document: { base: INVITATIONS_TEXT, value: changedGoal } },
+          { document: { base: INVITATIONS_TEXT, value: changedContext } },
+        );
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { document: { base: changedContext, value: changedGoal } },
         );
 
         const written = (yield* host.standingContext(standing)).split("\n");
@@ -679,8 +654,12 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         const rewritten = (yield* host.standingContext(standing)).split("\n");
 
         const at = written.indexOf("[fields the developer wrote]");
-        assert.match(written[at + 1] ?? "", /^- Goal, \d{4}-\d{2}-\d{2}T/u);
-        assert.ok(!rewritten.includes("[fields the developer wrote]"));
+        assert.notEqual(at, -1);
+        assert.match(written[at + 1] ?? "", /^- Context, \d{4}-\d{2}-\d{2}T/u);
+        assert.match(written[at + 2] ?? "", /^- Goal, \d{4}-\d{2}-\d{2}T/u);
+        const after = rewritten.indexOf("[fields the developer wrote]");
+        assert.match(rewritten[after + 1] ?? "", /^- Context, /u);
+        assert.ok(!rewritten.some((line) => line.startsWith("- Goal, ")));
         assert.ok(written.some((line) => line.includes("by email or link")));
       }),
   );
@@ -691,7 +670,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const session = yield* startSession(host, userId, conversationId);
-        yield* savePlanDocument(userId, planId, SAVED);
+        yield* savePlanText(userId, planId, SAVED_TEXT);
 
         const reply = yield* planningTurn(host, session, "turn_0", CORRECTION);
 
@@ -710,7 +689,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
         const session = yield* startSession(host, userId, conversationId, BRAIN_HOST_TURN.SPOKEN);
-        yield* savePlanDocument(userId, planId, SAVED);
+        yield* savePlanText(userId, planId, SAVED_TEXT);
         const standing = yield* admitted(host, session);
         assert.deepEqual(handedDocument(yield* host.standingContext(standing)), SAVED);
 
@@ -816,8 +795,8 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
         const host = yield* planningHost(TEST_OPENAI, meter(true));
-        const asking = yield* createFieldsPlan(userId, RELAY_PLAN);
-        const other = yield* createFieldsPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
+        const asking = yield* createPlan(userId, RELAY_PLAN);
+        const other = yield* createPlan(userId, { ...RELAY_PLAN, name: "Billing export" });
         const askingConversation = Option.getOrThrow(
           yield* openPlanConversation(userId, asking.id),
         );
@@ -860,7 +839,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
     Effect.gen(function* () {
       const userId = yield* openUser;
       const host = yield* planningHost(TEST_OPENAI, meter(true));
-      const started = yield* createFieldsPlan(userId, RELAY_PLAN);
+      const started = yield* createPlan(userId, RELAY_PLAN);
       const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
       const session = yield* startSession(host, userId, conversationId);
 
@@ -882,7 +861,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const userId = yield* openUser;
         const host = yield* planningHost(TEST_OPENAI, meter(false));
-        const started = yield* createFieldsPlan(userId, RELAY_PLAN);
+        const started = yield* createPlan(userId, RELAY_PLAN);
         const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, started.id));
         const session = yield* startSession(host, userId, conversationId);
         const search = searchService(true);
@@ -906,7 +885,7 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
       Effect.gen(function* () {
         const userId = yield* openGithubUser();
         const host = yield* planningHost();
-        const started = yield* createFieldsPlan(userId, {
+        const started = yield* createPlan(userId, {
           ...RELAY_PLAN,
           repository: RELAY_FULL_NAME,
         });
