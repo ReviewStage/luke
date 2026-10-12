@@ -17,6 +17,7 @@
     "./plan-template": "./src/plan-template.js",
     "./plan-wire": "./src/plan-wire.js",
     "./planning-view": "./src/planning-view.js",
+    "./provider-key-wire": "./src/provider-key-wire.js",
     "./transcript-wire": "./src/transcript-wire.js"
   },
   "types": "./src/index.ts",

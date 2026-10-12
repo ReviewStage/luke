@@ -672,6 +672,69 @@ as a snapshot to apply over its own settings, so a row a choice alone opened
 must answer none, or a Mac that never synced would take an empty snapshot
 over the voice it holds.
 
+### Accounts' own provider keys
+
+`server/provider-keys-app.ts` answers `/api/account/provider-keys`, the
+account's own Anthropic and OpenAI API keys, at most one per provider:
+`GET` answers what each is, `PUT` saves one, and `DELETE
+?provider=<provider>` removes one, each answered with the keys as they then
+stand (`@sidecar/hosted/provider-key-wire`). No answer carries a key: what
+the account is shown is the provider, a hint of the key's prefix and last
+four characters (`sk-ant-…abcd`), when it was added, and its status —
+`verified`, `invalid`, `quota_exceeded`, or `unreadable` where the ring
+below can no longer open it. A save asks the provider first, with one read
+of its model list, which bills nothing (`server/hosted/provider-key-check.ts`):
+a 200 keeps the key as verified, a 401 or 403 keeps nothing and answers
+`rejected: invalid`, anything else keeps nothing and answers `unreachable`,
+and a key spelled as the other provider's is answered `wrong_provider`
+without being sent anywhere. Saves are braked at ten an hour per account
+on each instance, so the endpoint is no oracle for keys that are not the
+caller's. Neither the key nor what the provider said of it is logged.
+
+A key is kept in `account_provider_key` (migration 0080), sealed by
+`server/hosted/provider-key-seal.ts`: AES-256-GCM under a data key drawn
+for that save, the data key wrapped under the deployment's key-encryption
+key, with the account and provider bound as additional data on both seals
+and the version on the wrap, so a sealed key copied onto another row does
+not open. The row holds the version, the wrapped data key, the sealed key,
+the hint, and the status; it is replaced whole by a save, deleted by a
+removal, and cascades with the account. `server/hosted/provider-key-store.ts`
+reads and writes the rows and never sees a key in the clear.
+
+The key-encryption keys are `PROVIDER_KEY_ENCRYPTION_KEYS`, read through
+`HostedEnvironment`: comma-separated `<version>:<base64 of 32 random
+bytes>` entries, the version new saves wrap under first. Production and
+Preview each hold their own. A deployment without it, or with a value that
+is no list, answers every request on the path `unavailable` and logs which
+shape is wrong, never the value. To set one up:
+
+```
+openssl rand -base64 32          # one key; repeat for the other environment
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS production   # value: 1:<key>
+vercel env add PROVIDER_KEY_ENCRYPTION_KEYS preview      # value: 1:<another key>
+```
+
+A rotation is two steps. First put a new version at the head of the list,
+`2:<new key>,1:<old key>`, and redeploy: new saves wrap under version 2, and
+rows on version 1 still open. Then ask that deployment for the rewrap:
+
+```
+CRON_SECRET=<the deployment's own> scripts/rewrap-provider-keys.sh https://tryluke.dev
+```
+
+The script is a `POST /api/maintenance/provider-keys-rewrap` under the
+deployment's `CRON_SECRET`, compared in constant time as the sweep's is, so
+the rewrap (`server/hosted/provider-key-rewrap.ts`) runs on the deployment
+over the ring it holds and the key-encryption keys never leave Vercel. It
+unwraps each older row's data key and wraps it under the head version,
+leaving the sealed key itself untouched, and answers counts: the version,
+moved, already current, changed meanwhile, and unreadable. Run it again
+until nothing is changed meanwhile; once nothing names the old version,
+drop it from the list and redeploy. A row counted unreadable reads
+`unreadable` to its account, which is told to replace it. It is not a
+migration, since a migration holds no key and runs before the deployment
+whose ring it would need.
+
 ## The models group
 
 `server/models-app.ts` answers `GET /api/models`: the models a coding agent

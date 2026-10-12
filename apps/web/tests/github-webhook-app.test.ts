@@ -103,6 +103,7 @@ function environment(secret: string | undefined): HostedEnvironmentValues {
     posthogIngestHost: undefined,
     cronSecret: undefined,
     githubWebhookSecret: secret === undefined ? undefined : Redacted.make(secret),
+    providerKeyEncryptionKeys: undefined,
   };
 }
 
