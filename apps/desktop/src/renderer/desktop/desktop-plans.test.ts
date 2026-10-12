@@ -38,6 +38,7 @@ import {
 } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { installHighlights } from "#testing/find-highlights";
 import {
   codingAgentsControl,
   plansControl,
@@ -2137,6 +2138,37 @@ test("Command-T opens the + of the column holding the focus, the plan's column's
   press(page, '[aria-label="Hide panel"]');
   keydown({ key: "t", metaKey: true });
   assert.ok(document.querySelector(".desktop-toolbar .tab-add-menu"));
+});
+test("Command-F opens the find bar over the chosen tab of the column holding the focus: the plan's document, the side panel's tab once the pointer went into it, and nothing over the Board, whose canvas keeps its own find", () => {
+  const painted = installHighlights();
+  const page = mountOpenPlan();
+  const find = () => keydown({ key: "f", code: "KeyF", metaKey: true });
+  const barIn = () => page.querySelector(".find-bar")?.parentElement?.className ?? "";
+
+  assert.equal(find(), true);
+  assert.match(barIn(), /desktop-plan-column/u);
+  const input = focused();
+  assert.ok(input instanceof HTMLInputElement && input.closest(".find-bar"));
+  const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setValue?.call(input, "invitations");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  assert.deepEqual(painted.matches(), ["invitations"], "the document's words, not the tab's name");
+
+  press(page, '[aria-label="Show panel"]');
+  const panel = page.querySelector(".side-panel");
+  assert.ok(panel);
+  act(() => {
+    panel.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  act(() => tabNamed(page, "Board").click());
+  assert.equal(find(), false, "the Board leaves ⌘F to its canvas");
+
+  act(() => tabNamed(page, "Transcript").click());
+  assert.equal(find(), true);
+  assert.equal(page.querySelectorAll(".find-bar").length, 2, "the column's bar stays open over it");
+  assert.match(focused().closest(".find-scope")?.className ?? "", /side-panel-content/u);
 });
 test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
   installScrollIntoView();

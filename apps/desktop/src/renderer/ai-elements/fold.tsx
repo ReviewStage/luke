@@ -7,6 +7,7 @@ import {
   useContext,
   useState,
 } from "react";
+import { useFindOpen } from "../find-in-tab";
 import { cn } from "./utils";
 
 /**
@@ -21,6 +22,12 @@ import { cn } from "./utils";
  * opened keeps the closed ones out of the layout entirely. The summary
  * takes the click itself and stops the element's own toggle, so the two
  * cannot disagree, and says whether it is open in `aria-expanded`.
+ *
+ * While a find bar is open over the tab (`find-in-tab.tsx`), a closed body
+ * is drawn after all, still hidden inside its closed `details` as the
+ * platform hides one, so the find covers what the fold holds; a find that
+ * shows a match there opens the element, and the fold follows the element's
+ * own toggle, so its state is the element's again at once.
  */
 
 interface FoldState {
@@ -41,12 +48,26 @@ export type FoldProps = Omit<ComponentProps<"details">, "open"> & {
   defaultOpen?: boolean;
 };
 
-export function Fold({ className, children, defaultOpen = false, ...props }: FoldProps): ReactNode {
+export function Fold({
+  className,
+  children,
+  defaultOpen = false,
+  onToggle,
+  ...props
+}: FoldProps): ReactNode {
   const [open, setOpen] = useState(defaultOpen);
   const state: FoldState = { open, toggle: () => setOpen((was) => !was) };
   return (
     <FoldContext.Provider value={state}>
-      <details open={open} className={cn("group/fold min-w-0", className)} {...props}>
+      <details
+        open={open}
+        className={cn("group/fold min-w-0", className)}
+        onToggle={(event) => {
+          setOpen(event.currentTarget.open);
+          onToggle?.(event);
+        }}
+        {...props}
+      >
         {children}
       </details>
     </FoldContext.Provider>
@@ -109,9 +130,10 @@ export function FoldChevron({ className }: { className?: string }): ReactNode {
 
 export type FoldBodyProps = ComponentProps<"div">;
 
-/** What the fold holds, drawn only while it is open. */
+/** What the fold holds, drawn only while it is open or a find is looking through it. */
 export function FoldBody({ children, ...props }: FoldBodyProps): ReactNode {
   const { open } = useFold();
-  if (!open) return null;
+  const finding = useFindOpen();
+  if (!open && !finding) return null;
   return <div {...props}>{children}</div>;
 }

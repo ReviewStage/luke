@@ -48,6 +48,8 @@ export const APP_COMMAND = {
   SETTINGS: "settings",
   KEYBOARD_SHORTCUTS: "keyboard-shortcuts",
   FIND: "find",
+  FIND_NEXT: "find-next",
+  FIND_PREVIOUS: "find-previous",
   EXIT_SETTINGS: "exit-settings",
   EXIT_VERSION_HISTORY: "exit-version-history",
   BACK: "back",
@@ -104,6 +106,7 @@ const SHORTCUT_KEY = {
   S: { accelerator: "S", glyph: "S", key: "s", code: "KeyS" },
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
+  G: { accelerator: "G", glyph: "G", key: "g", code: "KeyG" },
   T: { accelerator: "T", glyph: "T", key: "t", code: "KeyT" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
@@ -174,7 +177,9 @@ export interface AppShortcut {
  * Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, ⌘K for the command palette as Linear, Slack, and
- * Raycast have it, and ⌘+, ⌘−, and ⌘0 to zoom as every browser has them.
+ * Raycast have it, ⌘F to find, and ⌘G and ⇧⌘G to step through what it
+ * found, as every Mac app has them, and ⌘+, ⌘−, and ⌘0 to zoom as every
+ * browser has them.
  *
  * The system's own chords stand here too — ⌘H, ⌥⌘H, ⌘Q, ⌘M, and ⌃⌘F, which
  * every Mac app answers through the menu bar's standard items — so the menu
@@ -259,7 +264,12 @@ export const APP_SHORTCUTS = {
     label: "Keyboard shortcuts",
     chord: { key: SHORTCUT_KEY.SLASH },
   },
-  [APP_COMMAND.FIND]: { label: "Search settings", chord: { key: SHORTCUT_KEY.F } },
+  [APP_COMMAND.FIND]: { label: "Find", chord: { key: SHORTCUT_KEY.F } },
+  [APP_COMMAND.FIND_NEXT]: { label: "Find next", chord: { key: SHORTCUT_KEY.G } },
+  [APP_COMMAND.FIND_PREVIOUS]: {
+    label: "Find previous",
+    chord: { key: SHORTCUT_KEY.G, shift: true },
+  },
   [APP_COMMAND.EXIT_SETTINGS]: {
     label: "Exit settings",
     chord: { key: SHORTCUT_KEY.ESCAPE, bare: true },
@@ -286,6 +296,8 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SETTINGS,
       APP_COMMAND.KEYBOARD_SHORTCUTS,
       APP_COMMAND.FIND,
+      APP_COMMAND.FIND_NEXT,
+      APP_COMMAND.FIND_PREVIOUS,
       APP_COMMAND.EXIT_SETTINGS,
       APP_COMMAND.HIDE,
       APP_COMMAND.HIDE_OTHERS,

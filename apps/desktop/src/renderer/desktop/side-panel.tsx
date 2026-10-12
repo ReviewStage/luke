@@ -22,6 +22,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { FindScope } from "../find-in-tab";
 import { AgentSubagentTab } from "../planning/agent-tab";
 import {
   AgentTabCard,
@@ -1026,7 +1027,7 @@ export function SidePanel({
   views: TabViews;
   /** Whether the plan's page is on screen, which a subagent's tab follows its transcript under. */
   shown: boolean;
-  /** Whether the panel holds the window's focus, which its ⌘W and ⌘T answer to. */
+  /** Whether the panel holds the window's focus, which its ⌘W, ⌘T, and ⌘F answer to. */
   focused: boolean;
   /** Opens a coding agent's tab in the plan's column, by the agent, which a start's row on the Work tab asks for. */
   onOpenAgent: (agentId: string) => void;
@@ -1124,7 +1125,14 @@ export function SidePanel({
             )}
           </div>
         ) : (
-          <div className="side-panel-content" role="tabpanel" aria-label={label}>
+          // The Board is drawn on a canvas, which keeps a find of its own.
+          <FindScope
+            className="side-panel-content"
+            role="tabpanel"
+            aria-label={label}
+            active={keys && focused && tab !== SIDE_PANEL_TAB.BOARD}
+            subject={{ plan: planId, tab }}
+          >
             <TabContent
               tab={tab}
               planId={planId}
@@ -1147,7 +1155,7 @@ export function SidePanel({
               onBrowseFile={panel.onBrowseFile}
               onFileHistory={panel.onFileHistory}
             />
-          </div>
+          </FindScope>
         )}
         {/* Last, so the drag region of the row above does not take the
             edge's top from it. Full screen has no edge to drag. */}

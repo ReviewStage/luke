@@ -94,6 +94,12 @@
   /* A destructive act's own button, filled: deep enough to carry white words,
      where the panel's lighter red is drawn as text. */
   --danger-fill: #d4373a;
+  /* A find's matches in a tab's text: each one tinted, the one it is at
+     filled, in the yellow and orange a browser's find draws them in, with
+     dark words on the fill so the match reads in either appearance. */
+  --find-match: rgba(255, 214, 10, 0.3);
+  --find-current: #ff9f0a;
+  --find-current-text: #000;
   /* The layers that float over the whole window, each drawn at the root of
      the document: a menu, then a dialog and a hint on one layer, whichever
      was drawn later on top, then the passing notice over everything. Nothing inside the window's stage reaches
@@ -116,6 +122,7 @@
     --desktop-sidebar: #f3f3f4;
     --desktop-well: #f8f8f9;
     --surface-popover: #fff;
+    --find-match: rgba(255, 204, 0, 0.42);
   }
 }
 
@@ -2327,6 +2334,66 @@ body,
   width: calc(var(--control-height) - 2px - 2 * var(--space-2));
   height: calc(var(--control-height) - 2px - 2 * var(--space-2));
   border-radius: calc(var(--control-radius) - var(--space-2));
+}
+
+/* Find in a tab --------------------------------------------------------- */
+
+/* The tab a find searches holds its bar at its top right, over what it
+   shows, as a browser's find bar stands over the page. */
+.find-scope {
+  position: relative;
+}
+
+/* The bar floats as a menu does, on the menu's ground, edge, and entrance,
+   and claims its presses back from any drag strip beneath it. */
+.find-bar {
+  position: absolute;
+  z-index: 3;
+  top: var(--space-8);
+  right: var(--column-inset);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--hairline-strong);
+  border-radius: 10px;
+  background: var(--surface-popover);
+  box-shadow: 0 12px 32px var(--shadow);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+  -webkit-app-region: no-drag;
+}
+
+/* Over a File tab the bar stands just under the file's own bar
+   (`planning.css`), whose controls it would otherwise cover: that bar's
+   buttons, its padding, and its hairline. */
+.find-scope:has(> .file-view) > .find-bar {
+  top: calc(var(--control-height) + 2 * var(--space-4) + 1px + var(--space-8));
+}
+
+/* The field keeps one width whatever is typed or tallied, so the buttons
+   beside it never move. */
+.find-bar-well {
+  width: 240px;
+  margin-right: var(--space-2);
+}
+
+.find-bar-tally {
+  flex: none;
+  padding-right: var(--space-6);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Each match, then the one the find is at over it (`find-matches.ts`). */
+::highlight(find-match) {
+  background-color: var(--find-match);
+}
+
+::highlight(find-current) {
+  background-color: var(--find-current);
+  color: var(--find-current-text);
 }
 
 /* What a query found, in the list's place: each page's heading, then its

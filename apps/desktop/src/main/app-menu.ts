@@ -109,7 +109,9 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
  * own menu as macOS puts it; the plan's commands are File's, with New Tab,
- * Close Tab, and Close Window as Chrome's File keeps them, the window's
+ * Close Tab, and Close Window as Chrome's File keeps them; Edit is the
+ * system's own, spelt out so its Find submenu can hold the window's find as
+ * every Mac app's Edit does; the window's
  * columns, the system's full screen, and its zoom are View's, the zoom in
  * the order Chrome's View keeps it, the call's microphone and speaker are
  * Call's, back and forward are Go's as Finder and Safari keep them, the
@@ -151,7 +153,35 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
         commandItem(APP_COMMAND.DELETE_PLAN),
       ],
     },
-    { role: "editMenu" },
+    {
+      label: "Edit",
+      submenu: [
+        { role: "undo" },
+        { role: "redo" },
+        SEPARATOR,
+        { role: "cut" },
+        { role: "copy" },
+        { role: "paste" },
+        { role: "pasteAndMatchStyle" },
+        { role: "delete" },
+        { role: "selectAll" },
+        SEPARATOR,
+        {
+          label: "Find",
+          submenu: [
+            // Find opens a bar, so it is named with an ellipsis, as a Mac app's Find… is.
+            { ...commandItem(APP_COMMAND.FIND), label: "Find…" },
+            commandItem(APP_COMMAND.FIND_NEXT),
+            commandItem(APP_COMMAND.FIND_PREVIOUS),
+          ],
+        },
+        SEPARATOR,
+        {
+          label: "Speech",
+          submenu: [{ role: "startSpeaking" }, { role: "stopSpeaking" }],
+        },
+      ],
+    },
     {
       label: "View",
       submenu: [
