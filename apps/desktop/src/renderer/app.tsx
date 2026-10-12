@@ -436,6 +436,10 @@ export function App(): React.JSX.Element {
             view: settingsView,
             onViewChange: setSettingsView,
             microphone,
+            notifications: {
+              refused: state.notifications.refused,
+              onOpenSettings: () => tell(ACT_KIND.NOTIFICATIONS_OPEN_SETTINGS),
+            },
             updates,
             settings,
             onFeedback: setFeedbackKind,

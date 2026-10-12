@@ -2,6 +2,7 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { APP_SETTING_ID } from "@sidecar/guide";
 import { LIVE_VOICE } from "@sidecar/live";
 import { APP_SETTING_DEFAULTS, SETTINGS_RESET_SCOPE, THEME } from "@sidecar/settings";
 import { settingsView } from "@sidecar/settings/testing";
@@ -213,6 +214,22 @@ test("pressing a result opens its page beside the results, which stay standing",
   assert.ok(first);
   press(field(container), "Enter");
   assert.equal(shownPage(container), first.page);
+});
+
+test("searching for notifications finds the switch on General, and pressing it lands on the switch", () => {
+  const container = mount();
+  act(() => turnPage(SETTINGS_VIEW.APPEARANCE));
+  type(field(container), "notifications");
+  assert.deepEqual(results(container), [
+    { page: "General", rows: ["Notify me when a coding agent finishes"] },
+  ]);
+
+  act(() => result(container, "Notify me when a coding agent finishes").click());
+  assert.equal(shownPage(container), "General");
+  const row = container.querySelector(
+    `.settings-page [${SETTINGS_SEARCH_ANCHOR_ATTRIBUTE}="${APP_SETTING_ID.AGENT_NOTIFICATIONS}"]`,
+  );
+  assert.equal(row?.getAttribute("role"), "switch");
 });
 
 test("clearing the query restores the page list, and Escape clears before it lets go", () => {

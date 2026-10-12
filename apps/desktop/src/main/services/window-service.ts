@@ -23,6 +23,7 @@ import { type AppStateStore, voiceWindowState } from "../app-state";
 import { applyThemePreference, followAppearance, NativeTheme } from "../window/appearance";
 import { followDockIcon } from "../window/dock-icon";
 import { HOTKEY_RANK, HotkeyRegistrar } from "../window/hotkey-registrar";
+import { askForNotifications } from "../window/notice-doors";
 import { PanelManager } from "../window/panel-manager";
 import { VoiceWindow } from "../window/voice-window";
 import type { DesktopConfig } from "./desktop-config";
@@ -363,6 +364,14 @@ export function createWindowService(dependencies: WindowServiceDependencies): Wi
         native.setMediaDuckEnabled(
           settings?.stored.duckOtherMedia ?? APP_SETTING_SCHEMA.duckOtherMedia.default,
         );
+      }
+      // macOS is asked now, while the developer is here to answer, rather
+      // than as the first agent ends behind the window.
+      if (
+        runMode.observesProviders &&
+        (settings?.stored.agentNotifications ?? APP_SETTING_SCHEMA.agentNotifications.default)
+      ) {
+        askForNotifications();
       }
       hotkeys.setChosen(HOTKEY_RANK.TALK, settings?.stored.voiceHotkey);
       hotkeys.setChosen(HOTKEY_RANK.STOP, settings?.stored.stopHotkey);

@@ -25,6 +25,7 @@ export function settingsPanelProps(
       onRequest: ignore,
       onOpenSettings: ignore,
     },
+    notifications: { refused: false, onOpenSettings: ignore },
     updates: {
       update: {
         status: UPDATE_STATUS.IDLE,
