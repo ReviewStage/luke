@@ -253,7 +253,10 @@ counts — on an admin page of our site that only an account we have marked as a
 administrator can open; nothing you type, say, or run in a session appears on
 it. Every account also has a personal workspace on our service, a record
 named with your name and holding you as its owner; it goes when you delete
-your account. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
+your account. You can also make a shared workspace on our site's Workspaces
+page, a record holding the name you give it and its members with their
+roles. Everyone in a workspace sees every other member's name and email
+address on that page, and every plan in the workspace. The service also keeps your account's conversation with Luke. When Luke runs a turn for you on our service, that
 turn writes rows to our database: your ask as it was given; Luke's reply, the
 summaries of his reasoning, and each tool he called with its input and its
 result; and the turn's model, token counts, and the ids of OpenAI's
