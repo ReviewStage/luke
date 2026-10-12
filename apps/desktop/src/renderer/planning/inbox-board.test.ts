@@ -91,9 +91,11 @@ function service(
 ) {
   const sent: CodingAgentInboxAnswerParams[] = [];
   const reads: string[] = [];
+  const listReads: number[] = [];
   const agents = codingAgentsControl({
     agents: [AGENT],
     agentIds: [AGENT.id],
+    onRetryList: () => listReads.push(listReads.length),
     readInbox: ({ after }) => {
       reads.push(after);
       const page = pages.shift();
@@ -107,7 +109,7 @@ function service(
       );
     },
   });
-  return { agents, sent, reads };
+  return { agents, sent, reads, listReads };
 }
 
 /** The tab as the plan's column draws it: the board over the plan's inbox. */
@@ -319,5 +321,24 @@ it.effect(
       press(buttonNamed(page, "Try again"));
       yield* settle;
       assert.equal(page.textContent, "Nothing is waiting on you.");
+    }),
+);
+
+it.effect(
+  "an item of an agent the window has not listed yet, one started elsewhere, is drawn all the same, and the plan's agents are read again once for it",
+  () =>
+    Effect.gen(function* () {
+      const elsewhere = { ...SETTINGS, agentId: "3b8f4e5d-7c6a-4b9f-9eaf-4a5b6c7d8e9f" };
+      const { agents, listReads } = service(
+        [
+          { items: [elsewhere], cursor: "a" },
+          { items: [elsewhere], cursor: "b" },
+        ],
+        [],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      assert.ok(card(page, SETTINGS.id));
+      assert.equal(listReads.length, 1);
     }),
 );

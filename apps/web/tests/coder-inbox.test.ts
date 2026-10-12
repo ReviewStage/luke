@@ -249,6 +249,25 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
       }),
   );
 
+  it.effect(
+    "an item left open stays in the plan's inbox however many others changed after it, while the settled ones a read carries are bounded",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        yield* postToInbox(agent, input(SETTINGS));
+        for (let index = 0; index <= INBOX_BOUNDS.MAX_ITEMS_READ; index += 1) {
+          yield* TestClock.adjust(Duration.millis(1));
+          yield* postToInbox(agent, input({ ...QUEUE, key: `queue-${index}` }));
+          yield* closeInInbox(agent, input({ key: `queue-${index}`, reason: "Settled." }));
+        }
+        const items = yield* planInboxItems(agent.userId, agent.planId);
+        assert.ok(
+          items.some((each) => each.key === SETTINGS.key && each.status === INBOX_STATUS.OPEN),
+        );
+        assert.equal(items.length, 1 + INBOX_BOUNDS.MAX_ITEMS_READ);
+      }),
+  );
+
   it.effect("a plan's items go with the plan", () =>
     Effect.gen(function* () {
       const agent = yield* openAgent;

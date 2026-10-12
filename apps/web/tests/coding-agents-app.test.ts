@@ -98,6 +98,7 @@ import {
 } from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
+import { readInboxItem } from "../server/hosted/inbox-store";
 import {
   CODING_AGENT_DEFAULT_CHOICE,
   modelCatalogOf,
@@ -2933,6 +2934,92 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
         assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "an answer is taken on its item before the agent is handed it, so an answer the item no longer takes never reaches the agent",
+    () =>
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient;
+        const base = fakeEve();
+        const seen: (string | undefined)[] = [];
+        let watched: { readonly userId: string; readonly itemId: string } | undefined;
+        // eve as the group reaches it, noting where the item stood the moment the answer was handed over.
+        const eve = {
+          ...base,
+          eve: (authorization: string): EveSessions => {
+            const sessions = base.eve(authorization);
+            return {
+              ...sessions,
+              send: (sessionId, message) =>
+                Effect.flatMap(
+                  watched === undefined
+                    ? Effect.void
+                    : readInboxItem(watched.userId, watched.itemId).pipe(
+                        Effect.provideService(SqlClient.SqlClient, client),
+                        Effect.orDie,
+                        Effect.flatMap((found) =>
+                          Effect.sync(() => {
+                            seen.push(Option.getOrUndefined(found)?.item.status);
+                          }),
+                        ),
+                      ),
+                  () => sessions.send(sessionId, message),
+                ),
+            };
+          },
+        };
+        const { owner, post, read, answer } = yield* openInbox(eve);
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        watched = { userId: owner, itemId: item.id };
+        yield* answer(item.id, {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey: randomUUID(),
+        });
+        assert.deepEqual(seen, [INBOX_STATUS.ANSWERED]);
+      }),
+  );
+
+  it.effect(
+    "an answer the agent could not be handed is refused and taken back, so the item still waits, and the same answer sent again once the agent is ready is taken",
+    () =>
+      Effect.gen(function* () {
+        const { post, read, answer } = yield* openInbox(
+          fakeEve({ sends: EVE_SEND_OUTCOME.RETIRED }),
+        );
+        yield* post(QUESTION);
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        const body = {
+          revision: item.revision,
+          reply: INBOX_REPLY.ANSWERED,
+          note: "Keep it short.",
+          clientKey: randomUUID(),
+        };
+        const refused = yield* answer(item.id, body);
+        assert.notEqual(refused.status, HOSTED_HTTP_STATUS.OK);
+        const [standing] = (yield* read()).items;
+        assert.equal(standing?.status, INBOX_STATUS.OPEN);
+        assert.equal(standing?.answer, undefined);
+      }),
+  );
+
+  it.effect(
+    "a change of an item within the same millisecond as the read before it still moves the cursor, so a reader holding it hears the change at once",
+    () =>
+      Effect.gen(function* () {
+        const { post, read } = yield* openInbox();
+        yield* post(QUESTION);
+        const before = yield* read();
+        yield* post({ ...QUESTION, title: "What should the email say, in Spanish too?" });
+        const after = yield* read(before.cursor);
+        assert.notEqual(after.cursor, before.cursor);
+        assert.equal(after.items[0]?.revision, 2);
       }),
   );
 

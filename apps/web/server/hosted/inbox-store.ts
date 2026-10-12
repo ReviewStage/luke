@@ -247,14 +247,41 @@ const findAgentItems = SqlSchema.findAll({
       .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
 });
 
-const findPlanItems = SqlSchema.findAll({
-  Request: Schema.Struct({ userId: Schema.String, planId: Schema.String }),
+const PlanKeySchema = Schema.Struct({ userId: Schema.String, planId: Schema.String });
+
+/** Every item of the plan still open, however long ago it last changed; the open bound per agent keeps these few. */
+const findOpenPlanItems = SqlSchema.findAll({
+  Request: PlanKeySchema,
   Result: InboxRowSchema,
   execute: ({ userId, planId }) =>
     db
       .select(INBOX_COLUMNS)
       .from(inboxItem)
-      .where(and(eq(inboxItem.userId, userId), eq(inboxItem.planId, planId)))
+      .where(
+        and(
+          eq(inboxItem.userId, userId),
+          eq(inboxItem.planId, planId),
+          eq(inboxItem.status, INBOX_STATUS.OPEN),
+        ),
+      )
+      .orderBy(desc(inboxItem.updatedAt)),
+});
+
+/** The plan's settled items, the latest changed first, as many as a read carries. */
+const findSettledPlanItems = SqlSchema.findAll({
+  Request: PlanKeySchema,
+  Result: InboxRowSchema,
+  execute: ({ userId, planId }) =>
+    db
+      .select(INBOX_COLUMNS)
+      .from(inboxItem)
+      .where(
+        and(
+          eq(inboxItem.userId, userId),
+          eq(inboxItem.planId, planId),
+          ne(inboxItem.status, INBOX_STATUS.OPEN),
+        ),
+      )
       .orderBy(desc(inboxItem.updatedAt))
       .limit(INBOX_BOUNDS.MAX_ITEMS_READ),
 });
@@ -356,13 +383,19 @@ export function agentInboxItems(
   return Effect.map(findAgentItems(agent), (rows) => rows.map((row) => storedItem(row).item));
 }
 
-/** Every item the plan's agents posted, the latest changed first. */
+/**
+ * The plan's inbox: every item still open, then the latest settled ones as
+ * many as a read carries. Note that the open items are read apart from the
+ * bound, because one left unanswered while many others changed must still
+ * wait where the developer looks.
+ */
 export function planInboxItems(
   userId: string,
   planId: string,
 ): InboxStoreEffect<readonly InboxItem[]> {
-  return Effect.map(findPlanItems({ userId, planId }), (rows) =>
-    rows.map((row) => storedItem(row).item),
+  return Effect.map(
+    Effect.all([findOpenPlanItems({ userId, planId }), findSettledPlanItems({ userId, planId })]),
+    ([open, settled]) => [...open, ...settled].map((row) => storedItem(row).item),
   );
 }
 
@@ -372,6 +405,44 @@ export function readInboxItem(
   itemId: string,
 ): InboxStoreEffect<Option.Option<StoredInboxItem>> {
   return Effect.map(findItem({ userId, itemId }), Option.map(storedItem));
+}
+
+/** The answer taken back off the item it was taken on under the key, opening it again; nothing where that answer no longer stands. */
+const withdrawAnswer = SqlSchema.findOneOption({
+  Request: Schema.Struct({
+    userId: Schema.String,
+    itemId: Schema.String,
+    answerKey: Schema.String,
+    now: Schema.Date,
+  }),
+  Result: InboxRowSchema,
+  execute: ({ userId, itemId, answerKey, now }) =>
+    db
+      .update(inboxItem)
+      .set({ status: INBOX_STATUS.OPEN, answer: null, answerKey: null, updatedAt: now })
+      .where(
+        and(
+          eq(inboxItem.userId, userId),
+          eq(inboxItem.id, itemId),
+          eq(inboxItem.answerKey, answerKey),
+          eq(inboxItem.status, INBOX_STATUS.ANSWERED),
+        ),
+      )
+      .returning(INBOX_COLUMNS),
+});
+
+/** The answer taken under the key withdrawn, the item open again, where it still stands; nothing where it does not. */
+export function withdrawInboxAnswer(
+  userId: string,
+  itemId: string,
+  answerKey: string,
+): InboxStoreEffect<Option.Option<InboxItem>> {
+  return Effect.flatMap(DateTime.nowAsDate, (now) =>
+    Effect.map(
+      withdrawAnswer({ userId, itemId, answerKey, now }),
+      Option.map((row) => storedItem(row).item),
+    ),
+  );
 }
 
 /** The developer's answer taken on the item at the revision named, under the key the client sent it with; nothing where the item is no longer open at that revision. */

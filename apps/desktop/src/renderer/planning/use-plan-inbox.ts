@@ -184,8 +184,20 @@ export function usePlanInbox(input: {
     [sending, note],
   );
 
+  // An item of an agent the list has not read yet, one started from another
+  // window, has the list read again, once for each such agent.
+  const asked = useRef(new Set<string>());
   const ids = agents.agentIds;
-  const board = useMemo(() => inboxBoard(held.items, ids ?? []), [held.items, ids]);
+  useEffect(() => {
+    if (ids === undefined) return;
+    const unknown = held.items
+      .map((item) => item.agentId)
+      .filter((agentId) => !ids.includes(agentId) && !asked.current.has(agentId));
+    if (unknown.length === 0) return;
+    for (const agentId of unknown) asked.current.add(agentId);
+    latest.current.onRetryList();
+  }, [held.items, ids]);
+  const board = useMemo(() => inboxBoard(held.items), [held.items]);
   return {
     board,
     reading: active && !held.read,

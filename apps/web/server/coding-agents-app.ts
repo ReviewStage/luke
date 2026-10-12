@@ -91,7 +91,7 @@ import {
   readJsonBodyEffect,
   type UserIdResolver,
 } from "./hosted/http-effect.js";
-import { answerInboxItem, readInboxItem } from "./hosted/inbox-store.js";
+import { answerInboxItem, readInboxItem, withdrawInboxAnswer } from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
 import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
@@ -711,11 +711,12 @@ function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.Http
  * the key it was taken by finds it taken; one naming a revision the agent
  * has since moved on from, or an item no longer open, is answered with the
  * item as it stands and not taken. Where the item asks to be heard back,
- * the answer reaches the agent first, as one of the developer's messages
- * under the answer's own key through the one steer path
- * (`coder-host/steer.ts`), so a retry after a lost reply reaches it once;
- * the answer is written once it has, so an item never reads answered while
- * the agent was not told.
+ * the answer is taken first, at the revision it names, and only then
+ * handed to the agent as one of the developer's messages under the
+ * answer's own key through the one steer path (`coder-host/steer.ts`), so
+ * an answer the item no longer takes never reaches the agent, and a retry
+ * after a lost reply reaches it once; a hand-off that fails takes the
+ * answer back, so an item never reads answered while the agent was not told.
  */
 const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")(function* (
   seams: CodingAgentsAppSeams,
@@ -742,7 +743,17 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
   if (inboxReplyRefusal(item, reply) !== undefined) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
-  if (item.needsReply) {
+  const answered = yield* hostedStoreOrUnavailable(
+    answerInboxItem(userId, itemId, revision, reply, clientKey),
+  );
+  if (Option.isNone(answered)) {
+    // The agent changed the item between the read above and the write; it is answered as it now stands.
+    const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
+    if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+    return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
+  }
+  if (!item.needsReply) return inboxAnswered(answered.value, true);
+  const handedOver = Effect.gen(function* () {
     const agent = yield* hostedStoreOrUnavailable(readCodingAgent(userId, item.agentId));
     if (Option.isNone(agent)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
     const eve = yield* eveFor(seams, request);
@@ -750,15 +761,11 @@ const inboxAnswerEndpoint = /* @__PURE__ */ Effect.fn("web/inboxAnswerEndpoint")
       text: inboxAnswerMessage(item, reply),
       clientKey,
     });
-  }
-  const answered = yield* hostedStoreOrUnavailable(
-    answerInboxItem(userId, itemId, revision, reply, clientKey),
+  });
+  yield* handedOver.pipe(
+    Effect.tapError(() => hostedStoreOrUnavailable(withdrawInboxAnswer(userId, itemId, clientKey))),
   );
-  if (Option.isSome(answered)) return inboxAnswered(answered.value, true);
-  // The agent changed the item between the read above and the write; it is answered as it now stands.
-  const now = yield* hostedStoreOrUnavailable(readInboxItem(userId, itemId));
-  if (Option.isNone(now)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
-  return inboxAnswered(now.value.item, now.value.answerKey === clientKey);
+  return inboxAnswered(answered.value, true);
 });
 
 /** The group: the eight paths, and the hosted vocabulary's own refusal for any other. */

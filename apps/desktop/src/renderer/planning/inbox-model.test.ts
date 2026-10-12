@@ -4,7 +4,7 @@ import { test } from "vitest";
 import { EMPTY_INBOX_DRAFT, inboxBoard, inboxReply, settledWords } from "./inbox-model";
 
 const AGENT = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
-const GONE = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
+const UNLISTED = "9d2b7b5f-4e3f-4e9c-9c77-7a5d8b3f4c32";
 
 /** An item of the agent's, open, as the service answers one. */
 function item(overrides: Partial<InboxItem> & Pick<InboxItem, "id">): InboxItem {
@@ -28,20 +28,17 @@ const QUEUE = item({
   options: [{ label: "Postgres" }, { label: "Redis" }],
 });
 
-test("the board holds only the plan's agents' items: what waits the oldest posted first, what is settled the latest changed first", () => {
-  const board = inboxBoard(
-    [
-      item({ id: "late", postedAt: 30, updatedAt: 30 }),
-      item({ id: "early", postedAt: 10, updatedAt: 40 }),
-      item({ id: "answered", status: INBOX_STATUS.ANSWERED, updatedAt: 20 }),
-      item({ id: "closed", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
-      item({ id: "gone", agentId: GONE }),
-    ],
-    [AGENT],
-  );
+test("the board holds every item the plan's inbox holds, an agent the window has not listed yet's too: what waits the oldest posted first, what is settled the latest changed first", () => {
+  const board = inboxBoard([
+    item({ id: "late", postedAt: 30, updatedAt: 30 }),
+    item({ id: "early", postedAt: 10, updatedAt: 40 }),
+    item({ id: "answered", status: INBOX_STATUS.ANSWERED, updatedAt: 20 }),
+    item({ id: "closed", status: INBOX_STATUS.CLOSED, updatedAt: 50 }),
+    item({ id: "unlisted", agentId: UNLISTED, postedAt: 20, updatedAt: 20 }),
+  ]);
   assert.deepEqual(
     board.open.map((each) => each.id),
-    ["early", "late"],
+    ["early", "unlisted", "late"],
   );
   assert.deepEqual(
     board.settled.map((each) => each.id),

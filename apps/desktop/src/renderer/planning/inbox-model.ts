@@ -13,9 +13,10 @@ import {
  *
  * What waits stands first, the oldest posted first, since it has held its
  * agent longest; what is settled, answered or taken back by its agent,
- * follows, the latest changed first. Only the open plan's agents' items are
- * drawn, so an agent the list no longer holds leaves no card behind. A
- * card's answer is held to the same rule the service holds it to
+ * follows, the latest changed first. Every item the plan's inbox holds is
+ * drawn, whether or not the window's list of agents has caught up with the
+ * agent that posted it, since the service reads the inbox by plan and an
+ * agent's items go with it. A card's answer is held to the same rule the service holds it to
  * (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press the service would
  * refuse is never offered. Nothing here draws.
  */
@@ -34,14 +35,13 @@ export interface InboxBoardView {
   readonly settled: readonly InboxItem[];
 }
 
-/** The plan's board from its inbox: only its agents' items, what waits the oldest posted first, and what is settled the latest changed first. */
-export function inboxBoard(items: readonly InboxItem[], agents: readonly string[]): InboxBoardView {
-  const own = items.filter((item) => agents.includes(item.agentId));
+/** The plan's board from its inbox: what waits the oldest posted first, and what is settled the latest changed first. */
+export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   return {
-    open: own
+    open: items
       .filter((item) => item.status === INBOX_STATUS.OPEN)
       .toSorted((a, b) => a.postedAt - b.postedAt),
-    settled: own
+    settled: items
       .filter((item) => item.status !== INBOX_STATUS.OPEN)
       .toSorted((a, b) => b.updatedAt - a.updatedAt),
   };
