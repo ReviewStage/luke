@@ -64,11 +64,12 @@ export function voiceRuntimeActRows(
       if (!panel && !call) return;
       voiceWindow.current()?.webContents.send(channels.onVoiceCommand, { command });
     },
-    // The call window's way back names no plan: the call's is read here, so
-    // it cannot bring forward a plan the call is not about.
-    [ACT_KIND.CALL_SHOW_PLAN]: (_payload, { call }) => {
+    // The call card's way back, from the floating window or from a panel's
+    // own card, names no plan: the call's is read here, so it cannot bring
+    // forward a plan the call is not about.
+    [ACT_KIND.CALL_SHOW_PLAN]: (_payload, { call, panel }) => {
       const planId = state.snapshot().voice.view?.callPlanId;
-      if (!call || planId === undefined) return;
+      if ((!call && !panel) || planId === undefined) return;
       panels.focusExpanded();
       panels.broadcast(channels.onShowPlan, { planId });
     },
