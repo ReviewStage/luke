@@ -69,6 +69,7 @@ const PLAN: PlanSummary = {
         checks: CHECK_SUMMARY.FAILING,
         additions: 214,
         deletions: 9,
+        url: "https://github.com/acme/relay/pull/128",
       },
       {
         number: 120,
@@ -82,9 +83,11 @@ const PLAN: PlanSummary = {
   },
 };
 
-/** The card drawn on a registry whose runtime is this test's, so a working count reads the TestClock; answered with what each part says. */
+/** The card drawn on a registry whose runtime is this test's, so a working count reads the TestClock; answered with what each part says, its buttons, and what pressing them opened. */
 const drawnCard = (plan: PlanSummary) =>
   Effect.gen(function* () {
+    const opened: string[] = [];
+    const shownAgents: string[] = [];
     const context = yield* Effect.context<never>();
     const registry = AtomRegistry.make({
       initialValues: [[rendererRuntime, AsyncResult.success(context)]],
@@ -96,7 +99,14 @@ const drawnCard = (plan: PlanSummary) =>
         createElement(
           RegistryContext.Provider,
           { value: registry },
-          createElement(PlanCard, { plan, models: [], pictures: false, now: NOW }),
+          createElement(PlanCard, {
+            plan,
+            models: [],
+            pictures: false,
+            now: NOW,
+            onOpenGitHub: (url: string) => opened.push(url),
+            onShowAgent: (agentId: string) => shownAgents.push(agentId),
+          }),
         ),
       ),
     );
@@ -118,6 +128,9 @@ const drawnCard = (plan: PlanSummary) =>
           ring: glyph.querySelector(".spinner-ring") !== null,
         }),
       ),
+      buttons: () => [...container.querySelectorAll("button")],
+      opened,
+      shownAgents,
       unmount: () => act(() => root.unmount()),
     };
   });
@@ -172,4 +185,33 @@ it.effect("a plan with no agents hangs a card with its name and repository alone
     assert.deepEqual(card.pullRequests, []);
     card.unmount();
   }),
+);
+
+it.effect(
+  "a plan's card opens its repository and a pull request on GitHub and an agent on its tab, and leaves its facts as text",
+  () =>
+    Effect.gen(function* () {
+      const card = yield* drawnCard(PLAN);
+      const [repository, invite, done, failed, pullRequest, ...rest] = card.buttons();
+
+      assert.deepEqual(
+        rest,
+        [],
+        "the name, the times, a line without a page, and the counts are text",
+      );
+      assert.equal(repository?.textContent, "acme/relay");
+      assert.equal(pullRequest?.textContent, "#128 · Invite teammates by email+214 −9 Draft");
+      act(() => {
+        for (const line of [repository, pullRequest, invite, done, failed]) line?.click();
+      });
+      assert.deepEqual(card.opened, [
+        "https://github.com/acme/relay",
+        "https://github.com/acme/relay/pull/128",
+      ]);
+      assert.deepEqual(
+        card.shownAgents,
+        PLAN.agents?.agents.map((agent) => agent.id),
+      );
+      card.unmount();
+    }),
 );

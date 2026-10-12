@@ -95,8 +95,8 @@ function summaryOf(agents: readonly ReadAgent[]): PlanAgentsSummary {
   const pullRequests = new Map<number, PlanPullRequestLine>();
   for (const { published } of newest) {
     if (published === null || pullRequests.has(published.number)) continue;
-    const { number, title, state, checks, additions, deletions } = published;
-    pullRequests.set(number, { number, title, state, checks, additions, deletions });
+    const { number, title, state, checks, additions, deletions, url } = published;
+    pullRequests.set(number, { number, title, state, checks, additions, deletions, url });
   }
   return {
     total: agents.length,

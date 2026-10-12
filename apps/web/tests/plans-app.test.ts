@@ -511,6 +511,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             checks: CHECK_SUMMARY.FAILING,
             additions: 214,
             deletions: 9,
+            url: "https://github.com/Acme/Relay/pull/128",
           },
         ]);
       }),

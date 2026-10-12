@@ -304,6 +304,8 @@ export const planPullRequestLineSchema = EffectSchema.Struct({
   checks: EffectSchema.Literals(Object.values(CHECK_SUMMARY)),
   additions: countedNumber,
   deletions: countedNumber,
+  /** Its page on GitHub, which the hover card opens; absent from a service before it was sent. */
+  url: EffectSchema.optionalKey(EffectSchema.String),
 });
 
 export type PlanPullRequestLine = typeof planPullRequestLineSchema.Type;

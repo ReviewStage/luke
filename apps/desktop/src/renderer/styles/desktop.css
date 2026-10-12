@@ -3860,7 +3860,11 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 /* A sidebar plan's card: its name wrapped to two lines with how long ago it
    was updated at the head's right, its repository under the name, then a
    few lines each for its agents and its pull requests, each list under a
-   hairline, a glyph column at their start and a muted corner at their end. */
+   hairline, a glyph column at their start and a muted corner at their end.
+   The repository, an agent, and a pull request are buttons that look like
+   the lines around them until the pointer is on one, which washes it as a
+   menu's row is washed, bled into the card's inset so its words stay in
+   line with the rest. */
 .plan-card {
   display: flex;
   flex-direction: column;
@@ -3907,6 +3911,19 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-size: 11.5px;
 }
 
+.plan-card-repository,
+.plan-card-line {
+  margin: 0 calc(-1 * var(--space-6));
+  padding: var(--space-2) var(--space-6);
+  border-radius: 6px;
+  background: none;
+  text-align: left;
+}
+
+:is(button.plan-card-repository, button.plan-card-line):hover {
+  background: var(--raised-strong);
+}
+
 .plan-card-repository :is(.repository-picture, .account-mark) {
   width: 12px;
   height: 12px;
@@ -3916,15 +3933,15 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 .plan-card-lines {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
   margin: 0;
-  padding: var(--space-6) 0 0;
+  padding: var(--space-4) 0 0;
   border-top: 1px solid var(--hairline);
   list-style: none;
 }
 
 .plan-card-line {
   display: flex;
+  width: calc(100% + 2 * var(--space-6));
   min-width: 0;
   align-items: center;
   gap: var(--space-6);
@@ -3962,5 +3979,5 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 }
 
 .plan-card-more {
-  padding-left: calc(12px + var(--space-6));
+  padding: var(--space-2) 0 0 calc(12px + var(--space-6));
 }

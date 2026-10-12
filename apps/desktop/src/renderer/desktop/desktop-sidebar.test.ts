@@ -593,6 +593,58 @@ test("resting on a plan's row hangs its card beside the row, naming its agents a
   );
 });
 
+test("a plan card's pull request opens on GitHub and its agent opens the plan on its tab, either taking the card down", () => {
+  const opened: string[] = [];
+  const shownAgents: [string, string][] = [];
+  const agent = {
+    id: "agent-invite",
+    title: "Invite flow",
+    model: "anthropic/claude-opus-5.5",
+    effort: "high",
+    status: CODING_AGENT_STATUS.COMPLETED,
+  };
+  const url = "https://github.com/acme/relay/pull/128";
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        {
+          ...listedPlan("Invites"),
+          agents: agentsSummary({
+            agents: [agent],
+            pullRequestTotal: 1,
+            pullRequests: [{ ...pullRequest(PULL_REQUEST_STATE.OPEN), url }],
+          }),
+        },
+      ],
+      onShowAgent: (planId, agentId) => shownAgents.push([planId, agentId]),
+      repositories: { ...plansControl().repositories, openGitHub: (page) => opened.push(page) },
+    },
+  });
+  const row = container.querySelector<HTMLElement>(".sidebar-plan");
+  assert.ok(row);
+  const card = () => {
+    act(() => {
+      row.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+    });
+    const shown = document.body.querySelector<HTMLElement>('[role="tooltip"]');
+    assert.ok(shown);
+    return shown;
+  };
+  const choose = (label: string) => {
+    const line = card().querySelector<HTMLElement>(`[aria-label="${label}"] button`);
+    assert.ok(line, `no button among ${label}`);
+    act(() => line.click());
+  };
+
+  choose("Pull requests");
+  assert.deepEqual(opened, [url]);
+  assert.equal(document.body.querySelector('[role="tooltip"]') === null, true, "the card went");
+
+  choose("Agents");
+  assert.deepEqual(shownAgents, [["plan-Invites", "agent-invite"]]);
+  assert.equal(document.body.querySelector('[role="tooltip"]') === null, true, "the card went");
+});
+
 test("the pinned plans stand under Pinned above the rest only while any are pinned", () => {
   const flat = mount(DEAN, { plans: { plans: [listedPlan("Billing"), listedPlan("Invites")] } });
   const pinned = mount(DEAN, {

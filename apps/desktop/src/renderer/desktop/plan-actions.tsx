@@ -366,6 +366,8 @@ export function SidebarPlan({
               models={plans.agents.models ?? []}
               pictures={plans.repositories.pictures}
               now={now}
+              onOpenGitHub={plans.repositories.openGitHub}
+              onShowAgent={(agentId) => plans.onShowAgent(plan.id, agentId)}
             />
           }
           cardBeside
