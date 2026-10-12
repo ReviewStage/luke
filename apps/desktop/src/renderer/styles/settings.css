@@ -271,7 +271,7 @@
 /* Inside a running name — a shortcut row's title — the mark is a word in the
    line rather than a flex sibling, so it carries the spacing the flex gaps
    give it everywhere else, and sits on the text's own middle. */
-.settings-copy strong .settings-attention {
+.shortcut-name .settings-attention {
   margin-left: 6px;
   vertical-align: -3px;
 }
@@ -689,4 +689,72 @@
   margin: 0;
   color: var(--error-text);
   font-size: 10px;
+}
+
+/* The Keyboard shortcuts page: a reference list more than a form, so its rows
+   sit at a list's density rather than a form's, each the command's name in
+   regular weight and its chord's caps in the one column every row's chord
+   ends in, the way a menu prints its key equivalents. The caps stand at a
+   small control's height once the page's zoom is applied, and the buttons
+   beside the two keys Luke can change are small controls to match. */
+.shortcut-section {
+  gap: var(--space-2);
+  --control-height: 24px;
+  --keycap-size: 20px;
+  --keycap-text: 11px;
+}
+
+/* The label keeps its own room above the first row, which the list's
+   tighter gap would otherwise take from it. */
+.shortcut-section h2 {
+  margin-bottom: var(--space-4);
+}
+
+.shortcut-row {
+  min-height: 28px;
+}
+
+/* A row that carries a description keeps a form row's breathing room. */
+.shortcut-row:has(small) {
+  padding: var(--space-4) 0;
+}
+
+/* The two changeable keys hold their chord in a slot of one width, so their
+   buttons stand level whether the chord is ⌥S or ⌃⌥Space, and the caps still
+   end in the column the rest of the page's do. */
+.shortcut-slot {
+  display: flex;
+  min-width: 84px;
+  justify-content: flex-end;
+}
+
+.shortcut-name {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+/* What is said where the keys would be, when there are none to draw: the chord
+   being typed, or none having registered. As tall as a cap, so the row keeps
+   its height, and lettered rather than keyed because neither is something to
+   press. */
+.shortcut-state {
+  display: inline-flex;
+  height: var(--keycap-size);
+  align-items: center;
+  padding: 0 var(--space-8);
+  border: 1px solid var(--hairline);
+  border-radius: 5px;
+  color: var(--text-tertiary);
+  font-size: var(--keycap-text);
+  white-space: nowrap;
+}
+
+/* Recording is the field ringed in the focus colour, the way a text field
+   being typed into is, and saying what to do: nobody has to guess the next
+   keystroke is being listened for. */
+.shortcut-state[data-recording="true"] {
+  border-color: var(--focus-ring);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 25%, transparent);
+  color: var(--text-primary);
 }

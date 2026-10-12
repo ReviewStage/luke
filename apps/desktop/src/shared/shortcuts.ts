@@ -231,17 +231,45 @@ export const APP_SHORTCUTS = {
   [APP_COMMAND.COMMAND_PALETTE]: { label: "Command palette", chord: { key: SHORTCUT_KEY.K } },
 } as const satisfies Record<KeyedCommand, AppShortcut>;
 
-/** The shortcuts as the Keyboard shortcuts page lists them: in groups, under the group's name. */
+/**
+ * The shortcuts as the Keyboard shortcuts page and the command palette list
+ * them: in groups that follow the menu bar, under the group's name in
+ * sentence case, every keyed command in exactly one.
+ */
 export const APP_SHORTCUT_GROUPS = [
+  {
+    title: "General",
+    commands: [
+      APP_COMMAND.COMMAND_PALETTE,
+      APP_COMMAND.SETTINGS,
+      APP_COMMAND.KEYBOARD_SHORTCUTS,
+      APP_COMMAND.FIND,
+      APP_COMMAND.EXIT_SETTINGS,
+    ],
+  },
   {
     title: "Plans",
     commands: [
       APP_COMMAND.NEW_PLAN,
-      APP_COMMAND.PREVIOUS_PLAN,
-      APP_COMMAND.NEXT_PLAN,
       APP_COMMAND.COPY_PLAN,
       APP_COMMAND.ARCHIVE_PLAN,
       APP_COMMAND.DELETE_PLAN,
+    ],
+  },
+  {
+    title: "Tabs & panels",
+    commands: [
+      APP_COMMAND.TOGGLE_SIDEBAR,
+      APP_COMMAND.TOGGLE_SIDE_PANEL,
+      APP_COMMAND.SHOW_BOARD,
+      APP_COMMAND.SHOW_CODE,
+      APP_COMMAND.SHOW_TRANSCRIPT,
+      APP_COMMAND.SHOW_WORK,
+      APP_COMMAND.SHOW_HISTORY,
+      APP_COMMAND.NEW_TAB,
+      APP_COMMAND.CLOSE_TAB,
+      APP_COMMAND.MOVE_TAB_LEFT,
+      APP_COMMAND.MOVE_TAB_RIGHT,
     ],
   },
   {
@@ -250,34 +278,19 @@ export const APP_SHORTCUT_GROUPS = [
   },
   {
     title: "Navigation",
-    commands: [APP_COMMAND.COMMAND_PALETTE, APP_COMMAND.BACK, APP_COMMAND.FORWARD],
+    commands: [
+      APP_COMMAND.BACK,
+      APP_COMMAND.FORWARD,
+      APP_COMMAND.PREVIOUS_PLAN,
+      APP_COMMAND.NEXT_PLAN,
+    ],
   },
   {
     title: "Window",
     commands: [
-      APP_COMMAND.TOGGLE_SIDEBAR,
-      APP_COMMAND.TOGGLE_SIDE_PANEL,
       APP_COMMAND.TOGGLE_FULL_SCREEN,
       APP_COMMAND.EXIT_FULL_SCREEN,
-      APP_COMMAND.SHOW_BOARD,
-      APP_COMMAND.SHOW_CODE,
-      APP_COMMAND.SHOW_TRANSCRIPT,
-      APP_COMMAND.SHOW_WORK,
-      APP_COMMAND.SHOW_HISTORY,
-      APP_COMMAND.MOVE_TAB_LEFT,
-      APP_COMMAND.MOVE_TAB_RIGHT,
-      APP_COMMAND.NEW_TAB,
-      APP_COMMAND.CLOSE_TAB,
       APP_COMMAND.CLOSE_WINDOW,
-    ],
-  },
-  {
-    title: "Settings",
-    commands: [
-      APP_COMMAND.SETTINGS,
-      APP_COMMAND.KEYBOARD_SHORTCUTS,
-      APP_COMMAND.FIND,
-      APP_COMMAND.EXIT_SETTINGS,
     ],
   },
 ] as const satisfies readonly { title: string; commands: readonly KeyedCommand[] }[];

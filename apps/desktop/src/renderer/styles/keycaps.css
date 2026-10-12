@@ -3,9 +3,9 @@
    One cap per key, spaced apart and each closed by its own edge, because that
    is what the hand is being told to do: ⌥ and Space are two keys pressed
    together, and a single chip reading "⌥Space" draws them as one word. Every
-   surface that shows a chord — the settings row, the composer's hint — draws
-   the same cap, and sizes it with `--keycap-size` and `--keycap-text` rather
-   than restyling it.
+   surface that shows a chord as keys draws this cap (`keycaps.tsx`) and sizes
+   it with `--keycap-size` and `--keycap-text` rather than restyling it; a menu
+   or a hover prints the same glyphs inline instead (`.shortcut-glyphs`).
 
    Nothing here animates: caps appear and disappear with the surface that holds
    them, and a cap that grew on hover would re-shape text inside a pill that is
@@ -16,7 +16,10 @@
   flex: 0 0 auto;
   align-items: center;
   /* Wide enough to read as separate keys, tight enough to read as one chord. */
-  gap: 3px;
+  gap: var(--space-4);
+  /* The window's own type rather than the user agent's monospace for `kbd`:
+     the glyphs are the menu bar's, and a menu prints them in the system face. */
+  font-family: inherit;
 }
 
 .keycap {
@@ -41,7 +44,9 @@
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--keycap-text);
-  font-weight: 600;
+  font-weight: 500;
+  /* Digits and letters at one advance, so ⌥⌘1 and ⌥⌘5 are caps of one width. */
+  font-variant-numeric: tabular-nums;
   /* The glyph sits on the cap's own centre line: ⌥ and ⇧ have far more room
      above them than a letter does, and any leading at all would stack the two
      kinds of key differently. */
