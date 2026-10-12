@@ -70,9 +70,10 @@ export type SettingsSearchInput = SettingsRowsInput;
 
 /**
  * The page named the way a group's head says it: the names the sidebar's own
- * list of pages uses, so a result's group and the row it opens agree.
+ * list of pages uses, so a result's group and the row it opens agree. The
+ * command palette names a setting's page beside it in the same words.
  */
-const RESULT_PAGE_WORD = {
+export const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.ROOT]: "General",
   [SETTINGS_VIEW.VOICE]: "Voice",
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",

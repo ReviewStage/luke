@@ -3631,8 +3631,9 @@ body,
 
 /* ⌘K over the window: the dialog's dimmed window and card, a third of the
    way down as a command palette stands, holding the searchable menu's own
-   search row and rows. The highlight is cmdk's `data-selected`, which the
-   arrows and the pointer both move, so a hover draws nothing of its own. */
+   search row and rows, the filters under the field and the keys' hints at
+   its foot. The highlight is cmdk's `data-selected`, which the arrows and
+   the pointer both move, so a hover draws nothing of its own. */
 .command-palette-backdrop {
   position: fixed;
   z-index: var(--z-dialog);
@@ -3706,7 +3707,45 @@ body,
   color: var(--text-tertiary);
 }
 
+/* The filters under the field, one pill each, the chosen one filled as a
+   filter chip is everywhere in the window. */
+.command-palette-filters {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-8) var(--space-12);
+  border: 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.command-palette-filter {
+  height: 24px;
+  padding: 0 var(--space-8);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.command-palette-filter:hover {
+  background: var(--raised);
+  color: var(--text-primary);
+}
+
+.command-palette-filter[aria-pressed="true"] {
+  border-color: var(--selected-edge);
+  background: var(--selected);
+  color: var(--text-primary);
+}
+
 .command-palette-list {
+  flex: 1 1 auto;
   min-height: 0;
   padding: var(--space-6);
   overflow-y: auto;
@@ -3746,6 +3785,22 @@ body,
   background: var(--raised-strong);
 }
 
+/* A row's glyph: a plan's, an agent's mark, a setting's gear. */
+.command-palette-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.command-palette-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .command-palette-name {
   min-width: 0;
   flex: 0 1 auto;
@@ -3766,12 +3821,32 @@ body,
   white-space: nowrap;
 }
 
+/* An action's chord, drawn as keys at the row's right end. */
 .command-palette-hint {
+  display: inline-flex;
   flex: 0 0 auto;
   margin-left: auto;
   padding-left: var(--space-16);
+}
+
+/* The keys' hints along the card's foot, in muted keys as a palette's foot
+   says them. */
+.command-palette-footer {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-16);
+  height: 36px;
+  padding: 0 var(--space-16);
+  border-top: 1px solid var(--hairline);
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+.command-palette-footer-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
 }
 
 .command-palette-empty {
