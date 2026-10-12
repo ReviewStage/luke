@@ -255,7 +255,11 @@ composer card, and nothing spoken. Leaving or deleting a plan lands here.
 - The saved `body`, rendered as Markdown, followed by an `Assumptions` section
   drawn from the saved `assumptions` list. The body is the fixed template, so
   every section and field shows from the moment the plan starts, an
-  unanswered field as "Unanswered".
+  unanswered field as "Unanswered". The rules are drawn as a numbered list
+  rather than as the body's `### Rule N:` headings: each number muted in a
+  gutter, the statement in the body's own weight, and its examples beneath
+  it as a compact block with muted Given, When, and Then labels; a rule with
+  no examples draws nothing beneath it (`plan-rule.tsx`).
 - It is selectable, so a selection can be copied, and each field opens in an
   editor in place ("Editing" below): a text field, a rule, the open
   questions, and the assumptions.
@@ -695,8 +699,11 @@ and the planning model reads the canonical Markdown on its next turn.
   core field renders it as "Unanswered" while it is.
   `implementation.order` and `dataAndMigration` are optional: the body leaves
   them out while null. A rule is exactly its one-sentence `statement` and its
-  `examples`, null until one is agreed and rendering "No examples yet"; an
-  example is exactly `given`, `when`, and `then`, each one line. `rules` is
+  `examples`, null until one is agreed and rendering "No examples yet" in
+  the body; an example is exactly `given`, `when`, and `then`, each one
+  line. A statement is taken, saved from the developer's editor, and
+  formatted without the list markers it opens with, since the heading
+  numbers the rule. `rules` is
   null until one is agreed. `openQuestions` is always a list, rendering "No
   additional questions recorded" while empty.
 - **Order and containment.** The formatter owns every heading and its order,
@@ -1041,7 +1048,7 @@ every section of the template in order, then the assumption list, which
 reads `_None recorded_` while the list is empty:
 
 ```markdown
-<body exactly as saved>
+<body as saved, a rule's stray list marker dropped>
 
 ## Assumptions
 

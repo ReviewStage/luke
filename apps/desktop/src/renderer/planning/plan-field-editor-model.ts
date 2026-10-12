@@ -209,9 +209,24 @@ function clauseOf(text: string): string | null {
   return trimmed === "" ? null : trimmed;
 }
 
+/** A rule's statement with the list markers it opens with dropped, since the document numbers each rule itself. */
+function statementText(statement: string): string {
+  return statement.trim().replace(LEADING_LIST_MARKERS, "").trim();
+}
+
+/**
+ * A rule's statement as saved: as typed, its list markers dropped, or as it
+ * stands where the developer's words are the same apart from those markers,
+ * so opening a rule saved with one saves nothing until they change it.
+ */
+function statementOf(typed: string, standing: string | undefined): string {
+  const statement = statementText(typed);
+  return standing !== undefined && statementText(standing) === statement ? standing : statement;
+}
+
 /** A rule's parts as saved, or nothing where its statement is blank, which strikes it; an example of blank clauses is dropped. */
-function ruleOf(draft: RuleDraft): PlanRule | undefined {
-  const statement = draft.statement.trim();
+function ruleOf(draft: RuleDraft, standing: PlanRule | undefined): PlanRule | undefined {
+  const statement = statementOf(draft.statement, standing?.statement);
   if (statement === "") return undefined;
   const examples = draft.examples
     .map((example) => ({
@@ -240,7 +255,7 @@ function rulesWith(
 /** A rule's draft from the rule as it stands, an empty one for a new rule. */
 function ruleDraftOf(rule: PlanRule | undefined): RuleDraft {
   return {
-    statement: rule?.statement ?? "",
+    statement: statementText(rule?.statement ?? ""),
     examples: (rule?.examples ?? []).map((example) => ({
       given: example.given ?? "",
       when: example.when ?? "",
@@ -294,7 +309,8 @@ function requestOf(editor: FieldEditor): PlanEditRequest {
   switch (saved.field) {
     case PLAN_FIELD.RULES: {
       const index = "rule" in target ? target.rule : 0;
-      const rule = draft.kind === EDIT_DRAFT.RULE ? ruleOf(draft.rule) : undefined;
+      const standing = saved.base?.[index];
+      const rule = draft.kind === EDIT_DRAFT.RULE ? ruleOf(draft.rule, standing) : undefined;
       return { field: saved.field, base: saved.base, value: rulesWith(saved.base, index, rule) };
     }
     case PLAN_FIELD.OPEN_QUESTIONS:

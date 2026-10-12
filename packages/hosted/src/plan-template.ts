@@ -239,12 +239,19 @@ function exampleItem(example: Example): string {
   ].join("\n");
 }
 
+/**
+ * One rule under its numbered heading, then its examples. Note that we drop
+ * the list markers a statement opens with, as a rule saved before they were
+ * dropped on taking still does, because the heading numbers the rule and a
+ * marker behind the number reads as a stray dash.
+ */
 function ruleBlock(rule: Rule, index: number): string {
   const examples =
     rule.examples === null
       ? PLAN_EMPTY_TEXT.NO_EXAMPLES
       : rule.examples.map(exampleItem).join("\n");
-  return [`### ${PLAN_LABEL.RULE} ${index + 1}: ${oneLine(rule.statement)}`, examples].join("\n\n");
+  const statement = itemText(oneLine(rule.statement));
+  return [`### ${PLAN_LABEL.RULE} ${index + 1}: ${statement}`, examples].join("\n\n");
 }
 
 function rulesBlocks(rules: readonly Rule[] | null): readonly string[] {
@@ -302,6 +309,32 @@ export function planBody(header: PlanHeader, fields: PlanFields): string {
     ...optionalSection(PLAN_HEADING.DATA_AND_MIGRATION, fields.dataAndMigration),
   ];
   return `${blocks.join("\n\n")}\n`;
+}
+
+/** A rule's heading as a body saved before `ruleBlock` dropped markers holds it: its number, then the markers. */
+const RULE_HEADING_MARKERS = /^(### Rule \d+: )(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)+/u;
+
+/**
+ * A saved body with the list markers dropped from behind every rule's
+ * number, so a body formatted before `ruleBlock` dropped them reads as one
+ * formatted now. Note that we leave a fence's lines as written, because a
+ * heading inside code is code; outside a fence, `contained` has escaped
+ * every heading a field's own text could open, so a rule's heading there is
+ * the formatter's.
+ */
+export function planBodyTidied(body: string): string {
+  let fence: OpenFence | undefined;
+  return body
+    .split("\n")
+    .map((line) => {
+      if (fence !== undefined) {
+        if (fenceCloses(line, fence)) fence = undefined;
+        return line;
+      }
+      fence = fenceOpened(line);
+      return fence === undefined ? line.replace(RULE_HEADING_MARKERS, "$1") : line;
+    })
+    .join("\n");
 }
 
 /** The fields that hold one Markdown answer, as against the rules and the two lists. */
@@ -809,9 +842,11 @@ function rulesStruck(rules: readonly Rule[], find: string): readonly Rule[] | un
 /** The rules with a note applied, or nothing where the note names no rule or no phrase in them. */
 function rulesNoted(rules: readonly Rule[], note: PlanNote): readonly Rule[] | undefined {
   switch (note.kind) {
-    case NOTE_KIND.ADD:
-      if (note.text.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS) return undefined;
-      return [...rules, { statement: note.text, examples: null }];
+    case NOTE_KIND.ADD: {
+      const statement = itemText(note.text);
+      if (statement === "" || statement.length > PLAN_FIELD_BOUNDS.MAX_RULE_CHARS) return undefined;
+      return [...rules, { statement, examples: null }];
+    }
     case NOTE_KIND.ADD_EXAMPLE: {
       const rule = rules[note.rule - 1];
       if (rule === undefined) return undefined;

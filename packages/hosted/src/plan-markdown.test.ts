@@ -87,6 +87,31 @@ test("a draft of the fixed template copies every section in order, its unanswere
   assert.ok(copied.includes("## Decisions\n\n_Unanswered_\n"));
 });
 
+test("a body saved with a list marker behind a rule's number copies without it, and code keeps its own", () => {
+  const fenced = ["```md", "### Rule 1: - kept as written", "```"].join("\n");
+  const body = [
+    "## Rules",
+    "",
+    "### Rule 1: - Links expire in a week.",
+    "",
+    "_No examples yet_",
+    "",
+    "### Rule 2: 1. Only admins withdraw.",
+    "",
+    "## Implementation",
+    "",
+    "### Contracts",
+    "",
+    fenced,
+  ].join("\n");
+
+  const copied = planMarkdown({ body, assumptions: [] });
+
+  assert.ok(copied.includes("\n### Rule 1: Links expire in a week.\n"));
+  assert.ok(copied.includes("\n### Rule 2: Only admins withdraw.\n"));
+  assert.ok(copied.includes(fenced));
+});
+
 test("an assumption spanning lines stays one list item", () => {
   const copied = planMarkdown({
     body: BODY,

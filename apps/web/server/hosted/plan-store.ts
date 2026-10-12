@@ -4,6 +4,7 @@ import {
   type PlanFieldWriter,
   planAgentEditSchema,
   planBody,
+  planBodyTidied,
   planFieldWriterSchema,
 } from "@sidecar/hosted/plan-template";
 import {
@@ -570,15 +571,16 @@ export function savePlanDocument(
 
 /**
  * The body a renamed plan keeps. Note that only a body formatted from the
- * stored fields under the old name is formatted again under the new one,
- * because its heading is the name; an empty body already reads as the
+ * stored fields under the old name, as the formatter writes it now or wrote
+ * it before it dropped a rule's list markers, is formatted again under the
+ * new one, because its heading is the name; an empty body already reads as the
  * template under whatever name stands, and any other body, or one the longer
  * heading would carry past the body's bound, is left as saved until the next
  * save of notes formats it.
  */
 function retitledBody(row: PlanRow, name: string): string {
   if (row.body === "" || row.fields === null) return row.body;
-  if (row.body !== planBody({ name: row.name }, row.fields)) return row.body;
+  if (planBodyTidied(row.body) !== planBody({ name: row.name }, row.fields)) return row.body;
   const retitled = planBody({ name }, row.fields);
   return retitled.length > PLAN_BOUNDS.MAX_BODY_CHARS ? row.body : retitled;
 }

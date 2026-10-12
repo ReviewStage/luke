@@ -136,11 +136,12 @@ function bylines(container: HTMLElement): readonly (readonly [string, string])[]
   });
 }
 
-/** The headings of the sections tinted as changed since the last look. */
+/** What heads each section tinted as changed since the last look: its heading, or a rule's statement. */
 function changed(container: HTMLElement): readonly string[] {
   return [...container.querySelectorAll(".plan-changed")].map(
     (section) =>
-      section.querySelector(".markdown-heading, .plan-assumptions-heading")?.textContent ?? "",
+      section.querySelector(".markdown-heading, .plan-assumptions-heading, .plan-rule-body > p")
+        ?.textContent ?? "",
   );
 }
 
@@ -206,8 +207,8 @@ it.effect(
       assert.deepEqual(changed(container), [
         "Problem",
         "Rules",
-        "Rule 1: An invite expires after 7 days.",
-        "Rule 2: Only admins invite.",
+        "An invite expires after 7 days.",
+        "Only admins invite.",
         "Assumptions",
       ]);
       assert.equal(changedNote(container), "Changed since you last looked · 3 sections");

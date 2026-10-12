@@ -1,12 +1,14 @@
-import { PLAN_EMPTY_TEXT, PLAN_HEADING } from "./plan-template.js";
+import { PLAN_EMPTY_TEXT, PLAN_HEADING, planBodyTidied } from "./plan-template.js";
 import { PLAN_BOUNDS, type PlanDocument } from "./plan-wire.js";
 
 /**
  * plan-markdown.ts -- a plan's saved document as the readable Markdown Copy puts on the clipboard and a coding agent is handed.
  *
  * Copy is direct formatting of the saved document and nothing else: the body
- * exactly as saved, which carries every section of the fixed template in its
- * canonical order, then the template's last section, `## Assumptions`, drawn
+ * as saved, which carries every section of the fixed template in its
+ * canonical order, tidied only where a rule saved before the formatter
+ * dropped a statement's list markers still carries one behind its number
+ * (`planBodyTidied`), then the template's last section, `## Assumptions`, drawn
  * from the saved list, one bullet per assumption, or "None recorded" while
  * the list is empty. A draft with every field unanswered copies the same way
  * as a finished plan (`docs/PLANNING.md`, "Copy").
@@ -59,11 +61,11 @@ function listItem(text: string): string {
 }
 
 /**
- * The document as Markdown: the body as saved, then the assumptions'
- * section, which stands whether or not the list holds anything.
+ * The document as Markdown: the body as saved and tidied, then the
+ * assumptions' section, which stands whether or not the list holds anything.
  */
 export function planMarkdown(document: PlanDocument): string {
-  const body = document.body.trimEnd();
+  const body = planBodyTidied(document.body).trimEnd();
   const items =
     document.assumptions.length === 0
       ? [PLAN_EMPTY_TEXT.NO_ASSUMPTIONS]

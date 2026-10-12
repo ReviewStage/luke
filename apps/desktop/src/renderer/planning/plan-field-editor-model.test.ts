@@ -154,6 +154,37 @@ test("a new rule is added after the rules standing; a struck rule is saved as th
   assert.ok(struck.closing);
 });
 
+test("a rule's statement saves without the list marker it was typed with", () => {
+  const added = editorTyped(editorOpened({ field: PLAN_FIELD.RULES, rule: 1 }, CONTENT), {
+    kind: EDIT_DRAFT.RULE,
+    rule: { statement: "- Invites expire after 7 days.", examples: [] },
+  });
+
+  assert.deepEqual(saved(added).value, [
+    RULE,
+    { statement: "Invites expire after 7 days.", examples: null },
+  ]);
+});
+
+test("a rule saved with a list marker opens without it, saves nothing untouched, and saves clean once changed", () => {
+  const marked = { statement: "- Links expire.", examples: null };
+  const content = { ...CONTENT, fields: { ...CONTENT.fields, rules: [marked] } };
+  const opened = editorOpened({ field: PLAN_FIELD.RULES, rule: 0 }, content);
+  const changed = editorTyped(opened, {
+    kind: EDIT_DRAFT.RULE,
+    rule: { statement: "Links expire in a week.", examples: [] },
+  });
+
+  assert.deepEqual(opened.draft, {
+    kind: EDIT_DRAFT.RULE,
+    rule: { statement: "Links expire.", examples: [] },
+  });
+  assert.equal(pendingSave(opened), undefined);
+  assert.deepEqual(saved(changed).value, [
+    { statement: "Links expire in a week.", examples: null },
+  ]);
+});
+
 test("one save is out at a time; words typed meanwhile save after it lands, from what it saved", () => {
   const typed = editorTyped(editorOpened(PROBLEM, CONTENT), text("- Only owners."));
   const out = editorSent(typed, saved(typed));
