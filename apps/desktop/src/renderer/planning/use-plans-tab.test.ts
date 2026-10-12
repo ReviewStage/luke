@@ -367,6 +367,34 @@ it.effect(
 );
 
 it.effect(
+  "Version history opened at a section's save opens on the revision that made it, and from the plan's line again on the newest",
+  () =>
+    Effect.gen(function* () {
+      const tab = mount(
+        { shown: true, planning: EDITED },
+        {
+          [ACT_KIND.PLANNING_REVISIONS]: () =>
+            Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
+          [ACT_KIND.PLANNING_REVISION]: () =>
+            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+        },
+        yield* registryOnTestClock,
+      );
+
+      act(() => tab.control().history.onOpen(PLAN.id, revisionLine(1).lastEdit.at));
+      yield* landed;
+      assert.equal(tab.control().history.open, true);
+      assert.equal(tab.control().history.viewing?.line.seq, 1);
+      assert.equal(tab.control().history.viewing?.current, false);
+
+      act(() => tab.control().history.onClose());
+      act(() => tab.control().history.onOpen(PLAN.id));
+      yield* landed;
+      assert.equal(tab.control().history.viewing?.line.seq, 2);
+    }),
+);
+
+it.effect(
   "a save landing while the version history stands moves the view on to it from the newest, and leaves an older version chosen where it is",
   () =>
     Effect.gen(function* () {

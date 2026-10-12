@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
-import { PLAN_FIELD, type Plan, type PlanFields } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, PLAN_FIELD, type Plan, type PlanFields } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -93,6 +93,39 @@ test("a document with no edit door, or from a service that sends no fields, offe
   const { container } = mount(unfielded);
 
   assert.equal(container.querySelector(".plan-unit-edit"), null);
+});
+
+test('a section\'s "Edited by" opens the version history on the save it names, from the pointer or the keyboard, and opens no editor', () => {
+  const at = 1_000;
+  const shown: (number | undefined)[] = [];
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const plan: Plan = {
+    ...PLAN,
+    lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true },
+    fieldEdits: [{ field: PLAN_FIELD.PROBLEM, actor: PLAN_ACTOR.NOTETAKER, at, duringCall: true }],
+  };
+  const onShowHistory = (save: number | undefined) => shown.push(save);
+  const onEdit = () => Promise.resolve({ saved: true } as const);
+  act(() => root.render(createElement(PlanBody, { plan, live: false, onEdit, onShowHistory })));
+  const line = container.querySelector<HTMLButtonElement>("button.plan-unit-byline");
+  assert.ok(line, "the section's line is a button");
+
+  assert.match(
+    line.getAttribute("aria-label") ?? "",
+    /^Problem: Edited by Luke during your call · .+\. Show version history$/u,
+  );
+  line.focus();
+  assert.equal(document.activeElement, line, "reached from the keyboard");
+  act(() => line.click());
+  assert.ok(container.querySelector("textarea") === null, "no editor opened");
+  assert.deepEqual(shown, [at]);
+
+  // The line over the document opens the plan as it stands.
+  act(() => container.querySelector<HTMLButtonElement>(".plan-edit-link")?.click());
+  assert.deepEqual(shown, [at, undefined]);
 });
 
 test("a field's pencil opens its Markdown in an editor the recording does not capture, its heading kept", () => {

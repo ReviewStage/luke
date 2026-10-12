@@ -305,7 +305,7 @@ function PlanDocument({
                 key={String(archived)}
                 plan={plan}
                 live={plans.live}
-                onShowHistory={() => plans.history.onOpen(plan.id)}
+                onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
                 {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
                 looks={looks}
               />

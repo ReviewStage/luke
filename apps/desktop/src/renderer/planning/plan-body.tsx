@@ -51,7 +51,8 @@ import { NO_LOOKS, type PlanLooks } from "./use-plan-looks";
  * whether it was on a call, and how long ago, moved on once a minute. The
  * line opens the plan's version history, where each earlier version is. Each
  * section says the same of the save that last changed it, quietly, while the
- * pointer or the keyboard is on it. The sections changed since the developer
+ * pointer or the keyboard is on it, and its line opens the version history on
+ * the revision that save made. The sections changed since the developer
  * last looked at the plan on this Mac wear a still tint, counted under that
  * line, until they dismiss them or leave the plan (`use-plan-looks.ts`).
  */
@@ -122,13 +123,16 @@ export function editedLine(edit: PlanLastEdit, now: number): string {
   return `${by}${call} · ${agoText(edit.at, now)}`;
 }
 
+/** Opens the plan's version history on the revision that made the save at a moment, or on the plan as it stands. */
+type ShowHistory = (save: number | undefined) => void;
+
 /** The line over the document, which opens the plan's history where the window offers it. */
 function EditedLine({
   edit,
   onShowHistory,
 }: {
   edit: PlanLastEdit;
-  onShowHistory: (() => void) | undefined;
+  onShowHistory: ShowHistory | undefined;
 }): React.JSX.Element {
   const now = useMinute();
   const line = editedLine(edit, now);
@@ -139,7 +143,7 @@ function EditedLine({
         type="button"
         className="plan-edit-link"
         aria-label={`${line}. Show version history`}
-        onClick={onShowHistory}
+        onClick={() => onShowHistory(undefined)}
       >
         {line}
       </button>
@@ -166,18 +170,43 @@ function ChangedLine({ looks }: { looks: PlanLooks }): React.JSX.Element | null 
   );
 }
 
-/** What each unit says of its field: the save that last changed each, which changed since the last look, and the minute it counts from. */
+/**
+ * What each unit says of its field: the save that last changed each, which
+ * changed since the last look, the minute it counts from, and the way into
+ * the version history where the window offers one.
+ */
 interface FieldMarks {
   readonly edits: ReadonlyMap<PlanField, PlanFieldEdit>;
   readonly changed: ReadonlySet<PlanField>;
   readonly now: number;
+  readonly onShowHistory: ShowHistory | undefined;
 }
 
-/** The section's quiet line: who last changed it, and when, shown while the pointer or the keyboard is on it; none where no save has. */
+/**
+ * The section's quiet line: who last changed it, and when, shown while the
+ * pointer or the keyboard is on it; none where no save has. Where the window
+ * offers the version history, it opens it on the revision that save made.
+ */
 function bylineOf(marks: FieldMarks, field: PlanField): React.JSX.Element | null {
   const edit = marks.edits.get(field);
   if (edit === undefined) return null;
-  return <span className="plan-unit-byline">{editedLine(edit, marks.now)}</span>;
+  const line = editedLine(edit, marks.now);
+  const { onShowHistory } = marks;
+  if (onShowHistory === undefined) return <span className="plan-unit-byline">{line}</span>;
+  return (
+    <button
+      type="button"
+      className="plan-unit-byline"
+      aria-label={`${PLAN_FIELD_HEADING[field]}: ${line}. Show version history`}
+      onClick={(event) => {
+        // Note that the press stops here, because a click into the section opens its editor.
+        event.stopPropagation();
+        onShowHistory(edit.at);
+      }}
+    >
+      {line}
+    </button>
+  );
 }
 
 /** The class of a unit or assumption lit as it settles. */
@@ -433,8 +462,10 @@ function PlanAssumptions({
  * The plan's body and its assumptions, the assumptions' section standing even
  * while the list is empty. `live` is the plan's call in progress, which keeps
  * the caret waiting where the typing last stopped; `onShowHistory` opens the
- * plan's version history from the "Edited by" line. With `onEdit`, and fields
- * from a service that sends them, each field opens in an editor in place.
+ * plan's version history from the "Edited by" line, on the plan as it
+ * stands, and from a section's, on the revision of the save it names. With
+ * `onEdit`, and fields from a service that sends them, each field opens in
+ * an editor in place.
  * `looks` are the sections changed since the developer last looked, which
  * the plan's region keeps (`use-plan-looks.ts`); without them none are.
  */
@@ -447,7 +478,7 @@ export function PlanBody({
 }: {
   plan: Plan;
   live: boolean;
-  onShowHistory?: () => void;
+  onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
   looks?: PlanLooks;
 }): React.JSX.Element {
@@ -464,6 +495,7 @@ export function PlanBody({
     edits: new Map(plan.fieldEdits?.map((edit) => [edit.field, edit])),
     changed: looks.changed,
     now,
+    onShowHistory,
   };
   const scroller = useRef<HTMLDivElement>(null);
   /** Whether the developer has scrolled since the typing last began, which stops the caret being followed. */

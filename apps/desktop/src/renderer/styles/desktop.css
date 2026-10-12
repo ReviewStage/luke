@@ -1457,7 +1457,8 @@ body,
   text-align: left;
 }
 
-.plan-edit-link:hover {
+.plan-edit-link:hover,
+.plan-edit-link:focus-visible {
   color: var(--text-primary);
   text-decoration: underline;
   text-underline-offset: 0.2em;
