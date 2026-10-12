@@ -434,6 +434,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
           yield* recordCodingAgentPublished(owner, agent.id, {
             ...PULL_REQUEST,
             number: index + 1,
+            url: `https://github.com/Acme/Relay/pull/${index + 1}`,
             state,
           });
           yield* TestClock.adjust("1 minute");
@@ -454,6 +455,34 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             [3, PULL_REQUEST_STATE.MERGED],
             [4, PULL_REQUEST_STATE.CLOSED],
           ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a listed plan names two pull requests of one number in two repositories apart, each with its own page",
+    () =>
+      Effect.gen(function* () {
+        const { owner, ask } = yield* openAccounts();
+        const plan = yield* createPlan(owner, { name: RELAY.name });
+        const pages = [PULL_REQUEST.url, "https://github.com/Acme/Ledger/pull/128"];
+        for (const url of pages) {
+          const agent = yield* startAgent(owner, plan.id);
+          yield* recordCodingAgentPublished(owner, agent.id, { ...PULL_REQUEST, url });
+          yield* TestClock.adjust("1 minute");
+        }
+
+        const { plans } = readAnswer(
+          planListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(PLANS, owner)),
+        );
+
+        const agents = plans.find((listed) => listed.id === plan.id)?.agents;
+        assert.equal(agents?.pullRequestTotal, 2);
+        assert.deepEqual(
+          agents?.pullRequests.map((pullRequest) => pullRequest.url).sort(),
+          [...pages].sort(),
         );
       }),
   );
@@ -511,6 +540,7 @@ it.layer(testSqlClient)("the plan routes", (it) => {
             checks: CHECK_SUMMARY.FAILING,
             additions: 214,
             deletions: 9,
+            url: "https://github.com/Acme/Relay/pull/128",
           },
         ]);
       }),

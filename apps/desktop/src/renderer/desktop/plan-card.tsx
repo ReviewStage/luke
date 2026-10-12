@@ -19,6 +19,7 @@ import {
   planRowMark,
 } from "../planning/plan-agents-model";
 import { sinceText } from "../planning/plan-time";
+import { repositoryPageUrl } from "../planning/planning-model";
 import { WorkingTime } from "../planning/working-time";
 import { RepositoryPicture } from "../repository-picture";
 import { SpinnerRing } from "../spinner";
@@ -35,6 +36,12 @@ import { SpinnerRing } from "../spinner";
  * for each pull request with its size and the word for where it stands,
  * each list counting what it leaves out. Everything is read from the plan
  * list's row, so the card fetches nothing.
+ *
+ * Three of its lines are buttons, as a GitHub hover card's are: the
+ * repository and a pull request open their pages on GitHub, and an agent
+ * opens the plan on its tab. Each is also offered where the card is not:
+ * the plan's menu opens the repository, and the agent's tab its pull
+ * request. The rest are facts, left as text.
  */
 
 /** What a working agent's line says before its count. */
@@ -95,51 +102,67 @@ function AgentLine({
   agent,
   models,
   now,
+  onShow,
 }: {
   agent: PlanAgentLine;
   models: readonly CatalogModel[];
   now: number;
+  onShow: () => void;
 }): React.JSX.Element {
   const corner = agentLineCorner(agent);
   const choice = { model: agent.model, effort: agent.effort };
   return (
-    <li className="plan-card-line" data-plan-card-agent="">
-      <span className="plan-card-glyph">
-        <AgentGlyph agent={agent} />
-      </span>
-      <span className="plan-card-label">
-        {agent.title === null ? (
-          <ModelLabel choice={choice} models={models} />
-        ) : (
-          <>
-            <span className="plan-card-title">{agent.title}</span>{" "}
-            <span className="plan-card-model">
-              <ModelLabel choice={choice} models={models} />
-            </span>
-          </>
-        )}
-      </span>
-      <span className="plan-card-corner">
-        {corner.kind === AGENT_LINE_CORNER.WORKING ? (
-          <>
-            {WORKING_WORD}
-            {corner.startedAt === undefined ? null : (
-              <WorkingTime startedAt={corner.startedAt} className="ml-1" />
-            )}
-          </>
-        ) : (
-          `${corner.word}${corner.at === undefined ? "" : ` ${sinceText(corner.at, now)}`}`
-        )}
-      </span>
+    <li data-plan-card-agent="">
+      <button type="button" className="plan-card-line" onClick={onShow}>
+        <span className="plan-card-glyph">
+          <AgentGlyph agent={agent} />
+        </span>
+        <span className="plan-card-label">
+          {agent.title === null ? (
+            <ModelLabel choice={choice} models={models} />
+          ) : (
+            <>
+              <span className="plan-card-title">{agent.title}</span>{" "}
+              <span className="plan-card-model">
+                <ModelLabel choice={choice} models={models} />
+              </span>
+            </>
+          )}
+        </span>
+        <span className="plan-card-corner">
+          {corner.kind === AGENT_LINE_CORNER.WORKING ? (
+            <>
+              {WORKING_WORD}
+              {corner.startedAt === undefined ? null : (
+                <WorkingTime startedAt={corner.startedAt} className="ml-1" />
+              )}
+            </>
+          ) : (
+            `${corner.word}${corner.at === undefined ? "" : ` ${sinceText(corner.at, now)}`}`
+          )}
+        </span>
+      </button>
     </li>
   );
 }
 
-/** One pull request's line: its glyph, number and title, its size in green and red, and the word for where it stands where that matters. */
-function PullRequestLine({ pullRequest }: { pullRequest: PlanPullRequestLine }): React.JSX.Element {
+/**
+ * One pull request's line: its glyph, number and title, its size in green
+ * and red, and the word for where it stands where that matters. It opens
+ * the pull request on GitHub, where the service said its page; a line from
+ * a service before it did is text.
+ */
+function PullRequestLine({
+  pullRequest,
+  onOpenGitHub,
+}: {
+  pullRequest: PlanPullRequestLine;
+  onOpenGitHub: (url: string) => void;
+}): React.JSX.Element {
   const state = pullRequestStateWord(pullRequest.state);
-  return (
-    <li className="plan-card-line" data-plan-card-pull-request="">
+  const { url } = pullRequest;
+  const line = (
+    <>
       <span className="plan-card-glyph">
         <PullRequestGlyph pullRequest={pullRequest} />
       </span>
@@ -151,6 +174,17 @@ function PullRequestLine({ pullRequest }: { pullRequest: PlanPullRequestLine }):
         <span className="agent-published-removed">−{pullRequest.deletions}</span>
         {state === undefined ? null : <span className="plan-card-state"> {state}</span>}
       </span>
+    </>
+  );
+  return (
+    <li data-plan-card-pull-request="">
+      {url === undefined ? (
+        <span className="plan-card-line">{line}</span>
+      ) : (
+        <button type="button" className="plan-card-line" onClick={() => onOpenGitHub(url)}>
+          {line}
+        </button>
+      )}
     </li>
   );
 }
@@ -171,6 +205,8 @@ export function PlanCard({
   models,
   pictures,
   now,
+  onOpenGitHub,
+  onShowAgent,
 }: {
   plan: PlanSummary;
   /** The catalog as last read, which names each agent's model; empty before the first read. */
@@ -179,8 +215,12 @@ export function PlanCard({
   pictures: boolean;
   /** The time the card's times are counted back from. */
   now: number;
+  /** Opens a page on GitHub: the repository's, or a pull request's. */
+  onOpenGitHub: (url: string) => void;
+  /** Opens the plan on one of its agents' tabs. */
+  onShowAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const { agents } = plan;
+  const { agents, repository } = plan;
   return (
     <div className="plan-card" data-plan-card="">
       <div className="plan-card-head">
@@ -189,20 +229,30 @@ export function PlanCard({
           {sinceText(plan.updatedAt, now)}
         </time>
       </div>
-      {plan.repository === null ? null : (
-        <span className="plan-card-repository">
+      {repository === null ? null : (
+        <button
+          type="button"
+          className="plan-card-repository"
+          onClick={() => onOpenGitHub(repositoryPageUrl(repository))}
+        >
           <RepositoryPicture
-            repository={plan.repository}
+            repository={repository}
             pictures={pictures}
             fallback={<GitHubMark />}
           />
-          {plan.repository}
-        </span>
+          {repository}
+        </button>
       )}
       {agents === undefined || agents.agents.length === 0 ? null : (
         <ul className="plan-card-lines" aria-label="Agents">
           {agents.agents.map((agent) => (
-            <AgentLine key={agent.id} agent={agent} models={models} now={now} />
+            <AgentLine
+              key={agent.id}
+              agent={agent}
+              models={models}
+              now={now}
+              onShow={() => onShowAgent(agent.id)}
+            />
           ))}
           <More total={agents.total} shown={agents.agents.length} />
         </ul>
@@ -210,7 +260,11 @@ export function PlanCard({
       {agents === undefined || agents.pullRequests.length === 0 ? null : (
         <ul className="plan-card-lines" aria-label="Pull requests">
           {agents.pullRequests.map((pullRequest) => (
-            <PullRequestLine key={pullRequest.number} pullRequest={pullRequest} />
+            <PullRequestLine
+              key={pullRequest.url ?? pullRequest.number}
+              pullRequest={pullRequest}
+              onOpenGitHub={onOpenGitHub}
+            />
           ))}
           <More total={agents.pullRequestTotal} shown={agents.pullRequests.length} />
         </ul>

@@ -151,6 +151,9 @@
                     "deletions": {
                       "type": "number",
                       "minimum": 0
+                    },
+                    "url": {
+                      "type": "string"
                     }
                   },
                   "required": [
