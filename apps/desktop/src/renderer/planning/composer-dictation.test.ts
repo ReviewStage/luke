@@ -187,7 +187,7 @@ async function settle(): Promise<void> {
 const ignore = () => undefined;
 
 /** The agent's box over a draft the test can read, and the box's own presses. */
-function mountComposer(initial: string, registry?: AtomRegistry.AtomRegistry) {
+function mountComposer(initial: string, registry?: AtomRegistry) {
   let drafted = initial;
   function Probe() {
     const [draft, setDraft] = useState(initial);
