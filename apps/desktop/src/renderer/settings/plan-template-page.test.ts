@@ -23,6 +23,7 @@ import {
 } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { newestToastAction, newestToastSays } from "#testing/toast";
+import type { PlanEditorModule, PlanEditorProps } from "../plan-editor/contract";
 import { ToastHost } from "../toast";
 import { PlanTemplateSection } from "./plan-template-page";
 
@@ -72,6 +73,40 @@ function answer(request: Act): Promise<ActOutcome> {
   }
 }
 
+/**
+ * The plan editor's bundle, TipTap, is tested beside it (`../plan-editor/`).
+ * Here a stand-in takes its place at its one boundary, `window.lukePlanEditor`:
+ * a plain box that hands over its whole text on each input, as the editor
+ * does on each change, and finishes on Esc.
+ */
+const built: { props: PlanEditorProps; destroyed: boolean }[] = [];
+
+const STAND_IN: PlanEditorModule = {
+  mount: (host, props) => {
+    const editor = { props, destroyed: false };
+    built.push(editor);
+    const area = document.createElement("textarea");
+    area.value = props.markdown;
+    area.setAttribute("aria-label", props.label);
+    area.addEventListener("input", () => props.onDraft(area.value));
+    area.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") props.onFinish(0);
+    });
+    host.append(area);
+    if (props.focus) area.focus();
+    return {
+      take: (_sent, merged) => ({ base: merged, text: merged }),
+      destroy: () => {
+        editor.destroyed = true;
+        area.remove();
+      },
+    };
+  },
+};
+
+// Set before any page renders, since the page reads the bundle once per window.
+window.lukePlanEditor = STAND_IN;
+
 const roots: Root[] = [];
 
 beforeEach(() => {
@@ -81,6 +116,7 @@ beforeEach(() => {
   refuseWrites = false;
   holdWrites = false;
   heldWrites = [];
+  built.length = 0;
   Object.defineProperty(window, "sidecar", {
     configurable: true,
     value: { act: answer, recordSurfaceEvent: () => undefined },
@@ -163,6 +199,37 @@ test("the page reads the template as it opens and draws it in a box the recordin
   assert.ok(box(container).closest(".ph-no-capture"), "the box stands under the recording's mask");
   assert.match(container.textContent ?? "", /New plans start as a copy of this template/u);
   assert.equal(button(container, "Reset to default"), undefined);
+});
+
+test("the template is written in the plan's own editor, built on it without taking the keyboard, and not built again as the page saves what it hands over", async () => {
+  const { container } = await mount();
+
+  assert.deepEqual(
+    built.map(({ props }) => [props.markdown, props.label, props.focus]),
+    [[DEFAULT_PLAN_TEMPLATE, "Plan template", false]],
+  );
+  assert.notEqual(document.activeElement, box(container));
+  typeInto(box(container), CUSTOM);
+  blur(box(container));
+  await settle();
+
+  assert.deepEqual(writes(), [CUSTOM]);
+  assert.equal(built.length, 1, "the editor stands as it was, its caret with it");
+});
+
+test("Esc leaves the template as focus leaving does, which saves it", async () => {
+  const { container } = await mount();
+  const area = box(container);
+  act(() => area.focus());
+  typeInto(area, CUSTOM);
+
+  act(() => {
+    area.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  });
+  await settle();
+
+  assert.notEqual(document.activeElement, area);
+  assert.deepEqual(writes(), [CUSTOM]);
 });
 
 test("signed out, the page says the template needs an account and asks the service nothing", async () => {

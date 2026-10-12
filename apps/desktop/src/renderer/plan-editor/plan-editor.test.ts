@@ -22,7 +22,7 @@ afterEach(() => {
 });
 
 /** The editor mounted on the text, with every hand-over, finish, and leaving it reported. */
-function mounted(placement: PlanEditorPlacement | undefined = undefined) {
+function mounted(placement: PlanEditorPlacement | undefined = undefined, focus = true) {
   const host = document.createElement("div");
   document.body.append(host);
   const drafts: string[] = [];
@@ -31,6 +31,7 @@ function mounted(placement: PlanEditorPlacement | undefined = undefined) {
   const props: PlanEditorProps = {
     markdown: TEXT,
     placement,
+    focus,
     label: "Plan",
     className: "markdown plan-unit",
     onDraft: (markdown) => drafts.push(markdown),
@@ -90,4 +91,12 @@ test("a save's merged answer lays Luke's change in and answers the base and the 
   const taken = handle.take(TEXT, merged);
 
   assert.deepEqual(taken, { base: merged, text: merged });
+});
+
+test("opened by a key or a click it takes the keyboard; drawn by a page, it leaves it where it was", () => {
+  const opened = mounted();
+  assert.ok(opened.editable.contains(document.activeElement));
+
+  const drawn = mounted(undefined, false);
+  assert.ok(!drawn.editable.contains(document.activeElement));
 });

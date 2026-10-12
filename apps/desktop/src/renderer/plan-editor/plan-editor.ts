@@ -107,11 +107,11 @@ function placed(editor: Editor, placement: PlanEditorPlacement | undefined): Sel
 }
 
 /**
- * The text's editor mounted into `host`, in place of its drawn sections, and
- * focused with its caret where the placement says.
+ * The text's editor mounted into `host`, in place of its drawn sections, its
+ * caret where the placement says, and focused if it is asked to be.
  */
 export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): PlanEditorHandle {
-  const { markdown, placement, label, className, onDraft, onFinish, onLeaveUp } = props;
+  const { markdown, placement, focus, label, className, onDraft, onFinish, onLeaveUp } = props;
   const extensions = markdownExtensions();
   const manager = documentManager(extensions);
   const opened = documentOpened(manager, markdown);
@@ -145,7 +145,7 @@ export function mountPlanEditor(host: HTMLElement, props: PlanEditorProps): Plan
   });
   held = sourcesOf(editor.state.doc, opened);
   editor.view.dispatch(editor.state.tr.setSelection(placed(editor, placement)));
-  editor.view.focus();
+  if (focus) editor.view.focus();
   return {
     take: (sent, merged) => {
       const answer = documentTook(editor, manager, held, sent, merged);
