@@ -453,7 +453,9 @@ export function Tab({
 /**
  * A tab with its own actions, in the groups a rule divides, on a right-click
  * or the keyboard's menu keys, hung where the pointer is or under the tab;
- * closing the menu hands focus back to the tab. Every other part is `Tab`'s.
+ * closing the menu hands focus back to the tab, and a press on the tab
+ * closes it, as a press on a menu's own button does. Every other part is
+ * `Tab`'s.
  */
 export function MenuTab({
   groups,
@@ -471,6 +473,10 @@ export function MenuTab({
     <>
       <Tab
         {...tab}
+        onSelect={() => {
+          setMenu(undefined);
+          tab.onSelect();
+        }}
         onMenu={(placement, element) => {
           opener.current = element;
           setMenu({ placement, opener: element });

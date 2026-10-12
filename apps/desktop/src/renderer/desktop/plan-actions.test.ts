@@ -566,6 +566,9 @@ test("a press on the plan's tab only chooses it, while its right-click and the â
 
   rightClick(title(), 40, 12);
   assert.deepEqual(labels(), ["Rename"]);
+  act(() => title().click());
+  assert.deepEqual(labels(), [], "a press on the tab closes its menu");
+  rightClick(title(), 40, 12);
   choose("Rename");
   const field = type("Team invites");
   await act(async () => leave(field));

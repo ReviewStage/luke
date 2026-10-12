@@ -27,9 +27,10 @@ import { MenuTab, Tab, TabStrip } from "./tab-strip";
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
  * rest stand. Its one tab is the plan's, named for it, whose right-click
  * renames the plan in place, as the ⋯ menu's Rename does. The toolbar is
- * one row, the side panel's bar's height exactly; the plan's repository is the sidebar's row's to name, so
- * the toolbar draws the repository chip only while the plan has none, and
- * otherwise only the chip's menu, which Change repository… opens.
+ * one row, the side panel's bar's height exactly; the plan's repository is
+ * the sidebar's row's to name, so the toolbar draws the repository chip only
+ * while the plan has none, and otherwise only the chip's menu, which Change
+ * repository… opens.
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
