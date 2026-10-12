@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "pr_opened",
+        "ci_green",
+        "blocked",
+        "question",
+        "restacked",
+        "conflict",
+        "merged"
+      ]
+    },
+    "pullRequest": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "options": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+      },
+      "minItems": 1,
+      "maxItems": 6
+    }
+  },
+  "required": [
+    "kind",
+    "text"
+  ],
+  "additionalProperties": false
+}

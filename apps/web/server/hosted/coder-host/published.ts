@@ -148,11 +148,18 @@ export const agentPublished = /* @__PURE__ */ Effect.fn("web/agentPublished")(fu
   return answer;
 });
 
-/** One agent of one account, as the kept answers are keyed, and whether it had ended as asked: the first ask after a turn ends is its own key, so it reads afresh. */
+/**
+ * One agent of one account, as the kept answers are keyed, whether it had
+ * ended as asked, and the branch its row held: the first ask after a turn
+ * ends is its own key, and so is the first after a branch is written, as a
+ * rollout builder's report of its opened pull request writes one mid-turn,
+ * so each reads afresh rather than the kept answer of a branch not yet cut.
+ */
 export class PublishedKey extends Data.Class<{
   readonly userId: string;
   readonly agentId: string;
   readonly ended: boolean;
+  readonly branch: string | null;
 }> {}
 
 /** The kept answers of one function instance: an agent's answer for the TTL, a failure for no time. */

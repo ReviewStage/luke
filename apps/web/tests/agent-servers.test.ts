@@ -59,6 +59,7 @@ const codingHost = Effect.gen(function* () {
     fastRefused: async () => undefined,
     titleModel: () => undefined,
     research: () => ({ openAi: undefined, spend: Effect.void }),
+    planEve: () => Effect.succeed(undefined),
     scriptedModel: () => false,
     now: () => NOW,
   });

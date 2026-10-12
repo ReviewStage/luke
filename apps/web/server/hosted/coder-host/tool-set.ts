@@ -19,7 +19,8 @@ import { connectionToolEntries } from "../connection-tools.js";
  * its plan (`plan-edit.ts`) and its read of the plan whole (`plan-read.ts`), its to-do list (`todos.ts`), and the
  * developer's inbox it posts to (`inbox.ts`), the load of one of its
  * repository's skills (`skills.ts`), and the pages it shows the developer
- * (`../page-tool.ts`). The worker's own rows name
+ * (`../page-tool.ts`), and a rollout worker's reports to Luke (`report.ts`).
+ * The worker's own rows name
  * the read-only few of the same tools (`WORKER_TOOL_NAMES`), so one writer
  * over this set holds both transcripts. The writer holds every tool part
  * of a row to a registered tool, so each is registered here under the name
@@ -53,6 +54,7 @@ export const CODER_TOOL = {
   LOAD_SKILL: AGENT_TOOL.LOAD_SKILL,
   SHOW_PAGE: AGENT_TOOL.SHOW_PAGE,
   RUN_ON_MAC: AGENT_TOOL.RUN_ON_MAC,
+  REPORT: AGENT_TOOL.REPORT,
 } as const;
 
 /**

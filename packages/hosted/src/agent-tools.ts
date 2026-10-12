@@ -11,7 +11,11 @@
  */
 
 import { DRAW_ON_BOARD_TOOL_NAME, LOOK_AT_BOARD_TOOL_NAME } from "./board-vocabulary.js";
-import { CODING_AGENT_DELEGATE_TOOL, CODING_AGENT_TODOS_TOOL } from "./coding-agent-wire.js";
+import {
+  CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_REPORT_TOOL,
+  CODING_AGENT_TODOS_TOOL,
+} from "./coding-agent-wire.js";
 import { INBOX_TOOL } from "./inbox-wire.js";
 import { SHOW_PAGE_TOOL_NAME } from "./page-wire.js";
 
@@ -49,6 +53,8 @@ export const AGENT_TOOL = {
   POST_TO_INBOX: INBOX_TOOL.POST,
   CLOSE_INBOX_ITEM: INBOX_TOOL.CLOSE,
   READ_INBOX: INBOX_TOOL.READ,
+  // A rollout agent's report to Luke on the plan's conversation.
+  REPORT: CODING_AGENT_REPORT_TOOL,
   // eve's own, which loads one of the skills a session is offered.
   LOAD_SKILL: "load_skill",
   // An interactive page shown in the plan's side panel.

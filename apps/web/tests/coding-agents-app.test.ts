@@ -32,6 +32,7 @@ import {
   codingAgentAnswerSchema,
   codingAgentListAnswerSchema,
   codingAgentMessagesAnswerSchema,
+  codingAgentPullRequestAnswerSchema,
   ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
@@ -111,6 +112,7 @@ import { fakeWorkspaceSeams, joinWorkspace, startPlan } from "./support/workspac
 
 const ORIGIN = "https://luke.test";
 const PLAN_AGENTS = "/api/plans/agents";
+const AGENT_PULL_REQUEST = "/api/agents/pull-request";
 const AGENT_MESSAGES = "/api/agents/messages";
 /** One plan, served by the plans group, whose delete stops the plan's agents through the same Stop. */
 const PLAN = "/api/plans/plan";
@@ -962,6 +964,27 @@ it.layer(getTestDB())("the coding-agent routes", (it) => {
         );
       }),
   );
+  it.effect(
+    "a branch written mid-turn, as a builder's report of its opened pull request writes one, is read afresh inside the TTL rather than answered with the kept read of no branch",
+    () =>
+      Effect.gen(function* () {
+        const { owner, plan, ask } = yield* openPlan({
+          github: relayRepository({ pullRequest: pullRequestFixture(), pushed: true }),
+        });
+        const { agent } = yield* startedAgent(owner, plan.id, ask);
+        const read = () =>
+          Effect.map(ask(request(AGENT_PULL_REQUEST, owner, { id: agent.id })), (answered) =>
+            readAnswer(codingAgentPullRequestAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+          );
+
+        assert.equal((yield* read()).pullRequest, null);
+        yield* updateCodingAgentBranch(owner, agent.id, HEAD.ref);
+
+        const opened = yield* read();
+        assert.equal(opened.branch, HEAD.ref);
+        assert.equal(opened.pullRequest?.number, 41);
+      }),
+  );
 });
 
 /** A message to the agent as the bearer given, with the body given. */
@@ -1430,3 +1453,92 @@ it.layer(getTestDB())("the developer's inbox", (it) => {
       }),
   );
 });
+
+/** One pull request as the test's GitHub holds it, changed by the test between reads. */
+interface PullRequestFixture {
+  number: number;
+  state: "open" | "closed";
+  draft: boolean;
+  merged: boolean;
+  /** Each check run's status and conclusion on its head. */
+  runs: readonly { status: string; conclusion: string | null }[];
+  /** Each commit status's state on its head. */
+  statuses: readonly string[];
+  /** Whether the App may read the head's check runs; a refusal is 403. */
+  checksReadable: boolean;
+}
+
+const HEAD = { ref: "luke/teammate-invitations", sha: "0123abcd" } as const;
+
+function pullRequestFixture(overrides: Partial<PullRequestFixture> = {}): PullRequestFixture {
+  return {
+    number: 41,
+    state: "open",
+    draft: false,
+    merged: false,
+    runs: [{ status: "completed", conclusion: "success" }],
+    statuses: [],
+    checksReadable: true,
+    ...overrides,
+  };
+}
+
+/** The repository as the test's GitHub holds it: its one pull request, where there is one, and whether the head was pushed. */
+interface RepositoryFixture {
+  pullRequest: PullRequestFixture | undefined;
+  pushed: boolean;
+}
+
+function relayRepository(fixture: RepositoryFixture): RepositoryScript {
+  const base = `/repos/${RELAY.owner}/${RELAY.name}`;
+  const notFound = () => Response.json({ message: "Not Found" }, { status: 404 });
+  const pullJson = (pull: PullRequestFixture) => ({
+    number: pull.number,
+    title: "Teammate invitations",
+    html_url: `https://github.com/${RELAY_FULL_NAME}/pull/${pull.number}`,
+    state: pull.state,
+    draft: pull.draft,
+    merged: pull.merged,
+    additions: 210,
+    deletions: 14,
+    changed_files: 6,
+    head: { ref: HEAD.ref, sha: HEAD.sha, label: `${RELAY.owner}:${HEAD.ref}` },
+    user: { login: "luke[bot]", type: "Bot" },
+  });
+  return (sent) => {
+    const url = new URL(sent.url);
+    const { pathname } = url;
+    if (!pathname.startsWith(base)) return undefined;
+    const path = pathname.slice(base.length);
+    const { pullRequest } = fixture;
+    if (path === "/pulls") {
+      const head = url.searchParams.get("head");
+      return Response.json(
+        pullRequest !== undefined && head === `${RELAY.owner}:${HEAD.ref}`
+          ? [pullJson(pullRequest)]
+          : [],
+      );
+    }
+    if (path === `/pulls/${pullRequest?.number}` && pullRequest !== undefined) {
+      return Response.json(pullJson(pullRequest));
+    }
+    if (path === `/branches/${encodeURIComponent(HEAD.ref)}`) {
+      return fixture.pushed
+        ? Response.json({ name: HEAD.ref, commit: { sha: HEAD.sha } })
+        : notFound();
+    }
+    if (path === `/commits/${HEAD.sha}/check-runs` && pullRequest !== undefined) {
+      return pullRequest.checksReadable
+        ? Response.json({ total_count: pullRequest.runs.length, check_runs: pullRequest.runs })
+        : Response.json({ message: "Resource not accessible by integration" }, { status: 403 });
+    }
+    if (path === `/commits/${HEAD.sha}/status` && pullRequest !== undefined) {
+      return Response.json({
+        state: pullRequest.statuses[0] ?? "pending",
+        total_count: pullRequest.statuses.length,
+        statuses: pullRequest.statuses.map((state) => ({ state })),
+      });
+    }
+    return notFound();
+  };
+}

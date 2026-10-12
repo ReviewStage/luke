@@ -1,4 +1,5 @@
 import type { DatabaseServices, QueryError } from "@sidecar/database/core/query";
+import { askRecord } from "@sidecar/database/models/asks";
 import {
   type CodingAgent,
   readCodingAgentOfConversation,
@@ -12,6 +13,7 @@ import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_TOOL } from "@sidecar/hosted/inbox-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { WORKER_REPORT_KIND } from "@sidecar/hosted/rollout-wire";
 import { Effect, Option, type Redacted, Result, type Schema } from "effect";
 import type * as HttpClient from "effect/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -30,6 +32,7 @@ import {
 } from "../brain-host/conversation.js";
 import type { SessionPromptRecord } from "../brain-host/host.js";
 import { type RelayStanding, type RelayStateStore, StreamRelay } from "../brain-host/relay.js";
+import { reportToPlan } from "../brain-host/report.js";
 import { ModelCatalog, type OfferedModel, offeredToAccount } from "../model-catalog.js";
 import { runShowPage, SHOW_PAGE_REFUSAL, showPageRejected } from "../page-tool.js";
 import {
@@ -39,7 +42,7 @@ import {
   runSearchWeb,
   type SearchWebResult,
 } from "../public-research.js";
-import type { RepositorySandbox } from "../repository-shell.js";
+import { REPOSITORY_REFUSAL, type RepositorySandbox } from "../repository-shell.js";
 import { logStoreFailure } from "../store-failure.js";
 import { anthropicFastAccess } from "./account-keys.js";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
@@ -79,6 +82,15 @@ import {
   readAgentPlan,
 } from "./plan-read.js";
 import type { CoderHostSeams } from "./production.js";
+import {
+  REPORT_REFUSAL,
+  type ReportToolResult,
+  reportBy,
+  reportRejected,
+  reportTaken,
+  rolloutReporterOf,
+  workerReport,
+} from "./report.js";
 import { agentSkills } from "./skills.js";
 import { titleCodingAgent, titleSubagent } from "./title.js";
 import { CODER_TOOL } from "./tool-set.js";
@@ -261,6 +273,19 @@ export interface CoderHost extends HostAdmission {
     input: UnparsedWireValue,
     sandbox: InboxSandboxDoor,
   ): Effect.Effect<WireRecord, never, DatabaseServices>;
+  /**
+   * Hands one `report` call to Luke on the plan's conversation, keyed by the
+   * call's id, as the builder at the position the agent's row holds or as
+   * the rollout's stack keeper, each held to its own role's kinds; an agent
+   * started outside a rollout is refused. A pull request reported opened has
+   * the branch checked out in the sandbox written on the row first, where
+   * the session opened one, so its pull request reads at once rather than
+   * at the turn's end.
+   */
+  report(
+    admitted: AdmittedConversation,
+    call: ReportCall,
+  ): Effect.Effect<ReportToolResult, never, DatabaseServices | HttpClient.HttpClient>;
   /** Relays one event of the session's stream into the store, under the state the caller keeps for the session and the prompt it composed. */
   relay(
     event: MessageStreamEvent,
@@ -282,6 +307,13 @@ export type InboxCall =
       readonly tool: typeof INBOX_TOOL.CLOSE | typeof INBOX_TOOL.READ;
       readonly input: UnparsedWireValue;
     };
+
+/** One `report` call: eve's id for it, the input eve held to its schema, and the session's sandbox, where one was opened, to read the branch from. */
+export interface ReportCall {
+  readonly callId: string;
+  readonly input: UnparsedWireValue;
+  readonly sandbox: (() => Promise<RepositorySandbox>) | undefined;
+}
 
 /** A failure as a log line carries it: the checkout's reason, or a store failure's kind alone, since its message may name a statement. */
 function describeFailure(failure: CheckoutFailure): string {
@@ -380,6 +412,23 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
     });
     return written.pipe(Effect.catch(logStoreFailure));
   };
+
+  /** The branch checked out in the sandbox written on the agent's row; a read or write that fails is logged and writes nothing. */
+  const writeBranch = (
+    admitted: AdmittedConversation,
+    sandbox: Effect.Effect<RepositorySandbox, CheckoutRefused>,
+  ) =>
+    Effect.gen(function* () {
+      const agent = yield* agentOrRefused(admitted);
+      const branch = yield* checkoutBranch(yield* sandbox);
+      yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
+    }).pipe(
+      Effect.catch((failure) =>
+        Effect.logWarning(
+          `The branch of conversation ${admitted.target.conversationId} was not recorded: ${describeFailure(failure)}`,
+        ),
+      ),
+    );
 
   /** One event relayed through the shared relay, with no ask record beside it. */
   const relayEvent = (event: MessageStreamEvent, standing: RelayStanding) =>
@@ -481,18 +530,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
         Effect.map(agentRepositoryToken(admitted.target, agent), (minted) => minted.token),
       ),
 
-    recordBranch: (admitted, sandbox) =>
-      Effect.gen(function* () {
-        const agent = yield* agentOrRefused(admitted);
-        const branch = yield* checkoutBranch(sandbox);
-        yield* updateCodingAgentBranch(admitted.target.userId, agent.id, branch);
-      }).pipe(
-        Effect.catch((failure) =>
-          Effect.logWarning(
-            `The branch of conversation ${admitted.target.conversationId} was not recorded: ${describeFailure(failure)}`,
-          ),
-        ),
-      ),
+    recordBranch: (admitted, sandbox) => writeBranch(admitted, Effect.succeed(sandbox)),
 
     relayChild: (event, session, state) =>
       Effect.gen(function* () {
@@ -575,6 +613,45 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       }).pipe(
         Effect.tapError(logStoreFailure),
         Effect.catch(() => Effect.succeed(showPageRejected(SHOW_PAGE_REFUSAL.UNAVAILABLE))),
+      ),
+
+    report: (admitted, call) =>
+      Effect.gen(function* () {
+        const read = workerReport(call.input);
+        if (Result.isFailure(read)) return reportRejected(read.failure);
+        const found = yield* agentOf(admitted);
+        if (Result.isFailure(found)) return reportRejected(found.failure);
+        const { position, planId, role } = found.success;
+        const reporter = rolloutReporterOf(role, position);
+        if (reporter === undefined) return reportRejected(REPORT_REFUSAL.NO_ROLLOUT);
+        const named = reportBy(reporter, read.success);
+        if (Result.isFailure(named)) return reportRejected(named.failure);
+        const report = named.success;
+        const { userId } = admitted.target;
+        const eve = yield* seams.planEve(userId);
+        if (eve === undefined) {
+          yield* Effect.logWarning(`A report of agent ${found.success.id} found no eve to reach.`);
+          return reportRejected(REPORT_REFUSAL.UNAVAILABLE);
+        }
+        if (report.kind === WORKER_REPORT_KIND.PR_OPENED && call.sandbox !== undefined) {
+          yield* writeBranch(
+            admitted,
+            Effect.tryPromise({
+              try: call.sandbox,
+              catch: () => new CheckoutRefused({ reason: REPOSITORY_REFUSAL.SANDBOX_UNAVAILABLE }),
+            }),
+          );
+        }
+        const reported = yield* reportToPlan(
+          { asks: askRecord(), eve },
+          { userId, planId, report, clientKey: call.callId },
+        );
+        return Result.isSuccess(reported)
+          ? reportTaken(report)
+          : reportRejected(REPORT_REFUSAL.UNAVAILABLE);
+      }).pipe(
+        Effect.tapError(logStoreFailure),
+        Effect.catch(() => Effect.succeed(reportRejected(REPORT_REFUSAL.UNAVAILABLE))),
       ),
 
     title: (admitted) =>

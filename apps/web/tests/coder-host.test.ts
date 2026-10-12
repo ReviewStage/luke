@@ -5,11 +5,13 @@ import {
   type CodingAgentBriefText,
   createCodingAgent,
   latestTurnsOf,
+  type NewCodingAgent,
+  readCodingAgent,
 } from "@sidecar/database/models/coding-agent-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { openPlanConversation, readPlan } from "@sidecar/database/models/plan-store";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { turns } from "@sidecar/database/schemas/storage";
+import { asks, turns } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { CODING_AGENT_STATUS, ROLLOUT_ROLE } from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -31,19 +33,23 @@ import {
   unparsedWire,
 } from "../server/core";
 import { BRAIN_HOST_ATTRIBUTE, BRAIN_HOST_TURN } from "../server/hosted/brain-host/bounds";
+import type { AdmittedConversation } from "../server/hosted/brain-host/conversation";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import type { ProviderKeys } from "../server/hosted/coder-host/model";
 import { PLAN_READ_REFUSAL } from "../server/hosted/coder-host/plan-read";
 import type { CoderHostSeams } from "../server/hosted/coder-host/production";
+import { REPORT_REFUSAL } from "../server/hosted/coder-host/report";
 import { codingAgentStatusOf } from "../server/hosted/coder-host/status";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { CURSOR_START, transcriptPast } from "../server/hosted/coder-host/transcript";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
 import { stampedEveEvent } from "./support/eve-events";
+import { type FakeEve, fakeEve } from "./support/fake-eve";
 import { githubReaching, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { sandboxDouble } from "./support/repository-sandbox";
 import { startPlan } from "./support/workspaces";
 
 /**
@@ -88,7 +94,7 @@ const KEYS: ProviderKeys = {
 };
 
 /** The host over the test's own store, with the writer composed on the test's client, and the title model handed in where a test has one. */
-const hostOverStore = (titleModel?: LanguageModel) =>
+const hostOverStore = (titleModel?: LanguageModel, eve?: FakeEve) =>
   Effect.gen(function* () {
     const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
     const seams: CoderHostSeams = {
@@ -99,6 +105,7 @@ const hostOverStore = (titleModel?: LanguageModel) =>
         reachesConversation: () => Promise.resolve(false),
       },
       deploymentSecret: () => undefined,
+      planEve: (userId) => Effect.succeed(eve?.eve(userId)),
       keys: () => Effect.succeed(KEYS),
       fastRefused: async () => undefined,
       titleModel: () => titleModel,
@@ -136,6 +143,7 @@ const unclaimedAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
   brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+  rollout: Pick<NewCodingAgent, "position" | "baseBranch" | "role"> = {},
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
@@ -149,6 +157,7 @@ const unclaimedAgent = (
       model,
       effort,
       ...brief,
+      ...rollout,
       repository: "acme/relay",
     });
     assert.ok(Option.isSome(started));
@@ -163,9 +172,10 @@ const openAgent = (
   model = "anthropic/claude-opus-5.5",
   effort = "high",
   brief: CodingAgentBriefText = { planSnapshot: PLAN_TEXT, task: null },
+  rollout: Pick<NewCodingAgent, "position" | "baseBranch" | "role"> = {},
 ) =>
   Effect.gen(function* () {
-    const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief);
+    const { userId, agent, target, auth } = yield* unclaimedAgent(model, effort, brief, rollout);
     const sessionId = mintSession();
     const starting = yield* host.admitStarting(auth, sessionId);
     assert.ok(Result.isSuccess(starting));
@@ -569,6 +579,297 @@ it.layer(Layer.mergeAll(getTestDB(), noNetwork))("the coding-agent host", (it) =
         assert.deepEqual(yield* host.readPlan(onTask.admitted), {
           status: ACTION_RESULT_STATUS.REJECTED,
           reason: PLAN_READ_REFUSAL.NO_PLAN,
+        });
+      }),
+  );
+
+  it.effect(
+    "each milestone and ask a worker reports lands on the plan's conversation as a report turn, named by the position its row holds, keyed by the call, and a question or a block tells it to end its turn",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const { userId, agent, admitted } = yield* openAgent(
+          host,
+          undefined,
+          undefined,
+          undefined,
+          {
+            position: 2,
+            baseBranch: "luke/invites/1-table",
+            role: ROLLOUT_ROLE.BUILDER,
+          },
+        );
+        const calls = [
+          ["call_opened", { kind: "pr_opened", pullRequest: 415, text: "The route is in." }],
+          ["call_green", { kind: "ci_green", pullRequest: 415, text: "Every check passes." }],
+          [
+            "call_question",
+            {
+              kind: "question",
+              text: "Should an expired invite be resent or refused?",
+              options: ["Resend", "Refuse"],
+            },
+          ],
+          [
+            "call_blocked",
+            { kind: "blocked", text: "The mail provider's sandbox key is missing." },
+          ],
+        ] as const;
+
+        const answers = [];
+        for (const [callId, input] of calls) {
+          answers.push(
+            yield* host.report(admitted, {
+              callId,
+              input: unparsedWire(input),
+              sandbox: undefined,
+            }),
+          );
+        }
+
+        const carryOn = "Carry on.";
+        const wait =
+          "End your turn now, saying in one line that you are waiting on Luke. His answer arrives as your next message.";
+        assert.deepEqual(answers, [
+          {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            reported: "[worker 2] opened #415",
+            next: carryOn,
+          },
+          {
+            status: ACTION_RESULT_STATUS.ACCEPTED,
+            reported: "[worker 2] checks green on #415",
+            next: carryOn,
+          },
+          { status: ACTION_RESULT_STATUS.ACCEPTED, reported: "[worker 2] asks", next: wait },
+          { status: ACTION_RESULT_STATUS.ACCEPTED, reported: "[worker 2] blocked", next: wait },
+        ]);
+        // The first report opens the plan's conversation and a session in it as the deployment
+        // acting for the account; every later one follows that session up.
+        const plan = Option.getOrThrow(yield* readPlan(userId, agent.planId));
+        const conversationId = plan.conversationId;
+        assert.ok(conversationId !== undefined);
+        const handed = [...eve.opened, ...eve.sent].map((each) => [
+          each.authorization,
+          each.message.conversationId,
+          each.message.turn,
+        ]);
+        assert.deepEqual(
+          handed,
+          calls.map(() => [userId, conversationId, BRAIN_HOST_TURN.REPORT]),
+        );
+        assert.deepEqual(
+          [...eve.opened, ...eve.sent].map((each) => each.message.message),
+          [
+            "[worker 2] opened #415\n\nThe route is in.",
+            "[worker 2] checks green on #415\n\nEvery check passes.",
+            "[worker 2] asks\n\nShould an expired invite be resent or refused?\n\n- Resend\n- Refuse",
+            "[worker 2] blocked\n\nThe mail provider's sandbox key is missing.",
+          ],
+        );
+        const recorded = yield* Database.use((db) =>
+          db
+            .select({ clientId: asks.clientId, origin: asks.origin })
+            .from(asks)
+            .where(eq(asks.conversationId, conversationId)),
+        );
+        assert.deepEqual(
+          recorded.map((row) => [row.clientId, row.origin]).sort(),
+          calls.map(([callId]) => [callId, TURN_ORIGIN.REPORT]).sort(),
+        );
+      }),
+  );
+
+  it.effect(
+    "the rollout's stack keeper, at no position, reports its restacks, conflicts, merges, and asks, which land on the plan's conversation as the keeper's",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const { admitted } = yield* openAgent(host, undefined, undefined, undefined, {
+          role: ROLLOUT_ROLE.KEEPER,
+        });
+        const calls = [
+          ["call_restacked", { kind: "restacked", text: "Moved #416 and #417 onto main." }],
+          [
+            "call_conflict",
+            { kind: "conflict", pullRequest: 417, text: "Both rename the column." },
+          ],
+          ["call_merged", { kind: "merged", pullRequest: 415, text: "Squashed into main." }],
+          ["call_asked", { kind: "question", text: "Merge #416 now or wait for #417?" }],
+        ] as const;
+
+        const answers = [];
+        for (const [callId, input] of calls) {
+          answers.push(
+            yield* host.report(admitted, {
+              callId,
+              input: unparsedWire(input),
+              sandbox: undefined,
+            }),
+          );
+        }
+
+        assert.deepEqual(
+          answers.map((answer) =>
+            answer.status === ACTION_RESULT_STATUS.ACCEPTED ? answer.reported : answer.reason,
+          ),
+          [
+            "[keeper] restacked",
+            "[keeper] conflict on #417",
+            "[keeper] merged #415",
+            "[keeper] asks",
+          ],
+        );
+        assert.deepEqual(
+          [...eve.opened, ...eve.sent].map((each) => [each.message.turn, each.message.message]),
+          [
+            [BRAIN_HOST_TURN.REPORT, "[keeper] restacked\n\nMoved #416 and #417 onto main."],
+            [BRAIN_HOST_TURN.REPORT, "[keeper] conflict on #417\n\nBoth rename the column."],
+            [BRAIN_HOST_TURN.REPORT, "[keeper] merged #415\n\nSquashed into main."],
+            [BRAIN_HOST_TURN.REPORT, "[keeper] asks\n\nMerge #416 now or wait for #417?"],
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "a call eve replays under the same id is the report already taken, and Luke is handed it once",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const { admitted } = yield* openAgent(host, undefined, undefined, undefined, {
+          position: 1,
+        });
+        const call = {
+          callId: "call_opened",
+          input: unparsedWire({ kind: "pr_opened", pullRequest: 7, text: "Open." }),
+          sandbox: undefined,
+        };
+
+        const first = yield* host.report(admitted, call);
+        const again = yield* host.report(admitted, call);
+
+        assert.deepEqual(again, first);
+        assert.equal(eve.opened.length + eve.sent.length, 1);
+      }),
+  );
+
+  it.effect(
+    "a pull request reported opened writes the branch checked out in the sandbox on the row, where the session opened one, and reads no branch where it opened none",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore(undefined, fakeEve());
+        const { userId, agent, admitted } = yield* openAgent(
+          host,
+          undefined,
+          undefined,
+          undefined,
+          { position: 1 },
+        );
+        const sandbox = sandboxDouble((command) =>
+          command === "git branch --show-current"
+            ? { exitCode: 0, stdout: "luke/invites/1-table\n", stderr: "" }
+            : undefined,
+        );
+        sandbox.checkedOut = agent.repository;
+        const branchOnRow = Effect.map(readCodingAgent(userId, agent.id), (row) =>
+          Option.isSome(row) ? row.value.branch : assert.fail("the agent is gone"),
+        );
+        const opened = (callId: string, opensSandbox: boolean) =>
+          host.report(admitted, {
+            callId,
+            input: unparsedWire({ kind: "pr_opened", pullRequest: 9, text: "Open." }),
+            sandbox: opensSandbox ? () => Promise.resolve(sandbox) : undefined,
+          });
+
+        yield* opened("call_unopened", false);
+        assert.equal(yield* branchOnRow, null);
+        assert.equal(sandbox.runs.length, 0);
+
+        const answer = yield* opened("call_opened", true);
+        assert.equal(answer.status, ACTION_RESULT_STATUS.ACCEPTED);
+        assert.equal(yield* branchOnRow, "luke/invites/1-table");
+      }),
+  );
+
+  it.effect(
+    "an agent started outside a rollout, a report that does not read or claims the host's own kind, a kind that is the other role's, and a deployment with no eve to reach are each refused, and Luke is handed nothing",
+    () =>
+      Effect.gen(function* () {
+        const eve = fakeEve();
+        const host = yield* hostOverStore(undefined, eve);
+        const plain = yield* openAgent(host);
+        const worker = yield* openAgent(host, undefined, undefined, undefined, {
+          position: 3,
+          role: ROLLOUT_ROLE.BUILDER,
+        });
+        const asked = unparsedWire({ kind: "question", text: "Which table?" });
+        const report = (admitted: AdmittedConversation, input: typeof asked) =>
+          host.report(admitted, { callId: `call_${minted}`, input, sandbox: undefined });
+
+        assert.deepEqual(yield* report(plain.admitted, asked), {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: REPORT_REFUSAL.NO_ROLLOUT,
+        });
+        for (const unreadable of [
+          { kind: "finished", text: "Done." },
+          // No agent reports a rebase: a restack is the keeper's, and it reports it as one.
+          { kind: "rebased", text: "Rebased onto main." },
+          { kind: "question", text: "  " },
+          { kind: "pr_opened", pullRequest: 0, text: "Open." },
+        ]) {
+          assert.deepEqual(yield* report(worker.admitted, unparsedWire(unreadable)), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: REPORT_REFUSAL.UNREADABLE,
+          });
+        }
+        // A builder never restacks or merges, and the keeper never opens or checks a pull request.
+        for (const kind of ["merged", "restacked", "conflict"]) {
+          const input = unparsedWire({ kind, pullRequest: 415, text: "Done by the builder." });
+          assert.deepEqual(yield* report(worker.admitted, input), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: REPORT_REFUSAL.NOT_A_BUILDERS,
+          });
+        }
+        const keeper = yield* openAgent(host, undefined, undefined, undefined, {
+          role: ROLLOUT_ROLE.KEEPER,
+        });
+        for (const kind of ["pr_opened", "ci_green"]) {
+          const input = unparsedWire({ kind, pullRequest: 415, text: "Done by the keeper." });
+          assert.deepEqual(yield* report(keeper.admitted, input), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: REPORT_REFUSAL.NOT_THE_KEEPERS,
+          });
+        }
+        // A report about one pull request names its number, so Luke knows which.
+        for (const [admitted, kind] of [
+          [worker.admitted, "pr_opened"],
+          [worker.admitted, "ci_green"],
+          [keeper.admitted, "merged"],
+          [keeper.admitted, "conflict"],
+        ] as const) {
+          assert.deepEqual(yield* report(admitted, unparsedWire({ kind, text: "No number." })), {
+            status: ACTION_RESULT_STATUS.REJECTED,
+            reason: REPORT_REFUSAL.NO_NUMBER,
+          });
+        }
+        assert.equal(eve.opened.length + eve.sent.length, 0);
+
+        const unreachable = yield* hostOverStore();
+        const elsewhere = yield* openAgent(unreachable, undefined, undefined, undefined, {
+          position: 1,
+        });
+        const unanswered = yield* unreachable.report(elsewhere.admitted, {
+          callId: "call_unreachable",
+          input: asked,
+          sandbox: undefined,
+        });
+        assert.deepEqual(unanswered, {
+          status: ACTION_RESULT_STATUS.REJECTED,
+          reason: REPORT_REFUSAL.UNAVAILABLE,
         });
       }),
   );

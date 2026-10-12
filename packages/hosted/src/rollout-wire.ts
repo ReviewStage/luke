@@ -49,6 +49,35 @@ const REPORTER = {
 } as const;
 
 /**
+ * The kinds a builder reports itself, through its report tool: its pull
+ * request's milestones and its asks. It never restacks, retargets, or
+ * merges, so none of those is its to report.
+ */
+export const BUILDER_REPORT_KIND = {
+  PR_OPENED: REPORT_KIND.PR_OPENED,
+  CI_GREEN: REPORT_KIND.CI_GREEN,
+  BLOCKED: REPORT_KIND.BLOCKED,
+  QUESTION: REPORT_KIND.QUESTION,
+} as const;
+
+/** The kinds the stack keeper reports itself: a restack done, a conflict that is a judgment's, a merge, and its asks. */
+export const KEEPER_REPORT_KIND = {
+  RESTACKED: REPORT_KIND.RESTACKED,
+  CONFLICT: REPORT_KIND.CONFLICT,
+  MERGED: REPORT_KIND.MERGED,
+  BLOCKED: REPORT_KIND.BLOCKED,
+  QUESTION: REPORT_KIND.QUESTION,
+} as const;
+
+/**
+ * The kinds a rollout's agent reports through its report tool, a builder's
+ * and the keeper's together, since the two share one tool; the host holds
+ * each to its own role's. How a turn ended is the host's to report, so no
+ * agent can claim to have finished.
+ */
+export const WORKER_REPORT_KIND = { ...BUILDER_REPORT_KIND, ...KEEPER_REPORT_KIND } as const;
+
+/**
  * Each kind's words on the first line, and how a pull request's number
  * joins them: straight after a verb whose object it is ("opened #415"), or
  * after "on" where the pull request is where it happened ("blocked on #415").
@@ -111,6 +140,19 @@ function reporterOf(report: Report): string {
   if ("position" in report) return `worker ${report.position}`;
   return "keeper" in report ? REPORTER.KEEPER : REPORTER.GITHUB;
 }
+
+/**
+ * What a rollout's agent hands its report tool: a report with no reporter,
+ * since the host names a builder by the position its row holds and the
+ * keeper by its role, and one of the two roles' kinds. The model is shown this schema and eve holds the call
+ * to it, so its bounds are the report's own.
+ */
+export const workerReportInputSchema = EffectSchema.Struct({
+  ...REPORT_FIELDS,
+  kind: EffectSchema.Literals(Object.values(WORKER_REPORT_KIND)),
+});
+
+export type WorkerReportInput = typeof workerReportInputSchema.Type;
 
 /** A report's fixed first line: who reported, what happened, and on which pull request, `[worker 3] opened #415` or `[keeper] conflict on #415`. */
 export function reportLine(report: Report): string {
