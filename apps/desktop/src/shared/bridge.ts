@@ -244,8 +244,19 @@ export const BRIDGE = {
     ),
   }),
   /**
-   * The floating call window's way back pressed: the panel is to show the
-   * call's plan. An event, as a notification's click is, because it is an
+   * The floating call window moved under a pointer that did not: a drag of
+   * its own. The page is told so the hover its buttons were left with is not
+   * believed, since the engine keeps the hover the pointer had before.
+   */
+  onCallWindowMoved: entry({
+    kind: "subscribe",
+    channel: "app:call-window-moved",
+    args: noArgs,
+    result: result<void>((v) => v === undefined),
+  }),
+  /**
+   * The call card's way back pressed, in the floating window or a panel's
+   * own card: the panel is to show the call's plan. An event, as a notification's click is, because it is an
    * ask the window answers once.
    */
   onShowPlan: entry({
