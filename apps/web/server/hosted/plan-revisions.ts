@@ -122,8 +122,8 @@ const insertRevision = SqlSchema.void({
     at: Schema.Date,
     restoredFrom: Schema.NullOr(Schema.Number),
   }),
-  // The template's fields and assumptions are written empty: their columns stand, the assumptions not null, until the migration that drops them.
-  execute: (revision) => db.insert(planRevision).values({ ...revision, assumptions: [] }),
+  // Note that the fixed template's fields and assumptions are left to their columns' defaults, null and empty, until the migration that drops them.
+  execute: (revision) => db.insert(planRevision).values(revision),
 });
 
 const moveRevisionOn = SqlSchema.void({
