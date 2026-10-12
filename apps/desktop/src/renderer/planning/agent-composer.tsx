@@ -39,8 +39,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * Enter sends it, Shift+Enter is a new line, and Escape leaves the box. A
  * message sent while a turn runs steers it, so the agent sees it at its
  * next step; sent idle, it opens a new turn. The box reads the same
- * whatever the agent is doing: one placeholder, one size, the same chips,
- * no hint under it, because the tab's dot and the transcript's "Working…"
+ * whatever the agent is doing: one size, the same chips, no hint under it,
+ * and a placeholder that asks for the first message until the conversation
+ * has one and for a follow up after, because the tab's dot and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words, disabled while there are none and the agent is idle, and
@@ -52,12 +53,12 @@ import type { AgentModelControl } from "./use-agent-model";
  * model that did not take says why in the same place. The box takes
  * focus as the tab opens unless the developer is typing somewhere else, so
  * opening a tab never takes the caret out of the plan. A draft agent's tab
- * draws the same box over a start rather than a message, with words of its
- * own in the box, and its model chip once the choice it starts on is known.
+ * draws the same box over a start rather than a message, its conversation
+ * still empty, and its model chip once the choice it starts on is known.
  */
 
-/** What the box says it takes, whatever the agent is doing. */
-const PLACEHOLDER = "Message the agent…";
+/** What the box says it takes: the first message of an empty conversation, then a follow up. */
+const PLACEHOLDER = { FIRST: "Ask to make changes", FOLLOW_UP: "Send a follow up" } as const;
 
 /** The one button's names, which are its tooltips too. */
 const BUTTON = { SEND: "Send", STOP: "Stop", STOPPING: "Stopping…" } as const;
@@ -85,7 +86,7 @@ export function AgentComposer({
   published,
   doors,
   onStop,
-  placeholder = PLACEHOLDER,
+  followsUp,
 }: {
   status: CodingAgentStatus;
   composer: AgentComposerControl;
@@ -105,8 +106,8 @@ export function AgentComposer({
   doors: PublishedDoors;
   /** Stops the agent; the promise settles once the service has answered. */
   onStop: () => Promise<void>;
-  /** What the box says it takes. */
-  placeholder?: string;
+  /** Whether the conversation already holds a message, so the box takes a follow up rather than the first. */
+  followsUp: boolean;
 }): React.JSX.Element {
   const field = useRef<HTMLTextAreaElement>(null);
   const [stopping, setStopping] = useState(false);
@@ -145,7 +146,7 @@ export function AgentComposer({
           ref={field}
           className="ph-no-capture"
           aria-label="Message to the agent"
-          placeholder={placeholder}
+          placeholder={followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST}
           maxLength={CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS}
           value={composer.draft}
           disabled={held}

@@ -2685,7 +2685,7 @@ test("New coding agent opens a draft tab with nothing said and the box focused, 
   );
   const box = draftBox(page);
   assert.equal(document.activeElement, box, "the box takes focus as the tab opens");
-  assert.equal(box.getAttribute("placeholder"), "Describe a task for the agent…");
+  assert.equal(box.getAttribute("placeholder"), "Ask to make changes");
   assert.deepEqual(draftStarts(), [], "a draft asks nothing of the service");
 
   const task = "Rename the invite email's subject to say who sent it.";

@@ -29,9 +29,6 @@ export const DRAFT_TAB_LABEL = "New agent";
 /** What stands where the transcript will be, before the first send. */
 const DRAFT_LINE = "Describe a task. The agent starts when you send it.";
 
-/** What the box says it takes. */
-const DRAFT_PLACEHOLDER = "Describe a task for the agent…";
-
 /** A draft has nothing to stop and has published nothing, so its box's Stop and doors answer nothing. */
 const NOTHING_TO_STOP = () => Promise.resolve();
 const NO_DOORS = { openGitHub: () => undefined, copy: () => undefined };
@@ -108,7 +105,7 @@ export function DraftAgentTab({
           usage={undefined}
           doors={NO_DOORS}
           onStop={NOTHING_TO_STOP}
-          placeholder={DRAFT_PLACEHOLDER}
+          followsUp={false}
         />
       </footer>
     </section>
