@@ -12,16 +12,26 @@
  * so it never covers what it names.
  *
  * A control with more to say than a pill holds hangs a card in its place:
- * the same wait, warm spell, and ways down, drawn as a small light panel
- * from the control's start, the way a browser's tab hover card hangs
- * (`card`).
+ * the same wait and warm spell, drawn as a small light panel from the
+ * control's start, the way a browser's tab hover card hangs (`card`). A card
+ * is a surface of its own, the way GitHub's hover cards are: the pointer
+ * leaving its control lets it linger for `CARD_LINGER`, long enough to
+ * cross onto it, and the pointer on it keeps it standing, its words there
+ * to be read and selected, until the pointer leaves it for anywhere but its
+ * control. While the pointer is on it, only Escape among the keys takes it
+ * down, so the shortcut that copies a selection reaches it. One tooltip
+ * stands in the window at a time: the next to show takes a lingering card
+ * down at once.
  *
  * Its words are text like any other, so the session recording masks them
  * with the rest; nothing of it rides an attribute, and a card is left out
  * of the recording whole.
  */
 
+import { useAtomSet } from "@effect/atom-react";
 import { MOTION_DELAY_MS } from "@sidecar/surface";
+import { Duration, Effect } from "effect";
+import * as Atom from "effect/unstable/reactivity/Atom";
 import {
   cloneElement,
   type FocusEventHandler,
@@ -37,6 +47,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { APP_SHORTCUTS, type KeyedCommand, shortcutAria, shortcutGlyphs } from "#shared/shortcuts";
+import { rendererRuntime } from "./renderer-runtime";
 import { useStateWithRef } from "./use-state-with-ref";
 
 /** The gap between a control and its pill, and the pill's least distance from the window's edge, in CSS pixels. */
@@ -50,6 +61,14 @@ const TOOLTIP_MARGIN = 6;
  */
 const WARM_MS = MOTION_DELAY_MS.HINT;
 
+/**
+ * How long a card stands once the pointer has left it or its control: long
+ * enough to cross the gap between them, even on a slant, and short enough
+ * that a pointer moving on has it gone before it looks for it, as Radix's
+ * and GitHub's hover cards wait.
+ */
+const CARD_LINGER = Duration.millis(180);
+
 /** Which side of its control a pill hangs on. */
 const TOOLTIP_SIDE = {
   BELOW: "below",
@@ -62,6 +81,22 @@ type TooltipSide = (typeof TOOLTIP_SIDE)[keyof typeof TOOLTIP_SIDE];
 
 /** Until when a newly rested-on control shows its pill at once: the window's one warm spell. */
 let warmUntil = 0;
+
+/** The way to take down the one tooltip standing in the window, while one stands. */
+let standingHide: (() => void) | undefined;
+
+/**
+ * A card's linger, as an atom whose work is the wait: it takes the card down
+ * once it has run out. There is one, since one card stands at a time; a new
+ * linger starts it afresh and an interrupt calls it off. Note that the way
+ * down is handed inside a record, because a function handed to an atom's
+ * setter is read as an update of its value and called at once.
+ */
+const cardLingerAtom = Atom.keepAlive(
+  rendererRuntime.fn(({ leave }: { readonly leave: () => void }) =>
+    Effect.andThen(Effect.sleep(CARD_LINGER), Effect.sync(leave)),
+  ),
+);
 
 /** What the tooltip adds to its control's props. */
 interface AnchorProps {
@@ -163,6 +198,8 @@ function TooltipPill({
   command,
   card,
   cardBeside,
+  onCard,
+  onCardPress,
 }: {
   id: string;
   shown: Shown;
@@ -170,6 +207,10 @@ function TooltipPill({
   command: KeyedCommand | undefined;
   card: ReactNode;
   cardBeside: boolean;
+  /** The pointer arriving on the card, or leaving it. */
+  onCard: (over: boolean) => void;
+  /** A press begun on the card. */
+  onCardPress: () => void;
 }): React.JSX.Element {
   const element = useRef<HTMLDivElement | null>(null);
   const [at, setAt] = useState<PillPlace | undefined>(undefined);
@@ -194,6 +235,9 @@ function TooltipPill({
       data-side={at?.side ?? TOOLTIP_SIDE.BELOW}
       data-instant={String(shown.instant)}
       style={at === undefined ? undefined : { left: at.left, top: at.top }}
+      onPointerEnter={carded ? () => onCard(true) : undefined}
+      onPointerLeave={carded ? () => onCard(false) : undefined}
+      onPointerDown={carded ? onCardPress : undefined}
     >
       {carded ? card : label}
       {command === undefined || carded ? null : <ShortcutGlyphs command={command} />}
@@ -211,7 +255,8 @@ function TooltipPill({
  * place, and its focus, while it does. `card`, while given, is drawn in the
  * pill's place, and always describes the control, since it says more than
  * the control's name; `cardBeside` hangs it past the control's end rather
- * than under it, as a list row's card hangs.
+ * than under it, as a list row's card hangs. A card holds nothing to press,
+ * so it stays a description the keyboard never enters.
  */
 export function Tooltip({
   label,
@@ -228,8 +273,30 @@ export function Tooltip({
 }): React.JSX.Element {
   const id = useId();
   const [shown, setShown, latest] = useStateWithRef<Shown | undefined>(undefined);
+  const linger = useAtomSet(cardLingerAtom);
+  // Note that this is a ref, because the window's key listener reads it,
+  // which no render stands between.
+  const overCard = useRef(false);
+  const pressingCard = useRef(false);
+  // A pill that was on screen warms the window for the next; one still
+  // waiting leaves it as it was.
+  const hide = useCallback(() => {
+    const standing = latest();
+    if (standing === undefined) return;
+    if (visible(standing)) warmUntil = performance.now() + WARM_MS;
+    if (standingHide === hide) standingHide = undefined;
+    overCard.current = false;
+    linger(Atom.Interrupt);
+    setShown(undefined);
+  }, [latest, setShown, linger]);
   const show = (anchor: HTMLElement) => {
     if (label === undefined) return;
+    // The pointer back on a lingering card's control keeps the card as it stands.
+    if (latest()?.anchor === anchor) {
+      linger(Atom.Interrupt);
+      return;
+    }
+    if (standingHide !== hide) standingHide?.();
     const now = performance.now();
     const name = anchor.getAttribute("aria-label") ?? anchor.textContent?.trim();
     setShown({
@@ -238,27 +305,59 @@ export function Tooltip({
       instant: now < warmUntil,
       describes: card !== undefined || name !== label,
     });
+    standingHide = hide;
   };
-  // A pill that was on screen warms the window for the next; one still
-  // waiting leaves it as it was.
-  const hide = useCallback(() => {
+  // A card on screen lingers for the pointer crossing to it; a pill, or a
+  // card still waiting, goes at once.
+  const leave = () => {
     const standing = latest();
-    if (standing === undefined) return;
-    if (visible(standing)) warmUntil = performance.now() + WARM_MS;
-    setShown(undefined);
-  }, [latest, setShown]);
+    if (card !== undefined && standing !== undefined && visible(standing)) linger({ leave: hide });
+    else hide();
+  };
+  // A selection dragged past the card's edge leaves it standing until the
+  // press ends, and the pointer then off the card lets it linger.
+  const onCard = (over: boolean) => {
+    overCard.current = over;
+    if (over) linger(Atom.Interrupt);
+    else if (!pressingCard.current) linger({ leave: hide });
+  };
+  const onCardPress = () => {
+    pressingCard.current = true;
+    const end = () => {
+      window.removeEventListener("pointerup", end, true);
+      window.removeEventListener("pointercancel", end, true);
+      pressingCard.current = false;
+      if (latest() !== undefined && !overCard.current) linger({ leave: hide });
+    };
+    window.addEventListener("pointerup", end, true);
+    window.addEventListener("pointercancel", end, true);
+  };
+  // A control that goes while its card stands takes the card, and its linger, with it.
+  useEffect(
+    () => () => {
+      if (standingHide !== hide) return;
+      standingHide = undefined;
+      linger(Atom.Interrupt);
+    },
+    [hide, linger],
+  );
 
   // While a pill stands, the window's own movements take it down. A key is
   // a press too, Escape among them, and the key is still the control's or
-  // the window's: the pill is no layer of its own to take one.
+  // the window's: the pill is no layer of its own to take one. Only a card
+  // the pointer is on lets a key other than Escape pass, since that key is
+  // most likely the copy of what was selected on it.
   const standing = shown !== undefined;
   useEffect(() => {
     if (!standing) return;
-    window.addEventListener("keydown", hide, true);
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape" || !overCard.current) hide();
+    };
+    window.addEventListener("keydown", key, true);
     window.addEventListener("scroll", hide, true);
     window.addEventListener("blur", hide);
     return () => {
-      window.removeEventListener("keydown", hide, true);
+      window.removeEventListener("keydown", key, true);
       window.removeEventListener("scroll", hide, true);
       window.removeEventListener("blur", hide);
     };
@@ -277,7 +376,7 @@ export function Tooltip({
     },
     onPointerLeave: (event) => {
       own.onPointerLeave?.(event);
-      hide();
+      leave();
     },
     onPointerDown: (event) => {
       own.onPointerDown?.(event);
@@ -291,7 +390,8 @@ export function Tooltip({
     },
     onBlur: (event) => {
       own.onBlur?.(event);
-      hide();
+      // A press on the card takes focus from its control, and leaves the card standing.
+      if (!overCard.current) hide();
     },
   });
   return (
@@ -305,6 +405,8 @@ export function Tooltip({
           command={command}
           card={card}
           cardBeside={cardBeside}
+          onCard={onCard}
+          onCardPress={onCardPress}
         />
       )}
     </>
