@@ -727,7 +727,8 @@ function retiredRefusal(refusal: HostedRefusal): boolean {
 }
 
 /**
- * POST answers one item of the account's inbox. An answer naming a
+ * POST answers one item of a plan of the account's workspaces, whichever
+ * member started its agent. An answer naming a
  * revision the agent has since moved on from, or an item no longer open,
  * is answered with the item as it stands and not taken. Otherwise the
  * answer is taken first, at the revision it names, and only then, where
