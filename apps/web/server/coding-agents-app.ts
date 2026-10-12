@@ -1,6 +1,11 @@
 import { childConversationId } from "@sidecar/database/models/ids";
 import { recordedRuntimeSession } from "@sidecar/database/models/recorded-session";
 import {
+  type ConversationTarget,
+  type StoreWriter,
+  storeWriter,
+} from "@sidecar/database/models/writer";
+import {
   base64Chars,
   CODING_AGENT_BOUNDS,
   CODING_AGENT_CURSOR_START,
@@ -106,7 +111,6 @@ import {
 } from "./hosted/inbox-store.js";
 import type { ModelCatalog, ModelChoiceRefused } from "./hosted/model-catalog.js";
 import { readPlan } from "./hosted/plan-store.js";
-import { type ConversationTarget, type StoreWriter, storeWriter } from "./hosted/store/index.js";
 import { logStoreFailure } from "./hosted/store-failure.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
 

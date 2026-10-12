@@ -1,6 +1,8 @@
 import { askRecord } from "@sidecar/database/models/asks";
-import { toolSetHashOf } from "@sidecar/database/models/content-addressed";
+import { promptHashOf, toolSetHashOf } from "@sidecar/database/models/content-addressed";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
+import { listMessagesPast, type MessageCursor } from "@sidecar/database/models/message-reads";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { EMPTY_BOARD } from "@sidecar/hosted/board-wire";
 import { isTextUIPart, type LanguageModel } from "ai";
 import { Effect, Option, Result, type Schema } from "effect";
@@ -26,12 +28,6 @@ import { titleSubagent } from "../coder-host/title.js";
 import type { ModelCatalog } from "../model-catalog.js";
 import { readPlanOfConversation } from "../plan-store.js";
 import { MeterUnavailable, ResearchBudget } from "../public-research.js";
-import {
-  type ConversationTarget,
-  listMessagesPast,
-  type MessageCursor,
-  promptHashOf,
-} from "../store/index.js";
 import { turnKindOf } from "./auth.js";
 import {
   BRAIN_HOST,

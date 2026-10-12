@@ -5,6 +5,7 @@ import {
   reasoningItemId,
   receivedMessageId,
 } from "@sidecar/database/models/ids";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import { Effect, Option, Result, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -40,7 +41,6 @@ import {
 import { type ReceivedMessage, receivedMessage } from "../attached-files.js";
 import { LOOK_AT_BOARD_TOOL, storedLookOutput } from "../board-look.js";
 import { CONNECTION_TOOL, isRemoteToolName, storedRemoteCall } from "../connection-tools.js";
-import type { ConversationTarget, StoreWriter } from "../store/index.js";
 import {
   BRAIN_HOST_TURN,
   BRAIN_HOST_TURN_KIND,

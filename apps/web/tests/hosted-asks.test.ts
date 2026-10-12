@@ -4,6 +4,7 @@ import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { ASK_DISPATCH_REFUSAL, type AskRow, askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { ASK_ORIGIN } from "@sidecar/hosted";
@@ -25,7 +26,6 @@ import {
   StreamRelay,
 } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
-import { storeWriter } from "../server/hosted/store";
 import { stampedEveEvent } from "./support/eve-events";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 

@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
-import { sentLineStands } from "@sidecar/database/models/message-reads";
+import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
 import { claimRuntimeSession } from "@sidecar/database/models/recorded-session";
+import { storeWriter } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { getTestDB } from "@sidecar/database/testing";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
@@ -120,7 +121,6 @@ import {
   type OfferedModel,
 } from "../server/hosted/model-catalog";
 import { createPlan, savePlanText, updatePlan } from "../server/hosted/plan-store";
-import { listMessagesPast, storeWriter } from "../server/hosted/store";
 import {
   type FakeGitHub,
   githubReaching,

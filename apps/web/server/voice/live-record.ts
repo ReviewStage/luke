@@ -1,14 +1,14 @@
+import type {
+  VoiceTarget,
+  VoiceWriteResult,
+  VoiceWriter,
+} from "@sidecar/database/models/voice-writer";
+import { STORE_WRITE_EFFECT } from "@sidecar/database/models/writer";
 import { serialQueue } from "@sidecar/runtime/effect";
 import type { LiveRecord, SpokenAskAttach } from "@sidecar/voice/live-session";
 import { Deferred, Effect, Result, type Schema, type Scope } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import {
-  STORE_WRITE_EFFECT,
-  type VoiceTarget,
-  type VoiceWriteResult,
-  type VoiceWriter,
-} from "../hosted/store/index.js";
 import type { LiveServerEvent } from "../live.js";
 
 /**

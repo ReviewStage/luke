@@ -1,3 +1,4 @@
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { Data, Effect, Option, type Redacted } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { SqlClient } from "effect/unstable/sql";
@@ -11,7 +12,6 @@ import {
   runInSandbox,
   setCheckoutIdentity,
 } from "../repository-shell.js";
-import type { ConversationTarget } from "../store/index.js";
 import { CODER, CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**

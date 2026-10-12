@@ -4,8 +4,11 @@ import { db } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { EpochMillisColumnSchema } from "@sidecar/database/models/columns";
 import {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
   STORE_WRITE_REFUSAL,
   type StoreWriteResult,
+  storeWriter,
   TURN_FAILURE_DETAIL,
 } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -53,7 +56,6 @@ import {
   unparsedWire,
   type WireBoundaryInput,
 } from "../server/core";
-import { type ConversationTarget, STORE_WRITE_EFFECT, storeWriter } from "../server/hosted/store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {
   insertConversation,

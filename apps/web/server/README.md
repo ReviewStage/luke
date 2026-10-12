@@ -492,7 +492,7 @@ client out of the fiber it runs on rather than holding one of its own, the
 bridged statements of "The data layer" above included, so the edge serving a
 request is the one place the client behind it is provided. The hosted store's
 query modules are on it, the store writer and the voice writer among them.
-Outside `server/hosted/store/`, `server/hosted/plan-store.ts` is on the same
+Outside `packages/database/src/models/`, `server/hosted/plan-store.ts` is on the same
 client, and `server/voice/session-record.ts` is on it whole, each of its five methods
 answering an effect over the live session row rather than running one.
 `VoiceService` yields those five
@@ -1756,7 +1756,7 @@ brain's conversations per account: a plan's conversation, its messages, the
 turns that ran over it, and the asks handed to it. Every row is keyed by
 `user_id` and cascades with the user row, so
 `server/routes/account/delete.ts` erases them with the account.
-`server/hosted/store/` is the store the brain host composes against; every
+`packages/database/src/models/` is the store the brain host composes against; every
 module there is an `Effect<A, SqlError | Schema.SchemaError, SqlClient>`
 whose rows a `Schema` decodes and whose path rule is that schema too, which
 `HostedStore`, the store writer, the voice writer, and the ask record all

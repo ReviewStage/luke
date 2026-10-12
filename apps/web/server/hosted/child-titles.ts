@@ -10,12 +10,12 @@
  */
 
 import { db } from "@sidecar/database/core/query";
+import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { conversations } from "@sidecar/database/schemas/storage";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import type { ConversationTarget } from "./store/index.js";
 
 type ChildTitleEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;
 

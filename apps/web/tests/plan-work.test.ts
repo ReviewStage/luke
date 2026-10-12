@@ -4,6 +4,7 @@ import { db } from "@sidecar/database/core/query";
 import { askRecord } from "@sidecar/database/models/asks";
 import { childConversationId, hostTurnId } from "@sidecar/database/models/ids";
 import { listJournals } from "@sidecar/database/models/message-reads";
+import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
 import { messages, turns } from "@sidecar/database/schemas/storage";
 import { BOARD_ELEMENT_TYPE, DRAW_ON_BOARD_TOOL_NAME } from "@sidecar/hosted/board-vocabulary";
 import { TURN_ENDING } from "@sidecar/hosted/coding-agent-wire";
@@ -45,7 +46,6 @@ import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../server/hosted/public-res
 import { QUEUE_QUESTION_TOOL, WITHDRAW_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
-import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { planWorkOf } from "../server/voice/plan-work";
 import { stampedEveEvent } from "./support/eve-events";
 import { FIRST_EVE_TURN, parkedTurn, resumedTurn, steeredTurn } from "./support/eve-turns";

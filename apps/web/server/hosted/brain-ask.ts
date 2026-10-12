@@ -4,7 +4,9 @@ import {
   type AskRow,
   type AskVoice,
 } from "@sidecar/database/models/asks";
+import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { hostTurnId } from "@sidecar/database/models/ids";
+import type { StoredTurnRecord } from "@sidecar/database/models/message-reads";
 import {
   conversationOwnedBy,
   recordedRuntimeSession,
@@ -32,7 +34,6 @@ import {
   type EveSessions,
 } from "./brain-host/eve-sessions.js";
 import { HOSTED_HTTP_STATUS } from "./http.js";
-import type { HostedStore, StoredTurnRecord } from "./store/index.js";
 
 /**
  * The ask door: a spoken question handed to Luke's judgment, admitted before
