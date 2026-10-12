@@ -54,8 +54,10 @@
   --page-inset: var(--space-40);
   /* A menu's edge to its items, whose own row inset then places their glyphs. */
   --menu-inset: var(--space-4);
-  /* The sidebar's default width; the app stage carries the dragged one. */
-  --sidebar-width: 264px;
+  /* The sidebar's default width (`SIDEBAR_WIDTH.DEFAULT`), and its width as
+     drawn, which the app stage carries once the developer has dragged it. */
+  --sidebar-width-default: 264px;
+  --sidebar-width: var(--sidebar-width-default);
   /* The window's zoom as a factor, which the page draws every pixel at and
      the renderer keeps here (`window-zoom.ts`). */
   --zoom: 1;

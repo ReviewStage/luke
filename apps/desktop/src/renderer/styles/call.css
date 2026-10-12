@@ -72,13 +72,15 @@ html.call-window #root {
 
 /* Where the sidebar's card would stand, as far in from the corner as the
    toasts are from theirs, over the content rather than moving it, and clear
-   of a call bar's row where one is drawn. */
+   of a call bar's row where one is drawn. It is the card the default
+   sidebar would hold, whatever width the folded sidebar was dragged to,
+   since no sidebar stands beside it to match. */
 .call-card[data-surface="floating"] {
   position: fixed;
   z-index: var(--z-toast);
   bottom: var(--space-16);
   left: var(--space-16);
-  width: calc(var(--sidebar-width) - 2 * var(--row-inset));
+  width: calc(var(--sidebar-width-default) - 2 * var(--row-inset));
 }
 
 body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
