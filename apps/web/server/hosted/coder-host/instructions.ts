@@ -2,6 +2,7 @@ import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_DELEGATE_TOOL,
+  CODING_AGENT_REPORT_TOOL,
   type CodingAgentBrief,
   ROLLOUT_ROLE,
 } from "@sidecar/hosted/coding-agent-wire";
@@ -75,6 +76,21 @@ const PULL_REQUEST_UPDATING_WORDS = `${UPDATING_WORDS}
 
 Your brief is one pull request cut from the plan, not the plan. \`${READ_PLAN_TOOL.name}\` reads the whole plan as it stands now, which may have changed since your brief was cut: the developer plans on, and the other pull requests' workers take notes on it too. Read it before you take a note with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, since a correction quotes the saved text exactly; when you need why the plan chose what your brief asks; and when your pull request meets an interface another pull request of the rollout builds or uses. Read it rather than guess, and never build what it says belongs to another pull request.`;
 
+/**
+ * How a rollout's builder keeps Luke, who runs the rollout, told of its pull
+ * request, and leaves where its branch sits to the stack keeper. Note that the report tool's own description says the same,
+ * because the model reads that every step and this once; the instructions
+ * set it beside updating the plan so a small call goes to `edit_plan` and
+ * not to a question.
+ */
+const REPORTING_WORDS = `
+
+## Reporting to Luke
+
+Luke runs the plan's rollout and starts the pull requests that build on yours, and he hears of yours only through \`${CODING_AGENT_REPORT_TOOL}\`. Report the moment your pull request is open, with its number, and when its checks are green. Ask Luke with a question when the brief and the code disagree, when the acceptance cannot be met, or when a choice would change an interface another pull request of the rollout depends on, then end your turn: his answer arrives as your next message. Small calls stay yours: make them, record them with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, and do not ask.
+
+The rollout's stack keeper owns where your branch sits: it stacks your pull request, moves your branch onto its base when the base moves, retargets it when the base merges, and merges it when the developer says. So never rebase onto a moved base, retarget your pull request, merge it, or run \`gh stack\`, and push only your own branch. When Luke tells you to resync, run \`git fetch origin <your-branch>\` and \`git reset --hard origin/<your-branch>\` before any more work, because the keeper has rewritten your branch on the remote.`;
+
 /** The words the instructions say of what the agent was handed, a plan, a task, one pull request of the plan's rollout, or the rollout's stacks, where they differ. */
 const BRIEF_WORDS = {
   [CODING_AGENT_BRIEF.PLAN]: {
@@ -89,6 +105,8 @@ const BRIEF_WORDS = {
     }),
     decided: DECIDED_WORDS,
     updating: UPDATING_WORDS,
+    /** An agent handed the whole plan is no worker of a rollout, so nobody waits on its reports. */
+    reporting: "",
   },
   [CODING_AGENT_BRIEF.TASK]: {
     job: "carry out the task the developer gave as the first message of this conversation",
@@ -103,6 +121,7 @@ const BRIEF_WORDS = {
     /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
     decided: "",
     updating: "",
+    reporting: "",
   },
   [CODING_AGENT_BRIEF.PULL_REQUEST]: {
     job: "build the one pull request of the plan's rollout given as the first message of this conversation, and no other",
@@ -116,6 +135,7 @@ const BRIEF_WORDS = {
     }),
     decided: DECIDED_WORDS,
     updating: PULL_REQUEST_UPDATING_WORDS,
+    reporting: REPORTING_WORDS,
   },
   [CODING_AGENT_BRIEF.STACK_KEEPER]: {
     job: "keep the stacks of the plan's rollout that the first message of this conversation lays out: you own the rollout's git structure, and its builders write its code",
@@ -128,6 +148,8 @@ const BRIEF_WORDS = {
     /** The keeper writes nothing of the plan's: a decision about the code is a builder's to take into it. */
     decided: "",
     updating: "",
+    /** The keeper's own steps already say when it reports. */
+    reporting: "",
   },
 } as const satisfies Record<
   CodingAgentBrief,
@@ -138,6 +160,7 @@ const BRIEF_WORDS = {
     work: string;
     decided: string;
     updating: string;
+    reporting: string;
   }
 >;
 
@@ -231,7 +254,7 @@ When a result reads better as something to look at or click through than as word
 
 ## Handing work to a worker
 
-\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included; its answer arrives as a task result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only in the checkout, so it never edits, commits, or pushes. Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its task says, and the developer reads the task too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${words.updating}
+\`${CODING_AGENT_DELEGATE_TOOL}\` hands one scoped task to a worker that reads the same checkout, your uncommitted edits included; its answer arrives as a task result. Wait for it by calling task_wait right after delegating, unless you set \`background\` because there is other work to do while it runs; several calls in one step run at once, and a call with a worker's taskId sends that worker more. Delegate broad searches, a comparison of approaches, and investigations independent of each other, and keep the editing and the publishing to yourself: a worker is read-only in the checkout, so it never edits, commits, or pushes. Where the developer connected ${INTEGRATION_NAMES_SAID}, a worker reads it too, and changes something there only when its task explicitly asks it to. Choose each worker's model and effort for the job, a cheaper or faster model for a simple lookup and a stronger one for hard analysis, or leave both to yours; a model or effort outside the catalog is refused with the valid list. A worker knows only what its task says, and the developer reads the task too, so write it as short Markdown in complete sentences, never clipped notes: the goal as one plain sentence on the first line, then short sections or bullets for the context it needs, what to inspect, what to return, and any constraints.${words.updating}${words.reporting}
 
 ## What your messages are
 
