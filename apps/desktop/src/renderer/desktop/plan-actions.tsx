@@ -10,7 +10,7 @@ import {
   UnarchiveIcon,
   UnpinIcon,
 } from "@sidecar/panel";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
@@ -21,14 +21,7 @@ import { RepositoryPicture } from "../repository-picture";
 import { ConfirmDialog, type DialogQuestion, useConfirmDialog } from "../settings/confirm-dialog";
 import { confirmAsked } from "../settings/confirm-state";
 import { Tooltip } from "../tooltip";
-import {
-  ActionMenu,
-  MENU_ALIGN,
-  MENU_DROP,
-  type MenuAction,
-  type MenuPlacement,
-  type OpenMenu,
-} from "./action-menu";
+import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 
 /**
@@ -213,19 +206,9 @@ function usePlanMenu(plans: PlansControl, planId: string, name: string, rename: 
   const deletion = useConfirmDialog({ subject: plan !== undefined, surfaceOpen: plans.shown }, () =>
     plans.onDeletePlan(planId),
   );
-  const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
-  if (open !== undefined && !plans.shown) setOpen(undefined);
-  const opener = useRef<HTMLElement | null>(null);
-  const close = useCallback((returnFocus: boolean) => {
-    setOpen(undefined);
-    if (returnFocus) opener.current?.focus();
-  }, []);
-  const show = (placement: MenuPlacement, element: HTMLElement) => {
-    opener.current = element;
-    setOpen({ placement, opener: element });
-  };
+  const { open, show, close } = useActionMenu(plans.shown);
   const menu =
-    open === undefined || !plans.shown ? null : (
+    open === undefined ? null : (
       <ActionMenu
         label="Plan actions"
         menu={open}
@@ -281,11 +264,7 @@ export function PlanActionsButton({
               actions.close(true);
               return;
             }
-            const bounds = event.currentTarget.getBoundingClientRect();
-            actions.show(
-              { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END },
-              event.currentTarget,
-            );
+            actions.show(dropBelow(event.currentTarget), event.currentTarget);
           }}
         >
           <EllipsisIcon />
@@ -337,7 +316,7 @@ export function SidebarPlan({
   const showMenu = (event: React.MouseEvent) => {
     event.preventDefault();
     if (row.current === null) return;
-    actions.show({ x: event.clientX, y: event.clientY, align: MENU_ALIGN.START }, row.current);
+    actions.show(atPointer(event), row.current);
   };
   const repository =
     repositoryShown && plan.repository !== null ? (

@@ -14,7 +14,7 @@ import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLANS_PAGE } from "../planning/planning-model";
+import { PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
@@ -583,4 +583,112 @@ test("a plan row naming its repository leads the name with its owner's picture, 
   );
   assert.equal(named(staged)?.querySelector("img"), null);
   assert.ok(named(staged)?.querySelector("svg.account-mark"));
+});
+
+/** The labels of the menu standing open, item by item. */
+function menuItems(): HTMLButtonElement[] {
+  return [...document.querySelectorAll<HTMLButtonElement>('[role="menu"] [role="menuitem"]')];
+}
+
+/** Chooses the open menu's item by its label. */
+function choose(label: string): void {
+  const item = menuItems().find((candidate) => candidate.textContent === label);
+  assert.ok(item, `the menu offers ${label}`);
+  act(() => item.click());
+}
+
+/** Opens a header's menu from its ⋯. */
+function openActions(container: HTMLElement, name: string): void {
+  const ellipsis = header(container, name).querySelector<HTMLButtonElement>(
+    `[aria-label="Actions for ${name}"]`,
+  );
+  assert.ok(ellipsis, `the ${name} header offers its actions`);
+  act(() => ellipsis.click());
+}
+
+test("a repository's header is led by its owner's picture, and No repository, a picture that fails, and a fixture run by a folder", () => {
+  window.localStorage.clear();
+  const plans = {
+    plans: [onRepository("Billing", "acme/ledger", 2), onRepository("Notes", null)],
+  };
+  const live = mount(DEAN, { plans });
+  const picture = header(live, "ledger").querySelector<HTMLImageElement>("img");
+  assert.equal(picture?.getAttribute("src"), "https://github.com/acme.png?size=32");
+  assert.equal(header(live, "No repository").querySelector("img"), null);
+
+  act(() => {
+    picture?.dispatchEvent(new Event("error"));
+  });
+  assert.equal(header(live, "ledger").querySelector("img"), null);
+
+  const staged = mount(DEAN, {
+    plans: { ...plans, repositories: { ...plansControl().repositories, pictures: false } },
+  });
+  assert.equal(staged.querySelector(".sidebar-repository-header img"), null);
+  assert.ok(header(staged, "ledger").querySelector("svg"), "the folder stands in its place");
+});
+
+test("a repository's ⋯ and a right-click on its header open one menu: Archive plans, and Open on GitHub under GitHub's mark", () => {
+  window.localStorage.clear();
+  const container = mount(DEAN, {
+    plans: { plans: [onRepository("Billing", "acme/ledger"), onRepository("Notes", null)] },
+  });
+
+  openActions(container, "ledger");
+  const fromEllipsis = menuItems().map((item) => item.textContent);
+  act(() => {
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  assert.deepEqual(menuItems(), []);
+  act(() => {
+    header(container, "ledger").dispatchEvent(
+      new MouseEvent("contextmenu", { bubbles: true, clientX: 40, clientY: 12 }),
+    );
+  });
+
+  assert.deepEqual(fromEllipsis, ["Archive plans", "Open on GitHub"]);
+  const github = menuItems().find((item) => item.textContent === "Open on GitHub");
+  assert.ok(github?.querySelector("svg.account-mark"), "GitHub's mark, not the owner's picture");
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    fromEllipsis,
+  );
+  act(() => {
+    document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+  });
+  openActions(container, "No repository");
+  assert.deepEqual(
+    menuItems().map((item) => item.textContent),
+    ["Archive plans"],
+    "the plans with no repository have no page to open",
+  );
+});
+
+test("Archive plans archives every plan under the header and no other, and Open on GitHub opens the repository's page", () => {
+  window.localStorage.clear();
+  const archived: [string, string][] = [];
+  const opened: string[] = [];
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        onRepository("Billing", "acme/ledger"),
+        onRepository("Invoices", "acme/ledger"),
+        { ...onRepository("Refunds", "acme/ledger"), pinnedAt: 3 },
+        onRepository("Search", "acme/relay"),
+      ],
+      onMarkPlan: (planId, mark) => archived.push([planId, mark]),
+      repositories: { ...plansControl().repositories, openGitHub: (url) => opened.push(url) },
+    },
+  });
+
+  openActions(container, "ledger");
+  choose("Archive plans");
+  openActions(container, "ledger");
+  choose("Open on GitHub");
+
+  assert.deepEqual(archived, [
+    ["plan-Billing", PLAN_MARK.ARCHIVE],
+    ["plan-Invoices", PLAN_MARK.ARCHIVE],
+  ]);
+  assert.deepEqual(opened, ["https://github.com/acme/ledger"]);
 });

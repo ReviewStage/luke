@@ -1,32 +1,40 @@
 import { ACCOUNT_STATUS, type AccountSnapshot } from "@sidecar/credentials/snapshot";
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
 import {
+  ArchiveIcon,
   ArrowLeftIcon,
   ArrowRightIcon,
   ChevronRightIcon,
   ComposeIcon,
+  EllipsisIcon,
+  FolderIcon,
   GearIcon,
   PlusIcon,
   UpdateIcon,
   UserIcon,
 } from "@sidecar/panel";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { GitHubMark } from "../account-marks";
 import { useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
 import {
+  PLAN_MARK,
   PLANS_PAGE,
   type RepositoryGroup,
   repositoryGroups,
   repositoryLabel,
+  repositoryPageUrl,
 } from "../planning/planning-model";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
 import { updateAvailable, updateInSidebar, updateRow } from "../update-row";
+import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
 import { SidebarPlan } from "./plan-actions";
@@ -261,13 +269,43 @@ function PlanRows({
 }
 
 /**
- * One repository's plans under a quiet header in the headings' voice, which
- * folds and unfolds them, the fold kept across launches. A repository's
- * header also offers a + that starts a new plan with that repository
- * already chosen, shown while the header is hovered or holds focus, the way
- * Codex and Cursor reveal a row's actions; it stands beside the fold rather
- * than inside it, so pressing it folds nothing. The plans with no
- * repository stand under "No repository", with nothing to preset.
+ * A repository's actions, offered alike from its header's ⋯ and from a
+ * right-click on the header: Archive plans puts every plan under the header
+ * away, each undone from the plan's own menu under Archived, and Open on
+ * GitHub opens the repository's page, under GitHub's mark rather than the
+ * owner's picture, since it is about GitHub. The plans with no repository
+ * have no page to open.
+ */
+function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): MenuAction[][] {
+  const { repository } = group;
+  const archive: MenuAction = {
+    label: "Archive plans",
+    icon: <ArchiveIcon />,
+    onSelect: () => {
+      for (const plan of group.plans) plans.onMarkPlan(plan.id, PLAN_MARK.ARCHIVE);
+    },
+  };
+  if (repository === null) return [[archive]];
+  const github: MenuAction = {
+    label: "Open on GitHub",
+    icon: <GitHubMark />,
+    onSelect: () => plans.repositories.openGitHub(repositoryPageUrl(repository)),
+  };
+  return [[archive], [github]];
+}
+
+/**
+ * One repository's plans under a header in the headings' voice, which folds
+ * and unfolds them, the fold kept across launches. The header is a row like
+ * a plan's, with its hover, led by the owner's picture, which gives way to
+ * the fold's chevron while the header is hovered or reached from the
+ * keyboard, pointing down while the group is open and right while it is
+ * folded, the way Codex and Cursor draw a project. Its actions stand at its end while it is hovered or holds
+ * focus: a ⋯ that drops the repository's menu, which a right-click anywhere
+ * on the header opens too, and a + that starts a new plan with the
+ * repository already chosen. Both stand beside the fold rather than inside
+ * it, so pressing either folds nothing. The plans with no repository stand
+ * under "No repository", with nothing to preset and no page to open.
  */
 function RepositorySection({
   group,
@@ -285,10 +323,20 @@ function RepositorySection({
 }): React.JSX.Element {
   const { repository } = group;
   const folded = folds.folded(repository);
-  const named = repository ?? NO_REPOSITORY;
+  const named = repository === null ? NO_REPOSITORY : label;
+  const menu = useActionMenu(context.plans.shown);
+  const ellipsis = useRef<HTMLButtonElement | null>(null);
   return (
     <div className="sidebar-repository">
-      <div className="sidebar-repository-header">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the right-click is a second door to the ⋯ beside it, which is the keyboard's. */}
+      <div
+        className="sidebar-repository-header"
+        data-menu-open={String(menu.open !== undefined)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          menu.show(atPointer(event), ellipsis.current ?? event.currentTarget);
+        }}
+      >
         <Tooltip label={repository === null || label === repository ? undefined : repository}>
           <button
             type="button"
@@ -296,23 +344,63 @@ function RepositorySection({
             aria-expanded={!folded}
             onClick={() => folds.toggle(repository)}
           >
-            <ChevronRightIcon />
-            <span className="sidebar-repository-name">{repository === null ? named : label}</span>
+            <span className="sidebar-repository-glyph">
+              {repository === null ? (
+                <FolderIcon />
+              ) : (
+                <RepositoryPicture
+                  repository={repository}
+                  pictures={context.plans.repositories.pictures}
+                  fallback={<FolderIcon />}
+                />
+              )}
+              <ChevronRightIcon />
+            </span>
+            <span className="sidebar-repository-name">{named}</span>
           </button>
         </Tooltip>
-        {repository === null ? null : (
-          <Tooltip label={`New plan in ${label}`}>
+        <span className="sidebar-repository-actions">
+          <Tooltip label="Repository actions">
             <button
+              ref={ellipsis}
               type="button"
-              className="icon-button sidebar-repository-new"
-              aria-label={`New plan in ${label}`}
-              onClick={() => onNewPlanIn(repository)}
+              className="sidebar-repository-action"
+              aria-label={`Actions for ${named}`}
+              aria-haspopup="menu"
+              aria-expanded={menu.open !== undefined}
+              onClick={(event) => {
+                if (menu.open !== undefined) {
+                  menu.close(true);
+                  return;
+                }
+                menu.show(dropBelow(event.currentTarget), event.currentTarget);
+              }}
             >
-              <PlusIcon />
+              <EllipsisIcon />
             </button>
           </Tooltip>
-        )}
+          {repository === null ? null : (
+            <Tooltip label={`New plan in ${label}`}>
+              <button
+                type="button"
+                className="sidebar-repository-action sidebar-repository-new"
+                aria-label={`New plan in ${label}`}
+                onClick={() => onNewPlanIn(repository)}
+              >
+                <PlusIcon />
+              </button>
+            </Tooltip>
+          )}
+        </span>
       </div>
+      {menu.open === undefined ? null : (
+        <ActionMenu
+          label={`${named} actions`}
+          menu={menu.open}
+          groups={repositoryActionGroups(group, context.plans)}
+          onClose={menu.close}
+        />
+      )}
       {folded ? null : <PlanRows rows={group.plans} repositoryShown={false} context={context} />}
     </div>
   );
