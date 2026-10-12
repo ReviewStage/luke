@@ -13,6 +13,7 @@ import { readRevisionContent } from "../server/hosted/plan-revisions";
 import { readPlan } from "../server/hosted/plan-store";
 import { BULK_IMPORT } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
+import { openWorkspace } from "./support/workspaces";
 
 /**
  * plan-template-migration.test.ts -- migration 0082 carries a plan written in the old template onto the new one.
@@ -112,9 +113,10 @@ const insertPlan = (input: {
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const planId = randomUUID();
+    const organizationId = yield* openWorkspace(input.userId);
     yield* sql`
-      insert into plan (id, user_id, name, body, fields, field_writers)
-      values (${planId}, ${input.userId}, ${NAME}, ${input.body},
+      insert into plan (id, user_id, organization_id, name, body, fields, field_writers)
+      values (${planId}, ${input.userId}, ${organizationId}, ${NAME}, ${input.body},
         ${JSON.stringify(input.fields)}::jsonb, ${JSON.stringify(input.writers)}::jsonb)
     `;
     return planId;
