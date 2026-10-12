@@ -13,6 +13,11 @@
  *
  * A path is the repository's, from its root, without a leading or trailing
  * slash; the root itself is the empty path.
+ *
+ * The same bundle answers what icon a file's type draws as, so a file
+ * attached to a message (`../planning/attached-file-chips.tsx`) is drawn as
+ * the tree draws it, without Pierre's icons riding in the bundle every
+ * window parses.
  */
 
 /** One entry of a folder: its name within the folder, and whether it is a folder itself. */
@@ -87,11 +92,24 @@ export interface FolderListProps {
   readonly onChoose: (entry: FolderEntry, newTab: boolean) => void;
 }
 
+/**
+ * A file's type icon as the tree draws it: the symbol to draw, from the
+ * sheet the bundle adds to the document the first time one is asked for,
+ * and the type it stands for, which the panel colours it by
+ * (`styles/planning.css`).
+ */
+export interface FileTypeIcon {
+  readonly symbol: string;
+  readonly type: string;
+}
+
 /** What the file tree bundle sets on `window` once it has loaded. */
 export interface FileTreeModule {
   readonly mount: (host: HTMLElement, props: FileTreeProps) => FileTreeHandle;
   /** Draws one folder's entries in rows the tree's own, its icons, hover, and keys; answers how to take it down. */
   readonly list: (host: HTMLElement, props: FolderListProps) => () => void;
+  /** The type icon of a file by its name alone. */
+  readonly fileIcon: (name: string) => FileTypeIcon;
 }
 
 declare global {

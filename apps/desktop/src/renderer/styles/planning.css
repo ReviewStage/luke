@@ -1077,27 +1077,54 @@ button.code-card-path:hover {
   justify-content: flex-end;
 }
 
-/* An image is its thumbnail; any other file a glyph, its name, and its
-   size, on a chip as tall as the thumbnail. */
+/* An image is its thumbnail; any other file its type's icon, its name, and
+   its size, on a chip as tall as the thumbnail. The chip's face is the
+   press that opens the file, washed under the pointer as a row is. */
 .attached-file {
   position: relative;
   display: flex;
   max-width: 220px;
   height: 48px;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px 0 10px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
   background: var(--section-fill);
+  transition: border-color var(--duration-hover) ease;
+}
+
+.attached-file-face {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 0 10px;
+  border-radius: 7px;
+  background: none;
   color: var(--text-secondary);
   font-size: 12px;
+  text-align: left;
+  transition: background-color var(--duration-hover) ease;
+}
+
+button.attached-file-face {
+  cursor: pointer;
+}
+
+button.attached-file-face:hover {
+  background: var(--raised-strong);
+}
+
+.attached-file:has(button.attached-file-face:hover) {
+  border-color: var(--hairline-strong);
 }
 
 .attached-file:has(img) {
   width: 64px;
-  padding: 0;
   overflow: visible;
+}
+
+.attached-file-face:has(img) {
+  padding: 0;
 }
 
 .attached-file img {
@@ -1106,9 +1133,14 @@ button.code-card-path:hover {
   height: 100%;
   border-radius: 7px;
   object-fit: cover;
+  transition: filter var(--duration-hover) ease;
 }
 
-.attached-file > svg {
+button.attached-file-face:hover img {
+  filter: brightness(1.12);
+}
+
+.attached-file-face > svg {
   width: 16px;
   height: 16px;
   flex: none;
@@ -1123,6 +1155,111 @@ button.code-card-path:hover {
 
 .attached-file-size {
   flex: none;
+}
+
+/* A file's type icon in its type's colour, as the file tree draws it:
+   Pierre's own colour for each type of the complete set (`@pierre/trees`'
+   stylesheet), in the palette `base.css` repeats from it. A type Pierre
+   colours nowhere takes the muted ink the tree gives it. */
+.file-type-icon {
+  color: var(--text-secondary);
+  fill: currentColor;
+}
+
+.file-type-icon:is([data-file-type="default"], [data-file-type="text"]) {
+  color: var(--file-icon-gray);
+}
+
+.file-type-icon:is(
+  [data-file-type="npm"],
+  [data-file-type="postcss"],
+  [data-file-type="ruby"],
+  [data-file-type="svelte"],
+  [data-file-type="yml"]
+) {
+  color: var(--file-icon-red);
+}
+
+.file-type-icon[data-file-type="git"] {
+  color: var(--file-icon-vermilion);
+}
+
+.file-type-icon:is(
+  [data-file-type="claude"],
+  [data-file-type="html"],
+  [data-file-type="json"],
+  [data-file-type="rust"],
+  [data-file-type="svg"],
+  [data-file-type="swift"],
+  [data-file-type="zig"],
+  [data-file-type="zip"]
+) {
+  color: var(--file-icon-orange);
+}
+
+.file-type-icon:is(
+  [data-file-type="babel"],
+  [data-file-type="browserslist"],
+  [data-file-type="javascript"]
+) {
+  color: var(--file-icon-yellow);
+}
+
+.file-type-icon:is(
+  [data-file-type="bash"],
+  [data-file-type="markdown"],
+  [data-file-type="svgo"],
+  [data-file-type="vue"]
+) {
+  color: var(--file-icon-green);
+}
+
+.file-type-icon:is([data-file-type="mcp"], [data-file-type="prettier"], [data-file-type="table"]) {
+  color: var(--file-icon-teal);
+}
+
+.file-type-icon:is(
+  [data-file-type="go"],
+  [data-file-type="oxc"],
+  [data-file-type="react"],
+  [data-file-type="tailwind"]
+) {
+  color: var(--file-icon-cyan);
+}
+
+.file-type-icon:is(
+  [data-file-type="biome"],
+  [data-file-type="c"],
+  [data-file-type="cpp"],
+  [data-file-type="docker"],
+  [data-file-type="python"],
+  [data-file-type="typescript"],
+  [data-file-type="vscode"],
+  [data-file-type="webpack"]
+) {
+  color: var(--file-icon-blue);
+}
+
+.file-type-icon:is(
+  [data-file-type="bootstrap"],
+  [data-file-type="css"],
+  [data-file-type="eslint"],
+  [data-file-type="terraform"],
+  [data-file-type="wasm"]
+) {
+  color: var(--file-icon-indigo);
+}
+
+.file-type-icon:is([data-file-type="astro"], [data-file-type="database"], [data-file-type="vite"]) {
+  color: var(--file-icon-purple);
+}
+
+.file-type-icon:is([data-file-type="graphql"], [data-file-type="image"], [data-file-type="sass"]) {
+  color: var(--file-icon-pink);
+}
+
+.file-type-icon[data-file-type="bun"] {
+  color: var(--file-icon-mauve);
 }
 
 /* Its way off sits on the chip's corner, as a feedback screenshot's does. */
@@ -1149,6 +1286,138 @@ button.code-card-path:hover {
 .attached-file-remove svg {
   width: 8px;
   height: 8px;
+}
+
+/* A file opened over the window (attachment-viewer.tsx): the dialog's
+   dimmed window and card, the file's name and its buttons along the top,
+   and the file under them, an image fitted to the window, a text file's
+   lines scrolling inside the card, any other file its icon over Download. */
+.attachment-viewer {
+  display: flex;
+  min-width: min(360px, 100%);
+  max-width: min(1200px, 100%);
+  max-height: calc(100vh - 2 * var(--space-24));
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 14px;
+  background: var(--surface-popover);
+  box-shadow: 0 24px 64px var(--shadow-deep);
+  color: var(--text-primary);
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
+}
+
+.attachment-viewer:focus {
+  outline: none;
+}
+
+.attachment-viewer[data-view="text"] {
+  width: min(880px, 100%);
+  height: calc(100vh - 2 * var(--space-24));
+}
+
+.attachment-viewer[data-view="other"] {
+  width: min(400px, 100%);
+}
+
+.attachment-viewer-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-6) var(--space-6) var(--space-12);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.attachment-viewer-header > .file-type-icon,
+.attachment-viewer-header > .icon-button-glyph {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin-right: var(--space-4);
+}
+
+.attachment-viewer-title {
+  overflow: hidden;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-viewer-size {
+  flex: none;
+  margin: 0 auto 0 var(--space-4);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.attachment-viewer-walk {
+  display: flex;
+  align-items: center;
+}
+
+.attachment-viewer-place {
+  min-width: 48px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.attachment-viewer-body {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.attachment-viewer[data-view="image"] .attachment-viewer-body {
+  display: grid;
+  place-items: center;
+  background: var(--section-fill);
+}
+
+.attachment-viewer-image {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 2 * var(--space-24) - 50px);
+  object-fit: contain;
+  cursor: zoom-out;
+}
+
+.attachment-viewer-lines {
+  overflow: auto;
+  background: var(--code-ground);
+  user-select: text;
+}
+
+.attachment-viewer-other {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-24);
+  text-align: center;
+}
+
+.attachment-viewer-other > .file-type-icon,
+.attachment-viewer-other > .icon-button-glyph {
+  width: 48px;
+  height: 48px;
+}
+
+.attachment-viewer-other-name {
+  max-width: 100%;
+  margin: var(--space-6) 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.attachment-viewer-other-size {
+  margin: 0 0 var(--space-12);
+  color: var(--text-secondary);
+  font-size: 12px;
 }
 
 /* An archived plan's agent takes no message, so its composer's place says

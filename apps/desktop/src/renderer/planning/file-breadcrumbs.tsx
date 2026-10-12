@@ -6,7 +6,7 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MENU_DROP } from "../desktop/action-menu";
 import type { FolderEntry } from "../file-tree/contract";
-import { fileTreeModuleAtom } from "./file-tree-pane";
+import { fileTreeModuleAtom } from "./file-tree-bundle";
 import type { ListFolder } from "./folder-listings";
 
 /**

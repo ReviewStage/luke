@@ -5,15 +5,10 @@ import { CloseIcon, SearchIcon } from "@sidecar/panel";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
 import { ListFilterIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { bundleAtom } from "../bundle-loader";
-import {
-  FILE_TREE_ASSET,
-  type FileTreeHandle,
-  type FolderEntry,
-  type FolderListing,
-} from "../file-tree/contract";
+import type { FileTreeHandle, FolderEntry, FolderListing } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { refusalLine, refusalPasses } from "./file-tab-model";
+import { fileTreeModuleAtom, TREE_LOAD_FAILED } from "./file-tree-bundle";
 import type { ListFolder } from "./folder-listings";
 
 /**
@@ -21,7 +16,7 @@ import type { ListFolder } from "./folder-listings";
  *
  * The tree is drawn by the file tree bundle (`../file-tree/`), loaded the
  * first time a tree is shown and kept for the window's life
- * (`../bundle-loader.ts`). The pane hands it the folders as the panel lists
+ * (`file-tree-bundle.ts`). The pane hands it the folders as the panel lists
  * them (`folder-listings.ts`), a refusal put in the File tab's own words,
  * and reveals the tab's file in it whenever the tab shows another, its
  * folders opened and it marked, as an editor's explorer follows the file
@@ -49,16 +44,6 @@ const SEARCH_SCOPE = {
 } as const;
 
 type SearchScope = (typeof SEARCH_SCOPE)[keyof typeof SEARCH_SCOPE];
-
-/** Where the tree stands while its bundle loads or fails to. */
-const TREE_LOAD_FAILED = "The files could not be shown.";
-
-/** The file tree bundle, loaded the first time a tree or a breadcrumb's list is drawn and kept for the window's life. */
-export const fileTreeModuleAtom = bundleAtom(
-  { script: FILE_TREE_ASSET.SCRIPT },
-  () => window.lukeFileTree,
-  TREE_LOAD_FAILED,
-);
 
 /** A listing's entries as the tree hears them, each by its name or, listed whole, its path. */
 function entriesOf(entries: readonly PlanTreeEntry[]): readonly FolderEntry[] {
