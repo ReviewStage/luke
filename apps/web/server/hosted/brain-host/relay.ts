@@ -549,6 +549,9 @@ export class StreamRelay {
                   ...(usage.cacheReadTokens !== undefined
                     ? { cachedInputTokens: usage.cacheReadTokens }
                     : undefined),
+                  ...(usage.cacheWriteTokens !== undefined
+                    ? { cacheWriteTokens: usage.cacheWriteTokens }
+                    : undefined),
                 }),
               },
             })),

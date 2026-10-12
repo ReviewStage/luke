@@ -402,6 +402,28 @@ it.effect("the whole finished line hangs the card: its length and its timestamp 
   }),
 );
 
+it.effect(
+  "a turn whose provider said what it wrote to the cache lists it, out of the input row",
+  () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(TURN_END + MINUTE);
+      const tokens = {
+        inputTokens: 2_000,
+        outputTokens: 50,
+        cachedInputTokens: 1_200,
+        cacheWriteTokens: 600,
+      };
+      const tab = yield* mounted(finishedAgent({ ...OPUS_TURN, tokens }));
+      assert.deepEqual(tokenRows(tab.hoverWorked()), [
+        ["Input", "200"],
+        ["Output", "50"],
+        ["Cache read", "1,200"],
+        ["Cache write", "600"],
+      ]);
+      tab.unmount();
+    }),
+);
+
 it.effect("a turn whose row counted no tokens hangs a card with no token section", () =>
   Effect.gen(function* () {
     yield* TestClock.setTime(TURN_END + MINUTE);

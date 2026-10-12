@@ -20,7 +20,12 @@ const OFFERED: readonly OfferedModel[] = [
     name: "Claude Opus 5.5",
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: ["high"],
-    pricing: { inputUsd: 0.000004, outputUsd: 0.00002, cachedInputUsd: 0.0000002 },
+    pricing: {
+      inputUsd: 0.000004,
+      outputUsd: 0.00002,
+      cachedInputUsd: 0.0000002,
+      cacheWriteUsd: 0.000005,
+    },
   },
   {
     id: SOL,
@@ -99,4 +104,24 @@ test("a step on a model the catalog prices not, or lists no more, leaves the tok
   assert.deepEqual(usageOfTurns([priced, unpriced], OFFERED), tokens);
   assert.deepEqual(usageOfTurns([priced, unlisted], OFFERED), tokens);
   assert.equal(usageOfTurns([], OFFERED), undefined);
+});
+
+test("the input a provider wrote to its prompt cache is priced at the cache's write price, and only once, out of the input it is counted in", () => {
+  // 400 uncached at $4/M, 400 cached at $0.2/M, 200 written at $5/M, 100 out at $20/M: $0.00468.
+  const usage = usageOfTurns(
+    [
+      {
+        model: OPUS,
+        usage: {
+          inputTokens: 1000,
+          outputTokens: 100,
+          cachedInputTokens: 400,
+          cacheWriteTokens: 200,
+          reasoningTokens: 0,
+        },
+      },
+    ],
+    OFFERED,
+  );
+  assert.equal(usage?.costUsd, 0.00468);
 });

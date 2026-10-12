@@ -500,7 +500,12 @@ function countedStep(turnId: string, end: MessageStreamEvent): MessageStreamEven
         sequence: SEQUENCE,
         stepIndex: 0,
         finishReason: "stop",
-        usage: { inputTokens: 1_200, outputTokens: 80, cacheReadTokens: 1_000 },
+        usage: {
+          inputTokens: 1_200,
+          outputTokens: 80,
+          cacheReadTokens: 1_000,
+          cacheWriteTokens: 150,
+        },
       },
     }),
     end,
@@ -519,7 +524,12 @@ test("a finished turn's work says the model and effort it ran on and the tokens 
     const { model, effort, tokens, ending } = await worked(target, standing);
     return { model, effort, tokens, ending };
   };
-  const tokens = { inputTokens: 1_200, outputTokens: 80, cachedInputTokens: 1_000 };
+  const tokens = {
+    inputTokens: 1_200,
+    outputTokens: 80,
+    cachedInputTokens: 1_000,
+    cacheWriteTokens: 150,
+  };
 
   assert.deepEqual(
     await endedWith(
@@ -1004,7 +1014,12 @@ test("a plan's work read back says what a worker's finished task spent and how i
     { effort, tokens, ending },
     {
       effort: "low",
-      tokens: { inputTokens: 1_200, outputTokens: 80, cachedInputTokens: 1_000 },
+      tokens: {
+        inputTokens: 1_200,
+        outputTokens: 80,
+        cachedInputTokens: 1_000,
+        cacheWriteTokens: 150,
+      },
       ending: TURN_ENDING.STOPPED,
     },
   );

@@ -54,6 +54,8 @@ const UsageCountsFields = {
   outputTokens: Schema.Number,
   cachedInputTokens: Schema.Number,
   reasoningTokens: Schema.Number,
+  /** Absent on a row from before it was kept, and where no step's provider said it. */
+  cacheWriteTokens: Schema.optionalKey(Schema.Number),
 };
 
 /**

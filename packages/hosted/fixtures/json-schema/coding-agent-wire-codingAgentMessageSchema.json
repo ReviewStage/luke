@@ -53,6 +53,10 @@
         "cachedInputTokens": {
           "type": "number",
           "minimum": 0
+        },
+        "cacheWriteTokens": {
+          "type": "number",
+          "minimum": 0
         }
       },
       "required": [

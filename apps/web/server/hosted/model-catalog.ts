@@ -69,21 +69,24 @@ const PROVIDER_SET: ReadonlySet<string> = new Set(Object.values(MODEL_PROVIDER))
 
 /**
  * What a model's tokens cost, in dollars per token as the catalog lists
- * them: the input the model read, the output it wrote, and the input its
- * prefix cache answered, which the catalog prices for a model that caches
- * and leaves unsaid for one that does not.
+ * them: the input the model read, the output it wrote, the input its
+ * prefix cache answered, and the input written to that cache, the last two
+ * of which the catalog prices for a model that caches and leaves unsaid for
+ * one that does not.
  */
 export interface ModelPricing {
   readonly inputUsd: number;
   readonly outputUsd: number;
   readonly cachedInputUsd?: number;
+  readonly cacheWriteUsd?: number;
 }
 
-/** The counts a price is put on: a turn's, an agent's, as the brain keeps them. */
+/** The counts a price is put on: a turn's, an agent's, as the brain keeps them, the cache's writes only where a provider said them. */
 export interface PricedTokens {
   readonly inputTokens: number;
   readonly outputTokens: number;
   readonly cachedInputTokens: number;
+  readonly cacheWriteTokens?: number;
 }
 
 /**
@@ -150,6 +153,7 @@ const PricingSchema = Schema.Struct({
   input: PriceSchema,
   output: PriceSchema,
   input_cache_read: PriceSchema,
+  input_cache_write: PriceSchema,
 });
 
 /** One price tier: the price per token from `min` tokens on, as the catalog spells it; a tier with no `min` starts at none. */
@@ -213,10 +217,12 @@ function pricingOf(entry: CatalogEntry): ModelPricing | undefined {
   const outputUsd = pricing?.output ?? undefined;
   if (inputUsd === undefined || outputUsd === undefined) return undefined;
   const cachedInputUsd = pricing?.input_cache_read ?? undefined;
+  const cacheWriteUsd = pricing?.input_cache_write ?? undefined;
   return {
     inputUsd,
     outputUsd,
     ...(cachedInputUsd === undefined ? undefined : { cachedInputUsd }),
+    ...(cacheWriteUsd === undefined ? undefined : { cacheWriteUsd }),
   };
 }
 
@@ -295,15 +301,19 @@ function offeredModel(entry: CatalogEntry): OfferedModel | undefined {
 
 /**
  * What the tokens cost at the prices: the input read from the prefix cache
- * at the cache price, or at the input price for a model that lists none,
- * the rest of the input at the input price, and the output, reasoning
- * included since the provider counts it there, at the output price.
+ * at the cache's read price and the input written to it at its write price,
+ * each at the input price for a model that lists none, the rest of the
+ * input at the input price, and the output, reasoning included since the
+ * provider counts it there, at the output price. The input counts both of
+ * the cache's shares, so neither is priced twice.
  */
 export function tokensCostUsd(pricing: ModelPricing, tokens: PricedTokens): number {
   const cached = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
+  const written = Math.min(tokens.cacheWriteTokens ?? 0, tokens.inputTokens - cached);
   return (
-    (tokens.inputTokens - cached) * pricing.inputUsd +
+    (tokens.inputTokens - cached - written) * pricing.inputUsd +
     cached * (pricing.cachedInputUsd ?? pricing.inputUsd) +
+    written * (pricing.cacheWriteUsd ?? pricing.inputUsd) +
     tokens.outputTokens * pricing.outputUsd
   );
 }

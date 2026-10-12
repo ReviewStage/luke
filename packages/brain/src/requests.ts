@@ -68,12 +68,15 @@ export type BrainRequestFailure =
  * output it wrote, how much of the input its prefix cache answered, and how
  * much of the output was reasoning before the words. A count the provider
  * did not say adds nothing, so every field is a number from the first answer.
+ * Beside them, how much of the input was written to the prefix cache, which
+ * only some providers say, so it stands only once an answer has said it.
  */
 export interface BrainRunUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
   reasoningTokens: number;
+  cacheWriteTokens?: number;
 }
 
 /** One model's share of a run's usage: the counts of every step that ran on it, under the catalog id the step ran under. */
@@ -88,5 +91,8 @@ export function addModelUsage(total: BrainRunUsage | undefined, usage: ModelUsag
     outputTokens: (total?.outputTokens ?? 0) + (usage.outputTokens ?? 0),
     cachedInputTokens: (total?.cachedInputTokens ?? 0) + (usage.cachedInputTokens ?? 0),
     reasoningTokens: (total?.reasoningTokens ?? 0) + (usage.reasoningTokens ?? 0),
+    ...(total?.cacheWriteTokens === undefined && usage.cacheWriteTokens === undefined
+      ? undefined
+      : { cacheWriteTokens: (total?.cacheWriteTokens ?? 0) + (usage.cacheWriteTokens ?? 0) }),
   };
 }

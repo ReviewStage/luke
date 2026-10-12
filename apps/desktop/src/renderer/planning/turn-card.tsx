@@ -21,9 +21,9 @@ import { spanText } from "./plan-time";
  * which ran in no harness; and at its right how the turn ended
  * where it did not simply answer. Under it, when the turn began and ended,
  * in full. Then, under a hairline, its tokens: the input the model read
- * fresh, the output it wrote, and the input its prefix cache answered,
- * each label muted at the start and its count at the end in tabular
- * figures. Only what the turn's row recorded is said: a turn from before
+ * fresh, the output it wrote, the input its prefix cache answered, and,
+ * where the provider said it, the input written to that cache, each label
+ * muted at the start and its count at the end in tabular figures. Only what the turn's row recorded is said: a turn from before
  * the record, or whose model counted nothing, has no token rows, and no
  * placeholder stands in for one. No price is said, since a developer on
  * their own key pays at their provider's rate, not the catalog's.
@@ -41,6 +41,7 @@ const TOKEN_ROW = {
   INPUT: "Input",
   OUTPUT: "Output",
   CACHE_READ: "Cache read",
+  CACHE_WRITE: "Cache write",
 } as const;
 
 type TokenRow = (typeof TOKEN_ROW)[keyof typeof TOKEN_ROW];
@@ -52,16 +53,20 @@ const UNRECORDED_EFFORT = "";
 
 /**
  * A turn's tokens as the card lists them. Note that the input the row
- * counts holds what the cache answered, so the input row says the rest,
- * and the three rows add up to what the model read and wrote.
+ * counts holds what the cache answered and what was written to it, so the
+ * input row says the rest, and the rows add up to what the model read and
+ * wrote. The cache's writes have a row only where the provider said them.
  */
 function tokenRows(tokens: TurnTokens): readonly (readonly [TokenRow, number])[] {
-  const cached = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
-  return [
-    [TOKEN_ROW.INPUT, tokens.inputTokens - cached],
+  const read = Math.min(tokens.cachedInputTokens, tokens.inputTokens);
+  const written = Math.min(tokens.cacheWriteTokens ?? 0, tokens.inputTokens - read);
+  const rows: [TokenRow, number][] = [
+    [TOKEN_ROW.INPUT, tokens.inputTokens - read - written],
     [TOKEN_ROW.OUTPUT, tokens.outputTokens],
-    [TOKEN_ROW.CACHE_READ, cached],
+    [TOKEN_ROW.CACHE_READ, read],
   ];
+  if (tokens.cacheWriteTokens !== undefined) rows.push([TOKEN_ROW.CACHE_WRITE, written]);
+  return rows;
 }
 
 /** The model's harness mark, where the catalog lists the model; nothing otherwise. */

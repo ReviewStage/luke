@@ -491,13 +491,17 @@ export type TurnEnding = (typeof TURN_ENDING)[keyof typeof TURN_ENDING];
 
 /**
  * One turn's own tokens, as its row summed them over its steps: the input
- * the model read, the output it wrote, and how much of that input its
- * prefix cache answered, which the input counts too.
+ * the model read, the output it wrote, how much of that input its prefix
+ * cache answered, and how much of it was written to that cache, both of
+ * which the input counts too. The cache's writes are absent where no
+ * step's provider said them, as OpenAI's do not, and on a turn from before
+ * they were kept.
  */
 const turnTokensSchema = EffectSchema.Struct({
   inputTokens: countedNumber,
   outputTokens: countedNumber,
   cachedInputTokens: countedNumber,
+  cacheWriteTokens: EffectSchema.optionalKey(countedNumber),
 });
 
 export type TurnTokens = typeof turnTokensSchema.Type;
