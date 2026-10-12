@@ -23,6 +23,7 @@ import * as planDocumentTemplate from "./plan-document-template.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
 import * as providerKeyWire from "./provider-key-wire.js";
+import * as rolloutWire from "./rollout-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 import * as workspaceWire from "./workspace-wire.js";
@@ -260,6 +261,9 @@ const EFFECT_MODULE_SCHEMAS = {
     providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
     providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
   } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
+  "rollout-wire": {
+    reportSchema: rolloutWire.reportSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof rolloutWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,
     countedNumber: serviceWire.countedNumber,

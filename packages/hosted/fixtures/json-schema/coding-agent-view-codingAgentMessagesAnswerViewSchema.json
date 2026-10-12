@@ -50,7 +50,8 @@
                   "spoken",
                   "transcript_change",
                   "child",
-                  "child_completion"
+                  "child_completion",
+                  "report"
                 ]
               },
               "earlierOmitted": {

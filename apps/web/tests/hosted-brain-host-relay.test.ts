@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { askRecord } from "@sidecar/database/models/asks";
 import { hostTurnId } from "@sidecar/database/models/ids";
 import { type ConversationTarget, storeWriter } from "@sidecar/database/models/writer";
-import { isToolUIPart } from "ai";
+import { isTextUIPart, isToolUIPart } from "ai";
 import { Effect, Result } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll } from "vitest";
@@ -13,6 +13,7 @@ import {
   MESSAGE_AUTHOR,
   MESSAGE_CHANNEL,
   MESSAGE_ROLE,
+  OBSERVATION_SOURCE,
   type SpokenAskMetadata,
   TOOL_PART_STATE,
   TURN_ORIGIN,
@@ -274,6 +275,40 @@ it.effect(
       assert.equal(toolPart.state, TOOL_PART_STATE.OUTPUT_AVAILABLE);
       assert.equal(toolPart.toolCallId, "call-1");
       assert.deepEqual(standing.state.get(), { turns: {} });
+      assert.deepEqual(refusals, []);
+    }),
+);
+
+it.effect(
+  "a worker's report lands as a turn of the report's own origin whose line is the brain's row of the report's words, never the developer's",
+  () =>
+    Effect.promise(async () => {
+      const target = await conversation();
+      const standing = standingFor(target, BRAIN_HOST_TURN.REPORT);
+      const report = "[worker 3] opened #415\n\nThe migration is in.";
+      const events = typedTurn("turn_0", 0).map((event) =>
+        event.type === "message.received"
+          ? { ...event, data: { ...event.data, message: report } }
+          : event,
+      );
+      await play(events, standing);
+
+      const { turnRows, messageRows } = await rows(target);
+      assert.deepEqual(
+        turnRows.map((turn) => [turn.origin, turn.status]),
+        [[TURN_ORIGIN.REPORT, TURN_STATUS.SETTLED]],
+      );
+      const [line] = messageRows;
+      assert.equal(line?.role, MESSAGE_ROLE.USER);
+      assert.equal(line?.turnId, turnRows[0]?.id);
+      assert.deepEqual(line?.metadata, {
+        author: MESSAGE_AUTHOR.BRAIN,
+        source: OBSERVATION_SOURCE.REPORT,
+      });
+      assert.deepEqual(
+        line?.parts.filter((part) => isTextUIPart(part)).map((part) => part.text),
+        [report],
+      );
       assert.deepEqual(refusals, []);
     }),
 );

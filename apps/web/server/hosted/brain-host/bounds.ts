@@ -90,6 +90,8 @@ export const BRAIN_HOST_DEPLOYMENT_PRINCIPAL = "luke-deployment";
 export const BRAIN_HOST_TURN = {
   TYPED: "typed",
   SPOKEN: "spoken",
+  /** A rollout worker's report, which only the deployment opens, on the plan's conversation. */
+  REPORT: "report",
 } as const;
 
 export type BrainHostTurn = (typeof BRAIN_HOST_TURN)[keyof typeof BRAIN_HOST_TURN];
@@ -145,6 +147,12 @@ export const BRAIN_HOST_TURN_KIND = {
     origin: BRAIN_TURN_ORIGIN.SPOKEN,
     trigger: BRAIN_TURN_TRIGGER.ASK,
     receivedLine: RECEIVED_LINE.TRANSCRIPT,
+  },
+  // No developer wrote a report's words, so its line is the brain's own row under the report's origin.
+  [BRAIN_HOST_TURN.REPORT]: {
+    origin: BRAIN_TURN_ORIGIN.REPORT,
+    trigger: BRAIN_TURN_TRIGGER.REPORT,
+    receivedLine: RECEIVED_LINE.RELAY,
   },
   // The task the planning model handed the subagent is the child turn's received line.
   [RELAY_TURN.CHILD]: {

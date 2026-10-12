@@ -11,6 +11,8 @@ export const BRAIN_TURN_TRIGGER = {
   CHILD_TASK: "child-task",
   /** A requester's turn opened by a child's completion, when no run of its own was there to steer. */
   CHILD_COMPLETION: "child-completion",
+  /** A rollout worker's report on its pull request, which Luke acts on rather than answers. */
+  REPORT: "report",
 } as const;
 
 export type BrainTurnTrigger = (typeof BRAIN_TURN_TRIGGER)[keyof typeof BRAIN_TURN_TRIGGER];

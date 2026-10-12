@@ -268,6 +268,25 @@ async function refusal(run: () => ReturnType<AuthFn<Request>>): Promise<string> 
   assert.fail("the door admitted what it should have refused");
 }
 
+test("the deployment opens a rollout worker's report on the plan's conversation and follows one up on its recorded session, and is still refused a typed turn either way", async () => {
+  const actor = deploymentActor(DEPLOYMENT);
+  const opening = await actor(scheduled("user-a", BRAIN_HOST_TURN.REPORT));
+  assert.equal(opening?.principalType, BRAIN_HOST_PRINCIPAL_TYPE.DEPLOYMENT);
+  assert.equal(opening?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.REPORT);
+  assert.equal(actedForAccount(opening ?? null), "user-a");
+  const followUp = await actor(
+    scheduled("user-a", BRAIN_HOST_TURN.REPORT, `/eve/v1/session/${SESSION_A}`),
+  );
+  assert.equal(followUp?.attributes[BRAIN_HOST_ATTRIBUTE.TURN], BRAIN_HOST_TURN.REPORT);
+  assert.equal(actedForAccount(followUp ?? null), "user-a");
+  for (const typed of [
+    scheduled("user-a", BRAIN_HOST_TURN.TYPED),
+    scheduled("user-a", BRAIN_HOST_TURN.TYPED, `/eve/v1/session/${SESSION_A}`),
+  ]) {
+    assert.equal(await refusal(() => actor(typed)), BRAIN_HOST_REFUSAL.NOT_DEPLOYMENT_ACT);
+  }
+});
+
 test("the account a principal acts for is its own for a person and the named one for the deployment, and a request's account header reaches no person's attributes", () => {
   assert.equal(actedForAccount(principal("user-a")), "user-a");
   assert.equal(actedForAccount(null), undefined);

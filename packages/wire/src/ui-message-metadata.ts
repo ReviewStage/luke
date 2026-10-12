@@ -66,6 +66,8 @@ export const OBSERVATION_SOURCE = {
   CHILD_COMPLETION: "child_completion",
   /** Notes the memory provider recalled for the turn. */
   RECALLED_NOTES: "recalled_notes",
+  /** A rollout worker's report, its fixed first line ahead of the worker's own words. */
+  REPORT: "report",
 } as const;
 
 export type ObservationSource = (typeof OBSERVATION_SOURCE)[keyof typeof OBSERVATION_SOURCE];

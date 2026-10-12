@@ -93,6 +93,8 @@ export function userMetadataOf(
       return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD };
     case BRAIN_TURN_TRIGGER.CHILD_COMPLETION:
       return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.CHILD_COMPLETION };
+    case BRAIN_TURN_TRIGGER.REPORT:
+      return { author: MESSAGE_AUTHOR.BRAIN, source: OBSERVATION_SOURCE.REPORT };
   }
 }
 
