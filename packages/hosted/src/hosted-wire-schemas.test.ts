@@ -15,6 +15,7 @@ import * as liveContract from "./live-contract.js";
 import * as modelsWire from "./models-wire.js";
 import * as planEdit from "./plan-edit.js";
 import * as planWire from "./plan-wire.js";
+import * as providerKeyWire from "./provider-key-wire.js";
 import * as serviceWire from "./service-wire.js";
 import * as transcriptWire from "./transcript-wire.js";
 
@@ -143,6 +144,11 @@ const EFFECT_MODULE_SCHEMAS = {
     planFileRefusalSchema: planWire.planFileRefusalSchema,
     planFileAnswerSchema: planWire.planFileAnswerSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planWire>,
+  "provider-key-wire": {
+    providerKeySummarySchema: providerKeyWire.providerKeySummarySchema,
+    providerKeysAnswerSchema: providerKeyWire.providerKeysAnswerSchema,
+    providerKeySaveRequestSchema: providerKeyWire.providerKeySaveRequestSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof providerKeyWire>,
   "service-wire": {
     writtenText: serviceWire.writtenText,
     countedNumber: serviceWire.countedNumber,

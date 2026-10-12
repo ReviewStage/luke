@@ -13,6 +13,12 @@ export const HOSTED_SERVICE_PATH = {
    * `@sidecar/settings` as cross-device preferences belong here.
    */
   ACCOUNT_PREFERENCES: "/api/account/preferences",
+  /**
+   * The account's own Anthropic and OpenAI API keys: read what they are
+   * (GET), save one (PUT), or remove one (DELETE). No answer carries a key.
+   * `provider-key-wire.ts` declares every body.
+   */
+  ACCOUNT_PROVIDER_KEYS: "/api/account/provider-keys",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

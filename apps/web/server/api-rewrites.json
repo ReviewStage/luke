@@ -72,6 +72,10 @@
     "dest": "/api/default.js?route=account/preferences"
   },
   {
+    "src": "/api/account/provider-keys",
+    "dest": "/api/default.js?route=account/provider-keys"
+  },
+  {
     "src": "/api/admin/day",
     "dest": "/api/default.js?route=admin/day"
   },
@@ -110,6 +114,10 @@
   {
     "src": "/api/github/webhook",
     "dest": "/api/default.js?route=github/webhook"
+  },
+  {
+    "src": "/api/maintenance/provider-keys-rewrap",
+    "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
   },
   {
     "src": "/api/models",

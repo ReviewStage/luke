@@ -11,6 +11,9 @@
 /** Where Vercel's scheduler calls, fixed here so the cron entry can be checked against it. */
 export const MAINTENANCE_SWEEP_PATH = "/api/maintenance/sweep";
 
+/** The rotation's rewrap of every stored provider key (`provider-key-rewrap.ts`), asked by hand under the same secret. */
+export const MAINTENANCE_PROVIDER_KEYS_REWRAP_PATH = "/api/maintenance/provider-keys-rewrap";
+
 export const CRON_ENVIRONMENT = {
   /**
    * Vercel sends this as the bearer on every scheduled call once it is set,
