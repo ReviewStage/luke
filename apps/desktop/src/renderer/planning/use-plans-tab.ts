@@ -68,7 +68,7 @@ import {
   transcriptRegion,
 } from "./transcript-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
-import { type MainTabsControl, useMainTabs } from "./use-main-tabs";
+import { MAIN_TAB, type MainTabsControl, useMainTabs } from "./use-main-tabs";
 import { usePanelArrivals } from "./use-panel-arrivals";
 import {
   type PlanHistoryControl,
@@ -178,6 +178,8 @@ export interface PlansControl {
   onSelect: (planId: string) => void;
   /** Opens a plan on one agent's tab: what a notification's click asks. */
   onShowAgent: (planId: string, agentId: string) => void;
+  /** Opens a plan on its own document tab, out from under its version history and a side panel filling the window: the call card's way back. */
+  onShowPlan: (planId: string) => void;
   /** Opens a tab pinned to the sidebar: its plan, where it is not the open one, and the tab in its column, opening the side panel for one of its own. */
   onOpenPinnedTab: (pin: PinnedTab) => void;
   /** What the repository chip offers, in the composer and on the open plan alike. */
@@ -944,6 +946,13 @@ export function usePlansTab(input: {
       setHistoryFor(undefined);
       if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
       mainTabs.onShow(planId, { agent: agentId });
+    },
+    // The call card's way back lands where the plan's call bar is in sight.
+    onShowPlan: (planId) => {
+      if (planId !== planning.activePlanId) select(planId);
+      setHistoryFor(undefined);
+      if (sidePanel.fullScreen) sidePanel.onToggleFullScreen();
+      mainTabs.onShow(planId, MAIN_TAB.PLAN);
     },
     // A pinned tab is in one of the plan's columns, so a version history over it gives way as well.
     onOpenPinnedTab: (pin) => {

@@ -171,6 +171,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     history: versionHistoryControl(),
     onSelect: ignore,
     onShowAgent: ignore,
+    onShowPlan: ignore,
     onOpenPinnedTab: ignore,
     repositories: {
       recent: [],

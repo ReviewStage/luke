@@ -187,8 +187,8 @@ export interface MainTabsControl {
   newTabAsked: boolean;
   /** Shows the tab, opening an agent's where it was closed. */
   onChoose: (tab: MainTab) => void;
-  /** Shows the agent's tab on the plan given, as `onChoose` does on the open plan: what a pin or a notification asks, the plan opened beside it. */
-  onShow: (planId: string, tab: AgentStripTab) => void;
+  /** Shows the tab on the plan given, as `onChoose` does on the open plan: what a pin, a notification, or the call card asks, the plan opened beside it. */
+  onShow: (planId: string, tab: MainTab) => void;
   /** Closes the tab, and only the view: an agent goes on as it was. The plan's tab and its Inbox never close. */
   onClose: (tab: MainTab) => void;
   /** Moves an agent's or the draft's tab to the place `to` among them, after the plan's, leaving the chosen one chosen. */
@@ -433,7 +433,7 @@ export function useMainTabs(
   // Note that a tab shown on another plan is not counted viewed after the
   // open plan's, because the plan it is viewed on is the one about to open.
   const onShow = useCallback(
-    (on: string, tab: AgentStripTab) =>
+    (on: string, tab: MainTab) =>
       update((held) =>
         on === planId ? withChosen(held, tab, drawn) : withViewed(withOpened(held, tab), on, [tab]),
       ),

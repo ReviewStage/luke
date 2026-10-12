@@ -217,17 +217,15 @@ export function App(): React.JSX.Element {
       }),
     [changeTab],
   );
-  // The call card's way back: the Plans tab, on the call's plan, opening it
-  // where another plan, or none, is open.
-  const selectPlan = useRef(plans.onSelect);
-  selectPlan.current = plans.onSelect;
-  const boundPlan = useRef(plans.boundFor);
-  boundPlan.current = plans.boundFor;
+  // The call card's way back: the Plans tab, on the call's plan's document,
+  // opening it where another plan, or none, is open.
+  const showPlan = useRef(plans.onShowPlan);
+  showPlan.current = plans.onShowPlan;
   useEffect(
     () =>
       window.sidecar.onShowPlan(({ planId }) => {
         changeTab(PANEL_TAB.PLANS);
-        if (planId !== boundPlan.current) selectPlan.current(planId);
+        showPlan.current(planId);
       }),
     [changeTab],
   );

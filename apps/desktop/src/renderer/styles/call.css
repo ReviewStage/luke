@@ -93,7 +93,7 @@ body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
   animation: none;
 }
 
-/* The plan's name, and in the floating window the way back beside it. */
+/* The plan's name, and the way back to it beside the name. */
 .call-card-head {
   display: flex;
   min-width: 0;
@@ -102,21 +102,11 @@ body:has(.desktop-call-bar) .call-card[data-surface="floating"] {
 }
 
 .call-card-title {
-  display: block;
   min-width: 0;
   flex: 1;
   margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
   color: var(--text-secondary);
-  font: inherit;
   font-size: 12px;
-  text-align: left;
-}
-
-button.call-card-title:hover {
-  color: var(--text-primary);
 }
 
 /* In the floating window the title is what the window is dragged by. */
