@@ -248,8 +248,8 @@ async function stand(
   const brain = await database.run(
     Scope.provide(
       hostedLiveBrain({
-        userId: target.userId,
-        conversationId,
+        accountId: target.userId,
+        conversation: { userId: target.userId, conversationId },
         asks: { asks: record, eve: over ?? eve },
         store,
         writer,
@@ -399,8 +399,8 @@ async function eveBehindDoor(target: ConversationTarget, sessionId: string) {
       }),
     ],
     {
-      sessionOwner: async (id) => (id === sessionId ? target.userId : undefined),
-      ownsConversation: async (userId, conversationId) =>
+      reachesSession: async (userId, id) => userId === target.userId && id === sessionId,
+      reachesConversation: async (userId, conversationId) =>
         userId === target.userId && conversationId === target.conversationId,
     },
   );
@@ -570,7 +570,8 @@ it.live(
         database.run(
           Effect.gen(function* () {
             const plan = yield* startPlan(target.userId, PLAN);
-            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id));
+            return Option.getOrThrow(yield* openPlanConversation(target.userId, plan.id))
+              .conversationId;
           }),
         ),
       );

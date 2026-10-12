@@ -5,7 +5,7 @@ import { childTitlesByCall } from "@sidecar/database/models/child-titles";
 import type { HostedStore } from "@sidecar/database/models/hosted-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import { listJournals, type SpokenAskRow } from "@sidecar/database/models/message-reads";
-import type { StoreWriter } from "@sidecar/database/models/writer";
+import type { ConversationTarget, StoreWriter } from "@sidecar/database/models/writer";
 import type { TurnRecord } from "@sidecar/hosted/coding-agent-wire";
 import { PLAN_ACTIVITY_ACTION_MAX_CHARS, type PlanWorkTurn } from "@sidecar/hosted/planning-view";
 import {
@@ -338,10 +338,10 @@ function cancelOf(outcome: StopOutcome): LiveBrainCancel {
 }
 
 export interface HostedLiveBrainOptions {
-  /** The account the voice session was opened for, resolved at the handshake and written to `voice_sessions`. */
-  readonly userId: string;
-  /** The conversation every ask lands in: the plan's, the same one its record writes. */
-  readonly conversationId: string;
+  /** The account the voice session was opened for, resolved at the handshake: every ask is admitted as theirs. */
+  readonly accountId: string;
+  /** The conversation every ask lands in: the plan's, the same one its record writes, under the member who opened it. */
+  readonly conversation: ConversationTarget;
   /** The ask door's seams: the ask record, eve under the deployment principal for this account, and the clock. */
   readonly asks: AskSeams;
   /** The store the standing and the journal are read from, on the connection the socket's own fiber holds. */
@@ -405,7 +405,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     const order = followed.get(askId) ?? 0;
     for (const [later, laterOrder] of followed) {
       if (laterOrder <= order || boundTurn.has(later)) continue;
-      const standing = yield* askStanding(reads, options.userId, later);
+      const standing = yield* askStanding(reads, options.conversation.userId, later);
       if (standing?.turn !== undefined) boundTurn.set(later, standing.turn.id);
     }
     let newest = askId;
@@ -504,7 +504,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       const child = childConversationId(conversationId, sessionCallId);
       children.set(callId, child);
       const read = yield* listJournals(
-        options.userId,
+        options.conversation.userId,
         child,
         HOSTED_TOOL_SET,
         SUBAGENT_JOURNALS,
@@ -515,13 +515,13 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
       if (read?.ok) journals.set(callId, read.value);
     }
     const titles = yield* childTitlesByCall(
-      { userId: options.userId, conversationId },
+      { userId: options.conversation.userId, conversationId },
       children,
     ).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): ReadonlyMap<string, string> => new Map()),
     );
-    const records = yield* subagentRecordsByCall(options.userId, journals).pipe(
+    const records = yield* subagentRecordsByCall(options.conversation.userId, journals).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): ReadonlyMap<string, TurnRecord> => new Map()),
     );
@@ -533,7 +533,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * earlier turn started was started; none where they could not be read.
    */
   const workerJournalsOf = (conversationId: string) =>
-    plannerDelegationJournalsOf(options.userId, conversationId).pipe(
+    plannerDelegationJournalsOf(options.conversation.userId, conversationId).pipe(
       Effect.tapError(logStoreFailure),
       Effect.orElseSucceed((): StoredUIMessage[] => []),
     );
@@ -565,7 +565,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
    * hear only the end, so their exchanges still settle.
    */
   const look = Effect.fnUntraced(function* (askId: string, told: FollowTold, since: number) {
-    const standing = yield* askStanding(reads, options.userId, askId);
+    const standing = yield* askStanding(reads, options.conversation.userId, askId);
     if (standing === undefined) {
       endFailed(askId);
       return FOLLOW_LOOK.ENDED;
@@ -584,14 +584,16 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     // The start of a task the last look's calls steered is looked for ahead of the journal too.
     const earlier = told.seeking ? yield* workerJournalsOf(turn.conversationId) : [];
     // So are the lines the turn has taken as its ask.
-    const asked = yield* options.store.messages.spokenAskRows(options.userId, turn.conversationId, [
-      turn.id,
-    ]);
+    const asked = yield* options.store.messages.spokenAskRows(
+      options.conversation.userId,
+      turn.conversationId,
+      [turn.id],
+    );
     told.asked = asked.get(turn.id) ?? [];
     // A planning call's turns call the planning tools, so the journal is read
     // under every tool a hosted conversation's rows may name.
     const journal = yield* options.store.messages.byClientId(
-      options.userId,
+      options.conversation.userId,
       turn.conversationId,
       HOSTED_TOOL_SET,
       turn.id,
@@ -751,11 +753,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     submitAsk(ask) {
       return submit(
         {
-          userId: options.userId,
+          accountId: options.accountId,
+          userId: options.conversation.userId,
           question: ask.question,
           origin: ASK_ORIGIN.SPOKEN,
           clientId: ask.submissionId,
-          conversationId: options.conversationId,
+          conversationId: options.conversation.conversationId,
           voice: { sessionId: ask.sessionId, revision: ask.revision },
         },
         ask.revision,
@@ -770,11 +773,12 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     explore(sessionId) {
       return submit(
         {
-          userId: options.userId,
+          accountId: options.accountId,
+          userId: options.conversation.userId,
           question: PLANNING_EXPLORE_ASK,
           origin: ASK_ORIGIN.SPOKEN,
           clientId: sessionId,
-          conversationId: options.conversationId,
+          conversationId: options.conversation.conversationId,
         },
         0,
       );
@@ -787,7 +791,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           writer: options.writer,
           eve: options.asks.eve,
         },
-        options.userId,
+        options.conversation.userId,
         runId,
       ).pipe(
         Effect.map(cancelOf),
@@ -804,7 +808,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
     },
     recoverRuns(sessionId) {
       return Effect.gen(function* () {
-        const asked = yield* options.asks.asks.spokenIn(options.userId, sessionId);
+        const asked = yield* options.asks.asks.spokenIn(options.conversation.userId, sessionId);
         const now = yield* Clock.currentTimeMillis;
         for (const ask of asked) {
           if (ask.turnId === undefined) continue;
@@ -813,7 +817,7 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
         const runs: LiveBrainRecoveredRun[] = [];
         for (const ask of asked) {
           if (ask.endToldAt !== undefined) continue;
-          const standing = yield* askStanding(reads, options.userId, ask.id);
+          const standing = yield* askStanding(reads, options.conversation.userId, ask.id);
           if (standing === undefined) continue;
           const { turn } = standing;
           const settledAt = turn?.settledAt?.getTime();
