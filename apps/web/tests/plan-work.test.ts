@@ -58,7 +58,7 @@ import {
 } from "./support/eve-turns";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import { insertConversation } from "./support/store-rows";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
  * One planning turn's work as the Work tab is sent it, over the real
@@ -760,12 +760,19 @@ function shownAt(path: string, line: string) {
 }
 
 /** A plan of a new account, with the conversation its planning model runs in. */
-async function planConversation(): Promise<ConversationTarget & { planId: string }> {
+async function planConversation(): Promise<
+  ConversationTarget & { planId: string; workspaceId: string }
+> {
   const userId = await database.createUser();
   const plan = await database.run(startPlan(userId, { name: "Teammate invitations" }));
   const opened = await database.run(openPlanConversation(userId, plan.id));
   assert.ok(Option.isSome(opened));
-  return { userId, conversationId: opened.value, planId: plan.id };
+  return {
+    userId,
+    conversationId: opened.value,
+    planId: plan.id,
+    workspaceId: plan.workspaceId,
+  };
 }
 
 /**
@@ -931,6 +938,40 @@ test("a plan's work read back names the developer's spoken lines each turn took 
     database.store.messages.spokenAskRows(stranger, target.conversationId, [turnId]),
   );
   assert.equal(theirs.size, 0, "another account reads none of the plan's lines");
+});
+
+test("a plan's work reads the same for every member of its workspace, whichever member opened its conversation", async () => {
+  const target = await planConversation();
+  const teammate = await database.createUser();
+  await database.run(joinWorkspace(target.workspaceId, teammate));
+  const shown = shownAt("src/invite.ts", "export function invite() {}");
+  await play(
+    [
+      ...opening(FIRST_EVE_TURN),
+      ...callingStep(FIRST_EVE_TURN, 0, [
+        {
+          toolName: SHOW_CODE_TOOL.name,
+          input: { path: "src/invite.ts" },
+          output: { status: "accepted", code: shown },
+        },
+      ]),
+      ...answeringStep(FIRST_EVE_TURN, 1, "Invites live in one file."),
+    ],
+    standingFor(target),
+  );
+
+  const opener = await database.run(readPlanWork(target.userId, target.planId, undefined));
+  const member = await database.run(readPlanWork(teammate, target.planId, undefined));
+  assert.ok(Option.isSome(member));
+  assert.deepEqual(
+    member.value.turns.map((turn) => turn.parts.at(-1)),
+    [{ type: PLAN_WORK_PART.TEXT, text: "Invites live in one file." }],
+  );
+  assert.deepEqual(
+    (member.value.code ?? []).map((each) => each.code),
+    [shown],
+  );
+  assert.deepEqual(member, opener);
 });
 
 test("a plan of more turns than a page reads its newest first, then each older page before the oldest turn read, every code coming with the newest", async () => {

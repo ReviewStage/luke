@@ -2248,7 +2248,13 @@ delegation, so no sandbox opens there either.
 ## The coding-agent routes
 
 `server/coding-agents-app.ts` is the group the desktop starts, lists,
-reads, messages, re-models, and stops a plan's agents through; `packages/hosted/src/coding-agent-wire.ts`
+reads, messages, re-models, and stops a plan's agents through. An agent
+belongs to its plan's workspace: every route reads it through the plan's
+membership gate (`coding-agent-store.ts`), so any member lists, reads,
+messages, renames, re-models, and stops an agent a teammate started, while
+its conversation stays its starter's, the row's `userId`, under which its
+turns and lines are read and written, and its Start's retry key stays the
+starter's own; `packages/hosted/src/coding-agent-wire.ts`
 declares every request and answer, and `service-paths.ts` the addresses.
 `POST /api/plans/{id}/agents` takes `{ idempotencyKey, model?, effort?, task? }`:
 both of the choice or neither, the account's default (`/api/account/preferences`)
@@ -2331,15 +2337,16 @@ of them leaves a row behind.
 transcript the same way, under the agent and eve's id for the `delegate`
 call that started it, which the call's tool part carries as `toolCallId`:
 the child conversation is `childConversationId` of the two, and only a
-delegation recorded under the account's agent answers, so another account's
-agent, or a call that made no delegation, is `not-found`.
+delegation recorded under an agent the account reaches answers, so an agent
+of a workspace the account is not in, or a call that made no delegation, is
+`not-found`.
 `PATCH /api/agents/{id}` takes `{ model, effort }`, checked against the
 catalog exactly as a Start checks its own, and writes the choice on the
 agent's row (`updateCodingAgentChoice`), answering the agent's summary with
 it; the coder agent reads the row at every step (`coder/agent.ts`'s
 `defineDynamic`, through `coder-host/host.ts`'s `model`), so a change
 mid-turn is the next step's and an idle agent's next turn takes it. It
-refuses another account's agent as not found and a model or effort the
+refuses an agent of a workspace the account is not in as not found and a model or effort the
 catalog does not offer as `invalid-request`, and leaves the account's
 default as it was.
 `POST /api/agents/{id}/stop` is eve's cancel of the turn under way, named by

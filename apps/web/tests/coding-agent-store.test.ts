@@ -14,10 +14,11 @@ import {
   readCodingAgentContext,
   readCodingAgentOfConversation,
   recordCodingAgentPublished,
+  renameCodingAgent,
   updateCodingAgentChoice,
   updateCodingAgentServers,
 } from "@sidecar/database/models/coding-agent-store";
-import { deletePlan } from "@sidecar/database/models/plan-store";
+import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
 import { conversations } from "@sidecar/database/schemas/storage";
@@ -33,15 +34,16 @@ import { INTEGRATION_PROVIDER } from "@sidecar/hosted/integration-wire";
 import { count, eq, sql } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { startPlan } from "./support/workspaces";
+import { joinWorkspace, startPlan } from "./support/workspaces";
 
 /**
- * The coding agents of an account's plans, through the store's public
+ * The coding agents of a workspace's plans, through the store's public
  * functions against a real dialect. What is held to is the shape a Start
  * relies on: one Start is one agent with one `coding_agent` conversation,
  * a retry carrying the same key is that agent and not a second, the tabs
- * read a plan's agents in the order they were started, and nothing of a
- * plan another account owns is read or written.
+ * read a plan's agents in the order they were started, every member of the
+ * plan's workspace reads and changes an agent whichever of them started it,
+ * and nothing of a plan of a workspace the account is not in is read or written.
  *
  * Synthetic accounts, plans, repositories, and keys throughout.
  */
@@ -343,6 +345,67 @@ it.layer(getTestDB())("the coding agents of an account's plans", (it) => {
       assert.deepEqual(yield* listCodingAgents(other, planId), []);
       assert.deepEqual(yield* readCodingAgent(other, agent.id), Option.none());
     }),
+  );
+
+  it.effect(
+    "an agent one member started is listed, read, renamed, and re-chosen by another, a non-member reaches none, and a retry key is the starter's own",
+    () =>
+      Effect.gen(function* () {
+        const starter = yield* openUser;
+        const teammate = yield* openUser;
+        const stranger = yield* openUser;
+        const plan = yield* startPlan(starter, { name: "Teammate invitations" });
+        yield* joinWorkspace(plan.workspaceId, teammate);
+        const asked = start(plan.id);
+        const agent = started(yield* createCodingAgent(starter, asked));
+        assert.equal(agent.userId, starter);
+
+        assert.deepEqual(yield* listCodingAgents(teammate, plan.id), [agent]);
+        assert.deepEqual(yield* listPublishedCodingAgents(teammate, [plan.id]), [
+          { agent, published: null },
+        ]);
+        assert.deepEqual(yield* readCodingAgent(teammate, agent.id), Option.some(agent));
+        assert.deepEqual(
+          yield* readCodingAgentOfConversation(teammate, agent.conversationId),
+          Option.some(agent),
+        );
+        const renamed = yield* renameCodingAgent(teammate, agent.id, "Invite emails");
+        assert.equal(Option.getOrUndefined(renamed)?.title, "Invite emails");
+        const chosen = yield* updateCodingAgentChoice(teammate, agent.id, {
+          model: "openai/gpt-5.5",
+          effort: "low",
+        });
+        assert.equal(Option.getOrUndefined(chosen)?.model, "openai/gpt-5.5");
+        assert.equal(
+          Option.getOrUndefined(yield* readCodingAgent(starter, agent.id))?.title,
+          "Invite emails",
+        );
+
+        // The teammate's Start under the starter's key is a Start of their own, and the starter's retry still finds theirs.
+        const theirs = started(
+          yield* createCodingAgent(
+            teammate,
+            start(plan.id, { idempotencyKey: asked.idempotencyKey }),
+          ),
+        );
+        assert.notEqual(theirs.id, agent.id);
+        assert.equal(theirs.userId, teammate);
+        assert.equal(found(yield* createCodingAgent(starter, asked)).id, agent.id);
+
+        assert.deepEqual(yield* listCodingAgents(stranger, plan.id), []);
+        assert.deepEqual(yield* listPublishedCodingAgents(stranger, [plan.id]), []);
+        assert.deepEqual(yield* readCodingAgent(stranger, agent.id), Option.none());
+        assert.deepEqual(
+          yield* readCodingAgentOfConversation(stranger, agent.conversationId),
+          Option.none(),
+        );
+        assert.deepEqual(yield* renameCodingAgent(stranger, agent.id, "Taken"), Option.none());
+        assert.deepEqual(
+          yield* updateCodingAgentChoice(stranger, agent.id, { model: "x/y", effort: "low" }),
+          Option.none(),
+        );
+        assert.deepEqual(yield* createCodingAgent(stranger, start(plan.id)), Option.none());
+      }),
   );
 
   it.effect("a plan that does not exist starts nothing", () =>
