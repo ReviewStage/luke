@@ -38,8 +38,7 @@ window.lukeFileTree = {
   mount: (_host, props) => {
     tree.props = props;
     return {
-      reveal: (path, options) =>
-        tree.reveals.push(`${path}${options.folder ? "/" : ""}${options.focus ? " focused" : ""}`),
+      reveal: (path, options) => tree.reveals.push(`${path}${options.focus ? " focused" : ""}`),
       search: (query) => tree.narrowed.push(`search "${query}"`),
       only: (paths) => tree.narrowed.push(`only ${paths?.join(", ") ?? "all"}`),
       within: (entries) =>
@@ -48,20 +47,6 @@ window.lukeFileTree = {
         ),
       unmount: () => undefined,
     };
-  },
-  // A crumb's list as buttons, one an entry, the current one marked, standing in for Pierre's rows.
-  list: (host, props) => {
-    host.replaceChildren(
-      ...props.entries.map((entry) => {
-        const row = document.createElement("button");
-        row.type = "button";
-        row.textContent = `${entry.name}${entry.folder ? "/" : ""}`;
-        if (entry.name === props.current) row.setAttribute("aria-current", "true");
-        row.addEventListener("click", (event) => props.onChoose(entry, event.metaKey));
-        return row;
-      }),
-    );
-    return () => host.replaceChildren();
   },
   fileIcon: () => ({ symbol: "file-tree-builtin-default", type: "default" }),
 };
@@ -272,7 +257,7 @@ test("one bar spans the file and its tree: Back and Forward, the path, then GitH
   );
 });
 
-test("each crumb lists the folder it stands in in rows the tree draws, itself marked, the repository the root; the chevrons between are no controls; a file chosen is browsed to, in a tab of its own where ⌘ is held, and a folder revealed in the tree; Escape hands the keyboard back to the crumb; a folder is listed once however often it is asked", async () => {
+test("each crumb hangs the tree over the folder it stands in, through the view's listings, the tab's file revealed and taking the keyboard; the chevrons between are no controls; a file the tree opens is browsed to from the repository's root, and takes the tree down", async () => {
   const view = mounted();
   await view.draw("apps/web/README.md");
   assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "README.md"]);
@@ -283,44 +268,23 @@ test("each crumb lists the folder it stands in in rows the tree draws, itself ma
         separator.getAttribute("aria-hidden") === "true" && !separator.querySelector("button"),
     ),
   );
+  await view.press(view.button("Show files"));
+  const pane = tree.props;
 
-  const crumb = (name: string) =>
-    [...view.container.querySelectorAll(".file-breadcrumb")].find(
-      (each) => each.textContent === name,
-    );
-  const items = () => [...document.querySelectorAll(".file-crumb-list button")];
-  await view.press(crumb("README.md"));
-  assert.equal(crumb("README.md")?.getAttribute("aria-expanded"), "true");
-  assert.deepEqual(
-    items().map(
-      (item) =>
-        `${item.textContent}${item.getAttribute("aria-current") === "true" ? " (current)" : ""}`,
-    ),
-    ["server/", "README.md (current)", "package.json", "lib/"],
+  await view.press(view.container.querySelectorAll(".file-breadcrumb")[3]);
+  const crumbTree = tree.props;
+  assert.ok(crumbTree !== undefined && crumbTree !== pane, "the crumb mounted a tree of its own");
+  assert.equal(tree.reveals.at(-1), "README.md focused");
+  assert.deepEqual(await pane?.readFolder("apps/web"), await crumbTree.readFolder(""));
+  assert.equal(
+    view.listed.filter((path) => path === "apps/web").length,
+    1,
+    "a folder is listed once for the pane and the crumb alike",
   );
-  await act(async () => {
-    items()[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, metaKey: true }));
-  });
-  assert.equal(document.querySelector(".file-crumb-list"), null, "a choice closes the list");
-  await view.press(crumb("README.md"));
-  await view.press(items()[2]);
-  assert.deepEqual(view.browsed, ["apps/web/package.json in a new tab", "apps/web/package.json"]);
-  assert.deepEqual(crumbsOf(view.container), [REPOSITORY, "apps", "web", "package.json"]);
 
-  await view.press(crumb("package.json"));
-  act(() => {
-    document
-      .querySelector(".file-crumb-list button")
-      ?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  });
-  assert.equal(document.querySelector(".file-crumb-list"), null);
-  assert.equal(document.activeElement, crumb("package.json"));
-
-  await view.press(crumb("package.json"));
-  await view.press(items()[3]);
-  assert.ok(view.container.querySelector(".file-tree-pane"), "the folder opened the tree");
-  assert.ok(tree.reveals.includes("apps/web/lib/ focused"));
-  assert.equal(view.listed.filter((path) => path === "apps/web").length, 1);
+  act(() => crumbTree.onOpen("package.json", true));
+  assert.equal(document.querySelector(".file-crumb-tree"), null, "a file opened takes it down");
+  assert.deepEqual(view.browsed, ["apps/web/package.json in a new tab"]);
 });
 
 test("Back and Forward walk the files this tab showed, each dimmed while its way holds none", async () => {
@@ -417,7 +381,7 @@ test("the tree hears a folder in the File tab's words, a refusal saying whether 
   );
 });
 
-test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F in the pane takes the caret there; the filter narrows to the files Luke showed of this repository; a breadcrumb's folder lets go of both", async () => {
+test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F in the pane takes the caret there; the filter narrows to the files Luke showed of this repository", async () => {
   const view = mounted([
     showing(FILE, REPOSITORY),
     showing("README.md", "acme/other"),
@@ -457,21 +421,6 @@ test("the tree's search hands the tree what is typed, Escape clears it, and ⌘F
   });
   assert.equal(document.activeElement, field);
   assert.equal(view.container.querySelector(".find-bar"), null, "the tab's find bar stays shut");
-
-  type("web");
-  await view.press(view.container.querySelectorAll(".file-breadcrumb")[3]);
-  await view.press(document.querySelectorAll(".file-crumb-list button")[3]);
-  assert.equal(field.value, "");
-  assert.equal(filter?.getAttribute("aria-pressed"), "false");
-  assert.equal(
-    tree.narrowed.findLast((asked) => asked.startsWith("search")),
-    'search ""',
-  );
-  assert.equal(
-    tree.narrowed.findLast((asked) => asked.startsWith("only")),
-    "only all",
-  );
-  assert.equal(tree.reveals.at(-1), "apps/web/lib/ focused");
 });
 
 test("the filter offers nothing while Luke has shown no file of the repository", async () => {
@@ -698,23 +647,6 @@ test("the lines Luke showed, drawn where the file cannot be, follow the File tab
   await chooseInMenu(view, "Word wrap");
 });
 
-test("a later press on another crumb stands in for one still listing, so only its list opens", async () => {
-  const view = mounted();
-  await view.draw(FILE);
-  const crumbs = [...view.container.querySelectorAll<HTMLButtonElement>(".file-breadcrumb")];
-  await act(async () => {
-    crumbs[1]?.click();
-    crumbs[4]?.click();
-    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
-  });
-  assert.deepEqual(
-    [...document.querySelectorAll(".file-crumb-list")].map((list) =>
-      list.getAttribute("aria-label"),
-    ),
-    ["apps/web/server"],
-  );
-});
-
 it.effect(
   "the ⋯ copies and saves the file as it holds it, read raw, its long lines uncut, and a file the service will not carry whole is refused with a word on where to read it",
   () =>
@@ -763,39 +695,3 @@ it.effect(
       assert.match(document.body.textContent ?? "", /too large to copy whole\. Open it on GitHub/);
     }),
 );
-
-test("a crumb's list stands within the window, its rows scrolling inside; over a folder not listed it still takes Escape; and a second press on a crumb still listing lets it go", async () => {
-  const view = mounted();
-  await view.draw(FILE);
-  const crumb = (name: string) =>
-    [...view.container.querySelectorAll<HTMLButtonElement>(".file-breadcrumb")].find(
-      (each) => each.textContent === name,
-    );
-  const list = () => document.querySelector<HTMLElement>(".file-crumb-list");
-
-  vi.stubGlobal("innerHeight", 60);
-  await view.press(crumb("server"));
-  assert.equal(list()?.style.height, "48px", "the room under the crumb, less the window's margin");
-  vi.stubGlobal("innerHeight", 768);
-  await view.press(crumb("server"));
-  assert.equal(list(), null);
-
-  await view.press(crumb("apps"));
-  assert.match(list()?.textContent ?? "", /Could not list this folder/);
-  act(() => {
-    document.activeElement?.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
-    );
-  });
-  assert.equal(list(), null);
-  assert.equal(document.activeElement, crumb("apps"));
-
-  const server = crumb("server");
-  assert.ok(server);
-  await act(async () => {
-    server.click();
-    server.click();
-    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
-  });
-  assert.equal(list(), null, "the second press let the list go before it opened");
-});

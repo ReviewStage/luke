@@ -35,6 +35,7 @@ import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
 import { agentGlyphState, agentStateWords } from "../planning/coding-agent-model";
 import { snippetOf } from "../planning/file-tab-model";
+import { FileTypeIcon } from "../planning/file-type-icon";
 import { FileView } from "../planning/file-view";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
@@ -235,7 +236,9 @@ function kindRow(tab: FixedSidePanelTab): MenuRow {
  * showed on the plan, by name with its folder beside it. A subagent's row
  * wears the worker's glyph, and where the worker stands only where
  * `standing` asks: the "+" leaves that to its tab, beside it, and the
- * summary has no tab beside it to say it. Picking a row whose tab is open
+ * summary has no tab beside it to say it. A file's row wears its type's
+ * coloured icon there too, as the file tree draws it (`file-type-icon.tsx`),
+ * where the "+" keeps every file's one glyph. Picking a row whose tab is open
  * chooses that tab rather than opening another, as a browser's tab search
  * does, so no row says it is open; a file not open opens on the newest
  * snippet of it. The plan's coding agents are opened from the plan's
@@ -275,7 +278,7 @@ export function panelEntries(input: {
       row: {
         id: String(at),
         label: name,
-        icon: <FileCodeIcon />,
+        icon: standing ? <FileTypeIcon name={name} /> : <FileCodeIcon />,
         detail: ref.path.slice(0, -name.length - 1) || undefined,
         terms: [ref.path],
         section: ADD_SECTION.FILES,

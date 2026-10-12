@@ -596,9 +596,9 @@ button.code-card-path:hover {
   height: 12px;
 }
 
-/* A crumb's list, hung under the crumb over the window as a menu is, its
-   rows the tree's own (file-breadcrumbs.tsx). */
-.file-crumb-list {
+/* A crumb's tree, hung under the crumb over the window as a menu is, and
+   dropping in as one once it is placed (file-breadcrumbs.tsx). */
+.file-crumb-tree {
   position: fixed;
   z-index: var(--z-menu);
   display: flex;
@@ -612,20 +612,17 @@ button.code-card-path:hover {
   -webkit-app-region: no-drag;
 }
 
-.file-crumb-list[data-placed="false"] {
+.file-crumb-tree[data-placed="false"] {
   visibility: hidden;
 }
 
-/* The list holds the keyboard itself only over a folder with no row to take it, which shows no ring. */
-.file-crumb-list:focus {
-  outline: none;
+.file-crumb-tree[data-placed="true"] {
+  animation: menu-enter var(--duration-quick) var(--motion-exit) both;
 }
 
-.file-crumb-tree {
-  display: flex;
-  min-height: 0;
-  flex: 1;
-  flex-direction: column;
+/* The box holds the keyboard itself only until the tree takes it, or where the tree has no row to, which shows no ring. */
+.file-crumb-tree:focus {
+  outline: none;
 }
 
 .file-crumb-notice {
@@ -696,9 +693,8 @@ button.code-card-path:hover {
 
 /* Pierre's tree draws in a shadow root of its own, which inherits these:
    the panel's words, its fills, and its focus ring, so the tree reads as
-   the panel's own list. */
-.file-tree-host,
-.file-crumb-tree {
+   the panel's own list, beside a File tab and under a crumb alike. */
+.file-tree-host {
   --trees-bg-override: transparent;
   --trees-bg-muted-override: var(--raised);
   --trees-fg-override: var(--text-primary);
@@ -718,8 +714,7 @@ button.code-card-path:hover {
 }
 
 .file-tree-host > *,
-.file-tree-view > *,
-.file-crumb-tree > * {
+.file-tree-view > * {
   min-height: 0;
   flex: 1;
 }

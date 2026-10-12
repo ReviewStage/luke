@@ -5,16 +5,18 @@ import { onTestFinished, test } from "vitest";
 import type { FolderListing } from "./contract";
 import "./index";
 
-/** The tree bundle mounted on a host of its own over the listings `answer` gives, every file opened written down. */
+/** The tree bundle mounted on a host of its own over the listings `answer` gives, every file opened and every count of its rows written down. */
 function mounted(answer: (path: string) => FolderListing) {
   const module = window.lukeFileTree;
   assert.ok(module, "the bundle sets its global");
   const host = document.createElement("div");
   document.body.append(host);
   const opened: string[] = [];
+  const rows: number[] = [];
   const handle = module.mount(host, {
     readFolder: (path) => Promise.resolve(answer(path)),
     onOpen: (path, newTab) => opened.push(newTab ? `${path} in a new tab` : path),
+    onRows: (count) => rows.push(count),
   });
   onTestFinished(() => {
     handle.unmount();
@@ -31,7 +33,7 @@ function mounted(answer: (path: string) => FolderListing) {
     assert.ok(found, `no row for ${path}`);
     return found;
   };
-  return { host, handle, opened, settled, row };
+  return { host, handle, opened, rows, settled, row };
 }
 
 const ROOT: FolderListing = {
@@ -85,7 +87,7 @@ test("a file revealed before the root is listed is marked once the tree is drawn
   const tree = mounted((path) =>
     path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }], truncated: false },
   );
-  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  tree.handle.reveal("src/index.ts", { focus: false });
   await tree.settled();
 
   assert.equal(tree.row("src/index.ts").getAttribute("aria-selected"), "true");
@@ -95,9 +97,9 @@ test("a folder listed short of whole says so under the tree, once", async () => 
   const tree = mounted((path) =>
     path === "" ? ROOT : { entries: [{ name: "index.ts", folder: false }], truncated: true },
   );
-  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  tree.handle.reveal("src/index.ts", { focus: false });
   await tree.settled();
-  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  tree.handle.reveal("src/index.ts", { focus: false });
   await tree.settled();
 
   assert.equal(
@@ -137,7 +139,7 @@ function drawnRows(host: HTMLElement): readonly string[] {
 
 test("each file is drawn with its type's icon in that type's colour", async () => {
   const tree = mounted(repository);
-  tree.handle.reveal("src/index.ts", { folder: false, focus: false });
+  tree.handle.reveal("src/index.ts", { focus: false });
   await tree.settled();
 
   const shadow = tree.host.querySelector("file-tree-container")?.shadowRoot;
@@ -153,7 +155,7 @@ test("each file is drawn with its type's icon in that type's colour", async () =
 
 test("a search narrows the rows to the paths holding it, says when none do, and an empty one shows every row again", async () => {
   const tree = mounted(repository);
-  tree.handle.reveal("src/app/main.ts", { folder: false, focus: false });
+  tree.handle.reveal("src/app/main.ts", { focus: false });
   await tree.settled();
 
   tree.handle.search("MAIN");
@@ -184,7 +186,7 @@ test("a search narrows the rows to the paths holding it, says when none do, and 
 
 test("the filter shows only the files given, every folder open, the tab's file marked and opened on a press, until it is let go", async () => {
   const tree = mounted(repository);
-  tree.handle.reveal("README.md", { folder: false, focus: false });
+  tree.handle.reveal("README.md", { focus: false });
   tree.handle.only(["src/app/main.ts", "README.md"]);
   await tree.settled();
 
@@ -222,7 +224,7 @@ test("a search typed before the folders are listed shows the matches once they l
 
 test("handed the whole repository, a search finds a file in a folder never opened, which opens on a press, and letting go of it shows the folders as they were", async () => {
   const tree = mounted(repository);
-  tree.handle.reveal("README.md", { folder: false, focus: false });
+  tree.handle.reveal("README.md", { focus: false });
   await tree.settled();
   tree.handle.within([
     { name: "src", folder: true },
@@ -247,39 +249,18 @@ test("handed the whole repository, a search finds a file in a folder never opene
   assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
 });
 
-test("a crumb's list draws one folder's entries as the tree's own rows, folders first and coloured, none opening, the current one marked; a press or Return chooses one, ⌘ in a tab of its own", async () => {
-  const module = window.lukeFileTree;
-  assert.ok(module, "the bundle sets its global");
-  const host = document.createElement("div");
-  document.body.append(host);
-  const chosen: string[] = [];
-  const unmount = module.list(host, {
-    entries: [
-      { name: "README.md", folder: false },
-      { name: "src", folder: true },
-      { name: "index.ts", folder: false },
-    ],
-    current: "index.ts",
-    onChoose: (entry, newTab) =>
-      chosen.push(`${entry.name}${entry.folder ? "/" : ""}${newTab ? " in a new tab" : ""}`),
-  });
-  onTestFinished(() => {
-    unmount();
-    host.remove();
-  });
-  for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+test("the tree counts out the rows it shows as a folder is listed, opened, and closed, which a crumb's tree stands as tall as", async () => {
+  const tree = mounted(repository);
+  await tree.settled();
+  assert.equal(tree.rows.at(-1), 2);
 
-  const shadow = host.querySelector("file-tree-container")?.shadowRoot;
-  assert.ok(shadow?.querySelector("[data-file-tree-colored-icons='true']"));
-  const rows = [...(shadow?.querySelectorAll<HTMLElement>("[data-item-path]") ?? [])];
-  assert.deepEqual(
-    rows.map((row) => row.dataset.itemPath),
-    ["src/", "index.ts", "README.md"],
-  );
-  assert.equal(rows[1]?.getAttribute("aria-selected"), "true");
+  tree.row("src/").dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await tree.settled();
+  assert.deepEqual(drawnRows(tree.host), ["src/", "src/app/", "src/index.ts", "README.md"]);
+  assert.equal(tree.rows.at(-1), 4);
 
-  host.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  rows[0]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
-  rows[2]?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, metaKey: true }));
-  assert.deepEqual(chosen, ["index.ts", "src/", "README.md in a new tab"]);
+  tree.row("src/").dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+  await tree.settled();
+  assert.equal(tree.rows.at(-1), 2);
+  assert.deepEqual(tree.opened, [], "a folder pressed opens no file");
 });

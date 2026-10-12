@@ -4,7 +4,6 @@ import type {
   FileTreeModule,
   FileTreeProps,
   FileTypeIcon,
-  FolderListProps,
   ReadFolder,
   RevealOptions,
 } from "./contract";
@@ -45,9 +44,9 @@ import {
  * open. Each stands in the repository's place while it is asked for, so the
  * folders opened there are as they were when it is let go.
  *
- * A breadcrumb's list of one folder is drawn by Pierre too (`list`), so it
- * reads as the tree does, row for row: a tree of the folder's entries alone,
- * none of its folders opening, the crumb's own entry marked.
+ * A breadcrumb's tree is this same tree, mounted under the crumb over the
+ * folder the crumb stands in, with its rows counted out as they change so
+ * its box stands as tall as they are.
  *
  * The bundle also names a file's type icon by its name alone, for a file
  * attached to a message, through Pierre's own resolver over the same set,
@@ -204,8 +203,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let query = "";
   let marked: string | undefined;
   let taken = false;
-  // The reveals asked before the tree is drawn: the tab's file, and a folder a breadcrumb asked for.
-  const waiting = new Map<boolean, { path: string; options: RevealOptions }>();
+  // The reveal asked before the tree is drawn.
+  let waiting: { path: string; options: RevealOptions } | undefined;
   const empty = notice(NO_MATCH, undefined);
   // Note that the line saying a folder was cut short is added once, under the tree.
   const cut = notice(CUT_SHORT, undefined);
@@ -248,7 +247,9 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     host.replaceChildren(browse.frame, empty);
     // Note that a search stands over folders still being listed, so whether
     // it matches anything is asked again as each listing lands.
-    unheard = browse.tree.subscribe(() => {
+    const tree = browse.tree;
+    unheard = tree.subscribe(() => {
+      props.onRows?.(tree.getVisibleCount());
       if (query.trim() !== "") present();
     });
     browser = browseFolders(
@@ -257,10 +258,8 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
         if (!cut.isConnected) host.append(cut);
       }),
     );
-    for (const { path, options } of waiting.values()) {
-      browser.reveal(path, options).catch(() => undefined);
-    }
-    waiting.clear();
+    if (waiting !== undefined) browser.reveal(waiting.path, waiting.options).catch(() => undefined);
+    waiting = undefined;
     present();
   };
 
@@ -291,12 +290,9 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
 
   return {
     reveal: (path, options) => {
-      if (!options.folder) {
-        marked = path;
-        for (const view of [shown, whole])
-          if (view !== undefined) markAlone(view.tree, path, false);
-      }
-      if (browser === undefined) waiting.set(options.folder, { path, options });
+      marked = path;
+      for (const view of [shown, whole]) if (view !== undefined) markAlone(view.tree, path, false);
+      if (browser === undefined) waiting = { path, options };
       else browser.reveal(path, options).catch(() => undefined);
     },
     search: (asked) => {
@@ -328,31 +324,4 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   };
 }
 
-/** One folder's entries as rows of the tree, the current one marked and taking the keyboard. */
-function list(host: HTMLElement, props: FolderListProps): () => void {
-  const byPath = new Map(props.entries.map((entry) => [treePath(entry.name, entry.folder), entry]));
-  const view = viewOf([...byPath.keys()], "closed");
-  host.replaceChildren(view.frame);
-  const current = props.entries.find((entry) => entry.name === props.current);
-  if (current === undefined) view.tree.focusFirstItem();
-  else markAlone(view.tree, treePath(current.name, current.folder), true);
-  const choose = (path: string | null | undefined, event: MouseEvent | KeyboardEvent) => {
-    const entry = path === null || path === undefined ? undefined : byPath.get(path);
-    if (entry === undefined) return;
-    event.preventDefault();
-    props.onChoose(entry, event.metaKey || event.ctrlKey);
-  };
-  const onClick = (event: MouseEvent) => choose(pressedRow(event)?.dataset.itemPath, event);
-  const onKey = (event: KeyboardEvent) => {
-    if (event.key === "Enter") choose(view.tree.getFocusedPath(), event);
-  };
-  host.addEventListener("click", onClick);
-  host.addEventListener("keydown", onKey);
-  return () => {
-    host.removeEventListener("click", onClick);
-    host.removeEventListener("keydown", onKey);
-    view.tree.cleanUp();
-  };
-}
-
-window.lukeFileTree = { mount, list, fileIcon } satisfies FileTreeModule;
+window.lukeFileTree = { mount, fileIcon } satisfies FileTreeModule;

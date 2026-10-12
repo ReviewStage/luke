@@ -17,9 +17,11 @@ import type { AddEntry } from "./strip-tabs";
  * under quiet headings: the panel's kinds the plan has used, its coding
  * agents, its subagents, and the files Luke showed on it. An agent or a
  * subagent wears where it stands on its glyph, as its tab does, since no
- * tab stands beside the row to say it. A row opens what it names exactly as
- * its "+" row does: a kind, a subagent, or a file opens the side panel on
- * its tab, and an agent chooses its tab in the column.
+ * tab stands beside the row to say it, and a file is drawn in a row the
+ * file tree's own: its type's coloured icon, height, and type size. A row
+ * opens what it names exactly as its "+" row does: a kind, a subagent, or a
+ * file opens the side panel on its tab, and an agent chooses its tab in the
+ * column.
  *
  * It is always drawn, expanded or collapsed, and never hidden. Expanded and
  * where the column has room to keep the document at its measure beside it,
@@ -317,7 +319,11 @@ function SummaryList({
       {sections.map(({ heading, entries }) => (
         <div key={heading} className="plan-summary-section">
           <p className="plan-summary-heading">{heading}</p>
-          <ul className="plan-summary-rows" aria-label={heading}>
+          <ul
+            className="plan-summary-rows"
+            aria-label={heading}
+            data-tree={String(heading === ADD_SECTION.FILES)}
+          >
             {entries.map((entry) => (
               <SummaryRow
                 key={entry.row.id}

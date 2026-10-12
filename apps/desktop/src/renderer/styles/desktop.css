@@ -2923,6 +2923,23 @@ body,
   font-size: 12px;
 }
 
+/* The files Luke showed, in rows the file tree's own (`planning.css`): its
+   compact row's height, corner, and type size, and its 16px type icons. */
+.plan-summary-rows[data-tree="true"] {
+  gap: 0;
+}
+
+.plan-summary-rows[data-tree="true"] .plan-summary-row {
+  height: 24px;
+  border-radius: 5px;
+  font-size: 12.5px;
+}
+
+.plan-summary-rows[data-tree="true"] .plan-summary-glyph svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Its width is the developer's, set inline. The document keeps room to be
    read beside it while the window allows, but never at the cost of the
    panel's own least width. The room full screen keeps beside the document is

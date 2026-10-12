@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { codingAgentsControl, plansControl } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
+import "../file-tree/index";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../planning/planning-model";
 import { useMainTabs } from "../planning/use-main-tabs";
 import { NO_LOOKS } from "../planning/use-plan-looks";
@@ -606,4 +607,23 @@ test("two files of one name are told apart by their folders, as their picker row
     (row) => row.querySelector(".plan-summary-detail")?.textContent,
   );
   assert.deepEqual(files, ["apps/web", "apps/desktop"]);
+});
+
+test("a file's row draws its type's icon in the file tree's own colours, as the tree draws the file", async () => {
+  const shown = (path: string, at: number) => ({
+    callId: `show-${at}`,
+    turnId: "turn-1",
+    shownAt: at,
+    code: { ...CODE, ref: { path, startLine: 1, endLine: 1 } },
+  });
+  const page = mount(false, [shown("src/invite.ts", 1), shown("docs/README.md", 2)]);
+  await act(async () => {
+    for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
+  });
+
+  const icons = [...summaryOf(page).querySelectorAll('ul[aria-label="Files"] li')].map((row) =>
+    row.querySelector(".file-type-icon")?.getAttribute("data-file-type"),
+  );
+  assert.deepEqual(icons, ["typescript", "markdown"]);
+  assert.ok(document.querySelector("svg symbol"), "the icons draw from the tree's sprite sheet");
 });
