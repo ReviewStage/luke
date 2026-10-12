@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import {
   PLAN_CALL_FAILURE,
@@ -10,7 +12,7 @@ import {
 } from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, onTestFinished, test, vi } from "vitest";
 import { FileTab } from "./file-tab";
 import { snippetOf } from "./file-tab-model";
 import type { OpenFile } from "./use-side-panel";
@@ -137,6 +139,33 @@ test("a file opens on the window holding its lit lines, and the windows above an
   assert.equal(joined[0], "1");
   assert.equal(joined.at(-1), "1200");
   assert.equal(tab.container.querySelectorAll(".file-tab-edge").length, 0);
+});
+
+test("a File tab spans the side panel: neither its lines nor its heading pad in to the code column the Code feed keeps to", async () => {
+  const sheet = document.createElement("style");
+  sheet.textContent = readFileSync(
+    join(import.meta.dirname, "..", "styles", "desktop.css"),
+    "utf8",
+  );
+  document.head.append(sheet);
+  onTestFinished(() => sheet.remove());
+  const tab = mounted(numberedFile(40));
+  tab.container.className = "side-panel-content";
+
+  await tab.draw({ path: "src/invite.ts", range: undefined, opened: 1 });
+
+  const lines = tab.container.querySelector(".file-tab-lines");
+  const heading = tab.container.querySelector(".file-tab-header");
+  assert.ok(lines instanceof HTMLElement && heading instanceof HTMLElement);
+  // Note that jsdom leaves a custom property unresolved, so a padding reads as the tokens it is made of.
+  for (const padding of [
+    getComputedStyle(lines).paddingLeft,
+    getComputedStyle(lines).paddingRight,
+    getComputedStyle(heading).paddingLeft,
+    getComputedStyle(heading).paddingRight,
+  ]) {
+    assert.doesNotMatch(padding, /reading-room|file-room/u);
+  }
 });
 
 test("opening the file again on lines not drawn reads their window and lights them, and on lines drawn reads nothing", async () => {
