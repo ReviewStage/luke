@@ -147,30 +147,20 @@ function DictationClock({ startedAt }: { startedAt: number | undefined }): React
 
 /** The card's foot while a dictation stands: recording, then transcribing. */
 export function DictationStrip({ dictation }: { dictation: DictationControl }): React.JSX.Element {
-  if (dictation.phase === DICTATION_PHASE.TRANSCRIBING) {
-    return (
-      <div className="dictation-strip" data-phase={dictation.phase}>
+  const transcribing = dictation.phase === DICTATION_PHASE.TRANSCRIBING;
+  return (
+    <div className="dictation-strip" data-phase={dictation.phase}>
+      {transcribing ? (
         <span className="dictation-transcribing">
           <Spinner label={LABEL.TRANSCRIBING} />
           <span aria-hidden="true">Transcribing…</span>
         </span>
-        <Tooltip label={LABEL.CANCEL}>
-          <button
-            type="button"
-            className="icon-button dictation-cancel"
-            aria-label={LABEL.CANCEL}
-            onClick={dictation.cancel}
-          >
-            <CloseIcon />
-          </button>
-        </Tooltip>
-      </div>
-    );
-  }
-  return (
-    <div className="dictation-strip" data-phase={dictation.phase}>
-      <DictationWave analyser={dictation.analyser} />
-      <DictationClock startedAt={dictation.startedAt} />
+      ) : (
+        <>
+          <DictationWave analyser={dictation.analyser} />
+          <DictationClock startedAt={dictation.startedAt} />
+        </>
+      )}
       <Tooltip label={LABEL.CANCEL}>
         <button
           type="button"
@@ -182,18 +172,20 @@ export function DictationStrip({ dictation }: { dictation: DictationControl }): 
           <CloseIcon />
         </button>
       </Tooltip>
-      <Tooltip label={LABEL.FINISH}>
-        <button
-          type="button"
-          className="dictation-finish flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-secondary disabled:text-muted-foreground"
-          aria-label={LABEL.FINISH}
-          disabled={dictation.startedAt === undefined}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={dictation.finish}
-        >
-          <CheckIcon className="size-[15px]" />
-        </button>
-      </Tooltip>
+      {transcribing ? null : (
+        <Tooltip label={LABEL.FINISH}>
+          <button
+            type="button"
+            className="dictation-finish flex size-[30px] shrink-0 cursor-default items-center justify-center rounded-full bg-primary text-primary-foreground disabled:bg-secondary disabled:text-muted-foreground"
+            aria-label={LABEL.FINISH}
+            disabled={dictation.startedAt === undefined}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={dictation.finish}
+          >
+            <CheckIcon className="size-[15px]" />
+          </button>
+        </Tooltip>
+      )}
     </div>
   );
 }

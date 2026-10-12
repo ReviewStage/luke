@@ -132,11 +132,6 @@ const CHOOSE_REFUSALS = {
   ...DEFAULT_REFUSALS,
 } satisfies NamedRefusals;
 
-/** The refusal a dictated clip can answer with that the window words apart: a clip past the bounds. */
-const DICTATION_REFUSALS = {
-  [HOSTED_API_ERROR.REQUEST_TOO_LARGE]: CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG,
-} satisfies NamedRefusals;
-
 /** A response's body as JSON, or nothing where it is not JSON at all. */
 function jsonOf(response: Response): Effect.Effect<WireBoundaryInput> {
   return Effect.promise((): Promise<WireBoundaryInput> => response.json().catch(() => undefined));
@@ -277,7 +272,7 @@ export class HostedCodingAgentClient {
         path: HOSTED_SERVICE_PATH.DICTATION,
         body: JSON.stringify(admitted),
       }),
-      (answer) => readAnswer(answer, dictationAnswerSchema, DICTATION_REFUSALS),
+      (answer) => readAnswer(answer, dictationAnswerSchema, {}),
     );
   }
 

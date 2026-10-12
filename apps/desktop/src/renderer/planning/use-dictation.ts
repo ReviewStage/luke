@@ -1,5 +1,4 @@
 import { useAtomValue } from "@effect/atom-react";
-import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { DICTATION_AUDIO_TYPE, DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import { Duration, Effect } from "effect";
 import * as AsyncResult from "effect/unstable/reactivity/AsyncResult";
@@ -27,8 +26,7 @@ import { base64Of } from "./attached-files";
  * Cancelling, or a press elsewhere that unmounts the box, drops the clip
  * unsent. The recording stops itself a second short of the wire's two
  * minutes on a deadline of its own, kept on the renderer's runtime rather
- * than on the recorder's events, which a hidden page may hold back; a clip
- * that ran past the bound anyway is not sent. ✓ waits for the microphone
+ * than on the recorder's events, which a hidden page may hold back. ✓ waits for the microphone
  * to open, since until then there is nothing to send. Whatever fails says
  * why in the box's note and keeps nothing, the microphone let go with it.
  *
@@ -49,7 +47,6 @@ const DICTATION_NOTE = {
   MICROPHONE_DENIED:
     "Luke can't use the microphone. Allow it in System Settings › Privacy & Security › Microphone.",
   MICROPHONE_FAILED: "The microphone couldn't be opened.",
-  TOO_LONG: "That recording is too long to transcribe.",
   BOX_FULL: "The box is full, so the words couldn't go in.",
   NO_WORDS: "No words were heard.",
   FAILED: "The recording couldn't be transcribed. Try again.",
@@ -77,8 +74,6 @@ interface Recording {
   readonly context: AudioContext;
   readonly chunks: Blob[];
   readonly startedAt: number;
-  /** Whether the stop sends the clip; a cancel stops it unsent. */
-  keep: boolean;
 }
 
 export interface DictationControl {
@@ -159,19 +154,19 @@ export function useDictation(input: {
     box.setSelectionRange(caret, caret);
   });
 
+  /** Lets the standing dictation go unsent: a later stop, open, or answer finds its generation passed. */
+  const drop = () => {
+    generation.current += 1;
+    const standing = recording.current;
+    recording.current = undefined;
+    if (standing === undefined) return;
+    if (standing.recorder.state !== "inactive") standing.recorder.stop();
+    release(standing);
+  };
+
   // A box that goes away takes its recording with it, unsent.
-  useEffect(
-    () => () => {
-      generation.current += 1;
-      const standing = recording.current;
-      recording.current = undefined;
-      if (standing === undefined) return;
-      standing.keep = false;
-      if (standing.recorder.state !== "inactive") standing.recorder.stop();
-      release(standing);
-    },
-    [],
-  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the teardown reads the recording through refs.
+  useEffect(() => drop, []);
 
   const settle = (note: string | undefined) => {
     recording.current = undefined;
@@ -198,24 +193,16 @@ export function useDictation(input: {
   const transcribe = async (clip: Recording, durationMs: number) => {
     setPhase(DICTATION_PHASE.TRANSCRIBING);
     setAnalyser(undefined);
-    if (durationMs > DICTATION_BOUNDS.MAX_DURATION_MS) {
-      return fail(clip.generation, DICTATION_NOTE.TOO_LONG);
-    }
     const bytes = new Uint8Array(
       await new Blob(clip.chunks, { type: DICTATION_AUDIO_TYPE }).arrayBuffer(),
     );
-    if (bytes.byteLength > DICTATION_BOUNDS.MAX_AUDIO_BYTES)
-      return fail(clip.generation, DICTATION_NOTE.TOO_LONG);
     const answer = await act(ACT_KIND.DICTATION_TRANSCRIBE, {
       audio: base64Of(bytes),
       durationMs,
       keywords: latest.current.keywords,
     }).catch(() => undefined);
     if (generation.current !== clip.generation) return;
-    if (answer === undefined || "failure" in answer) {
-      const tooLong = answer?.failure === CODING_AGENT_CALL_FAILURE.MESSAGE_TOO_LONG;
-      return settle(tooLong ? DICTATION_NOTE.TOO_LONG : DICTATION_NOTE.FAILED);
-    }
+    if (answer === undefined || "failure" in answer) return settle(DICTATION_NOTE.FAILED);
     const words = answer.text.trim();
     if (words === "") return settle(DICTATION_NOTE.NO_WORDS);
     land(clip.caret, words);
@@ -225,26 +212,19 @@ export function useDictation(input: {
     // Note that ✓ before the microphone opens does nothing, because there is no clip yet and ✕ is the way out.
     const standing = recording.current;
     if (standing === undefined || standing.recorder.state === "inactive") return;
-    standing.keep = true;
     const durationMs = performance.now() - standing.startedAt;
     standing.recorder.onstop = () => {
       release(standing);
-      if (standing.keep)
-        transcribe(standing, durationMs).catch(() =>
-          fail(standing.generation, DICTATION_NOTE.FAILED),
-        );
+      if (generation.current !== standing.generation) return;
+      transcribe(standing, durationMs).catch(() =>
+        fail(standing.generation, DICTATION_NOTE.FAILED),
+      );
     };
     standing.recorder.stop();
   };
 
   const cancel = () => {
-    generation.current += 1;
-    const standing = recording.current;
-    if (standing !== undefined) {
-      standing.keep = false;
-      if (standing.recorder.state !== "inactive") standing.recorder.stop();
-      release(standing);
-    }
+    drop();
     settle(undefined);
     input.field.current?.focus();
   };
@@ -292,7 +272,6 @@ export function useDictation(input: {
         context,
         chunks: [],
         startedAt: performance.now(),
-        keep: false,
       };
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) standing.chunks.push(event.data);
