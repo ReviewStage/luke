@@ -192,15 +192,18 @@ test.each(surfaces(false))(
 );
 
 test.each(surfaces(false, DESCRIPTION))(
-  "on %s a command the model described is a row saying what it is for, in words, and the command is what it opens onto",
+  "on %s a command the model described is a row saying what it is for, in words, which it keeps open, and the command is what it opens onto",
   (_surface, element) => {
     const container = mounted(element);
 
-    const call = foldSaying(container, DESCRIPTION);
+    // Note that the row is found by its call, because the thought's preview opens on the same words.
+    const call = container.querySelector<HTMLDetailsElement>('details[data-call-id="call-1"]');
+    assert.ok(call);
     const line = call.querySelector("summary");
     assert.equal(line?.textContent, DESCRIPTION);
     assert.equal(line?.querySelector(".font-mono"), null);
     act(() => line?.click());
+    assert.equal(line?.textContent, DESCRIPTION);
     assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
     assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
   },
