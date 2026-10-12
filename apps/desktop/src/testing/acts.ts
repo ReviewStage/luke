@@ -135,6 +135,15 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.CODING_AGENTS_PULL_REQUEST,
     payload: { agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21" },
   },
+  [ACT_KIND.PROVIDER_KEYS_READ]: { kind: ACT_KIND.PROVIDER_KEYS_READ },
+  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
+    kind: ACT_KIND.PROVIDER_KEYS_SAVE,
+    payload: { provider: "anthropic", key: "sk-ant-api03-synthetic-000000000000000000" },
+  },
+  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
+    kind: ACT_KIND.PROVIDER_KEYS_REMOVE,
+    payload: { provider: "anthropic" },
+  },
   [ACT_KIND.CODING_AGENTS_CHOOSE]: {
     kind: ACT_KIND.CODING_AGENTS_CHOOSE,
     payload: {

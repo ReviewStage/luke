@@ -78,6 +78,7 @@ const RESULT_PAGE_WORD = {
   [SETTINGS_VIEW.APPEARANCE]: "Appearance",
   [SETTINGS_VIEW.SHORTCUTS]: "Keyboard shortcuts",
   [SETTINGS_VIEW.CODING_AGENTS]: "Coding agents",
+  [SETTINGS_VIEW.API_KEYS]: "API keys",
 } satisfies Record<SettingsView, string>;
 
 /** The pages in the order the front page offers them, which orders results. */
@@ -176,6 +177,23 @@ function fixedEntries(input: SettingsSearchInput): readonly SettingsSearchEntry[
           label: "Fast",
           page: SETTINGS_VIEW.CODING_AGENTS,
           haystack: ["Fast", "coding agent fast version speed quick model"],
+        }
+      : undefined,
+    // The account's own provider keys, which are the account's on the service: drawn once an account is signed in.
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.API_KEY_ANTHROPIC,
+          label: "Anthropic API key",
+          page: SETTINGS_VIEW.API_KEYS,
+          haystack: ["Anthropic API key", "byok own key claude billing provider credential"],
+        }
+      : undefined,
+    input.accountDrawn
+      ? {
+          id: SETTINGS_SEARCH_ROW.API_KEY_OPENAI,
+          label: "OpenAI API key",
+          page: SETTINGS_VIEW.API_KEYS,
+          haystack: ["OpenAI API key", "byok own key gpt codex billing provider credential"],
         }
       : undefined,
     // The window's own chords, fixed rather than chosen, listed below them.

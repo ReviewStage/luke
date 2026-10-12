@@ -25,6 +25,9 @@ import {
   type CodingAgentMessagesAnswerView,
   type CodingAgentModelsAnswer,
   type CodingAgentPullRequestAnswerView,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
 } from "./coding-agent-view.js";
 import {
   type CodingAgentMessageRequest,
@@ -45,6 +48,11 @@ import {
   modelChoiceSchema,
   modelsAnswerSchema,
 } from "./models-wire.js";
+import {
+  PROVIDER_KEY_QUERY,
+  providerKeySaveRequestSchema,
+  providerKeysAnswerSchema,
+} from "./provider-key-wire.js";
 import {
   agentMessagesPath,
   agentPath,
@@ -214,6 +222,49 @@ export class HostedCodingAgentClient {
         Effect.map(readAnswer(answer, codingAgentDefaultAnswerSchema, DEFAULT_REFUSALS), (read) =>
           "failure" in read ? read : { choice: read.codingAgent },
         ),
+    );
+  }
+
+  /** The account's own provider keys, as hints and statuses. */
+  readProviderKeys(): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    return Effect.flatMap(
+      this.#call.send({ method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    );
+  }
+
+  /**
+   * One key saved for its provider, answering the keys as they then stand
+   * and, where the service kept nothing, why; a key the service would
+   * refuse by shape is refused here without traveling at all.
+   */
+  saveProviderKey(
+    params: ProviderKeySaveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    const admitted = Result.getOrUndefined(readEither(providerKeySaveRequestSchema)(params));
+    if (admitted === undefined) return Effect.succeed(UNANSWERED);
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.PUT,
+        path: HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS,
+        body: JSON.stringify(admitted),
+      }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
+    );
+  }
+
+  /** One provider's key removed, answering the keys as they then stand. */
+  removeProviderKey(
+    params: ProviderKeyRemoveParams,
+  ): Effect.Effect<ProviderKeysAnswerView, never, HttpClient.HttpClient> {
+    // The provider rides in the query, since a DELETE carries no body.
+    const query = new URLSearchParams({ [PROVIDER_KEY_QUERY.PROVIDER]: params.provider });
+    return Effect.flatMap(
+      this.#call.send({
+        method: HTTP_METHOD.DELETE,
+        path: `${HOSTED_SERVICE_PATH.ACCOUNT_PROVIDER_KEYS}?${query}`,
+      }),
+      (answer) => readAnswer(answer, providerKeysAnswerSchema, {}),
     );
   }
 

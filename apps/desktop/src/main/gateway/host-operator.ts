@@ -37,6 +37,10 @@ import {
   codingAgentMessagesAnswerViewSchema,
   codingAgentModelsAnswerSchema,
   codingAgentPullRequestAnswerViewSchema,
+  type ProviderKeyRemoveParams,
+  type ProviderKeySaveParams,
+  type ProviderKeysAnswerView,
+  providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
 import {
@@ -215,6 +219,12 @@ export interface HostOperator {
   codingAgentPullRequest(
     params: CodingAgentPullRequestParams,
   ): Effect.Effect<CodingAgentPullRequestAnswerView>;
+  /** The account's own provider keys as hints and statuses; or why there are none. */
+  providerKeysRead(): Effect.Effect<ProviderKeysAnswerView>;
+  /** One provider key saved, carried once; the keys as they then stand, or why nothing was kept. */
+  providerKeySave(params: ProviderKeySaveParams): Effect.Effect<ProviderKeysAnswerView>;
+  /** One provider's key removed; the keys as they then stand. */
+  providerKeyRemove(params: ProviderKeyRemoveParams): Effect.Effect<ProviderKeysAnswerView>;
   onSettingsChanged(listener: (change: HostSettingsChange) => void): () => void;
   onAccountChanged(listener: (account: AccountSnapshot) => void): () => void;
   onVoiceLiveSessionChanged(listener: (change: VoiceLiveSessionChanged) => void): () => void;
@@ -615,6 +625,24 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
       Effect.map(
         client.call(GATEWAY_METHOD.CODING_AGENTS_PULL_REQUEST, { agentId: params.agentId }),
         codingAgentAnswer(codingAgentPullRequestAnswerViewSchema),
+      ),
+    providerKeysRead: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_READ),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeySave: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_SAVE, {
+          provider: params.provider,
+          key: params.key,
+        }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
+      ),
+    providerKeyRemove: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PROVIDER_KEYS_REMOVE, { provider: params.provider }),
+        codingAgentAnswer(providerKeysAnswerViewSchema),
       ),
     onSettingsChanged: (listener) =>
       on(

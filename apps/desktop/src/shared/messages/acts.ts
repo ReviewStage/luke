@@ -35,6 +35,10 @@ import {
   codingAgentRenameParamsSchema,
   codingAgentStartParamsSchema,
   codingAgentStopParamsSchema,
+  type ProviderKeysAnswerView,
+  providerKeyRemoveParamsSchema,
+  providerKeySaveParamsSchema,
+  providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
@@ -185,6 +189,15 @@ export const ACT_KIND = {
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
+  /**
+   * Settings › API keys: the account's own provider keys read as hints and
+   * statuses, one saved, one removed. The save's payload is the one place a
+   * key crosses from the renderer, once, on its way to the service; no
+   * answer carries one back, and nothing on the way keeps it.
+   */
+  PROVIDER_KEYS_READ: "providerKeys.read",
+  PROVIDER_KEYS_SAVE: "providerKeys.save",
+  PROVIDER_KEYS_REMOVE: "providerKeys.remove",
   VOICE_COMMAND: "voice.command",
   /**
    * The voice window as a GPT Live peer: its SDP offer handed to the host,
@@ -603,6 +616,21 @@ export const ACT = {
       isReadable(codingAgentPullRequestAnswerViewSchema),
     ),
     refusal: "Could not read the agent's pull request on this system.",
+  },
+  [ACT_KIND.PROVIDER_KEYS_READ]: {
+    payload: noPayload,
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not read your API keys on this system.",
+  },
+  [ACT_KIND.PROVIDER_KEYS_SAVE]: {
+    payload: actSchema(providerKeySaveParamsSchema),
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not save your API key on this system.",
+  },
+  [ACT_KIND.PROVIDER_KEYS_REMOVE]: {
+    payload: actSchema(providerKeyRemoveParamsSchema),
+    result: wireResult<ProviderKeysAnswerView>(isReadable(providerKeysAnswerViewSchema)),
+    refusal: "Could not remove your API key on this system.",
   },
   [ACT_KIND.VOICE_COMMAND]: {
     payload: record({
