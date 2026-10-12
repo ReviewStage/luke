@@ -1731,7 +1731,7 @@ it.effect(
 );
 
 it.effect(
-  "the session of a parked turn's worker reaches its work inside the worker's call, a poll after the call is found",
+  "the session of a parked turn's worker reaches its work inside the worker's call, a poll after the call is found, naming the model it ran on",
   () =>
     Effect.gen(function* () {
       const target = yield* Effect.promise(() => account());
@@ -1801,6 +1801,7 @@ it.effect(
       assert.deepEqual(drawn.session?.parts, [
         { type: PLAN_WORK_PART.TEXT, text: "Queue A lets an admin revoke." },
       ]);
+      assert.equal(drawn.session?.model, "openai/scripted-model", "the model its turn ran on");
       yield* Effect.promise(() => f.stop());
     }),
 );
