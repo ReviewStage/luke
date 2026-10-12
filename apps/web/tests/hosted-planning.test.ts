@@ -99,6 +99,7 @@ import {
   openGithubUser,
 } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { INVITATIONS_TEXT, makeDocumentPlan } from "./support/plan-documents";
 import { sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
 
@@ -655,6 +656,33 @@ it.layer(testSqlClient)("the planning model on the hosted brain", (it) => {
         const after = rewritten.indexOf("[fields the developer wrote]");
         assert.match(rewritten[after + 1] ?? "", /^- Testing, /u);
         assert.ok(!rewritten.some((line) => line.startsWith("- Approach, ")));
+      }),
+  );
+
+  it.effect(
+    "the sections of a document plan the developer wrote reach the planning model by heading, until Luke writes one again",
+    () =>
+      Effect.gen(function* () {
+        const { host, userId, planId, conversationId } = yield* savedPlanWithConversation();
+        yield* makeDocumentPlan(planId, INVITATIONS_TEXT);
+        const session = yield* startSession(host, userId, conversationId);
+        const standing = yield* admitted(host, session);
+        const changedGoal = INVITATIONS_TEXT.replace("by email", "by email or link");
+        yield* saveDeveloperEdit(
+          { userId, planId },
+          { document: { base: INVITATIONS_TEXT, value: changedGoal } },
+        );
+
+        const written = (yield* host.standingContext(standing)).split("\n");
+        yield* saveNotes({ userId, planId }, [
+          { kind: NOTE_KIND.ADD, field: PLAN_FIELD.GOAL, text: "- Owners can resend." },
+        ]);
+        const rewritten = (yield* host.standingContext(standing)).split("\n");
+
+        const at = written.indexOf("[fields the developer wrote]");
+        assert.match(written[at + 1] ?? "", /^- Goal, \d{4}-\d{2}-\d{2}T/u);
+        assert.ok(!rewritten.includes("[fields the developer wrote]"));
+        assert.ok(written.some((line) => line.includes("by email or link")));
       }),
   );
 

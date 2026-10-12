@@ -7,7 +7,7 @@ import {
   VOICE_SERVICE_FRAME,
   VOICE_SERVICE_PATH,
 } from "@sidecar/hosted";
-import type { Plan } from "@sidecar/hosted/plan-wire";
+import { PLAN_ACTOR, type Plan } from "@sidecar/hosted/plan-wire";
 import { STOP_SPEAKING_INSTRUCTION } from "@sidecar/voice/live-session";
 import { EXCESS_KEYS, isRecord, isWireString, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
@@ -1315,4 +1315,28 @@ test("a created session whose sideband OpenAI refuses is refused to the desktop 
   const [registered] = context.record.registered;
   assert.ok(registered);
   assert.deepEqual(context.record.rows.get(registered.sessionId), LEFT_TO_SWEEP);
+});
+
+/** The plan seed's words, the first item a call was created with. */
+function planSeedOf(context: Stand): string {
+  const session = context.openAi.creates[0]?.body.session;
+  assert.ok(isRecord(session) && Array.isArray(session.input));
+  return JSON.stringify(session.input[0]);
+}
+
+test("a call about a plan that is one document opens it as a new plan while nobody has written it, and as one under way once someone has", async () => {
+  const fresh = await stand();
+  onTestFinished(() => fresh.stop());
+  await openSession(fresh);
+
+  const written = await stand();
+  onTestFinished(() => written.stop());
+  written.record.plans.splice(0, written.record.plans.length, {
+    userId: FAKE_USER_ID,
+    plan: { ...PLAN, lastEdit: { actor: PLAN_ACTOR.DEVELOPER, at: 2_000, duringCall: false } },
+  });
+  await openSession(written);
+
+  assert.match(planSeedOf(fresh), /This call starts the new plan below\./u);
+  assert.match(planSeedOf(written), /This call continues the saved plan below\./u);
 });

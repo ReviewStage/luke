@@ -530,6 +530,29 @@ it.effect(
 );
 
 it.effect(
+  "a saved draft of a document plan carries who last changed each section, and the open plan takes them",
+  () =>
+    Effect.gen(function* () {
+      const invites = plan(INVITES, "Teammate invitations", "## Context\n\nAdmins only.\n", 10);
+      const { call, last, planning } = yield* subject(fakeService([invites]));
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      yield* call(GATEWAY_METHOD.PLANNING_OPEN, { planId: INVITES });
+
+      const named = [{ section: "Context", actor: PLAN_ACTOR.NOTETAKER, at: 11, duringCall: true }];
+      planning.showDraft({
+        type: VOICE_SERVICE_FRAME.PLAN_DRAFT,
+        planId: INVITES,
+        document: { body: "## Context\n\nAdmins only, today.\n", assumptions: [] },
+        savedAt: 11,
+        sectionEdits: named,
+      });
+
+      assert.deepEqual(last()?.document.plan?.sectionEdits, named);
+      assert.equal(last()?.document.plan?.fields, undefined);
+    }),
+);
+
+it.effect(
   "the developer's edit is saved on the service and the open document takes the plan it answered",
   () =>
     Effect.gen(function* () {

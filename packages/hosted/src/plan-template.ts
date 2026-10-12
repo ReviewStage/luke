@@ -7,6 +7,7 @@ import {
 } from "@sidecar/wire";
 import { describeWire, readEither } from "@sidecar/wire/effect";
 import { Schema as EffectSchema, Result } from "effect";
+import { openFenceAt, planSections } from "./plan-document.js";
 import {
   PLAN_ACTOR,
   PLAN_FIELD,
@@ -772,6 +773,108 @@ export function applyNotes(content: PlanContent, notes: readonly PlanNote[]): No
   return { content: taken, missed };
 }
 
+/** The heading a field's note lands under in a document, as the template names the field. */
+function noteHeading(note: PlanNote): string {
+  return PLAN_FIELD_HEADING[note.field];
+}
+
+/** What a note adds to a document: a list's item behind its own marker, any other field's text as written, each contained where it stands. */
+function addedText(note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>): string {
+  return isTextField(note.field) ? contained(note.text) : listItem("- ", itemText(note.text));
+}
+
+/**
+ * Words with any fence still open at their end closed on a line of its own,
+ * so a point written after them is not taken into the code the fence holds.
+ */
+function fenceClosed(words: string): string {
+  const open = openFenceAt(words, words.length + 1);
+  return open === undefined ? words : `${words}\n${open}`;
+}
+
+/**
+ * The text with a point added at the end of the first section under the
+ * note's heading, or, where the text has no such section, a new one at the
+ * end of the text holding it; a fence the section or the text leaves open is
+ * closed before it.
+ */
+function addedToText(
+  text: string,
+  note: Extract<PlanNote, { kind: typeof NOTE_KIND.ADD }>,
+): string {
+  const heading = noteHeading(note);
+  const added = addedText(note);
+  const section = planSections(text).find((each) => each.heading === heading);
+  if (section === undefined) {
+    const head = fenceClosed(text.trimEnd());
+    return `${head.length === 0 ? "" : `${head}\n\n`}## ${heading}\n\n${added}\n`;
+  }
+  const words = fenceClosed(section.text);
+  const lines = words.split("\n");
+  const under = lines.length > 1 ? appended(words, added) : `${words}\n\n${added}`;
+  return text.slice(0, section.from) + under + text.slice(section.to);
+}
+
+/** Whether a span touches a heading line of the text, which a note may never rewrite or strike. */
+function touchesHeading(text: string, at: Span): boolean {
+  return planSections(text).some((section) => {
+    if (section.heading === "" && !text.startsWith("#", section.from)) return false;
+    const lineEnd = text.indexOf("\n", section.from);
+    const headingTo = lineEnd === -1 ? text.length : lineEnd;
+    return at.from <= headingTo && at.to >= section.from;
+  });
+}
+
+/** The text with the lines a span touches struck out, and the blank line it leaves doubled taken back. */
+function struckFromText(text: string, at: Span): string {
+  const start = text.lastIndexOf("\n", at.from - 1) + 1;
+  const newline = text.indexOf("\n", at.to);
+  const end = newline === -1 ? text.length : newline + 1;
+  const head = text.slice(0, start);
+  const tail = text.slice(end);
+  if (tail.trim().length === 0) return head.replace(/\n+$/u, "\n");
+  return head.endsWith("\n\n") || head.length === 0
+    ? head + tail.replace(/^\n+/u, "")
+    : head + tail;
+}
+
+/**
+ * A document's text with one note taken, or nothing where the note cannot
+ * be. A field's note lands in the document's section under that field's
+ * heading (`PLAN_FIELD_HEADING`): an addition at the end of the section, or
+ * as a new section at the end of the text where it has none; a correction
+ * or a strike names a phrase that must stand exactly once in the whole text
+ * and touch no heading, since the headings are the developer's and a note
+ * writes under them.
+ */
+function applyNoteToText(text: string, note: PlanNote): string | undefined {
+  if (note.kind === NOTE_KIND.ADD) return addedToText(text, note);
+  const at = located(text, note.find);
+  if (at === undefined || touchesHeading(text, at)) return undefined;
+  if (note.kind === NOTE_KIND.REMOVE) return struckFromText(text, at);
+  // A correction inside a fence is code, written as given rather than contained as prose.
+  const words = openFenceAt(text, at.from) === undefined ? contained(note.text) : note.text;
+  return text.slice(0, at.from) + words + text.slice(at.to);
+}
+
+/** Notes taken over a document's text: the text after, and the notes that could not be taken. */
+export interface TextNotesTaken {
+  readonly text: string;
+  readonly missed: readonly PlanNote[];
+}
+
+/** Every note taken over a document's text in order, and the notes that could not be. */
+export function applyNotesToText(text: string, notes: readonly PlanNote[]): TextNotesTaken {
+  let taken = text;
+  const missed: PlanNote[] = [];
+  for (const note of notes) {
+    const next = applyNoteToText(taken, note);
+    if (next === undefined) missed.push(note);
+    else taken = next;
+  }
+  return { text: taken, missed };
+}
+
 const readNote = readEither(planNoteSchema, { excess: EXCESS_KEYS.DROP });
 
 /** Text still being written, cut back to its last line that cannot change how it is escaped. */
@@ -823,8 +926,18 @@ export function readNotes(answer: UnparsedWireValue): NotesRead {
  * answer is saved.
  */
 export function notesInProgress(content: PlanContent, partial: UnparsedWireValue): PlanContent {
+  return applyNotes(content, notesSoFar(partial)).content;
+}
+
+/** A document's text as the notetaker's answer so far leaves it, drawn as `notesInProgress` draws a plan of fields. */
+export function textNotesInProgress(text: string, partial: UnparsedWireValue): string {
+  return applyNotesToText(text, notesSoFar(partial)).text;
+}
+
+/** The notes an answer so far holds: every whole note that reads, then the last, while it adds a point, as written so far. */
+function notesSoFar(partial: UnparsedWireValue): readonly PlanNote[] {
   const values = isRecord(partial) && Array.isArray(partial.notes) ? partial.notes : [];
   const { notes: whole } = readNotes(unparsedWire({ notes: values.slice(0, -1) }));
   const growing = growingAddition(values.at(-1));
-  return applyNotes(content, growing === undefined ? whole : [...whole, growing]).content;
+  return growing === undefined ? whole : [...whole, growing];
 }

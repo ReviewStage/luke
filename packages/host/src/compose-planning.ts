@@ -396,6 +396,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           }),
       ...(draft.fields === undefined ? undefined : { fields: draft.fields }),
       ...(draft.fieldEdits === undefined ? undefined : { fieldEdits: draft.fieldEdits }),
+      ...(draft.sectionEdits === undefined ? undefined : { sectionEdits: draft.sectionEdits }),
     };
     write({ document: { status: PLANNING_READ.READY, plan } });
   }
