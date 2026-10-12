@@ -245,10 +245,16 @@ function postLines(post: InboxPost): string {
 /**
  * An inbox call's row: a post names its item's title and lists what it
  * asks, a close names the item's key and says why, and a read names
- * nothing. Its answer is the agent's whole inbox, which the Inbox tab draws
- * as it stands, so none is shown here.
+ * nothing. An answer that did what was asked is the agent's whole inbox,
+ * which the Inbox tab draws as it stands, so none is shown here; one that
+ * did nothing shows why, so a refused post never reads as posted.
  */
-function inboxToolView(tool: string, input: WireValue | undefined): ToolCallView {
+function inboxToolView(
+  tool: string,
+  input: WireValue | undefined,
+  output: WireValue | undefined,
+): ToolCallView {
+  const refused = inboxRefusal(output);
   if (tool === AGENT_TOOL.POST_TO_INBOX) {
     const post = inboxPostView(input);
     return {
@@ -260,7 +266,7 @@ function inboxToolView(tool: string, input: WireValue | undefined): ToolCallView
             ? textBlock("")
             : jsonBlock(input)
           : textBlock(postLines(post)),
-      output: undefined,
+      output: refused,
     };
   }
   if (tool === AGENT_TOOL.CLOSE_INBOX_ITEM) {
@@ -268,10 +274,19 @@ function inboxToolView(tool: string, input: WireValue | undefined): ToolCallView
       kind: CALL_KIND.INBOX_CLOSE,
       subject: stringAt(input, "key") ?? "",
       input: textBlock(stringAt(input, "reason") ?? ""),
-      output: undefined,
+      output: refused,
     };
   }
-  return { kind: CALL_KIND.INBOX_READ, subject: "", input: textBlock(""), output: undefined };
+  return { kind: CALL_KIND.INBOX_READ, subject: "", input: textBlock(""), output: refused };
+}
+
+/** The status an inbox call answers with when it did nothing, by the word its answer spells. */
+const INBOX_CALL_REJECTED = "rejected";
+
+/** Why an inbox call did nothing, as the row's answer shows it; nothing where it did what it was asked, whose answer is the inbox the Inbox tab draws. */
+function inboxRefusal(output: WireValue | undefined): ToolBlock | undefined {
+  if (stringAt(output, "status") !== INBOX_CALL_REJECTED) return undefined;
+  return textBlock(stringAt(output, "reason") ?? "");
 }
 
 /** The row and body for one of eve's tools, or nothing where the tool is not one this build knows. */
@@ -347,7 +362,7 @@ function knownToolView(
     case AGENT_TOOL.POST_TO_INBOX:
     case AGENT_TOOL.CLOSE_INBOX_ITEM:
     case AGENT_TOOL.READ_INBOX:
-      return inboxToolView(tool, input);
+      return inboxToolView(tool, input, output);
     default:
       return undefined;
   }

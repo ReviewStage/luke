@@ -89,6 +89,10 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
               kind: INBOX_KIND.CHOICE,
               title: QUEUE.title,
               status: INBOX_STATUS.OPEN,
+              details: QUEUE.details,
+              options: QUEUE.options,
+              recommended: QUEUE.recommended,
+              needsReply: true,
             },
           ],
         });
@@ -123,7 +127,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "every call answers the agent's whole inbox, open first, then answered with the answer, then closed with why",
+    "every call answers the agent's whole inbox, open first with what each asks, so compaction loses nothing the agent acts on, then answered with the answer, then closed with why",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
@@ -154,6 +158,10 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
               kind: INBOX_KIND.CHOICE,
               title: QUEUE.title,
               status: INBOX_STATUS.OPEN,
+              details: QUEUE.details,
+              options: QUEUE.options,
+              recommended: QUEUE.recommended,
+              needsReply: true,
             },
             {
               key: SETTINGS.key,

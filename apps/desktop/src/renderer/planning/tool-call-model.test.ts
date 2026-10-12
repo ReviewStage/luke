@@ -237,3 +237,15 @@ test("a post to the inbox is a row naming its item, its context and options as t
   assert.equal(closed.subject, "invite-queue");
   assert.deepEqual(closed.input, { kind: TOOL_BLOCK.TEXT, text: "Found it in the README." });
 });
+
+test("an inbox call that did nothing shows why, so a refused post never reads as posted", () => {
+  const view = toolCallView({
+    tool: "post_to_inbox",
+    input: { key: "one-more", title: "Protect main", kind: "task" },
+    output: { status: "rejected", reason: "Not posted: you hold 20 open items already." },
+  });
+  assert.deepEqual(view.output, {
+    kind: TOOL_BLOCK.TEXT,
+    text: "Not posted: you hold 20 open items already.",
+  });
+});

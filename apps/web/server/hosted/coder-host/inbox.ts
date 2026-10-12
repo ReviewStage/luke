@@ -83,6 +83,11 @@ interface AgentInboxLine {
   readonly kind: InboxItem["kind"];
   readonly title: string;
   readonly status: InboxItem["status"];
+  /** What an open item asks, as the agent posted it. */
+  readonly details?: string;
+  readonly options?: InboxItem["options"];
+  readonly recommended?: string;
+  readonly needsReply?: boolean;
   readonly answer?: InboxReply;
   readonly closedReason?: string;
 }
@@ -115,13 +120,29 @@ export const INBOX_REFUSAL = {
 const readPost = readEither(inboxPostInputSchema, { excess: EXCESS_KEYS.DROP });
 const readClose = readEither(inboxCloseInputSchema, { excess: EXCESS_KEYS.DROP });
 
-/** An item as the agent reads it back, with what it posted itself left out, since the model holds that in its own call. */
+/**
+ * An item as the agent reads it back. Note that an open item carries what
+ * it asks whole, its details, options, recommendation, and whether the
+ * agent waits to hear back, because compaction may have taken the call
+ * that posted it out of the model's context, and an open item is one the
+ * agent still acts on; a settled one carries what came of it alone.
+ */
 function lineOf(item: InboxItem): AgentInboxLine {
+  const asks =
+    item.status === INBOX_STATUS.OPEN
+      ? {
+          ...(item.details === undefined ? undefined : { details: item.details }),
+          ...(item.options === undefined ? undefined : { options: item.options }),
+          ...(item.recommended === undefined ? undefined : { recommended: item.recommended }),
+          needsReply: item.needsReply,
+        }
+      : undefined;
   return {
     key: item.key,
     kind: item.kind,
     title: item.title,
     status: item.status,
+    ...asks,
     ...(item.answer === undefined ? undefined : { answer: item.answer }),
     ...(item.closedReason === undefined ? undefined : { closedReason: item.closedReason }),
   };
