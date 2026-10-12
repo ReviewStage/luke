@@ -7,6 +7,17 @@ import {
   writeAccountPreferences,
 } from "@sidecar/database/models/account-store";
 import { fillChildTitle } from "@sidecar/database/models/child-titles";
+import {
+  awaitingLinesOf,
+  createCodingAgent,
+  fillCodingAgentTitle,
+  listCodingAgents,
+  listPublishedCodingAgents,
+  readCodingAgent,
+  recordCodingAgentCompaction,
+  recordCodingAgentStep,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, sentLineId } from "@sidecar/database/models/ids";
 import { listMessagesPast, sentLineStands } from "@sidecar/database/models/message-reads";
 import { createPlan, savePlanText, updatePlan } from "@sidecar/database/models/plan-store";
@@ -100,17 +111,6 @@ import { CODER, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { recordDelegation } from "../server/hosted/coder-host/delegation";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
 import { cursorOfWire } from "../server/hosted/coder-host/transcript";
-import {
-  awaitingLinesOf,
-  createCodingAgent,
-  fillCodingAgentTitle,
-  listCodingAgents,
-  listPublishedCodingAgents,
-  readCodingAgent,
-  recordCodingAgentCompaction,
-  recordCodingAgentStep,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {

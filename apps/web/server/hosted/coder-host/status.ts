@@ -1,3 +1,7 @@
+import type {
+  CodingAgent,
+  CodingAgentLatestTurn,
+} from "@sidecar/database/models/coding-agent-store";
 import {
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
@@ -9,7 +13,6 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { Duration } from "effect";
 import { BRAIN_REQUEST_FAILURE, TURN_STATUS } from "../../core.js";
-import type { CodingAgent, CodingAgentLatestTurn } from "../coding-agent-store.js";
 import { REPOSITORY_REFUSAL } from "../repository-shell.js";
 import { CODER, CODER_REFUSAL } from "./bounds.js";
 

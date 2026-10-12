@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { childTitlesOf } from "@sidecar/database/models/child-titles";
+import {
+  createCodingAgent,
+  readCodingAgent,
+  updateCodingAgentBranch,
+} from "@sidecar/database/models/coding-agent-store";
 import { childConversationId, hostTurnId, sentLineId } from "@sidecar/database/models/ids";
 import { listJournals, sentLineStands } from "@sidecar/database/models/message-reads";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
@@ -44,11 +49,6 @@ import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { STEER_OUTCOME } from "../server/hosted/coder-host/steer";
 import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import {
-  createCodingAgent,
-  readCodingAgent,
-  updateCodingAgentBranch,
-} from "../server/hosted/coding-agent-store";
 import {
   CODING_AGENT_TOOL_BOUNDS,
   CODING_AGENT_TOOL_REFUSAL,

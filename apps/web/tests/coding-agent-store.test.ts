@@ -2,6 +2,19 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  type CodingAgent,
+  type CodingAgentBriefText,
+  type CodingAgentStarted,
+  createCodingAgent,
+  listCodingAgents,
+  listPublishedCodingAgents,
+  type NewCodingAgent,
+  readCodingAgent,
+  readCodingAgentContext,
+  recordCodingAgentPublished,
+  updateCodingAgentChoice,
+} from "@sidecar/database/models/coding-agent-store";
 import { createPlan, deletePlan } from "@sidecar/database/models/plan-store";
 import { user } from "@sidecar/database/schemas/auth";
 import { codingAgent } from "@sidecar/database/schemas/coding-agent";
@@ -17,19 +30,6 @@ import {
 import { count, eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import {
-  type CodingAgent,
-  type CodingAgentBriefText,
-  type CodingAgentStarted,
-  createCodingAgent,
-  listCodingAgents,
-  listPublishedCodingAgents,
-  type NewCodingAgent,
-  readCodingAgent,
-  readCodingAgentContext,
-  recordCodingAgentPublished,
-  updateCodingAgentChoice,
-} from "../server/hosted/coding-agent-store";
 
 /**
  * The coding agents of an account's plans, through the store's public

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import { createCodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { createPlan, openPlanConversation } from "@sidecar/database/models/plan-store";
 import { storeWriter } from "@sidecar/database/models/writer";
 import { getTestDB } from "@sidecar/database/testing";
@@ -17,7 +18,6 @@ import { type BrainHost, brainHost } from "../server/hosted/brain-host/host";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import { type CoderHost, coderHost } from "../server/hosted/coder-host/host";
 import { CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import {
   LINEAR_CONNECT_FAILURE,
   LinearConnect,

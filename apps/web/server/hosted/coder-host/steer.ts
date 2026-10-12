@@ -1,3 +1,4 @@
+import type { CodingAgent } from "@sidecar/database/models/coding-agent-store";
 import { sentLineId } from "@sidecar/database/models/ids";
 import { sentLineStands } from "@sidecar/database/models/message-reads";
 import { readPlan } from "@sidecar/database/models/plan-store";
@@ -17,7 +18,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import type { CodingAgent } from "../coding-agent-store.js";
 import { HOSTED_HTTP_STATUS } from "../http.js";
 import { HOSTED_REFUSAL, type HostedRefusal, hostedStoreOrUnavailable } from "../http-effect.js";
 import { codingAgentStatusOf } from "./status.js";

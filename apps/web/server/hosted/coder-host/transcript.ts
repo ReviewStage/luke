@@ -1,3 +1,16 @@
+import {
+  awaitingLinesOf,
+  type CodingAgent,
+  type CodingAgentDelegation,
+  delegationStartsOf,
+  delegationTitlesOf,
+  latestTurnsOf,
+  readCodingAgentContext,
+  readCodingAgentOfConversation,
+  readDelegation,
+  turnUsagesOf,
+  untitledDelegationsSince,
+} from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import {
   type LatestTurn,
@@ -34,19 +47,6 @@ import {
   storedToolName,
   TURN_STATUS,
 } from "../../core.js";
-import {
-  awaitingLinesOf,
-  type CodingAgent,
-  type CodingAgentDelegation,
-  delegationStartsOf,
-  delegationTitlesOf,
-  latestTurnsOf,
-  readCodingAgentContext,
-  readCodingAgentOfConversation,
-  readDelegation,
-  turnUsagesOf,
-  untitledDelegationsSince,
-} from "../coding-agent-store.js";
 import { ModelCatalog, type OfferedModel } from "../model-catalog.js";
 import { turnRecordOf } from "../turn-record.js";
 import { CODER } from "./bounds.js";

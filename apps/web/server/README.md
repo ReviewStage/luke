@@ -1777,7 +1777,7 @@ less the `prompts` table it drew and less the `tool_sets` table
 tool set's and nothing else of either, because nothing replays them, and the
 tool set is the build's own and read from the build that offered it. A
 conversation row names its kind (`plan`, which `packages/database/src/models/plan-store.ts`
-opens, and `coding_agent`, which `server/hosted/coding-agent-store.ts` opens,
+opens, and `coding_agent`, which `packages/database/src/models/coding-agent-store.ts` opens,
 are the two any code still opens), the
 runtime's own session id, its soft-delete instant, and the counter that
 numbers its messages. A message is one AI SDK `UIMessage`, its parts and
@@ -1980,7 +1980,7 @@ URLs eve mints resolve to the public path. The web functions reach it through
 and `tests/eve-layout.test.ts` builds both roots.
 
 A coding agent is one eve session over a `coding_agent` conversation
-(`server/hosted/coding-agent-store.ts`), and the host behind the authored
+(`packages/database/src/models/coding-agent-store.ts`), and the host behind the authored
 files is `server/hosted/coder-host/`: the same door and conversation
 admission as the planning brain's (`brain-host/door.ts`,
 `brain-host/conversation.ts`), with the developer's own bearer the caller

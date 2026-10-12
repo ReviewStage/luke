@@ -1,22 +1,3 @@
-import { db } from "@sidecar/database/core/query";
-import { InstantColumnSchema } from "@sidecar/database/models/columns";
-import {
-  awaitingLinesOf,
-  type LatestTurn,
-  latestTurnsOf,
-  type TurnUsageRow,
-  turnUsagesOf,
-} from "@sidecar/database/models/message-reads";
-import { PlanArchived } from "@sidecar/database/models/plan-store";
-import type { ConversationTarget } from "@sidecar/database/models/writer";
-import {
-  codingAgent,
-  codingAgentDelegation,
-  type StoredAgentStep,
-} from "@sidecar/database/schemas/coding-agent";
-import { plan } from "@sidecar/database/schemas/plan";
-import { conversations } from "@sidecar/database/schemas/storage";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
@@ -26,11 +7,30 @@ import {
   contextWindowSchema,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
+import { TURN_STATUS } from "@sidecar/wire";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { TURN_STATUS } from "../core.js";
+import { db } from "../core/query.js";
+import {
+  codingAgent,
+  codingAgentDelegation,
+  type StoredAgentStep,
+} from "../schemas/coding-agent.js";
+import { plan } from "../schemas/plan.js";
+import { conversations } from "../schemas/storage.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { InstantColumnSchema } from "./columns.js";
+import {
+  awaitingLinesOf,
+  type LatestTurn,
+  latestTurnsOf,
+  type TurnUsageRow,
+  turnUsagesOf,
+} from "./message-reads.js";
+import { PlanArchived } from "./plan-store.js";
+import type { ConversationTarget } from "./writer.js";
 
 /**
  * coding-agent-store.ts -- the coding agents started on an account's plans, each one conversation and one row linking it to its plan.

@@ -14,6 +14,7 @@
     "./models/attached-file-parts": "./src/models/attached-file-parts.js",
     "./models/board-store": "./src/models/board-store.js",
     "./models/child-titles": "./src/models/child-titles.js",
+    "./models/coding-agent-store": "./src/models/coding-agent-store.js",
     "./models/columns": "./src/models/columns.js",
     "./models/content-addressed": "./src/models/content-addressed.js",
     "./models/hosted-store": "./src/models/hosted-store.js",

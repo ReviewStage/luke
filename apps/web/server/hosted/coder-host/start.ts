@@ -2,6 +2,11 @@ import {
   readAccountPreferences,
   writeAccountPreferences,
 } from "@sidecar/database/models/account-store";
+import {
+  type CodingAgent,
+  createCodingAgent,
+  discardCodingAgent,
+} from "@sidecar/database/models/coding-agent-store";
 import { readPlan } from "@sidecar/database/models/plan-store";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelChoice } from "@sidecar/hosted/models-wire";
@@ -19,7 +24,6 @@ import {
   EVE_SEND_OUTCOME,
   type EveSessions,
 } from "../brain-host/eve-sessions.js";
-import { type CodingAgent, createCodingAgent, discardCodingAgent } from "../coding-agent-store.js";
 import {
   HOSTED_REFUSAL,
   type HostedRefusal,

@@ -1,5 +1,9 @@
 import { childTitlesOf, fillChildTitle } from "@sidecar/database/models/child-titles";
 import {
+  type CodingAgent,
+  fillCodingAgentTitle,
+} from "@sidecar/database/models/coding-agent-store";
+import {
   listMessagesPast,
   listRecentMessages,
   turnsBefore,
@@ -11,7 +15,6 @@ import { Effect, Option, type Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { MESSAGE_ROLE, type StoredUIMessage } from "../../core.js";
-import { type CodingAgent, fillCodingAgentTitle } from "../coding-agent-store.js";
 import { CODER } from "./bounds.js";
 import { CODER_TOOL_SET } from "./tool-set.js";
 import { CURSOR_START } from "./transcript.js";

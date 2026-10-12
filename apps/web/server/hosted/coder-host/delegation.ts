@@ -1,3 +1,4 @@
+import { writeDelegation } from "@sidecar/database/models/coding-agent-store";
 import { childConversationId } from "@sidecar/database/models/ids";
 import type { ConversationTarget } from "@sidecar/database/models/writer";
 import { codingAgentDelegationInputSchema } from "@sidecar/hosted/coding-agent-wire";
@@ -6,7 +7,6 @@ import { Effect, Result, type Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { openChildConversation } from "../brain-host/conversation.js";
-import { writeDelegation } from "../coding-agent-store.js";
 import { MODEL_CHOICE_REFUSAL, type OfferedModel, validateModelChoice } from "../model-catalog.js";
 
 /**
