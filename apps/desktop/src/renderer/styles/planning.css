@@ -594,6 +594,11 @@ button.code-card-path:hover {
   visibility: hidden;
 }
 
+/* The list holds the keyboard itself only over a folder with no row to take it, which shows no ring. */
+.file-crumb-list:focus {
+  outline: none;
+}
+
 .file-crumb-tree {
   display: flex;
   min-height: 0;

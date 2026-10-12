@@ -691,7 +691,9 @@ test("a later press on another crumb stands in for one still listing, so only it
     for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
   });
   assert.deepEqual(
-    [...document.querySelectorAll('[role="menu"]')].map((menu) => menu.getAttribute("aria-label")),
+    [...document.querySelectorAll(".file-crumb-list")].map((list) =>
+      list.getAttribute("aria-label"),
+    ),
     ["apps/web/server"],
   );
 });
@@ -729,3 +731,39 @@ it.effect(
       assert.match(document.body.textContent ?? "", /lines too long to copy whole/);
     }),
 );
+
+test("a crumb's list stands within the window, its rows scrolling inside; over a folder not listed it still takes Escape; and a second press on a crumb still listing lets it go", async () => {
+  const view = mounted();
+  await view.draw(FILE);
+  const crumb = (name: string) =>
+    [...view.container.querySelectorAll<HTMLButtonElement>(".file-breadcrumb")].find(
+      (each) => each.textContent === name,
+    );
+  const list = () => document.querySelector<HTMLElement>(".file-crumb-list");
+
+  vi.stubGlobal("innerHeight", 60);
+  await view.press(crumb("server"));
+  assert.equal(list()?.style.height, "48px", "the room under the crumb, less the window's margin");
+  vi.stubGlobal("innerHeight", 768);
+  await view.press(crumb("server"));
+  assert.equal(list(), null);
+
+  await view.press(crumb("apps"));
+  assert.match(list()?.textContent ?? "", /Could not list this folder/);
+  act(() => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+  assert.equal(list(), null);
+  assert.equal(document.activeElement, crumb("apps"));
+
+  const server = crumb("server");
+  assert.ok(server);
+  await act(async () => {
+    server.click();
+    server.click();
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  });
+  assert.equal(list(), null, "the second press let the list go before it opened");
+});

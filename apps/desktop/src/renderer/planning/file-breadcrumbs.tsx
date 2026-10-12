@@ -71,19 +71,36 @@ function FolderList({
   const module = AsyncResult.isSuccess(loaded) ? loaded.value : undefined;
   const box = useRef<HTMLDivElement>(null);
   const host = useRef<HTMLDivElement>(null);
-  const [at, setAt] = useState<{ left: number; top: number } | undefined>(undefined);
+  const [at, setAt] = useState<{ left: number; top: number; height: number } | undefined>(
+    undefined,
+  );
   const latest = useRef({ onChoose, onClose });
   latest.current = { onChoose, onClose };
   const { entries, current, opener } = listed;
 
+  // The list hangs under the crumb, as tall as its rows up to its bound and
+  // no taller than the room left under the crumb, its rows scrolling within.
+  const rows = entries?.length ?? 1;
   useLayoutEffect(() => {
     const bounds = opener.getBoundingClientRect();
     const widest = window.innerWidth - LIST_BOUNDS.WIDTH - LIST_BOUNDS.MARGIN;
+    const top = bounds.bottom + MENU_DROP;
+    const wanted = Math.min(rows * ROW_HEIGHT + 2 * LIST_BOUNDS.INSET, LIST_BOUNDS.MAX_HEIGHT);
+    const room = window.innerHeight - top - LIST_BOUNDS.MARGIN;
     setAt({
       left: Math.max(LIST_BOUNDS.MARGIN, Math.min(bounds.left, widest)),
-      top: bounds.bottom + MENU_DROP,
+      top,
+      height: Math.max(ROW_HEIGHT + 2 * LIST_BOUNDS.INSET, Math.min(wanted, room)),
     });
-  }, [opener]);
+  }, [opener, rows]);
+
+  // Note that the list takes the keyboard itself where no row of it can,
+  // as over an empty folder or one not listed, so Escape still reaches it.
+  useEffect(() => {
+    const element = box.current;
+    if (at === undefined || element === null || element.contains(document.activeElement)) return;
+    element.focus({ preventScroll: true });
+  }, [at]);
 
   useEffect(() => {
     const element = host.current;
@@ -114,16 +131,15 @@ function FolderList({
     };
   }, [opener]);
 
-  const rows = entries?.length ?? 1;
-  const height = Math.min(rows * ROW_HEIGHT + 2 * LIST_BOUNDS.INSET, LIST_BOUNDS.MAX_HEIGHT);
   return createPortal(
     <div
       ref={box}
       className="file-crumb-list ph-no-capture"
       role="dialog"
       aria-label={label}
+      tabIndex={-1}
       data-placed={String(at !== undefined)}
-      style={{ ...at, height, width: LIST_BOUNDS.WIDTH }}
+      style={{ ...at, width: LIST_BOUNDS.WIDTH }}
       onKeyDown={(event) => {
         if (event.key !== "Escape") return;
         // Note that the Escape is stopped here, because the window's own would close the panel behind the list.
@@ -163,9 +179,12 @@ export function FileBreadcrumbs({
   const segments = path.split("/");
   const [listed, setListed] = useState<Listed | undefined>(undefined);
   const asked = useRef(0);
+  // The crumb whose folder is being listed, so a second press on it lets the list go before it opens.
+  const pending = useRef<HTMLElement | undefined>(undefined);
 
   const close = (returnFocus: boolean) => {
     asked.current += 1;
+    pending.current = undefined;
     if (returnFocus) listed?.opener.focus();
     setListed(undefined);
   };
@@ -179,11 +198,13 @@ export function FileBreadcrumbs({
     current: string | undefined,
     opener: HTMLElement,
   ) => {
-    if (listed?.opener === opener) return close(false);
+    if (listed?.opener === opener || pending.current === opener) return close(false);
     asked.current += 1;
+    pending.current = opener;
     const ticket = asked.current;
     listFolder(folder).then((answer) => {
       if (ticket !== asked.current) return;
+      pending.current = undefined;
       const entries =
         "folder" in answer
           ? answer.folder.entries.map((entry) => ({
