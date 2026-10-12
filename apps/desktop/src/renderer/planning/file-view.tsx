@@ -2,7 +2,6 @@ import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hos
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
-import type { FileTreeHandle } from "../file-tree/contract";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
@@ -35,9 +34,9 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * read from, listed through one store of what the panel has listed
  * (`folder-listings.ts`). A file chosen in either is shown in this tab, or
  * in a tab of its own where ⌘ was held, by the panel's own rule of one tab
- * per file (`use-side-panel.ts`). A breadcrumb's folder is revealed in the
- * tree, which opens first where it is closed: the reveal waits for the tree
- * to mount. The tree is open or closed for every File tab alike, as the
+ * per file (`use-side-panel.ts`); a folder opens in place in either, the
+ * breadcrumb's tree being the same tree, rooted where the crumb stands. The
+ * tree is open or closed for every File tab alike, as the
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
  * alone, its path plain in the bar.
@@ -178,25 +177,6 @@ export function FileView({
     [shownCode, repository],
   );
 
-  // The tree as mounted, and a folder a breadcrumb asked for before it was.
-  const tree = useRef<FileTreeHandle | undefined>(undefined);
-  const pending = useRef<string | undefined>(undefined);
-  const onMounted = useCallback((handle: FileTreeHandle | undefined) => {
-    tree.current = handle;
-    const asked = pending.current;
-    if (handle === undefined || asked === undefined) return;
-    pending.current = undefined;
-    handle.reveal(asked, { folder: true, focus: true });
-  }, []);
-  const reveal = (folder: string) => {
-    if (treeOpen && tree.current !== undefined) {
-      tree.current.reveal(folder, { folder: true, focus: true });
-      return;
-    }
-    pending.current = folder;
-    if (!treeOpen) onToggleTree();
-  };
-
   const [told, setTold] = useState<TabRead | undefined>(undefined);
   const read = told?.path === file.path ? told.read : { kind: FILE_READ.READING };
   const onRead = useCallback(
@@ -220,7 +200,6 @@ export function FileView({
             repository={repository}
             path={file.path}
             listFolder={listFolder}
-            onReveal={reveal}
             onOpen={onBrowse}
           />
         ) : (
@@ -263,7 +242,6 @@ export function FileView({
             listFolder={listFolder}
             readWhole={listWhole}
             onOpen={onBrowse}
-            onMounted={onMounted}
           />
         ) : null}
       </div>

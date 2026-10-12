@@ -61,7 +61,7 @@ function browsing(answer: (path: string) => readonly FolderEntry[] | undefined) 
 test("revealing a file lists the root and each folder above it, opens them, and marks the file; a folder opened by hand is listed the first time alone", async () => {
   const { tree, browser, asked, settled, rows } = browsing((path) => REPOSITORY.get(path));
 
-  await browser.reveal("src/app/main.ts", { folder: false, focus: false });
+  await browser.reveal("src/app/main.ts", { focus: false });
 
   assert.deepEqual(asked, ["", "src", "src/app"]);
   assert.deepEqual(rows(), ["docs/", "src/", "  app/", "    main.ts", "  index.ts", "README.md"]);
@@ -79,21 +79,17 @@ test("revealing a file lists the root and each folder above it, opens them, and 
   assert.deepEqual(rows().slice(0, 2), ["docs/", "  STYLE.md"]);
 });
 
-test("revealing another file marks it alone, though a ⌘-press had added to the marks; revealing a folder opens it, and the root its first row", async () => {
-  const { tree, browser, rows } = browsing((path) => REPOSITORY.get(path));
-  await browser.reveal("src/app/main.ts", { folder: false, focus: false });
+test("revealing another file marks it alone, though a ⌘-press had added to the marks, and takes the keyboard there where asked", async () => {
+  const { tree, browser } = browsing((path) => REPOSITORY.get(path));
+  await browser.reveal("src/app/main.ts", { focus: false });
   tree.getItem("README.md")?.select();
 
-  await browser.reveal("src/index.ts", { folder: false, focus: false });
+  await browser.reveal("src/index.ts", { focus: false });
   assert.deepEqual(tree.getSelectedPaths(), ["src/index.ts"]);
 
-  await browser.reveal("docs", { folder: true, focus: true });
-  assert.deepEqual(rows().slice(0, 2), ["docs/", "  STYLE.md"]);
-  assert.equal(tree.getFocusedPath(), "docs/");
-
-  await browser.reveal("src/index.ts", { folder: false, focus: true });
-  await browser.reveal("", { folder: true, focus: true });
-  assert.equal(tree.getFocusedPath(), "docs/", "the root takes the keyboard to its first row");
+  await browser.reveal("docs/STYLE.md", { focus: true });
+  assert.deepEqual(tree.getSelectedPaths(), ["docs/STYLE.md"]);
+  assert.equal(tree.getFocusedPath(), "docs/STYLE.md");
 });
 
 test("a folder that could not be read closes, and is read again when it is opened again", async () => {
@@ -101,7 +97,7 @@ test("a folder that could not be read closes, and is read again when it is opene
   const { tree, browser, asked, settled, rows } = browsing((path) =>
     path === "docs" && failing ? undefined : REPOSITORY.get(path),
   );
-  await browser.reveal("README.md", { folder: false, focus: false });
+  await browser.reveal("README.md", { focus: false });
 
   const docs = tree.getItem("docs/");
   assert.ok(docs !== null && "expand" in docs, "docs is a folder");

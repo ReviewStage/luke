@@ -12,12 +12,14 @@
  * included.
  *
  * A path is the repository's, from its root, without a leading or trailing
- * slash; the root itself is the empty path.
+ * slash; the root itself is the empty path. A breadcrumb mounts the same
+ * tree under its crumb (`../planning/file-breadcrumbs.tsx`), over the folder
+ * the crumb stands in, so its paths are that folder's, from it.
  *
  * The same bundle answers what icon a file's type draws as, so a file
- * attached to a message (`../planning/attached-file-chips.tsx`) is drawn as
- * the tree draws it, without Pierre's icons riding in the bundle every
- * window parses.
+ * attached to a message (`../planning/attached-file-chips.tsx`) or listed in
+ * the plan's summary (`../desktop/plan-summary.tsx`) is drawn as the tree
+ * draws it, without Pierre's icons riding in the bundle every window parses.
  */
 
 /** One entry of a folder: its name within the folder, and whether it is a folder itself. */
@@ -48,23 +50,27 @@ export interface FileTreeProps {
   readonly readFolder: ReadFolder;
   /** A file chosen in the tree, by a press or Return: open it, in a tab of its own where ⌘ was held. */
   readonly onOpen: (path: string, newTab: boolean) => void;
+  /**
+   * How many rows the repository's tree shows, each time a folder listed,
+   * opened, or closed changes it, which a breadcrumb's tree sizes its box
+   * by. Note that a search or the filter is not counted, because only the
+   * pane narrows its tree and the pane sizes nothing by its rows.
+   */
+  readonly onRows?: (rows: number) => void;
 }
 
-/** Where `reveal` brings a path, and whether it takes the keyboard there. */
+/** Whether `reveal` takes the keyboard to the file it brings into view. */
 export interface RevealOptions {
-  /** Whether the path is a folder, which is opened as well as shown. */
-  readonly folder: boolean;
-  /** Whether the tree takes the keyboard on the path, as a press in the breadcrumbs asks. */
+  /** Whether the tree takes the keyboard on the file, as a breadcrumb's tree does as it opens. */
   readonly focus: boolean;
 }
 
 /** The tree as mounted: bring a path into view, narrow the rows shown, and take the tree down. */
 export interface FileTreeHandle {
   /**
-   * Lists and opens each folder above the path, then scrolls it into view:
-   * a file is marked as the one shown, a folder opened. A later reveal
-   * stands in for one still listing, and one asked before the root is
-   * listed waits for it.
+   * Lists and opens each folder above a file, then marks it as the one
+   * shown and scrolls it into view. A later reveal stands in for one still
+   * listing, and one asked before the root is listed waits for it.
    */
   readonly reveal: (path: string, options: RevealOptions) => void;
   /**
@@ -83,15 +89,6 @@ export interface FileTreeHandle {
   readonly unmount: () => void;
 }
 
-/** One folder's entries drawn as the tree draws them, which a breadcrumb's list is. */
-export interface FolderListProps {
-  readonly entries: readonly FolderEntry[];
-  /** The entry the list stands for, marked and taking the keyboard; none for the repository's root. */
-  readonly current: string | undefined;
-  /** An entry chosen by a press or Return, in a tab of its own where ⌘ was held. */
-  readonly onChoose: (entry: FolderEntry, newTab: boolean) => void;
-}
-
 /**
  * A file's type icon as the tree draws it: the symbol to draw, from the
  * sheet the bundle adds to the document the first time one is asked for,
@@ -106,8 +103,6 @@ export interface FileTypeIcon {
 /** What the file tree bundle sets on `window` once it has loaded. */
 export interface FileTreeModule {
   readonly mount: (host: HTMLElement, props: FileTreeProps) => FileTreeHandle;
-  /** Draws one folder's entries in rows the tree's own, its icons, hover, and keys; answers how to take it down. */
-  readonly list: (host: HTMLElement, props: FolderListProps) => () => void;
   /** The type icon of a file by its name alone. */
   readonly fileIcon: (name: string) => FileTypeIcon;
 }

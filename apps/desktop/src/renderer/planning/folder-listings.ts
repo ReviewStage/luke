@@ -1,4 +1,7 @@
+import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@sidecar/hosted/plan-wire";
 import { PLAN_CALL_FAILURE, type PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import type { FolderEntry, FolderListing } from "../file-tree/contract";
+import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**
  * folder-listings.ts -- the folders of a plan's repository a File tab's tree and breadcrumbs have listed, so a folder is listed once however many of them ask.
@@ -8,7 +11,8 @@ import { PLAN_CALL_FAILURE, type PlanningTreeAnswer } from "@sidecar/hosted/plan
  * refused, is not kept, so the next ask lists it again. The store is the
  * File view's (`file-view.tsx`), which stands across File tabs, so moving
  * between them lists nothing twice, and coming back to a File tab from
- * another tab lists the repository afresh, as GitHub holds it then.
+ * another tab lists the repository afresh, as GitHub holds it then. Both
+ * hand a listing to the tree bundle in its own words (`listingOf`).
  */
 
 /** Lists one folder of the repository, the root for the empty path. */
@@ -32,5 +36,28 @@ export function keptListings(read: ListFolder): ListFolder {
     );
     kept.set(path, listing);
     return listing;
+  };
+}
+
+/** A listing's entries as the tree hears them, each by its name or, listed whole, its path. */
+export function entriesOf(entries: readonly PlanTreeEntry[]): readonly FolderEntry[] {
+  return entries.map((entry) => ({
+    name: entry.name,
+    folder: entry.kind === PLAN_TREE_ENTRY.FOLDER,
+  }));
+}
+
+/** A folder's listing as the tree hears it: its entries, or why it is not listed and whether listing again may help. */
+export function listingOf(answer: PlanningTreeAnswer): FolderListing {
+  if ("folder" in answer) {
+    return {
+      entries: entriesOf(answer.folder.entries),
+      truncated: answer.folder.truncated,
+    };
+  }
+  if ("failure" in answer) return { notice: "The files could not be read.", retry: true };
+  return {
+    notice: refusalLine(answer.refusal, answer.branch),
+    retry: refusalPasses(answer.refusal),
   };
 }

@@ -59,7 +59,7 @@ function foldersAbove(path: string): readonly string[] {
 
 /** The tree listed as it opens: reveal a path in it, and stop listing. */
 export interface FolderBrowser {
-  /** Lists and opens each folder above the path, then scrolls to it; answers once it has. */
+  /** Lists and opens each folder above a file, then marks it and scrolls to it; answers once it has. */
   readonly reveal: (path: string, options: RevealOptions) => Promise<void>;
   readonly dispose: () => void;
 }
@@ -119,29 +119,17 @@ export function browseFolders(tree: FileTree, readFolder: ListEntries): FolderBr
   });
   list("");
 
-  // Note that the root has no row of its own, so revealing it takes the
-  // tree's keyboard to its first row, where the root's entries begin.
   const reveal = async (path: string, options: RevealOptions): Promise<void> => {
     revealing += 1;
     const ticket = revealing;
-    if (path === "") {
-      const listed = await list("");
-      if (ticket === revealing && listed && options.focus) tree.focusFirstItem();
-      return;
-    }
-    const folders = options.folder ? [...foldersAbove(path), path] : foldersAbove(path);
-    for (const folder of folders) {
+    for (const folder of foldersAbove(path)) {
       const listed = await list(folder);
       // A later reveal stands in for this one, and a folder unread ends it.
       if (ticket !== revealing || !listed) return;
       const item = folder === "" ? undefined : folderItem(tree, folder);
       if (item !== undefined && !item.isExpanded()) item.expand();
     }
-    const id = treePath(path, options.folder);
-    if (!options.folder) markAlone(tree, id, options.focus);
-    else if (tree.getItem(id) !== null) {
-      tree.scrollToPath(id, { focus: options.focus, offset: "center" });
-    }
+    markAlone(tree, path, options.focus);
   };
 
   return { reveal, dispose: unsubscribe };
