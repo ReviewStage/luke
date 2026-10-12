@@ -6,9 +6,9 @@ import {
 } from "@sidecar/credentials/snapshot";
 import { WingFace } from "@sidecar/panel";
 import { FACE_MOTION, FACE_MOTION_CYCLE_MS, type FaceMotion } from "@sidecar/surface";
-import { LoaderCircleIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { GitHubMark, GoogleMark } from "./account-marks";
+import { SpinnerRing } from "./spinner";
 
 /**
  * The introductions Luke makes while nobody is signed in, in the order he
@@ -85,10 +85,9 @@ function ProviderButton({
       onClick={() => onBegin(provider)}
     >
       {waiting ? (
-        <LoaderCircleIcon
-          className="account-mark animate-spin [animation-play-state:var(--loop-motion)]"
-          aria-hidden="true"
-        />
+        <span className="account-mark">
+          <SpinnerRing />
+        </span>
       ) : (
         mark
       )}

@@ -1,9 +1,9 @@
 /**
  * state-glyph.tsx -- where a piece of work stands, drawn on its own glyph rather than as a dot beside it, the way Cursor's and Codex's agent tabs draw it.
  *
- * Working, the glyph shrinks inside a ring that turns around it; reduced
- * motion and a capture run hold the ring still (`--loop-motion`), which
- * still reads as working. Failed, an alert in the danger colour takes the
+ * Working, the glyph shrinks inside the window's one spinner ring
+ * (`spinner.tsx`) turning around it; reduced motion and a capture run hold
+ * the ring still (`--loop-motion`), which still reads as working. Failed, an alert in the danger colour takes the
  * glyph's place. At rest, finished or stopped by hand, the glyph stands
  * alone, since that is where every piece of work ends and a mark on each
  * says nothing. Working and failed are said aloud in a fixed word, so
@@ -13,6 +13,7 @@
 
 import { CircleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { SpinnerRing } from "./spinner";
 
 export const GLYPH_STATE = {
   WORKING: "working",
@@ -56,7 +57,7 @@ export function StateGlyph({
       ) : (
         <>
           {glyph}
-          <span className="state-glyph-ring" aria-hidden="true" />
+          <SpinnerRing />
         </>
       )}
     </span>

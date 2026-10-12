@@ -81,7 +81,7 @@ export function AccountSection({
             question: `Sign out of ${account.email}?`,
             stage: signOut.stage,
             verb: "Sign out",
-            running: "Signing out…",
+            running: "Signing out",
             onKeep: signOut.keep,
             onAct: signOut.run,
           }}
@@ -107,7 +107,7 @@ export function AccountSection({
             question: `Delete the account ${account.email}? This cannot be undone.`,
             stage: deletion.stage,
             verb: "Delete account",
-            running: "Deleting…",
+            running: "Deleting account",
             onKeep: deletion.keep,
             onAct: deletion.run,
           }}

@@ -28,6 +28,7 @@ import {
 import type { CodingAgentsControl } from "../planning/use-coding-agents";
 import { MAIN_TAB, type MainTab, type MainTabsControl } from "../planning/use-main-tabs";
 import type { PinnedTab } from "../planning/use-side-panel";
+import { SpinnerRegion } from "../spinner";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import {
   type AddEntry,
@@ -469,14 +470,14 @@ export function MainTabContent({
     return agents.draft?.id === tab.draft ? (
       <DraftAgentTab key={tab.draft} draft={agents.draft} control={agents} />
     ) : (
-      <p className="side-panel-empty">Reading the agent…</p>
+      <SpinnerRegion label="Loading agent" />
     );
   }
   const agent = agents.agents?.find((each) => each.id === tab.agent);
   // The tab stands for an agent the list no longer holds only until the
   // column moves back to the plan, a render away.
   return agent === undefined ? (
-    <p className="side-panel-empty">Reading the agent…</p>
+    <SpinnerRegion label="Loading agent" />
   ) : (
     <AgentTab
       key={agent.id}

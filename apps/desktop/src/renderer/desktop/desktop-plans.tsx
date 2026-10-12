@@ -12,6 +12,7 @@ import { CHIP_PLACE, RepositoryChip } from "../planning/repository-chip";
 import { MAIN_TAB } from "../planning/use-main-tabs";
 import type { PlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
 import { usePlanRename } from "./plan-name-field";
@@ -143,13 +144,11 @@ function PlanDocument({
   const [refusal, setRefusal] = useState<{ planId: string; note: string } | undefined>(undefined);
   if (region.kind !== DOCUMENT_REGION.READY) {
     const line =
-      region.kind === DOCUMENT_REGION.READING
-        ? "Reading the plan…"
-        : region.kind === DOCUMENT_REGION.FAILED
-          ? "The plan could not be read."
-          : region.kind === DOCUMENT_REGION.MISSING
-            ? "This plan no longer exists."
-            : "Choose a plan, or start a new one.";
+      region.kind === DOCUMENT_REGION.FAILED
+        ? "The plan could not be read."
+        : region.kind === DOCUMENT_REGION.MISSING
+          ? "This plan no longer exists."
+          : "Choose a plan, or start a new one.";
     return (
       <>
         <Toolbar
@@ -159,8 +158,12 @@ function PlanDocument({
             </TabStrip>
           }
         />
-        <section className="desktop-empty" aria-busy={region.kind === DOCUMENT_REGION.READING}>
-          <p role={region.kind === DOCUMENT_REGION.READING ? undefined : "alert"}>{line}</p>
+        <section className="desktop-empty">
+          {region.kind === DOCUMENT_REGION.READING ? (
+            <Spinner label="Loading plan" size={SPINNER_SIZE.REGION} />
+          ) : (
+            <p role="alert">{line}</p>
+          )}
           {region.kind === DOCUMENT_REGION.FAILED ? (
             <button type="button" className="primary-button" onClick={plans.onRetryDocument}>
               Try again

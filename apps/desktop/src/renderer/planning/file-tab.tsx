@@ -2,6 +2,7 @@ import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
+import { BusyLabel, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { rangeLabel } from "./code-pane-model";
@@ -96,11 +97,9 @@ function EdgeRow({
       disabled={read === EDGE_READ.READING}
       onClick={() => load.current()}
     >
-      {read === EDGE_READ.READING
-        ? "Reading…"
-        : read === EDGE_READ.FAILED
-          ? "Could not read these lines. Try again"
-          : label}
+      <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
+        {read === EDGE_READ.FAILED ? "Could not read these lines. Try again" : label}
+      </BusyLabel>
     </button>
   );
 }
@@ -303,9 +302,7 @@ export function FileTab({
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} readWindow={readWindow} />
       ) : read.kind === FILE_READ.READING ? (
-        <div className="side-panel-empty">
-          <p className="m-0">Reading the file…</p>
-        </div>
+        <SpinnerRegion label="Loading file" />
       ) : snippet === undefined ? (
         <div className="side-panel-empty" role="alert">
           <ReadNotice read={read} onRetry={readLit} />

@@ -28,6 +28,7 @@ import {
 } from "../planning/coding-agent-model";
 import { HarnessMark } from "../provider-marks";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { Spinner, SpinnerRegion } from "../spinner";
 import { PickerRow } from "./picker-row";
 
 /**
@@ -51,11 +52,9 @@ import { PickerRow } from "./picker-row";
  * there is no default to show, and the page says so.
  */
 
-/** What the page says while it reads, while it cannot, and with no account. */
+/** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  READING: "Reading your default…",
   FAILED: "The default could not be read. Try again.",
-  MODELS_READING: "Reading the models…",
   MODELS_FAILED: "The models could not be read. Open Settings again to try again.",
   MODELS_NONE_MATCH: "No models match.",
   SIGNED_OUT: "Sign in to choose the model your coding agents run on.",
@@ -152,9 +151,13 @@ function DefaultRows({
         noMatch={PAGE_LINE.MODELS_NONE_MATCH}
         note={
           models === undefined ? (
-            <span role={modelsFailed ? "alert" : undefined}>
-              {modelsFailed ? PAGE_LINE.MODELS_FAILED : PAGE_LINE.MODELS_READING}
-            </span>
+            modelsFailed ? (
+              <span role="alert">{PAGE_LINE.MODELS_FAILED}</span>
+            ) : (
+              <div className="plan-compose-menu-note">
+                <Spinner label="Loading models" />
+              </div>
+            )
           ) : undefined
         }
         anchor={SETTINGS_SEARCH_ROW.CODING_AGENT_MODEL}
@@ -358,9 +361,7 @@ export function CodingAgentsSection({ signedIn }: { signedIn: boolean }): React.
           </button>
         </>
       ) : (
-        <p className="settings-note" aria-busy="true">
-          {PAGE_LINE.READING}
-        </p>
+        <SpinnerRegion label="Loading your default" />
       )}
     </section>
   );

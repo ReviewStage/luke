@@ -8,6 +8,7 @@ import { Fragment, useEffect, useRef } from "react";
 import { ACT_KIND, type ActPayload } from "#shared/messages/acts";
 import { actRequest } from "../act";
 import { rendererRuntime } from "../renderer-runtime";
+import { SpinnerRegion } from "../spinner";
 import { useAppState } from "../use-app-state";
 import {
   WHITEBOARD_ASSET,
@@ -199,7 +200,7 @@ export function PlanBoard({
         </Fragment>
       ) : null}
       {!AsyncResult.isFailure(loaded) && (module === undefined || board === undefined) ? (
-        <p aria-busy="true">Opening the board…</p>
+        <SpinnerRegion label="Loading board" />
       ) : null}
     </section>
   );

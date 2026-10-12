@@ -41,6 +41,7 @@ import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy
 import { codingAgentsControl, plansControl, usedPlan } from "#testing/plans-control";
 import { relayout } from "#testing/resize-observer";
 import { installScrollIntoView } from "#testing/scroll-into-view";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { START_NEEDS_REPOSITORY } from "../planning/coding-agent-model";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE, type PlanMark } from "../planning/planning-model";
@@ -1485,29 +1486,42 @@ function Opening({ region }: { region: PlansControl["region"] }) {
   });
 }
 
-test("a plan opened from the list, read after the page first drew it reading, draws its document on the repository chip", () => {
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-  roots.push(root);
-  // The host publishes the plan reading before its read lands, and ready after.
-  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
-  assert.match(container.textContent ?? "", /Reading the plan…/u);
+it.effect(
+  "a plan opened from the list, read after the page first drew its spinner, draws its document on the repository chip",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      const draw = (region: PlansControl["region"]) =>
+        act(() => root.render(onRegistry(registry, createElement(Opening, { region }))));
+      const loading = () =>
+        waitsIn(container).filter((wait) => wait.says === "Loading plan" && wait.ring).length;
+      // The host publishes the plan reading before its read lands, and ready after.
+      draw({ kind: DOCUMENT_REGION.READING });
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.equal(loading(), 1);
+      assert.doesNotMatch(container.textContent ?? "", /Reading/u);
 
-  act(() =>
-    root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READY, plan: PLAN } })),
-  );
-  assert.ok(documentShown(container));
-  assert.equal(
-    container.querySelector(".repository-chip .plan-compose-chip-name")?.textContent,
-    "Choose repository",
-  );
+      draw({ kind: DOCUMENT_REGION.READY, plan: PLAN });
+      assert.ok(documentShown(container));
+      assert.equal(loading(), 0);
+      assert.equal(
+        container.querySelector(".repository-chip .plan-compose-chip-name")?.textContent,
+        "Choose repository",
+      );
 
-  // Another plan opening draws the page reading again, with nothing of the first left on it.
-  act(() => root.render(createElement(Opening, { region: { kind: DOCUMENT_REGION.READING } })));
-  assert.equal(documentShown(container), false);
-  assert.match(container.textContent ?? "", /Reading the plan…/u);
-});
+      // Another plan opening draws the spinner again, with nothing of the first left on it.
+      draw({ kind: DOCUMENT_REGION.READING });
+      assert.equal(documentShown(container), false);
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(settle);
+      assert.equal(loading(), 1);
+    }),
+);
 
 /** The panel's tabs, in the strip's order. */
 function panelTabs(page: HTMLElement): string[] {
@@ -1694,7 +1708,7 @@ test("a plan's coding agents follow the plan's tab in the column's strip, named 
   // A tab never shown holds no transcript, so its card says its name, model, and that it works, and no step.
   assert.equal(hover(claude), "Sign-out button in account menuOpus 5.5 HighWorking…");
   assert.equal(tabState(claude), "Working");
-  assert.ok(claude.querySelector(".state-glyph-ring"), "a ring turns while it works");
+  assert.ok(claude.querySelector(".spinner-ring"), "a ring turns while it works");
   assert.ok(claude.querySelector("svg.provider-mark"), "Claude Code's mark");
   assert.equal(tabUnread(claude), true, "an end no one saw sets the label in semibold");
   assert.equal(tabState(sol), undefined, "a finished agent's mark stands alone");

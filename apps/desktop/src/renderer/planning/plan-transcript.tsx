@@ -9,6 +9,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { CopyMessageAction } from "./copy-message";
 import { TranscriptNote, TranscriptWords } from "./transcript-blocks";
 import {
@@ -144,9 +145,9 @@ export function PlanTranscript({
       {region.kind === TRANSCRIPT_REGION.READY ? (
         <TranscriptCalls region={region} />
       ) : (
-        <ConversationEmptyState aria-busy={region.kind === TRANSCRIPT_REGION.READING}>
+        <ConversationEmptyState>
           {region.kind === TRANSCRIPT_REGION.READING ? (
-            <p className="m-0">Reading the transcript…</p>
+            <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
           ) : null}
           {region.kind === TRANSCRIPT_REGION.EMPTY ? (
             <p className="m-0">{TRANSCRIPT_EMPTY_LINE}</p>

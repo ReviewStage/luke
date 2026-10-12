@@ -2,6 +2,7 @@ import { CheckIcon, DownloadIcon, ExternalIcon } from "@sidecar/panel";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
+import { BusyLabel } from "../spinner";
 import { UPDATE_ROW_ACTION, type UpdateRowAction, updateRow } from "../update-row";
 import type { UpdateControl } from "./controls";
 
@@ -16,7 +17,9 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
     case UPDATE_ROW_ACTION.DOWNLOADING:
       return (
         <button type="button" className="toolbar-button" disabled>
-          Downloading…
+          <BusyLabel busy label="Downloading the update">
+            Download
+          </BusyLabel>
         </button>
       );
     case UPDATE_ROW_ACTION.RESTART:
@@ -39,7 +42,9 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
           disabled={action === UPDATE_ROW_ACTION.CHECKING}
           onClick={() => void control.onCheck()}
         >
-          {action === UPDATE_ROW_ACTION.CHECKING ? "Checking…" : "Check for updates"}
+          <BusyLabel busy={action === UPDATE_ROW_ACTION.CHECKING} label="Checking for updates">
+            Check for updates
+          </BusyLabel>
         </button>
       );
   }

@@ -26,6 +26,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { useCopyToast } from "../copy-feedback";
 import { HarnessMark } from "../provider-marks";
+import { SPINNER_SIZE, Spinner } from "../spinner";
 import { StateGlyph } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
@@ -521,7 +522,7 @@ export function AgentTranscriptView({
     );
   }
   return (
-    <ConversationEmptyState aria-busy={reading}>
+    <ConversationEmptyState>
       {failed ? (
         <>
           <p className="m-0" role="alert">
@@ -531,9 +532,11 @@ export function AgentTranscriptView({
             Try again
           </button>
         </>
+      ) : reading && ended === undefined ? (
+        <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
       ) : (
         <p className="m-0" data-ended={ended === undefined ? undefined : ""}>
-          {ended ?? (reading ? "Reading the transcript…" : lead.startingLine)}
+          {ended ?? lead.startingLine}
         </p>
       )}
     </ConversationEmptyState>

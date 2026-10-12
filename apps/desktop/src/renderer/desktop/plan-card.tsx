@@ -6,7 +6,6 @@ import {
   GitPullRequestClosedIcon,
   GitPullRequestDraftIcon,
   GitPullRequestIcon,
-  LoaderCircleIcon,
 } from "lucide-react";
 import { GitHubMark } from "../account-marks";
 import { AgentGlyph } from "../planning/agent-tab";
@@ -22,6 +21,7 @@ import {
 import { sinceText } from "../planning/plan-time";
 import { WorkingTime } from "../planning/working-time";
 import { RepositoryPicture } from "../repository-picture";
+import { SpinnerRing } from "../spinner";
 
 /**
  * plan-card.tsx -- a sidebar plan's agents at a glance: the one mark at its row's end, and the card its row hangs while the pointer rests on it.
@@ -51,12 +51,9 @@ const PULL_REQUEST_GLYPH = {
 /** The spinner an agent at work is drawn with, held still where motion is reduced. */
 function WorkingGlyph({ label }: { label: string }): React.JSX.Element {
   return (
-    <LoaderCircleIcon
-      className="plan-mark-glyph animate-spin [animation-play-state:var(--loop-motion)]"
-      data-plan-mark="working"
-      role="img"
-      aria-label={label}
-    />
+    <span className="plan-mark-glyph" data-plan-mark="working" role="img" aria-label={label}>
+      <SpinnerRing />
+    </span>
   );
 }
 

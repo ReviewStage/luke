@@ -1,5 +1,6 @@
 import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { useEffect, useRef } from "react";
+import { BusyLabel } from "../spinner";
 import { focusWhenVisible, useStagedFocus } from "../staged-focus";
 import {
   CONFIRM_STAGE,
@@ -30,7 +31,7 @@ interface SwapQuestion {
   /** What is being asked, in the words a hand and a reader both get. */
   question: string;
   stage: ConfirmStage;
-  /** The dangerous answer's word, and its word while it runs. */
+  /** The dangerous answer's word, and what a reader is told while it runs, under the spinner. */
   verb: string;
   running: string;
   onKeep: () => void;
@@ -143,7 +144,9 @@ export function ConfirmSwap({
               confirm.onAct();
             }}
           >
-            {acting ? confirm.running : confirm.verb}
+            <BusyLabel busy={acting} label={confirm.running}>
+              {confirm.verb}
+            </BusyLabel>
           </button>
         </fieldset>
       ) : null}

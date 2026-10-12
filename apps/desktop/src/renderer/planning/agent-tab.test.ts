@@ -18,12 +18,14 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import { type CatalogModel, MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
 import { Effect } from "effect";
+import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PublishedChip, PublishedRow } from "./agent-published";
 import { AgentTabView, AgentTranscriptView, type DelegationDoors } from "./agent-tab";
 
@@ -344,7 +346,7 @@ test("a delegation draws as a subagent's row on a line of its own, saying the ta
   assert.ok(done.querySelector('[data-subagent-harness="anthropic"] svg.provider-mark'), "Clawd");
   assert.equal(done.querySelector("svg.lucide-bot"), null, "no robot where the model is known");
   assert.equal(running.querySelector("[data-subagent-pair]")?.textContent, "Opus 5.5 High");
-  assert.ok(running.querySelector('[data-tool-state="input-available"] svg.animate-spin'));
+  assert.ok(running.querySelector('[data-tool-state="input-available"] .spinner-ring'));
   assert.equal(
     running.querySelector("[data-subagent-harness]"),
     null,
@@ -692,7 +694,10 @@ test("each row says what the call did and where it stands, and the icon and mark
   );
   assert.match(markup, /Edited <\/span><span[^>]*>apps\/web\/server\/db\/schema\.ts</u);
   assert.match(markup, /data-tool-state="output-available"[^>]*aria-label="Completed"><\/span>/u);
-  assert.match(markup, /data-tool-state="input-available"[^>]*aria-label="Running"><svg/u);
+  assert.match(
+    markup,
+    /data-tool-state="input-available"[^>]*aria-label="Running"><span class="spinner-ring/u,
+  );
   assert.match(markup, /data-tool-state="output-error"[^>]*aria-label="Failed"><svg[^>]*lucide-x/u);
   // Every svg drawn on a row is the one size, so nothing shifts as a mark changes.
   const icons = markup.match(/<svg[^>]*class="[^"]*"/gu) ?? [];
@@ -825,7 +830,7 @@ test("the tab wears no head: it opens on the transcript, what the agent runs on 
   assert.doesNotMatch(tabMarkup(CODING_AGENT_STATUS.COMPLETED), /agent-end-line/u);
 });
 
-test("with nothing held the tab says the agent is starting, or how it ended before its first message, a read out says it is reading, and a failed read offers Try again", () => {
+test("with nothing held the tab says the agent is starting, or how it ended before its first message, and a failed read offers Try again", () => {
   const empty = (reading: boolean, failed: boolean, ended?: string) =>
     renderToStaticMarkup(
       createElement(AgentTranscriptView, {
@@ -841,9 +846,39 @@ test("with nothing held the tab says the agent is starting, or how it ended befo
   assert.match(empty(false, false), /The agent is starting\./u);
   assert.match(empty(false, false, "Failed"), /data-ended="">Failed</u);
   assert.doesNotMatch(empty(false, false, "Failed"), /starting/u);
-  assert.match(empty(true, false), /Reading the transcript…/u);
   assert.match(empty(false, true), /could not be read[\s\S]*Try again/u);
 });
+
+it.effect(
+  "a read out draws the spinner in the transcript's place once it has stood, saying Loading transcript to a reader",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const container = document.createElement("div");
+      document.body.append(container);
+      const root = createRoot(container);
+      roots.push(root);
+      act(() =>
+        root.render(
+          onRegistry(
+            registry,
+            createElement(AgentTranscriptView, {
+              messages: [],
+              reading: true,
+              failed: false,
+              working: false,
+              onRetry: ignore,
+              openGitHub: ignore,
+            }),
+          ),
+        ),
+      );
+      yield* TestClock.adjust(PAST_SPINNER_DELAY);
+      yield* Effect.promise(() => act(async () => undefined));
+      assert.deepEqual(waitsIn(container), [{ says: "Loading transcript", ring: true }]);
+      assert.doesNotMatch(container.textContent ?? "", /Reading|starting/u);
+    }),
+);
 
 /** A message the developer sent the agent after the plan, as O1's messaging stores one. */
 const FOLLOW_UP: CodingAgentMessage = {

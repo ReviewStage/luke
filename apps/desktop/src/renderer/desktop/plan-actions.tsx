@@ -199,7 +199,7 @@ function deleteQuestion(name: string, archived: boolean): DialogQuestion {
     title: "Permanently delete plan?",
     body: archived ? lost : `${lost} To keep it out of the way instead, archive it.`,
     verb: "Permanently delete",
-    running: "Deleting…",
+    running: "Deleting",
   };
 }
 

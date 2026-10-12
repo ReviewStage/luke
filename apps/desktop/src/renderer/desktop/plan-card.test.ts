@@ -115,7 +115,7 @@ const drawnCard = (plan: PlanSummary) =>
         (glyph) => ({
           said: glyph.querySelector('[role="img"]')?.getAttribute("aria-label"),
           mark: glyph.querySelector(".provider-mark")?.tagName.toLowerCase(),
-          ring: glyph.querySelector(".state-glyph-ring") !== null,
+          ring: glyph.querySelector(".spinner-ring") !== null,
         }),
       ),
       unmount: () => act(() => root.unmount()),

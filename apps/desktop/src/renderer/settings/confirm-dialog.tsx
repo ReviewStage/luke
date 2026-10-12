@@ -1,6 +1,7 @@
 import type { ActionResult } from "@sidecar/wire";
 import { useEffect, useId, useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { BusyLabel } from "../spinner";
 import { useStagedFocus } from "../staged-focus";
 import {
   CONFIRM_STAGE,
@@ -43,7 +44,7 @@ const ACT_BUTTON_CLASS = {
   [DIALOG_TONE.PRIMARY]: "primary-button",
 } as const satisfies Record<DialogTone, string>;
 
-/** What the dialog says: its title, what the act takes with it, and the act's word, and its word while it runs; the act is red unless its tone says otherwise. */
+/** What the dialog says: its title, what the act takes with it, and the act's word, and what a reader is told while it runs, under the spinner; the act is red unless its tone says otherwise. */
 export interface DialogQuestion {
   title: string;
   body: string;
@@ -216,7 +217,9 @@ export function ConfirmDialog({
             disabled={acting}
             onClick={act}
           >
-            {acting ? question.running : question.verb}
+            <BusyLabel busy={acting} label={question.running}>
+              {question.verb}
+            </BusyLabel>
           </button>
         </div>
       </div>
