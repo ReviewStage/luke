@@ -36,9 +36,31 @@ export const ACCOUNT_TOKEN_STORAGE = {
  * The other two would hand a signed-in browser its GitHub access token:
  * nothing of Luke's reads that token anywhere but on the server
  * (`github/github-app.ts`), and root AGENTS.md pins that no credential
- * travels in an answer, so neither door is open.
+ * travels in an answer, so neither door is open. The organization plugin's
+ * invitation endpoints are shut too: Luke sends no invitation mail, and the
+ * plugin would otherwise write an invitation row nobody is told about. An
+ * owner adds an existing account to a workspace instead.
  */
-export const DISABLED_AUTH_PATHS = ["/token", "/get-access-token", "/refresh-token"] as const;
+export const DISABLED_AUTH_PATHS = [
+  "/token",
+  "/get-access-token",
+  "/refresh-token",
+  "/organization/invite-member",
+  "/organization/cancel-invitation",
+  "/organization/accept-invitation",
+  "/organization/reject-invitation",
+  "/organization/get-invitation",
+  "/organization/list-invitations",
+  "/organization/list-user-invitations",
+] as const;
+
+/**
+ * How Better Auth keeps workspaces, each an organization of its members. A
+ * workspace is never deleted, so no plan is lost with one.
+ */
+export const ORGANIZATION_OPTIONS = {
+  disableOrganizationDeletion: true,
+} as const;
 
 export const JWT_KEY_STORAGE = {
   jwks: {
