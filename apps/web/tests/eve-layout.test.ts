@@ -21,6 +21,20 @@ const WEB = join(import.meta.dirname, "..");
 const EVE_ROOTS = { PLANNING: join(WEB, "eve"), CODER: join(WEB, "coder") } as const;
 const VERCEL_OUTPUT = join(".vercel", "output", "config.json");
 const BUILD_OUTPUT_VERSION = 3;
+/** The chunk of the built server that registers every authored module by its source. */
+const SERVER_CHUNK = join(
+  ".vercel",
+  "output",
+  "functions",
+  "__server.func",
+  "_chunks",
+  "vercel.web.mjs",
+);
+/** The Linear connection each root and its worker register, by the path under the root. */
+const LINEAR_CONNECTION_FILES = [
+  join("connections", "linear.ts"),
+  join("subagents", "worker", "connections", "linear.ts"),
+] as const;
 
 const BuildOutputConfig = Schema.Struct({ version: Schema.Number });
 
@@ -29,7 +43,7 @@ function mtimeOrAbsent(path: string): number | undefined {
 }
 
 test.for(Object.entries(EVE_ROOTS))(
-  "eve resolves the %s root as a flat app root and writes its Vercel output there",
+  "eve resolves the %s root as a flat app root and writes its Vercel output there, with the root's and its worker's Linear connections",
   { timeout: 180_000 },
   ([, root]) => {
     const parentConfig = join(WEB, VERCEL_OUTPUT);
@@ -52,5 +66,11 @@ test.for(Object.entries(EVE_ROOTS))(
       JSON.parse(readFileSync(eveConfig, "utf8")),
     );
     assert.equal(config.version, BUILD_OUTPUT_VERSION);
+
+    // eve hands a declared worker none of its root's connections, so the build carries each one's own.
+    const server = readFileSync(join(root, SERVER_CHUNK), "utf8");
+    for (const connection of LINEAR_CONNECTION_FILES) {
+      assert.ok(server.includes(`"sourcePath": "${join(root, connection)}"`), connection);
+    }
   },
 );

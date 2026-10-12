@@ -252,6 +252,19 @@ Installing the App stores nothing about you with us: which repositories it
 can see is read from GitHub when you choose one. We also keep the records
 that keep you signed in, and a daily count of how much voice and review you
 have used.
+
+**Linear, if you connect it.** Connecting Linear in Luke's settings signs you
+in to Linear in your browser through Vercel Connect, which stores Linear's
+token for your account, encrypted, and renews it; Luke's service never stores
+it, and never hands it to your Mac, a model, or a coding agent's sandbox.
+We keep only whether your account is connected. While it is, Luke's planning
+assistant and coding agents can read and change what your Linear account can,
+through Linear's own MCP server, without asking you first; each call and what
+Linear answered is written to your account's conversation like any other tool
+call, so it holds whatever Linear content the call returned. Disconnecting
+stops Luke using it at once, removes the connection's record, and asks
+Vercel Connect to revoke the grant; what agents already changed in Linear,
+and the record of it, stays.
 Luke's own maintainers can see that record — your name, email address, which
 sign-in you used, when you joined, when you were last active, and your daily
 counts — on an admin page of our site that only an account we have marked as an
@@ -426,6 +439,10 @@ only when you press Send.
   with an installation token the App mints for that one repository, set at
   the sandbox's network boundary and never inside it; what GitHub sees is
   the App acting on a repository you gave it.
+- Vercel Connect and Linear, if you connect Linear. Vercel Connect keeps
+  Linear's token for your account; Luke's agents ask it for that token on our
+  service and send each Linear call, with its input, to Linear's MCP server,
+  which keeps it under Linear's own policy.
 - GitHub, to check for updates. These requests are unauthenticated and carry
   nothing about you.
 - GitHub, for the picture of each repository owner the app names, an

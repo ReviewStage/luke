@@ -6,11 +6,12 @@ import { ACTION_RESULT_STATUS, type ActionResult } from "@sidecar/wire";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { useConfirm, useConfirmGroup } from "./confirm-state";
 import { ConfirmSwap } from "./confirm-swap";
+import { LinearRow } from "./linear-row";
 
 /**
- * Who is signed in, and the two ways out of that. It sits at the foot of the
- * front page: signing out and deleting are done once or never. Both ways out
- * ask before they act.
+ * Who is signed in, the account's Linear connection, and the two ways out
+ * of that. It sits at the foot of the front page: signing out and deleting
+ * are done once or never. Both ways out ask before they act.
  */
 export function AccountSection({
   account,
@@ -98,6 +99,7 @@ export function AccountSection({
           </button>
         </ConfirmSwap>
       </div>
+      <LinearRow />
       <div className="settings-row" {...searchAnchorProps(SETTINGS_SEARCH_ROW.DELETE_ACCOUNT)}>
         <span className="settings-copy">
           <strong>Delete account</strong>

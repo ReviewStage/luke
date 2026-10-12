@@ -89,6 +89,22 @@
           "dest": "/api/default.js?route=account/delete"
         },
         {
+          "src": "/api/account/linear",
+          "dest": "/api/default.js?route=account/linear"
+        },
+        {
+          "src": "/api/account/linear/connect",
+          "dest": "/api/default.js?route=account/linear/connect"
+        },
+        {
+          "src": "/api/account/linear/connected",
+          "dest": "/api/default.js?route=account/linear/connected"
+        },
+        {
+          "src": "/api/account/linear/disconnect",
+          "dest": "/api/default.js?route=account/linear/disconnect"
+        },
+        {
           "src": "/api/account/plan-template",
           "dest": "/api/default.js?route=account/plan-template"
         },

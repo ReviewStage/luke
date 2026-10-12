@@ -31,6 +31,18 @@ export const HOSTED_SERVICE_PATH = {
    * both bodies.
    */
   DICTATION: "/api/dictation",
+  /** Where the account's Linear connection stands (GET). `linear-wire.ts` declares the answer. */
+  ACCOUNT_LINEAR: "/api/account/linear",
+  /** Begins a browser sign-in to Linear for the account (POST), answering the address the browser opens. */
+  ACCOUNT_LINEAR_CONNECT: "/api/account/linear/connect",
+  /** Ends the account's Linear connection (POST); what agents already wrote to Linear stands. */
+  ACCOUNT_LINEAR_DISCONNECT: "/api/account/linear/disconnect",
+  /**
+   * Where Vercel Connect returns the browser from a Linear sign-in (GET),
+   * with the sign-in's own state: the route settles it and sends the
+   * browser on to the landing page `linear-wire.ts` names.
+   */
+  ACCOUNT_LINEAR_CONNECTED: "/api/account/linear/connected",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

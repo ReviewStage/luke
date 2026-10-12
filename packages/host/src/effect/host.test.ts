@@ -95,6 +95,7 @@ describe("the standing host", () => {
       HOST_CONCERN.LIVE,
       HOST_CONCERN.PLANNING,
       HOST_CONCERN.CODING_AGENTS,
+      HOST_CONCERN.LINEAR,
     ]);
     assert.deepEqual([...HOST_START_ORDER].sort(), Object.values(HOST_CONCERN).sort());
   });

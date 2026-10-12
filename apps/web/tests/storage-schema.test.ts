@@ -76,6 +76,7 @@ const DECLARED_TABLES = [
   "inbox_item",
   "introduction_usage",
   "jwks",
+  "linear_connection",
   "messages",
   "oauth_access_token",
   "oauth_client",

@@ -8,13 +8,14 @@ import { verbatimJsonSchema } from "@sidecar/wire/effect";
 import type { ToolSet } from "ai";
 import type { MessageStreamEvent } from "eve/client";
 import { wireValidatedTool } from "../../core.js";
+import { connectionToolEntries } from "../connection-tools.js";
 
 /**
  * tool-set.ts -- every tool a coding agent's rows may name, as the store writer holds them.
  *
  * The coding agent runs eve's own tools, authored one file each under
  * `coder/tools/` so the set is exactly this list and eve adds nothing
- * beside it: its shell and its file tools, the code extension's patch and
+ * beside it but its two over the Linear connection (`../connection-tools.ts`): its shell and its file tools, the code extension's patch and
  * search, the provider-run web reads, the delegation of a slice of its
  * work to a worker (`coder/tools/delegate.ts`), the notes it takes on
  * its plan (`plan-edit.ts`), its to-do list (`todos.ts`), and the
@@ -103,10 +104,15 @@ const TOOL_INPUT = verbatimJsonSchema(WireValueSchema, {
   additionalProperties: true,
 });
 
-/** The coding agent's tools as stored rows are held to them, built once for the deployment. */
-export const CODER_TOOL_SET: ToolSet = Object.fromEntries(
-  Object.values(CODER_TOOL).map((name) => [
+/**
+ * The coding agent's tools as stored rows are held to them, built once for
+ * the deployment, with the Linear connection's calls beside them
+ * (`../connection-tools.ts`), which the agent and its workers alike make.
+ */
+export const CODER_TOOL_SET: ToolSet = Object.fromEntries([
+  ...Object.values(CODER_TOOL).map((name) => [
     name,
     wireValidatedTool(`eve's ${name} tool`, TOOL_INPUT),
   ]),
-);
+  ...connectionToolEntries(),
+]);

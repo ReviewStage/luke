@@ -52,6 +52,12 @@ import {
   providerKeySaveParamsSchema,
   providerKeysAnswerViewSchema,
 } from "@sidecar/hosted/coding-agent-view";
+import {
+  type LinearConnectView,
+  type LinearStatusView,
+  linearConnectViewSchema,
+  linearStatusViewSchema,
+} from "@sidecar/hosted/linear-view";
 import { PLAN_MARKDOWN_MAX_CHARS } from "@sidecar/hosted/plan-markdown";
 import {
   type CodeLines,
@@ -129,6 +135,14 @@ export const ACT_KIND = {
   ACCOUNT_CANCEL_SIGN_IN: "account.cancelSignIn",
   ACCOUNT_SIGN_OUT: "account.signOut",
   ACCOUNT_DELETE: "account.delete",
+  /**
+   * The account's Linear connection: where it stands, a browser sign-in
+   * begun and opened by the host, and the connection ended. The window
+   * hears whether the browser was sent, never the address it was sent to.
+   */
+  LINEAR_STATUS: "linear.status",
+  LINEAR_CONNECT: "linear.connect",
+  LINEAR_DISCONNECT: "linear.disconnect",
   SETTING_UPDATE: "setting.update",
   SETTINGS_RESET: "settings.reset",
   UPDATE_CHECK: "update.check",
@@ -612,6 +626,21 @@ export const ACT = {
   [ACT_KIND.PLANNING_WORK_EARLIER]: press(
     "Could not read that plan's earlier work on this system.",
   ),
+  [ACT_KIND.LINEAR_STATUS]: {
+    payload: noPayload,
+    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
+    refusal: "Could not read the Linear connection on this system.",
+  },
+  [ACT_KIND.LINEAR_CONNECT]: {
+    payload: noPayload,
+    result: wireResult<LinearConnectView>(isReadable(linearConnectViewSchema)),
+    refusal: "Could not connect Linear on this system.",
+  },
+  [ACT_KIND.LINEAR_DISCONNECT]: {
+    payload: noPayload,
+    result: wireResult<LinearStatusView>(isReadable(linearStatusViewSchema)),
+    refusal: "Could not disconnect Linear on this system.",
+  },
   [ACT_KIND.CODING_AGENTS_MODELS]: {
     payload: noPayload,
     result: wireResult<CodingAgentModelsAnswer>(isReadable(codingAgentModelsAnswerSchema)),

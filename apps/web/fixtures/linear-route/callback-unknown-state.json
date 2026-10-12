@@ -1,0 +1,11 @@
+{
+  "status": 303,
+  "statusText": "",
+  "headers": [
+    [
+      "location",
+      "/linear-connected.html?status=expired"
+    ]
+  ],
+  "body": ""
+}

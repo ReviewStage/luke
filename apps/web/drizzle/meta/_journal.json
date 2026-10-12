@@ -624,6 +624,13 @@
       "when": 1791380000000,
       "tag": "0089_voice_session_model",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1791390000000,
+      "tag": "0090_linear_connection",
+      "breakpoints": true
     }
   ]
 }

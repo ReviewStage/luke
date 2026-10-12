@@ -88,6 +88,12 @@ export const GATEWAY_METHOD = {
   CODING_AGENTS_INBOX: "codingAgents.inbox",
   /** One item of a plan's inbox answered against the revision the panel drew, under the panel's own key; the item as it then stands and whether the answer was taken, or why there is no answer. */
   CODING_AGENTS_INBOX_ANSWER: "codingAgents.inboxAnswer",
+  /** Where the account's Linear connection stands, read from the service now. */
+  LINEAR_STATUS: "linear.status",
+  /** A browser sign-in to Linear begun on the service and opened on this Mac; whether it was opened, never the address. */
+  LINEAR_CONNECT: "linear.connect",
+  /** The account's Linear connection ended on the service; where it then stands. */
+  LINEAR_DISCONNECT: "linear.disconnect",
   /** Everything a window's bootstrap reads of the host, in one answer. */
   CLIENT_BOOTSTRAP: "client.bootstrap",
   SETTINGS_SNAPSHOT: "settings.snapshot",
