@@ -12,16 +12,19 @@ import { planningCallInProgress } from "./planning/planning-model";
  * the panel stands, on another plan, in Settings, or on the new-plan page,
  * since the call outlives the call bar that draws their buttons. Each is the
  * voice window's to carry out on the call standing, so neither names the
- * open plan.
+ * open plan. The microphone's waits on the system's permission, as the call
+ * bar's button does: a microphone macOS refuses is unmuted in System
+ * Settings, not by a chord.
  */
 export function useCallCommands(
   view: Pick<VoiceView, "voiceStatus" | "callPlanId" | "speakerMuted">,
+  microphoneGranted: boolean,
   send: (command: VoiceCommand) => void,
 ): void {
   const inProgress = planningCallInProgress(view);
   useAppCommand(
     APP_COMMAND.TOGGLE_MICROPHONE,
-    inProgress ? () => send(VOICE_COMMAND.TOGGLE_MICROPHONE) : undefined,
+    inProgress && microphoneGranted ? () => send(VOICE_COMMAND.TOGGLE_MICROPHONE) : undefined,
   );
   useAppCommand(
     APP_COMMAND.TOGGLE_SPEAKER,

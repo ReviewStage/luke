@@ -21,16 +21,16 @@ let root: Root | undefined;
 /** Every command the chords handed to the voice window, in order. */
 let sent: VoiceCommand[] = [];
 
-function Panel({ view }: { view: VoiceView }): null {
+function Panel({ view, granted }: { view: VoiceView; granted: boolean }): null {
   useAppKeymap(true);
-  useCallCommands(view, (command) => sent.push(command));
+  useCallCommands(view, granted, (command) => sent.push(command));
   return null;
 }
 
-function draw(view: VoiceView): void {
+function draw(view: VoiceView, granted = true): void {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Panel, { view }));
+    root.render(createElement(Panel, { view, granted }));
   });
 }
 
@@ -83,4 +83,18 @@ test("the mute chords reach the standing call with no call bar on screen, naming
   draw({ ...call, voiceStatus: LIVE_STATUS.CLOSING });
   assert.equal(press(APP_COMMAND.TOGGLE_MICROPHONE), false);
   assert.equal(sent.length, 3);
+});
+
+test("a microphone the system refused mid-call is not toggled by its chord, and Luke's voice still is", () => {
+  draw(
+    {
+      ...IDLE_VOICE_VIEW,
+      voiceStatus: LIVE_STATUS.MUTED,
+      callPlanId: BILLING_PLAN,
+    },
+    false,
+  );
+  assert.equal(press(APP_COMMAND.TOGGLE_MICROPHONE), false);
+  assert.equal(press(APP_COMMAND.TOGGLE_SPEAKER), true);
+  assert.deepEqual(sent, [VOICE_COMMAND.MUTE_SPEAKER]);
 });
