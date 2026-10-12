@@ -1603,21 +1603,25 @@ test("an agent Luke starts in the call is read into the list as its start answer
   assert.equal(listReads(reopened), 1);
 });
 
-test("a notification's click opens its plan on the agent's tab in the plan's column, out from under a side panel filling the window, which it leaves shut", () => {
+test("a notification's click opens its plan on the agent's tab in the plan's column once its agents are read, out from under a side panel filling the window, which it leaves shut", async () => {
   const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
-  const tab = mount({
-    shown: true,
-    planning: {
-      ...OPEN,
-      activePlanId: other.id,
-      document: { status: PLANNING_READ.READY, plan: other },
+  const tab = mount(
+    {
+      shown: true,
+      planning: {
+        ...OPEN,
+        activePlanId: other.id,
+        document: { status: PLANNING_READ.READY, plan: other },
+      },
     },
-  });
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
 
   act(() => tab.control().onShowAgent(PLAN.id, AGENT_ID));
   assert.deepEqual(tab.told, [ACT_KIND.PLANNING_REFRESH, ACT_KIND.PLANNING_SELECT]);
   assert.equal(tab.control().mainTabs.tab, MAIN_TAB.PLAN, "the plan open until then shows its own");
   tab.stand({ planning: OPEN });
+  await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.equal(panelOf(tab).open, false);
 
@@ -1631,9 +1635,12 @@ test("a notification's click opens its plan on the agent's tab in the plan's col
   assert.equal(tab.control().sidePanel.fullScreen, false);
 });
 
-test("an agent pinned to the sidebar opens its plan on the agent's tab in the plan's column, its closed tab opened again, and leaves the side panel shut", () => {
+test("an agent pinned to the sidebar opens its plan on the agent's tab in the plan's column, its closed tab opened again, and leaves the side panel shut", async () => {
   const other: Plan = { ...PLAN, id: "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32", name: "Billing" };
-  const tab = mount({ shown: true, planning: OPEN });
+  const tab = mount(
+    { shown: true, planning: OPEN },
+    { [ACT_KIND.CODING_AGENTS_LIST]: () => Promise.resolve({ agents: [RUNNING_AGENT] }) },
+  );
   act(() => tab.control().sidePanel.onPin({ agent: AGENT_ID }, "Invite flow"));
   act(() => tab.control().mainTabs.onClose({ agent: AGENT_ID }));
   const [pin] = tab.control().sidePanel.pins;
@@ -1649,6 +1656,7 @@ test("an agent pinned to the sidebar opens its plan on the agent's tab in the pl
   act(() => tab.control().onOpenPinnedTab(pin));
   assert.equal(tab.told.at(-1), ACT_KIND.PLANNING_SELECT);
   tab.stand({ planning: OPEN });
+  await settle();
   assert.deepEqual(tab.control().mainTabs.tab, { agent: AGENT_ID });
   assert.equal(panelOf(tab).open, false);
 });

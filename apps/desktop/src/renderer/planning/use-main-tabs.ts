@@ -38,9 +38,10 @@ import {
  * stands, the plan's where none does. So opening a plan from the sidebar
  * shows it as the developer left it, the plan or the agent they were
  * reading, and an agent a notification, a pin, or a Start names is shown by
- * viewing it on its plan. With the plan's agents not yet read, an agent's
- * tab viewed last stands, so a plan opened on an agent is not swapped for
- * the document and back while the list is on its way.
+ * viewing it on its plan. An agent's tab stands only once the plan's agents
+ * are read and hold it, so the column never shows an agent its strip draws
+ * no tab for: a plan opened on an agent shows its document while the list
+ * is on its way, and stays on it where the read fails.
  *
  * The agents' tabs are dragged or moved from the keyboard among
  * themselves and the draft's, and the plan keeps the order from then on: a
@@ -229,9 +230,8 @@ function stripOf(held: HeldState, drawn: DrawnTabs): readonly MainTab[] {
   return [MAIN_TAB.PLAN, ...inPlanOrder([...agents, ...draft], order, (tab) => tab)];
 }
 
-/** Whether the tab stands on the plan now, an agent's whose tab is not closed doing so while the agents are unread. */
+/** Whether the tab stands in the plan's strip now. */
 function stands(held: HeldState, drawn: DrawnTabs, tab: MainTab): boolean {
-  if (isAgentTab(tab) && drawn.agents === undefined) return !held.closedAgents.includes(tab.agent);
   return stripOf(held, drawn).some((each) => sameTab(each, tab));
 }
 

@@ -71,7 +71,7 @@ test("the agents' tabs follow the plan's in the order started, and the draft's a
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, { agent: AGENT }, { agent: OTHER }]);
 });
 
-test("choosing an agent's tab shows it and keeps it as the plan's across a launch, standing while the agents are unread and giving way to the plan's once they hold none of it", () => {
+test("choosing an agent's tab shows it and keeps it as the plan's across a launch, shown once the agents are read and hold it, the plan's meanwhile and once they hold none of it", () => {
   const first = mount({ agents: [AGENT] });
   act(() => first.control().onChoose({ agent: AGENT }));
   assert.deepEqual(first.control().tab, { agent: AGENT });
@@ -82,8 +82,13 @@ test("choosing an agent's tab shows it and keeps it as the plan's across a launc
   first.render({ agents: [AGENT] });
   assert.deepEqual(first.control().tab, { agent: AGENT });
 
+  // Another launch shows the plan's own while the list is read, its strip drawing no agent's
+  // tab, and the agent once the list holds it.
   const second = mount({ agents: undefined });
-  assert.deepEqual(second.control().tab, { agent: AGENT }, "standing while the list is read");
+  assert.equal(second.control().tab, MAIN_TAB.PLAN);
+  assert.deepEqual(second.control().tabs, [MAIN_TAB.PLAN]);
+  second.render({ agents: [AGENT] });
+  assert.deepEqual(second.control().tab, { agent: AGENT });
   second.render({ agents: [OTHER] });
   assert.equal(second.control().tab, MAIN_TAB.PLAN);
 });
@@ -176,7 +181,7 @@ test("an agent shown on another plan, as a notification or a pin asks, is that p
   assert.equal(column.control().tab, MAIN_TAB.PLAN, "the open plan's own stands meanwhile");
 
   column.render({ agents: undefined });
-  assert.deepEqual(column.control().tab, { agent: AGENT });
+  assert.equal(column.control().tab, MAIN_TAB.PLAN, "its own until the agents are read");
   column.render({ agents: [AGENT] });
   assert.deepEqual(column.control().tab, { agent: AGENT });
 

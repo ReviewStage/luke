@@ -473,8 +473,8 @@ export function MainTabContent({
     );
   }
   const agent = agents.agents?.find((each) => each.id === tab.agent);
-  // The tab stands for an agent the list does not hold only while the list
-  // is on its way, or until the column moves back to the plan, a render away.
+  // The tab stands for an agent the list no longer holds only until the
+  // column moves back to the plan, a render away.
   return agent === undefined ? (
     <p className="side-panel-empty">Reading the agent…</p>
   ) : (
