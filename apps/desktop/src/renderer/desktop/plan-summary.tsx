@@ -16,8 +16,8 @@ import type { AddEntry } from "./strip-tabs";
  * open, in their rows' words and glyphs (`panelEntries`, `agentEntries`),
  * under quiet headings: the panel's kinds the plan has used, its coding
  * agents, its subagents, and the files Luke showed on it. An agent or a
- * subagent wears where it stands on its glyph, as its tab does, since no
- * tab stands beside the row to say it, and a file is drawn in a row the
+ * subagent wears where it stands on its glyph, and a failure at the row's
+ * end, as its tab does, since no tab stands beside the row to say it, and a file is drawn in a row the
  * file tree's own: its type's coloured icon, height, and type size. A row
  * opens what it names exactly as its "+" row does: a kind, a subagent, or a
  * file opens the side panel on its tab, and an agent chooses its tab in the
@@ -273,7 +273,7 @@ function summarySections(plans: PlansControl): SummarySection[] {
   });
 }
 
-/** A row of the column or the card: its glyph, its label, and what tells it apart, a file's folder, as its "+" row says it, faded at its end where it is cut short. */
+/** A row of the column or the card: its glyph, its label, and what tells it apart, a file's folder, as its "+" row says it, faded at its end where it is cut short, then a failed agent's mark. */
 function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) {
   const [words, clipped] = useClipped();
   return (
@@ -286,6 +286,7 @@ function SummaryRow({ entry, onPick }: { entry: AddEntry; onPick: () => void }) 
             <span className="plan-summary-detail">{entry.row.detail}</span>
           )}
         </span>
+        {entry.endMark}
       </button>
     </li>
   );

@@ -171,6 +171,8 @@ interface PaletteRow {
   label: string;
   /** Muted words after the name: a plan's repository, an agent's plan, a setting's page. */
   detail?: string | undefined;
+  /** The mark at the row's end: a failed agent's. */
+  endMark?: React.JSX.Element | undefined;
   /** The chord an action's row draws as keys. */
   command?: KeyedCommand | undefined;
   /** The short words the search scores, the name first. */
@@ -329,9 +331,9 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
   if (planId === undefined) return [];
   const planName = [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.name;
   const workers = planWorkers(plans.work.turns, workRowsOf(plans.work.turns, plans.work.callLive));
-  const agents = agentEntries(plans.mainTabs, plans.agents, true).map(({ row }) => ({
-    row,
-    onPick: () => plans.onShowAgent(planId, row.id),
+  const agents = agentEntries(plans.mainTabs, plans.agents, true).map((entry) => ({
+    ...entry,
+    onPick: () => plans.onShowAgent(planId, entry.row.id),
   }));
   const subagents = panelEntries({
     panel: plans.sidePanel,
@@ -339,15 +341,16 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     workers,
     files: [],
     standing: true,
-  }).map(({ row, onPick }) => ({
-    row,
-    onPick: () => shownOverHistory(plans, onPick),
+  }).map((entry) => ({
+    ...entry,
+    onPick: () => shownOverHistory(plans, entry.onPick),
   }));
   const entries = [...agents, ...subagents];
-  return entries.map(({ row, onPick }) => ({
+  return entries.map(({ row, endMark, onPick }) => ({
     icon: row.icon,
     label: row.label,
     detail: planName,
+    endMark,
     terms: planName === undefined ? [row.label] : [row.label, planName],
     onChoose: () => show(onPick),
   }));
@@ -405,6 +408,9 @@ function PaletteItem({
         <span className="command-palette-hint">
           <Keycaps caps={shortcutGlyphs(APP_SHORTCUTS[row.command].chord)} />
         </span>
+      )}
+      {row.endMark === undefined ? null : (
+        <span className="command-palette-end">{row.endMark}</span>
       )}
     </Command.Item>
   );

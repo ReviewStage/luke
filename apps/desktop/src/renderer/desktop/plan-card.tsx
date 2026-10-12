@@ -8,7 +8,7 @@ import {
   GitPullRequestIcon,
 } from "lucide-react";
 import { GitHubMark } from "../account-marks";
-import { AgentGlyph } from "../planning/agent-tab";
+import { AgentGlyph, agentEndMark } from "../planning/agent-tab";
 import { agentTabLabel, pullRequestPillLabel } from "../planning/coding-agent-model";
 import { moreText, PLAN_ROW_MARK, planRowMark } from "../planning/plan-agents-model";
 import { sinceText } from "../planning/plan-time";
@@ -25,7 +25,7 @@ import { WorkingMark } from "../working-mark";
  * (`plan-agents-model.ts`). The card names the plan, its repository, and
  * how long ago it was updated at its head, then a row for each of a few
  * agents, drawn as its tab draws it: its harness's mark wearing where it
- * stands and its tab's label, with no word for where it stands, since no
+ * stands, its tab's label, and a failure's mark at its end, with no word for where it stands, since no
  * agent anywhere else in the window says one. Then a row for each of a few
  * pull requests, its glyph coloured for where it stands, and its size.
  * Each list counts what it leaves out. Everything is read from the plan
@@ -94,7 +94,7 @@ export function PlanStatusMark({ plan }: { plan: PlanSummary }): React.JSX.Eleme
   }
 }
 
-/** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`) and its tab's label. */
+/** One agent's row, as its tab draws it (`main-tabs.tsx`): its harness's mark wearing where it stands (`AgentGlyph`), its tab's label, and a failure at its end (`agentEndMark`). */
 function AgentLine({
   agent,
   models,
@@ -111,6 +111,7 @@ function AgentLine({
           <AgentGlyph agent={agent} />
         </span>
         <span className="plan-card-label">{agentTabLabel(agent, models)}</span>
+        {agentEndMark(agent, false)}
       </button>
     </li>
   );

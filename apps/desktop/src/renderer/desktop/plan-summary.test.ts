@@ -118,16 +118,21 @@ function Page({
   archived,
   shownCode,
   resting,
+  failed,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
   /** Whether the agent finished and the worker answered, rather than both still at work. */
   resting: boolean;
+  /** Whether the agent's turn failed, whatever `resting` says of it. */
+  failed: boolean;
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
   const work = resting ? RESTING_WORK : WORK;
+  const settled = resting ? CODING_AGENT_STATUS.COMPLETED : AGENT.status;
+  const status = failed ? CODING_AGENT_STATUS.FAILED : settled;
   const agents = codingAgentsControl({
-    agents: [resting ? { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED } : AGENT],
+    agents: [{ ...AGENT, status }],
     agentIds: [AGENT.id],
     ...(archived ? { onUnarchive: () => undefined } : undefined),
   });
@@ -161,11 +166,11 @@ function Page({
   );
 }
 
-function mount(archived = false, shownCode = SHOWN, resting = false): HTMLElement {
+function mount(archived = false, shownCode = SHOWN, resting = false, failed = false): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode, resting })));
+  act(() => root.render(createElement(Page, { archived, shownCode, resting, failed })));
   return container;
 }
 
@@ -289,6 +294,26 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     const glyph: Element | null = rowNamed(summary, label).querySelector('[role="img"]');
     assert.equal(glyph?.getAttribute("aria-label"), "Working");
   }
+});
+
+test("a failed agent's row keeps its harness's mark and says Failed in a mark at its end, to a reader and in its hint, where a working agent's row ends on its label", () => {
+  const endOf = (row: HTMLElement) => {
+    const end = row.lastElementChild;
+    return end?.classList.contains("plan-summary-label") ? undefined : end;
+  };
+  const working = rowNamed(summaryOf(mount()), AGENT.title ?? "");
+  assert.equal(endOf(working), undefined, "nothing at a working agent's end");
+  quit();
+
+  const failed = rowNamed(summaryOf(mount(false, SHOWN, false, true)), AGENT.title ?? "");
+  assert.ok(failed.querySelector(".plan-summary-glyph .provider-mark"), "Claude Code's mark");
+  assert.equal(failed.querySelector('.plan-summary-glyph [role="img"]'), null);
+  const end = endOf(failed);
+  assert.ok(end instanceof HTMLElement, "a mark at its end");
+  assert.equal(end.getAttribute("role"), "img");
+  assert.equal(end.getAttribute("aria-label"), "Failed");
+  assert.ok(end.querySelector("svg.lucide-circle-alert"), "the alert glyph");
+  assert.equal(hover(end), "Failed");
 });
 
 test("collapsed to its rail while an agent and a subagent work, the chevron says only Expand summary and wears no working mark", () => {

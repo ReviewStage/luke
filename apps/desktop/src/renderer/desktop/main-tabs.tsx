@@ -10,7 +10,7 @@ import { InboxIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
-import { AgentGlyph, AgentTab } from "../planning/agent-tab";
+import { AgentGlyph, AgentTab, agentEndMark } from "../planning/agent-tab";
 import { AgentTabCard, cardCorner, heldLatest, lastFinished } from "../planning/agent-tab-card";
 import { agentStateWords, agentStillWriting, agentTabLabel } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
@@ -244,6 +244,7 @@ function agentTabs(input: {
       agent,
       look: look(tab, {
         icon: <AgentGlyph agent={agent} />,
+        endMark: agentEndMark(agent, false),
         label,
         card: <AgentTabCard name={label} models={models} read={readCard} />,
       }),
@@ -273,7 +274,8 @@ function agentTabs(input: {
  * and the plan's summary lists it (`plan-summary.tsx`). In the "+" it wears
  * the Coding agents glyph and says nothing of where it stands, which its
  * tab does; the summary has no tab beside it to say it, so there it wears
- * its harness's mark for where it stands, as its tab does (`standing`).
+ * its harness's mark for where it stands, and a failure at its end, as its
+ * tab does (`standing`).
  * Picking an agent whose tab is open chooses that tab rather than opening
  * another, as a browser's tab search does.
  */
@@ -289,6 +291,7 @@ export function agentEntries(
       icon: standing ? <AgentGlyph agent={agent} /> : <TerminalIcon />,
       section: AGENTS_SECTION,
     },
+    endMark: standing ? agentEndMark(agent, true) : undefined,
     onPick: () => main.onChoose({ agent: agent.id }),
   }));
 }

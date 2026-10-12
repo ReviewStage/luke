@@ -85,7 +85,13 @@ import {
 } from "../planning/work-model";
 import type { MenuRow } from "../searchable-menu";
 import { SpinnerRegion } from "../spinner";
-import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState, StateGlyph } from "../state-glyph";
+import {
+  GLYPH_STATE,
+  GLYPH_STATE_WORDS,
+  type GlyphState,
+  StateGlyph,
+  stateEndMark,
+} from "../state-glyph";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { type MenuAction, MenuItem } from "./action-menu";
 import { paneTiming } from "./pane-motion";
@@ -411,6 +417,7 @@ function stripTabs(input: {
       tab,
       look: look(tab, {
         icon: <StateGlyph glyph={<BotIcon />} state={state} />,
+        endMark: stateEndMark(state, false),
         label,
         card: <AgentTabCard name={label} untitled={untitled} models={models} read={readCard} />,
       }),

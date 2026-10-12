@@ -1,19 +1,24 @@
 /**
- * state-glyph.tsx -- where a piece of work stands, drawn on its own glyph rather than as a dot beside it, the way Cursor's and Codex's agent tabs draw it.
+ * state-glyph.tsx -- where a piece of work stands, drawn on its own glyph rather than as a dot beside it, the way Cursor's and Codex's agent tabs draw it, and a failure at its row's end.
  *
  * Working, the working mark (`working-mark.tsx`) takes the glyph's place in
  * the glyph's own footprint, so a tab or a row moves nothing as its work
  * starts or ends; reduced motion and a capture run hold it on a frame that
- * still reads as working. Failed, an alert in the danger colour takes the
- * glyph's place. At rest, finished or stopped by hand, the glyph stands
- * alone, since that is where every piece of work ends and a mark on each
- * says nothing. Working and failed are said aloud in a fixed word, so
- * nothing of the work rides the attribute the screen recording keeps; the
- * glyph at rest is decorative, its control's own label naming it.
+ * still reads as working. Failed, the glyph stands as it does at rest, so a
+ * failed agent still shows the harness it ran in, and an alert in the
+ * danger colour stands at the end of its row or its tab (`stateEndMark`),
+ * before its time where it has one, as an editor marks a file's tab with
+ * its problems. Only a failure has an end mark, so no other row keeps room
+ * for one. At rest, finished or stopped by hand, the glyph stands alone,
+ * since that is where every piece of work ends and a mark on each says
+ * nothing. Working and failed are said aloud in a fixed word, so nothing of
+ * the work rides the attribute the screen recording keeps; the glyph at
+ * rest is decorative, its control's own label naming it.
  */
 
 import { CircleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { Tooltip } from "./tooltip";
 import { WorkingMark } from "./working-mark";
 
 export const GLYPH_STATE = {
@@ -31,7 +36,7 @@ export const GLYPH_STATE_WORDS = {
   [GLYPH_STATE.REST]: undefined,
 } as const satisfies Record<GlyphState, string | undefined>;
 
-/** A glyph wearing where its work stands. */
+/** A glyph wearing where its work stands: the working mark in its place while it works, and the glyph itself otherwise, a failure included. */
 export function StateGlyph({
   glyph,
   state,
@@ -39,7 +44,7 @@ export function StateGlyph({
   glyph: ReactNode;
   state: GlyphState;
 }): React.JSX.Element {
-  if (state === GLYPH_STATE.REST) {
+  if (state !== GLYPH_STATE.WORKING) {
     return (
       <span className="state-glyph" data-state={state}>
         {glyph}
@@ -53,7 +58,28 @@ export function StateGlyph({
       role="img"
       aria-label={GLYPH_STATE_WORDS[state]}
     >
-      {state === GLYPH_STATE.FAILED ? <CircleAlertIcon aria-hidden="true" /> : <WorkingMark />}
+      <WorkingMark />
     </span>
   );
+}
+
+/**
+ * The alert a failed piece of work wears at its row's end, named Failed to
+ * a reader and, `hinted`, in its own hint. Note that a tab and a hover
+ * card's row leave the hint out, because the tab's card already says it
+ * failed and a hint over a card would take the card down.
+ */
+function FailedMark({ hinted }: { hinted: boolean }): React.JSX.Element {
+  const words = GLYPH_STATE_WORDS[GLYPH_STATE.FAILED];
+  const mark = (
+    <span className="failed-mark" role="img" aria-label={words}>
+      <CircleAlertIcon aria-hidden="true" />
+    </span>
+  );
+  return hinted ? <Tooltip label={words}>{mark}</Tooltip> : mark;
+}
+
+/** The mark at the end of a row or a tab whose work stands in `state`: the failed mark once it failed, nothing otherwise. */
+export function stateEndMark(state: GlyphState, hinted: boolean): React.JSX.Element | undefined {
+  return state === GLYPH_STATE.FAILED ? <FailedMark hinted={hinted} /> : undefined;
 }
