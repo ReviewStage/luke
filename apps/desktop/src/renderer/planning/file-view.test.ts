@@ -8,7 +8,8 @@ import {
   type PlanFileRequest,
 } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
-import { Effect } from "effect";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -842,6 +843,28 @@ test("a file opened at a commit, as an inbox item's code opens it, stands none o
   assert.ok(view.container.querySelector(".code-line"), "the file is drawn");
   assert.deepEqual(noteCards(view.container), []);
 });
+
+it.effect(
+  "a note's age moves on with the minute while the tab stands open with nothing else drawn anew",
+  () =>
+    Effect.gen(function* () {
+      const registry = yield* registryOnTestClock;
+      const view = mounted(
+        [shownLines("call-guard", 4, 6, "The invite guard.")],
+        undefined,
+        numberedFile(40),
+        registry,
+      );
+      yield* Effect.promise(() => view.draw(FILE, { startLine: 4, endLine: 6 }));
+      const age = () => view.container.querySelector(".file-note-time")?.textContent;
+      assert.equal(age(), "now");
+
+      yield* TestClock.adjust(Duration.minutes(10));
+      yield* Effect.promise(() => view.settle());
+
+      assert.equal(age(), "10m");
+    }),
+);
 
 test("every range of the file with a note stands its own card, in the file's order, the newest note on a range speaking for it, whichever lines the tab lit", async () => {
   const view = mounted(

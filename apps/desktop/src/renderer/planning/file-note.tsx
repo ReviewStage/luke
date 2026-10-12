@@ -4,7 +4,7 @@ import { MarkdownMessage } from "../markdown-message";
 import { Tooltip } from "../tooltip";
 import { rangeLabel } from "./code-pane-model";
 import type { FileNote } from "./file-tab-model";
-import { momentText, sinceText } from "./plan-time";
+import { momentText, sinceText, useMinute } from "./plan-time";
 
 /**
  * file-note.tsx -- Luke's note on lines of a File tab's file: a card standing over the lines he showed, saying why he showed them, as a review comment stands over the lines it is on.
@@ -41,17 +41,17 @@ export interface FileNotes {
 function FileNoteCard({
   note,
   folded,
-  now,
   onFold,
   onShow,
 }: {
   note: FileNote;
   folded: boolean;
-  now: number;
   onFold: (folded: boolean) => void;
   onShow: () => void;
 }): React.JSX.Element {
   const lines = rangeLabel(note) ?? "";
+  // Note that the age moves on with the minute, because a tab left open draws nothing else anew.
+  const now = useMinute();
   return (
     <aside
       className="file-note"
@@ -95,7 +95,6 @@ function FileNoteCard({
  * notes whose ranges begin there, nothing where none does.
  */
 export function notesBefore(notes: FileNotes): (line: number) => ReactNode {
-  const now = Date.now();
   return (line) =>
     notes.notes
       .filter((note) => note.startLine === line)
@@ -104,7 +103,6 @@ export function notesBefore(notes: FileNotes): (line: number) => ReactNode {
           key={note.callId}
           note={note}
           folded={notes.folded.includes(note.callId)}
-          now={now}
           onFold={(folded) => notes.onFold(note.callId, folded)}
           onShow={() => notes.onShow(note.callId)}
         />
