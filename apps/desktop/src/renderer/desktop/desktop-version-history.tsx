@@ -7,6 +7,7 @@ import type { NavigationHistory } from "../navigation-history";
 import { centreWithin } from "../planning/code-pane";
 import { revisionAuthor, revisionSummary } from "../planning/plan-history-model";
 import { momentText, sinceText, useMinute } from "../planning/plan-time";
+import { documentTitleOf } from "../planning/plan-title";
 import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
@@ -208,14 +209,15 @@ function useOpenedRowShown(
 function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
   const { history, region } = plans;
   if (history.viewing !== undefined) {
-    const archived = region.kind === DOCUMENT_REGION.READY && region.plan.archivedAt !== undefined;
+    const plan = region.kind === DOCUMENT_REGION.READY ? region.plan : undefined;
     return (
       <VersionView
         history={history}
         viewing={history.viewing}
         shown={plans.shown}
         onRestored={history.onClose}
-        restorable={!archived}
+        restorable={plan?.archivedAt === undefined}
+        title={plan === undefined ? undefined : documentTitleOf(plan)}
       />
     );
   }

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { planSections } from "@sidecar/hosted/plan-document";
 import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import type { PlanFields } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
@@ -11,7 +12,6 @@ import {
   chaseRetargeted,
   chaseStepped,
   chaseView,
-  planUnits,
   type UnitView,
 } from "./plan-reveal";
 
@@ -39,6 +39,11 @@ function sectioned(fields: Partial<PlanFields> = {}): string {
     approach: "- `invites.ts` sends it.",
     ...fields,
   });
+}
+
+/** The words of each unit a body is cut into, a unit to each section. */
+function planUnits(words: string): readonly string[] {
+  return planSections(words).map((section) => section.text);
 }
 
 /** What the unit opening with a heading puts on screen, if one does. */
@@ -76,7 +81,7 @@ function played(state: ChaseState) {
 
 test("the body is cut before each section heading, and joined back it is the body", () => {
   const words = body("Only an admin can add a member.");
-  const units = planUnits(words);
+  const units = drawn(chaseOpened(words));
   assert.equal(units[0], "# Teammate invitations");
   assert.equal(units[CONTEXT], "## Context\n\nOnly an admin can add a member.");
   assert.equal(units[CONTEXT + 1], "## Goal\n\n_Unanswered_");
@@ -84,9 +89,10 @@ test("the body is cut before each section heading, and joined back it is the bod
 });
 
 test("a heading the model wrote is escaped by the formatter, and one inside a fence is code; neither cuts a unit", () => {
-  const plain = planUnits(body("One line."));
-  assert.equal(planUnits(body("## Not a section\n\nStill the context.")).length, plain.length);
-  const fenced = planUnits(body("```\n## also code\n```"));
+  const units = (words: string) => drawn(chaseOpened(words));
+  const plain = units(body("One line."));
+  assert.equal(units(body("## Not a section\n\nStill the context.")).length, plain.length);
+  const fenced = units(body("```\n## also code\n```"));
   assert.equal(fenced.length, plain.length);
   assert.equal(fenced[CONTEXT], "## Context\n\n```\n## also code\n```");
 });
@@ -279,10 +285,52 @@ test("an optional section that leaves is erased where it stands, and the section
 
 test("only a section's heading cuts a unit: a deeper heading stays inside the section it stands in", () => {
   const words = "# Teammate invitations\n\n## Approach\n\n### Data\n\nA pending row.";
-  assert.deepEqual(planUnits(words), [
+  assert.deepEqual(drawn(chaseOpened(words)), [
     "# Teammate invitations",
     "## Approach\n\n### Data\n\nA pending row.",
   ]);
+});
+
+/** A plan that is one document: no title line, words before its first heading, a `#` section, and a fence holding heading-shaped lines. */
+const DOCUMENT_TEXT = [
+  "Started from the team's template.",
+  "# Goal",
+  "Invites land by email.",
+  "## Approach",
+  "~~~sh\n# not a heading\n## nor this\n~~~",
+  "## Assumptions",
+  "- Links are single use.",
+].join("\n\n");
+
+test("a plan that is one document is cut at each `#` or `##` heading outside a fence, each unit known by its heading", () => {
+  const views = chaseView(chaseOpened(DOCUMENT_TEXT), false);
+
+  assert.deepEqual(
+    views.map((view) => [view.heading, view.words]),
+    [
+      ["", "Started from the team's template."],
+      ["Goal", "# Goal\n\nInvites land by email."],
+      ["Approach", "## Approach\n\n~~~sh\n# not a heading\n## nor this\n~~~"],
+      ["Assumptions", "## Assumptions\n\n- Links are single use."],
+    ],
+  );
+});
+
+test("a `#` section of a document joining it types in where it stands, and no other unit is touched", () => {
+  const after = DOCUMENT_TEXT.replace("## Approach", "# Rollout\n\nBehind a flag.\n\n## Approach");
+  const { frames, end } = played(retarget(chaseOpened(DOCUMENT_TEXT), after));
+
+  for (const views of frames) {
+    assert.equal(drawnUnder(views, "# Goal"), "# Goal\n\nInvites land by email.");
+    assert.equal(drawnUnder(views, "## Assumptions"), "## Assumptions\n\n- Links are single use.");
+  }
+  assert.ok(
+    frames.some((views) => views.some((view) => view.writing && view.heading === "Rollout")),
+  );
+  assert.deepEqual(
+    chaseView(end, false).map((view) => view.heading),
+    ["", "Goal", "Rollout", "Approach", "Assumptions"],
+  );
 });
 
 test("a selection the newer words no longer erase is dropped rather than finished", () => {

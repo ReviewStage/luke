@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { EMPTY_PLAN_FIELDS, planBody } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
 import { test } from "vitest";
+import { DOCUMENT_NAME, DOCUMENT_TEXT } from "#testing/document-plan";
 import { MARKDOWN_MARK } from "../markdown-message";
 import {
   revisionAuthor,
@@ -154,9 +156,9 @@ test("a section struck and another written in its place read as one unit changed
   assert.deepEqual(
     diff.units.map((unit) => [unit.key, unit.change]),
     [
-      ["# Teammate invitations", VERSION_CHANGE.SAME],
-      ["## Context", VERSION_CHANGE.SAME],
-      ["## Plan of attack", VERSION_CHANGE.CHANGED],
+      ["Teammate invitations", VERSION_CHANGE.SAME],
+      ["Context", VERSION_CHANGE.SAME],
+      ["Plan of attack", VERSION_CHANGE.CHANGED],
     ],
   );
   assert.ok(marked(diff, MARKDOWN_MARK.INSERTED).some((words) => words.includes("Plan of attack")));
@@ -209,4 +211,110 @@ test("the first version is drawn as it is against nothing, and a version like it
     [VERSION_CHANGE.SAME],
   );
   assert.equal(same.changed, false);
+});
+
+/** A revision of a plan that is one document, as the service answers one: its text, no list. */
+function textOf(text: string) {
+  return { body: `${text}\n`, assumptions: [] };
+}
+
+test("a revision of a plan that is one document is compared by section under its name, with no list beside it", () => {
+  const before = textOf(DOCUMENT_TEXT);
+  const after = textOf(
+    DOCUMENT_TEXT.replace("Invites land by email.", "Invites land by email or by link.").concat(
+      "\n\n# Rollout\n\nBehind a flag.",
+    ),
+  );
+
+  const diff = versionDiff(before, after, DOCUMENT_NAME);
+
+  assert.deepEqual(
+    diff.units.map((unit) => [unit.key, unit.change]),
+    [
+      ["Context", VERSION_CHANGE.SAME],
+      ["Goal", VERSION_CHANGE.CHANGED],
+      ["Approach", VERSION_CHANGE.SAME],
+      ["Assumptions", VERSION_CHANGE.SAME],
+      ["Rollout", VERSION_CHANGE.ADDED],
+    ],
+  );
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [" or by link"]);
+  assert.deepEqual(diff.assumptions, []);
+  assert.ok(diff.changed);
+});
+
+test("a plan's first revision as one document, after its revisions of the template's fields, reads as what each draws", () => {
+  const fields = {
+    ...EMPTY_PLAN_FIELDS,
+    context: "Only an admin can add a member today.",
+    goal: "Invites land by email.",
+  };
+  const before = {
+    body: planBody({ name: DOCUMENT_NAME }, fields),
+    assumptions: [{ text: "Links are single use." }],
+  };
+  const after = textOf(
+    [
+      "## Context\n\nOnly an admin can add a member today.",
+      "## Goal\n\nInvites land by email or by link.",
+      "## Approach",
+      "## Interfaces",
+      "## Hard parts",
+      "## Not doing",
+      "## Testing",
+      "## Open questions",
+      "## Assumptions\n\n- Links are single use.",
+    ].join("\n\n"),
+  );
+
+  const diff = versionDiff(before, after, DOCUMENT_NAME);
+
+  assert.deepEqual(
+    diff.units.filter((unit) => unit.change !== VERSION_CHANGE.SAME).map((unit) => unit.key),
+    ["Goal"],
+    "the title line, the list, and the placeholders are drawn as the document draws them",
+  );
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.INSERTED), [" or by link"]);
+  assert.deepEqual(marked(diff, MARKDOWN_MARK.DELETED), []);
+  assert.ok(diff.units.every((unit) => !unit.words.includes("_Unanswered_")));
+});
+
+test("a document's own first section named as the plan is drawn and compared as a section, not taken for the fields' title", () => {
+  const before = textOf(`# ${DOCUMENT_NAME}\n\nRoll out gradually.\n\n## Goal\n\nShip safely.`);
+  const after = textOf(`# ${DOCUMENT_NAME}\n\nRoll out by team.\n\n## Goal\n\nShip safely.`);
+
+  const diff = versionDiff(before, after, DOCUMENT_NAME);
+
+  assert.deepEqual(
+    diff.units.map((unit) => [unit.key, unit.change]),
+    [
+      [DOCUMENT_NAME, VERSION_CHANGE.CHANGED],
+      ["Goal", VERSION_CHANGE.SAME],
+    ],
+  );
+  assert.deepEqual(
+    versionDiff(null, textOf(`# ${DOCUMENT_NAME}\n\n## Goal`), DOCUMENT_NAME).units.map(
+      (unit) => unit.key,
+    ),
+    [DOCUMENT_NAME, "Goal"],
+    "a title-shaped line alone over a document's own sections stays the document's",
+  );
+});
+
+test("a revision of the template's fields with no assumptions is still drawn with its title as the title and an empty Assumptions section", () => {
+  const before = { body: planBody({ name: DOCUMENT_NAME }, EMPTY_PLAN_FIELDS), assumptions: [] };
+
+  const keys = versionDiff(null, before, DOCUMENT_NAME).units.map((unit) => unit.key);
+
+  assert.deepEqual(keys, [
+    "Context",
+    "Goal",
+    "Approach",
+    "Interfaces",
+    "Hard parts",
+    "Not doing",
+    "Testing",
+    "Open questions",
+    "Assumptions",
+  ]);
 });

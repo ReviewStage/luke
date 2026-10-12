@@ -1,5 +1,10 @@
 import { useAtom, useAtomSet, useAtomValue } from "@effect/atom-react";
-import { PLAN_ACTOR, type Plan, type PlanField, type PlanSummary } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_ACTOR,
+  type Plan,
+  type PlanSectionEdit,
+  type PlanSummary,
+} from "@sidecar/hosted/plan-wire";
 import { Duration, Effect, Option, Schema } from "effect";
 import { AsyncResult, Atom } from "effect/unstable/reactivity";
 import { useEffect, useState } from "react";
@@ -11,11 +16,13 @@ import { rendererRuntime } from "../renderer-runtime";
  * A look is the plan held open for a few seconds: from then on, every save
  * the developer has the plan open for is one they watched land, so the
  * newest save the plan names is kept as what they last saw. Opening the plan
- * again reads that mark, and each field a save by anyone but the developer
+ * again reads that mark, and each section a save by anyone but the developer
  * changed after it is a section changed since they last looked, held for the
- * visit until they dismiss it or leave. A save that lands while the plan is
- * open is typed in before their eyes, the notetaker's on a call above all,
- * so it never joins the visit's changes. A plan never looked at on this Mac
+ * visit until they dismiss it or leave. A section is known by its field in
+ * a plan of the template's fields, and by its heading in a plan that is one
+ * document. A save that lands while the plan is open is typed in before
+ * their eyes, the notetaker's on a call above all, so it never joins the
+ * visit's changes. A plan never looked at on this Mac
  * has no mark and nothing changed: every section would be new.
  *
  * The mark is a save's instant as the service stamped it, never this Mac's
@@ -70,16 +77,16 @@ const lookAtom = rendererRuntime.fn((visit: VisitToken) =>
 interface Visit {
   readonly planId: string | undefined;
   readonly token: VisitToken;
-  readonly changed: ReadonlySet<PlanField>;
+  readonly changed: ReadonlySet<string>;
 }
 
-/** The open plan's sections changed since the last look, and the dismissal that clears them. */
+/** The open plan's sections changed since the last look, each by its field or its heading, and the dismissal that clears them. */
 export interface PlanLooks {
-  readonly changed: ReadonlySet<PlanField>;
+  readonly changed: ReadonlySet<string>;
   readonly dismiss: () => void;
 }
 
-const NOTHING_CHANGED: ReadonlySet<PlanField> = new Set();
+const NOTHING_CHANGED: ReadonlySet<string> = new Set();
 
 /** The looks of a document no plan's visit stands behind: nothing changed, and nothing to dismiss. */
 export const NO_LOOKS: PlanLooks = { changed: NOTHING_CHANGED, dismiss: () => undefined };
@@ -138,6 +145,14 @@ const looksAtom = Atom.writable(
 /** The plan the developer is looking at now: open past `PLAN_LOOK`, so every save that lands on it is seen. */
 const watchedAtom = Atom.make<string | undefined>(undefined);
 
+/** The save that last changed each of the plan's sections, each by the field or the heading it is known by. */
+export function sectionSavesOf(plan: Plan): readonly PlanSectionEdit[] {
+  return [
+    ...(plan.fieldEdits ?? []).map(({ field, ...edit }) => ({ section: field, ...edit })),
+    ...(plan.sectionEdits ?? []),
+  ];
+}
+
 /**
  * The instant of the newest save the plan names. Note that the document's
  * `updatedAt` stands among its revisions' instants, because the sidebar's row
@@ -147,11 +162,11 @@ function newestSaveOf(plan: Plan): number {
   return Math.max(
     plan.updatedAt,
     ...(plan.lastEdit === undefined ? [] : [plan.lastEdit.at]),
-    ...(plan.fieldEdits ?? []).map((edit) => edit.at),
+    ...sectionSavesOf(plan).map((edit) => edit.at),
   );
 }
 
-/** A visit to the plan as it opens: each field someone else saved after the last look; none while no plan is drawn. */
+/** A visit to the plan as it opens: each section someone else saved after the last look; none while no plan is drawn. */
 function visited(plan: Plan | undefined): Visit {
   if (plan === undefined)
     return { planId: undefined, token: { planId: undefined }, changed: NOTHING_CHANGED };
@@ -160,9 +175,9 @@ function visited(plan: Plan | undefined): Visit {
     mark === undefined
       ? NOTHING_CHANGED
       : new Set(
-          (plan.fieldEdits ?? [])
+          sectionSavesOf(plan)
             .filter((edit) => edit.actor !== PLAN_ACTOR.DEVELOPER && edit.at > mark)
-            .map((edit) => edit.field),
+            .map((edit) => edit.section),
         );
   return { planId: plan.id, token: { planId: plan.id }, changed };
 }
