@@ -51,6 +51,9 @@ const LANGUAGE_CLASS = /(?:^|\s)language-(\S+)/u;
 /** A fence's opening: up to three spaces, then three or more backticks or tildes. */
 const FENCE_OPENING = /^ {0,3}(`{3,}|~{3,})/u;
 
+/** The quote marks a line inside a quote opens on. */
+const QUOTE_MARKS = /^[\s>]*/u;
+
 /** How many coloured blocks the window holds before forgetting the oldest. */
 const COLOURINGS_HELD = 200;
 
@@ -117,13 +120,14 @@ function colourable(language: string, code: string): boolean {
 /**
  * Whether a fenced block's markdown still waits for its closing fence: a
  * fence of the opening's character at least as long, alone on the last
- * line. An indented block has no fence to wait for.
+ * line but for the quote marks of a block inside a quote. An indented
+ * block has no fence to wait for.
  */
 function fenceStillOpen(markdown: string): boolean {
   const marker = FENCE_OPENING.exec(markdown)?.[1];
   if (marker === undefined) return false;
   const lines = markdown.trimEnd().split("\n");
-  const last = lines.length > 1 ? lines.at(-1)?.trim() : undefined;
+  const last = lines.length > 1 ? lines.at(-1)?.replace(QUOTE_MARKS, "").trim() : undefined;
   if (last === undefined || last.length < marker.length) return true;
   return [...last].some((character) => character !== marker[0]);
 }

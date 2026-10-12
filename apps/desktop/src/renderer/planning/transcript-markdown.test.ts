@@ -141,6 +141,21 @@ test("a block still streaming is drawn plain and asked for once, when its closin
   assert.deepEqual(blocks(container)[0]?.runs[0], ["import", "#ff7b72", "#cf222e"]);
 });
 
+test("a block inside a quote is coloured once its closing fence arrives", async () => {
+  const { container, draw } = mounted();
+  const opening = "> Try:\n>\n> ```js\n> await seat.save();\n";
+
+  draw(opening);
+  await settled();
+  assert.deepEqual(asked, []);
+
+  draw(`${opening}> \`\`\``);
+  await settled();
+
+  assert.deepEqual(asked, [{ language: "js", code: "await seat.save();" }]);
+  assert.deepEqual(blocks(container)[0]?.runs[0], ["await", "#ff7b72", "#cf222e"]);
+});
+
 test("a block past the bound is drawn plain and never sent to main", async () => {
   const { container, draw } = mounted();
   const long = `const log = "${"x".repeat(COLOURED_CODE_MAX_CHARS)}";`;
