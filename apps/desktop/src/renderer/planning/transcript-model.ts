@@ -1,5 +1,5 @@
 import { PLANNING_READ, type PlanningView } from "@sidecar/hosted/planning-view";
-import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
+import { TRANSCRIPT_PART_TYPE, type TranscriptCall } from "@sidecar/hosted/transcript-wire";
 import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import type { UIMessage } from "ai";
 import type { VoiceView } from "#shared/messages/voice-view";
@@ -41,7 +41,10 @@ export const TRANSCRIPT_REGION = {
   READY: "ready",
 } as const;
 
-/** One call as the tab draws it: when it started, whether it stands now, and its lines, each a message with its words settled. */
+/** What a call's record says of the call itself, as far as it says it: when and why it ended, what it metered, and its model. */
+export type CallRecord = Pick<TranscriptCall, "endedAt" | "ending" | "usage" | "model">;
+
+/** One call as the tab draws it: when it started, whether it stands now, its lines, each a message with its words settled, and its record. */
 export interface TranscriptCallRow {
   readonly key: string;
   /** Epoch milliseconds the call started; for the call standing, when this window first heard it. */
@@ -50,6 +53,8 @@ export interface TranscriptCallRow {
   /** Whether Luke ended the call himself, as far as this window saw it end. */
   readonly lukeEnded: boolean;
   readonly messages: readonly UIMessage[];
+  /** What the record says of the call; nothing for a call the record does not hold yet, or one still standing. */
+  readonly record?: CallRecord | undefined;
 }
 
 /** The line a call closes with: none while it stands, and who ended it where this window saw Luke do it. */
@@ -222,13 +227,16 @@ export function transcriptRegion(input: {
       const settled = settledMessage(message);
       return settled === undefined ? [] : [settled];
     });
-    const ahead = heard.get(call.id);
+    const { id, startedAt, messages: _messages, ...record } = call;
+    const ahead = heard.get(id);
     const behind =
       ahead !== undefined && (ahead.live || wordCount(messages) < wordCount(ahead.messages));
-    if (ahead !== undefined && behind) return [{ ...ahead, startedAt: call.startedAt }];
+    if (ahead !== undefined && behind) {
+      return [{ ...ahead, startedAt, ...(ahead.live ? undefined : { record }) }];
+    }
     return messages.length === 0
       ? []
-      : [{ key: call.id, startedAt: call.startedAt, live: false, lukeEnded: false, messages }];
+      : [{ key: id, startedAt, live: false, lukeEnded: false, messages, record }];
   });
   calls.push(...unrecorded);
   if (calls.length > 0) {

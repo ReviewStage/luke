@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { TRANSCRIPT_PART_TYPE } from "@sidecar/hosted/transcript-wire";
-import { TRANSCRIPT_SPEAKER } from "@sidecar/live";
+import { LIVE_CLOSE_REASON, LIVE_DEFAULTS, TRANSCRIPT_SPEAKER } from "@sidecar/live";
 import { Duration, Effect } from "effect";
 import { TestClock } from "effect/testing";
 import { act, createElement } from "react";
@@ -13,7 +13,7 @@ import { afterEach, test } from "vitest";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { PAST_SPINNER_DELAY, waitsIn } from "#testing/spinner";
 import { PlanTranscript } from "./plan-transcript";
-import { TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
+import { type CallRecord, TRANSCRIPT_REGION, type TranscriptRegion } from "./transcript-model";
 
 /** Synthetic words throughout. */
 function said(count: number): TranscriptRegion {
@@ -343,5 +343,128 @@ it.effect(
       yield* TestClock.adjust(Duration.millis(1_200));
       yield* settle;
       assert.equal(copy.querySelector('[role="status"]')?.textContent, "");
+    }),
+);
+
+/** A call that ended at five past three, twelve minutes and thirty-four seconds after it began, local time. */
+const CALL_END = new Date(2026, 9, 12, 15, 4).getTime();
+const CALL_START = CALL_END - (12 * 60 + 34) * 1_000;
+
+/** The tab holding the calls given, each of one line of the developer's and ended, with what its record holds. */
+function endedCalls(records: readonly (CallRecord | undefined)[]): TranscriptRegion {
+  return {
+    kind: TRANSCRIPT_REGION.READY,
+    earlierOmitted: false,
+    calls: records.map((record, index) => ({
+      key: `call-${index}`,
+      startedAt: CALL_START,
+      live: false,
+      lukeEnded: false,
+      messages: [
+        {
+          id: "0",
+          role: TRANSCRIPT_SPEAKER.USER,
+          parts: [{ type: TRANSCRIPT_PART_TYPE.TEXT, text: "Invites should expire." }],
+        },
+      ],
+      record,
+    })),
+  };
+}
+
+/** The tab drawn on the test's clock, with what each call closes on and the card a call's closing line hangs on hover. */
+const drawnOnClock = (region: TranscriptRegion) =>
+  Effect.gen(function* () {
+    yield* TestClock.setTime(CALL_END + 60_000);
+    const registry = yield* registryOnTestClock;
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    roots.push(root);
+    act(() =>
+      root.render(
+        onRegistry(registry, createElement(PlanTranscript, { region, onRetry: () => undefined })),
+      ),
+    );
+    yield* settle;
+    return {
+      closings: () => [...container.querySelectorAll("[role='log'] p")].map((p) => p.textContent),
+      ended: () => [...container.querySelectorAll<HTMLElement>("[data-call-ended]")],
+      hover: (target: Element) => {
+        act(() => {
+          target.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+        });
+        return document.body.querySelector<HTMLElement>("[data-call-card]");
+      },
+    };
+  });
+
+it.effect(
+  "a call that ended closes on how long it ran and when, and its card says the voice model, when it began and ended, how it ended, and the seconds it was metered for",
+  () =>
+    Effect.gen(function* () {
+      const tab = yield* drawnOnClock(
+        endedCalls([
+          {
+            endedAt: CALL_END,
+            ending: LIVE_CLOSE_REASON.CONNECTION_LOST,
+            usage: { seconds: 760, confirmed: false },
+            model: LIVE_DEFAULTS.MODEL,
+          },
+        ]),
+      );
+      const [ended] = tab.ended();
+      assert.ok(ended);
+      assert.equal(ended.textContent, "Call ended · 12m 34s · Today, 3:04 PM");
+      assert.ok(ended.classList.contains("select-text"));
+      assert.equal(
+        ended.querySelector("time")?.getAttribute("datetime"),
+        new Date(CALL_END).toISOString(),
+      );
+
+      // The whole line hangs the card, its length as much as its time.
+      const card = tab.hover(ended.querySelector("[data-call-length]") ?? ended);
+      assert.equal(card?.querySelector(".turn-card-model")?.textContent, "GPT Live 1");
+      assert.equal(
+        card?.querySelector(".turn-card-when")?.textContent,
+        "Oct 12, 2026, 2:51 PM → 3:04 PM",
+      );
+      assert.equal(card?.querySelector(".turn-card-ending")?.textContent, "Dropped");
+      assert.deepEqual(
+        [...(card?.querySelectorAll(".turn-card-token") ?? [])].map((row) => [
+          row.querySelector("dt")?.textContent,
+          row.querySelector("dd")?.textContent,
+        ]),
+        [["Metered (estimated)", "12m 40s"]],
+      );
+    }),
+);
+
+it.effect(
+  "a call whose record holds only its end hangs a card of when it ran alone, and one whose end is not on record closes with the bare line",
+  () =>
+    Effect.gen(function* () {
+      const tab = yield* drawnOnClock(
+        endedCalls([
+          // A plain hang-up, metered for exactly as long as it ran.
+          {
+            endedAt: CALL_END,
+            ending: LIVE_CLOSE_REASON.CLOSE_REQUESTED,
+            usage: { seconds: 754, confirmed: true },
+          },
+          undefined,
+        ]),
+      );
+      assert.deepEqual(
+        tab.closings().filter((line) => line?.startsWith("Call ended")),
+        ["Call ended · 12m 34s · Today, 3:04 PM", "Call ended"],
+      );
+      const [ended] = tab.ended();
+      assert.ok(ended);
+      const card = tab.hover(ended);
+      assert.ok(card);
+      assert.equal(card.querySelector(".turn-card-head"), null);
+      assert.equal(card.querySelector("dl"), null);
+      assert.equal(card.textContent, "Oct 12, 2026, 2:51 PM → 3:04 PM");
     }),
 );
