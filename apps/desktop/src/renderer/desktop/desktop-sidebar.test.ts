@@ -412,7 +412,7 @@ test("Contact us opens GitHub and Email beside it, by press or Right, Left or Es
   ]);
 });
 
-test("resting on Contact us opens its submenu without taking focus, and resting on another item closes it", () => {
+test("resting on Contact us opens its submenu without taking focus, and resting on or walking to another item closes it", () => {
   const container = mount(DEAN);
   act(() => accountButton(container).click());
   const focused = document.activeElement;
@@ -431,6 +431,12 @@ test("resting on Contact us opens its submenu without taking focus, and resting 
     accountItem("Changelog").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
   });
   assert.deepEqual(submenuLabels(), []);
+
+  act(() => {
+    accountItem("Contact us").dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  keyDown(document.activeElement, "ArrowDown");
+  assert.deepEqual(submenuLabels(), [], "walking the menu by key leaves it behind too");
 });
 
 test("Log out asks first, and only its answer signs the account out", async () => {

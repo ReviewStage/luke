@@ -409,7 +409,8 @@ export function ActionMenu({
       onClose(true);
       return;
     }
-    moveFocus(event);
+    // Walking the menu's own items leaves a submenu the pointer opened behind.
+    if (moveFocus(event)) setSubmenu(undefined);
   };
 
   const choose = (action: MenuAction) => {
