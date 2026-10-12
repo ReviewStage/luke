@@ -36,6 +36,7 @@ import {
   BRAIN_HOST_REFUSAL,
   BRAIN_HOST_TURN,
 } from "../server/hosted/brain-host/bounds";
+import type { AdmittedConversation } from "../server/hosted/brain-host/conversation";
 import { childConversationId, hostTurnId, sentLineId } from "../server/hosted/brain-host/ids";
 import { memoryRelayState } from "../server/hosted/brain-host/relay";
 import { CODER, CODER_MODEL_FIXTURE, CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
@@ -384,6 +385,48 @@ const awaitingLine = (target: ConversationTarget, text: string, clientKey: strin
     return written.success.value;
   });
 
+/** What eve hands a turn beside its words: the files a message carries. */
+type ReceivedParts = Extract<MessageStreamEvent, { type: "message.received" }>["data"]["parts"];
+
+/**
+ * One turn of the agent's session relayed whole, a minute after the one
+ * before it: the developer's words received, with the files given, and the
+ * agent's answer echoing them, then the turn completed.
+ */
+const exchange = (
+  host: CoderHost,
+  opened: {
+    readonly auth: SessionAuth;
+    readonly sessionId: string;
+    readonly admitted: AdmittedConversation;
+  },
+  turnId: string,
+  said: string,
+  parts?: ReceivedParts,
+) =>
+  Effect.gen(function* () {
+    yield* TestClock.adjust("1 minute");
+    const session = { id: opened.sessionId, auth: opened.auth, turn: { id: turnId } };
+    const sequence = 0;
+    const answer = `Looked at it: ${said}`;
+    const state = memoryRelayState();
+    for (const event of [
+      stamped({ type: "turn.started", data: { turnId, sequence } }),
+      stamped({
+        type: "message.received",
+        data: { turnId, sequence, message: said, ...(parts === undefined ? undefined : { parts }) },
+      }),
+      stamped({
+        type: "message.completed",
+        data: { turnId, sequence, stepIndex: 0, finishReason: "stop", message: answer },
+      }),
+      stamped({ type: "turn.completed", data: { turnId, sequence } }),
+    ]) {
+      // SAFETY: the relay reads the session's id and auth; eve's turn metadata is not read here.
+      yield* host.relay(event, opened.admitted, session as never, state, {});
+    }
+  });
+
 /** Each user line of the transcript by the key it was sent under, with the turn that owns it; a line no key named is absent. */
 const linesByKey = (target: ConversationTarget, keys: readonly string[]) =>
   Effect.map(
@@ -698,45 +741,123 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
-    "the agent's title is generated from its plan as its first session starts, tidied of quotes and a full stop, and written once: a restarted session generates nothing, and a rename is never covered",
+    "an agent handed a task of its own is titled from its first exchange as its turn completes, with no plan's name beside it, tidied of quotes and a full stop, and written once: a later turn asks nothing, and a rename is never covered",
     () =>
       Effect.gen(function* () {
-        const model = titleModelAnswering(['"Teammate invitations by email."', "Second title"]);
+        const model = titleModelAnswering(['"Sign-out button in the header."', "Second title"]);
         const host = yield* hostOverStore(model);
-        const { userId, agent, auth, sessionId, starting } = yield* openAgent(host);
-        yield* host.title(starting, sessionId);
+        const opened = yield* openAgent(host, undefined, undefined, {
+          planSnapshot: null,
+          task: "Add a sign-out button to the header.",
+        });
+        const { userId, agent } = opened;
+        yield* exchange(host, opened, "turn_0", "Add a sign-out button to the header.");
+        yield* host.title(opened.admitted);
         const titled = yield* readCodingAgent(userId, agent.id);
-        assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
+        assert.equal(Option.getOrThrow(titled).title, "Sign-out button in the header");
         const [asked] = model.doGenerateCalls;
         assert.ok(asked !== undefined);
-        assert.match(
-          JSON.stringify(asked.prompt),
-          /Teammate invitations[\s\S]*Invite a teammate by email/u,
-        );
+        const read = JSON.stringify(asked.prompt);
+        assert.match(read, /Add a sign-out button to the header[\s\S]*Looked at it/u);
+        assert.doesNotMatch(read, /Teammate invitations/u);
 
-        // A later session of the same conversation finds the first recorded, and is no start.
-        const restartedId = mintSession();
-        const restarted = yield* host.admitStarting(auth, restartedId);
-        assert.ok(Result.isSuccess(restarted));
-        yield* host.title(restarted.success, restartedId);
+        // A title standing is never asked for again.
+        yield* exchange(host, opened, "turn_1", "Make it red.");
+        yield* host.title(opened.admitted);
         assert.equal(model.doGenerateCalls.length, 1);
 
         // The developer's own name is the last word: a generated title lands only where none stands.
-        yield* renameCodingAgent(userId, agent.id, "Sign-out button");
+        yield* renameCodingAgent(userId, agent.id, "Header sign-out");
         assert.equal(yield* fillCodingAgentTitle(userId, agent.id, "Late title"), false);
         const renamed = yield* readCodingAgent(userId, agent.id);
-        assert.equal(Option.getOrThrow(renamed).title, "Sign-out button");
+        assert.equal(Option.getOrThrow(renamed).title, "Header sign-out");
+      }),
+  );
+
+  it.effect("an agent started from the plan is titled from the plan it said first", () =>
+    Effect.gen(function* () {
+      const model = titleModelAnswering(["Teammate invitations by email"]);
+      const host = yield* hostOverStore(model);
+      const opened = yield* openAgent(host);
+      yield* exchange(host, opened, "turn_0", PLAN_TEXT);
+      yield* host.title(opened.admitted);
+      const titled = yield* readCodingAgent(opened.userId, opened.agent.id);
+      assert.equal(Option.getOrThrow(titled).title, "Teammate invitations by email");
+      const [asked] = model.doGenerateCalls;
+      assert.ok(asked !== undefined);
+      assert.match(JSON.stringify(asked.prompt), /Invite a teammate by email/u);
+    }),
+  );
+
+  it.effect(
+    "a first exchange that names no task, a greeting or an image with no words, is asked again as the next turn completes, and an agent still untitled past its third turn is asked no more",
+    () =>
+      Effect.gen(function* () {
+        const greeted = titleModelAnswering(["", "Flaky login test"]);
+        const greeting = yield* hostOverStore(greeted);
+        const hello = yield* openAgent(greeting, undefined, undefined, {
+          planSnapshot: null,
+          task: "Hi",
+        });
+        yield* exchange(greeting, hello, "turn_0", "Hi");
+        yield* greeting.title(hello.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(hello.userId, hello.agent.id)).title,
+          null,
+        );
+        yield* exchange(greeting, hello, "turn_1", "The login test fails on CI now and then.");
+        yield* greeting.title(hello.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(hello.userId, hello.agent.id)).title,
+          "Flaky login test",
+        );
+
+        const shown = titleModelAnswering(["", "Login screen redesign"]);
+        const imaging = yield* hostOverStore(shown);
+        const image = yield* openAgent(imaging, undefined, undefined, {
+          planSnapshot: null,
+          task: "",
+        });
+        yield* exchange(imaging, image, "turn_0", "", [
+          { type: "file", filename: "login.png", mediaType: "image/png" },
+        ]);
+        yield* imaging.title(image.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(image.userId, image.agent.id)).title,
+          null,
+        );
+        yield* exchange(imaging, image, "turn_1", "Redesign this screen.");
+        yield* imaging.title(image.admitted);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(image.userId, image.agent.id)).title,
+          "Login screen redesign",
+        );
+
+        const quiet = titleModelAnswering(["", "", "", "Too late"]);
+        const silent = yield* hostOverStore(quiet);
+        const idle = yield* openAgent(silent, undefined, undefined, {
+          planSnapshot: null,
+          task: "Hi",
+        });
+        for (const turnId of ["turn_0", "turn_1", "turn_2", "turn_3"]) {
+          yield* exchange(silent, idle, turnId, "Hi");
+          yield* silent.title(idle.admitted);
+        }
+        assert.equal(quiet.doGenerateCalls.length, 3);
+        assert.equal(
+          Option.getOrThrow(yield* readCodingAgent(idle.userId, idle.agent.id)).title,
+          null,
+        );
       }),
   );
 
   it.effect(
-    "an agent handed files with its task opens its sandbox before its session starts, to stage them: the sandbox's admission claims the record, so the checkout is let in, the start that follows still titles the agent, and a session older than the one recorded is refused",
+    "an agent handed files with its task opens its sandbox before its session starts, to stage them: the sandbox's admission claims the record, so the checkout is let in, the start that follows still finds the record its own, and a session older than the one recorded is refused",
     () =>
       Effect.gen(function* () {
-        const model = titleModelAnswering(["Login screen redesign"]);
-        const host = yield* hostOverStore(model);
+        const host = yield* hostOverStore();
         const stale = mintSession();
-        const { userId, agent, auth } = yield* unclaimedAgent(undefined, undefined, {
+        const { auth } = yield* unclaimedAgent(undefined, undefined, {
           planSnapshot: null,
           task: "Match this mock",
         });
@@ -752,9 +873,6 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const starting = yield* host.admitStarting(auth, sessionId);
         assert.ok(Result.isSuccess(starting));
         assert.equal(yield* host.sessionStarted(starting.success, sessionId), true);
-        yield* host.title(starting.success, sessionId);
-        const titled = yield* readCodingAgent(userId, agent.id);
-        assert.equal(Option.getOrThrow(titled).title, "Login screen redesign");
 
         const refused = yield* host.admitSandbox(auth, stale);
         assert.ok(Result.isFailure(refused));
@@ -800,9 +918,11 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   it.effect("a title call that fails leaves the agent untitled", () =>
     Effect.gen(function* () {
       const host = yield* hostOverStore(titleModelAnswering([new Error("fixture: provider down")]));
-      const { userId, agent, sessionId, starting } = yield* openAgent(host);
-      yield* host.title(starting, sessionId);
-      assert.equal(Option.getOrThrow(yield* readCodingAgent(userId, agent.id)).title, null);
+      const opened = yield* openAgent(host);
+      yield* exchange(host, opened, "turn_0", PLAN_TEXT);
+      yield* host.title(opened.admitted);
+      const untitled = yield* readCodingAgent(opened.userId, opened.agent.id);
+      assert.equal(Option.getOrThrow(untitled).title, null);
     }),
   );
 
