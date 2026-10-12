@@ -181,6 +181,14 @@ export function todosSummary(todos: CodingAgentTodos["todos"]): string {
   return `${done} of ${todos.length} done`;
 }
 
+/** The item a list is at: the one in progress, else the first still pending; nothing once every item is done. */
+export function todoFocus(todos: CodingAgentTodos["todos"]): string | undefined {
+  const current =
+    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.IN_PROGRESS) ??
+    todos.find((todo) => todo.status === CODING_AGENT_TODO_STATUS.PENDING);
+  return current?.content;
+}
+
 /** One item of a list as words, where the list is copied or drawn as a call's input: a markdown checkbox, the item in progress saying so. */
 function todoLine(todo: CodingAgentTodos["todos"][number]): string {
   switch (todo.status) {

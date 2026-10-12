@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { type ComponentProps, Fragment, type ReactNode } from "react";
 import type { Components } from "streamdown";
-import { Fold, FoldBody, FoldSummary } from "../ai-elements/fold";
+import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { MessageResponse, PANEL_MARKDOWN_COMPONENTS } from "../ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "../ai-elements/reasoning";
 import { Shimmer } from "../ai-elements/shimmer";
@@ -229,11 +229,31 @@ export type TranscriptTodosProps = Omit<ComponentProps<typeof Tool>, "children">
     errorText: string | undefined;
   };
 
+/** A to-do list's items, each behind the mark of where it stands, a done item struck through. */
+function TodoItems({ todos }: { todos: CodingAgentTodos["todos"] }): ReactNode {
+  return (
+    <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2">
+      {todos.map((todo, index) => {
+        const look = TODO_LOOK[todo.status];
+        return (
+          <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
+            <span className="flex h-[1lh] shrink-0 items-center" role="img" aria-label={look.label}>
+              <look.Icon className={cn("size-3.5", look.mark)} aria-hidden="true" />
+            </span>
+            <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
+              {todo.content}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /**
  * One write of an agent's to-do list: a call's row saying how far the list
- * has got, which opens onto the list itself, each item behind the mark of
- * where it stands and a done item struck through. Whether it starts open is
- * the caller's, since only the newest list is worth reading unasked.
+ * has got, which opens onto the list itself. Whether it starts open is the
+ * caller's, since only the newest list is worth reading unasked.
  */
 export function TranscriptTodos({
   state,
@@ -253,28 +273,49 @@ export function TranscriptTodos({
         subjectIsCode={words.code}
       />
       <ToolContent>
-        <ul className="m-0 flex list-none flex-col gap-1 px-3 py-2">
-          {todos.map((todo, index) => {
-            const look = TODO_LOOK[todo.status];
-            return (
-              <li key={index} className="flex items-start gap-2" data-todo-status={todo.status}>
-                <span
-                  className="flex h-[1lh] shrink-0 items-center"
-                  role="img"
-                  aria-label={look.label}
-                >
-                  <look.Icon className={cn("size-3.5", look.mark)} aria-hidden="true" />
-                </span>
-                <span className={cn("min-w-0 [overflow-wrap:anywhere]", look.words)}>
-                  {todo.content}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        <TodoItems todos={todos} />
         <ToolOutput block={undefined} errorText={errorText} />
       </ToolContent>
     </Tool>
+  );
+}
+
+/**
+ * The list the agent is working through, docked above the composer while
+ * it works, as Claude Code keeps its list over the prompt and VS Code's
+ * chat over its log: one line saying how far the list has got and the
+ * item it is at, which opens onto the whole list. Closed by default, as
+ * VS Code's collapses to the item in progress, so it costs the log one
+ * line. It is a card on the plan card's look, since it stands outside the
+ * log, and it is drawn by the caller only while the list is worked.
+ */
+export function TranscriptTodosDock({
+  todos,
+  summary,
+  focus,
+}: {
+  todos: CodingAgentTodos["todos"];
+  /** How far the list has got, as the row says it. */
+  summary: string;
+  /** The item the list is at; none once every item is done. */
+  focus: string | undefined;
+}): ReactNode {
+  return (
+    <Fold
+      className="overflow-clip rounded-lg border border-border bg-muted text-[12.5px]"
+      data-todos-dock=""
+      aria-label="To-dos"
+    >
+      <FoldSummary className="flex h-8 cursor-pointer items-center gap-2 px-3 transition-colors hover:bg-secondary focus-visible:-outline-offset-2">
+        <ListTodoIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="shrink-0 text-muted-foreground">{summary}</span>
+        {focus === undefined ? null : <span className="min-w-0 flex-1 truncate">{focus}</span>}
+        <FoldChevron className="ml-auto" />
+      </FoldSummary>
+      <FoldBody className="border-t border-border">
+        <TodoItems todos={todos} />
+      </FoldBody>
+    </Fold>
   );
 }
 

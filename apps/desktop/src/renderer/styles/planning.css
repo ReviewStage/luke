@@ -804,6 +804,12 @@ button.code-card-path:hover {
   mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
 }
 
+/* The to-do list the agent is working through, docked over the composer
+   on the transcript's own inset, so its card and the composer's line up. */
+.agent-todos-dock {
+  padding: 0 16px 8px;
+}
+
 /* The composer: the shared card (../ai-elements/prompt-input.tsx) at its
    default type, and a note under it, on the transcript's own inset so the
    card and the column line up. What stands here is the room around the

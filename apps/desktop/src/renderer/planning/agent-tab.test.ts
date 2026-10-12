@@ -173,49 +173,57 @@ function tabMarkup(
   failure?: CodingAgentFailure,
   turnUsage?: CodingAgentUsage,
 ): string {
-  return renderToStaticMarkup(
-    createElement(AgentTabView, {
-      agent: { ...AGENT, status },
-      models: undefined,
-      startedAt: undefined,
-      delegationStarts: undefined,
-      readModels: ignore,
-      transcript: {
-        messages: [PLAN, TURN],
-        failure,
-        usage: undefined,
-        turnUsage,
-        context: undefined,
-        runStartedAt: undefined,
-        pageStatus: undefined,
-        pageTitle: undefined,
-        subagentTitles: new Map(),
-        delegations: new Map(),
-        reading: false,
-        failed: false,
-        onRetry: ignore,
-      },
-      composer: {
-        draft: "",
-        setDraft: ignore,
-        sending: false,
-        note: undefined,
-        closed: undefined,
-        send: ignore,
-        retry: ignore,
-        sent: [],
-      },
-      model: {
-        choice: { model: AGENT.model, effort: AGENT.effort },
-        note: undefined,
-        choose: ignore,
-      },
-      published: undefined,
-      doors: SHUT,
-      onStop: () => Promise.resolve(),
-      openGitHub: ignore,
-    }),
-  );
+  return renderToStaticMarkup(tabElement(status, [PLAN, TURN], failure, turnUsage));
+}
+
+/** The whole tab, with the agent in the status given over the messages given. */
+function tabElement(
+  status: CodingAgentSummary["status"],
+  messages: readonly CodingAgentMessage[],
+  failure?: CodingAgentFailure,
+  turnUsage?: CodingAgentUsage,
+) {
+  return createElement(AgentTabView, {
+    agent: { ...AGENT, status },
+    models: undefined,
+    startedAt: undefined,
+    delegationStarts: undefined,
+    readModels: ignore,
+    transcript: {
+      messages,
+      failure,
+      usage: undefined,
+      turnUsage,
+      context: undefined,
+      runStartedAt: undefined,
+      pageStatus: undefined,
+      pageTitle: undefined,
+      subagentTitles: new Map(),
+      delegations: new Map(),
+      reading: false,
+      failed: false,
+      onRetry: ignore,
+    },
+    composer: {
+      draft: "",
+      setDraft: ignore,
+      sending: false,
+      note: undefined,
+      closed: undefined,
+      send: ignore,
+      retry: ignore,
+      sent: [],
+    },
+    model: {
+      choice: { model: AGENT.model, effort: AGENT.effort },
+      note: undefined,
+      choose: ignore,
+    },
+    published: undefined,
+    doors: SHUT,
+    onStop: () => Promise.resolve(),
+    openGitHub: ignore,
+  });
 }
 
 function drawn(
@@ -483,9 +491,9 @@ function listed(row: Element): readonly (readonly [string | null, string | null]
   ]);
 }
 
-test("each write of the agent's to-dos is drawn where it landed as the list on a row of its own, never in a run of calls, and only the newest is open", () => {
+test("each write of the agent's to-dos is drawn where it landed as the list on a row of its own, never in a run of calls, and once the agent stops only the newest is open", () => {
   const container = document.createElement("div");
-  container.innerHTML = drawn([PLAN, LISTING], true);
+  container.innerHTML = drawn([PLAN, LISTING]);
   const rows = [...container.querySelectorAll<HTMLDetailsElement>("details[data-todos]")];
   assert.deepEqual(
     rows.map((row) => row.getAttribute("data-call-id")),
@@ -511,6 +519,57 @@ test("each write of the agent's to-dos is drawn where it landed as the list on a
   );
 });
 
+test("while the agent works through its list, the newest docks over the composer as one closed line saying how far it has got and the item it is at, and every list in the transcript folds, none in a run of calls", () => {
+  const container = document.createElement("div");
+  container.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING]),
+  );
+  const dock = container.querySelector<HTMLDetailsElement>(".agent-tab-foot [data-todos-dock]");
+  assert.ok(dock);
+  assert.equal(dock.open, false);
+  assert.equal(dock.querySelector("[data-todo-status]"), null);
+  assert.equal(dock.getAttribute("aria-label"), "To-dos");
+  assert.match(
+    dock.querySelector("summary")?.textContent ?? "",
+    /^1 of 2 done\s*Add the invite endpoint$/u,
+  );
+  const composer = container.querySelector(".agent-composer");
+  assert.ok(composer && dock.compareDocumentPosition(composer) & Node.DOCUMENT_POSITION_FOLLOWING);
+  const rows = [...container.querySelectorAll<HTMLDetailsElement>("details[data-todos]")];
+  assert.equal(rows.length, 2);
+  for (const row of rows) {
+    assert.equal(row.open, false);
+    assert.equal(row.closest("[data-turn-fold]"), null);
+  }
+});
+
+test("the docked list opens on a click onto the whole list", () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  act(() => root.render(tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING])));
+  assert.deepEqual(listed(open(container, "[data-todos-dock]")), [
+    ["done", "Read the invitation routes"],
+    ["in_progress", "Add the invite endpoint"],
+  ]);
+});
+
+test("nothing docks once the agent has stopped, when the newest list is open in the transcript, nor while every item is done", () => {
+  const stopped = document.createElement("div");
+  stopped.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.COMPLETED, [PLAN, LISTING]),
+  );
+  assert.equal(stopped.querySelector("[data-todos-dock]"), null);
+  assert.equal(stopped.querySelector<HTMLDetailsElement>('[data-call-id="call_t2"]')?.open, true);
+  const finished = document.createElement("div");
+  finished.innerHTML = renderToStaticMarkup(
+    tabElement(CODING_AGENT_STATUS.RUNNING, [PLAN, LISTING, FINISHING]),
+  );
+  assert.equal(finished.querySelector("[data-todos-dock]"), null);
+  assert.equal(finished.querySelector<HTMLDetailsElement>('[data-call-id="call_t3"]')?.open, true);
+});
+
 test("an older list opens on a click onto the list as it stood, and folds once a newer list lands", () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -523,7 +582,7 @@ test("an older list opens on a click onto the list as it stood, and folds once a
           messages,
           reading: false,
           failed: false,
-          working: true,
+          working: false,
           onRetry: ignore,
           openGitHub: ignore,
         }),

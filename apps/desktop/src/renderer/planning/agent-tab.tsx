@@ -39,9 +39,10 @@ import {
   agentRows,
   agentStillWriting,
   agentTabLabel,
+  dockedTodos,
   endLine,
   messageWords,
-  newestTodosCall,
+  newestTodos,
   opensOnGitHub,
   providerOf,
   settledPlanEdits,
@@ -54,6 +55,7 @@ import {
   AGENT_TOOL,
   cardTitle,
   delegationView,
+  todoFocus,
   todosSummary,
   todosView,
   toolCallView,
@@ -64,6 +66,7 @@ import {
   TranscriptRows,
   TranscriptSubagent,
   TranscriptTodos,
+  TranscriptTodosDock,
   TranscriptTool,
   TranscriptWords,
 } from "./transcript-blocks";
@@ -90,7 +93,8 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * and the model and effort the worker runs on, the whole line the one
  * button that opens the worker's own tab in the side panel (`AgentSubagentTab`), each write
  * of its to-do list the list on a row of its own where it landed, open
- * while it is the newest and folded once a newer one stands, and its
+ * while it is the newest and folded once a newer one stands, the newest
+ * docked over the composer instead while the agent works through it, and its
  * runs of calls and its finished lead folded as the Work tab folds Luke's; a message the developer sent it after the plan
  * is the developer's bubble, as the Transcript tab draws one; and while
  * the agent may still write, a shimmering "Working…" stands at the end,
@@ -260,18 +264,52 @@ function TodosRow({
   );
 }
 
+/** Where the transcript draws the agent's to-do lists: the call whose list stays out of a finished turn's fold, and the call whose list is drawn open, none while the list is docked above the composer. */
+interface TodosPlace {
+  readonly kept: string | undefined;
+  readonly open: string | undefined;
+}
+
+/** Where the to-do lists are drawn for the transcript given: the newest kept and open, unless it is docked while the agent works on it. */
+function todosPlace(messages: readonly CodingAgentMessage[], working: boolean): TodosPlace {
+  const standing = newestTodos(messages);
+  const docked = dockedTodos(standing, working);
+  return { kept: standing?.callId, open: docked === undefined ? standing?.callId : undefined };
+}
+
+/** The list the agent is working through, docked above the composer; nothing where none is (`dockedTodos`). */
+function TodosDock({
+  messages,
+  working,
+}: {
+  messages: readonly CodingAgentMessage[];
+  working: boolean;
+}): ReactNode {
+  const docked = dockedTodos(newestTodos(messages), working);
+  if (docked === undefined) return null;
+  return (
+    <div className="agent-todos-dock">
+      <TranscriptTodosDock
+        key={docked.callId}
+        todos={docked.todos}
+        summary={todosSummary(docked.todos)}
+        focus={todoFocus(docked.todos)}
+      />
+    </div>
+  );
+}
+
 /** One part of the agent's turn, drawn by its kind. */
 function AgentPartView({
   part,
   components,
   delegation,
-  newestTodos,
+  todos,
 }: {
   part: AgentPart;
   components: Components;
   delegation: DelegationDoors | undefined;
-  /** The call that wrote the newest to-do list, the one list drawn open. */
-  newestTodos: string | undefined;
+  todos: TodosPlace;
 }): ReactNode {
   switch (part.kind) {
     case AGENT_PART.TEXT:
@@ -283,7 +321,7 @@ function AgentPartView({
         case CODING_AGENT_DELEGATE_TOOL:
           return <DelegationRow part={part} doors={delegation} />;
         case AGENT_TOOL.WRITE_TODOS:
-          return <TodosRow part={part} open={part.callId === newestTodos} />;
+          return <TodosRow part={part} open={part.callId === todos.open} />;
         default:
           return <ToolCallView part={part} />;
       }
@@ -330,7 +368,7 @@ function AgentMessage({
   moving,
   components,
   delegation,
-  newestTodos,
+  todos,
 }: {
   message: CodingAgentMessage;
   /** Whether this is the plan the agent was handed, which is the first of the developer's messages. */
@@ -340,7 +378,7 @@ function AgentMessage({
   moving: boolean;
   components: Components;
   delegation: DelegationDoors | undefined;
-  newestTodos: string | undefined;
+  todos: TodosPlace;
 }): ReactNode {
   const words = messageWords(message);
   if (plan) return <PlanCard text={words} lead={lead} components={components} />;
@@ -358,13 +396,13 @@ function AgentMessage({
   return (
     <Message from={message.role}>
       <MessageContent>
-        <TranscriptRows rows={agentRows(message, moving, lead.grouped, newestTodos)}>
+        <TranscriptRows rows={agentRows(message, moving, lead.grouped, todos.kept)}>
           {(part) => (
             <AgentPartView
               part={part}
               components={components}
               delegation={delegation}
-              newestTodos={newestTodos}
+              todos={todos}
             />
           )}
         </TranscriptRows>
@@ -434,7 +472,7 @@ export function AgentTranscriptView({
 }): React.JSX.Element {
   const components = transcriptComponents(openGitHub);
   if (messages.length > 0) {
-    const newestTodos = newestTodosCall(messages);
+    const todos = todosPlace(messages, working);
     // The plan is the first of the developer's messages, unless the agent
     // was handed a task in its place, which is the developer's message as
     // any other is; the rest the developer sent since.
@@ -459,7 +497,7 @@ export function AgentTranscriptView({
               moving={working && index === messages.length - 1}
               components={components}
               delegation={delegation}
-              newestTodos={newestTodos}
+              todos={todos}
             />
           ))}
           {working ? <WorkingLine startedAt={startedAt} /> : null}
@@ -544,10 +582,12 @@ export function AgentTabView({
   onOpenSubagent?: DelegationDoors["onOpen"];
   openGitHub: (url: string) => void;
 }): React.JSX.Element {
+  const lines = agentLines(transcript.messages, composer.sent);
+  const working = agentStillWriting(agent.status);
   return (
     <section className="agent-tab ph-no-capture" aria-label={agentTabLabel(agent, models)}>
       <AgentTranscriptView
-        messages={agentLines(transcript.messages, composer.sent)}
+        messages={lines}
         brief={agent.brief}
         delegation={{
           models,
@@ -557,7 +597,7 @@ export function AgentTabView({
         }}
         reading={transcript.reading}
         failed={transcript.failed}
-        working={agentStillWriting(agent.status)}
+        working={working}
         startedAt={startedAt}
         ended={endLine(agent.status, transcript.failure, transcript.turnUsage)}
         onRetry={transcript.onRetry}
@@ -570,6 +610,7 @@ export function AgentTabView({
         overComposer
       />
       <footer className="agent-tab-foot">
+        <TodosDock messages={lines} working={working} />
         {onUnarchive !== undefined ? (
           <ArchivedComposerNote
             onUnarchive={onUnarchive}
