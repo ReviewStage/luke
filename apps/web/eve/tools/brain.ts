@@ -48,6 +48,8 @@ export function hostedTools(
                   defineTool({
                     description: declared.description,
                     inputSchema: declared.inputSchema,
+                    // A dynamic tool takes a fixed answer alone, never a function of its output.
+                    ...(declared.endsTurn ? { endsTurn: true } : undefined),
                     // SAFETY: eve hands this the JSON the tool's own execute answered; the reader parses it as wire input.
                     toModelOutput: (output) =>
                       lookModelOutput(unparsedWire(output as WireBoundaryInput)),

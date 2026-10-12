@@ -18,6 +18,7 @@ import {
 import { END_CALL_TOOL, endsCall } from "./end-call.js";
 import { QUEUE_QUESTION_TOOL, queuedQuestionOf } from "./queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "./repository-shell.js";
+import { REST_TOOL, restReasonOf } from "./rest.js";
 import { SHOW_CODE_TOOL, shownCodeOf } from "./show-code.js";
 import type { StoredTurnRecord } from "./store/index.js";
 
@@ -78,7 +79,7 @@ function replyTextOf(parts: readonly JournalPart[]): string {
 }
 
 /**
- * What one call tells while the turn runs: a question a planning call queued,
+ * What one call tells while the turn runs: a question a planning call queued, its rest,
  * code it showed, its ask to end the call, or a repository command, the one
  * slow step. A queued question or an end is told once its input is whole,
  * never while it streams, and
@@ -93,6 +94,10 @@ function callEventOf(part: StoredToolPart): TurnEventBody | undefined {
   }
   if (name === END_CALL_TOOL.name) {
     return endsCall(part) ? { kind: TURN_EVENT_KIND.CALL_ENDING } : undefined;
+  }
+  if (name === REST_TOOL.name) {
+    const reason = restReasonOf(part);
+    return reason === undefined ? undefined : { kind: TURN_EVENT_KIND.RESTED, reason };
   }
   if (name === SHOW_CODE_TOOL.name) {
     const shown = shownCodeOf(part);
@@ -131,6 +136,7 @@ export function projectTurnEvents(
   const bodies: TurnEventBody[] = [];
   let slowStepTold = false;
   let endTold = false;
+  let restTold = false;
   let settledTold = false;
   let unsettled = false;
   for (const step of stepsOf(journal?.parts ?? [])) {
@@ -149,8 +155,10 @@ export function projectTurnEvents(
       const told = callEventOf(part);
       if (told === undefined || (told.kind === TURN_EVENT_KIND.SLOW_STEP && slowStepTold)) continue;
       if (told.kind === TURN_EVENT_KIND.CALL_ENDING && endTold) continue;
+      if (told.kind === TURN_EVENT_KIND.RESTED && restTold) continue;
       slowStepTold ||= told.kind === TURN_EVENT_KIND.SLOW_STEP;
       endTold ||= told.kind === TURN_EVENT_KIND.CALL_ENDING;
+      restTold ||= told.kind === TURN_EVENT_KIND.RESTED;
       bodies.push(told);
     }
   }

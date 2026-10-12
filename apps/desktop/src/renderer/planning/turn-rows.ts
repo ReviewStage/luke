@@ -37,6 +37,7 @@ export const CALL_KIND = {
   MESSAGE_AGENT: "message-agent",
   START_AGENT: "start-agent",
   END_CALL: "end-call",
+  REST: "rest",
   OTHER: "other",
 } as const;
 
@@ -64,6 +65,7 @@ export const CALL_WORDS = {
   [CALL_KIND.MESSAGE_AGENT]: { verb: "Messaged the coding agent", code: false },
   [CALL_KIND.START_AGENT]: { verb: "Started an agent", code: false },
   [CALL_KIND.END_CALL]: { verb: "Ended the call", code: false },
+  [CALL_KIND.REST]: { verb: "Paused until you speak", code: false },
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 

@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { TURN_END, TURN_EVENT_KIND, TURN_SLOW_STEP, type TurnEvent } from "@sidecar/hosted";
+import {
+  TURN_END,
+  TURN_EVENT_KIND,
+  TURN_REST_REASON,
+  TURN_SLOW_STEP,
+  type TurnEvent,
+} from "@sidecar/hosted";
 import { Effect } from "effect";
 import type { MessageStreamEvent } from "eve/client";
 import { afterAll, test } from "vitest";
@@ -30,6 +36,7 @@ import { END_CALL_TOOL } from "../server/hosted/end-call";
 import { SEARCH_WEB_TOOL } from "../server/hosted/public-research";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
+import { REST_TOOL } from "../server/hosted/rest";
 import { SHOW_CODE_TOOL } from "../server/hosted/show-code";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { askRecord } from "../server/hosted/store/asks";
@@ -479,6 +486,37 @@ test("the projection: a planning call's end of the call is told once per turn, a
     { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.REPLY_SENTENCE, sentence: "Bye for now." },
     { turnId: TURN.id, seq: 4, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
   ]);
+});
+
+test("the projection: a planning call's rest is told once per turn with its reason, as soon as its call is journaled, and the turn still completes with its end", () => {
+  const settled = { status: ACTION_RESULT_STATUS.ACCEPTED };
+  const rest = { reason: TURN_REST_REASON.WAITING_ON_DEVELOPER };
+  // SAFETY: stored parts in the SDK's own shape, as the writer lands a step's calls.
+  const parts = [
+    toolPart(REST_TOOL.name, "c1", rest, TOOL_PART_STATE.OUTPUT_AVAILABLE, settled),
+    toolPart(REST_TOOL.name, "c2", rest, TOOL_PART_STATE.OUTPUT_AVAILABLE, settled),
+  ] as StoredUIMessage["parts"];
+  assert.deepEqual(projectTurnEvents(TURN, journal(parts)), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.RESTED, ...rest },
+  ]);
+  assert.deepEqual(projectTurnEvents({ ...TURN, status: TURN_STATUS.SETTLED }, journal(parts)), [
+    { turnId: TURN.id, seq: 1, kind: TURN_EVENT_KIND.RESTED, ...rest },
+    { turnId: TURN.id, seq: 2, kind: TURN_EVENT_KIND.ACTIONS_SETTLED },
+    { turnId: TURN.id, seq: 3, kind: TURN_EVENT_KIND.ENDED, end: TURN_END.COMPLETED },
+  ]);
+});
+
+test("the projection: a rest still streaming in, or one whose reason does not read, is not told", () => {
+  assert.deepEqual(
+    projectTurnEvents(
+      TURN,
+      journal([
+        toolPart(REST_TOOL.name, "c1", { reason: TURN_REST_REASON.NOTHING_NEW }, "input-streaming"),
+        toolPart(REST_TOOL.name, "c2", { reason: "tired" }),
+      ]),
+    ),
+    [],
+  );
 });
 
 test("the projection: an end of the call still streaming in, or one that does not read, is not told", () => {

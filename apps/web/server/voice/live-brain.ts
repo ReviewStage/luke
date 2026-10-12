@@ -41,10 +41,15 @@ import {
   stopAsk,
 } from "../hosted/brain-ask.js";
 import { childConversationId } from "../hosted/brain-host/ids.js";
-import { EVE_DELEGATION_TOOL, PLANNING_EXPLORE_ASK } from "../hosted/brain-host/planning.js";
+import {
+  EVE_DELEGATION_TOOL,
+  PLANNING_EXPLORE_ASK,
+  planningContinueAsk,
+} from "../hosted/brain-host/planning.js";
 import { HOSTED_TOOL_SET } from "../hosted/brain-tool-set.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
+import { REST_TOOL } from "../hosted/rest.js";
 import { TURN_ABANDON } from "../hosted/store/abandoned-turns.js";
 import type { HostedStore, StoreWriter } from "../hosted/store/index.js";
 import { listJournals, listJournalsCalling } from "../hosted/store/message-reads.js";
@@ -137,6 +142,7 @@ const RUN_EVENT_OF_TURN_EVENT = {
   [TURN_EVENT_KIND.QUESTION_QUEUED]: LIVE_BRAIN_RUN_EVENT.QUESTION_QUEUED,
   [TURN_EVENT_KIND.CODE_SHOWN]: LIVE_BRAIN_RUN_EVENT.CODE_SHOWN,
   [TURN_EVENT_KIND.CALL_ENDING]: LIVE_BRAIN_RUN_EVENT.CALL_ENDING,
+  [TURN_EVENT_KIND.RESTED]: LIVE_BRAIN_RUN_EVENT.RESTED,
   [TURN_EVENT_KIND.ACTIONS_SETTLED]: LIVE_BRAIN_RUN_EVENT.ACTIONS_SETTLED,
   [TURN_EVENT_KIND.REPLY_SENTENCE]: LIVE_BRAIN_RUN_EVENT.REPLY_SENTENCE,
   [TURN_EVENT_KIND.ENDED]: LIVE_BRAIN_RUN_EVENT.ENDED,
@@ -176,6 +182,8 @@ function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveBrain
     case TURN_EVENT_KIND.CALL_ENDING:
     case TURN_EVENT_KIND.ACTIONS_SETTLED:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId };
+    case TURN_EVENT_KIND.RESTED:
+      return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, reason: event.reason };
     case TURN_EVENT_KIND.REPLY_SENTENCE:
       return { kind: RUN_EVENT_OF_TURN_EVENT[event.kind], runId, sentence: event.sentence };
     case TURN_EVENT_KIND.ENDED:
@@ -186,6 +194,12 @@ function runEventOf(event: TurnEvent, runId: string, shownAt: number): LiveBrain
       };
   }
 }
+
+/** The calls that are no step of the turn's work: a queued question, the plan's next question, and a rest, the work's end. */
+const UNCOUNTED_STEP_TOOLS: ReadonlySet<string> = new Set([
+  QUEUE_QUESTION_TOOL.name,
+  REST_TOOL.name,
+]);
 
 /** What a follow has told of its turn so far: the activity last said, how many of its calls were told settled, whether the turn handed work to a task, and its work as last shown. */
 interface FollowTold {
@@ -281,8 +295,8 @@ function delegatedOf(journal: StoredUIMessage | undefined): boolean {
 /**
  * The turn's settled calls, oldest first, as the kind of step each was: a
  * repository command as a repository read, and every other call as no named
- * kind. A queued question is the plan's next question and no step of the
- * work, so it is not counted. Note that we read which tool was called and
+ * kind. A queued question is the plan's next question and a rest the end
+ * of the work, so neither is counted. Note that we read which tool was called and
  * nothing of its input or output, so a settled step tells the voice no
  * command and no line the repository holds.
  */
@@ -290,7 +304,7 @@ function settledStepsOf(journal: StoredUIMessage | undefined): readonly (string 
   return (journal?.parts ?? [])
     .filter(isStoredToolPart)
     .filter((part) => isSettledToolPartState(part.state))
-    .filter((part) => storedToolName(part) !== QUEUE_QUESTION_TOOL.name)
+    .filter((part) => !UNCOUNTED_STEP_TOOLS.has(storedToolName(part)))
     .map((part) =>
       storedToolName(part) === RUN_IN_REPOSITORY_TOOL.name
         ? SLOW_STEP_KIND.REPOSITORY_READ
@@ -739,6 +753,23 @@ export const hostedLiveBrain = /* @__PURE__ */ Effect.fn("web/hostedLiveBrain")(
           conversationId: options.conversationId,
         },
         0,
+      );
+    },
+    // Note that each run's client id is the service's fresh one, because the
+    // backend is set working again many times in a session and each time is
+    // an ask of its own; and that, like an exploring run, it names no voice
+    // session, so a re-attached connection takes none of them up and the
+    // service simply sets the backend working again once the call is quiet.
+    continueWork(work) {
+      return submit(
+        {
+          userId: options.userId,
+          question: planningContinueAsk(work),
+          origin: ASK_ORIGIN.SPOKEN,
+          clientId: work.submissionId,
+          conversationId: options.conversationId,
+        },
+        work.revision,
       );
     },
     cancelRun(runId) {

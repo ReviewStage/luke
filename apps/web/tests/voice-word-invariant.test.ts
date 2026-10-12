@@ -186,6 +186,11 @@ class TurnOpeningBrain implements LiveBrain {
     return Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" });
   }
 
+  /** Nor set working between the developer's words, for the same reason. */
+  continueWork(): Effect.Effect<LiveBrainSubmission> {
+    return Effect.succeed({ outcome: LIVE_BRAIN_SUBMISSION.REFUSED, refusal: "unreachable" });
+  }
+
   cancelRun(): Effect.Effect<LiveBrainCancel> {
     return Effect.succeed(LIVE_BRAIN_CANCEL.NOT_RUNNING);
   }

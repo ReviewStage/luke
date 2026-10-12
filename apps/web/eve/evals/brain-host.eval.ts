@@ -32,6 +32,7 @@ import {
   savePlanDocument,
 } from "../../server/hosted/plan-store";
 import { REPOSITORY_SHELL_REFUSAL } from "../../server/hosted/repository-shell";
+import { REST_TOOL } from "../../server/hosted/rest";
 import { toolSetHashOf } from "../../server/hosted/store/content-addressed";
 import { readMessagesByConversationTyped, readTurnById } from "../../tests/support/store-rows";
 import {
@@ -39,6 +40,7 @@ import {
   SCRIPTED_NOT_READ_REPLY,
   SCRIPTED_PLANNING_REPLY,
   SCRIPTED_READ,
+  SCRIPTED_REST,
 } from "../scripted-model";
 
 /**
@@ -276,6 +278,29 @@ export default defineEval({
           (part) =>
             isTextUIPart(part) &&
             part.text === `${SCRIPTED_NOT_READ_REPLY} ${REPOSITORY_SHELL_REFUSAL.NO_REPOSITORY}`,
+        ),
+      );
+
+      // A rest ends the turn on its call alone: the turn settles with the
+      // call journaled and no words, since eve takes no step after it.
+      const restingPlan = await run(createPlan(LOCAL_DEV_PRINCIPAL, PLAN));
+      const restingConversationId = await planConversation(run, restingPlan.id);
+      const resting = await openSession(restingConversationId, `${SCRIPTED_REST}nothing new`);
+      const restingSession = await t.target.attachSession(resting.sessionId);
+      restingSession.succeeded();
+      const restingTurnId = hostTurnId(resting.sessionId, "turn_0");
+      assert.equal((await readTurnById(run, restingTurnId))?.status, TURN_STATUS.SETTLED);
+      const restingAnswer = (
+        await readMessagesByTurn(run, restingConversationId, restingTurnId)
+      )[1];
+      assert.ok(restingAnswer);
+      assert.deepEqual(
+        restingAnswer.parts.filter((part) => isTextUIPart(part)),
+        [],
+      );
+      assert.ok(
+        restingAnswer.parts.some(
+          (part) => isToolUIPart(part) && part.type === `tool-${REST_TOOL.name}`,
         ),
       );
     } finally {

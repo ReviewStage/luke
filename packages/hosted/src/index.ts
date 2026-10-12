@@ -99,10 +99,12 @@ export {
 export {
   TURN_END,
   TURN_EVENT_KIND,
+  TURN_REST_REASON,
   TURN_SLOW_STEP,
   type TurnEnd,
   type TurnEvent,
   type TurnEventBody,
   type TurnEventKind,
+  type TurnRestReason,
   type TurnSlowStep,
 } from "./turn-events-wire.js";

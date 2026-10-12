@@ -30,6 +30,7 @@ import { END_CALL_TOOL } from "../hosted/end-call.js";
 import { READ_WEB_PAGE_TOOL, SEARCH_WEB_TOOL } from "../hosted/public-research.js";
 import { QUEUE_QUESTION_TOOL } from "../hosted/queue-question.js";
 import { REPOSITORY_SHELL_STATUS, RUN_IN_REPOSITORY_TOOL } from "../hosted/repository-shell.js";
+import { REST_TOOL } from "../hosted/rest.js";
 import { SHOW_CODE_TOOL } from "../hosted/show-code.js";
 import type { StoredTurnRecord } from "../hosted/store/message-reads.js";
 
@@ -68,6 +69,7 @@ const TOOL_OF_NAME: ReadonlyMap<string, PlanWorkTool> = new Map([
   [MESSAGE_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.MESSAGE_AGENT],
   [START_CODING_AGENT_TOOL.name, PLAN_WORK_TOOL.START_AGENT],
   [END_CALL_TOOL.name, PLAN_WORK_TOOL.END_CALL],
+  [REST_TOOL.name, PLAN_WORK_TOOL.REST],
 ]);
 
 const isRepositoryInput = Schema.is(RUN_IN_REPOSITORY_TOOL.inputSchema);

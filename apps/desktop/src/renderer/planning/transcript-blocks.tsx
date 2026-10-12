@@ -11,6 +11,7 @@ import {
   ListIcon,
   type LucideIcon,
   MessageCircleQuestionIcon,
+  PauseIcon,
   PencilLineIcon,
   PhoneOffIcon,
   PlayIcon,
@@ -123,6 +124,7 @@ const CALL_ICON = {
   [CALL_KIND.MESSAGE_AGENT]: SendIcon,
   [CALL_KIND.START_AGENT]: PlayIcon,
   [CALL_KIND.END_CALL]: PhoneOffIcon,
+  [CALL_KIND.REST]: PauseIcon,
   [CALL_KIND.OTHER]: WrenchIcon,
 } as const satisfies Record<CallKind, LucideIcon>;
 
