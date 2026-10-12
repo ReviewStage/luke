@@ -233,24 +233,21 @@
   font-weight: 620;
 }
 
-/* The mark a row wears while its value differs from the default: a small dot
-   riding the name's line, said in words for a reader by the hidden text
-   inside it. The secondary text colour rather than a state colour on
-   purpose — changed is a fact about a preference, never an urgency. */
+/* The word a row wears while its value differs from the default, riding the
+   name's line in the small tertiary type of a caption. The tertiary colour
+   rather than a state colour on purpose — changed is a fact about a
+   preference, never an urgency. */
 .settings-changed {
-  display: inline-block;
-  width: 4px;
-  height: 4px;
   margin-left: 6px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  vertical-align: 2px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
 }
 
 /* The mark a name wears while the feature it belongs to still needs a hand —
    the front-page Voice row, the key or permission that supplies the missing
    thing, and a shortcut whose chord answers nothing until it is supplied. The
-   attention tint on purpose: unlike the changed dot this is an urgency, the
+   attention tint on purpose: unlike the changed word this is an urgency, the
    same standing a session waiting on a person has. The words are the hover's
    and the hidden text's; the glyph alone is the mark. */
 .settings-attention {

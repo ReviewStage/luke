@@ -102,7 +102,7 @@ import { startedAgentCallIds, workerCallIds } from "./work-model";
  * plan opens, started from the toolbar, and each drawn on a tab of the side
  * panel. Main is told which agent's tab is shown, so the notification it
  * posts when an agent ends is held back while the developer is looking at
- * that agent, and the agents main says ended unseen wear a dot until their
+ * that agent, and the agents main says ended unseen read in semibold until their
  * tab is shown (`main/agent-notices.ts`). The open plan's history is the
  * tab's as well (`use-plan-history.ts`): its version history, opened from
  * the plan's menu or its "Edited by" line, takes the whole window in the
@@ -707,7 +707,7 @@ export function usePlansTab(input: {
     code: live ? (planning.shownCode?.length ?? 0) > 0 : undefined,
     panel: sidePanel,
   });
-  // An agent that ended unseen dots its tab the way an arrival does; main
+  // An agent that ended unseen marks its tab unread as an arrival does; main
   // clears it once the tab is shown.
   const unreadTabs: readonly SidePanelTab[] = [
     ...arrivedTabs,

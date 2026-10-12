@@ -8,6 +8,7 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel, ModelChoice } from "@sidecar/hosted/models-wire";
+import { TerminalIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon, FileTextIcon } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
@@ -23,12 +24,15 @@ import {
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { useCopyToast } from "../copy-feedback";
+import { HarnessMark } from "../provider-marks";
+import { StateGlyph } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
 import { type PublishedDoors, PublishedRow } from "./agent-published";
 import { ArchivedComposerNote } from "./archived-plan";
 import {
   AGENT_PART,
   type AgentPart,
+  agentGlyphState,
   agentLines,
   agentRows,
   agentStillWriting,
@@ -37,6 +41,7 @@ import {
   isDelegation,
   messageWords,
   opensOnGitHub,
+  providerOf,
   settledPlanEdits,
   showsPublishedRow,
   workerLines,
@@ -93,7 +98,7 @@ import { WorkedFor, WorkingLine } from "./working-time";
  * root is left out of the screen recording (`ph-no-capture`) as a second
  * line behind the recording's text masking. Under the transcript stands
  * the composer (`agent-composer.tsx`), with no head above either: where
- * the agent stands is its tab's dot and the transcript's own lines, what
+ * the agent stands is its tab's glyph and the transcript's own lines, what
  * it runs on is the model chip at the box's foot, and what it published
  * is the chip after it. A line the developer sends joins the transcript at
  * once as theirs and is read back from the service's own row, and the
@@ -315,14 +320,18 @@ function AgentMessage({
   );
 }
 
-/** The dot that says where an agent stands, pulsing while it may still write. */
-export function AgentStatusDot({ status }: { status: CodingAgentSummary["status"] }) {
+/**
+ * An agent's glyph wearing where it stands: the mark of the harness its
+ * model runs in, or the Coding agents glyph where Luke knows no harness for
+ * it, turning a ring while the agent may still write and giving way to an
+ * alert once its turn failed (`state-glyph.tsx`).
+ */
+export function AgentGlyph({ agent }: { agent: Pick<CodingAgentSummary, "model" | "status"> }) {
+  const provider = providerOf(agent.model);
   return (
-    <span
-      className="agent-status-dot"
-      data-status={status}
-      data-live={String(agentStillWriting(status))}
-      aria-hidden="true"
+    <StateGlyph
+      glyph={provider === undefined ? <TerminalIcon /> : <HarnessMark provider={provider} />}
+      state={agentGlyphState(agent.status)}
     />
   );
 }

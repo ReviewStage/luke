@@ -7,7 +7,11 @@ import {
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
-import type { PlanCodeShowing, PlanWorkTurn } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_WORK_STATE,
+  type PlanCodeShowing,
+  type PlanWorkTurn,
+} from "@sidecar/hosted/planning-view";
 import {
   BoardIcon,
   CloseIcon,
@@ -31,10 +35,15 @@ import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { useCopyToast } from "../copy-feedback";
-import { AgentStatusDot, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
+import { AgentGlyph, AgentSubagentTab, AgentTab } from "../planning/agent-tab";
 import { CodePane } from "../planning/code-pane";
 import { fileName, shownFiles } from "../planning/code-pane-model";
-import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding-agent-model";
+import {
+  agentGlyphState,
+  agentStateWords,
+  agentTabLabel,
+  modelLabel,
+} from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { FileTab } from "../planning/file-tab";
 import { snippetOf } from "../planning/file-tab-model";
@@ -84,6 +93,7 @@ import {
   workRowsOf,
 } from "../planning/work-model";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
+import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState, StateGlyph } from "../state-glyph";
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { commandKeyshortcuts, Tooltip } from "../tooltip";
 import { ActionMenu, type MenuAction, MenuItem, type OpenMenu } from "./action-menu";
@@ -105,8 +115,8 @@ import { EDGE_SIDE, type ResizableEdgeProps, useResizableEdge } from "./use-resi
  * is the window's rather than the panel's (desktop-shell.tsx), so the
  * panel's coming and going never moves it. The fixed tabs the plan has
  * used come first, and a plan that has used none, and has no agent, says
- * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model with a dot
- * for where the agent stands; after them stand the subagents opened from
+ * so in the panel's body under the "+". The plan's coding agents follow, one tab each, named by model and wearing
+ * its harness's mark for where the agent stands; after them stand the subagents opened from
  * the Work tab, the "+", or a delegation's row in an agent's tab, one tab
  * each, named by job. A draft agent opened from the "+" stands after the
  * agents until its first message starts it. Every tab closes, and closing
@@ -563,7 +573,8 @@ function PanelTab({
 
 /**
  * One coding agent's tab: named by its title, or its model until it has one,
- * with the model in its hint, and dotted for where the agent stands. Its
+ * with the model in its hint, and its harness's mark wearing where the agent
+ * stands. Its
  * menu offers Rename beside every tab's actions, which turns the tab into
  * its name's field until the edit ends; a key that ends it hands focus back
  * to the tab. An archived plan's agents are read and not renamed.
@@ -696,9 +707,11 @@ function stripTabs(input: {
       tab,
       agent,
       look: look(tab, {
-        icon: <AgentStatusDot status={agent.status} />,
+        icon: <AgentGlyph agent={agent} />,
         label,
-        tooltip: modelLabel(agent.model, agents.models),
+        tooltip: [modelLabel(agent.model, agents.models), agentStateWords(agent.status)]
+          .filter((words) => words !== undefined)
+          .join(" · "),
       }),
       close: () => panel.onClose(tab),
       copy: copied(read),
@@ -718,7 +731,7 @@ function stripTabs(input: {
             },
           },
         ];
-  const subagentTabs = subagents.map(({ tab, label, running, worker }) => {
+  const subagentTabs = subagents.map(({ tab, label, state, worker }) => {
     const { delegation } = tab;
     const read = () =>
       delegation === undefined
@@ -738,7 +751,11 @@ function stripTabs(input: {
           );
     return {
       tab,
-      look: look(tab, { icon: <BotIcon className={running ? "text-luke" : undefined} />, label }),
+      look: look(tab, {
+        icon: <StateGlyph glyph={<BotIcon />} state={state} />,
+        label,
+        tooltip: GLYPH_STATE_WORDS[state],
+      }),
       close: () => panel.onClose(tab),
       copy: copied(read),
     };
@@ -757,14 +774,15 @@ function stripTabs(input: {
  * subagents, and the files, then the "+". A
  * tab's own word is all it needs to say, so it hangs no pill; a fixed tab's
  * chord is in the View menu, the "+" menu, and on the Keyboard shortcuts
- * page, and an agent's tab wears the dot for where the agent stands in its
- * glyph's place; no agent's or subagent's tab has a chord. A tab something
- * arrived on while another was shown, and an agent's whose end no one was
- * looking at, wear the note at their corner until shown. The agent tabs
- * stand after the fixed ones in the order the agents started, and the
+ * page, and an agent's tab wears its harness's mark, turning a ring while
+ * the agent works and giving way to an alert once it failed, with the state
+ * said in its hint beside the model; no agent's or subagent's tab has a
+ * chord. A tab something arrived on while another was shown, and an agent's
+ * whose end no one was looking at, read in semibold until shown. The agent
+ * tabs stand after the fixed ones in the order the agents started, and the
  * subagent tabs after those in the order opened, each wearing the worker's
- * glyph, lit while it runs, until the developer drags or steps any tab to
- * any place, which the plan keeps (`inPlanOrder`). A tab pinned to the
+ * glyph with the same ring while it runs, until the developer drags or
+ * steps any tab to any place, which the plan keeps (`inPlanOrder`). A tab pinned to the
  * sidebar is drawn and moved as any other. Every tab's right-click offers
  * Close, Close others, which closes every tab but it and chooses it, and a
  * fixed tab's, an agent's, and a file's Pin tab or Unpin tab, which puts
@@ -900,16 +918,22 @@ interface SidePanelWork {
   onLoadEarlier: () => Promise<void>;
 }
 
-/** An open subagent tab the plan draws: its tab, what the strip calls it, whether its glyph is lit, and the planning worker's block where it is one. */
+/** An open subagent tab the plan draws: its tab, what the strip calls it, where its glyph says it stands, and the planning worker's block where it is one. */
 interface DrawnSubagent {
   tab: SubagentSidePanelTab;
   label: string;
-  running: boolean;
+  state: GlyphState;
   worker: WorkWorkerBlock | undefined;
 }
 
 /** Where the open delegated workers stand, by the call that started each, as their tabs' pages last said. */
 type WorkerStandings = ReadonlyMap<string, CodingAgentStatus>;
+
+/** Where a planning worker stands as its tab's glyph wears it: working while its call still moves, failed once it failed. */
+function workerGlyphState(worker: WorkWorkerBlock): GlyphState {
+  if (worker.call.running) return GLYPH_STATE.WORKING;
+  return worker.call.state === PLAN_WORK_STATE.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
+}
 
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
 function drawnSubagents(
@@ -926,7 +950,7 @@ function drawnSubagents(
         {
           tab,
           label: cardTitle(tab.delegation.task),
-          running: agentStillWriting(status),
+          state: agentGlyphState(status),
           worker: undefined,
         },
       ];
@@ -934,7 +958,7 @@ function drawnSubagents(
     const worker = workerOf(workRows, tab.subagent);
     return worker === undefined
       ? []
-      : [{ tab, label: workerJob(worker.call), running: worker.call.running, worker }];
+      : [{ tab, label: workerJob(worker.call), state: workerGlyphState(worker), worker }];
   });
 }
 
@@ -1323,7 +1347,7 @@ export function SidePanel({
   shown,
 }: SidePanelDrawing & {
   panel: SidePanelControl;
-  /** The tabs holding something that arrived while another was shown, each dotted until it is shown. */
+  /** The tabs holding something that arrived while another was shown, each in semibold until it is shown. */
   unread: readonly SidePanelTab[];
   planId: string;
   /** The plan's repository, `owner/name`, or none before one is chosen. */

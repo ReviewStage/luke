@@ -41,7 +41,7 @@ import type { AgentModelControl } from "./use-agent-model";
  * next step; sent idle, it opens a new turn. The box reads the same
  * whatever the agent is doing: one size, the same chips, no hint under it,
  * and one placeholder asking for a follow up, since a started agent's
- * conversation opens on its plan or task, because the tab's dot and the transcript's "Working…"
+ * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
  * there are words, disabled while there are none and the agent is idle, and

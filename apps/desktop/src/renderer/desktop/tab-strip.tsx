@@ -24,6 +24,11 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * ⇧⌘← and ⇧⌘→, as VS Code moves an editor, with focus kept on it. Either
  * way the strip says where the tab now stands to whoever reads it aloud.
  *
+ * A tab something arrived on while another was chosen reads in semibold
+ * until it is chosen, the sidebar's convention for a plan saved unseen,
+ * rather than wearing a dot, and says "New result" in its hint and to a
+ * reader.
+ *
  * A tab with actions of its own offers them on a
  * right-click, or from the keyboard on the menu key or ⇧F10, hanging under
  * the tab.
@@ -59,6 +64,24 @@ const WHEEL_LINE = 16;
  * over a strip that, to the eye, holds them all.
  */
 const OVERFLOW_SLACK = 1;
+
+/** What an unread tab says in its hint and to a reader beyond its label. */
+const UNREAD_TAB_NOTE = "New result";
+
+/** The words a tab's hint joins: its label where it is cut short, what the tab adds, and its news. */
+function tabHint(input: {
+  label: string;
+  clipped: boolean;
+  tooltip: string | undefined;
+  unread: boolean;
+}): string | undefined {
+  const words = [
+    input.clipped ? input.label : undefined,
+    input.tooltip,
+    input.unread ? UNREAD_TAB_NOTE : undefined,
+  ].filter((word) => word !== undefined);
+  return words.length === 0 ? undefined : words.join(" · ");
+}
 
 /**
  * The tab a navigation key moves to from the focused one, or nothing for any
@@ -302,7 +325,7 @@ export function TabStrip({
  * one that always stands. `editor`, while given, is drawn in the label's
  * place as a field of its own, outside the tab's role, so a reader reaches
  * it. A label cut short is said whole in the tab's hint, before what
- * `tooltip` adds. `onMenu` opens the tab's own
+ * `tooltip` adds and an unread tab's news. `onMenu` opens the tab's own
  * actions where it says, from a right-click or the keyboard's menu keys.
  * A `quiet` tab draws no fill at rest, chosen or not, and the hover fill
  * under the pointer: a lone tab, always the chosen one, need not be told
@@ -325,7 +348,7 @@ export function Tab({
   icon: React.JSX.Element;
   label: string;
   selected: boolean;
-  /** Something arrived on the tab while another was chosen: a dot until it is chosen. */
+  /** Something arrived on the tab while another was chosen: its label in semibold until it is chosen. */
   unread?: boolean;
   /** What the pointer resting on the tab says beyond its label. */
   tooltip?: string | undefined;
@@ -340,13 +363,8 @@ export function Tab({
   // Whether the label is cut short: a label renamed, or the plan's one tab
   // giving way to its toolbar.
   const [words, clipped] = useClipped();
-  const hint = !clipped ? tooltip : tooltip === undefined ? label : `${label} · ${tooltip}`;
-  const glyph = (
-    <span className="tab-icon">
-      {icon}
-      {unread ? <span className="tab-note" aria-hidden="true" /> : null}
-    </span>
-  );
+  const hint = tabHint({ label, clipped, tooltip, unread });
+  const glyph = <span className="tab-icon">{icon}</span>;
   const tab = (
     <button
       ref={tabRef}
@@ -355,6 +373,7 @@ export function Tab({
       className="tab-button"
       aria-selected={selected}
       aria-keyshortcuts={keyshortcuts}
+      aria-description={unread ? UNREAD_TAB_NOTE : undefined}
       tabIndex={selected ? 0 : -1}
       onClick={onSelect}
       onContextMenu={
@@ -391,6 +410,7 @@ export function Tab({
       data-selected={String(selected)}
       data-closable={String(onClose !== undefined)}
       data-quiet={String(quiet)}
+      data-unread={String(unread)}
     >
       {editor === undefined ? (
         <Tooltip label={hint}>{tab}</Tooltip>
