@@ -61,8 +61,9 @@ test("the connect policy names both recorder hosts, and nothing else", () => {
   assert.deepEqual(connectSrc?.split(" "), [POSTHOG_HOST, POSTHOG_ASSETS_HOST]);
 });
 
-// The voice window loads the panel's bundle, recorder included; `App` is never
-// mounted for it, and behind that stands this policy: no host at all.
+// The voice window loads the panel's bundle; `App` is never mounted for it,
+// so it never asks for the recorder's, and behind that stands this policy: no
+// host at all.
 test("the voice document loads the one bundle and may reach no host at all", () => {
   const voice = readFileSync(new URL("./voice.html", import.meta.url), "utf8");
   assert.equal(voice.match(/connect-src ([^;"]+)/)?.[1], "'none'");

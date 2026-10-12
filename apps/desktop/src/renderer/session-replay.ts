@@ -1,14 +1,12 @@
 import { isRecord, text, type UnparsedWireValue, type WireValue } from "@sidecar/wire";
 import type { Properties } from "posthog-js";
+// The "no-external" client: the full build without the surveys, product
+// tours, web vitals, and the rest Luke never turns on, and without the
+// recorder, which is a bundle of its own (`session-recorder/contract.ts`).
 import posthog from "posthog-js/dist/module.no-external";
-// Note that the recorder is imported for its side effect, because the client
-// above loads no script of its own: the "no-external" build never fetches the
-// recorder, so this import is what registers it (`__PosthogExtensions__`),
-// and without it recording would silently never start. The two together are
-// the "full" build without the surveys, product tours, web vitals, and the
-// rest that Luke never turns on, which was over a quarter of the renderer bundle.
-import "posthog-js/dist/posthog-recorder";
 import type { SessionReplayBootstrap } from "#shared/messages/session";
+import { appendBundle } from "./bundle-loader";
+import { SESSION_RECORDER_ASSET, sessionRecorderLoaded } from "./session-recorder/contract";
 
 /**
  * Recording the shape of what Luke's own panel draws, and none of its words.
@@ -43,7 +41,8 @@ import type { SessionReplayBootstrap } from "#shared/messages/session";
  * There is no switch — `PRIVACY.md` is where a user learns this happens, so
  * that file carries the whole of the disclosure and has to keep doing it. No
  * account is among the reasons either. Recording begins at the first paint of
- * an ordinary launch, before anyone has signed in, because the launch is where what goes wrong goes wrong and a
+ * an ordinary launch, as soon as the recorder's bundle has loaded beside it,
+ * before anyone has signed in, because the launch is where what goes wrong goes wrong and a
  * recording that waited for a sign-in never saw it. A session that reaches
  * one is joined to the person there; a session that never does stays
  * anonymous, which is the part `PRIVACY.md` has to say plainly, because such
@@ -273,6 +272,9 @@ const SESSION_REPLAY_MASKING = {
 
 let started = false;
 let initialized = false;
+let recorderLoading = false;
+/** The run's latest word on recording, which a recorder that finishes loading starts under. */
+let latest: SessionReplayBootstrap | undefined;
 
 /**
  * Brings recording into line with what the run allows, in either direction.
@@ -280,6 +282,7 @@ let initialized = false;
  * stops the recording where it stands rather than at the next launch.
  */
 export function applySessionReplay(bootstrap: SessionReplayBootstrap): void {
+  latest = bootstrap;
   const wanted = sessionReplayWanted(bootstrap);
   if (wanted === started) return;
   if (wanted) startSessionReplay(bootstrap);
@@ -299,6 +302,39 @@ function startSessionReplay(bootstrap: SessionReplayBootstrap): void {
   const key = projectApiKey();
   if (!key) return;
   started = true;
+  if (sessionRecorderLoaded()) record(key, bootstrap);
+  else loadRecorder(key);
+}
+
+/**
+ * Loads the recorder's bundle (`session-recorder/contract.ts`), then starts
+ * the client under the run's word as it stands by then, unless a stop
+ * arrived while it loaded. Note that the client is started only once the
+ * recorder is there, because the "no-external" client never fetches a
+ * recorder of its own: started first, it would find none and silently
+ * record nothing. A recorder that failed to load, or loaded and registered
+ * nothing, records nothing and stands recording down, so the run's next word
+ * on it tries again.
+ */
+function loadRecorder(key: string): void {
+  if (recorderLoading) return;
+  recorderLoading = true;
+  appendBundle(
+    { script: SESSION_RECORDER_ASSET.SCRIPT },
+    () => {
+      recorderLoading = false;
+      if (!sessionRecorderLoaded()) started = false;
+      else if (started && latest) record(key, latest);
+    },
+    () => {
+      recorderLoading = false;
+      started = false;
+    },
+  );
+}
+
+/** Starts the client over a recorder already loaded: built once per window, resumed after that. */
+function record(key: string, bootstrap: SessionReplayBootstrap): void {
   if (initialized) {
     // The client is built once per window. A second `init` would not rebuild
     // it, so a recording resumed after an account change is started rather

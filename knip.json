@@ -32,6 +32,7 @@
         "src/renderer/whiteboard/index.tsx",
         "src/renderer/whiteboard/index.css",
         "src/renderer/plan-editor/index.ts",
+        "src/renderer/session-recorder/index.ts",
         "scripts/*.mjs",
         "electron-builder.ts"
       ],

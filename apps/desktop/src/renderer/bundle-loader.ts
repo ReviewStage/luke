@@ -6,7 +6,8 @@ import { rendererRuntime } from "./renderer-runtime";
 /**
  * bundle-loader.ts -- a bundle of the panel's own that is too large for the one every window parses, loaded the first time it is needed and kept for the window's life.
  *
- * The whiteboard (`whiteboard/`) and a File tab's tree (`file-tree/`) each
+ * The whiteboard (`whiteboard/`), a File tab's tree (`file-tree/`), a plan's
+ * editor (`plan-editor/`), and the session recorder (`session-recorder/`) each
  * ship as a script of their own beside `index.html` that sets one global
  * once it has run. Loading one adds its stylesheet, where it has one, and
  * its script to the document, and answers with what the script set; the
@@ -18,6 +19,27 @@ import { rendererRuntime } from "./renderer-runtime";
 export interface BundleAsset {
   readonly script: string;
   readonly stylesheet?: string;
+}
+
+/**
+ * Adds a bundle's stylesheet, where it has one, and its script to the
+ * document, and calls back once the script has run or failed. The one way a
+ * bundle of the panel's own reaches the page, for the atom below and for the
+ * session recorder (`session-replay.ts`), which no atom drives.
+ */
+export function appendBundle(asset: BundleAsset, onLoad: () => void, onError: () => void): void {
+  const script = document.createElement("script");
+  script.src = asset.script;
+  script.addEventListener("load", onLoad);
+  script.addEventListener("error", onError);
+  if (asset.stylesheet === undefined) {
+    document.head.append(script);
+    return;
+  }
+  const stylesheet = document.createElement("link");
+  stylesheet.rel = "stylesheet";
+  stylesheet.href = asset.stylesheet;
+  document.head.append(stylesheet, script);
 }
 
 /** The bundle loaded once per window, as what its script set on `window`, or the failure given. */
@@ -34,21 +56,14 @@ export function bundleAtom<A>(
           resume(Effect.succeed(standing));
           return;
         }
-        const script = document.createElement("script");
-        script.src = asset.script;
-        script.addEventListener("load", () => {
-          const module = loaded();
-          resume(module ? Effect.succeed(module) : Effect.fail(new Error(failure)));
-        });
-        script.addEventListener("error", () => resume(Effect.fail(new Error(failure))));
-        if (asset.stylesheet === undefined) {
-          document.head.append(script);
-          return;
-        }
-        const stylesheet = document.createElement("link");
-        stylesheet.rel = "stylesheet";
-        stylesheet.href = asset.stylesheet;
-        document.head.append(stylesheet, script);
+        appendBundle(
+          asset,
+          () => {
+            const module = loaded();
+            resume(module ? Effect.succeed(module) : Effect.fail(new Error(failure)));
+          },
+          () => resume(Effect.fail(new Error(failure))),
+        );
       }),
     ),
   );
