@@ -116,6 +116,10 @@
     "dest": "/api/default.js?route=plans"
   },
   {
+    "src": "/api/repository-pins",
+    "dest": "/api/default.js?route=repository-pins"
+  },
+  {
     "src": "/api/maintenance/sweep",
     "dest": "/api/maintenance-sweep.js?route=maintenance/sweep"
   }

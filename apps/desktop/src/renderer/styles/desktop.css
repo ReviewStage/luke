@@ -613,6 +613,19 @@ body,
   opacity: 1;
 }
 
+/* A pinned repository says so after its name, quietly, since the pin is
+   what holds it above groups updated more lately. */
+.sidebar-repository-pinned {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.sidebar-repository-pinned svg {
+  width: 11px;
+  height: 11px;
+}
+
 .sidebar-repository-actions {
   display: flex;
   flex: none;

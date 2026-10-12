@@ -68,6 +68,10 @@ export const ONE_ACT_OF_EACH_KIND = {
     kind: ACT_KIND.PLANNING_PIN,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", pinned: true },
   },
+  [ACT_KIND.PLANNING_PIN_REPOSITORY]: {
+    kind: ACT_KIND.PLANNING_PIN_REPOSITORY,
+    payload: { repository: "acme/relay", pinned: true },
+  },
   [ACT_KIND.PLANNING_ARCHIVE]: {
     kind: ACT_KIND.PLANNING_ARCHIVE,
     payload: { planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10", archived: true },

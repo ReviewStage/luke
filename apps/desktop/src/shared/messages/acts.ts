@@ -52,6 +52,7 @@ import {
   planningFileAnswerSchema,
   planningFileParamsSchema,
   planningPinParamsSchema,
+  planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
   planningRepositoriesAnswerSchema,
   planningRevisionAnswerSchema,
@@ -129,6 +130,8 @@ export const ACT_KIND = {
   PLANNING_DELETE: "planning.delete",
   PLANNING_RENAME: "planning.rename",
   PLANNING_PIN: "planning.pin",
+  /** A repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
+  PLANNING_PIN_REPOSITORY: "planning.pinRepository",
   PLANNING_ARCHIVE: "planning.archive",
   /** The repository chip's read: the repositories the account reaches through the Luke GitHub App, as the service answers them now. */
   PLANNING_REPOSITORIES: "planning.repositories",
@@ -454,6 +457,11 @@ export const ACT = {
     payload: actSchema(planningPinParamsSchema),
     result: wireResult<boolean>(isWireBoolean),
     refusal: "Could not pin that plan on this system.",
+  },
+  [ACT_KIND.PLANNING_PIN_REPOSITORY]: {
+    payload: actSchema(planningPinRepositoryParamsSchema),
+    result: wireResult<boolean>(isWireBoolean),
+    refusal: "Could not pin that repository on this system.",
   },
   [ACT_KIND.PLANNING_ARCHIVE]: {
     payload: actSchema(planningArchiveParamsSchema),

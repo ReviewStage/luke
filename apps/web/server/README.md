@@ -700,6 +700,17 @@ endpoint resolves the bearer first, and every statement in
 `server/hosted/plan-store.ts` names the account beside the plan, so another
 account's plan answers exactly as none does.
 
+`server/repository-pins-app.ts` answers `/api/repository-pins`, the
+repositories the account pinned in the sidebar, whose groups of plans stand
+above the rest: `GET` reads them newest pinned first, and `PUT` pins or
+unpins one and answers them all as they then stand. A pin is a row of
+`repository_pin` keyed by the account and the repository's full name
+(`server/hosted/repository-pin-store.ts`), stamped the first time it is made,
+deleted when it is undone, bounded at fifty an account, and gone with the
+account. It names the repository and nothing of it, so it asks GitHub
+nothing. It is a path of its own rather than one under `/api/plans/`, whose
+rewrite reads the next segment as a plan's id.
+
 `GET /api/plans/{id}/work` reads back what the planning model wrote and
 ran on the plan's calls (`server/hosted/plan-work-store.ts`): the plan's
 conversation's turns, twenty a page newest first, each projected from its

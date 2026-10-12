@@ -16,6 +16,8 @@ import {
   planRevisionsAnswerSchema,
   planSchema,
   planSummarySchema,
+  repositoryPinRequestSchema,
+  repositoryPinSchema,
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
@@ -331,6 +333,8 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
+  /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
+  repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
   activePlanId: EffectSchema.optionalKey(EffectSchema.String),
   document: planningDocumentSchema,
@@ -389,6 +393,11 @@ export const planningPinParamsSchema = EffectSchema.Struct({
 });
 
 export type PlanningPinParams = typeof planningPinParamsSchema.Type;
+
+/** Pinning a repository in the sidebar, or unpinning it, as the window asks it; the service keeps it on the account. */
+export const planningPinRepositoryParamsSchema = repositoryPinRequestSchema;
+
+export type PlanningPinRepositoryParams = typeof planningPinRepositoryParamsSchema.Type;
 
 /** Archiving a plan, or bringing it back, as the window asks it. */
 export const planningArchiveParamsSchema = EffectSchema.Struct({

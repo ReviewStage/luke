@@ -200,6 +200,36 @@ export const planUpdateRequestSchema = EffectSchema.Struct({
 export type PlanUpdateRequest = typeof planUpdateRequestSchema.Type;
 
 /**
+ * A repository the account pinned in the sidebar, and the instant it was
+ * pinned: a pinned repository's group of plans stands above the others,
+ * newest pinned first. A pin is the account's, so it follows it to every
+ * Mac it signs in on, as a plan's pin does, and it names the repository and
+ * nothing more, so pinning one asks GitHub nothing.
+ */
+export const repositoryPinSchema = EffectSchema.Struct({
+  repository: githubRepositoryFullNameSchema,
+  pinnedAt: countedNumber,
+});
+
+export type RepositoryPin = typeof repositoryPinSchema.Type;
+
+export const REPOSITORY_PIN_BOUNDS = {
+  /** The most repositories one account may hold pinned; a pin past it is refused, and nothing is written. */
+  MAX_PINS: 50,
+} as const;
+
+/** The account's pinned repositories, newest pinned first (GET, and every PUT's answer). */
+export const repositoryPinsAnswerSchema = EffectSchema.Struct({
+  pins: EffectSchema.Array(repositoryPinSchema),
+});
+
+/** Pinning a repository, or unpinning it (PUT): asking twice for either moves nothing, and a pin keeps the instant it was first made. */
+export const repositoryPinRequestSchema = EffectSchema.Struct({
+  repository: githubRepositoryFullNameSchema,
+  pinned: EffectSchema.Boolean,
+});
+
+/**
  * The plan list's query (GET): `archived=include` lists the archived plans
  * among the rest, each carrying its `archivedAt`. Without it they are left
  * out, which is what a build from before archiving asks.
