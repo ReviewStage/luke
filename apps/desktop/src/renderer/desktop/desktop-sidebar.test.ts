@@ -11,18 +11,21 @@ import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
 import { Effect } from "effect";
 import { TestClock } from "effect/testing";
 import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
-import { act, createElement, type ReactElement } from "react";
+import { act, createElement, Fragment, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
+import { sheetStyle } from "#testing/css-rules";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
+import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
 import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
+import { CommandPalette } from "./command-palette";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
 
@@ -88,10 +91,21 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
   const root = createRoot(container);
   roots.push(root);
   const registry = options.registry ?? AtomRegistry.make();
-  // The window's keymap stands beside the sidebar, as `App` stands it.
+  // The window's keymap and command palette stand beside the sidebar, as
+  // `App` stands them.
   function Keyed(props: Parameters<typeof DesktopSidebar>[0]) {
     useAppKeymap(true);
-    return createElement(DesktopSidebar, props);
+    return createElement(
+      Fragment,
+      null,
+      createElement(DesktopSidebar, props),
+      createElement(CommandPalette, {
+        available: true,
+        tab: props.tab,
+        onTabChange: props.onTabChange,
+        plans: props.plans,
+      }),
+    );
   }
   const render = ({ collapsed = false, plans = options.plans }: Restage) =>
     root.render(
@@ -142,6 +156,7 @@ function accountButton(container: ParentNode): HTMLButtonElement {
 }
 
 beforeEach(() => {
+  installScrollIntoView();
   // Luke's face reads the reduced-motion preference, which jsdom has no media for.
   Object.defineProperty(window, "matchMedia", {
     configurable: true,
@@ -380,6 +395,32 @@ test("New plan names its chord, which it shows at its end only while hovered or 
   assert.equal(hint?.getAttribute("aria-hidden"), "true");
 });
 
+function searchButton(container: ParentNode): HTMLButtonElement {
+  const button = container.querySelector<HTMLButtonElement>(".sidebar-search");
+  assert.ok(button, "the sidebar draws Search");
+  return button;
+}
+
+test("Search stands right under New plan and opens the command palette", () => {
+  const container = mount(DEAN);
+  const search = searchButton(container);
+  assert.equal(newPlanButton(container).nextElementSibling, search);
+  assert.equal(search.textContent?.replace("⌘K", ""), "Search");
+  assert.equal(document.querySelector('[cmdk-root=""]'), null);
+
+  act(() => search.click());
+
+  assert.ok(document.querySelector('[cmdk-root=""]'), "the command palette is open");
+});
+
+test("Search names the palette's chord, which it shows at its end only while hovered or reached from the keyboard", () => {
+  const button = searchButton(mount(DEAN));
+  assert.equal(button.getAttribute("aria-keyshortcuts"), "Meta+K");
+  const hint = button.querySelector(".row-shortcut");
+  assert.equal(hint?.textContent, "⌘K");
+  assert.equal(hint?.getAttribute("aria-hidden"), "true");
+});
+
 /** A plan's row of the list, with whatever pin or archive it is given. */
 function listedPlan(name: string, marks: { pinnedAt?: number; archivedAt?: number } = {}) {
   return { id: `plan-${name}`, name, createdAt: 1, updatedAt: 1, repository: null, ...marks };
@@ -406,7 +447,7 @@ test("the pinned plans stand under Pinned above the rest only while any are pinn
   ]);
 });
 
-test("the archived plans fold away behind a row that counts them, which unfolds them under the rest", () => {
+test("the archived plans fold away behind a header that counts them while folded, which unfolds them under the rest", () => {
   const opened: string[] = [];
   const archived = [listedPlan("Old", { archivedAt: 9 }), listedPlan("Older", { archivedAt: 8 })];
   const container = mount(DEAN, {
@@ -416,16 +457,45 @@ test("the archived plans fold away behind a row that counts them, which unfolds 
   assert.ok(row);
 
   const folded = sections(container);
+  const foldedName = row.textContent;
   act(() => row.click());
   const unfolded = sections(container);
   const old = [...container.querySelectorAll<HTMLButtonElement>("button.sidebar-plan")].at(1);
   act(() => old?.click());
 
-  assert.equal(row.textContent, "Archived (2)");
+  assert.equal(foldedName, "Archived2 plans");
+  assert.equal(row.textContent, "Archived", "unfolded, the plans count themselves");
   assert.deepEqual(folded, [["Plans", ["Billing"]]]);
   assert.equal(row.getAttribute("aria-expanded"), "true");
   assert.deepEqual(unfolded, [["Plans", ["Billing", "Old", "Older"]]]);
   assert.deepEqual(opened, ["plan-Old"]);
+});
+
+test("Archived's header is drawn as a repository's, led by the Archive action's own glyph", async () => {
+  const styled = await sheetStyle();
+  const container = mount(DEAN, {
+    plans: {
+      plans: [listedPlan("Billing"), onRepository("Search", "acme/relay")],
+      archived: [listedPlan("Old", { archivedAt: 9 })],
+    },
+  });
+  const archived = container.querySelector<HTMLElement>(".sidebar-archived-row");
+  const repository = header(container, "relay").querySelector<HTMLElement>(
+    ".sidebar-repository-toggle",
+  );
+  const archiveAction = container.querySelector(
+    '.sidebar-plan-marks button[aria-label="Archive"] svg',
+  );
+  assert.ok(archived && repository && archiveAction);
+  const box = (toggle: HTMLElement) =>
+    ["padding", "font-size", "font-weight", "gap", "color"].map((property) =>
+      styled(toggle, property),
+    );
+  const leading = archived.querySelector(".sidebar-repository-glyph > svg");
+
+  assert.deepEqual(box(archived), box(repository));
+  assert.ok(archived.parentElement?.matches(".sidebar-repository-header"));
+  assert.equal(leading?.innerHTML, archiveAction.innerHTML);
 });
 
 test("with every plan archived, the list says nothing of having none, and with none archived it draws no Archived row", () => {
@@ -579,7 +649,7 @@ test("the open plan under a folded group still walks to its neighbours", () => {
   window.localStorage.clear();
 });
 
-test("a folded group counts its plans at its header's end, No repository's too, and an open one counts none", () => {
+test("a folded group counts its plans, No repository's too, and an open one counts none", () => {
   window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger", null]));
   const container = mount(DEAN, {
     plans: {
@@ -597,6 +667,23 @@ test("a folded group counts its plans at its header's end, No repository's too, 
   assert.equal(count("ledger"), "2 plans");
   assert.equal(count("No repository"), "1 plan");
   assert.equal(count("relay"), undefined);
+  window.localStorage.clear();
+});
+
+test("a folded group's count stands a small gap after its name, not pushed to the header's end beside the +", async () => {
+  const styled = await sheetStyle();
+  window.localStorage.setItem("luke.sidebarFoldedGroups", JSON.stringify(["acme/ledger"]));
+  const container = mount(DEAN, {
+    plans: { plans: [onRepository("Billing", "acme/ledger", 3)] },
+  });
+  const name = header(container, "ledger").querySelector(".sidebar-repository-name");
+  const count = name?.nextElementSibling;
+  assert.ok(name && count, "the folded header draws a name and something after it");
+  assert.ok(count.matches(".sidebar-repository-count"), "the count follows the name");
+
+  // Nothing between them takes the slack: neither the count's margin nor the name's growth.
+  assert.notEqual(styled(count, "margin-left"), "auto");
+  assert.equal(styled(name, "flex") ?? styled(name, "flex-grow"), undefined);
   window.localStorage.clear();
 });
 

@@ -11,6 +11,7 @@ import {
   GearIcon,
   PinIcon,
   PlusIcon,
+  SearchIcon,
   UnpinIcon,
   UpdateIcon,
   UserIcon,
@@ -19,7 +20,7 @@ import { useRef, useState } from "react";
 import { UPDATE_STATUS } from "#shared/messages/update";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { GitHubMark } from "../account-marks";
-import { useAppCommand } from "../app-commands";
+import { runAppCommand, useAppCommand } from "../app-commands";
 import type { NavigationHistory } from "../navigation-history";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { useMinute } from "../planning/plan-time";
@@ -307,6 +308,19 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
 }
 
 /**
+ * A folded group's count of its plans, shown after its name while the
+ * header is hovered or reached from the keyboard, and read as "n plans".
+ */
+function FoldedCount({ count }: { count: number }): React.JSX.Element {
+  return (
+    <span className="sidebar-repository-count">
+      {count}
+      <span className="visually-hidden">{count === 1 ? " plan" : " plans"}</span>
+    </span>
+  );
+}
+
+/**
  * One repository's plans under a header in the headings' voice, which folds
  * and unfolds them, the fold kept across launches. The header is a row like
  * a plan's, with its hover, led by the owner's picture, which gives way to
@@ -381,14 +395,7 @@ function RepositorySection({
                 <span className="visually-hidden">(pinned)</span>
               </span>
             ) : null}
-            {folded ? (
-              <span className="sidebar-repository-count">
-                {group.plans.length}
-                <span className="visually-hidden">
-                  {group.plans.length === 1 ? " plan" : " plans"}
-                </span>
-              </span>
-            ) : null}
+            {folded ? <FoldedCount count={group.plans.length} /> : null}
           </button>
         </Tooltip>
         <span className="sidebar-repository-actions">
@@ -441,12 +448,14 @@ function RepositorySection({
 }
 
 /**
- * The plans under Archived, folded away behind one quiet row that counts
- * them, the way Codex and ChatGPT keep theirs: a press on the row unfolds
- * the list beneath it, and each archived plan opens and offers its actions
- * like any other, flat and naming its repository. It draws nothing while no
- * plan is archived, and it starts folded, because an archived plan is one
- * the developer put out of the way.
+ * The plans under Archived, folded away behind a header drawn as a
+ * repository's is, the way Codex and ChatGPT keep theirs: an archive box in
+ * the picture's place, giving way to the fold's chevron while hovered or
+ * reached from the keyboard, and folded, the count after its name. A press
+ * unfolds the list beneath it, and each archived plan opens and offers its
+ * actions like any other, flat and naming its repository. It draws nothing
+ * while no plan is archived, and it starts folded, because an archived plan
+ * is one the developer put out of the way.
  */
 function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element | null {
   const [unfolded, setUnfolded] = useState(false);
@@ -454,23 +463,30 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
   if (archived.length === 0) return null;
   return (
     <div className="sidebar-archived">
-      <button
-        type="button"
-        className="sidebar-archived-row"
-        aria-expanded={unfolded}
-        onClick={() => setUnfolded((was) => !was)}
-      >
-        <ChevronRightIcon />
-        Archived ({archived.length})
-      </button>
+      <div className="sidebar-repository-header">
+        <button
+          type="button"
+          className="sidebar-repository-toggle sidebar-archived-row"
+          aria-expanded={unfolded}
+          onClick={() => setUnfolded((was) => !was)}
+        >
+          <span className="sidebar-repository-glyph">
+            <ArchiveIcon />
+            <ChevronRightIcon />
+          </span>
+          <span className="sidebar-repository-name">Archived</span>
+          {unfolded ? null : <FoldedCount count={archived.length} />}
+        </button>
+      </div>
       {unfolded ? <PlanRows rows={archived} repositoryShown context={context} /> : null}
     </div>
   );
 }
 
 /**
- * The window's left column: Luke, the way to a new plan, every plan the
- * account owns, and the account's row that leads to Settings. The pinned
+ * The window's left column: Luke, the way to a new plan, Search, which
+ * opens the command palette, every plan the account owns, and the account's
+ * row that leads to Settings. The pinned
  * plans stand in a section of their own above the rest while any are pinned,
  * newest pinned first and each naming its repository; the rest are grouped
  * under their repositories' headers, the pinned repositories first, newest
@@ -591,6 +607,18 @@ export function DesktopSidebar({
         <ComposeIcon />
         New plan
         <ShortcutGlyphs command={APP_COMMAND.NEW_PLAN} className="row-shortcut" />
+      </button>
+      {/* Search is a second door to the command palette, drawn as New plan
+          is, since it heads the list the same way. */}
+      <button
+        type="button"
+        className="sidebar-search"
+        aria-keyshortcuts={commandKeyshortcuts(APP_COMMAND.COMMAND_PALETTE)}
+        onClick={() => runAppCommand(APP_COMMAND.COMMAND_PALETTE)}
+      >
+        <SearchIcon />
+        Search
+        <ShortcutGlyphs command={APP_COMMAND.COMMAND_PALETTE} className="row-shortcut" />
       </button>
 
       {/* One scroller for both sections, so the pinned plans scroll away
