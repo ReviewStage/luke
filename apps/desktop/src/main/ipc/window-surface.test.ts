@@ -10,7 +10,7 @@ import { windowSurfaceActRows } from "./window-surface";
 // SAFETY: the router reads the sender by identity alone; one inert object is one window.
 const SENDER = {} as WebContents;
 
-const PANEL: ActSender = { sender: SENDER, panel: true, voice: false };
+const PANEL: ActSender = { sender: SENDER, panel: true, voice: false, call: false };
 const VOICE: ActSender = { ...PANEL, panel: false, voice: true };
 
 /** The window surface's rows over a save dialog that answers `choosing`, every file it saved written down. */
