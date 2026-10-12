@@ -632,7 +632,7 @@ test("a repository's header is led by its owner's picture, and No repository, a 
   assert.ok(header(staged, "ledger").querySelector("svg"), "the folder stands in its place");
 });
 
-test("a repository's ⋯ and a right-click on its header open one menu: Archive plans, and Open on GitHub under GitHub's mark", () => {
+test("a repository's ⋯ and a right-click on its header open one menu: Pin, Archive plans, and Open on GitHub under GitHub's mark", () => {
   window.localStorage.clear();
   const container = mount(DEAN, {
     plans: { plans: [onRepository("Billing", "acme/ledger"), onRepository("Notes", null)] },
@@ -650,7 +650,7 @@ test("a repository's ⋯ and a right-click on its header open one menu: Archive 
     );
   });
 
-  assert.deepEqual(fromEllipsis, ["Archive plans", "Open on GitHub"]);
+  assert.deepEqual(fromEllipsis, ["Pin", "Archive plans", "Open on GitHub"]);
   const github = menuItems().find((item) => item.textContent === "Open on GitHub");
   assert.ok(github?.querySelector("svg.account-mark"), "GitHub's mark, not the owner's picture");
   assert.deepEqual(
@@ -664,7 +664,7 @@ test("a repository's ⋯ and a right-click on its header open one menu: Archive 
   assert.deepEqual(
     menuItems().map((item) => item.textContent),
     ["Archive plans"],
-    "the plans with no repository have no page to open",
+    "the plans with no repository have no pin and no page to open",
   );
 });
 
@@ -677,6 +677,38 @@ test("a repository's menu closes when the sidebar folds away, so nothing of a hi
 
   assert.ok(opened > 0, "the menu stood open");
   assert.deepEqual(menuItems(), []);
+});
+
+test("a pinned repository stands above groups updated since, newest pinned first and marked pinned, and its menu asks for the pin or the unpin", () => {
+  const asked: [string, boolean][] = [];
+  const container = mount(DEAN, {
+    plans: {
+      plans: [
+        onRepository("Billing", "acme/ledger", 9),
+        onRepository("Search", "acme/relay", 5),
+        onRepository("Gateway", "acme/gateway", 3),
+        onRepository("Notes", null),
+      ],
+      pinnedRepositories: ["acme/gateway", "acme/relay"],
+      onPinRepository: (repository, pinned) => asked.push([repository, pinned]),
+    },
+  });
+
+  openActions(container, "relay");
+  choose("Unpin");
+  openActions(container, "ledger");
+  choose("Pin");
+
+  assert.deepEqual(
+    groups(container).map(([name]) => name),
+    ["gateway", "relay", "ledger", "No repository"],
+  );
+  assert.match(header(container, "relay").textContent ?? "", /\(pinned\)/u);
+  assert.doesNotMatch(header(container, "ledger").textContent ?? "", /\(pinned\)/u);
+  assert.deepEqual(asked, [
+    ["acme/relay", false],
+    ["acme/ledger", true],
+  ]);
 });
 
 test("Archive plans archives every plan under the header and no other, and Open on GitHub opens the repository's page", () => {

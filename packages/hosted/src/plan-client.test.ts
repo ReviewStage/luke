@@ -547,3 +547,46 @@ it.effect("an edit of a plan the service does not find reads as not found", () =
     assert.deepEqual(edited, { ok: false, failure: PLAN_CALL_FAILURE.NOT_FOUND });
   }),
 );
+
+it.effect(
+  "reads the account's pinned repositories, and a pin answers them as they then stand",
+  () =>
+    Effect.gen(function* () {
+      const relay = { repository: "acme/relay", pinnedAt: 1_800_000_300_000 };
+      const ledger = { repository: "acme/ledger", pinnedAt: 1_800_000_400_000 };
+      const api = fakeCloudApi({
+        "GET /api/repository-pins": { answer: () => ({ pins: [relay] }) },
+        "PUT /api/repository-pins": { answer: () => ({ pins: [ledger, relay] }) },
+      });
+      const refused = fakeCloudApi({
+        "PUT /api/repository-pins": {
+          answer: () => ({ error: HOSTED_API_ERROR.INVALID_REQUEST }),
+          status: HTTP_STATUS.BAD_REQUEST,
+        },
+      });
+
+      const read = yield* Effect.provide(client().repositoryPins(), api.layer);
+      const pinned = yield* Effect.provide(client().pinRepository("acme/ledger", true), api.layer);
+      const past = yield* Effect.provide(client().pinRepository("acme/more", true), refused.layer);
+
+      assert.deepEqual(read, [relay]);
+      assert.deepEqual(pinned, [ledger, relay]);
+      assert.deepEqual(
+        api.requests().flatMap((request) => (request.body ? [JSON.parse(request.body)] : [])),
+        [{ repository: "acme/ledger", pinned: true }],
+      );
+      assert.equal(past, undefined);
+    }),
+);
+
+it.effect("a pin that names no repository never travels", () =>
+  Effect.gen(function* () {
+    const api = fakeCloudApi({});
+
+    assert.equal(
+      yield* Effect.provide(client().pinRepository("not a repository", true), api.layer),
+      undefined,
+    );
+    assert.deepEqual(api.requests(), []);
+  }),
+);

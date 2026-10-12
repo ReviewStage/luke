@@ -85,6 +85,7 @@ const DECLARED_TABLES = [
   "plan_revision",
   "provider_cursors",
   "provider_key",
+  "repository_pin",
   "roster_snapshot",
   "session",
   "transcript_mark",

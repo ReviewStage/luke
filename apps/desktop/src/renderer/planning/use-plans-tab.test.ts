@@ -890,6 +890,53 @@ it.effect(
     }),
 );
 
+test("a repository pinned or unpinned is drawn so at once, newest pinned first, and stands as main's view carries it", async () => {
+  const listed: PlanningView = {
+    ...OPEN,
+    repositoryPins: [{ repository: "acme/relay", pinnedAt: 1 }],
+  };
+  const tab = mount(
+    { shown: true, planning: listed },
+    { [ACT_KIND.PLANNING_PIN_REPOSITORY]: () => Promise.resolve(true) },
+  );
+
+  const read = tab.control().pinnedRepositories;
+  await act(async () => tab.control().onPinRepository("acme/ledger", true));
+  const pinned = tab.control().pinnedRepositories;
+  await act(async () => tab.control().onPinRepository("acme/relay", false));
+  const unpinned = tab.control().pinnedRepositories;
+  tab.stand({
+    planning: { ...listed, repositoryPins: [{ repository: "acme/ledger", pinnedAt: 5 }] },
+  });
+
+  assert.deepEqual(read, ["acme/relay"]);
+  assert.deepEqual(pinned, ["acme/ledger", "acme/relay"]);
+  assert.deepEqual(unpinned, ["acme/ledger"]);
+  assert.deepEqual(tab.control().pinnedRepositories, ["acme/ledger"]);
+  assert.deepEqual(
+    tab.told.filter((kind) => kind === ACT_KIND.PLANNING_PIN_REPOSITORY),
+    [ACT_KIND.PLANNING_PIN_REPOSITORY, ACT_KIND.PLANNING_PIN_REPOSITORY],
+  );
+});
+
+it.effect("a repository pin the service refused puts the group back and says so in a toast", () =>
+  Effect.gen(function* () {
+    const tab = mount(
+      { shown: true, planning: OPEN },
+      { [ACT_KIND.PLANNING_PIN_REPOSITORY]: () => Promise.resolve(false) },
+      yield* registryOnTestClock,
+    );
+
+    act(() => tab.control().onPinRepository("acme/ledger", true));
+    const drawn = tab.control().pinnedRepositories;
+    yield* landed;
+
+    assert.deepEqual(drawn, ["acme/ledger"]);
+    assert.deepEqual(tab.control().pinnedRepositories, []);
+    assert.equal(toast(), "The repository could not be pinned. Try again.");
+  }),
+);
+
 test("New plan in a repository leaves the open plan for the new-plan page with that repository chosen, and plain New plan chooses none", async () => {
   const tab = mount(
     { shown: true, planning: OPEN },
@@ -922,7 +969,10 @@ test("a repository chosen by New plan is let go once a plan opens, so a later vi
 test("a fixture's plan is pinned and archived nowhere", () => {
   const fixture = mount({ shown: true, fixtureMode: true, profile: RUN_PROFILE.PLANNING });
   act(() => fixture.control().onMarkPlan(PLAN.id, PLAN_MARK.ARCHIVE));
+  act(() => fixture.control().onArchivePlans([PLAN.id]));
+  act(() => fixture.control().onPinRepository("acme/relay", true));
   assert.deepEqual(fixture.told, []);
+  assert.deepEqual(fixture.control().pinnedRepositories, []);
 });
 
 test("a fixture's plan is renamed nowhere", async () => {

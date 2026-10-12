@@ -27,6 +27,7 @@ export const GATEWAY_METHOD = {
   PLANNING_RENAME: "planning.rename",
   /** One plan pinned or unpinned on the service; the list and the open document take the plan it answered without reading either again. */
   PLANNING_PIN: "planning.pin",
+  PLANNING_PIN_REPOSITORY: "planning.pinRepository",
   /** One plan archived or brought back on the service, taken in place as a pin is; the open plan stays open either way. */
   PLANNING_ARCHIVE: "planning.archive",
   /** The repositories the account reaches through the Luke GitHub App, read from the service now. */

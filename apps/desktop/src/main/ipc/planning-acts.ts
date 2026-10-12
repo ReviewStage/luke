@@ -6,6 +6,7 @@ import type {
   PlanningFileAnswer,
   PlanningFileParams,
   PlanningPinParams,
+  PlanningPinRepositoryParams,
   PlanningRenameParams,
   PlanningRepositoriesAnswer,
   PlanningRevisionAnswer,
@@ -38,6 +39,7 @@ export interface PlanningActsDependencies {
     planningDelete(planId: string): Effect.Effect<boolean>;
     planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
     planningPin(params: PlanningPinParams): Effect.Effect<boolean>;
+    planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
     planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
     planningStart(request: PlanningStartRequest): Effect.Effect<PlanningStartAnswer>;
     planningRepositories(): Effect.Effect<PlanningRepositoriesAnswer>;
@@ -70,6 +72,7 @@ type PlanningActKind =
   | typeof ACT_KIND.PLANNING_DELETE
   | typeof ACT_KIND.PLANNING_RENAME
   | typeof ACT_KIND.PLANNING_PIN
+  | typeof ACT_KIND.PLANNING_PIN_REPOSITORY
   | typeof ACT_KIND.PLANNING_ARCHIVE
   | typeof ACT_KIND.PLANNING_REPOSITORIES
   | typeof ACT_KIND.PLANNING_SET_REPOSITORY
@@ -132,6 +135,10 @@ export function planningActRows(
     [ACT_KIND.PLANNING_PIN]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_PIN, sender);
       return host.planningPin(params);
+    },
+    [ACT_KIND.PLANNING_PIN_REPOSITORY]: (params, sender) => {
+      refuseUnlessPanel(ACT_KIND.PLANNING_PIN_REPOSITORY, sender);
+      return host.planningPinRepository(params);
     },
     [ACT_KIND.PLANNING_ARCHIVE]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.PLANNING_ARCHIVE, sender);

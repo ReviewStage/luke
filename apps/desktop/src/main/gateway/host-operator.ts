@@ -48,6 +48,7 @@ import {
   type PlanningFileAnswer,
   type PlanningFileParams,
   type PlanningPinParams,
+  type PlanningPinRepositoryParams,
   type PlanningRenameParams,
   type PlanningRepositoriesAnswer,
   type PlanningRevisionAnswer,
@@ -166,6 +167,8 @@ export interface HostOperator {
   planningRename(params: PlanningRenameParams): Effect.Effect<boolean>;
   /** One plan pinned or unpinned; answers whether the service changed it. */
   planningPin(params: PlanningPinParams): Effect.Effect<boolean>;
+  /** One repository pinned in the sidebar or unpinned, kept on the account; answers whether the service changed the pins. */
+  planningPinRepository(params: PlanningPinRepositoryParams): Effect.Effect<boolean>;
   /** One plan archived or brought back; answers whether the service changed it. */
   planningArchive(params: PlanningArchiveParams): Effect.Effect<boolean>;
   /** The repositories the account reaches through the Luke GitHub App, read from the service now; or why there is no list. */
@@ -405,6 +408,14 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
     planningPin: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_PIN, { planId: params.planId, pinned: params.pinned }),
+        (answer) => record(answer)?.changed === true,
+      ),
+    planningPinRepository: (params) =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.PLANNING_PIN_REPOSITORY, {
+          repository: params.repository,
+          pinned: params.pinned,
+        }),
         (answer) => record(answer)?.changed === true,
       ),
     planningArchive: (params) =>

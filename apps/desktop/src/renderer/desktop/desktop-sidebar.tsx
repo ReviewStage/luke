@@ -9,7 +9,9 @@ import {
   EllipsisIcon,
   FolderIcon,
   GearIcon,
+  PinIcon,
   PlusIcon,
+  UnpinIcon,
   UpdateIcon,
   UserIcon,
 } from "@sidecar/panel";
@@ -271,11 +273,11 @@ function PlanRows({
 
 /**
  * A repository's actions, offered alike from its header's ⋯ and from a
- * right-click on the header: Archive plans puts every plan under the header
- * away, each undone from the plan's own menu under Archived, and Open on
+ * right-click on the header: Pin holds the group above the rest on the
+ * account, Archive plans puts every plan under the header away, and Open on
  * GitHub opens the repository's page, under GitHub's mark rather than the
  * owner's picture, since it is about GitHub. The plans with no repository
- * have no page to open.
+ * have no pin, since they always stand last, and no page to open.
  */
 function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): MenuAction[][] {
   const { repository } = group;
@@ -285,12 +287,19 @@ function repositoryActionGroups(group: RepositoryGroup, plans: PlansControl): Me
     onSelect: () => plans.onArchivePlans(group.plans.map((plan) => plan.id)),
   };
   if (repository === null) return [[archive]];
+  const pin: MenuAction = plans.pinnedRepositories.includes(repository)
+    ? {
+        label: "Unpin",
+        icon: <UnpinIcon />,
+        onSelect: () => plans.onPinRepository(repository, false),
+      }
+    : { label: "Pin", icon: <PinIcon />, onSelect: () => plans.onPinRepository(repository, true) };
   const github: MenuAction = {
     label: "Open on GitHub",
     icon: <GitHubMark />,
     onSelect: () => plans.repositories.openGitHub(repositoryPageUrl(repository)),
   };
-  return [[archive], [github]];
+  return [[pin, archive], [github]];
 }
 
 /**
@@ -358,6 +367,12 @@ function RepositorySection({
               <ChevronRightIcon />
             </span>
             <span className="sidebar-repository-name">{named}</span>
+            {repository !== null && context.plans.pinnedRepositories.includes(repository) ? (
+              <span className="sidebar-repository-pinned">
+                <PinIcon />
+                <span className="visually-hidden">(pinned)</span>
+              </span>
+            ) : null}
           </button>
         </Tooltip>
         <span className="sidebar-repository-actions">
@@ -440,7 +455,8 @@ function ArchivedPlans({ context }: { context: RowContext }): React.JSX.Element 
  * account owns, and the account's row that leads to Settings. The pinned
  * plans stand in a section of their own above the rest while any are pinned,
  * newest pinned first and each naming its repository; the rest are grouped
- * under their repositories' headers, the group updated most recently first;
+ * under their repositories' headers, the pinned repositories first, newest
+ * pinned first, then the group updated most recently first;
  * and the archived ones are folded away under them all.
  * It is where the developer moves between things; what they work on is the
  * column beside it.
@@ -497,7 +513,15 @@ export function DesktopSidebar({
     inSight: !sidebar.collapsed,
   };
   const pinned = plans.plans.filter((plan) => plan.pinnedAt !== undefined);
-  const groups = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  // The pinned repositories' groups stand above the rest, newest pinned
+  // first, and the rest keep the groups' own order.
+  const grouped = repositoryGroups(plans.plans.filter((plan) => plan.pinnedAt === undefined));
+  const pinnedAt = (group: RepositoryGroup) =>
+    group.repository === null ? -1 : plans.pinnedRepositories.indexOf(group.repository);
+  const groups = [
+    ...grouped.filter((group) => pinnedAt(group) >= 0).sort((a, b) => pinnedAt(a) - pinnedAt(b)),
+    ...grouped.filter((group) => pinnedAt(group) < 0),
+  ];
   // The rows as the list draws them: the pinned, then each group not folded
   // away, the open plan standing in its place even under a fold, so walking
   // the list still moves from it.

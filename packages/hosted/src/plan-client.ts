@@ -47,6 +47,9 @@ import {
   planRevisionAnswerSchema,
   planRevisionsAnswerSchema,
   planUpdateRequestSchema,
+  type RepositoryPin,
+  repositoryPinRequestSchema,
+  repositoryPinsAnswerSchema,
 } from "./plan-wire.js";
 import {
   PLAN_CALL_FAILURE,
@@ -424,6 +427,47 @@ export class HostedPlanClient {
         planAnswerSchema,
       ),
       (answer) => answer?.plan,
+    );
+  }
+
+  /** The repositories the account pinned in the sidebar, newest pinned first; nothing where the service did not answer. */
+  repositoryPins(): Effect.Effect<
+    readonly RepositoryPin[] | undefined,
+    never,
+    HttpClient.HttpClient
+  > {
+    return Effect.map(
+      this.#call.ask(
+        { method: HTTP_METHOD.GET, path: HOSTED_SERVICE_PATH.REPOSITORY_PINS },
+        repositoryPinsAnswerSchema,
+      ),
+      (answer) => answer?.pins,
+    );
+  }
+
+  /**
+   * Pins one repository or unpins it, answering the account's pins as they
+   * then stand; nothing where the service refused or did not answer. A
+   * repository the wire would refuse by shape never travels.
+   */
+  pinRepository(
+    repository: string,
+    pinned: boolean,
+  ): Effect.Effect<readonly RepositoryPin[] | undefined, never, HttpClient.HttpClient> {
+    const asked = Result.getOrUndefined(
+      readEither(repositoryPinRequestSchema)({ repository, pinned }),
+    );
+    if (asked === undefined) return Effect.succeed(undefined);
+    return Effect.map(
+      this.#call.ask(
+        {
+          method: HTTP_METHOD.PUT,
+          path: HOSTED_SERVICE_PATH.REPOSITORY_PINS,
+          body: JSON.stringify(asked),
+        },
+        repositoryPinsAnswerSchema,
+      ),
+      (answer) => answer?.pins,
     );
   }
 

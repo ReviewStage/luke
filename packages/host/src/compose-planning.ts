@@ -36,6 +36,7 @@ import {
   planningEditParamsSchema,
   planningFileParamsSchema,
   planningPinParamsSchema,
+  planningPinRepositoryParamsSchema,
   planningRenameParamsSchema,
   planningRevisionParamsSchema,
   planningRevisionsParamsSchema,
@@ -111,6 +112,8 @@ export type PlanningClient = Pick<
   | "delete"
   | "rename"
   | "mark"
+  | "repositoryPins"
+  | "pinRepository"
   | "readBoard"
   | "saveBoard"
   | "readTranscript"
@@ -275,6 +278,12 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
         : { listStatus: PLANNING_READ.FAILED },
     );
+  });
+
+  // A failed read keeps the pins it last read, as a failed list read keeps the plans.
+  const readRepositoryPins = Effect.gen(function* () {
+    const pins = yield* Effect.provide(client.repositoryPins(), FetchHttpClient.layer);
+    if (pins !== undefined) write({ repositoryPins: pins });
   });
 
   /**
@@ -580,6 +589,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         yield* serial(
           Effect.gen(function* () {
             yield* readList;
+            yield* readRepositoryPins;
             const planId = view.activePlanId;
             if (planId !== undefined) yield* readDocument(planId);
             if (planId !== undefined) yield* readBoard(planId);
@@ -812,6 +822,28 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
         }
         if (!gate()) return { changed: false };
         return yield* markPlan(read.success.planId, { pinned: read.success.pinned });
+      }),
+    // The service answers the pins as they then stand, so the view takes its
+    // word rather than the window's guess.
+    [GATEWAY_METHOD.PLANNING_PIN_REPOSITORY]: (params) =>
+      Effect.gen(function* () {
+        const read = readEither(planningPinRepositoryParamsSchema)(unparsedWire(params));
+        if (Result.isFailure(read)) {
+          return yield* invalid("pinning a repository names it and whether it is pinned");
+        }
+        if (!gate()) return { changed: false };
+        const { repository, pinned } = read.success;
+        return yield* serial(
+          Effect.gen(function* () {
+            const pins = yield* Effect.provide(
+              client.pinRepository(repository, pinned),
+              FetchHttpClient.layer,
+            );
+            if (pins === undefined) return { changed: false };
+            write({ repositoryPins: pins });
+            return { changed: true };
+          }),
+        );
       }),
     // Note that an archived plan stays open where it is the open one: leaving
     // it is the window's to ask, as it is for any plan.

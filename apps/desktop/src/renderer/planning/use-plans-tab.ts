@@ -37,13 +37,17 @@ import {
   microphoneButton,
   type PendingMarks,
   type PendingRenames,
+  type PendingRepositoryPin,
+  type PendingRepositoryPins,
   PLAN_MARK,
   PLANS_PAGE,
   type PlanMark,
   type PlansPage,
   pendingMark,
+  pinnedRepositories,
   planningCallInProgress,
   plansPage,
+  REPOSITORY_PIN_FAILED_NOTES,
   recentRepositories,
   renamedView,
   repositoryFailureNote,
@@ -51,6 +55,7 @@ import {
   sidebarPlans,
   unsettledMarks,
   unsettledRenames,
+  unsettledRepositoryPins,
 } from "./planning-model";
 import type { RepositoryChooser } from "./repository-chip";
 import {
@@ -212,6 +217,10 @@ export interface PlansControl {
    * service answered, whose Undo brings back every plan it kept.
    */
   onArchivePlans: (planIds: readonly string[]) => void;
+  /** The repositories the account pinned in the sidebar, newest pinned first, whose groups stand above the rest. */
+  pinnedRepositories: readonly string[];
+  /** Pins a repository in the sidebar or unpins it, on the account: drawn at once, and put back with a toast if the service refuses. */
+  onPinRepository: (repository: string, pinned: boolean) => void;
   /** Deletes a plan, which ends its call and returns to the new-plan page if it is the open one; answers whether it was deleted. */
   onDeletePlan: (planId: string) => Promise<ActionResult>;
   /**
@@ -400,6 +409,12 @@ export function usePlansTab(input: {
   // A pin or an archive given here stands until main's view carries it, as a name does.
   const [marks, setMarks] = useState<PendingMarks>(new Map());
   useEffect(() => setMarks((held) => unsettledMarks(held, viewed)), [viewed]);
+  // A repository's pin given here stands until main's view carries it, as a plan's does.
+  const [repositoryPins, setRepositoryPins] = useState<PendingRepositoryPins>(new Map());
+  useEffect(
+    () => setRepositoryPins((held) => unsettledRepositoryPins(held, viewed.repositoryPins)),
+    [viewed],
+  );
   const planning = markedView(renamedView(viewed, renames), marks);
   const sidebar = sidebarPlans(planning.plans);
   const signedIn = fixture !== undefined || input.signedIn;
@@ -527,6 +542,31 @@ export function usePlansTab(input: {
         });
       });
   };
+  // A fixture's repositories are pinned nowhere, as its plans are marked
+  // nowhere. A pin says nothing once it lands, since the group it moves is
+  // in sight; a refusal puts the group back only while no later press
+  // replaced it, and says so in a toast, since the menu that asked has closed.
+  const pinRepository = (repository: string, pinned: boolean) => {
+    if (fixture !== undefined) return;
+    const next: PendingRepositoryPin = { pinned, at: Date.now() };
+    setRepositoryPins((held) => new Map(held).set(repository, next));
+    act(ACT_KIND.PLANNING_PIN_REPOSITORY, { repository, pinned })
+      .catch(() => false)
+      .then((changed) => {
+        if (changed) return;
+        setRepositoryPins((held) =>
+          held.get(repository) === next
+            ? new Map([...held].filter(([pending]) => pending !== repository))
+            : held,
+        );
+        toast({
+          words: pinned ? REPOSITORY_PIN_FAILED_NOTES.PIN : REPOSITORY_PIN_FAILED_NOTES.UNPIN,
+          tone: TOAST_TONE.FAILED,
+          hold: TOAST_HOLD.FAILED,
+        });
+      });
+  };
+
   // Several plans archived at once answer with one toast rather than one
   // each, so its Undo brings back every plan the service kept, and opens
   // again the open plan where the archive left it. A plan the service
@@ -841,6 +881,8 @@ export function usePlansTab(input: {
     onRenamePlan: renamePlan,
     onMarkPlan: (planId, mark) => markPlan(planId, mark),
     onArchivePlans: archivePlans,
+    pinnedRepositories: pinnedRepositories(viewed.repositoryPins, repositoryPins),
+    onPinRepository: pinRepository,
     onDeletePlan: deletePlan,
     back,
   };

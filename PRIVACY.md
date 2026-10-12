@@ -81,6 +81,11 @@ that agent was handed, and marks the plan's conversation and each agent's
 transcript deleted, removed thirty days later; deleting your account removes
 every plan.
 
+**Pinned repositories.** When you pin a repository in the sidebar, our
+service stores its name under your account, with when you pinned it, so the
+pin follows you to every Mac you sign in on. Unpinning it deletes that record,
+and deleting your account removes them all.
+
 **A plan's whiteboard.** Each plan has a whiteboard that Luke's planning model
 and you can both draw on. Our service stores it with the plan, under your
 account: every shape, arrow, line, freehand stroke, and piece of text on it,

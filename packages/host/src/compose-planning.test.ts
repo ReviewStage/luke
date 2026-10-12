@@ -28,6 +28,7 @@ import {
   type PlanRevisionAnswer,
   type PlanRevisionsAnswer,
   type PlanSummary,
+  type RepositoryPin,
   type ShownCode,
 } from "@sidecar/hosted/plan-wire";
 import {
@@ -123,6 +124,10 @@ interface FakeService extends PlanningClient {
   revisions: Record<number, PlanRevisionAnswer["revision"]>;
   /** What an edit answers in place of a save, where a test sets one: a conflict or a refusal. */
   editAnswer: PlanEditAnswer | undefined;
+  /** The account's pinned repositories, newest pinned first, as the service keeps them. */
+  pins: RepositoryPin[];
+  /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
+  pinsFail: boolean;
 }
 
 /** The instant the fake service stamps every edit's save with. */
@@ -169,6 +174,20 @@ function fakeService(plans: Plan[]): FakeService {
         return restored;
       }),
     editAnswer: undefined,
+    pins: [],
+    pinsFail: false,
+    repositoryPins: () => Effect.sync(() => (service.pinsFail ? undefined : service.pins)),
+    // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
+    pinRepository: (repository, pinned) =>
+      Effect.sync(() => {
+        if (service.pinsFail) return undefined;
+        const others = service.pins.filter((pin) => pin.repository !== repository);
+        const standing = service.pins.find((pin) => pin.repository === repository);
+        service.pins = pinned
+          ? [standing ?? { repository, pinnedAt: MARKED_AT + service.pins.length }, ...others]
+          : others;
+        return service.pins;
+      }),
     // The service writes the edit's value into the document's decisions and answers the plan whole.
     edit: (planId, edit) =>
       Effect.sync((): PlanCallResult<PlanEditAnswer, typeof PLAN_CALL_FAILURE.NOT_FOUND> => {
@@ -905,6 +924,63 @@ it.effect("a pin or an archive the service refused leaves the plan as it was", (
     assert.deepEqual(last()?.plans, [summary(invites)]);
     assert.deepEqual(last()?.document, { status: PLANNING_READ.READY, plan: invites });
   }),
+);
+
+it.effect(
+  "the refresh reads the pinned repositories, and a pin or an unpin draws the pins the service answered",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.pins = [{ repository: "acme/relay", pinnedAt: 1_000 }];
+      const { call, last } = yield* subject(service);
+
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+      const read = last()?.repositoryPins;
+      const answers = [
+        yield* call(GATEWAY_METHOD.PLANNING_PIN_REPOSITORY, {
+          repository: "acme/ledger",
+          pinned: true,
+        }),
+      ];
+      const pinned = last()?.repositoryPins;
+      answers.push(
+        yield* call(GATEWAY_METHOD.PLANNING_PIN_REPOSITORY, {
+          repository: "acme/relay",
+          pinned: false,
+        }),
+      );
+
+      assert.deepEqual(read, [{ repository: "acme/relay", pinnedAt: 1_000 }]);
+      assert.deepEqual(pinned, [
+        { repository: "acme/ledger", pinnedAt: MARKED_AT + 1 },
+        { repository: "acme/relay", pinnedAt: 1_000 },
+      ]);
+      assert.deepEqual(answers, [{ changed: true }, { changed: true }]);
+      assert.deepEqual(last()?.repositoryPins, [
+        { repository: "acme/ledger", pinnedAt: MARKED_AT + 1 },
+      ]);
+    }),
+);
+
+it.effect(
+  "a pin the service refused, or a pins read that fails, keeps the pins already drawn",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService([]);
+      service.pins = [{ repository: "acme/relay", pinnedAt: 1_000 }];
+      const { call, last } = yield* subject(service);
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      service.pinsFail = true;
+      const refused = yield* call(GATEWAY_METHOD.PLANNING_PIN_REPOSITORY, {
+        repository: "acme/ledger",
+        pinned: true,
+      });
+      yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+      assert.deepEqual(refused, { changed: false });
+      assert.deepEqual(last()?.repositoryPins, [{ repository: "acme/relay", pinnedAt: 1_000 }]);
+    }),
 );
 
 it.effect("a list read that fails keeps the plans and the document already drawn", () =>

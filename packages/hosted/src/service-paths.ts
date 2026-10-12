@@ -22,6 +22,12 @@ export const HOSTED_SERVICE_PATH = {
    */
   PLANS: "/api/plans",
   /**
+   * The repositories the account pinned in the sidebar: read them, newest
+   * pinned first (GET), or pin or unpin one (PUT), answered with them all as
+   * they then stand. `plan-wire.ts` declares both.
+   */
+  REPOSITORY_PINS: "/api/repository-pins",
+  /**
    * The repositories the signed-in account reaches through the Luke GitHub
    * App, most recently updated first (GET), with whether the App is
    * installed anywhere for them and where to install it.
