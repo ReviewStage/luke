@@ -81,7 +81,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
  * The open panel may also fill the window's work, over the document, as
  * ChatGPT's canvas does. That is a moment's view rather than a preference,
  * so it is kept nowhere: a launch, and a panel shown again, start beside
- * the document.
+ * the document. So is ⌘T's ask for the "+" menu, which shows the panel
+ * where it was hidden and stands until the "+" opens its menu.
  */
 
 /** The panel's kinds of tab, the fixed five. A kind is one entry here, one row below, and one case where the panel draws it. */
@@ -344,6 +345,8 @@ export interface SidePanelControl {
   open: boolean;
   /** Whether the open panel fills the work column in the document's place. */
   fullScreen: boolean;
+  /** Whether ⌘T asked for the "+" menu and the "+" has not yet opened it. */
+  newTabAsked: boolean;
   /** The open plan's fixed tabs, in the strip's order; the plan's agent tabs follow them. */
   tabs: readonly FixedSidePanelTab[];
   /** The fixed tabs the developer closed on the open plan, which stay closed there however much arrives until one is opened again. */
@@ -363,6 +366,10 @@ export interface SidePanelControl {
   /** Shows or hides the panel; hiding it leaves full screen too. */
   onToggle: () => void;
   onToggleFullScreen: () => void;
+  /** Shows the panel, where it was hidden, and asks its "+" to open its menu, as ⌘T does. */
+  onNewTab: () => void;
+  /** Says the "+" opened its menu on the ask. */
+  onNewTabAnswered: () => void;
   /** Shows the panel on the tab, opening it where it was closed or the open plan has not used it; a fixed tab stays open on that plan. */
   onChoose: (tab: SidePanelTab) => void;
   /** Closes the tab, and only the view: an agent's goes on as it was. Closing the one shown chooses the tab viewed before it on the plan that still stands, else its neighbour, the one after it where there is one. A pinned tab closed is unpinned. */
@@ -937,6 +944,7 @@ export function useSidePanel(
   const [kept, setKept] = useState<HeldState>(readStored);
   const [moved, setMoved] = useState<HeldState | undefined>(undefined);
   const [fullScreen, setFullScreen] = useState(false);
+  const [newTabAsked, setNewTabAsked] = useState(false);
   const [seen, setSeen] = useState<OpenPlan>(plan);
   const stage = useMemo(() => (staged === undefined ? undefined : settled(staged)), [staged]);
   const planId = plan.id;
@@ -1008,8 +1016,14 @@ export function useSidePanel(
   const onToggle = useCallback(() => {
     update((held) => ({ ...held, open: !held.open }));
     setFullScreen(false);
+    setNewTabAsked(false);
   }, [update]);
   const onToggleFullScreen = useCallback(() => setFullScreen((was) => !was), []);
+  const onNewTab = useCallback(() => {
+    update((held) => (held.open ? held : { ...held, open: true }));
+    setNewTabAsked(true);
+  }, [update]);
+  const onNewTabAnswered = useCallback(() => setNewTabAsked(false), []);
   const onChoose = useCallback(
     (tab: SidePanelTab) =>
       update((held) => ({
@@ -1054,8 +1068,11 @@ export function useSidePanel(
     tab: shownTab(state.tab, tabs, openAgents, subagents, draft, files) ?? agentTab ?? firstPin,
     width: state.width,
     fullScreen: state.open && fullScreen,
+    newTabAsked: state.open && newTabAsked,
     onToggle,
     onToggleFullScreen,
+    onNewTab,
+    onNewTabAnswered,
     onChoose,
     onClose,
     onMove,

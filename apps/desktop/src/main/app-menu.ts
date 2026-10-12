@@ -83,8 +83,8 @@ function dialogItem(command: MenuCommand): MenuItemConstructorOptions {
 
 /**
  * The menu bar, in the order a Mac app keeps it. Settings sits in the app's
- * own menu as macOS puts it; the plan's commands are File's, with Close Tab
- * and Close Window as Chrome's File keeps them, the window's
+ * own menu as macOS puts it; the plan's commands are File's, with New Tab,
+ * Close Tab, and Close Window as Chrome's File keeps them, the window's
  * columns are View's, the call's microphone and speaker are Call's, back and forward are Go's as Finder and Safari keep
  * them, and the shortcuts and the notes to the people who make Luke are
  * Help's.
@@ -114,6 +114,7 @@ export function appMenuTemplate(appName: string): MenuItemConstructorOptions[] {
       submenu: [
         commandItem(APP_COMMAND.NEW_PLAN),
         SEPARATOR,
+        commandItem(APP_COMMAND.NEW_TAB),
         commandItem(APP_COMMAND.CLOSE_TAB),
         closeWindowItem(),
         SEPARATOR,

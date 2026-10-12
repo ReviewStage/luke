@@ -35,6 +35,7 @@ export const APP_COMMAND = {
   TOGGLE_SPEAKER: "toggle-speaker",
   MOVE_TAB_LEFT: "move-tab-left",
   MOVE_TAB_RIGHT: "move-tab-right",
+  NEW_TAB: "new-tab",
   CLOSE_TAB: "close-tab",
   CLOSE_WINDOW: "close-window",
   SETTINGS: "settings",
@@ -88,6 +89,7 @@ const SHORTCUT_KEY = {
   S: { accelerator: "S", glyph: "S", key: "s", code: "KeyS" },
   B: { accelerator: "B", glyph: "B", key: "b", code: "KeyB" },
   F: { accelerator: "F", glyph: "F", key: "f", code: "KeyF" },
+  T: { accelerator: "T", glyph: "T", key: "t", code: "KeyT" },
   W: { accelerator: "W", glyph: "W", key: "w", code: "KeyW" },
   K: { accelerator: "K", glyph: "K", key: "k", code: "KeyK" },
   ONE: { accelerator: "1", glyph: "1", key: "1", code: "Digit1" },
@@ -145,8 +147,9 @@ export interface AppShortcut {
  * shortcuts as ChatGPT has it, ⌘[ and ⌘] for back and forward as Finder and
  * Safari have them, ⇧⌘↩ to fill the window with a pane as iTerm and Warp
  * have it, ⇧⌘← and ⇧⌘→ to move the focused tab along its strip, the
- * keys VS Code's Move Editor Left and Right end in, ⌘W to close the tab
- * chosen and ⇧⌘W to close the window as Chrome and VS Code have them,
+ * keys VS Code's Move Editor Left and Right end in, ⌘T to open a tab, ⌘W
+ * to close the tab chosen, and ⇧⌘W to close the window as Chrome and VS
+ * Code have them,
  * ⇧⌘M to toggle the call's microphone as Teams has it, with ⇧⌘S for its
  * speaker beside it, and ⌘K for the command palette as Linear, Slack, and
  * Raycast have it.
@@ -207,6 +210,7 @@ export const APP_SHORTCUTS = {
     label: "Move tab right",
     chord: { key: SHORTCUT_KEY.RIGHT, shift: true },
   },
+  [APP_COMMAND.NEW_TAB]: { label: "New tab", chord: { key: SHORTCUT_KEY.T } },
   [APP_COMMAND.CLOSE_TAB]: { label: "Close tab", chord: { key: SHORTCUT_KEY.W } },
   [APP_COMMAND.CLOSE_WINDOW]: {
     label: "Close window",
@@ -262,6 +266,7 @@ export const APP_SHORTCUT_GROUPS = [
       APP_COMMAND.SHOW_HISTORY,
       APP_COMMAND.MOVE_TAB_LEFT,
       APP_COMMAND.MOVE_TAB_RIGHT,
+      APP_COMMAND.NEW_TAB,
       APP_COMMAND.CLOSE_TAB,
       APP_COMMAND.CLOSE_WINDOW,
     ],

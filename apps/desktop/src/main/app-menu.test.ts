@@ -90,27 +90,33 @@ test("Help offers the two notes to the people who make Luke, each handing the wi
   ]);
 });
 
-test("File's Close Tab hands the window its command on a click, leaving ⌘W to the window's keymap, and Close Window closes the window on ⇧⌘W or a click", () => {
+test("File's New Tab and Close Tab hand the window their commands on a click, leaving ⌘T and ⌘W to the window's keymap, and Close Window closes the window on ⇧⌘W or a click", () => {
   const file = appMenuTemplate("Luke").find((menu) => menu.label === "File");
   assert.ok(Array.isArray(file?.submenu));
   assert.deepEqual(
     file.submenu
-      .filter((each) => each.label?.startsWith("Close"))
+      .filter((each) => each.label?.endsWith("Tab") || each.label?.startsWith("Close"))
       .map((each) => [each.label, each.accelerator]),
     [
+      ["New Tab", "Command+T"],
       ["Close Tab", "Command+W"],
       ["Close Window", "Shift+Command+W"],
     ],
   );
   const window = new FakeBrowserWindow();
+  choose("New Tab", window, true);
   choose("Close Tab", window, true);
-  assert.deepEqual(window.sent, [], "a ⌘W the window left unclaimed closes nothing");
+  assert.deepEqual(window.sent, [], "a ⌘T or ⌘W the window left unclaimed does nothing");
   assert.equal(window.closes, 0);
+  choose("New Tab", window, false);
   choose("Close Tab", window, false);
-  assert.deepEqual(window.sent, [[channels.onMenuCommand, APP_COMMAND.CLOSE_TAB]]);
+  assert.deepEqual(window.sent, [
+    [channels.onMenuCommand, APP_COMMAND.NEW_TAB],
+    [channels.onMenuCommand, APP_COMMAND.CLOSE_TAB],
+  ]);
 
   choose("Close Window", window, true);
   choose("Close Window", window, false);
   assert.equal(window.closes, 2);
-  assert.equal(window.sent.length, 1, "Close Window hands the page nothing");
+  assert.equal(window.sent.length, 2, "Close Window hands the page nothing");
 });

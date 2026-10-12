@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
@@ -11,7 +12,9 @@ import { plansControl } from "#testing/plans-control";
 import { settingsPanelProps } from "#testing/settings-panel-props";
 import { useAppKeymap, useMenuCommands } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
-import { PLANS_PAGE, type PlansPage } from "../planning/planning-model";
+import { DOCUMENT_REGION, PLANS_PAGE, type PlansPage } from "../planning/planning-model";
+import { HISTORY_READ } from "../planning/use-plan-history";
+import type { PlansControl } from "../planning/use-plans-tab";
 import { SETTINGS_VIEW, type SettingsView } from "../settings-views";
 import { DesktopShell } from "./desktop-shell";
 import { SIDEBAR_WIDTH, useSidebarCollapse } from "./sidebar-collapse";
@@ -23,7 +26,15 @@ const ignore = () => undefined;
  * keymap, and over plans that open on an empty plan page and turn to the
  * new-plan page when asked for it.
  */
-function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JSX.Element {
+function Window({
+  tab,
+  fixture,
+  plans,
+}: {
+  tab: PanelTab;
+  fixture: boolean;
+  plans: Partial<PlansControl>;
+}): React.JSX.Element {
   const sidebar = useSidebarCollapse(fixture);
   useAppKeymap(true);
   const [page, setPage] = useState<PlansPage>(PLANS_PAGE.DOCUMENT);
@@ -42,7 +53,7 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
     },
     tab,
     onTabChange: ignore,
-    plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW) }),
+    plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW), ...plans }),
     history: navigationHistory(),
     sidebar,
     captions: captionStripProps(),
@@ -52,10 +63,10 @@ function Window({ tab, fixture }: { tab: PanelTab; fixture: boolean }): React.JS
 
 let root: Root | undefined;
 
-function show(tab: PanelTab, fixture = false): void {
+function show(tab: PanelTab, fixture = false, plans: Partial<PlansControl> = {}): void {
   act(() => {
     root ??= createRoot(document.body.appendChild(document.createElement("div")));
-    root.render(createElement(Window, { tab, fixture }));
+    root.render(createElement(Window, { tab, fixture, plans }));
   });
 }
 
@@ -497,6 +508,7 @@ test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page
   );
   assert.ok(rows.includes("New plan"));
   assert.ok(rows.includes("Toggle panel"));
+  assert.ok(rows.includes("New tab"));
   assert.ok(rows.includes("Exit full screen"));
 });
 
@@ -592,6 +604,43 @@ test("the panel's toggle stands in the title bar on a plan's page alone, disable
 
   show(PANEL_TAB.SETTINGS);
   assert.equal(document.body.querySelector(".side-panel-toggle"), null, "Settings has none");
+});
+
+test("Command-T is claimed on a drawn plan's page alone: not while a version stands in its place, nor on a plan not drawn, the new-plan page, or Settings", () => {
+  const plan = {
+    id: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+    name: "Teammate invitations",
+    createdAt: 1,
+    updatedAt: 2,
+    repository: null,
+    document: { body: "# Teammate invitations", assumptions: [] },
+  };
+  const drawn = { region: { kind: DOCUMENT_REGION.READY, plan } };
+  show(PANEL_TAB.PLANS, false, drawn);
+  assert.equal(command("t"), true, "a drawn plan's page opens a tab");
+
+  const version = {
+    line: {
+      seq: 1,
+      lastEdit: { actor: PLAN_ACTOR.NOTETAKER, at: 1, duringCall: false },
+      startedAt: 1,
+      changes: 1,
+    },
+    current: false,
+    read: { kind: HISTORY_READ.READING },
+  } as const;
+  show(PANEL_TAB.PLANS, false, {
+    ...drawn,
+    history: { ...plansControl().history, viewing: version },
+  });
+  assert.equal(command("t"), false, "a version drawn in the plan's place opens none");
+
+  show(PANEL_TAB.PLANS, false, { region: { kind: DOCUMENT_REGION.READING } });
+  assert.equal(command("t"), false, "a plan not yet drawn opens none");
+  show(PANEL_TAB.PLANS, false, { page: PLANS_PAGE.NEW });
+  assert.equal(command("t"), false, "the new-plan page opens none");
+  show(PANEL_TAB.SETTINGS);
+  assert.equal(command("t"), false, "Settings opens none");
 });
 
 test("a toolbar leaves the panel's toggle room only where the toggle stands", () => {

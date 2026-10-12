@@ -143,7 +143,7 @@ function Page({
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
   );
 }
 
@@ -1729,6 +1729,32 @@ function addButton(page: HTMLElement): HTMLElement {
   return button;
 }
 
+test("Command-T shows a hidden panel and opens the + menu with its search focused, its chord in the +'s pill, and Escape closes the menu choosing nothing", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan();
+  assert.equal(panelShown(page), false);
+
+  assert.equal(keydown({ key: "t", metaKey: true }), true);
+  assert.equal(panelShown(page), true);
+  const search = document.activeElement;
+  assert.ok(search instanceof HTMLInputElement, "the menu's search has focus");
+  assert.ok(search.closest(".tab-add-menu"), "in the + menu");
+
+  key(search, "Escape");
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work"]);
+  assert.equal(chosenTab(page), "Board");
+  assert.equal(document.activeElement, addButton(page), "focus goes back to the +");
+
+  // With the panel shown, the chord opens the menu again; hidden and shown once more, the menu stays shut.
+  keydown({ key: "t", metaKey: true });
+  assert.ok(document.querySelector(".tab-add-menu"));
+  press(page, '[aria-label="Hide panel"]');
+  press(page, '[aria-label="Show panel"]');
+  assert.equal(document.querySelector(".tab-add-menu"), null);
+  assert.equal(hover(addButton(page)), "Open a tab⌘T");
+});
+
 test("the + drops the searchable menu over every kind, each with its shortcut whether or not it is open, an open one chosen by a pick and a closed one opened in its place", () => {
   installScrollIntoView();
   const page = mountOpenPlan();
@@ -2386,7 +2412,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
     createElement(ToastHost),
   );
 }
@@ -2592,7 +2618,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     Fragment,
     null,
     page,
-    createElement(SidePanelToggle, { panel: sidePanel, disabled: false }),
+    createElement(SidePanelToggle, { panel: sidePanel, disabled: false, viewingVersion: false }),
   );
 }
 
