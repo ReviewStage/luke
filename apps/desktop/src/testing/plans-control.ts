@@ -156,6 +156,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onLeavePlan: ignore,
     onRenamePlan: () => Promise.resolve(true),
     onMarkPlan: ignore,
+    onArchivePlans: ignore,
     onDeletePlan: () => Promise.resolve({ status: ACTION_RESULT_STATUS.ACCEPTED }),
     back: () => false,
     ...overrides,

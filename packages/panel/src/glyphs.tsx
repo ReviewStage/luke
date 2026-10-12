@@ -483,6 +483,15 @@ export function DocumentIcon(): React.JSX.Element {
   );
 }
 
+/** A folder with its tab: a repository whose owner's picture is not drawn. */
+export function FolderIcon(): React.JSX.Element {
+  return (
+    <Glyph className="icon-button-glyph">
+      <path d="M3.6 7.2a2 2 0 0 1 2-2h3.7l2 2.2h7.1a2 2 0 0 1 2 2v7.8a2 2 0 0 1-2 2H5.6a2 2 0 0 1-2-2Z" />
+    </Glyph>
+  );
+}
+
 /** Starts a run: the triangle every transport draws for play. */
 export function PlayIcon(): React.JSX.Element {
   return (

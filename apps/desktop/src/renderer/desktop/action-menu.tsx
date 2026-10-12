@@ -1,12 +1,13 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { KeyedCommand } from "#shared/shortcuts";
 import { ShortcutGlyphs } from "../tooltip";
 
 /**
- * action-menu.tsx -- the window's own drop-down menu: a plan's actions, and a side panel tab's.
+ * action-menu.tsx -- the window's own drop-down menu: a plan's actions, a repository's, and a side panel tab's.
  *
- * The one menu the plan's ⋯ and right-click and a tab's right-click draw, whose
+ * The one menu the plan's ⋯ and right-click, a repository header's ⋯ and
+ * right-click, and a tab's right-click draw, whose
  * items the empty side panel also lists as buttons of their own. It is
  * drawn here rather than asked of the system so that every door draws it
  * the same way and an action can be drawn red. It behaves as a system menu
@@ -55,6 +56,38 @@ export interface MenuAction {
 export interface OpenMenu {
   placement: MenuPlacement;
   opener: HTMLElement;
+}
+
+/** Where a menu dropped from a button hangs: under it, its right edge on the button's. */
+export function dropBelow(button: HTMLElement): MenuPlacement {
+  const bounds = button.getBoundingClientRect();
+  return { x: bounds.right, y: bounds.bottom + MENU_DROP, align: MENU_ALIGN.END };
+}
+
+/** Where a right-click's menu hangs: at the pointer, growing rightward from it. */
+export function atPointer(event: React.MouseEvent): MenuPlacement {
+  return { x: event.clientX, y: event.clientY, align: MENU_ALIGN.START };
+}
+
+/**
+ * One control's menu: where it hangs while it stands, the door that opens it
+ * from an element, which takes focus back when it closes by key, and the
+ * close. A menu does not outlive the surface it stands on, so it is taken
+ * down in the render that finds the surface off screen.
+ */
+export function useActionMenu(shown: boolean) {
+  const [open, setOpen] = useState<OpenMenu | undefined>(undefined);
+  if (open !== undefined && !shown) setOpen(undefined);
+  const opener = useRef<HTMLElement | null>(null);
+  const close = useCallback((returnFocus: boolean) => {
+    setOpen(undefined);
+    if (returnFocus) opener.current?.focus();
+  }, []);
+  const show = useCallback((placement: MenuPlacement, element: HTMLElement) => {
+    opener.current = element;
+    setOpen({ placement, opener: element });
+  }, []);
+  return { open: shown ? open : undefined, show, close };
 }
 
 function clamp(value: number, low: number, high: number): number {

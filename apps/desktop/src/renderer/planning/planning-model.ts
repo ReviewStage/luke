@@ -201,6 +201,23 @@ export const MARK_UNDOS = {
   [PLAN_MARK.UNARCHIVE]: { note: "Plan unarchived", undo: PLAN_MARK.ARCHIVE },
 } as const satisfies Partial<Record<PlanMark, { note: string; undo: PlanMark }>>;
 
+/**
+ * What the toast says once a repository's plans were archived together, by
+ * how many the service kept and how many it refused; one plan says what an
+ * archive of one says.
+ */
+export function archivedPlansNote(landed: number, refused: number): string {
+  const kept = landed === 1 ? MARK_UNDOS[PLAN_MARK.ARCHIVE].note : `${landed} plans archived`;
+  return refused === 0 ? kept : `${kept}, ${refused} could not be`;
+}
+
+/** What the toast says when the service refused every plan of a repository's Archive plans. */
+export function archivePlansFailedNote(refused: number): string {
+  return refused === 1
+    ? MARK_FAILED_NOTES[PLAN_MARK.ARCHIVE]
+    : "The plans could not be archived. Try again.";
+}
+
 /** A plan's pin and archive as the list carries them, each only where it stands. */
 type MarkStamps = Pick<PlanSummary, "pinnedAt" | "archivedAt">;
 
