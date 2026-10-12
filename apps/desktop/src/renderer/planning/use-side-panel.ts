@@ -608,19 +608,43 @@ function rangeOf(ref: CodeRef): OpenFile["range"] {
     : { startLine: ref.startLine, endLine: ref.endLine };
 }
 
-/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more. */
+/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more, its history kept. */
 function withFileOpened(held: HeldState, ref: CodeRef): HeldState {
   const standing = held.files.find((each) => each.path === ref.path);
+  // Note that the tab keeps the way it came, since it shows the same file.
   const opened: OpenFile = {
     path: ref.path,
     range: rangeOf(ref),
     opened: (standing?.opened ?? 0) + 1,
+    ...(standing?.back === undefined ? undefined : { back: standing.back }),
+    ...(standing?.forward === undefined ? undefined : { forward: standing.forward }),
   };
   const files =
     standing === undefined
       ? [...held.files, opened]
       : held.files.map((each) => (each === standing ? opened : each));
   return { ...held, files, tab: { file: ref.path }, open: true };
+}
+
+/**
+ * The state with the tab a file already has chosen and the panel shown, as
+ * browsing or a step of a tab's history to that file asks: a tab another
+ * plan browsed to moves to this one, since this plan does not draw it.
+ */
+function withOpenFileChosen(
+  held: HeldState,
+  open: OpenFile,
+  drawn: DrawnTabs,
+  planId: string | undefined,
+): HeldState {
+  const tab: SidePanelTab = { file: open.path };
+  const drawnHere = drawn.files.includes(open.path)
+    ? held
+    : {
+        ...held,
+        files: held.files.map((each) => (each === open ? { ...each, browsedOn: planId } : each)),
+      };
+  return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
 }
 
 /** What a File tab's history holds of the file it shows. */
@@ -1092,19 +1116,9 @@ export function useSidePanel(
   const onBrowseFile = useCallback(
     (from: string, path: string, newTab: boolean) =>
       update((held) => {
-        const tab: SidePanelTab = { file: path };
         const open = held.files.find((each) => each.path === path);
-        if (open !== undefined) {
-          const drawnHere = drawn.files.includes(path)
-            ? held
-            : {
-                ...held,
-                files: held.files.map((each) =>
-                  each === open ? { ...each, browsedOn: planId } : each,
-                ),
-              };
-          return { ...withTab(withChosenViewed(drawnHere, tab, drawn), tab, planId), open: true };
-        }
+        if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
+        const tab: SidePanelTab = { file: path };
         const standing = newTab ? undefined : held.files.find((each) => each.path === from);
         return withFileBrowsed(withChosenViewed(held, tab, drawn), planId, standing, path);
       }),
@@ -1121,11 +1135,9 @@ export function useSidePanel(
         const ways = step === FILE_HISTORY_STEP.BACK ? standing.back : standing.forward;
         const to = ways?.at(-1)?.path;
         if (to === undefined) return held;
-        const tab: SidePanelTab = { file: to };
-        if (held.files.some((each) => each.path === to)) {
-          return { ...withTab(withChosenViewed(held, tab, drawn), tab, planId), open: true };
-        }
-        return withFileStepped(withChosenViewed(held, tab, drawn), standing, step);
+        const open = held.files.find((each) => each.path === to);
+        if (open !== undefined) return withOpenFileChosen(held, open, drawn, planId);
+        return withFileStepped(withChosenViewed(held, { file: to }, drawn), standing, step);
       }),
     [update, drawn, planId],
   );

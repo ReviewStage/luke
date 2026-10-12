@@ -274,6 +274,28 @@ test("a File tab's Back walks the files it showed before, its lit lines with the
   assert.deepEqual(shown(), [ROLES, README], "one tab per file");
 });
 
+test("Luke's snippet opening a File tab again keeps its history, and a step to a file whose tab another plan took moves that tab back here", () => {
+  const panel = mountStood({ agents: [], subagents: [], files: [INVITE, ROLES] });
+  act(() => panel.control().onOpenFile({ path: INVITE }));
+  act(() => panel.control().onBrowseFile(INVITE, ROLES, false));
+  act(() => panel.control().onOpenFile({ path: ROLES, startLine: 3, endLine: 4 }));
+  act(() => panel.control().onFileHistory(ROLES, FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(panel.control().tab, { file: INVITE }, "the history outlived the snippet");
+
+  act(() => panel.control().onBrowseFile(INVITE, "a.md", false));
+  act(() => panel.control().onBrowseFile("a.md", "b.md", false));
+  panel.render({ plan: usedPlan(OTHER), agents: [], subagents: [], files: [INVITE, ROLES] });
+  act(() => panel.control().onBrowseFile(INVITE, "a.md", true));
+  panel.render({ agents: [], subagents: [], files: [INVITE, ROLES] });
+  act(() => panel.control().onChoose({ file: "b.md" }));
+  act(() => panel.control().onFileHistory("b.md", FILE_HISTORY_STEP.BACK));
+  assert.deepEqual(
+    panel.control().tab,
+    { file: "a.md" },
+    "shown on this plan, not swapped for another tab",
+  );
+});
+
 test("a file browsed to stands on the plan it was browsed on, though Luke never showed it, and on no other", () => {
   const panel = mountStood({ agents: [], subagents: [], files: [INVITE] });
   act(() => panel.control().onOpenFile({ path: INVITE }));

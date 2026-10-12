@@ -7,6 +7,7 @@ import { ActionMenu, dropBelow, type MenuAction, useActionMenu } from "../deskto
 import { TOAST_HOLD, TOAST_TONE, useToast } from "../toast";
 import { Tooltip } from "../tooltip";
 import { fileName } from "./code-pane-model";
+import { WHOLE_TEXT, type WholeText } from "./file-tab-model";
 import { useFileViewSettings } from "./file-view-settings";
 
 /**
@@ -18,11 +19,13 @@ import { useFileViewSettings } from "./file-view-settings";
  * save dialog chooses (`ACT_KIND.WINDOW_SAVE_FILE`); and, under a rule, the
  * File tabs' two settings as checks (`file-view-settings.ts`). The text is
  * read whole only when it is asked for, a window at a time, so a file
- * scrolled through a window costs nothing more until it is copied.
+ * scrolled through a window costs nothing more until it is copied; a file
+ * holding a line the service cut is refused rather than handed on short.
  */
 
-/** What the menu says where the file's text could not be read whole. */
+/** What the menu says where the file's text could not be read whole, or holds a line too long to carry whole. */
 const UNREAD = "Could not read the whole file.";
+const CUT = "This file has lines too long to copy whole. Open it on GitHub instead.";
 
 export function FileMenu({
   path,
@@ -33,8 +36,8 @@ export function FileMenu({
   path: string;
   /** Whether the file was read, so its text can be: a file refused or still loading offers its name alone. */
   ready: boolean;
-  /** The file's whole text, read a window at a time, or nothing where a window did not land. */
-  readText: () => Promise<string | undefined>;
+  /** The file's whole text, read a window at a time, or why it is not at hand. */
+  readText: () => Promise<WholeText>;
 }): React.JSX.Element {
   const menu = useActionMenu(true);
   const { act } = useAct();
@@ -46,7 +49,10 @@ export function FileMenu({
     show({ words, tone: TOAST_TONE.FAILED, hold: TOAST_HOLD.FAILED });
 
   const withText = (use: (text: string) => void) =>
-    readText().then((text) => (text === undefined ? failed(UNREAD) : use(text)));
+    readText().then((whole) => {
+      if (whole.kind === WHOLE_TEXT.READ) use(whole.text);
+      else failed(whole.kind === WHOLE_TEXT.CUT ? CUT : UNREAD);
+    });
   const save = (text: string) =>
     act(ACT_KIND.WINDOW_SAVE_FILE, { name, text }).then(
       (saved) => {

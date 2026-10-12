@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { PLAN_FILE_REFUSAL, PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
-import type { PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, useState } from "react";
@@ -12,6 +12,7 @@ import { afterEach, beforeEach, test, vi } from "vitest";
 import { ACT_KIND, ACT_OUTCOME_STATUS, type Act, type ActOutcome } from "#shared/messages/acts";
 import { installClipboard, onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import type { FileTreeProps } from "../file-tree/contract";
+import { ToastHost } from "../toast";
 import type { ReadFileWindow } from "./file-tab";
 import { FileView } from "./file-view";
 import { FILE_HISTORY_STEP, type OpenFile } from "./use-side-panel";
@@ -141,6 +142,7 @@ function mounted(
   whole: () => Promise<PlanningTreeAnswer> = () => Promise.resolve(wholeListing(false)),
   readFile: ReadFileWindow = numberedFile(1),
   registry?: AtomRegistry.AtomRegistry,
+  snippet?: PlanCode,
 ) {
   const listed: string[] = [];
   const browsed: string[] = [];
@@ -157,7 +159,7 @@ function mounted(
       planId: PLAN,
       repository: REPOSITORY,
       file,
-      snippet: undefined,
+      snippet,
       shownCode,
       readFile,
       readFolder: (path) => {
@@ -621,3 +623,80 @@ test("Line numbers and Word wrap are checks under the ⋯ that redraw every File
   await chooseInMenu(one, "Word wrap");
   assert.deepEqual(drawn(), ["true true", "true true"]);
 });
+
+test("the lines Luke showed, drawn where the file cannot be, follow the File tabs' settings too", async () => {
+  const view = mounted();
+  await view.draw(FILE);
+  await chooseInMenu(view, "Line numbers");
+  await chooseInMenu(view, "Word wrap");
+  const snippet: PlanCode = {
+    ref: { path: "src/moved.ts", startLine: 2, endLine: 2 },
+    repository: REPOSITORY,
+    firstLine: 1,
+    lineCount: 3,
+    lines: [[{ text: "a" }], [{ text: "b" }], [{ text: "c" }]],
+  };
+  const refused = mounted(
+    [],
+    undefined,
+    () => Promise.resolve({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }),
+    undefined,
+    snippet,
+  );
+  await refused.draw("src/moved.ts");
+
+  const lines = refused.container.querySelector<HTMLElement>(".file-tab-lines");
+  assert.equal(lines?.dataset.lineNumbers, "false");
+  assert.equal(lines?.dataset.wrap, "false");
+  await chooseInMenu(view, "Line numbers");
+  await chooseInMenu(view, "Word wrap");
+});
+
+test("a later press on another crumb stands in for one still listing, so only its list opens", async () => {
+  const view = mounted();
+  await view.draw(FILE);
+  const crumbs = [...view.container.querySelectorAll<HTMLButtonElement>(".file-breadcrumb")];
+  await act(async () => {
+    crumbs[1]?.click();
+    crumbs[4]?.click();
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  });
+  assert.deepEqual(
+    [...document.querySelectorAll('[role="menu"]')].map((menu) => menu.getAttribute("aria-label")),
+    ["apps/web/server"],
+  );
+});
+
+it.effect(
+  "a file holding a line as long as the service carries is not copied or saved short, and says why",
+  () =>
+    Effect.gen(function* () {
+      const saved = installSaveDialog();
+      const clipboard = installClipboard();
+      const registry = yield* registryOnTestClock;
+      const long: ReadFileWindow = (window) =>
+        Promise.resolve({
+          file: {
+            path: window.path,
+            repository: REPOSITORY,
+            branch: "main",
+            firstLine: 1,
+            lineCount: 2,
+            lines: [[{ text: "x".repeat(400) }], [{ text: "end" }]],
+          },
+        });
+      const view = mounted([], undefined, long, registry);
+      yield* Effect.promise(() => view.draw("dist/bundle.js"));
+      const toasts = createRoot(document.body.appendChild(document.createElement("div")));
+      roots.push(toasts);
+      act(() => toasts.render(onRegistry(registry, createElement(ToastHost))));
+
+      yield* Effect.promise(() => chooseInMenu(view, "Copy file contents"));
+      yield* Effect.promise(() => chooseInMenu(view, "Download file"));
+      yield* Effect.promise(() => view.settle());
+
+      assert.deepEqual(clipboard.copied, []);
+      assert.deepEqual(saved, []);
+      assert.match(document.body.textContent ?? "", /lines too long to copy whole/);
+    }),
+);

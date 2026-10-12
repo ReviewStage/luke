@@ -103,6 +103,20 @@ function EdgeRow({
   );
 }
 
+/** The attributes every run of a File tab's lines is drawn by: its numbers shown or not, wrapped or not, as the File tabs' settings say. */
+interface LinesLook {
+  readonly "data-line-numbers": string;
+  readonly "data-wrap": string;
+}
+
+function useLinesLook(): LinesLook {
+  const { settings } = useFileViewSettings();
+  return {
+    "data-line-numbers": String(settings.lineNumbers),
+    "data-wrap": String(settings.wordWrap),
+  };
+}
+
 /** The run of lines held after a window's answer, or why there is none. */
 function afterAnswer(held: FileRead, answer: PlanningFileAnswer): FileRead {
   if ("file" in answer) return { kind: FILE_READ.READY, ...withWindow(held, answer.file) };
@@ -129,7 +143,7 @@ function FileLinesView({
 }): React.JSX.Element {
   const scroller = useRef<HTMLDivElement>(null);
   const centred = useRef<number | undefined>(undefined);
-  const { settings } = useFileViewSettings();
+  const look = useLinesLook();
   const last = lastLineOf(held);
   const above = held.firstLine > 1 ? windowAt(held.firstLine - 1) : undefined;
   const below = last < held.lineCount ? windowAt(last + 1) : undefined;
@@ -152,12 +166,7 @@ function FileLinesView({
   });
 
   return (
-    <div
-      className="code-lines file-tab-lines"
-      ref={scroller}
-      data-line-numbers={String(settings.lineNumbers)}
-      data-wrap={String(settings.wordWrap)}
-    >
+    <div className="code-lines file-tab-lines" ref={scroller} {...look}>
       {above === undefined ? null : (
         <EdgeRow
           key={above.firstLine}
@@ -219,6 +228,7 @@ export function FileTab({
   const held = useRef<FileRead>(read);
   held.current = read;
   const told = useRef(onRead);
+  const look = useLinesLook();
   told.current = onRead;
   useEffect(() => {
     told.current(read);
@@ -301,7 +311,7 @@ export function FileTab({
             <ReadNotice read={read} onRetry={readLit} />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
-          <div className="code-lines file-tab-lines">
+          <div className="code-lines file-tab-lines" {...look}>
             <CodeLineRows
               firstLine={snippet.firstLine}
               lines={snippet.lines}

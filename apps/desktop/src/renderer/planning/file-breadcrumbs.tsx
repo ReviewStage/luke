@@ -1,6 +1,6 @@
 import { PLAN_TREE_ENTRY, type PlanTreeEntry } from "@sidecar/hosted/plan-wire";
 import { ChevronRightIcon } from "lucide-react";
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import {
   ActionMenu,
   dropBelow,
@@ -88,25 +88,31 @@ export function FileBreadcrumbs({
   const segments = path.split("/");
   const menu = useActionMenu(true);
   const [listed, setListed] = useState<Listed | undefined>(undefined);
+  const asked = useRef(0);
 
   // The folder's entries, listed as a crumb opens their menu; a press on
-  // the crumb whose menu stands closes it.
+  // the crumb whose menu stands closes it, and a later press stands in for
+  // one still listing.
   const showEntries = (
     at: number,
     folder: string,
     current: string | undefined,
     button: HTMLElement,
   ) => {
+    asked.current += 1;
     if (menu.open?.opener === button) {
       menu.close(true);
       return;
     }
+    const ticket = asked.current;
     const placement = {
       ...dropBelow(button),
       x: button.getBoundingClientRect().left,
       align: MENU_ALIGN.START,
     };
     listFolder(folder).then((answer) => {
+      // A later press, or the path moving on, stands in for this one.
+      if (ticket !== asked.current || !button.isConnected) return;
       const entries = "folder" in answer ? answer.folder.entries : undefined;
       setListed({ at, folder, entries, current });
       menu.show(placement, button);
