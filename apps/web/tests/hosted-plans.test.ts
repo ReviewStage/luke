@@ -13,9 +13,11 @@ import {
   type PlanDocument,
   type PlanField,
 } from "@sidecar/hosted/plan-wire";
+import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { user } from "../server/db/auth-schema";
+import { plan } from "../server/db/plan-schema";
 import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
@@ -471,6 +473,35 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
         assert.deepEqual(
           listed.map((summary) => summary.id),
           [ledger.id, relay.id],
+        );
+      }),
+  );
+
+  it.effect(
+    "a plan whose saved fields are in a shape this build does not read still lists beside the rest",
+    () =>
+      Effect.gen(function* () {
+        const userId = yield* openUser;
+        const relay = yield* createPlan(userId, RELAY_PLAN);
+        yield* TestClock.adjust("1 minute");
+        const ledger = yield* createPlan(userId, LEDGER_PLAN);
+        // The fields as the template before 0082 kept them, as a migration
+        // landing ahead of the build that reads its shape leaves a row.
+        yield* db
+          .update(plan)
+          .set({
+            fields: sql`'{"goal":{"problem":null,"outcome":null},"implementation":{"order":null}}'::jsonb`,
+          })
+          .where(eq(plan.id, relay.id));
+
+        const listed = yield* listPlans(userId);
+
+        assert.deepEqual(
+          listed.map(({ id, name }) => [id, name]),
+          [
+            [ledger.id, LEDGER_PLAN.name],
+            [relay.id, RELAY_PLAN.name],
+          ],
         );
       }),
   );

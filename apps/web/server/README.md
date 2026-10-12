@@ -441,6 +441,17 @@ restoration was for — a text column read back as its own vocabulary rather
 than cast by hand under a `// SAFETY:` comment — so the module itself is the
 only thing that holds them.
 
+A migration that rewrites data the live release reads is expand and contract,
+for the same reason a dropped column takes two deployments: a production build
+migrates within seconds of its push and goes live up to an hour later, and the
+release before it serves the migrated database all that while. So the first
+deployment teaches every read to decode both the old shape and the new one,
+and the second, once the first is live, carries the migration that rewrites
+the rows. `0082_plan_template_teammate` shipped in one step, and the release
+still serving refused every plan until its own build went live. Each read
+projects only the columns it answers (`plan-store.ts`'s list reads no part of
+the document), so a rewrite reaches only the reads of what it rewrote.
+
 ## Where a function runs an Effect
 
 `server/runtime.ts` holds the one `ManagedRuntime` this app has, memoized at
