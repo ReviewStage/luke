@@ -92,10 +92,18 @@ const NOTHING_YET_LINE = "Board, code, agents, and files appear here as you plan
 /** The controls that hang the card, so a press on one toggles it rather than dismissing it first. */
 const OPENER = "[data-summary-opener]";
 
-/** Whether the summary stands pinned where it fits, rather than collapsed to its rail, and the press that turns it. */
+/**
+ * Whether the summary stands pinned where it fits, rather than collapsed to
+ * its rail, and the press that turns it; and whether the plan's column, as
+ * last measured, has room for it pinned, which the column reports. Both are
+ * held by the shell, whose panes glide as either turns how the summary
+ * stands, the column's measure included.
+ */
 export interface SummaryPin {
   pinned: boolean;
   onToggle: () => void;
+  wide: boolean;
+  onMeasured: (wide: boolean) => void;
 }
 
 /** The kept pin, or pinned where there is none or storage refuses the read. */
@@ -114,6 +122,7 @@ function readPinned(): boolean {
 export function useSummaryPin(fixtureMode: boolean): SummaryPin {
   const [kept, setKept] = useState(readPinned);
   const [staged, setStaged] = useState(true);
+  const [wide, setWide] = useState(true);
   const onToggle = useCallback(
     () => (fixtureMode ? setStaged : setKept)((was) => !was),
     [fixtureMode],
@@ -126,7 +135,7 @@ export function useSummaryPin(fixtureMode: boolean): SummaryPin {
       // The summary keeps working on the pin it holds.
     }
   }, [kept]);
-  return { pinned: fixtureMode ? staged : kept, onToggle };
+  return { pinned: fixtureMode ? staged : kept, onToggle, wide, onMeasured: setWide };
 }
 
 /** How the summary stands now, whether its card hangs, and the presses that change either. */
@@ -136,7 +145,7 @@ export interface SummaryLayout {
   wide: boolean;
   /** What hung the card, while it hangs. */
   card: CardFrom | undefined;
-  /** The toolbar's button: the pin where the summary fits, else the card. */
+  /** The toolbar's button: the card while it hangs, else the pin where the summary fits, else the card. */
   onToggle: () => void;
   /** The rail's chevron, which does what the toolbar's button does. */
   onExpand: () => void;
@@ -146,31 +155,43 @@ export interface SummaryLayout {
 /**
  * How the summary stands in the plan's `column`, measured whole: pinned
  * while it is pinned and the column holds it beside the document's measure,
- * and a rail otherwise. A card hangs only over a rail that cannot be pinned,
- * so a column grown wide enough takes it down. A column not laid out,
- * hidden or not yet drawn, measures nothing and changes nothing.
+ * and a rail otherwise. A card hangs only over the rail, and only while the
+ * column is drawn, so the summary pinned, or a side panel `covering` the
+ * column, takes it down. A column not laid out, hidden or not yet drawn,
+ * measures nothing and changes nothing.
  */
-export function useSummaryLayout(pin: SummaryPin, column: HTMLElement | null): SummaryLayout {
-  const [wide, setWide] = useState(true);
+export function useSummaryLayout(
+  pin: SummaryPin,
+  column: HTMLElement | null,
+  covering: boolean,
+): SummaryLayout {
+  const { wide, onMeasured } = pin;
   const [hung, setHung] = useState<CardFrom | undefined>(undefined);
   useLayoutEffect(() => {
     if (column === null) return;
     const measure = () => {
       const width = column.getBoundingClientRect().width;
-      if (width > 0) setWide(width >= SUMMARY_WIDE);
+      if (width > 0) onMeasured(width >= SUMMARY_WIDE);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(column);
     return () => observer.disconnect();
-  }, [column]);
-  if (wide && hung !== undefined) setHung(undefined);
-  const card = wide ? undefined : hung;
-  const expand = (from: CardFrom) =>
-    wide ? pin.onToggle() : setHung(card === undefined ? from : undefined);
+  }, [column, onMeasured]);
+  const mode = wide && pin.pinned ? SUMMARY_MODE.COLUMN : SUMMARY_MODE.RAIL;
+  // Note that the card's keys are heard on the window, so a card the
+  // column no longer shows is let go rather than left taking Escape.
+  const gone = mode === SUMMARY_MODE.COLUMN || covering;
+  if (gone && hung !== undefined) setHung(undefined);
+  const card = gone ? undefined : hung;
+  const expand = (from: CardFrom) => {
+    if (card !== undefined) setHung(undefined);
+    else if (wide) pin.onToggle();
+    else setHung(from);
+  };
   const onDismiss = useCallback(() => setHung(undefined), []);
   return {
-    mode: wide && pin.pinned ? SUMMARY_MODE.COLUMN : SUMMARY_MODE.RAIL,
+    mode,
     wide,
     card,
     onToggle: () => expand(CARD_FROM.TOOLBAR),
@@ -179,11 +200,20 @@ export function useSummaryLayout(pin: SummaryPin, column: HTMLElement | null): S
   };
 }
 
+/** The attributes of a control that hangs the card: whether it hangs, and which it is. */
+function cardControl(layout: SummaryLayout, cardId: string) {
+  return {
+    "aria-haspopup": "dialog" as const,
+    "aria-expanded": layout.card !== undefined,
+    "aria-controls": layout.card === undefined ? undefined : cardId,
+  };
+}
+
 /**
  * The toolbar's button, after the ⋯ menu, drawn on while the summary is
- * expanded, pinned or hung. Where the summary fits it pins it or collapses
- * it to its rail, and says which it is; where it does not it hangs the card
- * over the rail or takes it down.
+ * expanded, pinned or hung. While the card hangs, or where the summary
+ * does not fit, it hangs the card over the rail or takes it down; otherwise
+ * it pins the summary or collapses it to its rail, and says which it is.
  */
 export function SummaryButton({
   layout,
@@ -192,14 +222,11 @@ export function SummaryButton({
   layout: SummaryLayout;
   cardId: string;
 }): React.JSX.Element {
-  const label = layout.wide ? "Toggle pinned summary" : "Toggle summary";
-  const state = layout.wide
+  const pins = layout.wide && layout.card === undefined;
+  const label = pins ? "Toggle pinned summary" : "Toggle summary";
+  const state = pins
     ? { "aria-pressed": layout.mode === SUMMARY_MODE.COLUMN }
-    : {
-        "aria-haspopup": "dialog" as const,
-        "aria-expanded": layout.card !== undefined,
-        "aria-controls": layout.card === undefined ? undefined : cardId,
-      };
+    : cardControl(layout, cardId);
   return (
     <Tooltip label={label}>
       <button
@@ -413,13 +440,7 @@ export function PlanSummary({
                 type="button"
                 className="icon-button"
                 aria-label="Expand summary"
-                {...(layout.wide
-                  ? {}
-                  : {
-                      "aria-haspopup": "dialog" as const,
-                      "aria-expanded": layout.card !== undefined,
-                      "aria-controls": layout.card === undefined ? undefined : cardId,
-                    })}
+                {...(layout.wide && layout.card === undefined ? {} : cardControl(layout, cardId))}
                 data-summary-opener={CARD_FROM.RAIL}
                 onClick={layout.onExpand}
               >

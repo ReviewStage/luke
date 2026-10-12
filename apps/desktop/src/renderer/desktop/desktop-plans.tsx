@@ -126,7 +126,7 @@ function PlanDocument({
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
   const [column, setColumn] = useState<HTMLDivElement | null>(null);
-  const summaryLayout = useSummaryLayout(summary, column);
+  const summaryLayout = useSummaryLayout(summary, column, plans.sidePanel.fullScreen);
   const summaryCard = useId();
   // The column the pointer or the focus last went into holds the keys. Note
   // that it is heard on the plan's area as it bubbles, because the columns
@@ -368,7 +368,7 @@ export function DesktopPlans({
   looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
-  /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, held by the shell, whose panes glide as it turns. */
+  /** Whether the plan's summary stands pinned beside its column where it fits, rather than collapsed to its rail, and whether it fits, held by the shell, whose panes glide as either turns. */
   summary: SummaryPin;
 }): React.JSX.Element {
   switch (plans.page) {

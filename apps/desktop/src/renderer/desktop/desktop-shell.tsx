@@ -147,7 +147,8 @@ function transcriptStreaming(plans: PlansControl): boolean {
  * sidebar was, and leaves the same way; it is still a stay on the plan, so
  * what changed since the developer last looked is held here, across it,
  * rather than by the plan's page (`use-plan-looks.ts`). Folding the sidebar,
- * opening, shutting, or growing the side panel, or pinning the plan's summary
+ * opening, shutting, or growing the side panel, or the plan's summary pinned
+ * or folded to its rail, by a press or by its column's room
  * (plan-summary.tsx), glides the work beside them (pane-motion.tsx). Back and forward ride the left column's title-bar row,
  * the plans' sidebar or Settings' page list alike, and leaving Settings is
  * going back to wherever it was opened from, or to the plans when nothing
@@ -289,7 +290,7 @@ export function DesktopShell({
           sidebarCollapsed: sidebar.collapsed,
           panelOpen: plans.sidePanel.open,
           panelFullScreen: plans.sidePanel.fullScreen,
-          summaryPinned: summary.pinned,
+          summaryPinned: summary.pinned && summary.wide,
         }}
       />
     </div>

@@ -475,6 +475,36 @@ test("a column grown wide enough to pin the summary takes its card down", () => 
   assert.equal(summaryButton(page).getAttribute("aria-pressed"), "true");
 });
 
+test("a column grown wide while the summary is collapsed keeps its card, and the button takes the card down first", () => {
+  const page = mount();
+  act(() => summaryButton(page).click());
+  layOutColumn(900);
+  act(() => summaryButton(page).click());
+  assert.ok(card());
+
+  layOutColumn(1200);
+
+  assert.ok(card(), "the card still hangs over the rail");
+  assert.equal(modeOf(page), "rail");
+  assert.equal(buttonOn(page), true);
+  act(() => summaryButton(page).click());
+  assert.equal(card(), null);
+  assert.equal(modeOf(page), "rail");
+});
+
+test("a panel filled over the column takes the card down, leaving it no Escape to take from the panel", () => {
+  const page = mount();
+  press(page, '[aria-label="Show panel"]');
+  layOutColumn(800);
+  act(() => summaryButton(page).click());
+  assert.ok(card());
+
+  // A press from the keys, which no pointerdown outside the card announces.
+  press(page, '[aria-label="Expand panel"]');
+
+  assert.equal(card(), null);
+});
+
 test("Escape on the card is the card's alone: the window under it hears nothing of it", () => {
   const page = mount();
   layOutColumn(900);

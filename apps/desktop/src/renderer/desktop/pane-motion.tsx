@@ -49,6 +49,7 @@ interface PaneLayout {
   sidebarCollapsed: boolean;
   panelOpen: boolean;
   panelFullScreen: boolean;
+  /** Whether the plan's summary stands pinned, as the column's room and the developer's pin decide together. */
   summaryPinned: boolean;
 }
 
