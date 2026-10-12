@@ -30,6 +30,8 @@
  */
 
 import { createPrivateKey, createSign, type KeyObject } from "node:crypto";
+import { db } from "@sidecar/database/core/query";
+import { account } from "@sidecar/database/schemas/auth";
 import { symmetricDecrypt, symmetricEncrypt } from "better-auth/crypto";
 import { and, desc, eq } from "drizzle-orm";
 import {
@@ -51,8 +53,6 @@ import * as HttpClientResponse from "effect/unstable/http/HttpClientResponse";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import { AUTH_SECRET_ENVIRONMENT, GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { type GitHubRepository, text } from "../core.js";
-import { account } from "../db/auth-schema.js";
-import { db } from "../db/query.js";
 import { InstantColumnSchema } from "../hosted/store/database.js";
 import type { StoreFailure } from "../hosted/store-failure.js";
 

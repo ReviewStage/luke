@@ -9,12 +9,12 @@
  * alone, so the routes that read a plan's work reach none of eve's code.
  */
 
+import { db } from "@sidecar/database/core/query";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { db } from "../db/query.js";
-import { conversations } from "../db/storage-schema.js";
 import type { ConversationTarget } from "./store/index.js";
 
 type ChildTitleEffect<A> = Effect.Effect<A, SqlError | Schema.SchemaError, SqlClient.SqlClient>;

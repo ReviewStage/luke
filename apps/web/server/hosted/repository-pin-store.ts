@@ -1,10 +1,10 @@
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { repositoryPin } from "@sidecar/database/schemas/repository-pin";
 import { REPOSITORY_PIN_BOUNDS, type RepositoryPin } from "@sidecar/hosted/plan-wire";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
-import { user } from "../db/auth-schema.js";
-import { db } from "../db/query.js";
-import { repositoryPin } from "../db/repository-pin-schema.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 

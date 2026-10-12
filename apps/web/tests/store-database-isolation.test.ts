@@ -1,7 +1,7 @@
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { Effect, ManagedRuntime } from "effect";
 import { expect, test } from "vitest";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { openHostedStoreTestDatabase, TEST_USER_NAME } from "./support/hosted-store-database";
 import { testSqlClient } from "./support/sql-client";
 

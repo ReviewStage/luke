@@ -1,3 +1,6 @@
+import { db } from "@sidecar/database/core/query";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
 import { Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
@@ -9,9 +12,6 @@ import {
   MESSAGE_ROLE,
   type SpokenAskMetadata,
 } from "../../core.js";
-import { db } from "../../db/query.js";
-import { voiceSessions, voiceTranscriptSegments } from "../../db/voice-schema.js";
-import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "../../db/voice-vocabulary.js";
 import {
   LIVE_SERVER_EVENT,
   type LiveServerEvent,

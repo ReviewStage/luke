@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { hostedUsage } from "@sidecar/database/schemas/usage";
 import { DICTATION_BOUNDS } from "@sidecar/hosted/dictation-wire";
 import type { WireBoundaryInput } from "@sidecar/wire";
 import {
@@ -13,9 +16,6 @@ import { eq } from "drizzle-orm";
 import { Cause, Clock, Effect, Layer, Logger, Option, Redacted } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { hostedUsage } from "../server/db/usage-schema";
 import { dictationApp } from "../server/dictation-app";
 import { HostedEnvironment, type HostedEnvironmentValues } from "../server/hosted/environment";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";

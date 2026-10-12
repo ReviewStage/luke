@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
 import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
@@ -16,8 +18,6 @@ import { TestClock } from "effect/testing";
 import { HttpRouter } from "effect/unstable/http";
 import { SqlClient } from "effect/unstable/sql";
 import { accountApp } from "../server/account-app";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import {
   deleteAccount,
   readAccountPreferences,

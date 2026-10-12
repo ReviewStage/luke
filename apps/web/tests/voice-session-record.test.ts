@@ -1,18 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { LIVE_DEFAULTS } from "@sidecar/live";
-import { eq } from "drizzle-orm";
-import { Effect, Schema } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { voiceSessions, voiceTranscriptSegments } from "../server/db/voice-schema";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import {
   VOICE_CLOSE_REASON,
   VOICE_DELEGATION_MODE,
   VOICE_SEGMENT_ROLE,
   type VoiceSegmentRole,
-} from "../server/db/voice-vocabulary";
+} from "@sidecar/database/voice-vocabulary";
+import { LIVE_DEFAULTS } from "@sidecar/live";
+import { eq } from "drizzle-orm";
+import { Effect, Schema } from "effect";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { InstantColumnSchema } from "../server/hosted/store/database";
 import { voiceSessionRecord } from "../server/voice/session-record";

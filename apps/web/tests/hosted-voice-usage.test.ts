@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { voiceSessionUsage } from "@sidecar/database/schemas/usage";
 import { eq } from "drizzle-orm";
 import { Effect } from "effect";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
-import { voiceSessionUsage } from "../server/db/usage-schema";
 import { recordVoiceSeconds, utcDayKey, VOICE_SECONDS_OUTCOME } from "../server/hosted/quota";
 import { testSqlClient } from "./support/sql-client";
 

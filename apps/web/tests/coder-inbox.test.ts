@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
 import {
   INBOX_BLOCK,
   INBOX_BOUNDS,
@@ -16,9 +19,6 @@ import { eq } from "drizzle-orm";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
 import { ACTION_RESULT_STATUS } from "../server/core";
-import { user } from "../server/db/auth-schema";
-import { inboxAttachment } from "../server/db/inbox-attachment-schema";
-import { db } from "../server/db/query";
 import {
   closeInInbox,
   INBOX_REFUSAL,

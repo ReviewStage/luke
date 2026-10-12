@@ -1,3 +1,12 @@
+import { db } from "@sidecar/database/core/query";
+import {
+  codingAgent,
+  codingAgentDelegation,
+  type StoredAgentStep,
+} from "@sidecar/database/schemas/coding-agent";
+import { plan } from "@sidecar/database/schemas/plan";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   CONTEXT_WINDOW,
   type CodingAgentPullRequest,
@@ -12,15 +21,6 @@ import { DateTime, Effect, Option, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import { TURN_STATUS } from "../core.js";
-import {
-  codingAgent,
-  codingAgentDelegation,
-  type StoredAgentStep,
-} from "../db/coding-agent-schema.js";
-import { plan } from "../db/plan-schema.js";
-import { db } from "../db/query.js";
-import { conversations } from "../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
 import { PlanArchived } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 import type { ConversationTarget } from "./store/index.js";

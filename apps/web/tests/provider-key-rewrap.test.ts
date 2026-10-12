@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
+import { user } from "@sidecar/database/schemas/auth";
 import { PROVIDER_KEY_PROVIDER, type ProviderKeyProvider } from "@sidecar/hosted/provider-key-wire";
 import { Effect, Redacted, Result } from "effect";
-import { accountProviderKey } from "../server/db/account-provider-key-schema";
-import { user } from "../server/db/auth-schema";
-import { db } from "../server/db/query";
 import { HOSTED_API_ERROR, HOSTED_HTTP_STATUS } from "../server/hosted/http";
 import {
   handleProviderKeyRewrap,

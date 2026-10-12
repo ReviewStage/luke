@@ -1,5 +1,5 @@
 import { bigint, jsonb, pgTable, primaryKey, text } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
+import { user } from "./auth.js";
 
 /**
  * The hosted brain's identity workspace and notebook, one row per user per

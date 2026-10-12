@@ -1,9 +1,9 @@
+import { db } from "@sidecar/database/core/query";
+import { plan } from "@sidecar/database/schemas/plan";
+import { planRevision } from "@sidecar/database/schemas/plan-revision";
 import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import { PLAN_ACTOR } from "@sidecar/hosted/plan-wire";
 import { eq } from "drizzle-orm";
-import { planRevision } from "../../server/db/plan-revision-schema";
-import { plan } from "../../server/db/plan-schema";
-import { db } from "../../server/db/query";
 
 /**
  * plan-documents.ts -- a stored plan's text, its sections' writers, and its revisions, as a test sets them.

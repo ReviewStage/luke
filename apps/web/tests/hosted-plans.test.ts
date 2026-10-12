@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
+import { db } from "@sidecar/database/core/query";
+import { user } from "@sidecar/database/schemas/auth";
+import { plan } from "@sidecar/database/schemas/plan";
+import { conversations } from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import { planSections } from "@sidecar/hosted/plan-document";
 import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import { NOTE_KIND, PLAN_HEADING, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -8,11 +13,6 @@ import type { PlanDocument } from "@sidecar/hosted/plan-wire";
 import { eq, sql } from "drizzle-orm";
 import { Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
-import { user } from "../server/db/auth-schema";
-import { plan } from "../server/db/plan-schema";
-import { db } from "../server/db/query";
-import { conversations } from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { deleteAccount } from "../server/hosted/account-store";
 import {
   PLAN_SAVE_REFUSAL,

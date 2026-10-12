@@ -1,19 +1,19 @@
 import assert from "node:assert/strict";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import { asc } from "drizzle-orm";
-import { Effect, Layer } from "effect";
-import * as Migrator from "effect/unstable/sql/Migrator";
-import * as SqlClient from "effect/unstable/sql/SqlClient";
-import { oauthClient } from "../server/db/auth-schema.js";
 import {
   MIGRATIONS_TABLE,
   runWebMigrations,
   webMigrationJournal,
   webMigrations,
-} from "../server/db/effect-migrator.js";
-import { db } from "../server/db/query.js";
-import { unmigratedPgliteSqlClient } from "./support/sql-client.js";
+} from "@sidecar/database/core/migrator";
+import { db } from "@sidecar/database/core/query";
+import { oauthClient } from "@sidecar/database/schemas/auth";
+import { asc } from "drizzle-orm";
+import { Effect, Layer } from "effect";
+import * as Migrator from "effect/unstable/sql/Migrator";
+import * as SqlClient from "effect/unstable/sql/SqlClient";
+import { unmigratedPgliteSqlClient } from "./support/sql-client";
 
 /**
  * Migration 0081 carries out step 2 of Better Auth's 1.7 upgrade guide for

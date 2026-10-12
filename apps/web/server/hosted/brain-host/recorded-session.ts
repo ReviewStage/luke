@@ -11,13 +11,13 @@
  * keeps that bundle free of it.
  */
 
+import { db } from "@sidecar/database/core/query";
+import { conversations } from "@sidecar/database/schemas/storage";
 import { and, eq, isNull, lt, or } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import type { SqlClient } from "effect/unstable/sql";
 import { SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { db } from "../../db/query.js";
-import { conversations } from "../../db/storage-schema.js";
 import type { ConversationTarget } from "../store/index.js";
 
 const StandingSessionSchema = Schema.Struct({

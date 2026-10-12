@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import { db } from "@sidecar/database/core/query";
+import { codingAgent } from "@sidecar/database/schemas/coding-agent";
+import { inboxItem } from "@sidecar/database/schemas/inbox";
+import { inboxAttachment } from "@sidecar/database/schemas/inbox-attachment";
+import { plan } from "@sidecar/database/schemas/plan";
 import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
   INBOX_BLOCK,
@@ -20,11 +25,6 @@ import { and, desc, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
 import { DateTime, Effect, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
-import { codingAgent } from "../db/coding-agent-schema.js";
-import { inboxAttachment } from "../db/inbox-attachment-schema.js";
-import { inboxItem } from "../db/inbox-schema.js";
-import { plan } from "../db/plan-schema.js";
-import { db } from "../db/query.js";
 import { InstantColumnSchema } from "./store/database.js";
 
 /**

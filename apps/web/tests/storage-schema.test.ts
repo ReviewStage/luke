@@ -1,4 +1,14 @@
 import assert from "node:assert/strict";
+import { MIGRATIONS_TABLE } from "@sidecar/database/core/migrator";
+import { db } from "@sidecar/database/core/query";
+import {
+  conversations,
+  events,
+  messages,
+  providerCursors,
+  turns,
+} from "@sidecar/database/schemas/storage";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import {
   CONVERSATION_EVENT_KIND,
   MESSAGE_AUTHOR,
@@ -11,16 +21,6 @@ import { eq, getTableName } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import { afterAll, test } from "vitest";
-import { MIGRATIONS_TABLE } from "../server/db/effect-migrator";
-import { db } from "../server/db/query";
-import {
-  conversations,
-  events,
-  messages,
-  providerCursors,
-  turns,
-} from "../server/db/storage-schema";
-import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { EpochMillisColumnSchema, InstantColumnSchema } from "../server/hosted/store/database";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 import {

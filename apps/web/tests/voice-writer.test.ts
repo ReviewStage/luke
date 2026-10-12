@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import { LIVE_DEFAULTS } from "@sidecar/live";
 import { Effect, Result, Schema } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -10,7 +11,6 @@ import {
   MESSAGE_ROLE,
   type UserMessageMetadata,
 } from "../server/core";
-import { VOICE_SEGMENT_ROLE } from "../server/db/voice-vocabulary";
 import { HOSTED_TOOL_SET } from "../server/hosted/brain-tool-set";
 import {
   type ConversationTarget,

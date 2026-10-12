@@ -1,8 +1,8 @@
 import type { PlanActor } from "@sidecar/hosted/plan-wire";
 import { integer, pgTable, primaryKey, text, uuid } from "drizzle-orm/pg-core";
-import { codingAgent } from "./coding-agent-schema.js";
-import { instant } from "./instant.js";
-import { plan } from "./plan-schema.js";
+import { timestamptz } from "./_helpers.js";
+import { codingAgent } from "./coding-agent.js";
+import { plan } from "./plan.js";
 
 /**
  * plan-revision-schema.ts -- a plan's history, one revision per row.
@@ -37,9 +37,9 @@ export const planRevision = pgTable(
     /** How many changes the revision's saves made: notes taken, summed over each save it holds. */
     changes: integer("changes").notNull(),
     /** The revision's first save. */
-    startedAt: instant("started_at").notNull(),
+    startedAt: timestamptz("started_at").notNull(),
     /** The revision's latest save. */
-    at: instant("at").notNull(),
+    at: timestamptz("at").notNull(),
     /** The revision of the same plan the developer restored, where this revision is that restore; null for any other. */
     restoredFrom: integer("restored_from"),
   },

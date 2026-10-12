@@ -1,3 +1,7 @@
+import { db } from "@sidecar/database/core/query";
+import { plan } from "@sidecar/database/schemas/plan";
+import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
+import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "@sidecar/database/voice-vocabulary";
 import {
   type PlanTranscript,
   TRANSCRIPT_BOUNDS,
@@ -8,10 +12,6 @@ import { TRANSCRIPT_SPEAKER, TranscriptLedger } from "@sidecar/live";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { Effect, Option, Schema } from "effect";
 import { SqlSchema } from "effect/unstable/sql";
-import { plan } from "../db/plan-schema.js";
-import { db } from "../db/query.js";
-import { voiceSessions, voiceTranscriptSegments } from "../db/voice-schema.js";
-import { VOICE_CLOSE_REASON, VOICE_SEGMENT_ROLE } from "../db/voice-vocabulary.js";
 import type { PlanStoreEffect } from "./plan-store.js";
 import { InstantColumnSchema } from "./store/database.js";
 

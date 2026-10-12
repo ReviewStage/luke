@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
+import { db } from "@sidecar/database/core/query";
+import { asks, conversations, messages, turns } from "@sidecar/database/schemas/storage";
+import { voiceSessions } from "@sidecar/database/schemas/voice";
+import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
 import {
   asSchema,
@@ -49,10 +53,6 @@ import {
   UNKNOWN_ACTION_STATUS,
   type UnparsedWireValue,
 } from "../../core.js";
-import { db } from "../../db/query.js";
-import { asks, conversations, messages, turns } from "../../db/storage-schema.js";
-import { CONVERSATION_KIND } from "../../db/storage-vocabulary.js";
-import { voiceSessions } from "../../db/voice-schema.js";
 import { lineParts, receivedPartsOf } from "../attached-files.js";
 import { sentLineId } from "../brain-host/ids.js";
 import {
@@ -106,7 +106,7 @@ import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
  *
  * Every statement is a Drizzle builder over the tables
  * `db/storage-schema.ts` declares, yielded as the `Effect` over the ambient
- * `SqlClient` that `db/drizzle.ts`'s bridge makes it; the transaction is
+ * `SqlClient` that `packages/database/src/core/drizzle.ts`'s bridge makes it; the transaction is
  * that client's own and the bridge reads it from the running fiber, which is
  * what puts the sequence allocation and the writes that follow it inside the
  * conversation's lock rather than beside it. Each row a statement answers is

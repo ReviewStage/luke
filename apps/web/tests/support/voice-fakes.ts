@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import http, { type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
+import type { VoiceCloseReason } from "@sidecar/database/voice-vocabulary";
 import type { Plan } from "@sidecar/hosted/plan-wire";
 import { isRecord, unparsedWire, type WireRecord } from "@sidecar/wire";
 import { Effect, Option } from "effect";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { VoiceCloseReason } from "../../server/db/voice-vocabulary";
 import { VOICE_SECONDS_OUTCOME } from "../../server/hosted/quota";
 import { LIVE_CLIENT_EVENT, LIVE_SESSIONS_PATH, LIVE_TRANSPORT_TYPE } from "../../server/live";
 import type { VoiceAccounts } from "../../server/voice/accounts";
