@@ -337,11 +337,10 @@ const startEndpoint = /* @__PURE__ */ Effect.fnUntraced(function* (
   if (Result.isFailure(asked)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   const { idempotencyKey, model, effort, contextWindow, task, attachments } = asked.success;
   // A choice is one thing: a model without its effort, or the reverse, names nothing to run on,
-  // and a window without them is a window of no model; files go only with a task.
+  // and a window without them is a window of no model.
   if (
     (model === undefined) !== (effort === undefined) ||
-    (contextWindow !== undefined && model === undefined) ||
-    (attachments !== undefined && task === undefined)
+    (contextWindow !== undefined && model === undefined)
   ) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }

@@ -388,10 +388,14 @@ function AgentMessage({
     return (
       <Message from={message.role}>
         <AttachedFileChips files={messageFileChips(message)} />
-        <MessageContent>
-          <TranscriptWords text={words} components={components} />
-        </MessageContent>
-        <CopyMessageAction words={words} />
+        {words === "" ? null : (
+          <>
+            <MessageContent>
+              <TranscriptWords text={words} components={components} />
+            </MessageContent>
+            <CopyMessageAction words={words} />
+          </>
+        )}
       </Message>
     );
   }

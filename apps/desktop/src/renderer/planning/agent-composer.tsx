@@ -6,6 +6,7 @@ import {
   type CodingAgentPullRequestAnswer,
   type CodingAgentStatus,
   type CodingAgentUsage,
+  hasWordsOrFiles,
 } from "@sidecar/hosted/coding-agent-wire";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { PlusIcon } from "@sidecar/panel";
@@ -48,9 +49,9 @@ import type { AgentModelControl } from "./use-agent-model";
  * conversation opens on its plan or task, because the tab's glyph and the transcript's "Working…"
  * line already say where the agent stands. The one thing that follows the agent's state is
  * the button at the card's right, the way every chat draws it: Send while
- * there are words, disabled while there are none and the agent is idle, and
- * Stop while there are none and a turn runs, which is the one Stop the tab
- * has. A message that did not go stays in the box with why under the card
+ * there are words or files, disabled while there are neither and the agent
+ * is idle, and Stop while there are neither and a turn runs, which is the
+ * one Stop the tab has. A message that did not go stays in the box with why under the card
  * and Retry, which sends it again under the same key, so a send whose
  * answer was lost reaches the agent once; an agent that takes no message
  * any more keeps the box, disabled, with the reason under it; a change of
@@ -66,16 +67,14 @@ import type { AgentModelControl } from "./use-agent-model";
  * is taken, and files dropped on the card are, each drawn as a chip above
  * the words with its way off (`attached-file-chips.tsx`). A file that
  * cannot come says why under the card while the rest still come
- * (`attached-files.ts`). Words still carry every message, so files with no
- * words keep Send disabled and the placeholder asks for a message to send
- * them with.
+ * (`attached-files.ts`). A message is words, files, or both, as the wire
+ * takes it (`hasWordsOrFiles`), so files alone send too.
  */
 
 /** What the box says it takes: the first message of an empty conversation, then a follow up. */
 const PLACEHOLDER = {
   FIRST: "Ask to make changes",
   FOLLOW_UP: "Send a follow up",
-  FILES: "Add a message to send these files",
 } as const;
 
 /** The buttons' names, which are their tooltips too. */
@@ -154,14 +153,13 @@ export function AgentComposer({
   const stoppable = status === CODING_AGENT_STATUS.RUNNING;
   const closed = composer.closed !== undefined;
   const held = composer.sending || closed;
-  const empty = composer.draft.trim() === "";
+  const empty = !hasWordsOrFiles(composer.draft.trim(), composer.attachments);
   const showsStop = empty && stoppable && !composer.sending;
   const note = composer.closed ?? refusal ?? composer.note ?? model?.note;
   // Retry is the composer's own: a change of model that did not take is made again from the chip.
   const retries =
     composer.closed === undefined && refusal === undefined && composer.note !== undefined;
-  let placeholder: string = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
-  if (composer.attachments.length > 0) placeholder = PLACEHOLDER.FILES;
+  const placeholder = followsUp ? PLACEHOLDER.FOLLOW_UP : PLACEHOLDER.FIRST;
 
   // The box takes focus as the tab opens, unless the caret is somewhere the developer is typing.
   useEffect(() => {
