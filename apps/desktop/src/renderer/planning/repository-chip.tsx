@@ -3,6 +3,7 @@ import { PLAN_CALL_FAILURE, type PlanningRepositoriesAnswer } from "@sidecar/hos
 import { ExternalIcon } from "@sidecar/panel";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
+import { RepositoryPicture } from "../repository-picture";
 import { type MenuRow, SearchableMenu } from "../searchable-menu";
 import { repositoryFailureNote } from "./planning-model";
 
@@ -10,15 +11,15 @@ import { repositoryFailureNote } from "./planning-model";
  * repository-chip.tsx -- the chip that names a plan's GitHub repository, and the menu that picks one.
  *
  * Drawn along the composer card's foot for a plan about to start, the way a
- * branch or model chip is: the GitHub mark and `owner/name`, or the pick it
- * is waiting on. In the open plan's toolbar it stands in the actions row,
+ * branch or model chip is: the owner's picture and `owner/name`, or the
+ * GitHub mark and the pick it is waiting on. In the open plan's toolbar it stands in the actions row,
  * reading `Choose repository` while the plan has none; once the plan names
  * one, the sidebar's row says which and the toolbar draws no chip, and the
  * menu alone is left, opened by the plan menu's Change repository… and
  * hung from the toolbar. Its menu is the shared searchable one: a search over every
  * repository the Luke GitHub App reaches, the repositories the account's
  * plans were about lately first and the rest as GitHub last saw them
- * change, each under the GitHub mark, and
+ * change, each under its owner's picture, and
  * pinned under the list the page on GitHub where the developer chooses
  * which repositories the App reaches, which with the App installed nowhere
  * is the page that installs it. With the App installed nowhere and no
@@ -38,6 +39,8 @@ export interface RepositoryChooser {
   read: () => Promise<PlanningRepositoriesAnswer>;
   /** Opens a page of GitHub's in the browser. */
   openGitHub: (url: string) => void;
+  /** Whether a repository is drawn with its owner's picture: not in a fixture run (`repository-picture.tsx`). */
+  pictures: boolean;
 }
 
 /** Where the chip stands, which is how it is sized. */
@@ -69,19 +72,24 @@ const MENU_NOTE = {
 /**
  * The menu's rows: the recent repositories first, then every other the App
  * reaches as the service ordered them, most recently updated first, each
- * once, every one under the GitHub mark whether private or not. A recent
+ * once, every one under its owner's picture whether private or not. A recent
  * repository the App no longer reaches is still offered, since the plan it
  * came from still names it.
  */
 function repositoryRows(
   recent: readonly string[],
   reached: readonly GitHubRepository[] | undefined,
+  pictures: boolean,
 ): MenuRow[] {
   const names = [...recent];
   for (const each of reached ?? []) {
     if (!names.includes(each.fullName)) names.push(each.fullName);
   }
-  return names.map((fullName) => ({ id: fullName, label: fullName, icon: <GitHubMark /> }));
+  return names.map((fullName) => ({
+    id: fullName,
+    label: fullName,
+    icon: <RepositoryPicture repository={fullName} pictures={pictures} fallback={<GitHubMark />} />,
+  }));
 }
 
 export function RepositoryChip(props: {
@@ -158,7 +166,7 @@ export function RepositoryChip(props: {
   // The toolbar's chip is drawn only while the plan has no repository; the sidebar names one it has.
   const triggerDrawn = props.place !== CHIP_PLACE.TOOLBAR || props.value === null;
 
-  const rows = repositoryRows(chooser.recent, listed?.repositories);
+  const rows = repositoryRows(chooser.recent, listed?.repositories, chooser.pictures);
   const note =
     failure !== undefined ? (
       <>
@@ -187,7 +195,15 @@ export function RepositoryChip(props: {
           aria-controls={open ? menuId : undefined}
           onClick={press}
         >
-          <GitHubMark />
+          {props.value === null ? (
+            <GitHubMark />
+          ) : (
+            <RepositoryPicture
+              repository={props.value}
+              pictures={chooser.pictures}
+              fallback={<GitHubMark />}
+            />
+          )}
           <span className="plan-compose-chip-name">{label}</span>
           {offersInstall ? <ExternalIcon /> : null}
         </button>

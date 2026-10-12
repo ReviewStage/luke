@@ -59,6 +59,7 @@ function mount(patch: Partial<NewPlan> = {}, chooser: Partial<RepositoryChooser>
     recent: [],
     read: () => Promise.resolve(LISTED),
     openGitHub: (url) => opened.push(url),
+    pictures: true,
     ...chooser,
   };
   const container = document.createElement("div");
@@ -183,7 +184,7 @@ test("start waits for a name alone, and Enter, with or without Shift, starts the
   assert.deepEqual(page.started.at(-1), ["Teammate invitations", BILLING]);
 });
 
-test("the menu is the search, the recent repositories first and the rest after under one GitHub mark, a check on the chosen one, and GitHub pinned last, with no heading", async () => {
+test("the menu is the search, the recent repositories first and the rest after each under its owner's picture, a check on the chosen one, and GitHub pinned last, with no heading", async () => {
   const page = mount({}, { recent: [BILLING] });
   await settle();
   assert.equal(page.chip().textContent, BILLING);
@@ -200,11 +201,17 @@ test("the menu is the search, the recent repositories first and the rest after u
     [BILLING, RELAY],
   );
   const [billing, relay] = page.rows();
-  assert.ok(
-    billing?.querySelector("svg.account-mark"),
-    "the private repository wears the GitHub mark",
+  assert.equal(
+    billing?.querySelector("img")?.getAttribute("src"),
+    "https://github.com/acme.png?size=32",
+    "the private repository wears its owner's picture",
   );
-  assert.ok(relay?.querySelector("svg.account-mark"), "and the public one the same");
+  assert.ok(relay?.querySelector("img.repository-picture"), "and the public one the same");
+  assert.equal(
+    billing?.querySelector("img")?.getAttribute("loading"),
+    "lazy",
+    "a row out of sight asks for nothing until it scrolls in",
+  );
   assert.equal(
     page.container.querySelector("svg.lock-icon"),
     null,
@@ -441,4 +448,39 @@ test("a New plan that chose a repository chooses it in the composer, on arrival 
   assert.equal(arrived, "acme/ledger");
   assert.equal(plain, "acme/ledger", "a press that chose nothing leaves the pick standing");
   assert.equal(page.chip().textContent, "acme/gateway");
+});
+
+test("the chip wears the chosen repository's owner picture, and the GitHub mark while it waits on a pick", async () => {
+  const waiting = mount();
+  await settle();
+  const chosen = mount({ preset: { repository: "acme/ledger" } });
+  await settle();
+
+  assert.ok(waiting.chip().querySelector("svg.account-mark"));
+  assert.equal(waiting.chip().querySelector("img"), null);
+  assert.equal(
+    chosen.chip().querySelector("img")?.getAttribute("src"),
+    "https://github.com/acme.png?size=32",
+  );
+});
+
+test("a picture that fails to load, and every picture in a fixture run, gives way to the GitHub mark", async () => {
+  const live = mount({ preset: { repository: "acme/ledger" } });
+  await settle();
+  const staged = mount({ preset: { repository: "acme/ledger" } }, { pictures: false });
+  await settle();
+
+  act(() => {
+    live.chip().querySelector("img")?.dispatchEvent(new Event("error"));
+  });
+  act(() => staged.chip().click());
+
+  assert.ok(live.chip().querySelector("svg.account-mark"));
+  assert.equal(live.chip().querySelector("img"), null);
+  assert.ok(staged.chip().querySelector("svg.account-mark"));
+  assert.equal(
+    document.querySelector(".plan-compose-menu img"),
+    null,
+    "the fixture's menu asks the network for no picture",
+  );
 });

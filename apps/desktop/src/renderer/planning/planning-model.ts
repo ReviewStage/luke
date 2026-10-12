@@ -103,6 +103,18 @@ export function repositoryPageUrl(repository: string): string {
   return `https://github.com/${repository}`;
 }
 
+/**
+ * The picture of a repository's owner on GitHub, an organization's logo or a
+ * person's avatar, which is drawn wherever a repository is named or picked:
+ * asked of github.com, which redirects to the picture's address, because the
+ * picture host answers an organization's name with GitHub's default face.
+ * Asked at twice the largest size it is drawn, for a Retina screen.
+ */
+export function repositoryOwnerPictureUrl(repository: string): string {
+  const owner = repository.slice(0, repository.indexOf("/"));
+  return `https://github.com/${encodeURIComponent(owner)}.png?size=32`;
+}
+
 /** What the new-plan form says when the service answered no plan. */
 export const START_FAILED_NOTE = "Luke's service could not be reached. Try again.";
 
