@@ -610,6 +610,13 @@
       "when": 1791360000000,
       "tag": "0087_account_plan_template",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1791370000000,
+      "tag": "0088_inbox_item_blocks",
+      "breakpoints": true
     }
   ]
 }

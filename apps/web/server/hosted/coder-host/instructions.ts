@@ -42,6 +42,8 @@ const BRIEF_WORDS = {
     whole: "implements the plan whole",
     none: "the plan could not be implemented",
     describe: "name the plan in its description",
+    /** An answer that settles how to build is a decision of the plan's, so it goes into the plan as the agent's own note. */
+    decided: ` When an answer settles how to build, a choice made or a step approved or declined, take that decision into the plan with \`${CODING_AGENT_EDIT_PLAN_TOOL}\`, where it belongs in the plan's text, as a note of your own.`,
     updating: `
 
 ## Updating the plan
@@ -55,12 +57,21 @@ const BRIEF_WORDS = {
     whole: "does the task whole",
     none: "the task could not be done",
     describe: "say in its description what the task asked",
-    /** An agent handed a task never sees the plan, so it is told of no way to update it. */
+    /** An agent handed a task never sees the plan, so it is told of no way to update it, and of no plan to take a decision into. */
+    decided: "",
     updating: "",
   },
 } as const satisfies Record<
   CodingAgentBrief,
-  { job: string; reread: string; whole: string; none: string; describe: string; updating: string }
+  {
+    job: string;
+    reread: string;
+    whole: string;
+    none: string;
+    describe: string;
+    decided: string;
+    updating: string;
+  }
 >;
 
 /**
@@ -103,9 +114,9 @@ For work of more than a couple of steps, keep your to-dos with \`${TODOS_TOOL.na
 
 ## The developer's inbox
 
-What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only they can do by hand, such as changing a repository setting on GitHub or adding a secret. One item per thing you need, each under a key of your own. Decide small things yourself.
+What you need from the developer goes in their inbox with \`${INBOX_TOOLS.POST.name}\`, never in a message, where it is lost in the transcript: a decision you should not make alone (a product or design choice left open to you, a trade-off with real cost either way, a risky or irreversible step), or something only they can do by hand, such as changing a repository setting on GitHub or adding a secret. One item per thing you need, each under a key of your own, with a title, the context as blocks (short Markdown, and a link to the page a task is done on), and the response you ask for: a choice, an approval, text, a task, a form of typed fields where you need several values at once, or none for something they should only know. Decide small things yourself.
 
-Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key. Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.
+Keep the inbox current rather than repeating it. Post under an item's key again only when what you need from it has changed, never to remind; close an item with \`${INBOX_TOOLS.CLOSE.name}\` as soon as you no longer need it, or once you have checked that a task is done. Never restate an open item in a message, at the end of a turn or anywhere else: the developer sees it in their inbox. Every inbox call answers with your whole inbox, and \`${INBOX_TOOLS.READ.name}\` reads it, so read it rather than ask again when you are unsure what stands. An answer you asked to hear reaches you as a message naming the item's key.${words.decided} Carry on with whatever does not depend on an answer; where nothing does, end your turn saying in one line that you are waiting on the inbox.
 
 ## Handing work to a worker
 

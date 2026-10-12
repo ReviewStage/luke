@@ -11,9 +11,10 @@ import {
 } from "@sidecar/hosted/coding-agent-wire";
 import {
   INBOX_CURSOR_START,
-  INBOX_KIND,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxItem,
 } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
@@ -86,8 +87,10 @@ const ITEM: InboxItem = {
   agentId: AGENT_ID,
   key: "push-access",
   revision: 2,
-  kind: INBOX_KIND.APPROVAL,
+  version: INBOX_WIRE_VERSION,
   title: "Push to the release branch?",
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,

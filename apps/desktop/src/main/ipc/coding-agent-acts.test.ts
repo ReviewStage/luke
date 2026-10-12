@@ -9,7 +9,13 @@ import {
   CODING_AGENT_STATUS,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
-import { INBOX_KIND, INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+  INBOX_WIRE_VERSION,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import {
   DEFAULT_PLAN_TEMPLATE,
   PLAN_TEMPLATE_BOUNDS,
@@ -51,8 +57,10 @@ const ITEM: InboxItem = {
   agentId: AGENT_ID,
   key: "push-access",
   revision: 2,
-  kind: INBOX_KIND.APPROVAL,
+  version: INBOX_WIRE_VERSION,
   title: "Push to the release branch?",
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,

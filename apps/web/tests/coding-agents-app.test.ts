@@ -19,8 +19,9 @@ import {
   TURN_ENDING,
 } from "@sidecar/hosted/coding-agent-wire";
 import {
-  INBOX_KIND,
+  INBOX_FIELD,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
   type InboxPost,
   inboxAnsweredSchema,
@@ -3138,8 +3139,8 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
 
   const QUESTION = {
     key: "invite-copy",
-    kind: INBOX_KIND.QUESTION,
     title: "What should the invitation email say?",
+    response: { type: INBOX_RESPONSE.TEXT },
   } as const;
 
   it.effect(
@@ -3193,8 +3194,8 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
         const { eve, post, read, answer } = yield* openInbox();
         yield* post({
           key: "branch-protection",
-          kind: INBOX_KIND.TASK,
           title: "Protect main",
+          response: { type: INBOX_RESPONSE.TASK },
           needsReply: false,
         });
         const [item] = (yield* read()).items;
@@ -3247,6 +3248,132 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           ),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+        assert.deepEqual(eve.sent, []);
+      }),
+  );
+
+  it.effect(
+    "a pick of several options reaches the agent naming each, and a form's values reach it one per line; a value naming no field of the form, and a pick of two where the choice takes one, are refused",
+    () =>
+      Effect.gen(function* () {
+        const { eve, post, read, answer } = yield* openInbox();
+        yield* post({
+          key: "channels",
+          title: "Which channels send the invitation?",
+          response: {
+            type: INBOX_RESPONSE.CHOICE,
+            options: [{ label: "Email" }, { label: "Slack" }, { label: "SMS" }],
+            multiple: true,
+          },
+        });
+        yield* post({
+          key: "one-channel",
+          title: "Which channel sends the reminder?",
+          response: {
+            type: INBOX_RESPONSE.CHOICE,
+            options: [{ label: "Email" }, { label: "Slack" }],
+          },
+        });
+        yield* post({
+          key: "smtp",
+          title: "SMTP settings",
+          response: {
+            type: INBOX_RESPONSE.FORM,
+            fields: [
+              { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+              { type: INBOX_FIELD.NUMBER, label: "Port" },
+              { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+            ],
+          },
+        });
+        const items = (yield* read()).items;
+        const channels = items.find((item) => item.key === "channels");
+        const one = items.find((item) => item.key === "one-channel");
+        const smtp = items.find((item) => item.key === "smtp");
+        assert.ok(channels && one && smtp);
+
+        const picked = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(channels.id, {
+            revision: 1,
+            reply: INBOX_REPLY.CHOSE,
+            choices: ["Email", "Slack"],
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(picked.taken, true);
+        assert.deepEqual(
+          yield* answer(one.id, {
+            revision: 1,
+            reply: INBOX_REPLY.CHOSE,
+            choices: ["Email", "Slack"],
+            clientKey: randomUUID(),
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        assert.deepEqual(
+          yield* answer(smtp.id, {
+            revision: 1,
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [{ label: "Password", value: "hunter2" }],
+            clientKey: randomUUID(),
+          }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const filled = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(smtp.id, {
+            revision: 1,
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [
+              { label: "Host", value: "smtp.acme.test" },
+              { label: "Port", value: 587 },
+              { label: "Verify certificate", value: false },
+            ],
+            note: "Staging only.",
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(filled.taken, true);
+        assert.deepEqual(
+          eve.sent.map((sent) => sent.message.message),
+          [
+            'Inbox answer on "Which channels send the invitation?" (key channels): Chose "Email", "Slack".',
+            'Inbox answer on "SMTP settings" (key smtp): Filled in the form.\n\n- Host: smtp.acme.test\n- Port: 587\n- Verify certificate: no\n\nStaging only.',
+          ],
+        );
+      }),
+  );
+
+  it.effect(
+    "an item that asks nothing is acknowledged, which messages the agent only where it asked to hear back",
+    () =>
+      Effect.gen(function* () {
+        const { eve, post, read, answer } = yield* openInbox();
+        yield* post({
+          key: "renamed",
+          title: "The migration renamed the invites table",
+          response: { type: INBOX_RESPONSE.NONE },
+          needsReply: false,
+        });
+        const [item] = (yield* read()).items;
+        assert.ok(item);
+        assert.deepEqual(
+          yield* answer(item.id, { revision: 1, reply: INBOX_REPLY.DONE, clientKey: randomUUID() }),
+          refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST),
+        );
+        const seen = readAnswer(
+          inboxAnsweredSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* answer(item.id, {
+            revision: 1,
+            reply: INBOX_REPLY.ACKNOWLEDGED,
+            clientKey: randomUUID(),
+          }),
+        );
+        assert.equal(seen.item.status, INBOX_STATUS.ANSWERED);
         assert.deepEqual(eve.sent, []);
       }),
   );

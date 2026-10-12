@@ -18,9 +18,10 @@ import {
 import {
   INBOX_BOUNDS,
   INBOX_CURSOR_START,
-  INBOX_KIND,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
 } from "./inbox-wire.js";
 import { MODEL_PROVIDER } from "./models-wire.js";
 import { DEFAULT_PLAN_TEMPLATE, PLAN_TEMPLATE_BOUNDS } from "./plan-document-template.js";
@@ -53,8 +54,10 @@ const ITEM = {
   agentId: AGENT_ID,
   key: "push-access",
   revision: 2,
-  kind: INBOX_KIND.APPROVAL,
+  version: INBOX_WIRE_VERSION,
   title: "Push to the release branch?",
+  blocks: [],
+  response: { type: INBOX_RESPONSE.APPROVAL },
   needsReply: true,
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,

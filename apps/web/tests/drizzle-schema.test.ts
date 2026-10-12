@@ -74,7 +74,10 @@ const EXACT_COLUMN_TYPES: ReadonlySet<string> = new Set([
  * An entry goes in the same PR as its drop, which the last test below holds
  * by failing on an entry the database no longer carries.
  */
-const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map();
+const PENDING_DROP: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  // Migration 0088 moved the fixed kinds into `blocks` and `response`.
+  ["inbox_item", new Set(["kind", "details", "options", "recommended"])],
+]);
 
 /** `information_schema` reads an array column back under this one type, its element in `udt_name`. */
 const ARRAY_DATA_TYPE = "ARRAY";

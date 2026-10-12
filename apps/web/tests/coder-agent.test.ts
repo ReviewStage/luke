@@ -305,6 +305,21 @@ test("an agent handed a task is told its job is the developer's task, in the sam
   assert.doesNotMatch(tasked, /\bplan\b/iu);
 });
 
+test("an agent handed the plan is told to take a decision an inbox answer settles into the plan with edit_plan, as a note of its own; one handed a task is not", () => {
+  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false);
+  const inbox = planned.slice(planned.indexOf("## The developer's inbox"));
+  const told = inbox.slice(0, inbox.indexOf("\n## "));
+  for (const kept of [
+    "When an answer settles how to build",
+    `take that decision into the plan with \`${CODER_TOOL.EDIT_PLAN}\``,
+    "as a note of your own",
+  ]) {
+    assert.ok(told.includes(kept), kept);
+  }
+  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false);
+  assert.ok(!tasked.includes("take that decision into the plan"));
+});
+
 test("an agent handed the plan is told how to update it, and one handed a task is not", () => {
   assert.ok(
     coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false).includes("`edit_plan`"),

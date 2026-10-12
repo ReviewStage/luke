@@ -1,3 +1,4 @@
+import { isWireBoolean, isWireNumber, isWireString } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
@@ -10,39 +11,65 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * past, and the agent can change it or take it back. The agent names each
  * item by a key of its own: posting under a key it used before replaces
  * that item, and reopens it where it was answered or closed, so an item is
- * kept current rather than posted twice. Each item is one of four kinds,
- * each answered its own way: a choice among the agent's options or in the
- * developer's own words, an approval or a decline of a step, an open
- * question, or a task the developer does by hand and marks done or not
- * possible. An item says whether the agent needs to hear back: where it
- * does, the answer reaches the agent as one of the developer's messages,
- * which steers its turn or opens one; where it does not, the answer is
- * kept and the agent reads it the next time it reads its inbox. Every item
- * carries a revision the agent's every change moves on, and an answer names
- * the revision it answers, so an answer to an item the agent has since
- * changed is refused rather than taken for the item as it now stands.
+ * kept current rather than posted twice. An item is a title, the blocks
+ * of context under it, and the response it asks for. The blocks are a
+ * closed set of shapes, Markdown and a link today, each a tagged record,
+ * so a later block type is one more member rather than a new column. The
+ * response is a closed set too, each answered its own way: a choice among
+ * the agent's options, one or several, or in the developer's own words;
+ * an approval or a decline of a step; words; a task the developer does by
+ * hand and marks done or not possible; a form of typed fields; or nothing
+ * but an acknowledgement, for something the developer should know. An
+ * item says whether the agent needs to hear back: where it does, the
+ * answer reaches the agent as one of the developer's messages, which
+ * steers its turn or opens one; where it does not, the answer is kept and
+ * the agent reads it the next time it reads its inbox. Every item carries
+ * a revision the agent's every change moves on, and an answer names the
+ * revision it answers, so an answer to an item the agent has since changed
+ * is refused rather than taken for the item as it now stands.
  *
  * The agent posts, closes, and reads its items through the tools named
  * below, whose inputs are declared here so the model is shown, eve holds,
  * and the desktop draws one shape. A plan's inbox is read past a cursor the
  * service hands back, held open while nothing changed, as a transcript is.
  * Every request refuses a key it does not name; an answer ignores one a
- * newer service added.
+ * newer service added. The item a desktop reads carries the version of
+ * this vocabulary the service wrote it in, and reads a block or a response
+ * of a type this build does not know as its type alone, so a desktop
+ * behind the service draws what it knows and a placeholder for the rest
+ * rather than refusing the whole inbox.
  */
+
+/**
+ * The version of this vocabulary: moved on when a block or a response type
+ * is added, so a desktop reading an item written under a later one knows
+ * what it cannot draw was written for a newer Luke. Version 1 was the
+ * fixed kinds, a choice, an approval, a question, and a task, with one
+ * Markdown details field; version 2 is blocks and a response.
+ */
+export const INBOX_WIRE_VERSION = 2;
 
 export const INBOX_BOUNDS = {
   /** The most characters an item's key may spell: a short slug the agent chooses. */
   MAX_KEY_CHARS: 80,
   /** The most characters an item's title may spell: one line in the inbox. */
   MAX_TITLE_CHARS: 160,
-  /** The most characters an item's details may spell: the context the developer needs, short Markdown rather than a report. */
-  MAX_DETAILS_CHARS: 8_000,
-  /** The most options a choice may offer: a choice a person makes at a glance. */
+  /** The most blocks an item may carry: the context the developer needs, never a report. */
+  MAX_BLOCKS: 8,
+  /** The most characters a Markdown block may spell. */
+  MAX_MARKDOWN_CHARS: 8_000,
+  /** The most characters a link's address may spell. */
+  MAX_URL_CHARS: 2_000,
+  /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
+  MAX_LABEL_CHARS: 160,
+  /** The most options a choice or a select may offer: a choice a person makes at a glance. */
   MAX_OPTIONS: 6,
-  /** The most characters an option's label may spell. */
-  MAX_OPTION_CHARS: 160,
   /** The most characters an option's detail may spell: the trade-off in a sentence or two. */
   MAX_OPTION_DETAIL_CHARS: 600,
+  /** The most fields a form may ask: what a person fills in at a glance. */
+  MAX_FIELDS: 8,
+  /** The most characters a form's text field may take. */
+  MAX_FIELD_VALUE_CHARS: 1_000,
   /** The most characters the developer's note may spell. */
   MAX_NOTE_CHARS: 4_000,
   /** The most characters the agent's reason for closing an item may spell. */
@@ -69,19 +96,43 @@ export const INBOX_TOOL = {
   READ: "read_inbox",
 } as const;
 
-/** The shapes an item takes, each answered its own way. */
-export const INBOX_KIND = {
-  /** Pick one of the agent's options, one perhaps recommended, or answer in the developer's own words. */
+/** The blocks an item's context is made of. */
+export const INBOX_BLOCK = {
+  /** Words in Markdown. */
+  MARKDOWN: "markdown",
+  /** An address with a label, such as the GitHub page a task is done on. */
+  LINK: "link",
+} as const;
+
+/** The responses an item asks for, each answered its own way. */
+export const INBOX_RESPONSE = {
+  /** Pick one of the agent's options, or several where it allows, one perhaps recommended, or answer in the developer's own words. */
   CHOICE: "choice",
   /** Approve or decline a step the agent proposes. */
   APPROVAL: "approval",
   /** An open answer in the developer's own words. */
-  QUESTION: "question",
+  TEXT: "text",
   /** Something the developer does by hand, such as a setting on GitHub, marked done or not possible. */
   TASK: "task",
+  /** Typed fields the developer fills in. */
+  FORM: "form",
+  /** Nothing but an acknowledgement: something the developer should know. */
+  NONE: "none",
 } as const;
 
-export type InboxKind = (typeof INBOX_KIND)[keyof typeof INBOX_KIND];
+type InboxResponseType = (typeof INBOX_RESPONSE)[keyof typeof INBOX_RESPONSE];
+
+/** The fields a form may ask. */
+export const INBOX_FIELD = {
+  /** A line of words. */
+  TEXT: "text",
+  /** A number. */
+  NUMBER: "number",
+  /** One of the field's options. */
+  SELECT: "select",
+  /** Yes or no. */
+  BOOLEAN: "boolean",
+} as const;
 
 /** Where an item stands. */
 export const INBOX_STATUS = {
@@ -97,29 +148,35 @@ export type InboxStatus = (typeof INBOX_STATUS)[keyof typeof INBOX_STATUS];
 
 /** How the developer answered an item. */
 export const INBOX_REPLY = {
-  /** Picked one of a choice's options. */
+  /** Picked one or more of a choice's options. */
   CHOSE: "chose",
   /** Approved an approval's step. */
   APPROVED: "approved",
   /** Declined an approval's step. */
   DECLINED: "declined",
-  /** Answered in their own words: a question, or a choice none of whose options fit. */
+  /** Answered in their own words: a text, or a choice none of whose options fit. */
   ANSWERED: "answered",
   /** Did a task. */
   DONE: "done",
   /** Could not, or would not, do a task. */
   NOT_DONE: "not-done",
+  /** Filled in a form. */
+  SUBMITTED: "submitted",
+  /** Read an item that asked for nothing. */
+  ACKNOWLEDGED: "acknowledged",
 } as const;
 
 export type InboxReplyKind = (typeof INBOX_REPLY)[keyof typeof INBOX_REPLY];
 
-/** The answers each kind of item takes. */
+/** The answers each response takes. */
 const INBOX_REPLIES_OF = {
-  [INBOX_KIND.CHOICE]: [INBOX_REPLY.CHOSE, INBOX_REPLY.ANSWERED],
-  [INBOX_KIND.APPROVAL]: [INBOX_REPLY.APPROVED, INBOX_REPLY.DECLINED],
-  [INBOX_KIND.QUESTION]: [INBOX_REPLY.ANSWERED],
-  [INBOX_KIND.TASK]: [INBOX_REPLY.DONE, INBOX_REPLY.NOT_DONE],
-} as const satisfies Record<InboxKind, readonly InboxReplyKind[]>;
+  [INBOX_RESPONSE.CHOICE]: [INBOX_REPLY.CHOSE, INBOX_REPLY.ANSWERED],
+  [INBOX_RESPONSE.APPROVAL]: [INBOX_REPLY.APPROVED, INBOX_REPLY.DECLINED],
+  [INBOX_RESPONSE.TEXT]: [INBOX_REPLY.ANSWERED],
+  [INBOX_RESPONSE.TASK]: [INBOX_REPLY.DONE, INBOX_REPLY.NOT_DONE],
+  [INBOX_RESPONSE.FORM]: [INBOX_REPLY.SUBMITTED],
+  [INBOX_RESPONSE.NONE]: [INBOX_REPLY.ACKNOWLEDGED],
+} as const satisfies Record<InboxResponseType, readonly InboxReplyKind[]>;
 
 function boundedText(maximumChars: number) {
   return EffectSchema.String.check(EffectSchema.isMaxLength(maximumChars));
@@ -139,30 +196,104 @@ export const inboxKeySchema = EffectSchema.String.check(
   EffectSchema.isPattern(/^[a-z0-9][a-z0-9._-]*$/u),
 );
 
+/** A link's address: a web page, and nothing a desktop would hand to another scheme. */
+const WEB_ADDRESS = /^https?:\/\/\S+$/u;
+
+/** One block of an item's context: words in Markdown, or a link with its label. */
+export const inboxBlockSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.MARKDOWN),
+    text: filledText(INBOX_BOUNDS.MAX_MARKDOWN_CHARS),
+  }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.LINK),
+    url: EffectSchema.String.check(
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_URL_CHARS),
+      EffectSchema.isPattern(WEB_ADDRESS),
+    ),
+    label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
+  }),
+]);
+
+export type InboxBlock = typeof inboxBlockSchema.Type;
+
+/** An item's context: its blocks in order, few. */
+export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(
+  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_BLOCKS),
+);
+
 /** One option of a choice: its label, and the trade-off in a sentence where the agent wrote one. */
 export const inboxOptionSchema = EffectSchema.Struct({
-  label: filledText(INBOX_BOUNDS.MAX_OPTION_CHARS),
+  label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   detail: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_OPTION_DETAIL_CHARS)),
 });
 
-export type InboxOption = typeof inboxOptionSchema.Type;
+/** One field of a form: its type, its label, which names its value in the answer, whether it must be filled, and a select's options. */
+export const inboxFieldSchema = EffectSchema.Struct({
+  type: EffectSchema.Literals(Object.values(INBOX_FIELD)),
+  label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
+  required: EffectSchema.optionalKey(EffectSchema.Boolean),
+  options: EffectSchema.optionalKey(
+    EffectSchema.Array(filledText(INBOX_BOUNDS.MAX_LABEL_CHARS)).check(
+      EffectSchema.isMinLength(2),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+    ),
+  ),
+});
+
+export type InboxField = typeof inboxFieldSchema.Type;
 
 /**
- * What a post's tool part carries as its input: the item's key, its kind,
- * a title, the context in Markdown, a choice's options and the label it
- * recommends, and whether the agent needs to hear back, which it does
- * unless it says not. The model is shown this schema and eve holds the
- * call to it.
+ * What an item asks of the developer, one of six: a choice among options,
+ * several where `multiple`, the label it recommends named; an approval; words,
+ * with what the box says while empty; a task; a form of fields; or nothing
+ * but an acknowledgement.
+ */
+export const inboxResponseSchema = EffectSchema.Union([
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_RESPONSE.CHOICE),
+    options: EffectSchema.Array(inboxOptionSchema).check(
+      EffectSchema.isMinLength(2),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+    ),
+    multiple: EffectSchema.optionalKey(EffectSchema.Boolean),
+    recommended: EffectSchema.optionalKey(EffectSchema.String),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.APPROVAL) }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_RESPONSE.TEXT),
+    placeholder: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_LABEL_CHARS)),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.TASK) }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_RESPONSE.FORM),
+    fields: EffectSchema.Array(inboxFieldSchema).check(
+      EffectSchema.isMinLength(1),
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
+    ),
+  }),
+  EffectSchema.Struct({ type: EffectSchema.Literal(INBOX_RESPONSE.NONE) }),
+]);
+
+export type InboxResponse = typeof inboxResponseSchema.Type;
+
+/** A choice as an item asks it, with the options an answer must name. */
+export type InboxChoice = Extract<InboxResponse, { type: typeof INBOX_RESPONSE.CHOICE }>;
+
+/** A form as an item asks it, with the fields an answer fills. */
+export type InboxForm = Extract<InboxResponse, { type: typeof INBOX_RESPONSE.FORM }>;
+
+/**
+ * What a post's tool part carries as its input: the item's key, a title,
+ * the blocks of context under it, the response it asks for, and whether the
+ * agent needs to hear back, which it does unless it says not. The model is
+ * shown this schema and eve holds the call to it.
  */
 export const inboxPostInputSchema = EffectSchema.Struct({
   key: inboxKeySchema,
-  kind: EffectSchema.Literals(Object.values(INBOX_KIND)),
   title: filledText(INBOX_BOUNDS.MAX_TITLE_CHARS),
-  details: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_DETAILS_CHARS)),
-  options: EffectSchema.optionalKey(
-    EffectSchema.Array(inboxOptionSchema).check(EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS)),
-  ),
-  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  blocks: EffectSchema.optionalKey(inboxBlocksSchema),
+  response: inboxResponseSchema,
   needsReply: EffectSchema.optionalKey(EffectSchema.Boolean),
 });
 
@@ -177,14 +308,76 @@ export const inboxCloseInputSchema = EffectSchema.Struct({
 /** What a read's tool part carries as its input: nothing, since an agent reads its own items alone. */
 export const inboxReadInputSchema = EffectSchema.Struct({});
 
-/** The developer's answer: how they answered, the option where they picked one, and their note. */
+/** What a form's field holds once filled: words, a number, an option, or yes or no, by the field's type. */
+export const inboxFieldValueSchema = EffectSchema.Union([
+  boundedText(INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS),
+  EffectSchema.Finite,
+  EffectSchema.Boolean,
+]);
+
+export type InboxFieldValue = typeof inboxFieldValueSchema.Type;
+
+/** One field filled: the field's label, and what it holds. */
+export const inboxFormValueSchema = EffectSchema.Struct({
+  label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
+  value: inboxFieldValueSchema,
+});
+
+export type InboxFormValue = typeof inboxFormValueSchema.Type;
+
+/** A form's values, one per field filled, each named by its field's label. */
+export const inboxFormValuesSchema = EffectSchema.Array(inboxFormValueSchema).check(
+  EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_FIELDS),
+);
+
+type InboxFormValues = typeof inboxFormValuesSchema.Type;
+
+/** The developer's answer: how they answered, the options where they picked, the form's values where they filled one, and their note. */
 export const inboxReplySchema = EffectSchema.Struct({
   reply: EffectSchema.Literals(Object.values(INBOX_REPLY)),
-  choice: EffectSchema.optionalKey(EffectSchema.String),
+  choices: EffectSchema.optionalKey(
+    EffectSchema.Array(EffectSchema.String).check(
+      EffectSchema.isMaxLength(INBOX_BOUNDS.MAX_OPTIONS),
+    ),
+  ),
+  values: EffectSchema.optionalKey(inboxFormValuesSchema),
   note: EffectSchema.optionalKey(boundedText(INBOX_BOUNDS.MAX_NOTE_CHARS)),
 });
 
 export type InboxReply = typeof inboxReplySchema.Type;
+
+/** The types this build draws, by which a read tells a type it does not know. */
+const KNOWN_TYPES: ReadonlySet<string> = new Set([
+  ...Object.values(INBOX_BLOCK),
+  ...Object.values(INBOX_RESPONSE),
+]);
+
+/**
+ * A type this build does not know, as a newer service wrote one: read as
+ * the type's name alone, so it narrows away from every type this build
+ * draws, and drawn as a placeholder naming a newer Luke. Note that a type
+ * this build knows is refused here, because a known block or response
+ * that fails its own shape is a broken read and not a newer one.
+ */
+const unknownTypeSchema = EffectSchema.String.check(
+  EffectSchema.makeFilter((type) => !KNOWN_TYPES.has(type)),
+).pipe(EffectSchema.brand("UnknownInboxType"));
+
+/** A block as a desktop reads one: one this build knows, or the type alone of one it does not. */
+export const inboxReadBlockSchema = EffectSchema.Union([
+  ...inboxBlockSchema.members,
+  EffectSchema.Struct({ type: unknownTypeSchema }),
+]);
+
+export type InboxReadBlock = typeof inboxReadBlockSchema.Type;
+
+/** A response as a desktop reads one: one this build knows, or the type alone of one it does not. */
+export const inboxReadResponseSchema = EffectSchema.Union([
+  ...inboxResponseSchema.members,
+  EffectSchema.Struct({ type: unknownTypeSchema }),
+]);
+
+export type InboxReadResponse = typeof inboxReadResponseSchema.Type;
 
 /** One item as the desktop reads it. */
 export const inboxItemSchema = EffectSchema.Struct({
@@ -192,11 +385,11 @@ export const inboxItemSchema = EffectSchema.Struct({
   agentId: wireUuidSchema,
   key: EffectSchema.String,
   revision: countedNumber,
-  kind: EffectSchema.Literals(Object.values(INBOX_KIND)),
+  /** The version of this vocabulary the service wrote the item in. */
+  version: countedNumber,
   title: EffectSchema.String,
-  details: EffectSchema.optionalKey(EffectSchema.String),
-  options: EffectSchema.optionalKey(EffectSchema.Array(inboxOptionSchema)),
-  recommended: EffectSchema.optionalKey(EffectSchema.String),
+  blocks: EffectSchema.Array(inboxReadBlockSchema),
+  response: inboxReadResponseSchema,
   needsReply: EffectSchema.Boolean,
   status: EffectSchema.Literals(Object.values(INBOX_STATUS)),
   /** The developer's answer, on an answered item. */
@@ -243,11 +436,32 @@ export const inboxAnsweredSchema = EffectSchema.Struct({
 /** How the developer's answer opens, in the message that hands it to the agent. */
 export const INBOX_ANSWER_LEAD = "Inbox answer";
 
+/** Whether a response read off the wire is one this build knows, which its type decides. */
+export function knownResponse(response: InboxReadResponse): response is InboxResponse {
+  return Object.values<string>(INBOX_RESPONSE).includes(response.type);
+}
+
+/** Whether a block read off the wire is one this build knows, which its type decides. */
+export function knownBlock(block: InboxReadBlock): block is InboxBlock {
+  return Object.values<string>(INBOX_BLOCK).includes(block.type);
+}
+
+/** A field's value as words: a number as it prints, yes or no for a boolean. */
+export function fieldValueWords(value: InboxFieldValue): string {
+  if (isWireBoolean(value)) return value ? "yes" : "no";
+  return String(value);
+}
+
+/** A form's values as lines, one per field filled, in the form's own order. */
+function valueLines(values: InboxFormValues): string {
+  return values.map(({ label, value }) => `- ${label}: ${fieldValueWords(value)}`).join("\n");
+}
+
 /** The answer's own words, as the agent reads them. */
 function replyWords(reply: InboxReply): string {
   switch (reply.reply) {
     case INBOX_REPLY.CHOSE:
-      return `Chose "${reply.choice ?? ""}".`;
+      return `Chose ${(reply.choices ?? []).map((choice) => `"${choice}"`).join(", ")}.`;
     case INBOX_REPLY.APPROVED:
       return "Approved.";
     case INBOX_REPLY.DECLINED:
@@ -258,13 +472,18 @@ function replyWords(reply: InboxReply): string {
       return "Done.";
     case INBOX_REPLY.NOT_DONE:
       return "Not done.";
+    case INBOX_REPLY.SUBMITTED:
+      return "Filled in the form.";
+    case INBOX_REPLY.ACKNOWLEDGED:
+      return "Acknowledged.";
   }
 }
 
 /**
  * The message an answer reaches the agent as: a first line naming the item
- * by its key and title with what the developer did, then their note. Note
- * that the title is put on one line, because the line is read whole.
+ * by its key and title with what the developer did, then a form's values
+ * one per line, then their note. Note that the title is put on one line,
+ * because the line is read whole.
  */
 export function inboxAnswerMessage(
   item: Pick<InboxItem, "key" | "title">,
@@ -272,20 +491,82 @@ export function inboxAnswerMessage(
 ): string {
   const title = item.title.replace(/\s+/gu, " ").trim();
   const header = `${INBOX_ANSWER_LEAD} on "${title}" (key ${item.key}): ${replyWords(reply)}`;
-  const note = reply.note?.trim();
-  return note ? `${header}\n\n${note}` : header;
+  const values = reply.values === undefined ? "" : valueLines(reply.values);
+  const note = reply.note?.trim() ?? "";
+  return [header, values, note].filter((part) => part !== "").join("\n\n");
 }
 
-/** Why an answer does not fit its item, or nothing where it does: the kind takes it, a choice names one of the options, and words stand where the answer is the developer's own. */
+/** Whether a field's value is of the field's type, and names one of a select's options. */
+function fieldTakes(field: InboxField, value: InboxFieldValue): boolean {
+  switch (field.type) {
+    case INBOX_FIELD.TEXT:
+      return isWireString(value);
+    case INBOX_FIELD.NUMBER:
+      return isWireNumber(value) && Number.isFinite(value);
+    case INBOX_FIELD.SELECT:
+      return isWireString(value) && (field.options ?? []).includes(value);
+    case INBOX_FIELD.BOOLEAN:
+      return isWireBoolean(value);
+  }
+}
+
+/** Whether a filled value counts as filled: words with something in them, or any number or boolean. */
+function filled(value: InboxFieldValue): boolean {
+  return !isWireString(value) || value.trim() !== "";
+}
+
+/** Why a form's values do not fill the form, or nothing where they do: each names a field once and is of its type, and every required field is filled. */
+function formRefusal(form: InboxForm, values: InboxFormValues | undefined): string | undefined {
+  const given = new Map((values ?? []).map(({ label, value }) => [label, value]));
+  if (given.size !== (values ?? []).length) return "A value names a field twice.";
+  const fields = new Map(form.fields.map((field) => [field.label, field]));
+  for (const [label, value] of given) {
+    const field = fields.get(label);
+    if (field === undefined) return "A value names no field of the form.";
+    if (!fieldTakes(field, value)) return "A value is not of its field's type.";
+  }
+  for (const field of form.fields) {
+    const value = given.get(field.label);
+    if (field.required === true && (value === undefined || !filled(value))) {
+      return "A required field of the form is empty.";
+    }
+  }
+  return undefined;
+}
+
+/** Why a pick does not fit the choice, or nothing where it does: at least one option, each offered and once, and one alone unless the choice allows several. */
+function choiceRefusal(
+  choice: InboxChoice,
+  choices: readonly string[] | undefined,
+): string | undefined {
+  const picked = choices ?? [];
+  if (picked.length === 0) return "A pick names no option.";
+  if (picked.length > 1 && choice.multiple !== true) return "The choice takes one option.";
+  if (new Set(picked).size !== picked.length) return "A pick names an option twice.";
+  const offered = new Set(choice.options.map((option) => option.label));
+  if (!picked.every((label) => offered.has(label))) return "The pick names no option of the item.";
+  return undefined;
+}
+
+/**
+ * Why an answer does not fit its item, or nothing where it does: the
+ * response takes the reply, a pick names offered options, a form's values
+ * fill it, and words stand where the answer is the developer's own. A
+ * response this build does not know takes nothing.
+ */
 export function inboxReplyRefusal(
-  item: Pick<InboxItem, "kind" | "options">,
+  item: Pick<InboxItem, "response">,
   reply: InboxReply,
 ): string | undefined {
-  const takes: readonly InboxReplyKind[] = INBOX_REPLIES_OF[item.kind];
+  const response = item.response;
+  if (!knownResponse(response)) return "The item asks something this Luke does not know.";
+  const takes: readonly InboxReplyKind[] = INBOX_REPLIES_OF[response.type];
   if (!takes.includes(reply.reply)) return "The item does not take that answer.";
-  if (reply.reply === INBOX_REPLY.CHOSE) {
-    const offered = (item.options ?? []).some((option) => option.label === reply.choice);
-    if (!offered) return "The choice names no option of the item.";
+  if (reply.reply === INBOX_REPLY.CHOSE && response.type === INBOX_RESPONSE.CHOICE) {
+    return choiceRefusal(response, reply.choices);
+  }
+  if (reply.reply === INBOX_REPLY.SUBMITTED && response.type === INBOX_RESPONSE.FORM) {
+    return formRefusal(response, reply.values);
   }
   if (reply.reply === INBOX_REPLY.ANSWERED && (reply.note ?? "").trim() === "") {
     return "An answer in the developer's own words needs words.";

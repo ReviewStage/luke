@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
-import { INBOX_BOUNDS, INBOX_KIND, INBOX_REPLY, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_BLOCK,
+  INBOX_BOUNDS,
+  INBOX_FIELD,
+  INBOX_REPLY,
+  INBOX_RESPONSE,
+  INBOX_STATUS,
+} from "@sidecar/hosted/inbox-wire";
 import { unparsedWire, type WireBoundaryInput } from "@sidecar/wire";
 import { Duration, Effect, Option } from "effect";
 import { TestClock } from "effect/testing";
@@ -56,19 +63,43 @@ const openAgent = Effect.gen(function* () {
 
 const QUEUE = {
   key: "invite-queue",
-  kind: INBOX_KIND.CHOICE,
   title: "Which queue sends the invitation emails?",
-  details: "The repo already runs **Postgres**.",
-  options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
-  recommended: "Postgres outbox",
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." }],
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
+    recommended: "Postgres outbox",
+  },
 };
 
 const SETTINGS = {
   key: "branch-protection",
-  kind: INBOX_KIND.TASK,
   title: "Require a review on main",
-  details: "Settings → Branches → add a rule for `main`.",
+  blocks: [
+    { type: INBOX_BLOCK.MARKDOWN, text: "Settings → Branches → add a rule for `main`." },
+    {
+      type: INBOX_BLOCK.LINK,
+      url: "https://github.com/acme/relay/settings/branches",
+      label: "Branch rules",
+    },
+  ],
+  response: { type: INBOX_RESPONSE.TASK },
   needsReply: false,
+};
+
+/** A form of every field type, one required. */
+const CREDENTIALS = {
+  key: "smtp",
+  title: "SMTP settings for the invitation emails",
+  response: {
+    type: INBOX_RESPONSE.FORM,
+    fields: [
+      { type: INBOX_FIELD.TEXT, label: "Host", required: true },
+      { type: INBOX_FIELD.NUMBER, label: "Port" },
+      { type: INBOX_FIELD.SELECT, label: "Security", options: ["TLS", "STARTTLS"] },
+      { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
+    ],
+  },
 };
 
 /** A tool's input as eve hands it over. */
@@ -86,12 +117,10 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           inbox: [
             {
               key: QUEUE.key,
-              kind: INBOX_KIND.CHOICE,
               title: QUEUE.title,
               status: INBOX_STATUS.OPEN,
-              details: QUEUE.details,
-              options: QUEUE.options,
-              recommended: QUEUE.recommended,
+              blocks: QUEUE.blocks,
+              response: QUEUE.response,
               needsReply: true,
             },
           ],
@@ -100,13 +129,13 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         assert.ok(first);
         assert.equal(first.revision, 1);
         assert.equal(first.needsReply, true, "an item asks to be heard back unless it says not");
-        assert.deepEqual(first.options, QUEUE.options);
+        assert.deepEqual(first.response, QUEUE.response);
 
         const taken = yield* answerInboxItem(
           agent.userId,
           first.id,
           1,
-          { reply: INBOX_REPLY.CHOSE, choice: "Redis" },
+          { reply: INBOX_REPLY.CHOSE, choices: ["Redis"] },
           randomUUID(),
         );
         assert.equal(Option.getOrUndefined(taken)?.status, INBOX_STATUS.ANSWERED);
@@ -137,7 +166,7 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
         yield* TestClock.adjust(Duration.seconds(1));
         yield* postToInbox(
           agent,
-          input({ key: "ship", kind: INBOX_KIND.APPROVAL, title: "Ship it?" }),
+          input({ key: "ship", title: "Ship it?", response: { type: INBOX_RESPONSE.APPROVAL } }),
         );
         const [ship, , settings] = yield* planInboxItems(agent.userId, agent.planId);
         assert.ok(ship && settings);
@@ -155,24 +184,20 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           inbox: [
             {
               key: QUEUE.key,
-              kind: INBOX_KIND.CHOICE,
               title: QUEUE.title,
               status: INBOX_STATUS.OPEN,
-              details: QUEUE.details,
-              options: QUEUE.options,
-              recommended: QUEUE.recommended,
+              blocks: QUEUE.blocks,
+              response: QUEUE.response,
               needsReply: true,
             },
             {
               key: SETTINGS.key,
-              kind: INBOX_KIND.TASK,
               title: SETTINGS.title,
               status: INBOX_STATUS.ANSWERED,
               answer: { reply: INBOX_REPLY.DONE, note: "Done, with two reviewers." },
             },
             {
               key: "ship",
-              kind: INBOX_KIND.APPROVAL,
               title: "Ship it?",
               status: INBOX_STATUS.CLOSED,
               closedReason: "The checks failed; not yet.",
@@ -183,23 +208,139 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
   );
 
   it.effect(
-    "a post that does not read, a choice with fewer than two options or recommending none of them, and a close of no item are refused with why, writing nothing",
+    "a form, a link, and an item asking nothing post as the wire's shapes and read back whole, a settled one carrying what it asked no longer",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        yield* postToInbox(agent, input(CREDENTIALS));
+        yield* TestClock.adjust(Duration.seconds(1));
+        yield* postToInbox(agent, input(SETTINGS));
+        yield* TestClock.adjust(Duration.seconds(1));
+        const posted = yield* postToInbox(
+          agent,
+          input({
+            key: "renamed",
+            title: "The migration renamed the invites table",
+            response: { type: INBOX_RESPONSE.NONE },
+            needsReply: false,
+          }),
+        );
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const [fyi, settings, form] = yield* planInboxItems(agent.userId, agent.planId);
+        assert.ok(fyi && settings && form);
+        assert.deepEqual(fyi.blocks, []);
+        assert.deepEqual(fyi.response, { type: INBOX_RESPONSE.NONE });
+        assert.deepEqual(settings.blocks, SETTINGS.blocks);
+        assert.deepEqual(form.response, CREDENTIALS.response);
+        yield* answerInboxItem(
+          agent.userId,
+          form.id,
+          form.revision,
+          {
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [
+              { label: "Host", value: "smtp.acme.test" },
+              { label: "Port", value: 587 },
+              { label: "Verify certificate", value: true },
+            ],
+          },
+          randomUUID(),
+        );
+        const told = yield* readOwnInbox(agent);
+        const lines = told.status === ACTION_RESULT_STATUS.ACCEPTED ? told.inbox : [];
+        assert.deepEqual(lines.at(-1), {
+          key: CREDENTIALS.key,
+          title: CREDENTIALS.title,
+          status: INBOX_STATUS.ANSWERED,
+          answer: {
+            reply: INBOX_REPLY.SUBMITTED,
+            values: [
+              { label: "Host", value: "smtp.acme.test" },
+              { label: "Port", value: 587 },
+              { label: "Verify certificate", value: true },
+            ],
+          },
+        });
+      }),
+  );
+
+  it.effect(
+    "a post that does not read, a choice with fewer than two options, two under one label, or recommending none of them, a form naming a field twice or a select with no options, and a close of no item are refused with why, writing nothing",
     () =>
       Effect.gen(function* () {
         const agent = yield* openAgent;
         const refused = (result: { readonly status: string; readonly reason?: string }) =>
           result.status === ACTION_RESULT_STATUS.REJECTED ? result.reason : undefined;
+        const asking = (response: WireBoundaryInput) => input({ ...QUEUE, response });
         assert.equal(
           refused(yield* postToInbox(agent, input({ ...QUEUE, key: "Not A Slug" }))),
           INBOX_REFUSAL.UNREADABLE_POST,
         );
         assert.equal(
-          refused(yield* postToInbox(agent, input({ ...QUEUE, options: [{ label: "Only" }] }))),
+          refused(
+            yield* postToInbox(
+              agent,
+              input({
+                ...SETTINGS,
+                blocks: [{ type: INBOX_BLOCK.LINK, url: "ftp://x", label: "x" }],
+              }),
+            ),
+          ),
+          INBOX_REFUSAL.UNREADABLE_POST,
+          "a link opens on the web alone",
+        );
+        assert.equal(
+          refused(
+            yield* postToInbox(
+              agent,
+              asking({ type: INBOX_RESPONSE.CHOICE, options: [{ label: "Only" }] }),
+            ),
+          ),
+          INBOX_REFUSAL.UNREADABLE_POST,
+          "a choice offers two options at least",
+        );
+        assert.equal(
+          refused(
+            yield* postToInbox(
+              agent,
+              asking({
+                type: INBOX_RESPONSE.CHOICE,
+                options: [{ label: "Same" }, { label: "Same" }],
+              }),
+            ),
+          ),
           INBOX_REFUSAL.NO_OPTIONS,
         );
         assert.equal(
-          refused(yield* postToInbox(agent, input({ ...QUEUE, recommended: "SQS" }))),
+          refused(yield* postToInbox(agent, asking({ ...QUEUE.response, recommended: "SQS" }))),
           INBOX_REFUSAL.UNKNOWN_RECOMMENDATION,
+        );
+        assert.equal(
+          refused(
+            yield* postToInbox(
+              agent,
+              asking({
+                type: INBOX_RESPONSE.FORM,
+                fields: [
+                  { type: INBOX_FIELD.TEXT, label: "Host" },
+                  { type: INBOX_FIELD.TEXT, label: "Host" },
+                ],
+              }),
+            ),
+          ),
+          INBOX_REFUSAL.FIELD_LABELS,
+        );
+        assert.equal(
+          refused(
+            yield* postToInbox(
+              agent,
+              asking({
+                type: INBOX_RESPONSE.FORM,
+                fields: [{ type: INBOX_FIELD.SELECT, label: "Security" }],
+              }),
+            ),
+          ),
+          INBOX_REFUSAL.SELECT_OPTIONS,
         );
         assert.equal(
           refused(yield* closeInInbox(agent, input({ key: "never-posted", reason: "x" }))),

@@ -196,7 +196,13 @@ const MAXIMUM_START_BODY_BYTES =
   6 * CODING_AGENT_BOUNDS.MAX_MESSAGE_CHARS + MAXIMUM_ATTACHMENTS_BODY_BYTES + 4_096;
 
 /** An answer is a note and a few short fields: the note's bound at JSON's widest escape, and room for the rest. */
-const MAXIMUM_INBOX_ANSWER_BODY_BYTES = 6 * INBOX_BOUNDS.MAX_NOTE_CHARS + 2_048;
+const MAXIMUM_INBOX_ANSWER_BODY_BYTES =
+  6 *
+    (INBOX_BOUNDS.MAX_NOTE_CHARS +
+      INBOX_BOUNDS.MAX_FIELDS *
+        (INBOX_BOUNDS.MAX_LABEL_CHARS + INBOX_BOUNDS.MAX_FIELD_VALUE_CHARS) +
+      INBOX_BOUNDS.MAX_OPTIONS * INBOX_BOUNDS.MAX_LABEL_CHARS) +
+  2_048;
 
 /** A change names a model, an effort, and a window, or a title, at most, so a body past this is no change. */
 const MAXIMUM_CHOICE_BODY_BYTES = 4_096;

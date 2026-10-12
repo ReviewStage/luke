@@ -1,7 +1,9 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { DocumentIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useId, useState } from "react";
+import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
 import { FindScope } from "../find-in-tab";
 import { ArchivedBanner } from "../planning/archived-plan";
@@ -129,6 +131,7 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
+  const { tell } = useAct();
   const inbox = usePlanInbox({
     planId: region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
     shown: plans.shown,
@@ -330,6 +333,7 @@ function PlanDocument({
                   control={inbox}
                   agents={agents}
                   onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
+                  openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
                 />
               </section>
             ) : null}

@@ -1,13 +1,20 @@
 import {
+  fieldValueWords,
   INBOX_BOUNDS,
-  INBOX_KIND,
+  INBOX_FIELD,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxFieldValue,
+  type InboxForm,
+  type InboxFormValue,
   type InboxItem,
   type InboxReply,
   type InboxReplyKind,
   inboxReplyRefusal,
+  knownResponse,
 } from "@sidecar/hosted/inbox-wire";
+import { isWireString } from "@sidecar/wire";
 
 /**
  * inbox-model.ts -- the plan's Inbox tab as pure decisions: which items wait on the developer and which are settled, what a card's answer is, and how a settled one reads.
@@ -17,18 +24,20 @@ import {
  * follows, the latest changed first. Every item the plan's inbox holds is
  * drawn, whether or not the window's list of agents has caught up with the
  * agent that posted it, since the service reads the inbox by plan and an
- * agent's items go with it. A card's answer is held to the same rule the service holds it to
- * (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press the service would
- * refuse is never offered. Nothing here draws.
+ * agent's items go with it. A card's answer is held to the same rule the
+ * service holds it to (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press
+ * the service would refuse is never offered; an item asking a response
+ * this build does not know holds no answer at all. Nothing here draws.
  */
 
-/** What the developer has put on a card so far: the option picked on a choice, and their note. */
+/** What the developer has put on a card so far: the options picked on a choice, the fields filled on a form, and their note. */
 export interface InboxDraft {
-  readonly choice: string | undefined;
+  readonly choices: readonly string[];
+  readonly values: readonly InboxFormValue[];
   readonly note: string;
 }
 
-export const EMPTY_INBOX_DRAFT: InboxDraft = { choice: undefined, note: "" };
+export const EMPTY_INBOX_DRAFT: InboxDraft = { choices: [], values: [], note: "" };
 
 /** The board as the tab draws it. */
 export interface InboxBoardView {
@@ -48,28 +57,67 @@ export function inboxBoard(items: readonly InboxItem[]): InboxBoardView {
   };
 }
 
-/** The answer's kind for what the card holds: a press where the kind is answered by one, else the option picked or the developer's words. */
+/** The draft with the option pressed: picked where it was not, let go where it was; one at a time unless the choice allows several. */
+export function withChoice(draft: InboxDraft, label: string, multiple: boolean): InboxDraft {
+  const picked = draft.choices.includes(label);
+  if (picked) return { ...draft, choices: draft.choices.filter((each) => each !== label) };
+  return { ...draft, choices: multiple ? [...draft.choices, label] : [label] };
+}
+
+/** What the draft holds for the field, or nothing where it is untouched. */
+export function fieldValueOf(draft: InboxDraft, label: string): InboxFieldValue | undefined {
+  return draft.values.find((each) => each.label === label)?.value;
+}
+
+/** The draft with the field set to the value, or cleared where none. */
+export function withValue(
+  draft: InboxDraft,
+  label: string,
+  value: InboxFieldValue | undefined,
+): InboxDraft {
+  const others = draft.values.filter((each) => each.label !== label);
+  return { ...draft, values: value === undefined ? others : [...others, { label, value }] };
+}
+
+/** The answer's kind for what the card holds: a press where the response is answered by one, else the options picked, the form filled, or the developer's words. */
 function replyKindOf(
   item: InboxItem,
   draft: InboxDraft,
   press: InboxReplyKind | undefined,
 ): InboxReplyKind | undefined {
   if (press !== undefined) return press;
-  if (item.kind === INBOX_KIND.CHOICE && draft.choice !== undefined) return INBOX_REPLY.CHOSE;
+  const response = item.response;
+  if (response.type === INBOX_RESPONSE.CHOICE && draft.choices.length > 0) return INBOX_REPLY.CHOSE;
+  if (response.type === INBOX_RESPONSE.FORM) return INBOX_REPLY.SUBMITTED;
   return draft.note.trim() === "" ? undefined : INBOX_REPLY.ANSWERED;
+}
+
+/** A form's values as sent, in the form's own order: words trimmed, a field left blank left out, and a switch left alone sent as no. */
+function sentValues(form: InboxForm, draft: InboxDraft): readonly InboxFormValue[] {
+  return form.fields.flatMap((field) => {
+    const held = fieldValueOf(draft, field.label);
+    const value =
+      held === undefined ? (field.type === INBOX_FIELD.BOOLEAN ? false : undefined) : held;
+    if (value === undefined) return [];
+    const sent = isWireString(value) ? value.trim() : value;
+    return sent === "" ? [] : [{ label: field.label, value: sent }];
+  });
 }
 
 /**
  * The answer the card holds, or nothing where it holds none the item
- * takes: a choice is answered by its option, with the note beside it, or
- * by the developer's own words; an approval and a task by their presses,
- * with the note beside them; a question by words.
+ * takes: a choice is answered by its options, with the note beside them,
+ * or by the developer's own words; an approval, a task, and an item asking
+ * nothing by their presses, with the note beside them; words by words; a
+ * form by its fields, with the note beside them.
  */
 export function inboxReply(
   item: InboxItem,
   draft: InboxDraft,
   press?: InboxReplyKind,
 ): InboxReply | undefined {
+  const response = item.response;
+  if (!knownResponse(response)) return undefined;
   const reply = replyKindOf(item, draft, press);
   if (reply === undefined) return undefined;
   const note = draft.note.trim();
@@ -77,8 +125,9 @@ export function inboxReply(
   if (note.length > INBOX_BOUNDS.MAX_NOTE_CHARS) return undefined;
   const answer: InboxReply = {
     reply,
-    ...(reply === INBOX_REPLY.CHOSE && draft.choice !== undefined
-      ? { choice: draft.choice }
+    ...(reply === INBOX_REPLY.CHOSE ? { choices: draft.choices } : undefined),
+    ...(response.type === INBOX_RESPONSE.FORM
+      ? { values: sentValues(response, draft) }
       : undefined),
     ...(note === "" ? undefined : { note }),
   };
@@ -93,12 +142,23 @@ const REPLY_WORDS = {
   [INBOX_REPLY.ANSWERED]: "Answered",
   [INBOX_REPLY.DONE]: "Done",
   [INBOX_REPLY.NOT_DONE]: "Not done",
+  [INBOX_REPLY.SUBMITTED]: "Filled in",
+  [INBOX_REPLY.ACKNOWLEDGED]: "Acknowledged",
 } as const satisfies Record<InboxReplyKind, string>;
 
-/** What a settled card says of what came of it: a lead in strong words, and the note after it where there is one. */
+/** What a settled card says of what came of it: a lead in strong words, and the lines after it where there are any. */
 interface SettledWords {
   readonly lead: string;
   readonly note?: string;
+}
+
+/** A settled card's lines: a form's values one per line, then the note. */
+function settledNote(answer: InboxReply): string | undefined {
+  const values = (answer.values ?? []).map(
+    ({ label, value }) => `${label}: ${fieldValueWords(value)}`,
+  );
+  const lines = [...values, ...(answer.note === undefined ? [] : [answer.note])];
+  return lines.length === 0 ? undefined : lines.join("\n");
 }
 
 /** How a settled card says what came of it: the answer and its note, or why the agent took it back. */
@@ -113,7 +173,8 @@ export function settledWords(item: InboxItem): SettledWords {
   if (answer === undefined) return { lead: REPLY_WORDS[INBOX_REPLY.ANSWERED] };
   const lead =
     answer.reply === INBOX_REPLY.CHOSE
-      ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${answer.choice ?? ""}`
+      ? `${REPLY_WORDS[INBOX_REPLY.CHOSE]} ${(answer.choices ?? []).join(", ")}`
       : REPLY_WORDS[answer.reply];
-  return { lead, ...(answer.note === undefined ? undefined : { note: answer.note }) };
+  const note = settledNote(answer);
+  return { lead, ...(note === undefined ? undefined : { note }) };
 }

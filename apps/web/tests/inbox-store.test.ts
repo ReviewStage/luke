@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import {
+  INBOX_BLOCK,
   INBOX_BOUNDS,
-  INBOX_KIND,
   INBOX_REPLY,
+  INBOX_RESPONSE,
   INBOX_STATUS,
+  INBOX_WIRE_VERSION,
   type InboxPost,
 } from "@sidecar/hosted/inbox-wire";
 import { Duration, Effect, Option, Result } from "effect";
@@ -63,17 +65,19 @@ const openAgent = Effect.gen(function* () {
 
 const QUEUE: InboxPost = {
   key: "invite-queue",
-  kind: INBOX_KIND.CHOICE,
   title: "Which queue sends the invitation emails?",
-  details: "The repo already runs **Postgres**.",
-  options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
-  recommended: "Postgres outbox",
+  blocks: [{ type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." }],
+  response: {
+    type: INBOX_RESPONSE.CHOICE,
+    options: [{ label: "Postgres outbox", detail: "No new service." }, { label: "Redis" }],
+    recommended: "Postgres outbox",
+  },
 };
 
 const SETTINGS: InboxPost = {
   key: "branch-protection",
-  kind: INBOX_KIND.TASK,
   title: "Require a review on main",
+  response: { type: INBOX_RESPONSE.TASK },
   needsReply: false,
 };
 
@@ -86,6 +90,9 @@ it.layer(testSqlClient)("the inbox store", (it) => {
         const posted = yield* postInboxItem(agent, QUEUE);
         assert.ok(Result.isSuccess(posted));
         assert.equal(posted.success.revision, 1);
+        assert.equal(posted.success.version, INBOX_WIRE_VERSION);
+        assert.deepEqual(posted.success.blocks, QUEUE.blocks);
+        assert.deepEqual(posted.success.response, QUEUE.response);
         assert.equal(
           posted.success.needsReply,
           true,
@@ -95,7 +102,7 @@ it.layer(testSqlClient)("the inbox store", (it) => {
           agent.userId,
           posted.success.id,
           1,
-          { reply: INBOX_REPLY.CHOSE, choice: "Redis" },
+          { reply: INBOX_REPLY.CHOSE, choices: ["Redis"] },
           randomUUID(),
         );
         yield* TestClock.adjust(Duration.seconds(1));

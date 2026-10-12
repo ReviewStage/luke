@@ -220,16 +220,21 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
   );
 });
 
-test("a post to the inbox is a row naming its item, its context and options as the body, the recommended one saying so; a close names the key and says why", () => {
+test("a post to the inbox is a row naming its item, its blocks and options as the body, a link as its label and address and the recommended option saying so; a close names the key and says why", () => {
   const view = toolCallView({
     tool: "post_to_inbox",
     input: {
       key: "invite-queue",
       title: "Which queue backs the `invite` emails?",
-      kind: "choice",
-      details: "Both work.",
-      options: [{ label: "Postgres", detail: "One database." }, { label: "Redis" }],
-      recommended: "Postgres",
+      blocks: [
+        { type: "markdown", text: "Both work." },
+        { type: "link", url: "https://github.com/acme/relay/pull/7", label: "The PR" },
+      ],
+      response: {
+        type: "choice",
+        options: [{ label: "Postgres", detail: "One database." }, { label: "Redis" }],
+        recommended: "Postgres",
+      },
     },
     output: { status: "accepted", inbox: [] },
   });
@@ -241,7 +246,7 @@ test("a post to the inbox is a row naming its item, its context and options as t
   );
   assert.deepEqual(view.input, {
     kind: TOOL_BLOCK.TEXT,
-    text: "Both work.\n- Postgres (recommended) -- One database.\n- Redis",
+    text: "Both work.\nThe PR: https://github.com/acme/relay/pull/7\n- Postgres (recommended) -- One database.\n- Redis",
   });
   assert.equal(view.output, undefined);
 
@@ -258,7 +263,7 @@ test("a post to the inbox is a row naming its item, its context and options as t
 test("an inbox call that did nothing shows why, so a refused post never reads as posted", () => {
   const view = toolCallView({
     tool: "post_to_inbox",
-    input: { key: "one-more", title: "Protect main", kind: "task" },
+    input: { key: "one-more", title: "Protect main", response: { type: "task" } },
     output: { status: "rejected", reason: "Not posted: you hold 20 open items already." },
   });
   assert.deepEqual(view.output, {
