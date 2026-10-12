@@ -10,8 +10,8 @@ import type { ReportHandlers } from "../bridge-host";
 import type { HostOperator } from "../gateway/host-operator";
 import type { PanelManager } from "../window/panel-manager";
 
-/** A window this file sends to or reads the sender of: the hidden voice window, and the call window. */
-interface WindowSurface {
+/** The hidden window the conversation lives in, as much of it as this file needs. */
+interface VoiceWindowSurface {
   current(): BrowserWindow | undefined;
   owns(webContents: WebContents): boolean;
 }
@@ -28,9 +28,7 @@ type LiveSessionActs = Pick<
 
 export interface VoiceRuntimeDependencies {
   panels: PanelManager;
-  voiceWindow: WindowSurface;
-  /** The floating call window, which presses the call's controls and draws its levels. */
-  callWindow: WindowSurface;
+  voiceWindow: VoiceWindowSurface;
   /** Where the voice window's own reports are written; every panel is told from it. */
   state: AppStateStore;
   openExternal: (url: string) => Promise<void>;
@@ -104,8 +102,8 @@ export function voiceRuntimeActRows(
 
 export function voiceRuntimeReports(
   dependencies: VoiceRuntimeDependencies,
-): Pick<ReportHandlers, "reportVoiceView" | "reportVoiceLevel" | "setShortcutCapturing"> {
-  const { panels, voiceWindow, callWindow } = dependencies;
+): Pick<ReportHandlers, "reportVoiceView" | "setShortcutCapturing"> {
+  const { panels, voiceWindow } = dependencies;
   return {
     // The voice window's snapshot: written to the document, from which every
     // panel is told and a late one bootstraps, and read for the one level the
@@ -124,14 +122,6 @@ export function voiceRuntimeReports(
           exchange_kind: countedKind,
         });
       }
-    },
-    // Relayed to the panels rather than written to the document: a loudness is
-    // a reading that expires before the next one arrives, so no panel
-    // bootstraps from it and no version of the document should carry one.
-    reportVoiceLevel(context, levels) {
-      if (!voiceWindow.owns(context.sender)) return;
-      panels.broadcast(channels.onVoiceLevelChanged, levels);
-      callWindow.current()?.webContents.send(channels.onVoiceLevelChanged, levels);
     },
     setShortcutCapturing(context, capturing) {
       if (!panels.owns(context.sender)) return;

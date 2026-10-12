@@ -131,28 +131,6 @@ test("an exchange kind rides a voice view only on an edge that opened one", () =
   );
 });
 
-test("a voice level report is both speakers, each a finite number in the unit interval", () => {
-  const guard = BRIDGE.onVoiceLevelChanged.result;
-  assert.ok(guard);
-  assert.equal(guard({ developer: 0, luke: 1 }), true);
-  assert.equal(guard({ developer: 0.5, luke: 0.5 }), true);
-  assert.equal(guard({ developer: 1.5, luke: 0.5 }), false);
-  assert.equal(guard({ developer: -0.1, luke: 0 }), false);
-  assert.equal(guard({ developer: Number.NaN, luke: 0 }), false);
-  assert.equal(guard({ developer: 0.5 }), false);
-  assert.equal(guard(0.5), false);
-  assert.equal(BRIDGE.reportVoiceLevel.args([{ developer: 0.25, luke: 0 }]), true);
-  assert.equal(BRIDGE.reportVoiceLevel.args([]), false);
-  assert.equal(BRIDGE.reportVoiceLevel.args([0.25]), false);
-  assert.equal(
-    BRIDGE.reportVoiceLevel.args([
-      { developer: 0.25, luke: 0 },
-      { developer: 0, luke: 0.25 },
-    ]),
-    false,
-  );
-});
-
 test("shortcut capture is reported as one boolean", () => {
   assert.equal(BRIDGE.setShortcutCapturing.kind, "send");
   assert.equal(BRIDGE.setShortcutCapturing.args([true]), true);

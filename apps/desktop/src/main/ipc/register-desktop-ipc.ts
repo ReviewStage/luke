@@ -41,7 +41,6 @@ export function registerDesktopIpc(services: DesktopServices): void {
   const voiceRuntime = {
     panels,
     voiceWindow,
-    callWindow,
     state,
     setShortcutCapturing: (capturing: boolean) => hotkeys.setShortcutCapturing(capturing),
     openExternal: config.openExternal,

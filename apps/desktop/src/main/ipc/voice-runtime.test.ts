@@ -36,7 +36,6 @@ const RUN = {
 
 function fixture() {
   const sentToVoice: { channel: string; payload: WireRecord }[] = [];
-  const sentToCall: { channel: string; payload: WireRecord }[] = [];
   const toPanels: { channel: string; payload: WireRecord }[] = [];
   let panelsFocused = 0;
   const liveCalls: string[] = [];
@@ -57,17 +56,6 @@ function fixture() {
       },
     }),
   } as unknown as VoiceRuntimeDependencies["voiceWindow"];
-  // SAFETY: the call window's paths read only `owns` and `current().webContents.send`, as the voice window's do.
-  const callWindow = {
-    owns: (sender: WebContents) => sender === callSender,
-    current: () => ({
-      webContents: {
-        send: (channel: string, payload: WireRecord) => {
-          sentToCall.push({ channel, payload });
-        },
-      },
-    }),
-  } as unknown as VoiceRuntimeDependencies["callWindow"];
   // SAFETY: these paths read only `owns`, the exchange edge, the broadcast, and the focus off the panel manager.
   const panels = {
     owns: (sender: WebContents) => sender === panelSender,
@@ -82,7 +70,6 @@ function fixture() {
   const dependencies = {
     panels,
     voiceWindow,
-    callWindow,
     state: new AppStateStore(initialAppState(RUN, false), Context.empty()),
     openExternal: async () => undefined,
     liveSession: {
@@ -139,7 +126,6 @@ function fixture() {
     reports,
     liveCalls,
     sentToVoice,
-    sentToCall,
     toPanels,
     panelsFocused: () => panelsFocused,
     panelSender,
@@ -245,16 +231,6 @@ it.effect(
       assert.deepEqual(f.toPanels, [shown, shown]);
     }),
 );
-
-it("the voice window's levels reach the call window as well as the panels, and nothing else's do", () => {
-  const f = fixture();
-  const levels = { developer: 0.4, luke: 0 };
-  f.reports.reportVoiceLevel({ sender: f.panelSender }, levels);
-  assert.deepEqual(f.sentToCall, []);
-  f.reports.reportVoiceLevel({ sender: f.voiceSender }, levels);
-  assert.deepEqual(f.sentToCall, [{ channel: channels.onVoiceLevelChanged, payload: levels }]);
-  assert.deepEqual(f.toPanels, [{ channel: channels.onVoiceLevelChanged, payload: levels }]);
-});
 
 it("the voice window's report is written to the document; a panel's report is ignored", () => {
   const f = fixture();
