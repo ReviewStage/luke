@@ -1,4 +1,11 @@
 import { db } from "@sidecar/database/core/query";
+import {
+  type ConversationTarget,
+  type SpokenAskAttach,
+  STORE_WRITE_EFFECT,
+  STORE_WRITE_REFUSAL,
+  type StoreWriter,
+} from "@sidecar/database/models/writer";
 import { voiceSessions, voiceTranscriptSegments } from "@sidecar/database/schemas/voice";
 import { VOICE_SEGMENT_ROLE, type VoiceSegmentRole } from "@sidecar/database/voice-vocabulary";
 import { and, asc, eq, gte, lte, sql } from "drizzle-orm";
@@ -18,13 +25,6 @@ import {
   TRANSCRIPT_SPEAKER,
   type TranscriptSpeaker,
 } from "../../live.js";
-import {
-  type ConversationTarget,
-  type SpokenAskAttach,
-  STORE_WRITE_EFFECT,
-  STORE_WRITE_REFUSAL,
-  type StoreWriter,
-} from "./writer.js";
 
 /**
  * The voice writer: what a GPT Live session's event stream leaves in the

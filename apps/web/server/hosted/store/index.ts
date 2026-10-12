@@ -75,14 +75,14 @@ export {
   type StoredTurnRecord,
 } from "@sidecar/database/models/message-reads";
 export {
+  type ConversationTarget,
+  STORE_WRITE_EFFECT,
+  type StoreWriter,
+  storeWriter,
+} from "@sidecar/database/models/writer";
+export {
   type VoiceTarget,
   type VoiceWriteResult,
   type VoiceWriter,
   voiceWriter,
 } from "./voice-writer.js";
-export {
-  type ConversationTarget,
-  STORE_WRITE_EFFECT,
-  type StoreWriter,
-  storeWriter,
-} from "./writer.js";

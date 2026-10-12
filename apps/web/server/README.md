@@ -1794,7 +1794,7 @@ the schemas as the key, and the turn row carries that hash and nothing else
 of either, naming no row and holding no foreign key. Nothing in these tables
 is sealed: the content is readable by an operator.
 
-The store writer, `server/hosted/store/writer.ts`, is the one path by which a
+The store writer, `packages/database/src/models/writer.ts`, is the one path by which a
 `messages` or `turns` row is written, and
 `tests/store-writer-boundary.test.ts` holds the server's own sources to that:
 the writer is the one server module with an insert, an update, or a delete over

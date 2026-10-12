@@ -1,11 +1,10 @@
+import type { StoreWriter } from "@sidecar/database/models/writer";
 import type { LanguageModel } from "ai";
 import { Data, Effect, Option, type Schema, type Scope } from "effect";
-
 import type { SqlClient } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
 import type { EveSessions } from "../hosted/brain-host/eve-sessions.js";
 import { openPlanConversation } from "../hosted/plan-store.js";
-import type { StoreWriter } from "../hosted/store/writer.js";
 import {
   type ExchangeAttachment,
   type HostedLiveExchange,

@@ -1,19 +1,44 @@
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import { db } from "@sidecar/database/core/query";
-import { lineParts, receivedPartsOf } from "@sidecar/database/models/attached-file-parts";
 import {
-  EpochMillisColumnSchema,
-  InstantColumnSchema,
-  nullable,
-  TurnUsageColumnSchema,
-} from "@sidecar/database/models/columns";
-import { sentLineId } from "@sidecar/database/models/ids";
-import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "@sidecar/database/models/message-reads";
-import { asks, conversations, messages, turns } from "@sidecar/database/schemas/storage";
-import { voiceSessions } from "@sidecar/database/schemas/voice";
-import { CONVERSATION_KIND } from "@sidecar/database/storage-vocabulary";
+  BRAIN_REQUEST_STATUS,
+  BRAIN_RUN_EVENT,
+  BRAIN_TURN_ORIGIN,
+  type BrainRunEvent,
+  type BrainTurnOrigin,
+  STEP_START_PART,
+  settledToolPart,
+  toolPartType,
+  UI_PART_STATE,
+  UI_PART_TYPE,
+} from "@sidecar/brain";
+import { isWireUuid } from "@sidecar/hosted";
 import type { CodingAgentAttachment } from "@sidecar/hosted/coding-agent-wire";
+import {
+  isSettledToolPartState,
+  isStoredToolPart,
+  type StoredToolPart,
+  TOOL_PART_STATE,
+} from "@sidecar/session";
+import { readStoredUIMessages, type StoredUIMessage } from "@sidecar/session/ui-messages";
+import {
+  type AssistantMessageMetadata,
+  isWireString,
+  jsonRoundTrip,
+  MESSAGE_AUTHOR,
+  MESSAGE_CHANNEL,
+  MESSAGE_ROLE,
+  type SchemaPath,
+  type SchemaRefusal,
+  type SpokenAskMetadata,
+  type StoredMessageMetadata,
+  TURN_ORIGIN,
+  TURN_STATUS,
+  type TurnOrigin,
+  type TurnStatus,
+  UNKNOWN_ACTION_STATUS,
+  type UnparsedWireValue,
+} from "@sidecar/wire";
 import {
   asSchema,
   type ReasoningUIPart,
@@ -27,41 +52,19 @@ import { alias } from "drizzle-orm/pg-core";
 import { Cause, DateTime, Duration, Effect, Exit, Fiber, Option, Result, Schema } from "effect";
 import { SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
+import { db } from "../core/query.js";
+import { asks, conversations, messages, turns } from "../schemas/storage.js";
+import { voiceSessions } from "../schemas/voice.js";
+import { CONVERSATION_KIND } from "../storage-vocabulary.js";
+import { lineParts, receivedPartsOf } from "./attached-file-parts.js";
 import {
-  type AssistantMessageMetadata,
-  BRAIN_REQUEST_STATUS,
-  BRAIN_RUN_EVENT,
-  BRAIN_TURN_ORIGIN,
-  type BrainRunEvent,
-  type BrainTurnOrigin,
-  isSettledToolPartState,
-  isStoredToolPart,
-  isWireString,
-  isWireUuid,
-  jsonRoundTrip,
-  MESSAGE_AUTHOR,
-  MESSAGE_CHANNEL,
-  MESSAGE_ROLE,
-  readStoredUIMessages,
-  type SchemaPath,
-  type SchemaRefusal,
-  type SpokenAskMetadata,
-  STEP_START_PART,
-  type StoredMessageMetadata,
-  type StoredToolPart,
-  type StoredUIMessage,
-  settledToolPart,
-  TOOL_PART_STATE,
-  TURN_ORIGIN,
-  TURN_STATUS,
-  type TurnOrigin,
-  type TurnStatus,
-  toolPartType,
-  UI_PART_STATE,
-  UI_PART_TYPE,
-  UNKNOWN_ACTION_STATUS,
-  type UnparsedWireValue,
-} from "../../core.js";
+  EpochMillisColumnSchema,
+  InstantColumnSchema,
+  nullable,
+  TurnUsageColumnSchema,
+} from "./columns.js";
+import { sentLineId } from "./ids.js";
+import { COALESCED_LINE_SEPARATOR, noReceiptOfLine } from "./message-reads.js";
 
 /**
  * The store writer: the one path by which a `messages` or `turns` row is
