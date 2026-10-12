@@ -698,6 +698,45 @@ it.effect(
     }),
 );
 
+/** One item that waits across the account, as the service answers it. */
+const WAITING = {
+  id: ITEM_ID,
+  planId: PLAN_ID,
+  agentId: AGENT_ID,
+  agentTitle: "Fix invitations",
+  agentModel: "anthropic/claude-opus-5.5",
+  title: "Push to the release branch?",
+  revision: 2,
+  postedAt: 1_800_000_000_000,
+  updatedAt: 1_800_000_060_000,
+};
+
+it.effect(
+  "reads what waits across the account past the cursor at the account's inbox address, still read when the service holds it past an ordinary call's deadline",
+  () =>
+    Effect.gen(function* () {
+      const asked = yield* Deferred.make<string>();
+      let answer: (response: Response) => void = () => undefined;
+      const held = fakeHttpClientLayer((url) => {
+        Deferred.doneUnsafe(asked, Effect.succeed(url));
+        return new Promise<Response>((resolve) => {
+          answer = resolve;
+        });
+      });
+
+      const reading = yield* Effect.forkChild(Effect.provide(client().accountInbox("7"), held));
+      assert.equal(yield* Deferred.await(asked), "https://tryluke.dev/api/inbox?after=7");
+      yield* TestClock.adjust(Duration.seconds(20));
+      answer(jsonResponse({ items: [WAITING], cursor: "8", readAt: 1_800_000_120_000 }));
+
+      assert.deepEqual(yield* Fiber.join(reading), {
+        items: [WAITING],
+        cursor: "8",
+        readAt: 1_800_000_120_000,
+      });
+    }),
+);
+
 it.effect(
   "answers an inbox item at its own address with the answer as sent, and reads each refusal a message names as its own failure",
   () =>

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { HOSTED_API_ERROR } from "@sidecar/hosted";
+import { accountInboxAnswerSchema } from "@sidecar/hosted/account-inbox-wire";
 import {
   base64Chars,
   CHECK_SUMMARY,
@@ -3252,6 +3253,7 @@ function startAs(bearer: string | undefined, planId: string, body: WireBoundaryI
 
 const PLAN_INBOX = "/api/plans/inbox";
 const INBOX_ITEM = "/api/inbox/item";
+const ACCOUNT_INBOX = "/api/inbox";
 
 it.layer(testSqlClient)("the developer's inbox", (it) => {
   /** The owner's plan with one agent started on it, its session claimed so a message reaches it, and the inbox as each side sees it. */
@@ -3278,7 +3280,13 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
       /** The owner's answer to an item, as the route answers it. */
       const answer = (itemId: string, body: WireBoundaryInput, bearer = opened.owner) =>
         opened.ask(request(INBOX_ITEM, bearer, { method: "POST", id: itemId, body }));
-      return { ...opened, agent, target, post, read, answer };
+      /** What waits across the account, as the bearer reads it past the cursor. */
+      const waiting = (after?: string, bearer = opened.owner) =>
+        Effect.map(
+          opened.ask(request(ACCOUNT_INBOX, bearer, after === undefined ? undefined : { after })),
+          (answered) => readAnswer(accountInboxAnswerSchema, HOSTED_HTTP_STATUS.OK, answered),
+        );
+      return { ...opened, agent, target, post, read, answer, waiting };
     });
 
   const QUESTION = {
@@ -3693,6 +3701,87 @@ it.layer(testSqlClient)("the developer's inbox", (it) => {
           yield* ask(request(PLAN_INBOX, other, { id: plan.id })),
           refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
         );
+      }),
+  );
+
+  it.effect(
+    "the account's inbox answers every open item across its plans with the agent that posted it, and leaves out settled items, an archived plan's, and another account's",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, agent, ask, post, waiting } = yield* openInbox();
+        const second = yield* createPlan(owner, {
+          name: "Billing export",
+          repository: RELAY_FULL_NAME,
+        });
+        yield* savePlanDocument(owner, second.id, SAVED);
+        const secondAgent = (yield* startedAgent(owner, second.id, ask)).agent;
+        const onSecond = (value: InboxPost) =>
+          postInboxItem({ userId: owner, planId: second.id, agentId: secondAgent.id }, value);
+        yield* post(QUESTION);
+        const settled = yield* post({ ...QUESTION, key: "settled", title: "Settled already" });
+        assert.ok(Result.isSuccess(settled));
+        yield* answerInboxItem(
+          owner,
+          settled.success.id,
+          settled.success.revision,
+          { reply: INBOX_REPLY.ANSWERED, note: "Done." },
+          randomUUID(),
+        );
+        yield* onSecond({ key: "export-format", kind: INBOX_KIND.QUESTION, title: "CSV or JSON?" });
+
+        const all = yield* waiting();
+        assert.deepEqual(
+          all.items.map((item) => [item.title, item.planId, item.agentId, item.agentModel]).sort(),
+          [
+            [QUESTION.title, agent.planId, agent.id, agent.model],
+            ["CSV or JSON?", second.id, secondAgent.id, secondAgent.model],
+          ].sort(),
+        );
+        assert.ok(all.items.every((item) => item.agentTitle === null));
+
+        yield* updatePlan(owner, second.id, { archived: true });
+        assert.deepEqual(
+          (yield* waiting()).items.map((item) => item.title),
+          [QUESTION.title],
+        );
+        assert.deepEqual((yield* waiting(undefined, other)).items, []);
+        assert.deepEqual(
+          yield* ask(request(ACCOUNT_INBOX, undefined)),
+          refusal(HOSTED_HTTP_STATUS.UNAUTHORIZED, HOSTED_API_ERROR.INVALID_TOKEN),
+        );
+      }),
+  );
+
+  it.effect(
+    "a read of the account's inbox holds while nothing changed past its cursor, and answers once an item opens or one waiting is answered",
+    () =>
+      Effect.gen(function* () {
+        const { owner, post, waiting } = yield* openInbox();
+        const first = yield* waiting();
+        assert.deepEqual(first.items, []);
+
+        const held = yield* Effect.forkChild(waiting(first.cursor));
+        yield* TestClock.adjust(Duration.seconds(4));
+        assert.equal(held.pollUnsafe(), undefined, "nothing changed, so the read holds");
+        yield* post(QUESTION);
+        const opened = yield* driven(held, CODER.ACCOUNT_INBOX_POLL, EARLY_READ_STEPS / 2);
+        assert.deepEqual(
+          opened.items.map((item) => [item.title, item.revision]),
+          [[QUESTION.title, 1]],
+        );
+
+        const answered = yield* Effect.forkChild(waiting(opened.cursor));
+        const [item] = opened.items;
+        assert.ok(item);
+        yield* answerInboxItem(
+          owner,
+          item.id,
+          item.revision,
+          { reply: INBOX_REPLY.ANSWERED, note: "Short." },
+          randomUUID(),
+        );
+        const emptied = yield* driven(answered, CODER.ACCOUNT_INBOX_POLL, EARLY_READ_STEPS / 2);
+        assert.deepEqual(emptied.items, []);
       }),
   );
 });

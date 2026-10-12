@@ -43,6 +43,12 @@ export const HOSTED_SERVICE_PATH = {
    * browser on to the landing page `linear-wire.ts` names.
    */
   ACCOUNT_LINEAR_CONNECTED: "/api/account/linear/connected",
+  /**
+   * What waits on the developer across the account's plans: every open
+   * inbox item, past a cursor (GET), held open while nothing changed, as a
+   * plan's inbox is. `account-inbox-wire.ts` declares the answer.
+   */
+  INBOX: "/api/inbox",
   /** The models a coding agent may run on, as the service offers them now (GET). `models-wire.ts` declares the answer. */
   MODELS: "/api/models",
   /**

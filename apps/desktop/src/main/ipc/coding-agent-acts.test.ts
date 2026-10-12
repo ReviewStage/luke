@@ -97,6 +97,9 @@ function fixture() {
       shown: (agentId) => {
         noted.push(`shown:${agentId}`);
       },
+      shownInbox: (planId) => {
+        noted.push(`inbox:${planId}`);
+      },
     },
     host: {
       codingAgentModels: () =>
@@ -369,15 +372,15 @@ it.effect(
         PANEL,
       );
       yield* router.performAct(
-        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID } },
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID, inboxPlanId: null } },
         PANEL,
       );
       yield* router.performAct(
-        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: null } },
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: null, inboxPlanId: PLAN_ID } },
         PANEL,
       );
       const refused = yield* router.performAct(
-        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID } },
+        { kind: ACT_KIND.CODING_AGENTS_SHOWN, payload: { agentId: AGENT_ID, inboxPlanId: null } },
         VOICE,
       );
 
@@ -387,7 +390,9 @@ it.effect(
         `status:${AGENT_ID}=${CODING_AGENT_STATUS.RUNNING}`,
         "agents:",
         `shown:${AGENT_ID}`,
+        "inbox:null",
         "shown:null",
+        `inbox:${PLAN_ID}`,
       ]);
       assert.equal(refused.status, ACT_OUTCOME_STATUS.REFUSED);
     }),

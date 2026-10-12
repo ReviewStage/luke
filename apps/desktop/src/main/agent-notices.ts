@@ -1,5 +1,7 @@
+import type { AccountInboxAnswer, AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
@@ -9,13 +11,15 @@ import {
   type CodingAgentStatus,
   type CodingAgentSummary,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
 import { modelLabel } from "@sidecar/hosted/model-label";
 import type { CatalogModel } from "@sidecar/hosted/models-wire";
 import { scheduleOnce } from "@sidecar/runtime/effect";
-import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
+import { Context, Duration, Effect, Queue, Schedule, type Scope, Stream } from "effect";
+import type { AppInboxPlan } from "#shared/messages/app-state";
 
 /**
- * agent-notices.ts -- tells the developer when a coding agent's turn ends: the ledger of where each agent stands, the poll that keeps it current while no tab does, and the notification posted when one ends.
+ * agent-notices.ts -- tells the developer when a coding agent's turn ends or an inbox item lands: the ledger of where each agent stands, the poll that keeps it current while no tab does, the held read of what waits across the account, and the notification, toast, and badge they announce by.
  *
  * The panel reads an agent's status only while its tab is on screen, so
  * main keeps a ledger of its own, fed by every coding-agent answer that
@@ -63,10 +67,37 @@ import { Context, Duration, Effect, Queue, Schedule, type Scope } from "effect";
  * and whenever a read of what an agent published, the panel's or the
  * notice's own, finds a pull request other than the one it last saw for
  * that agent, since that read is what the service keeps for the list.
+ *
+ * The notices hold one more read of their own: what waits on the developer
+ * across the account's plans, every open inbox item, on the service's held
+ * read, for as long as an account is signed in, so an item an agent posts
+ * is heard whichever plan is open, or none, and whichever Mac started the
+ * agent. Each answer is written whole as each plan's open items, which the
+ * sidebar counts, and the Dock's badge is their number. The first answer
+ * for an account is where it stands and announces nothing; after it, an
+ * item that opens, newly posted or posted again under the key of one the
+ * developer answered or the agent closed, is announced once, by the same
+ * doors and the same gates as a turn's end: nowhere while the window is
+ * focused on that plan's Inbox tab, in the window's toast while it is
+ * focused on anything else, and as a notification while it is behind,
+ * unless the developer turned notifications off. An item the agent posts
+ * again while it is still open is the same ask kept current, and announces
+ * nothing, and so does one whose plan comes back from the archive, which
+ * changed before the last answer was read. Another account, or nobody,
+ * ends the read held for the last, and lets go of its items, its counts,
+ * and its badge before anything of the next is read. A read that did not
+ * answer is asked again on the watch's clock.
  */
 
 /** How often a plan with an agent still writing has its agents listed again. */
 const WATCH_INTERVAL = Duration.seconds(30);
+
+/**
+ * How long before the last answer of what waits was read an item's change
+ * still counts as since it: room for the clocks of the service's instances
+ * to disagree, so an item written as the last read was made is not missed.
+ */
+const READ_SKEW = Duration.minutes(1);
 
 /** What the notification is titled for a plan main holds no name for. */
 const UNNAMED_PLAN_TITLE = "Luke";
@@ -104,15 +135,27 @@ export interface AgentEndToast {
   failed: boolean;
 }
 
+/** An inbox item that opened as the window's own toast says it: the plan and the item, the words, and the plan's name under them. */
+export interface InboxItemToast {
+  planId: string;
+  itemId: string;
+  words: string;
+  detail: string;
+}
+
 /**
- * The two doors an announcement leaves this process through: the OS's
- * notification, and the panel's toast. A service rather than a dependency
- * handed in, because it is this process's door to Electron, so a test stands
- * a Layer of its own on it.
+ * The doors an announcement leaves this process through: the OS's
+ * notification, the panel's toast for a turn's end or an inbox item, and
+ * the Dock's badge. A service rather than a dependency handed in, because
+ * it is this process's door to Electron, so a test stands a Layer of its
+ * own on it.
  */
 export interface AgentNoticeDoorsSurface {
   post(notice: AgentNotice): void;
   toast(end: AgentEndToast): void;
+  toastInbox(item: InboxItemToast): void;
+  /** How many inbox items wait across the account, which the Dock's badge counts; none clears it. */
+  badge(count: number): void;
 }
 
 export class AgentNoticeDoors extends Context.Service<AgentNoticeDoors, AgentNoticeDoorsSurface>()(
@@ -140,6 +183,14 @@ export interface AgentNoticesDependencies {
   onAccountChanged: (listener: (signedInAs: string | undefined) => void) => () => void;
   /** An agent started or ended, or a read found it published something new: the plan list is read again, so its rows say so. */
   onPlanAgentsMoved: () => void;
+  /** What waits across the account past a cursor, as the host answers it: the inbox read's one read. */
+  readAccountInbox: (after: string) => Effect.Effect<CodingAgentAccountInboxAnswerView>;
+  /** Who is signed in, by the account's own key, from where the launch stands and at each change: whose items the inbox read reads. */
+  accounts: Stream.Stream<string | undefined>;
+  /** Where each plan's waiting items are written, for the sidebar to count. */
+  onWaitingChanged: (waiting: readonly AppInboxPlan[]) => void;
+  /** Brings Luke forward on the plan with its Inbox tab open: an inbox notification's click. */
+  openInbox: (planId: string) => void;
   watchInterval?: Duration.Duration;
   report: (line: string) => void;
 }
@@ -161,6 +212,8 @@ export interface AgentNotices {
   observePlanGone(planId: string): void;
   /** The panel said which agent's tab it shows, or none. */
   shown(agentId: string | null): void;
+  /** The panel said which plan's Inbox tab it shows, or none. */
+  shownInbox(planId: string | null): void;
 }
 
 /** What the ledger keeps of one agent: enough to watch it, to name it, and to tell one turn's end from the next's. */
@@ -233,6 +286,31 @@ export function noticeText(input: {
 }
 
 /**
+ * What an inbox item's announcement says: the plan's name over the agent,
+ * by its title or else its model's name, and the item's title, and nothing
+ * of what the item details.
+ */
+function inboxNoticeText(
+  item: AccountInboxEntry,
+  planName: string | undefined,
+  models: readonly CatalogModel[] | undefined,
+): Pick<AgentNotice, "title" | "body"> {
+  const agent = item.agentTitle ?? modelLabel(item.agentModel, models);
+  return { title: planName ?? UNNAMED_PLAN_TITLE, body: `${agent}: ${item.title}` };
+}
+
+/** The items each plan holds waiting, the plan whose item changed latest first, as the read answered them latest first. */
+function waitingPlans(items: readonly AccountInboxEntry[]): AppInboxPlan[] {
+  const plans = new Map<string, string[]>();
+  for (const item of items) {
+    const held = plans.get(item.planId);
+    if (held === undefined) plans.set(item.planId, [item.id]);
+    else held.push(item.id);
+  }
+  return [...plans].map(([planId, ids]) => ({ planId, items: ids }));
+}
+
+/**
  * The notices, built on the ambient scope: the watch forks into it and the
  * focus subscription is given back when it closes, so both end with the
  * launch rather than with a handle a caller had to remember.
@@ -248,11 +326,17 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     const published = new Map<string, CodingAgentPullRequest | null>();
     const unseen = new Set<string>();
     const ends = yield* Queue.unbounded<TurnEnd>();
+    const interval = dependencies.watchInterval ?? WATCH_INTERVAL;
     let models: readonly CatalogModel[] | undefined;
     let shownAgent: string | null = null;
     let focused = false;
     /** Whose agents the ledger holds: read as it takes its first, and moved only by another account. */
     let holder: string | undefined;
+    /** The inbox read's last answer for the account signed in, and its items by id; none before its first. */
+    let waiting:
+      | { readonly answer: AccountInboxAnswer; readonly items: ReadonlySet<string> }
+      | undefined;
+    let shownInbox: string | null = null;
 
     function publishUnseen(): void {
       onUnseenChanged([...unseen]);
@@ -333,6 +417,87 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     });
     // Each announce suspends on the queue itself, so the loop need not yield between ends: the ends queued together are posted together.
     yield* Effect.forkScoped(Effect.forever(announce, { disableYield: true }));
+
+    /** Writes what waits, each plan's items for the sidebar and their number for the Dock. */
+    function publishWaiting(items: readonly AccountInboxEntry[]): void {
+      dependencies.onWaitingChanged(waitingPlans(items));
+      doors.badge(items.length);
+    }
+
+    /** An item opened: told nowhere on its plan's Inbox in front, in the toast elsewhere in front, and as a notification behind. */
+    function announceItem(item: AccountInboxEntry): void {
+      if (focused && shownInbox === item.planId) return;
+      const text = inboxNoticeText(item, planName(item.planId), models);
+      if (focused) {
+        doors.toastInbox({
+          planId: item.planId,
+          itemId: item.id,
+          words: text.body,
+          detail: text.title,
+        });
+        return;
+      }
+      if (dependencies.notifying()) {
+        doors.post({ ...text, onClick: () => dependencies.openInbox(item.planId) });
+      }
+    }
+
+    /**
+     * An answer of the inbox read: written whole, and each item that opened
+     * since the last answer announced, unless this is the first. Note that
+     * an item opened since is one the last answer did not hold and that
+     * changed after it was read, because a plan brought back from the
+     * archive brings its items back unchanged, and they are not news.
+     */
+    function observeWaiting(answer: AccountInboxAnswer): void {
+      const was = waiting;
+      if (was?.answer.cursor === answer.cursor) return;
+      waiting = { answer, items: new Set(answer.items.map((item) => item.id)) };
+      publishWaiting(answer.items);
+      if (was === undefined) return;
+      const since = was.answer.readAt - Duration.toMillis(READ_SKEW);
+      for (const item of answer.items) {
+        if (!was.items.has(item.id) && item.updatedAt > since) announceItem(item);
+      }
+    }
+
+    /**
+     * What waits for one account, read for as long as it stays signed in:
+     * whatever the last account left is let go first, and nobody's is
+     * nothing to read. Note that an answer is let go where the account it
+     * was read for is no longer signed in, because the read may land in the
+     * tick before the change ends it, and the next read waits on the
+     * watch's clock rather than asking again at once for an account that
+     * has left.
+     */
+    const waitingOf = (reader: string | undefined): Effect.Effect<void> =>
+      Effect.suspend(() => {
+        waiting = undefined;
+        publishWaiting([]);
+        if (reader === undefined) return Effect.void;
+        let cursor = INBOX_CURSOR_START;
+        const look = Effect.gen(function* () {
+          const answer = yield* dependencies.readAccountInbox(cursor);
+          if (dependencies.signedInAs() !== reader || "failure" in answer) {
+            return yield* Effect.sleep(interval);
+          }
+          cursor = answer.cursor;
+          observeWaiting(answer);
+        });
+        // A look that died is reported and asked again on the watch's clock, as a tick of the watch is.
+        return Effect.forever(
+          Effect.catchDefect(look, (defect) =>
+            Effect.andThen(
+              Effect.sync(() =>
+                report(
+                  `the inbox read failed: ${defect instanceof Error ? defect.message : String(defect)}`,
+                ),
+              ),
+              Effect.sleep(interval),
+            ),
+          ),
+        );
+      });
 
     /** One agent as an answer carried it, against where the ledger last had it. */
     function observe(agentId: string, next: HeldAgent): void {
@@ -436,6 +601,9 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
         shownAgent = agentId;
         seen(agentId);
       },
+      shownInbox: (planId) => {
+        shownInbox = planId;
+      },
     };
 
     /** One tick of the watch: each watched plan listed again, read as the panel's own list is. */
@@ -463,10 +631,18 @@ export const createAgentNotices = /* @__PURE__ */ Effect.fn("desktop/createAgent
     );
     // The watch never fires at the fork itself: nothing is in the ledger at
     // launch, so the first tick is one interval on, and each after it.
-    const interval = dependencies.watchInterval ?? WATCH_INTERVAL;
     yield* scheduleOnce(
       Duration.toMillis(interval),
       Effect.repeat(watch, Schedule.spaced(interval)),
+    );
+    // Each account's inbox read in turn, the read held for the last one
+    // ended as the next is signed in, so nothing of one is read for another.
+    yield* Effect.forkScoped(
+      Stream.runDrain(
+        Stream.switchMap(Stream.changes(dependencies.accounts), (reader) =>
+          Stream.fromEffect(waitingOf(reader)),
+        ),
+      ),
     );
     // Coming forward on the shown agent's tab is seeing it.
     yield* Effect.acquireRelease(

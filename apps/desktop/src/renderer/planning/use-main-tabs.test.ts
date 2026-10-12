@@ -24,19 +24,26 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-/** The open plan, its agents, nothing while unread, and its draft's key. */
+/** The open plan, its agents, nothing while unread, its draft's key, and whether an inbox item waits on it. */
 interface Stood {
   plan?: string;
   agents: readonly string[] | undefined;
   draft?: string | undefined;
   fixture?: boolean;
+  waiting?: boolean;
 }
 
 /** Mounts the column's tabs alone over what the plan holds now, answering the control as it stands. */
 function mount(stood: Stood) {
   let control: MainTabsControl | undefined;
   function Probe({ held }: { held: Stood }) {
-    control = useMainTabs(held.fixture ?? false, held.plan ?? PLAN, held.agents, held.draft);
+    control = useMainTabs(
+      held.fixture ?? false,
+      held.plan ?? PLAN,
+      held.agents,
+      held.draft,
+      held.waiting ?? false,
+    );
     return null;
   }
   const container = document.createElement("div");
@@ -60,6 +67,19 @@ test("the plan's tab stands first and alone on a plan with no agent, and is show
   assert.equal(column.control().tab, MAIN_TAB.PLAN);
   act(() => column.control().onClose(MAIN_TAB.PLAN));
   assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN]);
+});
+
+test("the plan's Inbox tab stands where an item waits on a plan whose agents this window has not read, and is shown where the sidebar's Inbox asks for it on another plan", () => {
+  const column = mount({ agents: [], waiting: true });
+  act(() => column.control().onShow(OTHER_PLAN, MAIN_TAB.INBOX));
+  column.render({ plan: OTHER_PLAN, agents: undefined, waiting: true });
+  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN, MAIN_TAB.INBOX]);
+  assert.equal(column.control().tab, MAIN_TAB.INBOX);
+
+  // Answered, and with no agent read, the plan has nothing to keep the tab for.
+  column.render({ plan: OTHER_PLAN, agents: [], waiting: false });
+  assert.deepEqual(column.control().tabs, [MAIN_TAB.PLAN]);
+  assert.equal(column.control().tab, MAIN_TAB.PLAN);
 });
 
 test("the plan's Inbox tab stands nowhere until an item it has not seen waits, which opens it after every tab, chosen; it closes and stays closed until another such item", () => {

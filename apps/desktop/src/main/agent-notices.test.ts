@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import {
   CODING_AGENT_CALL_FAILURE,
+  type CodingAgentAccountInboxAnswerView,
   type CodingAgentListAnswer,
   type CodingAgentPullRequestAnswerView,
 } from "@sidecar/hosted/coding-agent-view";
@@ -13,15 +15,18 @@ import {
   type CodingAgentSummary,
   PULL_REQUEST_STATE,
 } from "@sidecar/hosted/coding-agent-wire";
+import { INBOX_CURSOR_START } from "@sidecar/hosted/inbox-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
-import { Duration, Effect, Layer } from "effect";
+import { Duration, Effect, Layer, Queue, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import type { AppInboxPlan } from "#shared/messages/app-state";
 import {
   type AgentEndToast,
   type AgentNotice,
   AgentNoticeDoors,
   type AgentPlace,
   createAgentNotices,
+  type InboxItemToast,
   noticeText,
 } from "./agent-notices";
 
@@ -55,9 +60,10 @@ function agent(
 
 /**
  * The notices over a scripted host: each plan's list answers from its own
- * queue, the last answer standing, and everything posted, toasted, opened,
- * and written is kept for the test to read. Electron's doors are a Layer of
- * the test's own that records what leaves through each.
+ * queue, the last answer standing, the account's inbox read holds until the
+ * test answers it, and everything posted, toasted, opened, badged, and
+ * written is kept for the test to read. Electron's doors are a Layer of the
+ * test's own that records what leaves through each.
  */
 function fixture() {
   const listed: string[] = [];
@@ -65,10 +71,19 @@ function fixture() {
   const published = new Map<string, CodingAgentPullRequestAnswerView>();
   const posted: AgentNotice[] = [];
   const toasted: AgentEndToast[] = [];
+  const inboxToasted: InboxItemToast[] = [];
+  const badges: number[] = [];
   const doors = Layer.succeed(AgentNoticeDoors, {
     post: (notice) => posted.push(notice),
     toast: (end) => toasted.push(end),
+    toastInbox: (item) => inboxToasted.push(item),
+    badge: (count) => badges.push(count),
   });
+  const inboxReads: string[] = [];
+  const waiting: (readonly AppInboxPlan[])[] = [];
+  const openedInboxes: string[] = [];
+  let inboxAnswers: Queue.Queue<CodingAgentAccountInboxAnswerView> | undefined;
+  let accounts: Queue.Queue<string | undefined> | undefined;
   const opened: AgentPlace[] = [];
   const unseen: (readonly string[])[] = [];
   const answers = new Map<string, CodingAgentListAnswer[]>();
@@ -77,41 +92,55 @@ function fixture() {
   let signedInAs: string | undefined = ACCOUNT;
   let notifying = true;
   let listReads = 0;
-  const notices = createAgentNotices({
-    listAgents: (planId) =>
-      Effect.sync(() => {
-        listed.push(planId);
-        const queue = answers.get(planId) ?? [];
-        const answer = queue.length > 1 ? queue.shift() : queue[0];
-        return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
-    readPullRequest: (agentId) =>
-      Effect.sync(() => {
-        readPullRequests.push(agentId);
-        return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
-      }),
-    planName: (planId) => (planId === PLAN_ID ? PLAN_NAME : undefined),
-    open: (place) => opened.push(place),
-    onUnseenChanged: (next) => unseen.push(next),
-    onPanelFocusChanged: (listener) => {
-      focus = listener;
-      return () => {
-        focus = undefined;
-      };
-    },
-    notifying: () => notifying,
-    signedInAs: () => signedInAs,
-    onAccountChanged: (listener) => {
-      accountChanged = listener;
-      return () => {
-        accountChanged = undefined;
-      };
-    },
-    onPlanAgentsMoved: () => {
-      listReads += 1;
-    },
-    watchInterval: WATCH,
-    report: () => undefined,
+  const notices = Effect.gen(function* () {
+    inboxAnswers = yield* Queue.unbounded<CodingAgentAccountInboxAnswerView>();
+    accounts = yield* Queue.unbounded<string | undefined>();
+    Queue.offerUnsafe(accounts, signedInAs);
+    return yield* createAgentNotices({
+      listAgents: (planId) =>
+        Effect.sync(() => {
+          listed.push(planId);
+          const queue = answers.get(planId) ?? [];
+          const answer = queue.length > 1 ? queue.shift() : queue[0];
+          return answer ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        }),
+      readPullRequest: (agentId) =>
+        Effect.sync(() => {
+          readPullRequests.push(agentId);
+          return published.get(agentId) ?? { failure: CODING_AGENT_CALL_FAILURE.UNANSWERED };
+        }),
+      planName: (planId) => (planId === PLAN_ID ? PLAN_NAME : undefined),
+      open: (place) => opened.push(place),
+      onUnseenChanged: (next) => unseen.push(next),
+      onPanelFocusChanged: (listener) => {
+        focus = listener;
+        return () => {
+          focus = undefined;
+        };
+      },
+      notifying: () => notifying,
+      signedInAs: () => signedInAs,
+      onAccountChanged: (listener) => {
+        accountChanged = listener;
+        return () => {
+          accountChanged = undefined;
+        };
+      },
+      onPlanAgentsMoved: () => {
+        listReads += 1;
+      },
+      readAccountInbox: (after) =>
+        Effect.suspend(() => {
+          inboxReads.push(after);
+          assert.ok(inboxAnswers);
+          return Queue.take(inboxAnswers);
+        }),
+      accounts: Stream.fromQueue(accounts),
+      onWaitingChanged: (next) => waiting.push(next),
+      openInbox: (planId) => openedInboxes.push(planId),
+      watchInterval: WATCH,
+      report: () => undefined,
+    });
   }).pipe(Effect.provide(doors));
   return {
     notices,
@@ -133,9 +162,21 @@ function fixture() {
     /** The account as a change of it says: another one, nobody, or the same one renewed. */
     changeAccount: (next: string | undefined) => {
       assert.ok(accountChanged, "the notices subscribe to the account");
+      assert.ok(accounts);
       signedInAs = next;
       accountChanged(next);
+      Queue.offerUnsafe(accounts, next);
     },
+    /** The account's inbox read answered, as the host answers the one standing. */
+    answerInbox: (answer: CodingAgentAccountInboxAnswerView) => {
+      assert.ok(inboxAnswers);
+      Queue.offerUnsafe(inboxAnswers, answer);
+    },
+    inboxReads,
+    waiting,
+    badges,
+    inboxToasted,
+    openedInboxes,
     /** The developer's setting for notifications. */
     notify: (on: boolean) => {
       notifying = on;
@@ -675,5 +716,224 @@ it.effect(
       assert.deepEqual(f.readPullRequests, [opened, branchOnly, unanswered]);
       f.posted[0]?.onClick();
       assert.deepEqual(f.opened, [{ planId: PLAN_ID, agentId: opened }]);
+    }),
+);
+
+/**
+ * Every step the inbox read has to take, taken: the accounts' stream hands
+ * the account on, the read it switched to asks, and the look writes what
+ * was answered, each on a fiber of its own.
+ */
+const settled = Effect.repeat(Effect.yieldNow, { times: 20 });
+
+/** An item waiting on the developer, as the account's inbox read carries it. */
+function waitingItem(id: string, patch: Partial<AccountInboxEntry> = {}): AccountInboxEntry {
+  return {
+    id,
+    planId: PLAN_ID,
+    agentId: AGENT_ID,
+    agentTitle: "Fix invitations",
+    agentModel: MODEL,
+    title: "Push to the release branch?",
+    revision: 1,
+    postedAt: READ_AT,
+    updatedAt: READ_AT,
+    ...patch,
+  };
+}
+
+/** When the service read each answer, by its clock: the instant every item is posted at unless a test says. */
+const READ_AT = 1_800_000_000_000;
+
+const ITEM_A = "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a";
+const ITEM_B = "6f3e8d4b-2c5a-4f7b-9d0e-1a2b3c4d5e6f";
+const ITEM_C = "7a4f9e5c-3d6b-4a8c-8e1f-2b3c4d5e6f7a";
+
+it.effect(
+  "the first answer of what waits is where the account stands: each plan's items are written and the Dock counts them, and nothing is announced",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A),
+          waitingItem(ITEM_B, { planId: OTHER_PLAN_ID }),
+          waitingItem(ITEM_C),
+        ],
+        cursor: "1",
+        readAt: READ_AT,
+      });
+      yield* settled;
+
+      assert.deepEqual(f.waiting.at(-1), [
+        { planId: PLAN_ID, items: [ITEM_A, ITEM_C] },
+        { planId: OTHER_PLAN_ID, items: [ITEM_B] },
+      ]);
+      assert.equal(f.badges.at(-1), 3);
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1"]);
+    }),
+);
+
+it.effect(
+  "an item that opens behind the window is announced once, as the plan's name over the agent and the item's title, and its click opens the plan's Inbox; one posted again while it waits announces nothing, and one posted again after it was answered is announced again",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_B, { agentTitle: null, title: "CSV or JSON?" }),
+          waitingItem(ITEM_A, { revision: 2 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.said(), [{ title: PLAN_NAME, body: "Opus 5.5: CSV or JSON?" }]);
+      assert.equal(f.badges.at(-1), 2);
+      f.posted[0]?.onClick();
+      assert.deepEqual(f.openedInboxes, [PLAN_ID]);
+
+      // The developer answers A, and its agent posts it again under the same key.
+      f.answerInbox({
+        items: [waitingItem(ITEM_B, { title: "CSV or JSON?" })],
+        cursor: "3",
+        readAt: READ_AT,
+      });
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A, { revision: 3 }),
+          waitingItem(ITEM_B, { title: "CSV or JSON?" }),
+        ],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.said(), [
+        { title: PLAN_NAME, body: "Opus 5.5: CSV or JSON?" },
+        { title: PLAN_NAME, body: "Fix invitations: Push to the release branch?" },
+      ]);
+    }),
+);
+
+it.effect(
+  "an item that opens while the window is focused on its plan's Inbox is announced nowhere; focused anywhere else it is the window's toast and no notification; behind with notifications off it is posted nowhere, yet counted",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      const notices = yield* f.notices;
+      f.focus(true);
+      notices.shownInbox(PLAN_ID);
+      f.answerInbox({ items: [], cursor: "1", readAt: READ_AT });
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "2", readAt: READ_AT });
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+      assert.deepEqual(f.inboxToasted, []);
+
+      // The Inbox of another plan is not this one's.
+      notices.shownInbox(OTHER_PLAN_ID);
+      f.answerInbox({
+        items: [waitingItem(ITEM_B), waitingItem(ITEM_A)],
+        cursor: "3",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.inboxToasted, [
+        {
+          planId: PLAN_ID,
+          itemId: ITEM_B,
+          words: "Fix invitations: Push to the release branch?",
+          detail: PLAN_NAME,
+        },
+      ]);
+      assert.deepEqual(f.posted, []);
+
+      f.notify(false);
+      f.focus(false);
+      f.answerInbox({
+        items: [waitingItem(ITEM_C), waitingItem(ITEM_B), waitingItem(ITEM_A)],
+        cursor: "4",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+      assert.equal(f.inboxToasted.length, 1);
+      assert.equal(f.badges.at(-1), 3);
+    }),
+);
+
+it.effect(
+  "another account ends the read held for the last and lets go of its items, its counts, and its badge, and its first answer is where it stands; nobody signed in reads nothing",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      yield* settled;
+      assert.equal(f.badges.at(-1), 1);
+
+      f.changeAccount(OTHER_ACCOUNT);
+      yield* settled;
+      assert.deepEqual(f.waiting.at(-1), []);
+      assert.equal(f.badges.at(-1), 0);
+      // The read held for the last account is let go: the next account reads from the start.
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START]);
+
+      // The next answer is the new account's first, which announces nothing it holds.
+      f.answerInbox({
+        items: [waitingItem(ITEM_B), waitingItem(ITEM_C)],
+        cursor: "7",
+        readAt: READ_AT,
+      });
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+      assert.equal(f.badges.at(-1), 2);
+
+      f.changeAccount(undefined);
+      yield* settled;
+      assert.deepEqual(f.waiting.at(-1), []);
+      assert.equal(f.badges.at(-1), 0);
+      assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, "1", INBOX_CURSOR_START, "7"]);
+    }),
+);
+
+it.effect("a read of what waits that did not answer is asked again on the watch's clock", () =>
+  Effect.gen(function* () {
+    const f = fixture();
+    yield* f.notices;
+    f.answerInbox({ failure: CODING_AGENT_CALL_FAILURE.UNANSWERED });
+    yield* settled;
+    assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START]);
+
+    yield* TestClock.adjust(WATCH);
+    assert.deepEqual(f.inboxReads, [INBOX_CURSOR_START, INBOX_CURSOR_START]);
+  }),
+);
+
+it.effect(
+  "an item back in what waits unchanged since before the last answer was read, as a plan brought back from the archive brings its items, is counted and announced nowhere",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+      yield* f.notices;
+      f.focus(false);
+      f.answerInbox({ items: [waitingItem(ITEM_A)], cursor: "1", readAt: READ_AT });
+      f.answerInbox({
+        items: [
+          waitingItem(ITEM_A),
+          waitingItem(ITEM_B, { planId: OTHER_PLAN_ID, updatedAt: READ_AT - 2 * 86_400_000 }),
+        ],
+        cursor: "2",
+        readAt: READ_AT + 60_000,
+      });
+      yield* settled;
+      assert.deepEqual(f.posted, []);
+      assert.equal(f.badges.at(-1), 2);
     }),
 );

@@ -33,8 +33,9 @@ import { plan } from "./plan-schema.js";
  * open until the developer answers it, which writes the answer and the key
  * the client sent it under, so an answer sent again after a lost reply is
  * taken once, or until the agent closes it, which writes why. The plan is
- * the agent's, kept on the row so a plan's inbox is read by one index. The
- * row goes with its account, its plan, and its agent alike. The columns
+ * the agent's, kept on the row so a plan's inbox is read by one index, and
+ * the account's open items are read by another. The row goes with its
+ * account, its plan, and its agent alike. The columns
  * the fixed kinds stood in, `kind`, `details`, `options`, and
  * `recommended`, are declared no longer and wait on their drop
  * (`tests/drizzle-schema.test.ts`'s `PENDING_DROP`).
@@ -79,5 +80,7 @@ export const inboxItem = pgTable(
     uniqueIndex("inbox_item_agent_key").on(table.agentId, table.key),
     // A plan's inbox is read the latest changed first.
     index("inbox_item_plan_updated").on(table.planId, table.updatedAt),
+    // What waits across the account is read on every look of a held read, its open items the latest changed first.
+    index("inbox_item_user_status_updated").on(table.userId, table.status, table.updatedAt),
   ],
 );

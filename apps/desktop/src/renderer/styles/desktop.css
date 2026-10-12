@@ -515,7 +515,11 @@ body,
   flex: 1;
 }
 
-.sidebar-plan-time {
+/* An Inbox row's count of what waits stands in the time's place, drawn as
+   the time is, and, with no Pin or Archive to make room for, stays put
+   under the pointer. */
+.sidebar-plan-time,
+.sidebar-inbox-count {
   flex: none;
   min-width: calc(2 * var(--sidebar-plan-mark) + var(--space-2));
   color: var(--text-tertiary);
@@ -4472,6 +4476,12 @@ body:has(.app-stage[data-capture="true"]) .toast-stack {
 
 .toast[data-tone="failed"] > svg {
   color: var(--error-text);
+}
+
+/* An ask is the developer's to answer, not news of something done, so its
+   tray stands in the secondary ink rather than the success green. */
+.toast[data-tone="ask"] > svg {
+  color: var(--text-secondary);
 }
 
 /* Its words, and the line under them that says where or what. */

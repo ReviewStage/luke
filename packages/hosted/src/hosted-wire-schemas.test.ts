@@ -7,6 +7,7 @@ import {
   settleJsonSchemaGoldenSet,
 } from "@sidecar/wire/testing";
 import { test } from "vitest";
+import * as accountInboxWire from "./account-inbox-wire.js";
 import * as boardWire from "./board-wire.js";
 import * as codingAgentView from "./coding-agent-view.js";
 import * as codingAgentWire from "./coding-agent-wire.js";
@@ -37,6 +38,10 @@ import * as transcriptWire from "./transcript-wire.js";
 const ROOT = jsonSchemaGoldenRoot(import.meta.url);
 
 const EFFECT_MODULE_SCHEMAS = {
+  "account-inbox-wire": {
+    accountInboxEntrySchema: accountInboxWire.accountInboxEntrySchema,
+    accountInboxAnswerSchema: accountInboxWire.accountInboxAnswerSchema,
+  } satisfies RecordedEffectJsonSchemas<typeof accountInboxWire>,
   "board-wire": {
     boardElementSchema: boardWire.boardElementSchema,
     boardElementsSchema: boardWire.boardElementsSchema,
@@ -115,6 +120,9 @@ const EFFECT_MODULE_SCHEMAS = {
     codingAgentInboxAnswerViewSchema: codingAgentView.codingAgentInboxAnswerViewSchema,
     codingAgentInboxAnswerParamsSchema: codingAgentView.codingAgentInboxAnswerParamsSchema,
     codingAgentInboxAnsweredViewSchema: codingAgentView.codingAgentInboxAnsweredViewSchema,
+    codingAgentAccountInboxParamsSchema: codingAgentView.codingAgentAccountInboxParamsSchema,
+    codingAgentAccountInboxAnswerViewSchema:
+      codingAgentView.codingAgentAccountInboxAnswerViewSchema,
   } satisfies RecordedEffectJsonSchemas<typeof codingAgentView>,
   "dictation-wire": {
     dictationRequestSchema: dictationWire.dictationRequestSchema,

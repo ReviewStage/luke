@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { carried, GATEWAY_METHOD, type GatewayClient, type GatewayMethod } from "@sidecar/gateway";
+import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { CONTEXT_WINDOW } from "@sidecar/hosted/coding-agent-wire";
 import { INBOX_REPLY } from "@sidecar/hosted/inbox-wire";
 import { APP_SETTING_SCHEMA } from "@sidecar/settings";
@@ -360,6 +361,52 @@ it.effect(
         [
           [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: "## Why\n" }],
           [GATEWAY_METHOD.PLAN_TEMPLATE_WRITE, { template: null }],
+        ],
+      );
+    }),
+);
+
+it.effect(
+  "what waits across the account is asked of the host past its cursor and read as the view declares it, and an answer it cannot read is unanswered",
+  () =>
+    Effect.gen(function* () {
+      const waiting = {
+        items: [
+          {
+            id: "5e2d7c3a-1b4f-4e6a-8c9d-0f1e2d3c4b5a",
+            planId: "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10",
+            agentId: "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21",
+            agentTitle: null,
+            agentModel: "anthropic/claude-opus-5.5",
+            title: "Push to the release branch?",
+            revision: 2,
+            postedAt: 1_800_000_000_000,
+            updatedAt: 1_800_000_060_000,
+          },
+        ],
+        cursor: "9",
+        readAt: 1_800_000_120_000,
+      };
+      const answers = [carried(waiting), carried({ items: "none" })];
+      const requests: RecordedCall[] = [];
+      const operator = operatorOver({
+        call: (method, params = {}) =>
+          Effect.sync(() => {
+            requests.push({ method, params });
+            return { ok: true, result: answers.shift() ?? carried({}) };
+          }),
+        on: () => () => undefined,
+      });
+
+      assert.deepEqual(yield* operator.codingAgentAccountInbox({ after: "8" }), waiting);
+      assert.deepEqual(yield* operator.codingAgentAccountInbox({ after: "9" }), {
+        failure: CODING_AGENT_CALL_FAILURE.UNANSWERED,
+      });
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: "8" }],
+          [GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: "9" }],
         ],
       );
     }),

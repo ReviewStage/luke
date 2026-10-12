@@ -107,6 +107,24 @@ interface AppCodingAgentsSlice {
   unseen: readonly string[];
 }
 
+/** One plan with inbox items waiting on the developer: the plan, and its open items by id, the latest changed first. */
+export interface AppInboxPlan {
+  planId: string;
+  items: readonly string[];
+}
+
+/**
+ * What waits on the developer across the account's plans, as main's own
+ * read of it last answered (`main/agent-notices.ts`): each plan with an
+ * open inbox item, the plan whose item changed latest first. What the
+ * sidebar's Inbox counts, and what an item's toast is withdrawn by once it
+ * no longer waits. Main's, because main holds that read whichever plan is
+ * open, and empty while nobody is signed in.
+ */
+interface AppInboxSlice {
+  waiting: readonly AppInboxPlan[];
+}
+
 /**
  * Whether macOS refused the last notification Luke posted, which is the only
  * word Electron gives of notifications being off for Luke in System Settings:
@@ -144,6 +162,7 @@ export interface AppState {
    */
   planning: PlanningView;
   codingAgents: AppCodingAgentsSlice;
+  inbox: AppInboxSlice;
   notifications: AppNotificationsSlice;
   sessionReplay: AppSessionReplaySlice;
 }

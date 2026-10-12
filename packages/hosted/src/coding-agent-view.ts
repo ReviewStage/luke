@@ -1,4 +1,5 @@
 import { Schema as EffectSchema } from "effect";
+import { accountInboxAnswerSchema } from "./account-inbox-wire.js";
 import {
   codingAgentCallIdSchema,
   codingAgentMessageRequestSchema,
@@ -259,3 +260,18 @@ export type CodingAgentInboxAnswerParams = typeof codingAgentInboxAnswerParamsSc
 export const codingAgentInboxAnsweredViewSchema = EffectSchema.Union([inboxAnsweredSchema, failed]);
 
 export type CodingAgentInboxAnsweredView = typeof codingAgentInboxAnsweredViewSchema.Type;
+
+/** What waits across the account past a cursor, as main asks it: where it stands. */
+export const codingAgentAccountInboxParamsSchema = EffectSchema.Struct({
+  after: EffectSchema.NonEmptyString,
+});
+
+export type CodingAgentAccountInboxParams = typeof codingAgentAccountInboxParamsSchema.Type;
+
+/** What waits across the account, as main hears it: every open item and the cursor to read on from, or why there is none. */
+export const codingAgentAccountInboxAnswerViewSchema = EffectSchema.Union([
+  accountInboxAnswerSchema,
+  failed,
+]);
+
+export type CodingAgentAccountInboxAnswerView = typeof codingAgentAccountInboxAnswerViewSchema.Type;

@@ -8,7 +8,7 @@ import { cssCustomProperties } from "@sidecar/surface/react-css";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
-import { RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
+import { type AppInboxPlan, RUN_PROFILE, sessionReplayBootstrap } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
 import type { VoiceSpeakers } from "#shared/messages/voice-view";
 import { APP_COMMAND } from "#shared/shortcuts";
@@ -26,6 +26,7 @@ import { useLastSignIn } from "./last-sign-in";
 import { useHistoryMouseButtons, useWindowHistory } from "./navigation-history";
 import { PANEL_TAB, type PanelTab } from "./panel-tabs";
 import { useAgentEndToasts } from "./planning/agent-end-toast";
+import { useInboxToasts } from "./planning/inbox-toast";
 import { PLANS_PAGE } from "./planning/planning-model";
 import { usePlansTab } from "./planning/use-plans-tab";
 import { applySessionReplay } from "./session-replay";
@@ -52,6 +53,9 @@ import { useWindowZoom } from "./window-zoom";
 
 /** No agent ended unseen, as the document reads before main has answered. */
 const NO_UNSEEN_AGENTS: readonly string[] = [];
+
+/** Nothing waits on the developer, as the document reads before main has answered. */
+const NOTHING_WAITING: readonly AppInboxPlan[] = [];
 
 export function App(): React.JSX.Element {
   const { act, tell, updateSetting } = useAct();
@@ -202,6 +206,7 @@ export function App(): React.JSX.Element {
     microphoneStatus: state?.audio.microphoneStatus ?? MICROPHONE_STATUS.NOT_DETERMINED,
     shown: tab === PANEL_TAB.PLANS,
     unseenAgents: state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS,
+    inboxWaiting: state?.inbox.waiting ?? NOTHING_WAITING,
     voice: { view: voiceView, listening, requestMicrophoneAccess },
   });
   // A coding agent's notification clicked: the Plans tab, on that agent.
@@ -255,6 +260,18 @@ export function App(): React.JSX.Element {
     changeTab(PANEL_TAB.PLANS);
     showAgent.current(planId, agentId);
   }, state?.codingAgents.unseen ?? NO_UNSEEN_AGENTS);
+  // An inbox notification clicked, or an item's toast's View: the Plans tab, on that plan's Inbox.
+  const showInbox = useRef(plans.onShowInbox);
+  showInbox.current = plans.onShowInbox;
+  const openInbox = useCallback(
+    (planId: string) => {
+      changeTab(PANEL_TAB.PLANS);
+      showInbox.current(planId);
+    },
+    [changeTab],
+  );
+  useEffect(() => window.sidecar.onShowInbox(({ planId }) => openInbox(planId)), [openInbox]);
+  useInboxToasts(openInbox, state?.inbox.waiting ?? NOTHING_WAITING, plans.inboxShown);
   // Where the window has stood, for back and forward, from the moment it
   // knows where it stands.
   const history = useWindowHistory({

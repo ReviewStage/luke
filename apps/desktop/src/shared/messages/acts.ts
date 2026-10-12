@@ -215,8 +215,9 @@ export const ACT_KIND = {
   CODING_AGENTS_RENAME: "codingAgents.rename",
   CODING_AGENTS_STOP: "codingAgents.stop",
   /**
-   * Which agent's tab the panel shows, or none: what main's notification of
-   * an agent's end is held back by, and what clears the tab's unseen dot.
+   * Which agent's tab the panel shows, or none, and which plan's Inbox tab,
+   * or none: what main's notification of an agent's end or of an inbox item
+   * is held back by, and what clears an agent's tab's unseen dot.
    */
   CODING_AGENTS_SHOWN: "codingAgents.shown",
   CODING_AGENTS_PULL_REQUEST: "codingAgents.pullRequest",
@@ -694,7 +695,10 @@ export const ACT = {
     refusal: "Could not stop the agent on this system.",
   },
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
-    payload: record({ agentId: EffectSchema.NullOr(exactId) }),
+    payload: record({
+      agentId: EffectSchema.NullOr(exactId),
+      inboxPlanId: EffectSchema.NullOr(exactId),
+    }),
     result: answersNothing,
     refusal: "Could not note which agent is shown on this system.",
   },

@@ -136,7 +136,7 @@ function Page({
     agentIds: [AGENT.id],
     ...(archived ? { onUnarchive: () => undefined } : undefined),
   });
-  const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined);
+  const mainTabs = useMainTabs(false, plan.id, agents.agentIds, undefined, false);
   const sidePanel = useSidePanel(
     undefined,
     { id: plan.id, holds: HOLDS },

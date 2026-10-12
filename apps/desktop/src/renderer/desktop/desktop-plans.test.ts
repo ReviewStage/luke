@@ -144,7 +144,7 @@ function Page({
   onRenamePlan?: PlansControl["onRenamePlan"];
 }) {
   const files = (shownCode ?? []).map((showing) => showing.code.ref.path);
-  const mainTabs = useMainTabs(false, plan.id, agents?.agentIds, agents?.draft?.id);
+  const mainTabs = useMainTabs(false, plan.id, agents?.agentIds, agents?.draft?.id, false);
   const sidePanel = useSidePanel(
     staged,
     { id: plan.id, holds: holds ?? usedPlan(plan.id).holds },
@@ -2977,7 +2977,7 @@ function AgentsPage({ work }: { work?: PlansControl["work"] | undefined }) {
   useAppKeymap(true);
   const [agents, setAgents] = useState(listed);
   const agentIds = agents.map((agent) => agent.id);
-  const mainTabs = useMainTabs(false, PLAN.id, agentIds, undefined);
+  const mainTabs = useMainTabs(false, PLAN.id, agentIds, undefined, false);
   const sidePanel = useSidePanel(
     undefined,
     usedPlan(PLAN.id),
@@ -3202,7 +3202,7 @@ function DraftPage({ repository }: { repository: string | null }) {
     onStarted: (agentId) => mainRef.current?.onChoose({ agent: agentId }),
     mintKey: () => DRAFT_KEY,
   });
-  const mainTabs = useMainTabs(false, PLAN.id, agents.agentIds, agents.draft?.id);
+  const mainTabs = useMainTabs(false, PLAN.id, agents.agentIds, agents.draft?.id, false);
   mainRef.current = mainTabs;
   const sidePanel = useSidePanel(undefined, usedPlan(PLAN.id), mainTabs.openAgents, []);
   const page = createElement(DesktopPlans, {

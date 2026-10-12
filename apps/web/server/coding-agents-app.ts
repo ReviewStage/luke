@@ -53,7 +53,7 @@ import {
 import { childConversationId } from "./hosted/brain-host/ids.js";
 import { recordedRuntimeSession } from "./hosted/brain-host/recorded-session.js";
 import { childTitlesOf } from "./hosted/child-titles.js";
-import { planInboxPast } from "./hosted/coder-host/inbox-page.js";
+import { accountInboxPast, planInboxPast } from "./hosted/coder-host/inbox-page.js";
 import {
   type PublishedCache,
   PublishedKey,
@@ -191,6 +191,8 @@ const AGENTS_PATH = {
   INBOX_OF_PLAN: "/api/plans/inbox",
   /** POST answers one inbox item; the rewrite moves the path's item id into the `id` query. */
   INBOX_ITEM: "/api/inbox/item",
+  /** GET reads what waits on the developer across the account's plans past `after`. */
+  INBOX: "/api/inbox",
 } as const;
 
 const HTTP_METHOD = { GET: "GET", POST: "POST", PATCH: "PATCH" } as const;
@@ -762,6 +764,21 @@ const planInboxEndpoint = /* @__PURE__ */ Effect.fn("web/planInboxEndpoint")(fun
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
 });
 
+/** GET reads what waits on the developer across the account's plans past the cursor: every open item, held open while nothing changed. */
+const accountInboxEndpoint = /* @__PURE__ */ Effect.fn("web/accountInboxEndpoint")(function* (
+  seams: CodingAgentsAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, AgentsServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const after = yield* inboxCursorOf(request);
+  const userId = yield* resolvedUserId(seams, request);
+  const page = yield* hostedStoreOrUnavailable(accountInboxPast(userId, after));
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, page);
+});
+
 /** An item as an answer comes back with it, and whether the answer was taken. */
 function inboxAnswered(item: InboxItem, taken: boolean): HttpServerResponse.HttpServerResponse {
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, { item, taken });
@@ -859,7 +876,7 @@ const takenAnswer = /* @__PURE__ */ Effect.fnUntraced(function* (
   return Option.getOrUndefined(answered);
 });
 
-/** The group: the eight paths, and the hosted vocabulary's own refusal for any other. */
+/** The group: the nine paths, and the hosted vocabulary's own refusal for any other. */
 export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAgentsAppServices> {
   const writer = storeWriter({ tools: CODER_TOOL_SET });
   return Layer.unwrap(
@@ -897,6 +914,7 @@ export function codingAgentsApp(seams: CodingAgentsAppSeams): WebRoutes<CodingAg
           AGENTS_PATH.INBOX_ITEM,
           hostedRefusing(inboxAnswerEndpoint(seams, writer)),
         ),
+        HttpRouter.add(ANY_METHOD, AGENTS_PATH.INBOX, hostedRefusing(accountInboxEndpoint(seams))),
         hostedNotFoundRoute,
       ),
     ),

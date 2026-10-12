@@ -179,7 +179,7 @@ export const ONE_ACT_OF_EACH_KIND = {
   },
   [ACT_KIND.CODING_AGENTS_SHOWN]: {
     kind: ACT_KIND.CODING_AGENTS_SHOWN,
-    payload: { agentId: null },
+    payload: { agentId: null, inboxPlanId: null },
   },
   [ACT_KIND.CODING_AGENTS_INBOX]: {
     kind: ACT_KIND.CODING_AGENTS_INBOX,

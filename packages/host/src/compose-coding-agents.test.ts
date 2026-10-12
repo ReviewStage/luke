@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
 import { GATEWAY_CLIENT_ROLE, GATEWAY_METHOD, type GatewayMethod } from "@sidecar/gateway";
+import type { AccountInboxEntry } from "@sidecar/hosted/account-inbox-wire";
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import {
   CHECK_SUMMARY,
@@ -95,6 +96,19 @@ const ITEM: InboxItem = {
   status: INBOX_STATUS.OPEN,
   postedAt: 1_800_000_000_000,
   updatedAt: 1_800_000_060_000,
+};
+
+/** That item as what waits across the account carries it. */
+const WAITING: AccountInboxEntry = {
+  id: ITEM.id,
+  planId: PLAN_ID,
+  agentId: AGENT_ID,
+  agentTitle: null,
+  agentModel: AGENT.model,
+  title: ITEM.title,
+  revision: ITEM.revision,
+  postedAt: ITEM.postedAt,
+  updatedAt: ITEM.updatedAt,
 };
 
 const context = { client: { clientId: "desktop", role: GATEWAY_CLIENT_ROLE.OPERATOR } };
@@ -221,6 +235,11 @@ function fakeService() {
           },
           taken: true,
         };
+      }),
+    accountInbox: (after) =>
+      Effect.sync(() => {
+        asked.push(`account-inbox:${after}`);
+        return { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt };
       }),
   };
   return { client, asked };
@@ -349,6 +368,11 @@ it.effect("each method asks the service once and answers what it said, whole", (
       },
     );
 
+    assert.deepEqual(
+      yield* call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, { after: INBOX_CURSOR_START }),
+      { items: [WAITING], cursor: "9", readAt: ITEM.updatedAt },
+    );
+
     assert.deepEqual(asked, [
       "models",
       "default",
@@ -364,6 +388,7 @@ it.effect("each method asks the service once and answers what it said, whole", (
       `pull-request:${AGENT_ID}`,
       `inbox:${PLAN_ID}:${INBOX_CURSOR_START}`,
       `answer:${ITEM.id}:2:${INBOX_REPLY.DECLINED}:Not before the freeze lifts.:answer-1`,
+      `account-inbox:${INBOX_CURSOR_START}`,
     ]);
   }),
 );
@@ -395,6 +420,9 @@ it.effect(
       const noCursor = yield* Effect.flip(
         call(GATEWAY_METHOD.CODING_AGENTS_INBOX, { planId: PLAN_ID }),
       );
+      const noAccountCursor = yield* Effect.flip(
+        call(GATEWAY_METHOD.CODING_AGENTS_ACCOUNT_INBOX, {}),
+      );
       const noRevision = yield* Effect.flip(
         call(GATEWAY_METHOD.CODING_AGENTS_INBOX_ANSWER, {
           itemId: ITEM.id,
@@ -406,6 +434,7 @@ it.effect(
       assert.equal(refused._tag, "InvalidParamsRefusal");
       assert.equal(noCursor._tag, "InvalidParamsRefusal");
       assert.equal(noRevision._tag, "InvalidParamsRefusal");
+      assert.equal(noAccountCursor._tag, "InvalidParamsRefusal");
       assert.deepEqual(asked, []);
     }),
 );

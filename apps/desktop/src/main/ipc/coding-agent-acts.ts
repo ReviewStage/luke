@@ -40,9 +40,10 @@ import type { AgentNotices } from "../agent-notices";
  * the hidden voice window. What the service answers comes back as the
  * panel's own answer; on its way it is noted by the notices
  * (`main/agent-notices.ts`), which hold where each agent stands so an end
- * the panel is not looking at is still announced. The plan's inbox is
- * answered to the panel alone: no notice watches it. Nothing else is held
- * here.
+ * the panel is not looking at is still announced, and which plan's Inbox
+ * the panel shows, so an item it is looking at is not. The plan's inbox is
+ * answered to the panel alone: the notices watch what waits across the
+ * account on a read of their own. Nothing else is held here.
  *
  * The account's own provider keys, which an agent runs on, are asked here
  * too, from Settings in the same panel: a save's key passes through to the
@@ -93,6 +94,7 @@ export interface CodingAgentActsDependencies {
     | "observePublished"
     | "observePlanGone"
     | "shown"
+    | "shownInbox"
   >;
 }
 
@@ -196,9 +198,10 @@ export function codingAgentActRows(
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_STOP, sender);
       return notedAgent(host.codingAgentStop(params));
     },
-    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId }, sender) => {
+    [ACT_KIND.CODING_AGENTS_SHOWN]: ({ agentId, inboxPlanId }, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_SHOWN, sender);
       notices.shown(agentId);
+      notices.shownInbox(inboxPlanId);
     },
     [ACT_KIND.CODING_AGENTS_PULL_REQUEST]: (params, sender) => {
       refuseUnlessPanel(ACT_KIND.CODING_AGENTS_PULL_REQUEST, sender);

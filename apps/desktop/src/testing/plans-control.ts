@@ -190,6 +190,8 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       },
       question: { title: "", body: "", verb: "", running: "" },
     },
+    inbox: [],
+    inboxShown: null,
     onOpenPinnedTab: ignore,
     repositories: {
       recent: [],
