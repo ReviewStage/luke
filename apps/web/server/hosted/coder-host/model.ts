@@ -1,10 +1,17 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@sidecar/hosted/models-wire";
-import type { LanguageModel } from "ai";
+import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
+import {
+  APICallError,
+  type LanguageModel,
+  type LanguageModelMiddleware,
+  wrapLanguageModel,
+} from "ai";
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
 import { providerModelOf } from "../model-catalog.js";
+import { PROVIDER_KEY_UNREADABLE, type ProviderKeyUnreadable } from "../provider-key-seal.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**
@@ -21,8 +28,18 @@ import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
  * planning brain does, and Anthropic for its summarized thinking on a
  * model that thinks whether asked or not. The agent's
  * title is one small call beside the steps, on a fixed cheap model at the
- * same provider door. A key is
+ * same provider door, always on Luke's own Anthropic key. A key is
  * revealed here alone, into the SDK client that puts it on its requests.
+ *
+ * A step runs on the account's own key for its provider where the account
+ * saved one, and on Luke's only where it saved none: an account's key that
+ * cannot be read refuses the step rather than run it on Luke's, so nothing
+ * the account meant to pay for is quietly billed to Luke. A step on the
+ * account's key reports how the provider answered it, so its row reads
+ * invalid when the provider refuses the key, quota exceeded when it refuses
+ * the work for the key's billing, and verified again once a step goes
+ * through; a refusal of either kind fails the step in words that name the
+ * account's key, which the agent's failure is read from.
  */
 
 /** The one model an agent's title is generated on: the cheapest that names a task well, at Anthropic's own id. */
@@ -44,10 +61,46 @@ const ANTHROPIC_SHOWN_THINKING = { type: "adaptive", display: "summarized" } as 
  */
 const THINKS_BY_DEFAULT = /^claude-[a-z]+-5(?:-|$)/u;
 
-/** Luke's own keys, sealed; one absent is that provider's agents refused at their first step. */
-export interface ProviderKeys {
+/** OpenAI's word, in a 429's body, for an account out of credit rather than over its rate. */
+const OPENAI_NO_QUOTA = "insufficient_quota";
+
+/** Anthropic's words, in a refusal's body, for an account out of credit. */
+const ANTHROPIC_NO_CREDIT = /credit balance/iu;
+
+const PROVIDER_REFUSAL_STATUS = {
+  UNAUTHORIZED: 401,
+  TOO_MANY_REQUESTS: 429,
+  SERVER_ERROR: 500,
+} as const;
+
+/** Luke's own keys, sealed; one absent is that provider's agents refused at their first step where the account holds none of its own. */
+export interface LukeKeys {
   readonly anthropic: Redacted.Redacted | undefined;
   readonly openAi: Redacted.Redacted | undefined;
+}
+
+/** The account's own key as a step finds it: what its row says now, and where a change is reported. */
+interface AccountKeyStanding {
+  readonly status: ProviderKeyStatus;
+  /** Writes the status the provider's answer showed; a write that fails is the row's loss, never the step's. */
+  readonly report: (status: ProviderKeyStatus) => Promise<void>;
+}
+
+/** The key one provider's steps run on, and, where it is the account's own, its standing. */
+export interface ProviderKey {
+  readonly key: Redacted.Redacted;
+  readonly account?: AccountKeyStanding;
+}
+
+/**
+ * The key each provider's steps run on for one account: its own, Luke's,
+ * its own that cannot be read, or none. `fetch` is the provider's HTTP door,
+ * the platform's own where absent.
+ */
+export interface ProviderKeys {
+  readonly anthropic: ProviderKey | ProviderKeyUnreadable | undefined;
+  readonly openAi: ProviderKey | ProviderKeyUnreadable | undefined;
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 /** What a step is told: the provider's model, the window eve compacts against, and the effort in the provider's own words. */
@@ -81,14 +134,89 @@ function stepOptions(
   }
 }
 
+/** What a provider's refusal says of the account's key: refused, out of credit, or nothing of the key at all. */
+function accountKeyStatusOf(failure: APICallError): ProviderKeyStatus | undefined {
+  if (failure.statusCode === undefined) return undefined;
+  if (failure.statusCode === PROVIDER_REFUSAL_STATUS.UNAUTHORIZED)
+    return PROVIDER_KEY_STATUS.INVALID;
+  const body = failure.responseBody ?? "";
+  if (
+    failure.statusCode === PROVIDER_REFUSAL_STATUS.TOO_MANY_REQUESTS &&
+    body.includes(OPENAI_NO_QUOTA)
+  ) {
+    return PROVIDER_KEY_STATUS.QUOTA_EXCEEDED;
+  }
+  if (failure.statusCode < PROVIDER_REFUSAL_STATUS.SERVER_ERROR && ANTHROPIC_NO_CREDIT.test(body)) {
+    return PROVIDER_KEY_STATUS.QUOTA_EXCEEDED;
+  }
+  return undefined;
+}
+
+/**
+ * The account's key's standing kept as each call settles: a call that goes
+ * through reads verified, a refusal of the key or its billing reads as that
+ * and fails the step in words naming the account's key, and any other
+ * failure is left as it was. Note that a report is awaited but never
+ * thrown, because the row's status is the account's view of its key and no
+ * reason to fail a step.
+ */
+function accountKeyMiddleware(standing: AccountKeyStanding): LanguageModelMiddleware {
+  const settle = async (status: ProviderKeyStatus) => {
+    if (status === standing.status) return;
+    await standing.report(status).catch(() => undefined);
+  };
+  const settled = async <A>(call: () => PromiseLike<A>): Promise<A> => {
+    let answer: A;
+    try {
+      answer = await call();
+    } catch (failure) {
+      if (!APICallError.isInstance(failure)) throw failure;
+      const status = accountKeyStatusOf(failure);
+      if (status === undefined) throw failure;
+      await settle(status);
+      throw new Error(
+        status === PROVIDER_KEY_STATUS.INVALID
+          ? CODER_REFUSAL.ACCOUNT_KEY_REFUSED
+          : CODER_REFUSAL.ACCOUNT_KEY_NO_QUOTA,
+      );
+    }
+    await settle(PROVIDER_KEY_STATUS.VERIFIED);
+    return answer;
+  };
+  return {
+    wrapGenerate: ({ doGenerate }) => settled(doGenerate),
+    wrapStream: ({ doStream }) => settled(doStream),
+  };
+}
+
+/** The provider's model on the key, behind the account's middleware where the key is the account's own. */
+function modelOnKey(
+  provider: ModelProvider,
+  modelId: string,
+  key: ProviderKey,
+  fetch: typeof globalThis.fetch | undefined,
+): LanguageModel {
+  // The key is revealed here alone, into the SDK client that puts it on its requests.
+  const settings = {
+    apiKey: Redacted.value(key.key),
+    ...(fetch === undefined ? undefined : { fetch }),
+  };
+  const model =
+    provider === MODEL_PROVIDER.ANTHROPIC
+      ? createAnthropic(settings)(modelId)
+      : createOpenAI(settings).responses(modelId);
+  if (key.account === undefined) return model;
+  return wrapLanguageModel({ model, middleware: accountKeyMiddleware(key.account) });
+}
+
 /** The model an agent's title is generated on, or nothing where the deployment holds no Anthropic key, which leaves agents untitled. */
-export function titleModel(keys: ProviderKeys): LanguageModel | undefined {
+export function titleModel(keys: LukeKeys): LanguageModel | undefined {
   if (keys.anthropic === undefined) return undefined;
   // The key is revealed here alone, into the SDK client that puts it on its requests.
   return createAnthropic({ apiKey: Redacted.value(keys.anthropic) })(AGENT_TITLE_MODEL_ID);
 }
 
-/** The choice as a step runs it, or why it cannot: a provider Luke does not run, or a key the deployment does not hold. */
+/** The choice as a step runs it, or why it cannot: a provider Luke does not run, an account's key that cannot be read, or no key at all. */
 export function coderModel(
   choice: ModelChoice,
   keys: ProviderKeys,
@@ -98,13 +226,9 @@ export function coderModel(
   if (named === undefined) return Result.fail(CODER_REFUSAL.UNKNOWN_PROVIDER);
   const key = named.provider === MODEL_PROVIDER.ANTHROPIC ? keys.anthropic : keys.openAi;
   if (key === undefined) return Result.fail(CODER_REFUSAL.NO_PROVIDER_KEY);
-  // The key is revealed here alone, into the SDK client that puts it on its requests.
-  const model =
-    named.provider === MODEL_PROVIDER.ANTHROPIC
-      ? createAnthropic({ apiKey: Redacted.value(key) })(named.modelId)
-      : createOpenAI({ apiKey: Redacted.value(key) }).responses(named.modelId);
+  if (key === PROVIDER_KEY_UNREADABLE) return Result.fail(CODER_REFUSAL.ACCOUNT_KEY_UNREADABLE);
   return Result.succeed({
-    model,
+    model: modelOnKey(named.provider, named.modelId, key, keys.fetch),
     modelContextWindowTokens: contextWindowTokens,
     modelOptions: stepOptions(named.provider, named.modelId, choice.effort),
   });

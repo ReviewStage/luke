@@ -122,6 +122,7 @@
         "sandbox",
         "github",
         "abandoned",
+        "provider_key",
         "other"
       ]
     },

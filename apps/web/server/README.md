@@ -1917,7 +1917,25 @@ agent's and each worker's tab show it as the Work tab shows Luke's:
 `reasoningSummary: "auto"` on OpenAI, as the planning brain asks, and
 adaptive thinking with `display: "summarized"` on a Claude 5 model, which
 thinks whether asked or not. An older Claude is not asked, since the ask
-would start it thinking. Nothing goes through AI Gateway. Reading the row every
+would start it thinking. Nothing goes through AI Gateway.
+
+The key a step runs on is read at every step too
+(`coder-host/account-keys.ts`): the account's own key for the provider where
+it saved one (above, "Accounts' own provider keys"), opened from its row,
+and Luke's own `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` only where it saved
+none. A row the deployment's ring cannot open, or a deployment holding no
+ring, refuses the step with `ACCOUNT_KEY_UNREADABLE` rather than run it on
+Luke's key, so nothing the account meant to pay for is quietly billed to
+Luke. A step on the account's key goes through a middleware that keeps the
+row's status as the provider answers: a 401 marks it `invalid`, OpenAI's
+429 `insufficient_quota` or Anthropic's "credit balance" refusal marks it
+`quota_exceeded`, and a call that goes through marks it `verified` again,
+each written only where the row still holds the key the step ran on. The
+first two fail the step with `ACCOUNT_KEY_REFUSED` or
+`ACCOUNT_KEY_NO_QUOTA` in place of the provider's own error, and the three
+refusals read as the agent's failure `provider_key`, which the desktop
+words as a key to replace in Settings. An agent's title stays on Luke's
+Anthropic key. Reading the row every
 step means a later change to it is the next step's model.
 
 The sandbox (`coder/sandbox.ts`) is one Vercel Sandbox per session at the

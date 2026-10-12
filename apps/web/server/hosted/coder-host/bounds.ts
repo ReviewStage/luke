@@ -78,6 +78,12 @@ export const CODER_REFUSAL = {
   NO_AGENT: "Not run: this conversation is no coding agent's.",
   UNKNOWN_PROVIDER: "Not run: the agent's model is outside the providers Luke runs agents on.",
   NO_PROVIDER_KEY: "Not run: this deployment holds no key for the agent's model provider.",
+  ACCOUNT_KEY_UNREADABLE:
+    "Not run: your own API key for the agent's model provider cannot be read. Replace it in Settings.",
+  ACCOUNT_KEY_REFUSED:
+    "Not run: the provider refused your own API key for the agent's model. Replace it in Settings.",
+  ACCOUNT_KEY_NO_QUOTA:
+    "Not run: the provider refused the work for your own API key's billing or quota.",
   SIGN_IN_REQUIRED:
     "Not run: the developer must sign in with GitHub again before the repository can be checked out.",
   NOT_REACHABLE:
