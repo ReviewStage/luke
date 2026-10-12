@@ -1457,6 +1457,22 @@ body,
   line-height: 1.55;
 }
 
+/* A whole tab with nothing in it yet (empty-state.tsx): the tab's glyph,
+   large and fainter than the faintest ink, which no token is, over its one
+   line. The stroke is thinned so the glyph keeps the weight of the tab's
+   own at more than twice its size. */
+.empty-state-icon {
+  display: flex;
+  color: var(--text-tertiary);
+  opacity: 0.6;
+}
+
+.empty-state-icon svg {
+  width: 40px;
+  height: 40px;
+  stroke-width: 1.4;
+}
+
 /* The document ------------------------------------------------------------- */
 
 /* An archived plan's quiet line over its document: a hairline strip in the

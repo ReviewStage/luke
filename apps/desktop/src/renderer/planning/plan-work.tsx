@@ -4,6 +4,7 @@ import {
   type PlanWorkState,
   type PlanWorkTurn,
 } from "@sidecar/hosted/planning-view";
+import { WorkIcon } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { BotIcon } from "lucide-react";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
@@ -11,13 +12,13 @@ import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
   ConversationContent,
-  ConversationEmptyState,
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { EmptyState } from "../empty-state";
 import { RetryRowLabel } from "../retry-button";
 import { BusyLabel } from "../spinner";
 import { WorkingMark } from "../working-mark";
@@ -436,9 +437,7 @@ export function PlanWork({
           <OpenAgentContext.Provider value={onOpenAgent}>
             <CountingContext.Provider value={shown}>
               {rows.length === 0 && earlier === undefined ? (
-                <ConversationEmptyState>
-                  <p className="m-0">{WORK_EMPTY_LINE}</p>
-                </ConversationEmptyState>
+                <EmptyState icon={<WorkIcon />}>{WORK_EMPTY_LINE}</EmptyState>
               ) : (
                 <Conversation>
                   {/* No top padding, because a sticky checkpoint would leave what scrolled under it showing in that band. */}

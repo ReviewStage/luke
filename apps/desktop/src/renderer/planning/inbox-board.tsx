@@ -16,6 +16,7 @@ import {
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
 import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import { InboxIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
@@ -28,6 +29,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { EmptyState } from "../empty-state";
 import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
@@ -81,7 +83,9 @@ import type { PlanInboxControl } from "./use-plan-inbox";
  * what is settled, answered or taken back by its agent, folds under one
  * line as a finished turn's steps fold, each a closed card saying what came
  * of it. The tab's own label names it and counts what waits, so no head
- * repeats either. The agent's name opens its tab. Every card shows words an
+ * repeats either. An inbox that holds nothing at all says so under the
+ * tab's own glyph, drawn large (`empty-state.tsx`). The agent's name opens
+ * its tab. Every card shows words an
  * agent wrote, and a code block the repository's lines, so the board is out
  * of the session recording (`ph-no-capture`).
  */
@@ -711,6 +715,8 @@ export function InboxBoard({
   const { open, settled } = control.board;
   const agentOf = (item: InboxItem) => agents.agents?.find((agent) => agent.id === item.agentId);
   if (open.length === 0 && settled.length === 0) {
+    if (!control.failed && !control.reading)
+      return <EmptyState icon={<InboxIcon />}>{NOTHING_WAITS}</EmptyState>;
     return (
       <ConversationEmptyState>
         {control.failed ? (
@@ -720,10 +726,8 @@ export function InboxBoard({
             </p>
             <RetryButton onRetry={control.onRetry} />
           </>
-        ) : control.reading ? (
-          <Spinner label="Loading inbox" size={SPINNER_SIZE.REGION} />
         ) : (
-          <p className="m-0">{NOTHING_WAITS}</p>
+          <Spinner label="Loading inbox" size={SPINNER_SIZE.REGION} />
         )}
       </ConversationEmptyState>
     );

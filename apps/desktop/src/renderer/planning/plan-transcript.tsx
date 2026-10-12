@@ -1,4 +1,4 @@
-import { WingFace } from "@sidecar/panel";
+import { TranscriptIcon, WingFace } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
 import { AudioLinesIcon } from "lucide-react";
 import { Checkpoint } from "../ai-elements/checkpoint";
@@ -9,6 +9,7 @@ import {
   ConversationScrollButton,
 } from "../ai-elements/conversation";
 import { Message, MessageContent } from "../ai-elements/message";
+import { EmptyState } from "../empty-state";
 import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { CallEnded } from "./call-card";
@@ -147,13 +148,12 @@ export function PlanTranscript({
     <section className="plan-transcript ph-no-capture" aria-label="Transcript">
       {region.kind === TRANSCRIPT_REGION.READY ? (
         <TranscriptCalls region={region} />
+      ) : region.kind === TRANSCRIPT_REGION.EMPTY ? (
+        <EmptyState icon={<TranscriptIcon />}>{TRANSCRIPT_EMPTY_LINE}</EmptyState>
       ) : (
         <ConversationEmptyState>
           {region.kind === TRANSCRIPT_REGION.READING ? (
             <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />
-          ) : null}
-          {region.kind === TRANSCRIPT_REGION.EMPTY ? (
-            <p className="m-0">{TRANSCRIPT_EMPTY_LINE}</p>
           ) : null}
           {region.kind === TRANSCRIPT_REGION.FAILED ? (
             <>

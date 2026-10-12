@@ -285,7 +285,7 @@ test("the pinned summary lists what the two pickers open, under their headings, 
 
   assert.deepEqual(listed(summary), [
     ["Tabs", ["Board", "Transcript"]],
-    ["Coding agents", [AGENT.title]],
+    ["Coding agents", ["Inbox", AGENT.title]],
     ["Subagents", [JOB]],
     ["Files", ["invite.ts"]],
   ]);

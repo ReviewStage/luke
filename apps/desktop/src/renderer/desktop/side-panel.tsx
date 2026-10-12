@@ -22,6 +22,7 @@ import { ACT_KIND } from "#shared/messages/acts";
 import { APP_COMMAND, type AppCommand } from "#shared/shortcuts";
 import { useAct } from "../act";
 import { useAppCommand } from "../app-commands";
+import { EmptyState } from "../empty-state";
 import { FindScope } from "../find-in-tab";
 import { AgentSubagentTab } from "../planning/agent-tab";
 import {
@@ -760,7 +761,7 @@ function TabContent({
       );
     case SIDE_PANEL_TAB.CODE:
       return shownCode === undefined || shownCode.length === 0 ? (
-        <p className="side-panel-empty">{NO_CODE_LINE}</p>
+        <EmptyState icon={TAB_ICON[SIDE_PANEL_TAB.CODE]}>{NO_CODE_LINE}</EmptyState>
       ) : (
         <CodePane
           shown={shownCode}

@@ -164,6 +164,8 @@ interface Asked {
   ran: string[];
   /** Each agent shown, by its plan and its id. */
   agents: [string, string][];
+  /** Each plan shown on its Inbox. */
+  inboxes: string[];
   views: SettingsView[];
   /** Each read of the open plan's whole repository, by plan. */
   reads: string[];
@@ -186,6 +188,7 @@ function mountWindow(
     tabs: [],
     ran: [],
     agents: [],
+    inboxes: [],
     views: [],
     reads: [],
     browsed: [],
@@ -200,6 +203,7 @@ function mountWindow(
     onSelect: (planId) => asked.selected.push(planId),
     agents: codingAgentsControl({ agents: [AGENT], agentIds: [AGENT.id] }),
     onShowAgent: (planId, agentId) => asked.agents.push([planId, agentId]),
+    onShowInbox: (planId) => asked.inboxes.push(planId),
     sidePanel: {
       ...base.sidePanel,
       onBrowseFile: (_from, path, newTab) => asked.browsed.push([path, newTab]),
@@ -412,14 +416,22 @@ test("a search lists the rows its letters abbreviate, never those it is only sca
   );
 });
 
-test("the open plan's coding agent is listed beside the plan's name and opens as its notification would, over whatever covers its tab", () => {
+test("the open plan's Inbox and coding agent are listed beside the plan's name and open as an agent's notification would, over whatever covers their tab", () => {
   const asked = mountWindow(PANEL_TAB.SETTINGS);
   openPalette();
   pressFilter("Agents");
-  assert.deepEqual(rows(), ["Invite email template · Teammate invitations"]);
+  assert.deepEqual(rows(), [
+    "Inbox · Teammate invitations",
+    "Invite email template · Teammate invitations",
+  ]);
   choose("Invite email template");
   assert.deepEqual(asked.tabs, [PANEL_TAB.PLANS], "an agent opens on the Plans tab");
   assert.deepEqual(asked.agents, [[OPEN.id, AGENT.id]]);
+
+  openPalette();
+  pressFilter("Agents");
+  choose("Inbox");
+  assert.deepEqual(asked.inboxes, [OPEN.id]);
 });
 
 test("a subagent chosen over the version history opens its tab with the history put away", () => {

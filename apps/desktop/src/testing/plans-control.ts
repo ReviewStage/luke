@@ -125,6 +125,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       onChoose: ignore,
       onShow: ignore,
       onClose: ignore,
+      onInboxRead: ignore,
       onMove: ignore,
       onNewTab: ignore,
       onNewTabAnswered: ignore,
@@ -173,6 +174,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     onSelect: ignore,
     onShowAgent: ignore,
     onShowPlan: ignore,
+    onShowInbox: ignore,
     secondCall: {
       confirm: {
         stage: CONFIRM_STAGE.RESTING,
