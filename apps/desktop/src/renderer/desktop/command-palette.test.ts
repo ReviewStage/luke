@@ -6,7 +6,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
-import { plansControl } from "#testing/plans-control";
+import { plansControl, UNPINNED_SUMMARY } from "#testing/plans-control";
 import { installScrollIntoView } from "#testing/scroll-into-view";
 import { useAppCommand, useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
@@ -95,7 +95,11 @@ function mountWindow(initialTab: PanelTab, overrides: Partial<PlansControl> = {}
     return createElement(
       "div",
       null,
-      createElement(DesktopPlans, { looks: NO_LOOKS, plans }),
+      createElement(DesktopPlans, {
+        summary: UNPINNED_SUMMARY,
+        looks: NO_LOOKS,
+        plans,
+      }),
       createElement(CommandPalette, {
         available: true,
         tab,

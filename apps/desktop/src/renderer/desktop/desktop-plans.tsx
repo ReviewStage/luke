@@ -1,6 +1,6 @@
 import type { CodingAgentStatus } from "@sidecar/hosted/coding-agent-wire";
 import { DocumentIcon } from "@sidecar/panel";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useId, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { ArchivedBanner } from "../planning/archived-plan";
@@ -16,6 +16,7 @@ import { SPINNER_SIZE, Spinner } from "../spinner";
 import { MainTabContent, MainTabStrip, mainTabLabel } from "./main-tabs";
 import { PlanActionsButton } from "./plan-actions";
 import { usePlanRename } from "./plan-name-field";
+import { PlanSummary, SummaryButton, type SummaryPin, useSummaryLayout } from "./plan-summary";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
 import { useTabViews } from "./strip-tabs";
@@ -33,6 +34,10 @@ import { Tab, TabStrip } from "./tab-strip";
  * the plan's repository is the sidebar's row's to name, so the toolbar draws
  * the repository chip only while the plan has none, and otherwise only the
  * chip's menu, which Change repository… opens.
+ *
+ * The column's summary stands at its right, under the toolbar and over the
+ * call bar, listing what both "+" menus open, with its button last in the
+ * toolbar, after the ⋯ menu (`plan-summary.tsx`).
  *
  * The column holds tabs as the side panel does (`main-tabs.tsx`): the
  * plan's own first, showing its document, then one per coding agent,
@@ -108,16 +113,20 @@ function PlanDocument({
   plans,
   looks,
   captions,
+  summary,
 }: {
   plans: PlansControl;
   looks: PlanLooks;
   captions: React.ReactNode;
+  summary: SummaryPin;
 }): React.JSX.Element {
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
   const [focus, setFocus] = useState<Column>(COLUMN.MAIN);
   const [area, setArea] = useState<HTMLDivElement | null>(null);
+  const summaryLayout = useSummaryLayout(summary, plans.sidePanel.open, area);
+  const summaryCard = useId();
   // The column the pointer or the focus last went into holds the keys. Note
   // that it is heard on the plan's area as it bubbles, because the columns
   // are no controls of their own to hear it.
@@ -268,41 +277,54 @@ function PlanDocument({
             )}
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
-        </Toolbar>
-        {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
-        <section
-          className="desktop-document"
-          role="tabpanel"
-          aria-label={plan.name}
-          hidden={tab !== MAIN_TAB.PLAN}
-        >
-          {/* Keyed by the archive, so an editor still open when the plan is
-              archived elsewhere is let go rather than left taking words. */}
-          <PlanBody
-            key={String(archived)}
-            plan={plan}
-            live={plans.live}
-            onShowHistory={() => plans.history.onOpen(plan.id)}
-            {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
-            looks={looks}
+          <SummaryButton
+            layout={summaryLayout}
+            pinned={summary.pinned}
+            panelOpen={sidePanel.open}
+            cardId={summaryCard}
           />
-        </section>
-        {tab === MAIN_TAB.PLAN ? null : (
-          <section
-            className="desktop-agent"
-            role="tabpanel"
-            aria-label={mainTabLabel(tab, agents)}
-            data-popover-room=""
-          >
-            <MainTabContent
-              tab={tab}
-              agents={agents}
-              shown={plans.shown && !sidePanel.fullScreen}
-              views={views}
-              onOpenDelegation={openDelegation}
-            />
-          </section>
-        )}
+        </Toolbar>
+        {/* The summary stands beside what the column shows, under the
+            toolbar and over the call bar, which both span the column. */}
+        <div className="desktop-plan-body">
+          <div className="desktop-plan-column">
+            {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
+            <section
+              className="desktop-document"
+              role="tabpanel"
+              aria-label={plan.name}
+              hidden={tab !== MAIN_TAB.PLAN}
+            >
+              {/* Keyed by the archive, so an editor still open when the plan is
+                  archived elsewhere is let go rather than left taking words. */}
+              <PlanBody
+                key={String(archived)}
+                plan={plan}
+                live={plans.live}
+                onShowHistory={() => plans.history.onOpen(plan.id)}
+                {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
+                looks={looks}
+              />
+            </section>
+            {tab === MAIN_TAB.PLAN ? null : (
+              <section
+                className="desktop-agent"
+                role="tabpanel"
+                aria-label={mainTabLabel(tab, agents)}
+                data-popover-room=""
+              >
+                <MainTabContent
+                  tab={tab}
+                  agents={agents}
+                  shown={plans.shown && !sidePanel.fullScreen}
+                  views={views}
+                  onOpenDelegation={openDelegation}
+                />
+              </section>
+            )}
+          </div>
+          <PlanSummary plans={plans} layout={summaryLayout} cardId={summaryCard} />
+        </div>
         {/* Note that a call of the plan's own still stands, so it can be
             ended, when only a race left one on a plan just archived. */}
         {archived && !plans.stop.shown ? null : (
@@ -343,16 +365,19 @@ export function DesktopPlans({
   plans,
   looks,
   captions,
+  summary,
 }: {
   plans: PlansControl;
   /** The open plan's sections changed since the developer last looked, held by the shell across the plan's version history. */
   looks: PlanLooks;
   /** The live captions, while they ride the open plan's call bar. */
   captions?: React.ReactNode;
+  /** Whether the plan's summary stands pinned beside its column, held by the shell, whose panes glide as it turns. */
+  summary: SummaryPin;
 }): React.JSX.Element {
   switch (plans.page) {
     case PLANS_PAGE.DOCUMENT:
-      return <PlanDocument plans={plans} looks={looks} captions={captions} />;
+      return <PlanDocument plans={plans} looks={looks} captions={captions} summary={summary} />;
     // The page names itself in its heading, so its strip is the drag handle alone.
     case PLANS_PAGE.NEW:
       return (

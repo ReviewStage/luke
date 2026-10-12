@@ -1,6 +1,7 @@
 import { CODING_AGENT_CALL_FAILURE } from "@sidecar/hosted/coding-agent-view";
 import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { ACTION_RESULT_STATUS } from "@sidecar/wire";
+import type { SummaryPin } from "../renderer/desktop/plan-summary";
 import { DOCUMENT_REGION, PLANS_PAGE } from "../renderer/planning/planning-model";
 import { TRANSCRIPT_REGION } from "../renderer/planning/transcript-model";
 import type { CodingAgentsControl } from "../renderer/planning/use-coding-agents";
@@ -28,6 +29,9 @@ export function usedPlan(id: string): OpenPlan {
     },
   };
 }
+
+/** The plan's summary unpinned, its press ignored, so a page drawn over it draws no summary beside its column. */
+export const UNPINNED_SUMMARY: SummaryPin = { pinned: false, onToggle: ignore };
 
 /** A plan whose version history is shut, its history still being read, no version chosen, every press ignored. */
 export function versionHistoryControl(
@@ -123,6 +127,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
       tabs: SIDE_PANEL_TABS,
       order: [],
       closedTabs: [],
+      used: SIDE_PANEL_TABS,
       pins: [],
       subagents: [],
       files: [],
