@@ -48,12 +48,6 @@ function Window({
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
     },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: false },
-      voiceActive: { developer: false, luke: false },
-      fixtureSpeaking: false,
-      voiceOpening: false,
-    },
     tab,
     onTabChange: ignore,
     plans: plansControl({ page, onNewPlan: () => setPage(PLANS_PAGE.NEW), ...plans }),
@@ -478,12 +472,6 @@ function Routed({ start }: { start: PanelTab }): React.JSX.Element {
       onBeginSignIn: ignore,
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
-    },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: false },
-      voiceActive: { developer: false, luke: false },
-      fixtureSpeaking: false,
-      voiceOpening: false,
     },
     tab,
     onTabChange: (next) => {

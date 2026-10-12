@@ -132,12 +132,6 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
               onResize: () => undefined,
               staged: options.staged ?? false,
             },
-            identity: {
-              speakers: { listening: false, lukeSpeaking: false },
-              voiceActive: { developer: false, luke: false },
-              fixtureSpeaking: false,
-              voiceOpening: false,
-            },
             history: navigationHistory(),
             call: undefined,
             plans: plansControl(plans),

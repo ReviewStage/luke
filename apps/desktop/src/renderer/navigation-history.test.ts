@@ -149,12 +149,6 @@ function Window({
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
     },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: false },
-      voiceActive: { developer: false, luke: false },
-      fixtureSpeaking: false,
-      voiceOpening: false,
-    },
     tab,
     onTabChange,
     plans,

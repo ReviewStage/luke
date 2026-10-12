@@ -171,12 +171,10 @@ export function App(): React.JSX.Element {
     view: voiceView,
     speaking,
     listening,
-    levels: voiceLevels,
-    voiceActive,
     stopSpeaking,
     requestMicrophoneAccess,
   } = useVoiceView();
-  const { voiceError, voiceNotice, talkOpening } = voiceView;
+  const { voiceError, voiceNotice } = voiceView;
   // Who the wings, the face, and the strip answer to: the staged pair in a
   // capture run, the voice window's report otherwise.
   const speakers: VoiceSpeakers = fixture?.speakers ?? { listening, lukeSpeaking: speaking };
@@ -437,13 +435,6 @@ export function App(): React.JSX.Element {
             onBeginSignIn: signIn.beginSignIn,
             onCancelSignIn: signIn.cancelSignIn,
             signInFace,
-          }}
-          identity={{
-            levels: voiceLevels,
-            speakers,
-            voiceActive,
-            fixtureSpeaking,
-            voiceOpening: talkOpening,
           }}
           tab={tab}
           onTabChange={changeTab}

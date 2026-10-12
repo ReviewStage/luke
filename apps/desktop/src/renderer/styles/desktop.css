@@ -304,43 +304,10 @@ body,
   flex-direction: column;
 }
 
-/* At rest the status line is an empty live region, still in the
-   accessibility tree but with no height, so its gap goes only with words and
-   the name sits centred beside the face. */
-.luke-identity-status:not(:empty) {
-  margin-top: var(--space-2);
-}
-
 .luke-identity-name {
   font-size: 15px;
   font-weight: 700;
   letter-spacing: -0.01em;
-}
-
-.luke-identity-status {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.luke-identity[data-turn="luke"] .luke-identity-status {
-  color: var(--voice-luke);
-}
-
-.luke-identity[data-turn="developer"] .luke-identity-status {
-  color: var(--voice-developer);
-}
-
-.luke-identity-meter {
-  margin-left: auto;
-  animation: none;
-}
-
-.luke-identity-meter .waveform {
-  opacity: 1;
-  transform: none;
 }
 
 /* New plan reads as a row of the list it heads: no ground at rest, the body's

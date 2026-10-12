@@ -21,7 +21,6 @@ import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { DesktopVersionHistory } from "./desktop-version-history";
-import type { LukeIdentityProps } from "./luke-identity";
 import { PaneGlide } from "./pane-motion";
 import { useSummaryPin } from "./plan-summary";
 import { SidePanelToggle } from "./side-panel";
@@ -160,7 +159,6 @@ function transcriptStreaming(plans: PlansControl): boolean {
  */
 export function DesktopShell({
   gates,
-  identity,
   tab,
   onTabChange,
   plans,
@@ -171,7 +169,6 @@ export function DesktopShell({
   settings,
 }: {
   gates: DesktopGates;
-  identity: LukeIdentityProps;
   tab: PanelTab;
   onTabChange: (tab: PanelTab) => void;
   plans: PlansControl;
@@ -258,7 +255,6 @@ export function DesktopShell({
     >
       <DesktopSidebar
         sidebar={sidebar}
-        identity={identity}
         history={history}
         plans={plans}
         tab={tab}

@@ -290,12 +290,6 @@ function Window({ plan, versions }: { plan: Plan; versions: boolean }): React.JS
       onCancelSignIn: ignore,
       signInFace: { play: 0 },
     },
-    identity: {
-      speakers: { listening: false, lukeSpeaking: false },
-      voiceActive: { developer: false, luke: false },
-      fixtureSpeaking: false,
-      voiceOpening: false,
-    },
     tab: PANEL_TAB.PLANS,
     onTabChange: ignore,
     plans: plansControl({

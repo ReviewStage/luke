@@ -5,7 +5,7 @@
 export const VOICE_ACTIVITY_HANGOVER_MS = 220;
 
 /** The loudness a frame must reach to count as a voice at all. */
-export const VOICE_ACTIVITY_THRESHOLD = 0.12;
+const VOICE_ACTIVITY_THRESHOLD = 0.12;
 
 /**
  * The fastest the level may be reported. The panels draw from a relayed

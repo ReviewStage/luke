@@ -15,7 +15,6 @@
 @import "./tooltip.css";
 @import "./skeleton.css";
 @import "./sign-in.css";
-@import "./voice.css";
 @import "./planning.css";
 /* The AI Elements components' utilities, over the tokens above; compiled by
    scripts/tailwind.mjs as the stylesheet is built. */
