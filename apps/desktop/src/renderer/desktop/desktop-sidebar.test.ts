@@ -420,6 +420,17 @@ test("New plan names its chord, which it shows at its end only while hovered or 
   assert.equal(hint?.getAttribute("aria-hidden"), "true");
 });
 
+test("New plan and Search read in the weight of a read plan's name", async () => {
+  const styled = await sheetStyle();
+  const container = mount(DEAN, { plans: { plans: [listedPlan("Billing")] } });
+  const name = container.querySelector(".sidebar-plan-name");
+  assert.ok(name, "the list draws Billing");
+  const weight = (element: Element) => styled(element, "font-weight");
+
+  assert.equal(weight(newPlanButton(container)), weight(name));
+  assert.equal(weight(searchButton(container)), weight(name));
+});
+
 function searchButton(container: ParentNode): HTMLButtonElement {
   const button = container.querySelector<HTMLButtonElement>(".sidebar-search");
   assert.ok(button, "the sidebar draws Search");

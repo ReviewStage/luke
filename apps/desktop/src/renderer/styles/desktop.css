@@ -334,9 +334,10 @@ body,
   transform: none;
 }
 
-/* New plan reads as a row of the list it heads: no ground at rest, and the
-   plan rows' own hover and selection, since its page is a place like theirs.
-   Search beneath it is drawn the same, and the section's gap falls after it. */
+/* New plan reads as a row of the list it heads: no ground at rest, the body's
+   weight a read plan's name takes, and the plan rows' own hover and selection,
+   since its page is a place like theirs. Search beneath it is drawn the same,
+   and the section's gap falls after it. */
 .sidebar-new-plan,
 .sidebar-search {
   display: flex;
@@ -348,7 +349,6 @@ body,
   border-radius: 9px;
   background: none;
   font-size: 13px;
-  font-weight: 600;
   transition: background-color var(--duration-hover) ease;
 }
 
