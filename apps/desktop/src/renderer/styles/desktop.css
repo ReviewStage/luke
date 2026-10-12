@@ -2727,7 +2727,6 @@ body,
    the column's ground, its rows a sidebar's in miniature under quiet
    headings, the first of them level with its chevron. */
 .plan-summary {
-  position: relative;
   display: flex;
   box-sizing: border-box;
   width: var(--summary-width);
@@ -2788,15 +2787,16 @@ body,
   animation: summary-card-enter var(--duration-quick) var(--motion-exit) both;
 }
 
-/* The pinned summary's chevron and the card's stand on the rail's own, the
-   pinned one in from the column's edges as the rail's is and the card's less
-   the card's border, and show while the pointer is on the summary, and the
-   pinned one while the keys are in it too. */
+/* The pinned summary's chevron and the card's stand on the rail's own, and
+   show while the pointer is on the summary, and the pinned one while the keys
+   are in it too. The pinned one stands where the rail's does, in the
+   summary's padding, and stays there as the summary scrolls: it takes no
+   room of its own, so the first heading stands level with it, and stands on
+   the summary's ground, so a row scrolled under it never shows through. The
+   card's is in from the card's outer edges as far as the rail's padding,
+   less the card's border. */
 .plan-summary[data-mode="column"] > .plan-summary-chevron,
 .plan-summary-collapse {
-  position: absolute;
-  top: var(--column-inset);
-  right: var(--column-inset);
   opacity: 0;
   transition:
     opacity var(--duration-hover) ease,
@@ -2804,7 +2804,19 @@ body,
     color var(--duration-hover) ease;
 }
 
+.plan-summary[data-mode="column"] > .plan-summary-chevron {
+  --button-ground: var(--desktop-ground);
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  flex: none;
+  align-self: flex-end;
+  margin-bottom: calc(-1 * (var(--control-height) + var(--section-gap)));
+  background-color: var(--button-ground);
+}
+
 .plan-summary-collapse {
+  position: absolute;
   top: calc(var(--column-inset) - var(--card-edge));
   right: calc(var(--column-inset) - var(--card-edge));
 }
