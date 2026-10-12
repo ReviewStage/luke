@@ -72,7 +72,7 @@ import {
   updateCodingAgentChoice,
 } from "../server/hosted/coding-agent-store";
 import { modelCatalogOf, type OfferedModel } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation, readPlan } from "../server/hosted/plan-store";
+import { openPlanConversation, readPlan } from "../server/hosted/plan-store";
 import {
   type ConversationTarget,
   listMessagesPast,
@@ -83,6 +83,7 @@ import {
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { noNetwork } from "./support/no-network";
+import { createFieldsPlan } from "./support/plan-documents";
 import { type CommandTable, sandboxDouble } from "./support/repository-sandbox";
 import { testSqlClient } from "./support/sql-client";
 import { titleModelAnswering } from "./support/title-model";
@@ -189,7 +190,7 @@ const unclaimedAgent = (
 ) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
-    const plan = yield* createPlan(userId, {
+    const plan = yield* createFieldsPlan(userId, {
       name: "Teammate invitations",
       repository: "acme/relay",
     });
@@ -1009,7 +1010,7 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
         const { admitted } = yield* openAgent(host);
         // The same account's other conversation: a plan's, which no agent row names.
         const userId = admitted.target.userId;
-        const plan = yield* createPlan(userId, { name: "Billing export" });
+        const plan = yield* createFieldsPlan(userId, { name: "Billing export" });
         const conversationId = Option.getOrThrow(yield* openPlanConversation(userId, plan.id));
         const sessionId = mintSession();
         const auth = ownSeat(userId, conversationId);

@@ -727,7 +727,21 @@ is left standing.
 
 ### The fixed template
 
-Every plan uses one fixed template (LUKE-352). There is no configurable
+**Plans are now one document.** A plan started since the switch is one free
+Markdown text, a copy of its account's own template (Settings › Plan
+template, `GET`/`PUT /api/account/plan-template`) or `DEFAULT_PLAN_TEMPLATE`
+where the account keeps none, copied as the plan starts so a later edit of
+the template leaves it as it stands. A plan from before the switch keeps the
+fixed template's fields below until the backfill carries it over
+(`POST /api/maintenance/plan-documents` under the deployment's
+`CRON_SECRET`, `scripts/backfill-plan-documents.sh`): its text becomes its
+fields as one document (`planDocumentOf`), who last changed each field
+becomes who last changed the section under its heading, every revision kept
+as fields gets its text beside them, and nothing it carries over is a save,
+so its last edit and the list's order stand. What follows describes the
+fixed template those plans were kept in until then.
+
+Every plan used one fixed template (LUKE-352). There is no configurable
 template, no sections map, and no freeform body: a note names one of the
 fields below (`PLAN_FIELD`) and nothing else. The service keeps the plan's
 fields in the row's `fields` column, takes the notes over them, formats the

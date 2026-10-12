@@ -136,6 +136,10 @@
     "dest": "/api/default.js?route=github/webhook"
   },
   {
+    "src": "/api/maintenance/plan-documents",
+    "dest": "/api/default.js?route=maintenance/plan-documents"
+  },
+  {
     "src": "/api/maintenance/provider-keys-rewrap",
     "dest": "/api/default.js?route=maintenance/provider-keys-rewrap"
   },

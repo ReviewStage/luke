@@ -25,8 +25,9 @@ import {
   saveNotes,
 } from "../server/hosted/plan-notes";
 import { listRevisions, PLAN_REVISION, type PlanWriter } from "../server/hosted/plan-revisions";
-import { createPlan, deletePlan, readPlan, savePlanDocument } from "../server/hosted/plan-store";
+import { deletePlan, readPlan, savePlanDocument } from "../server/hosted/plan-store";
 import { added, INVITATIONS_DRAFT, notesFor, SMALL_FEATURE } from "./support/plan-contents";
+import { createFieldsPlan } from "./support/plan-documents";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -44,7 +45,7 @@ const ON_CALL: PlanWriter = { actor: PLAN_ACTOR.NOTETAKER, liveSessionId: CALL }
 const openPlan = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* createFieldsPlan(userId, { name: "Teammate invitations" });
   return { userId, planId: plan.id };
 });
 

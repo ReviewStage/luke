@@ -1,4 +1,5 @@
 import { type PlanSectionWriter, planSectionWriterSchema } from "@sidecar/hosted/plan-document";
+import { DEFAULT_PLAN_TEMPLATE } from "@sidecar/hosted/plan-document-template";
 import {
   EMPTY_PLAN_FIELDS,
   type PlanAgentEdit,
@@ -29,6 +30,7 @@ import { plan } from "../db/plan-schema.js";
 import { db } from "../db/query.js";
 import { conversations } from "../db/storage-schema.js";
 import { CONVERSATION_KIND } from "../db/storage-vocabulary.js";
+import { readPlanTemplate } from "./account-store.js";
 import { readLastEdit, UNKNOWN_AGENT_LABEL } from "./plan-revisions.js";
 import { InstantColumnSchema } from "./store/database.js";
 
@@ -340,6 +342,7 @@ const insertPlan = SqlSchema.findOne({
     userId: Schema.String,
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
+    document: Schema.String,
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
@@ -350,6 +353,7 @@ const insertPlan = SqlSchema.findOne({
         userId: write.userId,
         name: write.name,
         repository: write.repository,
+        document: write.document,
         assumptions: [],
         createdAt: write.now,
         updatedAt: write.now,
@@ -569,17 +573,21 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /**
- * Starts a plan under the account with the fixed template untouched, every
- * field unanswered and nothing assumed, and the repository it was handed;
- * it stands first in the list.
+ * Starts a plan under the account as one document, a copy of the account's
+ * own template or the default where it keeps none, with the repository it
+ * was handed; it stands first in the list. Note that the template is copied,
+ * not referred to, because an edit of the template must leave every plan
+ * started from it as it stands.
  */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
   return Effect.gen(function* () {
     const now = yield* DateTime.nowAsDate;
+    const template = yield* readPlanTemplate(userId);
     const row = yield* insertPlan({
       userId,
       name: started.name,
       repository: started.repository ?? null,
+      document: template ?? DEFAULT_PLAN_TEMPLATE,
       now,
     }).pipe(
       // An insert that returned no row is the database breaking its own contract, not an outcome.
