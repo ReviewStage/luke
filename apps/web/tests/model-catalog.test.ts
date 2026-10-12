@@ -105,7 +105,12 @@ const OFFERED: readonly OfferedModel[] = [
     provider: MODEL_PROVIDER.ANTHROPIC,
     efforts: OPUS_EFFORTS,
     contextWindow: 200_000,
-    pricing: { inputUsd: 0.000004, outputUsd: 0.00002, cachedInputUsd: 0.0000002 },
+    pricing: {
+      inputUsd: 0.000004,
+      outputUsd: 0.00002,
+      cachedInputUsd: 0.0000002,
+      cacheWriteUsd: 0.000005,
+    },
   },
   {
     id: "openai/gpt-6.1-sol",
