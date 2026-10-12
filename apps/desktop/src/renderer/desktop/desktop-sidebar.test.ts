@@ -83,6 +83,7 @@ function unmountAll(): void {
 interface MountOptions {
   update?: UpdateSnapshot;
   onInstall?: () => void;
+  onOpenLatest?: () => void;
   onTabChange?: (tab: PanelTab) => void;
   tab?: PanelTab;
   plans?: Partial<PlansControl>;
@@ -146,7 +147,7 @@ function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElemen
               update: options.update ?? UP_TO_DATE,
               onCheck: () => Promise.resolve(),
               onInstall: options.onInstall ?? (() => undefined),
-              onOpenLatest: () => undefined,
+              onOpenLatest: options.onOpenLatest ?? (() => undefined),
             },
           }),
           options.beside,
@@ -286,23 +287,38 @@ test("up to date, checking, or unable to install in place, the sidebar draws no 
   }
 });
 
-test("the gear's dot stands down while the sidebar carries the release, and marks a failed one", () => {
-  const ready = accountButton(mount(DEAN, { update: READY }));
-  assert.equal(ready.querySelector(".tab-note"), null);
-
-  const failed = accountButton(
-    mount(DEAN, {
-      update: {
-        status: UPDATE_STATUS.ERROR,
-        currentVersion: "0.10.0",
-        installSupported: true,
-        latestVersion: "0.11.0",
-      },
-    }),
+test("a release that could not be installed puts Download update above the account row, saying why in its hint, and the gear wears no dot in any state", () => {
+  let opened = 0;
+  const failed: UpdateSnapshot = {
+    status: UPDATE_STATUS.ERROR,
+    currentVersion: "0.10.0",
+    installSupported: true,
+    latestVersion: "0.11.0",
+  };
+  const container = mount(DEAN, {
+    update: failed,
+    onOpenLatest: () => {
+      opened += 1;
+    },
+  });
+  const control = updateControl(container);
+  assert.ok(control instanceof HTMLButtonElement, "the foot draws the download");
+  assert.equal(control.textContent, "Download update");
+  act(() => {
+    control.dispatchEvent(new MouseEvent("pointerover", { bubbles: true }));
+  });
+  assert.match(
+    document.body.querySelector('[role="tooltip"]')?.textContent ?? "",
+    /could not be installed\. Get version 0\.11\.0/u,
   );
-  const note = failed.querySelector(".tab-note")?.getAttribute("title");
-  assert.match(note ?? "", /could not be installed/u);
-  assert.match(failed.textContent ?? "", /could not be installed/u);
+  act(() => control.click());
+  assert.equal(opened, 1);
+
+  for (const update of [READY, failed, UP_TO_DATE]) {
+    const button = accountButton(mount(DEAN, { update }));
+    assert.equal(button.querySelector(".tab-note"), null, "no dot on the gear");
+    assert.doesNotMatch(button.textContent ?? "", /update|install/iu, "nor words of the release");
+  }
 });
 
 function newPlanButton(container: ParentNode): HTMLButtonElement {

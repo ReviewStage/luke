@@ -518,8 +518,7 @@ body,
   color: var(--state-merged);
 }
 
-.plan-mark-glyph[data-failing="true"],
-.plan-card-failed {
+.plan-mark-glyph[data-failing="true"] {
   color: var(--danger);
 }
 
@@ -929,7 +928,6 @@ body,
   font-weight: 600;
 }
 
-/* The gear holds the update dot at its corner, where a badge sits on an icon. */
 .sidebar-account-settings {
   position: relative;
   display: flex;
@@ -943,18 +941,10 @@ body,
   color: var(--text-primary);
 }
 
-.sidebar-account-settings .tab-note {
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  margin: 0;
-}
-
 /* A release on its way in, above the account row. Waiting on its restart it
-   is a row tinted the working blue the gear's dot answers in: news, not
-   urgency, so a wash rather than the accent's fill. Downloading it is a
-   quiet line, with nothing yet to press. */
+   is a row tinted the working blue, as is the download offered once
+   installing it failed: news, not urgency, so a wash rather than the
+   accent's fill. Downloading it is a quiet line, with nothing yet to press. */
 .sidebar-update {
   margin-bottom: var(--space-4);
   background: color-mix(in srgb, var(--state-working) 12%, transparent);
@@ -2946,6 +2936,12 @@ body,
   height: var(--control-glyph);
 }
 
+/* A glyph wearing where its work stands takes a glyph's footprint, so an
+   agent's tab and a fixed tab line their labels up alike. */
+.tab-icon .state-glyph {
+  --state-glyph-size: var(--control-glyph);
+}
+
 .tab-label {
   overflow: hidden;
   white-space: nowrap;
@@ -3021,15 +3017,15 @@ body,
   flex: 0 0 auto;
 }
 
-/* Something arrived on a tab while another was chosen: a dot on its glyph's
-   corner until the tab is chosen, as the gear carries the update's. It rides
-   the glyph, so an unchosen tab's × stands at the pill's other end. */
-.tab .tab-note {
-  top: -2px;
-  right: -2px;
-  width: 6px;
-  height: 6px;
-  margin: 0;
+/* Something arrived on a tab while another was chosen: its label reads in
+   semibold, in the primary colour, until the tab is chosen, as a plan saved
+   unseen reads in the sidebar. */
+.tab[data-unread="true"] {
+  color: var(--text-primary);
+}
+
+.tab[data-unread="true"] .tab-label {
+  font-weight: 680;
 }
 
 /* The plan's column holds its one tab, so the tab takes the room the
@@ -3646,10 +3642,15 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
   font-size: 12px;
 }
 
+/* An agent's line leads with its harness's mark wearing where it stands, as
+   its tab does, a size up from the pull request's glyph so the mark still
+   reads inside the working ring. */
 .plan-card-glyph {
   display: inline-flex;
-  width: 12px;
+  width: 14px;
   flex: none;
+  justify-content: center;
+  --state-glyph-size: 14px;
 }
 
 .plan-card-label {

@@ -37,7 +37,7 @@ import type { PinnedTab } from "../planning/use-side-panel";
 import { RepositoryPicture } from "../repository-picture";
 import type { UpdateControl } from "../settings/controls";
 import { commandKeyshortcuts, ShortcutGlyphs, Tooltip } from "../tooltip";
-import { updateAvailable, updateInSidebar, updateRow } from "../update-row";
+import { updateInSidebar, updateRow } from "../update-row";
 import { ActionMenu, atPointer, dropBelow, type MenuAction, useActionMenu } from "./action-menu";
 import { type FoldedGroups, useFoldedGroups } from "./folded-groups";
 import { LukeIdentity, type LukeIdentityProps } from "./luke-identity";
@@ -164,9 +164,11 @@ function AccountAvatar({ account }: { account: AccountSnapshot }): React.JSX.Ele
 /**
  * A newer release on its way in, just above the account row, where a desktop
  * devtool keeps it: a quiet line while it downloads, then the restart that
- * installs it, which is the very act Settings' Restart to update runs. It
- * draws nothing in any other state, so the column carries no control with
- * nothing to do.
+ * installs it, which is the very act Settings' Restart to update runs; or,
+ * once installing it failed, the download from the releases page that
+ * Settings offers in its place, its hint saying what went wrong. It draws
+ * nothing in any other state, so the column carries no control with nothing
+ * to do, and it is the one place outside Settings that says a release waits.
  */
 function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Element | null {
   const { update } = updates;
@@ -190,25 +192,33 @@ function SidebarUpdate({ updates }: { updates: UpdateControl }): React.JSX.Eleme
         </p>
       );
     default:
-      return null;
+      return (
+        <Tooltip label={updateRow(update).detail}>
+          <button
+            type="button"
+            className="sidebar-item sidebar-update"
+            onClick={updates.onOpenLatest}
+          >
+            <UpdateIcon />
+            Download update
+          </button>
+        </Tooltip>
+      );
   }
 }
 
 /**
  * The foot of the column: one row that is who is signed in and the way to
  * Settings at once, the way every desktop devtool keeps it. Signed out it
- * names where it leads instead. The update dot rides on the gear, since
- * Settings is where a release the sidebar does not carry is fetched.
+ * names where it leads instead.
  */
 function AccountButton({
   account,
   current,
-  settingsNote,
   onPress,
 }: {
   account: AccountSnapshot;
   current: boolean;
-  settingsNote: string | undefined;
   onPress: () => void;
 }): React.JSX.Element {
   const signedIn = account.status === ACCOUNT_STATUS.SIGNED_IN;
@@ -226,11 +236,6 @@ function AccountButton({
         </span>
         <span className="sidebar-account-settings">
           <GearIcon />
-          {settingsNote ? (
-            <span className="tab-note" title={settingsNote}>
-              <span className="visually-hidden">({settingsNote})</span>
-            </span>
-          ) : null}
         </span>
       </button>
     </Tooltip>
@@ -652,12 +657,6 @@ export function DesktopSidebar({
     if (plan !== undefined) openPlan(plan.id);
   };
   const listed = plans.signedIn && drawn.length > 0;
-  // Note that the gear's dot wears the update row's own words, so its hover
-  // and the row it leads to tell one story, and that it stands down while the
-  // release has its own control above it, so the news is said once.
-  const { update } = updates;
-  const settingsNote =
-    updateAvailable(update) && !updateInSidebar(update) ? updateRow(update).detail : undefined;
   useAppCommand(APP_COMMAND.PREVIOUS_PLAN, listed && at >= 0 ? () => step(-1) : undefined);
   useAppCommand(APP_COMMAND.NEXT_PLAN, listed && at < drawn.length - 1 ? () => step(1) : undefined);
 
@@ -741,7 +740,6 @@ export function DesktopSidebar({
         <AccountButton
           account={account}
           current={tab === PANEL_TAB.SETTINGS}
-          settingsNote={settingsNote}
           onPress={() => onTabChange(PANEL_TAB.SETTINGS)}
         />
       </div>

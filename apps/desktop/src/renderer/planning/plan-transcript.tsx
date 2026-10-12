@@ -1,5 +1,6 @@
 import { WingFace } from "@sidecar/panel";
 import { MESSAGE_ROLE } from "@sidecar/wire";
+import { AudioLinesIcon } from "lucide-react";
 import { Checkpoint } from "../ai-elements/checkpoint";
 import {
   Conversation,
@@ -90,7 +91,7 @@ function TranscriptCall({
         trailing={
           call.live ? (
             <span className="flex items-center gap-1.5 text-developer">
-              <span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+              <AudioLinesIcon className="size-3.5" aria-hidden="true" />
               {LIVE_LABEL}
             </span>
           ) : null

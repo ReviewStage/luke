@@ -47,7 +47,7 @@ function updateButton(action: UpdateRowAction, control: UpdateControl): React.JS
 
 /**
  * Where the build stands against the latest release. It stays below the pages
- * while the Settings tab's dot carries the news outside.
+ * while the sidebar's update row carries the news outside.
  */
 export function UpdatesSection({ control }: { control: UpdateControl }): React.JSX.Element {
   const { tell } = useAct();

@@ -39,7 +39,11 @@ afterEach(() => {
   document.body.innerHTML = "";
 });
 
-function mount(value: Voice = "cedar", within: HTMLElement = document.body): HTMLElement {
+function mount(
+  value: Voice = "cedar",
+  within: HTMLElement = document.body,
+  changed = false,
+): HTMLElement {
   const container = document.createElement("div");
   within.append(container);
   const root = createRoot(container);
@@ -52,6 +56,7 @@ function mount(value: Voice = "cedar", within: HTMLElement = document.body): HTM
         value,
         options: VOICES,
         parse,
+        changed,
         onChange: (next) => {
           chosen.push(next);
         },
@@ -86,6 +91,15 @@ test("the row draws its value on a chip and no native select, and a press drops 
     ["Cedar", "Marin", "Sage"],
   );
   assert.equal(row.querySelector('[role="option"][aria-current="true"]')?.textContent, "Cedar");
+});
+
+test("a value changed from its default says Modified beside the name in words, with no dot, and one at its default says nothing", () => {
+  const changed = mount("marin", document.body, true);
+  const name = changed.querySelector(".settings-copy strong");
+  assert.equal(name?.textContent, "VoiceModified");
+  assert.equal(changed.querySelector(".settings-changed")?.textContent, "Modified");
+
+  assert.equal(mount().querySelector(".settings-copy strong")?.textContent, "Voice");
 });
 
 test("a pick stores the parsed value, closes the menu, and hands the keyboard back to the chip", () => {

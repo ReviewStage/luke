@@ -265,6 +265,8 @@ test("each call begins at a divider saying when it started, the standing one mar
   assert.ok(dividers[0]?.textContent?.includes(":"), "the first divider carries a time");
   assert.equal(dividers[0]?.textContent?.includes("Live"), false);
   assert.ok(dividers[1]?.textContent?.endsWith("Live"));
+  assert.ok(dividers[1]?.querySelector("svg.lucide-audio-lines"), "a voice glyph, not a dot");
+  assert.equal(dividers[1]?.querySelector(".rounded-full"), null);
 
   // The developer's two lines are one turn, in a bubble at the right; Luke's turns stand under his mark.
   const turns = [...log.querySelectorAll("[data-speaker]")];

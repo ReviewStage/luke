@@ -1,16 +1,12 @@
 /**
- * The small mark beside a row's name while its value differs from the
- * default: what a page's reset would change, said row by row rather than
- * only by the reset appearing. A statement, not a control — the row's own
- * control is where the value moves — so it carries its meaning as words for
- * a reader and a hover alike.
+ * The word beside a row's name while its value differs from the default,
+ * as VS Code's settings editor says it: what a page's reset would change,
+ * said row by row rather than only by the reset appearing. A statement, not
+ * a control — the row's own control is where the value moves — and a word
+ * rather than a dot, so a reader and a glance read the same thing.
  */
 export function ChangedMark(): React.JSX.Element {
-  return (
-    <span className="settings-changed" title="Changed from its default">
-      <span className="visually-hidden">(changed from its default)</span>
-    </span>
-  );
+  return <span className="settings-changed">Modified</span>;
 }
 
 /**

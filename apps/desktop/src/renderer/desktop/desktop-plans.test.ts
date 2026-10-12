@@ -219,6 +219,18 @@ function hover(control: HTMLElement): string | undefined {
   return document.body.querySelector('[role="tooltip"]')?.textContent ?? undefined;
 }
 
+/** What a tab's glyph says of where its work stands, as a reader hears it; nothing at rest. */
+function tabState(tab: HTMLElement): string | undefined {
+  return tab.querySelector('.tab-icon [role="img"]')?.getAttribute("aria-label") ?? undefined;
+}
+
+/** Whether a tab reads as unread: its pill marked for the semibold label, and its news said to a reader. */
+function tabUnread(tab: HTMLElement): boolean {
+  const marked = tab.closest(".tab")?.getAttribute("data-unread") === "true";
+  assert.equal(tab.getAttribute("aria-description") === "New result", marked);
+  return marked;
+}
+
 function documentShown(page: HTMLElement): boolean {
   const body = page.querySelector(`.desktop-document[aria-label="${PLAN.name}"] .plan-body`);
   return body !== null && body.closest("[hidden]") === null;
@@ -434,7 +446,7 @@ test("the Code tab draws every code Luke showed on the plan, and says so where h
   );
 });
 
-test("a tab with something new on it carries a dot, and the tab shown carries none", () => {
+test("a tab with something new on it reads in semibold and says it is new, and the tab shown does not, with no dot on any", () => {
   const page = document.createElement("div");
   page.innerHTML = renderToStaticMarkup(
     createElement(DesktopPlans, {
@@ -449,9 +461,10 @@ test("a tab with something new on it carries a dot, and the tab shown carries no
     }),
   );
 
-  assert.ok(tabNamed(page, "Board").querySelector(".tab-note"));
-  assert.equal(tabNamed(page, "Code").querySelector(".tab-note"), null);
-  assert.equal(tabNamed(page, "Transcript").querySelector(".tab-note"), null);
+  assert.equal(tabUnread(tabNamed(page, "Board")), true);
+  assert.equal(tabUnread(tabNamed(page, "Code")), false);
+  assert.equal(tabUnread(tabNamed(page, "Transcript")), false);
+  assert.equal(page.querySelector(".tab-note"), null, "no tab wears a dot");
 });
 
 test("the Work tab draws each turn's calls as lines that open onto their output, left out of the screen recording", () => {
@@ -731,7 +744,8 @@ test("a delegation's row in an agent's tab opens the worker in a tab of its own,
   press(page, '[data-subagent-row][data-call-id="call_d1"]');
   assert.deepEqual(panelTabs(page), ["Board", "Code", "Transcript", "Work", "Opus 5.5", job]);
   assert.equal(chosenTab(page), job);
-  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot.text-luke"), "lit while it runs");
+  assert.ok(tabNamed(page, job).querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(tabState(tabNamed(page, job)), "Working", "a ring around it while it runs");
   const content = page.querySelector('.side-panel-content[role="tabpanel"]');
   assert.equal(content?.getAttribute("aria-label"), job);
   const card = content?.querySelector("[data-task-card], [data-plan-card]");
@@ -778,7 +792,35 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   act(() => relayout());
 
   assert.equal(hover(tabNamed(page, "Work")), undefined);
-  assert.equal(hover(tabNamed(page, job)), job);
+  assert.equal(hover(tabNamed(page, job)), `${job} · Working`);
+});
+
+test("a planning worker whose call ended under it wears its glyph at rest and says it stopped, as its transcript does, with no failure alert", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL);
+  const stopped: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.FAILED,
+        parts: [{ ...worker, state: PLAN_WORK_STATE.FAILED }],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: stopped });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const tab = tabNamed(page, job);
+
+  assert.equal(tabState(tab), undefined, "no alert");
+  assert.ok(tab.querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(hover(tab), "Stopped");
 });
 
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
@@ -1588,7 +1630,7 @@ function mountAgentTabs(
   return container;
 }
 
-test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by title or else by model with the model in the hint, dotted for where each stands and for an end unseen, each with an × and no shortcut", () => {
+test("a plan's coding agents follow the fixed tabs as tabs of the strip, named by title or else by model, wearing their harness's mark, a ring while working, and a semibold label for an end unseen, with the model and the state in the hint, each with an × and no shortcut", () => {
   const running = TITLED_AGENT;
   const chosen: SidePanelTab[] = [];
   const container = mountAgentTabs({}, chosen);
@@ -1601,10 +1643,16 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
   ]);
   assert.equal(chosenTab(container), "GPT 5.6 Sol");
   const claude = tabNamed(container, "Sign-out button in account menu");
-  assert.equal(hover(claude), "Opus 5.5");
-  assert.equal(claude.querySelector(".agent-status-dot")?.getAttribute("data-status"), "running");
-  assert.ok(claude.querySelector(".tab-note"), "an end no one saw dots the tab");
-  assert.equal(tabNamed(container, "GPT 5.6 Sol").querySelector(".tab-note"), null);
+  const sol = tabNamed(container, "GPT 5.6 Sol");
+  assert.equal(hover(claude), "Opus 5.5 · Working · New result");
+  assert.equal(tabState(claude), "Working");
+  assert.ok(claude.querySelector(".state-glyph-ring"), "a ring turns while it works");
+  assert.ok(claude.querySelector("svg.provider-mark"), "Claude Code's mark");
+  assert.equal(tabUnread(claude), true, "an end no one saw sets the label in semibold");
+  assert.equal(tabState(sol), undefined, "a finished agent's mark stands alone");
+  assert.ok(sol.querySelector("img.provider-mark"), "Codex's mark");
+  assert.equal(tabUnread(sol), false);
+  assert.equal(container.querySelector(".agent-status-dot, .tab-note"), null, "no dots");
   assert.equal(claude.getAttribute("aria-keyshortcuts"), null);
   assert.ok(container.querySelector('[aria-label="Close Sign-out button in account menu"]'));
   assert.ok(container.querySelector('[aria-label="Close Board"]'));
@@ -1615,6 +1663,30 @@ test("a plan's coding agents follow the fixed tabs as tabs of the strip, named b
 
   act(() => claude.click());
   assert.deepEqual(chosen, [{ agent: running.id }]);
+});
+
+test("an agent whose turn failed wears an alert in its mark's place and says so in its hint, and one stopped by hand wears its mark alone and says it stopped", () => {
+  const container = mountAgentTabs({
+    agents: [
+      { ...TITLED_AGENT, status: CODING_AGENT_STATUS.FAILED },
+      { ...UNTITLED_AGENT, status: CODING_AGENT_STATUS.CANCELLED },
+    ],
+  });
+  const failed = tabNamed(container, "Sign-out button in account menu");
+  const stopped = tabNamed(container, "GPT 5.6 Sol");
+
+  assert.equal(tabState(failed), "Failed");
+  assert.ok(failed.querySelector("svg.lucide-circle-alert"), "the alert glyph");
+  assert.equal(failed.querySelector(".provider-mark"), null, "in the mark's place");
+  assert.equal(hover(failed), "Opus 5.5 · Failed · New result");
+  act(() => {
+    failed.dispatchEvent(
+      new MouseEvent("pointerout", { bubbles: true, relatedTarget: document.body }),
+    );
+  });
+  assert.equal(tabState(stopped), undefined);
+  assert.ok(stopped.querySelector("img.provider-mark"));
+  assert.equal(hover(stopped), "GPT 5.6 Sol · Stopped");
 });
 
 test("a right-click on an agent's tab offers Rename where the pointer is, and Rename turns the tab into a field whose Return renames the agent and hands focus back", async () => {

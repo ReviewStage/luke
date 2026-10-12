@@ -326,8 +326,8 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   plan's calls ("Transcript" below); `History`, the plan's versions
   ("History" below), which stands once anyone has written the plan since its
   history began; and, after them, one tab per coding
-  agent started on the plan, named by its model with a dot for where it
-  stands ("Agent tabs" below). The Work tab, what the planning model wrote
+  agent started on the plan, named by its model and wearing its harness's
+  mark for where it stands ("Agent tabs" below). The Work tab, what the planning model wrote
   and ran on the plan's calls, is told live during a call and read back
   from the plan's conversation when the plan opens
   (`GET /api/plans/{id}/work`, `hosted/plan-work-store.ts`), so a restart
@@ -357,7 +357,7 @@ sidebar does (`desktop/side-panel.tsx`, `planning/use-side-panel.ts`).
   plan's board, the first code he puts up, each once per plan
   (`planning/use-panel-arrivals.ts`), and an agent just started, whose tab
   it opens on; an open panel keeps its tab, and an arrival on another tab
-  marks that tab with a dot until it is shown. Its left edge
+  sets that tab's label in semibold until it is shown. Its left edge
   drags it between 280 and 720 pixels wide, and the arrow keys move it once
   it has the focus.
 - **Kept across launches.** Whether it is open, its tab, and its width are
@@ -382,8 +382,12 @@ selected the moment its Start lands.
   the draft lets it go with nothing left behind. An agent handed a task
   draws it as the developer's first message rather than as the plan's card.
 
-- **The head.** The model · the effort · the status, with the dot the tab
-  wears: starting or running (pulsing), completed, failed, or cancelled. A
+- **The head.** The model · the effort · the status, which the tab's glyph
+  wears (`state-glyph.tsx`): the mark of the harness the model runs in
+  (Claude Code or Codex), shrunk inside a turning ring while the agent is
+  starting or running, an alert in the danger colour once it failed, and
+  the mark alone once it completed or was stopped; the tab's hint says
+  "Working", "Failed", or "Stopped" beside the model. A
   Stop stands while the agent may still write; it asks the service to cancel
   the turn and stop the sandbox, and anything the agent pushed stays.
 - **What it published.** Once the agent has pushed, the head wears a pill
@@ -439,7 +443,7 @@ selected the moment its Start lands.
   the plan's name, saying the model's name and "finished" or "failed" and
   nothing of the transcript, unless the window is focused on that agent's
   tab; its click brings Luke forward on the plan with that tab open. The
-  agent's tab wears the unseen dot until it is shown or the window comes
+  agent's tab reads in semibold until it is shown or the window comes
   forward on it. A Stop is the developer's own and is not announced, and an
   agent first seen already ended, as after a relaunch, is not either. The
   "opened #N" wording waits on a read of the agent's pull request, and a

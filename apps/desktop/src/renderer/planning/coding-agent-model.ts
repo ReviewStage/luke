@@ -17,9 +17,15 @@ import {
   type PullRequestState,
 } from "@sidecar/hosted/coding-agent-wire";
 import { CATALOG_ID_SEPARATOR, modelLabel } from "@sidecar/hosted/model-label";
-import { type CatalogModel, MODEL_PROVIDER, type ModelChoice } from "@sidecar/hosted/models-wire";
+import {
+  type CatalogModel,
+  MODEL_PROVIDER,
+  type ModelChoice,
+  type ModelProvider,
+} from "@sidecar/hosted/models-wire";
 import { isRecord, isWireString, MESSAGE_ROLE, type WireValue } from "@sidecar/wire";
 import { TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { GLYPH_STATE, GLYPH_STATE_WORDS, type GlyphState } from "../state-glyph";
 import { AGENT_TOOL } from "./tool-call-model";
 import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
 
@@ -27,7 +33,7 @@ import { ROW_PART, type RowReading, type TurnRow, turnRows } from "./turn-rows";
  * coding-agent-model.ts -- what the agent tabs, the Start button, and an agent's transcript draw, decided from what the service answered.
  *
  * Pure decisions over the wire's shapes: how an agent is named on its tab,
- * what its status dot says, what line ends a transcript whose turn failed
+ * what its tab's glyph says of where it stands, what line ends a transcript whose turn failed
  * or was stopped, whether its transcript is still followed, how
  * a page of its messages joins the ones held, how a stored message's parts
  * are read for drawing, which of its rows wait above the composer rather
@@ -117,6 +123,23 @@ const FOLLOWED_STATUSES: ReadonlySet<CodingAgentStatus> = new Set([
 /** Whether an agent in this status may still write more. */
 export function agentStillWriting(status: CodingAgentStatus): boolean {
   return FOLLOWED_STATUSES.has(status);
+}
+
+/**
+ * Where an agent stands as its tab's glyph wears it: working while it may
+ * still write, failed once its turn failed, and at rest once it finished
+ * or the developer stopped it, since a stop is the developer's own doing.
+ */
+export function agentGlyphState(status: CodingAgentStatus): GlyphState {
+  if (agentStillWriting(status)) return GLYPH_STATE.WORKING;
+  return status === CODING_AGENT_STATUS.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
+}
+
+/** What an agent's tab says of where it stands beyond its glyph: a stop, which its glyph at rest does not tell from a finish. */
+export function agentStateWords(status: CodingAgentStatus): string | undefined {
+  return status === CODING_AGENT_STATUS.CANCELLED
+    ? "Stopped"
+    : GLYPH_STATE_WORDS[agentGlyphState(status)];
 }
 
 /**
@@ -236,6 +259,17 @@ export { modelLabel };
 /** The agent's tab label: its title, or its model's name until it has one. */
 export function agentTabLabel(agent: CodingAgentSummary, models?: readonly CatalogModel[]): string {
   return agent.title ?? modelLabel(agent.model, models);
+}
+
+/**
+ * The provider whose harness runs a model, read from its catalog id, whose
+ * prefix is the provider's word (`models-wire.ts`), so a tab wears its
+ * harness's mark before the catalog itself is read; none for a provider
+ * Luke runs no agent on.
+ */
+export function providerOf(modelId: string): ModelProvider | undefined {
+  const prefix = modelId.slice(0, Math.max(0, modelId.indexOf(CATALOG_ID_SEPARATOR)));
+  return Object.values(MODEL_PROVIDER).find((provider) => provider === prefix);
 }
 
 /** The first run of digits and points in a model's own name, which is its version: `claude-opus-5.5` is 5.5, `gpt-6-astra` is 6. */
