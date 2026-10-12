@@ -3,7 +3,12 @@ import { it } from "@effect/vitest";
 import { fakeCloudApi, HTTP_STATUS, recordedRoutes } from "@sidecar/wire/testing";
 import { Effect } from "effect";
 import { HostedPlanClient } from "./plan-client.js";
-import { PLAN_FIELD, PLAN_FILE_REFUSAL } from "./plan-wire.js";
+import {
+  CODE_PATH_MAX_CHARS,
+  PLAN_FIELD,
+  PLAN_FILE_REFUSAL,
+  PLAN_TREE_ENTRY,
+} from "./plan-wire.js";
 import { PLAN_CALL_FAILURE } from "./planning-view.js";
 import { HOSTED_API_ERROR } from "./service-wire.js";
 
@@ -443,6 +448,47 @@ it.effect(
         ),
         undefined,
       );
+    }),
+);
+
+it.effect(
+  "a folder of the repository is asked by its path, the root by none, and read as the service answers it, a refusal included; a path the wire refuses is never sent",
+  () =>
+    Effect.gen(function* () {
+      const listing = (path: string) => ({
+        folder: {
+          path,
+          repository: "acme/web",
+          branch: "main",
+          entries: [
+            { name: "src", kind: PLAN_TREE_ENTRY.FOLDER },
+            { name: ".env", kind: PLAN_TREE_ENTRY.FILE },
+          ],
+          truncated: false,
+        },
+      });
+      const api = fakeCloudApi({
+        [`GET /api/plans/${PLAN_ID}/tree`]: {
+          answer: (request) => {
+            const path = request.searchParams.get("path") ?? "";
+            return path === "gone"
+              ? { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }
+              : listing(path);
+          },
+        },
+      });
+      const read = (path: string) =>
+        Effect.provide(client().readTree(PLAN_ID, { path }), api.layer);
+
+      assert.deepEqual(yield* read(""), listing(""));
+      assert.deepEqual(yield* read("src/app"), listing("src/app"));
+      assert.deepEqual(yield* read("gone"), { refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" });
+      assert.equal(yield* read("a".repeat(CODE_PATH_MAX_CHARS + 1)), undefined);
+      assert.deepEqual(recordedRoutes(api.requests()), [
+        `GET /api/plans/${PLAN_ID}/tree`,
+        `GET /api/plans/${PLAN_ID}/tree?path=src/app`,
+        `GET /api/plans/${PLAN_ID}/tree?path=gone`,
+      ]);
     }),
 );
 

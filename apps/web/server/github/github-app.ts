@@ -120,7 +120,12 @@ interface InstallationTokenRequest {
 }
 
 /** The statuses the reads here decide on by name; any other is answered as the status it is. */
-export const GITHUB_HTTP_STATUS = { UNAUTHORIZED: 401, FORBIDDEN: 403, NOT_FOUND: 404 } as const;
+export const GITHUB_HTTP_STATUS = {
+  UNAUTHORIZED: 401,
+  FORBIDDEN: 403,
+  NOT_FOUND: 404,
+  UNPROCESSABLE: 422,
+} as const;
 
 /** The domain of the address GitHub links to an account while keeping the account's own private. */
 const GITHUB_NOREPLY_DOMAIN = "users.noreply.github.com";
@@ -247,7 +252,7 @@ interface GitHubUserRepositories {
 }
 
 /** A token the App minted for one repository: the repository as GitHub spells it, and the token, sealed. */
-interface GitHubRepositoryToken {
+export interface GitHubRepositoryToken {
   readonly repository: GitHubRepository;
   /** An installation token limited to this one repository, good for an hour from its mint. */
   readonly token: Redacted.Redacted;

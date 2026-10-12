@@ -3,8 +3,10 @@ import { PLAN_EDIT_REFUSAL, planEditRequestSchema } from "@sidecar/hosted/plan-e
 import {
   PLAN_FIELD_BOUNDS,
   type PlanFileRequest,
+  type PlanTreeRequest,
   planFileRequestSchema,
   planRevisionSeqSchema,
+  planTreeRequestSchema,
 } from "@sidecar/hosted/plan-wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Effect, Layer, Option, Result } from "effect";
@@ -48,6 +50,7 @@ import {
 } from "./hosted/plan-notes.js";
 import { listRevisions, readRevision } from "./hosted/plan-revisions.js";
 import { createPlan, deletePlan, listPlans, readPlan, updatePlan } from "./hosted/plan-store.js";
+import { readPlanTree } from "./hosted/plan-tree.js";
 import { readPlanWork } from "./hosted/plan-work-store.js";
 import { readTranscript } from "./hosted/transcript-store.js";
 import { ANY_METHOD, type WebRoutes } from "./route.js";
@@ -83,7 +86,9 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
  * stands now through the App, under the rule `show_code` is held to
- * (`hosted/plan-file.ts`). `/api/plans/{id}/revisions` is the plan's history
+ * (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
+ * the tree beside that tab, listed where and as the file is read
+ * (`hosted/plan-tree.ts`). `/api/plans/{id}/revisions` is the plan's history
  * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
  * one revision's content beside the one before it, both formatted under the
  * plan's name as it stands; and `/api/plans/{id}/revisions/{seq}/restore`
@@ -117,6 +122,8 @@ const PLANS_PATH = {
   WORK: "/api/plans/work",
   /** GET reads a window of one file of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
   FILE: "/api/plans/file",
+  /** GET lists one folder of the plan's repository as GitHub holds it now; the rewrite moves the path's id into the `id` query. */
+  TREE: "/api/plans/tree",
   /** GET reads a page of the plan's history, before the revision `before` names where it names one; the rewrite moves the path's id into the `id` query. */
   REVISIONS: "/api/plans/revisions",
   /** GET reads one revision's content and the one before it; the rewrite moves the path's id and number into the `id` and `seq` queries. */
@@ -149,6 +156,9 @@ const FILE_QUERY = {
   FIRST_LINE: "first",
   LAST_LINE: "last",
 } as const;
+
+/** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
+const TREE_PATH_QUERY = "path";
 
 /** A start or a change is a name and a repository's name at most, so a body past this is neither. */
 const MAXIMUM_NAME_BODY_BYTES = 8_192;
@@ -427,6 +437,34 @@ const fileEndpoint = /* @__PURE__ */ Effect.fn("web/planFileEndpoint")(function*
   return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, file.value);
 });
 
+/** The folder the query names, named at most once, the root where it is not named, or the invalid-request refusal. */
+const treeRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
+  request: Request,
+): Effect.fn.Return<PlanTreeRequest, HostedRefusal> {
+  const named = new URL(request.url).searchParams.getAll(TREE_PATH_QUERY);
+  if (named.length > 1) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  const read = readEither(planTreeRequestSchema)(unparsedWire({ path: named[0] ?? "" }));
+  if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
+  return read.success;
+});
+
+/** GET lists one folder of the plan's repository, or why it is not listed. */
+const treeEndpoint = /* @__PURE__ */ Effect.fn("web/planTreeEndpoint")(function* (
+  seams: PlansAppSeams,
+): Effect.fn.Return<HttpServerResponse.HttpServerResponse, HostedRefusal, PlansServices> {
+  const incoming = yield* HttpServerRequest.HttpServerRequest;
+  if (incoming.method !== HTTP_METHOD.GET) {
+    return yield* Effect.fail(HOSTED_REFUSAL.METHOD_NOT_ALLOWED);
+  }
+  const request = yield* Effect.orDie(HttpServerRequest.toWeb(incoming));
+  const planId = yield* idOf(request, PLAN_ID_QUERY);
+  const userId = yield* resolvedUserId(seams, request);
+  const folder = yield* treeRequestOf(request);
+  const tree = yield* hostedStoreOrUnavailable(readPlanTree(userId, planId, folder));
+  if (Option.isNone(tree)) return yield* Effect.fail(HOSTED_REFUSAL.NOT_FOUND);
+  return hostedJsonResponse(HOSTED_HTTP_STATUS.OK, tree.value);
+});
+
 /**
  * The revision number the query `name` holds, named once, or nothing where
  * it is absent. A number that is not a whole number from one names no
@@ -572,6 +610,7 @@ export function plansApp(seams: PlansAppSeams): WebRoutes<PlansAppServices> {
     HttpRouter.add(ANY_METHOD, PLANS_PATH.TRANSCRIPT, hostedRefusing(transcriptEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.WORK, hostedRefusing(workEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.FILE, hostedRefusing(fileEndpoint(seams))),
+    HttpRouter.add(ANY_METHOD, PLANS_PATH.TREE, hostedRefusing(treeEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISIONS, hostedRefusing(revisionsEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.REVISION, hostedRefusing(revisionEndpoint(seams))),
     HttpRouter.add(ANY_METHOD, PLANS_PATH.RESTORE, hostedRefusing(restoreEndpoint(seams))),
