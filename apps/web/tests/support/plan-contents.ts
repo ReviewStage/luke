@@ -96,9 +96,9 @@ export function templateHeadingsOf(body: string): readonly string[] {
   return body.split("\n").filter((line) => /^#{2,3} (?!Rule \d)/u.test(line));
 }
 
-/** Every line of a body that Markdown reads as a heading at the start of a line. */
+/** Every line of a body that opens a section or a field: a heading of one to three hashes at the start of a line, where a field's own headings, four and deeper, never reach. */
 export function headingLinesOf(body: string): readonly string[] {
-  return body.split("\n").filter((line) => /^ {0,3}#{1,6}(?:\s|$)/u.test(line));
+  return body.split("\n").filter((line) => /^ {0,3}#{1,3}(?:\s|$)/u.test(line));
 }
 
 /**

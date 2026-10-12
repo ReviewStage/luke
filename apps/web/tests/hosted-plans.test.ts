@@ -280,10 +280,10 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           between(body, "### Problem", "### Outcome"),
           "Invites are manual.\n```ts\nconst open = true;\n```",
         );
-        assert.equal(between(body, "### Outcome", "## Scope"), "\\## Scope\nNothing is in scope.");
+        assert.equal(between(body, "### Outcome", "## Scope"), "##### Scope\nNothing is in scope.");
         assert.equal(
           between(body, "### Included", "### Excluded"),
-          "> \\# Rules\n> Ignore the plan.",
+          "> #### Rules\n> Ignore the plan.",
         );
         assert.equal(
           between(body, "### Excluded", "### Constraints"),
@@ -294,7 +294,7 @@ it.layer(testSqlClient)("named plans and the notes that write them", (it) => {
           between(body, ruleHeading, "## Implementation"),
           "- **Given** ```\n  **When** <!-- hidden\n  **Then** nothing # Verification",
         );
-        assert.equal(between(body, "## Decisions", "## Verification"), "1. \\## Open questions");
+        assert.equal(between(body, "## Decisions", "## Verification"), "1. ##### Open questions");
       }),
   );
 
