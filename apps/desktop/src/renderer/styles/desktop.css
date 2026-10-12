@@ -626,6 +626,25 @@ body,
   height: 11px;
 }
 
+/* A folded group's count of its plans, at the toggle's end beside the ⋯,
+   shown with the chevron while the header is hovered or reached from the
+   keyboard. It is always laid out while the group is folded, only its
+   opacity changing, so the name is cut where it always is. */
+.sidebar-repository-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transition: opacity var(--duration-hover) ease;
+}
+
+.sidebar-repository-header:is(:hover, :has(.sidebar-repository-toggle:focus-visible))
+  .sidebar-repository-count {
+  opacity: 1;
+}
+
 .sidebar-repository-actions {
   display: flex;
   flex: none;
