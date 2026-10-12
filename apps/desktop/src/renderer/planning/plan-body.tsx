@@ -12,6 +12,12 @@ import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "../markdown-message";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
+  DOCUMENT_BLOCK_CLASS,
+  DocumentBlock,
+  EditableTitle,
+  PlanDocumentEditor,
+} from "./plan-document-editor";
+import {
   EDITOR_PLACE,
   EditableUnit,
   type FieldEditing,
@@ -19,7 +25,7 @@ import {
   PlanFieldEditor,
   useFieldEditing,
 } from "./plan-field-editor";
-import { editTargetOfUnit } from "./plan-field-editor-model";
+import { editTargetOfUnit, targetHeading } from "./plan-field-editor-model";
 import {
   type ChaseState,
   chaseBehind,
@@ -499,21 +505,29 @@ export function PlanBody({
   live,
   onShowHistory,
   onEdit,
+  onRename,
   looks = NO_LOOKS,
 }: {
   plan: Plan;
   live: boolean;
   onShowHistory?: ShowHistory;
   onEdit?: PlanEditDoor;
+  /** Renames the plan, from its title where the plan is one document. */
+  onRename?: (name: string) => void;
   looks?: PlanLooks;
 }): React.JSX.Element {
   const { views, behind, freshAssumptions, jumps } = usePlanChase(plan, live);
   const { fields } = plan;
+  const title = documentTitleOf(plan);
+  // A plan of the template's fields is edited a field at a time; a plan that is one document, whole.
+  const textEditable = onEdit !== undefined && title !== undefined;
   const content =
-    onEdit === undefined || fields === undefined
+    onEdit === undefined
       ? undefined
-      : { fields, assumptions: plan.document.assumptions };
-  const editable = content !== undefined;
+      : fields !== undefined
+        ? { fields, assumptions: plan.document.assumptions }
+        : { text: plan.document.body };
+  const editable = onEdit !== undefined && fields !== undefined;
   const editing = useFieldEditing(plan.id, content, onEdit ?? NO_EDIT);
   const now = useMinute();
   const marks: SectionMarks = {
@@ -540,6 +554,32 @@ export function PlanBody({
     };
   }, []);
 
+  // With nothing focused, the arrows select a block of a document, the first
+  // in view going down and the last going up, rather than scroll the page.
+  // Note that focus anywhere else keeps its own arrows.
+  useEffect(() => {
+    if (!textEditable) return;
+    const select = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const element = scroller.current;
+      if (element === null || document.activeElement !== document.body) return;
+      const shown = element.getBoundingClientRect();
+      const blocks = [...element.querySelectorAll<HTMLElement>(`.${DOCUMENT_BLOCK_CLASS}`)].filter(
+        (block) => {
+          const at = block.getBoundingClientRect();
+          return at.bottom > shown.top && at.top < shown.bottom;
+        },
+      );
+      const chosen = event.key === "ArrowDown" ? blocks[0] : blocks.at(-1);
+      if (chosen === undefined) return;
+      event.preventDefault();
+      chosen.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", select);
+    return () => window.removeEventListener("keydown", select);
+  }, [textEditable]);
+
   // A pause in the typing hands the view back: the next burst is followed again.
   useEffect(() => {
     if (!behind) scrolledAway.current = false;
@@ -559,15 +599,50 @@ export function PlanBody({
 
   const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
-  const title = documentTitleOf(plan);
+  // The document's one Tab stop: the block selected last while it still stands, or its title, or its first section.
+  const standing =
+    editing.cursor === EDITOR_PLACE.TITLE
+      ? onRename !== undefined
+      : views.some((view) => view.id === editing.cursor);
+  const entry = standing
+    ? editing.cursor
+    : onRename === undefined
+      ? views[0]?.id
+      : EDITOR_PLACE.TITLE;
+  const sections = views.map((view, section) =>
+    textEditable ? (
+      <DocumentBlock
+        key={view.id}
+        host={view.id}
+        section={section}
+        label={view.heading === "" ? "Section" : view.heading}
+        entry={entry === view.id}
+        editing={editing}
+      >
+        <DocumentUnit view={view} marks={marks} />
+      </DocumentBlock>
+    ) : (
+      <DocumentUnit key={view.id} view={view} marks={marks} />
+    ),
+  );
+  const textOpen = editing.editor !== undefined && editing.host === EDITOR_PLACE.DOCUMENT;
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
       <ChangedLine looks={looks} />
       <div className="plan-body">
-        {title === undefined ? null : <PlanTitle name={title} />}
-        {views.map((view) =>
-          title === undefined ? (
+        {title === undefined ? null : textEditable && onRename !== undefined ? (
+          <EditableTitle
+            name={title}
+            entry={entry === EDITOR_PLACE.TITLE}
+            editing={editing}
+            onRename={onRename}
+          />
+        ) : (
+          <PlanTitle name={title} />
+        )}
+        {title === undefined ? (
+          views.map((view) => (
             <BodyUnit
               key={view.id}
               view={view}
@@ -575,18 +650,28 @@ export function PlanBody({
               editing={editing}
               marks={marks}
             />
-          ) : (
-            <DocumentUnit key={view.id} view={view} marks={marks} />
-          ),
+          ))
+        ) : textOpen && editing.editor !== undefined ? (
+          <PlanDocumentEditor
+            plan={plan}
+            editor={editing.editor}
+            editing={editing}
+            drawn={sections}
+            hostOf={(section) => views[section]?.id ?? EDITOR_PLACE.TITLE}
+          />
+        ) : (
+          sections
         )}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
           <PlanFieldEditor
-            heading={`## ${PLAN_FIELD_HEADING[editing.editor.target.field]}`}
+            heading={`## ${targetHeading(editing.editor.target)}`}
             editor={editing.editor}
             editing={editing}
           />
         ) : null}
-        {content === undefined ? null : <AddSections fields={content.fields} editing={editing} />}
+        {fields === undefined || !editable ? null : (
+          <AddSections fields={fields} editing={editing} />
+        )}
       </div>
       {title === undefined ? (
         <PlanAssumptions

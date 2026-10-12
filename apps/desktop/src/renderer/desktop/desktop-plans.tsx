@@ -320,7 +320,13 @@ function PlanDocument({
                 plan={plan}
                 live={plans.live}
                 onShowHistory={(save) => plans.history.onOpen(plan.id, save)}
-                {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
+                {...(archived
+                  ? {}
+                  : {
+                      onEdit: (request) => plans.edit(plan.id, request),
+                      // The title renames as the chip's field does, so a refusal is said beside it.
+                      onRename: (name) => rename.end({ name, byKey: true }),
+                    })}
                 looks={looks}
               />
             </section>

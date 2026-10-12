@@ -1,6 +1,5 @@
 import { useAtom } from "@effect/atom-react";
 import type { PlanEditRequest } from "@sidecar/hosted/plan-edit";
-import { PLAN_FIELD_HEADING, type PlanContent } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { PlanningEditAnswer } from "@sidecar/hosted/planning-view";
 import { PencilIcon } from "@sidecar/panel";
@@ -12,12 +11,14 @@ import { rendererRuntime } from "../renderer-runtime";
 import { RetryButton } from "../retry-button";
 import {
   CONFLICT_NOTE,
+  type EditContent,
   type EditTarget,
   editorAnswered,
   editorCloseAsked,
   editorCloses,
   editorKeptMine,
   editorOpened,
+  editorRebased,
   editorRefused,
   editorRetried,
   editorSent,
@@ -25,7 +26,9 @@ import {
   editorTyped,
   FIELD_EDITOR_STATE,
   type FieldEditor,
+  type FieldTarget,
   pendingSave,
+  targetHeading,
 } from "./plan-field-editor-model";
 
 /**
@@ -65,7 +68,14 @@ export const EDITOR_PLACE = {
   ASSUMPTIONS: "assumptions",
   /** After the body, for a section the body does not draw until it holds something. */
   END: "end",
+  /** In place of the text of a plan that is one document, which opens whole. */
+  DOCUMENT: "document",
+  /** The title over a document's text: no editor's place, but a block the keyboard selects. */
+  TITLE: "title",
 } as const;
+
+/** Where an editor's caret goes as it opens: where a click landed, or the end of a section of a document. */
+type EditorPlacement = { readonly x: number; readonly y: number } | { readonly section: number };
 
 /** Where an editor stands in the document: in place of a unit, by its id, or a place of its own. */
 export type EditorHost = number | (typeof EDITOR_PLACE)[keyof typeof EDITOR_PLACE];
@@ -74,9 +84,22 @@ export type EditorHost = number | (typeof EDITOR_PLACE)[keyof typeof EDITOR_PLAC
 export interface FieldEditing {
   readonly editor: FieldEditor | undefined;
   readonly host: EditorHost | undefined;
-  readonly open: (target: EditTarget, host: EditorHost) => void;
+  /** Where the editor's caret went as it opened; the end of its words without one. */
+  readonly placement: EditorPlacement | undefined;
+  readonly open: (target: EditTarget, host: EditorHost, placement?: EditorPlacement) => void;
   readonly typeText: (text: string) => void;
-  readonly close: () => void;
+  /** Ends the edit; `select` is the block the keyboard goes back to once the editor has gone. */
+  readonly close: (select?: EditorHost) => void;
+  /** The block to take the keyboard back once the editor has gone, until it has. */
+  readonly selecting: EditorHost | undefined;
+  readonly selected: () => void;
+  /** The block the keyboard last selected, which is the document's one Tab stop. */
+  readonly cursor: EditorHost | undefined;
+  readonly select: (host: EditorHost) => void;
+  /** An open editor's way to hand over words it still holds, which the document calls before it saves what is left; none once it goes. */
+  readonly holdWords: (handOver: (() => void) | undefined) => void;
+  /** A document's base and words once its open editor has taken Luke's part of a save's merged answer. */
+  readonly rebase: (base: string, text: string) => void;
   readonly keepMine: () => void;
   readonly takeLukes: () => void;
   readonly retry: () => void;
@@ -89,11 +112,16 @@ export interface FieldEditing {
  */
 export function useFieldEditing(
   planId: string,
-  content: PlanContent | undefined,
+  content: EditContent | undefined,
   edit: PlanEditDoor,
 ): FieldEditing {
   const [editor, setEditor] = useState<FieldEditor | undefined>(undefined);
   const [host, setHost] = useState<EditorHost | undefined>(undefined);
+  const [placement, setPlacement] = useState<EditorPlacement | undefined>(undefined);
+  const [selecting, setSelecting] = useState<EditorHost | undefined>(undefined);
+  const [cursor, setCursor] = useState<EditorHost | undefined>(undefined);
+  // The open editor's words not yet handed over, which a plan leaving must save too.
+  const heldWords = useRef<(() => void) | undefined>(undefined);
   const [pause, restartPause] = useAtom(savePauseAtom);
   // Note that these are refs, because a save's answer and the pause's end
   // read them as they land, which no render stands between.
@@ -126,8 +154,12 @@ export function useFieldEditing(
   };
 
   /** The words changed: the editor holds them, and the pause before their save starts over. */
+  // Note that the ref moves with the words, so a close in the same tick as an
+  // editor's last hand-over saves those words rather than the ones before.
   const changed = (next: (now: FieldEditor) => FieldEditor) => {
-    setEditor((now) => (now === undefined ? now : next(now)));
+    if (latest.current === undefined) return;
+    latest.current = next(latest.current);
+    setEditor(latest.current);
     stamp.current += 1;
     restartPause(stamp.current);
   };
@@ -151,7 +183,10 @@ export function useFieldEditing(
   // biome-ignore lint/correctness/useExhaustiveDependencies: the plan changing is what closes it.
   useEffect(() => {
     setEditor(undefined);
+    setSelecting(undefined);
+    setCursor(undefined);
     return () => {
+      heldWords.current?.();
       const held = latest.current;
       const request = held === undefined ? undefined : pendingSave(held);
       if (request !== undefined) door.current(request).catch(() => undefined);
@@ -161,20 +196,36 @@ export function useFieldEditing(
   return {
     editor,
     host,
-    open: (target, where) => {
+    placement,
+    open: (target, where, place) => {
       if (content === undefined) return;
       if (editor !== undefined && !editorCloses(editorCloseAsked(editor))) return;
       setEditor(editorOpened(target, content));
       setHost(where);
+      setPlacement(place);
+      setSelecting(undefined);
     },
     typeText: (text) => changed((now) => editorTyped(now, text)),
     // The save starts with the close, not a render later, since the close may
     // be focus leaving for another plan that takes the document with it.
-    close: () => {
+    close: (select) => {
       if (latest.current === undefined) return;
+      if (select !== undefined) setSelecting(select);
       latest.current = editorCloseAsked(latest.current);
       setEditor(latest.current);
       send();
+    },
+    selecting,
+    selected: () => setSelecting(undefined),
+    cursor,
+    select: setCursor,
+    holdWords: (handOver) => {
+      heldWords.current = handOver;
+    },
+    rebase: (base, text) => {
+      if (latest.current === undefined) return;
+      latest.current = editorRebased(latest.current, base, text);
+      setEditor(latest.current);
     },
     keepMine: () => changed(editorKeptMine),
     takeLukes: () => setEditor((now) => (now === undefined ? now : editorTookLukes(now))),
@@ -247,7 +298,7 @@ export function PlanFieldEditor({
   editor: FieldEditor;
   editing: FieldEditing;
 }): React.JSX.Element {
-  const label = PLAN_FIELD_HEADING[editor.target.field];
+  const label = targetHeading(editor.target);
   return (
     <section
       className="plan-field-editor ph-no-capture"
@@ -297,7 +348,7 @@ export function EditableUnit({
   editing,
   children,
 }: {
-  target: EditTarget;
+  target: FieldTarget;
   host: EditorHost;
   editing: FieldEditing;
   children: React.ReactNode;
@@ -315,7 +366,7 @@ export function EditableUnit({
       <button
         type="button"
         className="icon-button plan-unit-edit"
-        aria-label={`Edit ${PLAN_FIELD_HEADING[target.field]}`}
+        aria-label={`Edit ${targetHeading(target)}`}
         onClick={(event) => {
           event.stopPropagation();
           editing.open(target, host);
