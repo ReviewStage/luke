@@ -17,6 +17,7 @@ import type { SettingsPanelProps } from "../settings/settings-panel";
 import { SETTINGS_VIEW } from "../settings-views";
 import { SignInGate } from "../sign-in-gate";
 import { Tooltip } from "../tooltip";
+import { useColumnDock } from "./column-dock";
 import { DesktopPlans } from "./desktop-plans";
 import { DesktopSettings } from "./desktop-settings";
 import { DesktopSidebar } from "./desktop-sidebar";
@@ -186,6 +187,12 @@ export function DesktopShell({
   const gated = gates.accountRequired && account.status !== ACCOUNT_STATUS.SIGNED_IN;
   usePlaceCommands(!gated, tab, onTabChange, plans, settings, history);
   const { region } = plans;
+  // The folded sidebar's call card stands over the column's foot, clear of its dock.
+  useColumnDock(
+    shell,
+    plans.sidePanel.fullScreen,
+    `${tab}:${plans.page}:${plans.history.open}:${sidebar.collapsed}`,
+  );
   const looks = usePlanLooks(
     tab === PANEL_TAB.PLANS && region.kind === DOCUMENT_REGION.READY ? region.plan : undefined,
   );
