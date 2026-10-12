@@ -128,7 +128,7 @@ const WORK_READING: RowReading<WorkBlock> = {
       case WORK_BLOCK.CALL:
         return ROW_PART.CALL;
       case WORK_BLOCK.WORKER:
-        return ROW_PART.LONE_CALL;
+        return ROW_PART.SUBAGENT;
     }
   },
   running: (block) =>

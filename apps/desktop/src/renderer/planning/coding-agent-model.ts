@@ -802,13 +802,14 @@ export function dockedTodos(
   return open ? standing : undefined;
 }
 
-/** How the fold reads a part: its words, its reasoning as a note, a delegation and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
+/** How the fold reads a part: its words, its reasoning as a note, a delegation as a subagent and a to-do list each on a row of its own, and every other call grouped with the calls beside it. */
 const AGENT_READING: RowReading<AgentPart> = {
   key: (part, index) => (part.kind === AGENT_PART.TOOL ? part.callId : String(index)),
   part: (part) => {
     if (part.kind === AGENT_PART.TEXT) return ROW_PART.WORDS;
     if (part.kind !== AGENT_PART.TOOL) return ROW_PART.NOTE;
-    return isDelegation(part) || isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
+    if (isDelegation(part)) return ROW_PART.SUBAGENT;
+    return isTodos(part) ? ROW_PART.LONE_CALL : ROW_PART.CALL;
   },
   running: (part) =>
     part.kind === AGENT_PART.TOOL &&
