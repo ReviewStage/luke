@@ -1,5 +1,5 @@
 /**
- * command-palette.tsx -- ⌘K: the plans, the open plan's agents, every command the window can run now, and the settings, found by typing, in a dialog over the window.
+ * command-palette.tsx -- ⌘K: the plans, the open plan's agents and files, every command the window can run now, and the settings, found by typing, in a dialog over the window.
  *
  * The palette is cmdk's own dialog, list, and keys, drawn in the window's
  * menu rows, under a row of filters as Cursor's palette has them: All, then
@@ -17,8 +17,11 @@
  * when the host does not open the plan. Each plan names its repository
  * beside it, so two plans of one name can be told apart, and an archived
  * plan says so. An agent opens its tab as the column's "+" would, a subagent
- * its tab as the side panel's "+" would, and a setting lands on its row as
- * the settings search does.
+ * its tab as the side panel's "+" would, a file in a tab of its own as one
+ * chosen in a File tab's tree would, and a setting lands on its row as the
+ * settings search does. The files are the open plan's repository read whole
+ * in the one listing the File tab's search reads, the first time a file is
+ * searched, and fuzzy-matched on their paths.
  *
  * It is the nearest layer while it stands: no key pressed in it goes on to
  * the window, so Escape closes the palette and nothing else, a call's reply
@@ -32,11 +35,12 @@
  * each row's words instead.
  */
 
-import type { PlanSummary } from "@sidecar/hosted/plan-wire";
+import { PLAN_TREE_BOUNDS, PLAN_TREE_ENTRY, type PlanSummary } from "@sidecar/hosted/plan-wire";
+import type { PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { ArchiveIcon, DocumentIcon, GearIcon, SearchIcon } from "@sidecar/panel";
 import type { SettingsRowsInput } from "@sidecar/settings";
 import { Command, defaultFilter } from "cmdk";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   APP_COMMAND,
   APP_SHORTCUT_GROUPS,
@@ -51,6 +55,9 @@ import {
 import { appCommandOffered, runAppCommand, useAppCommand } from "../app-commands";
 import { Keycaps } from "../keycaps";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
+import { fileName } from "../planning/code-pane-model";
+import { refusalLine } from "../planning/file-tab-model";
+import { FileTypeIcon } from "../planning/file-type-icon";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { workRowsOf } from "../planning/work-model";
 import { Highlighted } from "../search-field";
@@ -65,6 +72,7 @@ const PALETTE_FILTER = {
   ALL: "all",
   PLANS: "plans",
   AGENTS: "agents",
+  FILES: "files",
   ACTIONS: "actions",
   SETTINGS: "settings",
 } as const;
@@ -81,15 +89,17 @@ const FILTER_LABEL = {
   [PALETTE_FILTER.ALL]: "All",
   [PALETTE_FILTER.PLANS]: "Plans",
   [PALETTE_FILTER.AGENTS]: "Agents",
+  [PALETTE_FILTER.FILES]: "Files",
   [PALETTE_FILTER.ACTIONS]: "Actions",
   [PALETTE_FILTER.SETTINGS]: "Settings",
 } as const satisfies Record<PaletteFilter, string>;
 
 /** What the search field asks for under each filter. */
 const FILTER_PLACEHOLDER = {
-  [PALETTE_FILTER.ALL]: "Search plans, agents, actions, and settings…",
+  [PALETTE_FILTER.ALL]: "Search plans, agents, files, actions, and settings…",
   [PALETTE_FILTER.PLANS]: "Search plans…",
   [PALETTE_FILTER.AGENTS]: "Search agents…",
+  [PALETTE_FILTER.FILES]: "Search files…",
   [PALETTE_FILTER.ACTIONS]: "Search actions…",
   [PALETTE_FILTER.SETTINGS]: "Search settings…",
 } as const satisfies Record<PaletteFilter, string>;
@@ -102,6 +112,37 @@ const KIND_ROWS = {
 
 /** The first row's value: rows are valued by their place in the list, from one. */
 const FIRST_ROW = "1";
+
+/** How far the read of the open plan's files has come: asked, listed, or not listed and why. */
+const FILES_READ = {
+  READING: "reading",
+  LISTED: "listed",
+  MISSED: "missed",
+} as const;
+
+/**
+ * The open plan's repository as the palette read it, whole, in one listing:
+ * which plan and repository it is of, and its files by path, or why they
+ * were not listed.
+ */
+type FilesHeld = { planId: string; repository: string } & FilesRead;
+
+type FilesRead =
+  | { read: typeof FILES_READ.READING }
+  | { read: typeof FILES_READ.LISTED; paths: readonly string[]; truncated: boolean }
+  | { read: typeof FILES_READ.MISSED; notice: string };
+
+/** What the Files filter says while no plan with a repository is open. */
+const NO_REPOSITORY_LINE = "Open a plan with a repository to search its files.";
+
+/** What the Files filter says where the read did not land. */
+const FILES_MISSED_LINE = "The files could not be read.";
+
+/** What the Files filter says while the repository is read. */
+const READING_LINE = "Reading the repository's files…";
+
+/** What the Files filter says under a listing cut short at the wire's bound. */
+const TRUNCATED_LINE = `Only the repository's first ${PLAN_TREE_BOUNDS.MAX_RECURSIVE_ENTRIES.toLocaleString("en-US")} entries are searched.`;
 
 /** The footer's hints, each the chords drawn as keys and what they do. */
 const FOOTER_HINTS: readonly { chords: readonly (readonly string[])[]; label: string }[] = [
@@ -176,18 +217,70 @@ function rowScore(row: PaletteRow, query: string, tokens: readonly string[]): nu
 }
 
 /**
- * The rows that match the query, best first, as many as `limit`, ties left
- * in the order given. A blank query matches every row in that order.
+ * How well a path answers the query: cmdk's own score, asked only of a path
+ * holding every letter typed, since the repository may hold tens of
+ * thousands and most hold none of a query's rarer letters.
  */
-function ranked(rows: readonly PaletteRow[], query: string, limit: number): readonly PaletteRow[] {
+function pathScore(path: string, query: string): number {
+  const lowered = path.toLowerCase();
+  for (const letter of query.toLowerCase()) {
+    if (letter.trim() !== "" && !lowered.includes(letter)) return 0;
+  }
+  return fuzzyScore(path, query);
+}
+
+/**
+ * The items that match the query, best first, as many as `limit`, ties
+ * left in the order given. A blank query matches every item in that order.
+ */
+function ranked<Item>(
+  items: readonly Item[],
+  query: string,
+  limit: number,
+  score: (item: Item, tokens: readonly string[]) => number,
+): readonly Item[] {
   const tokens = searchTokens(query);
-  if (tokens.length === 0) return rows.slice(0, limit);
-  return rows
-    .map((row) => ({ row, score: rowScore(row, query, tokens) }))
+  if (tokens.length === 0) return items.slice(0, limit);
+  return items
+    .map((item) => ({ item, score: score(item, tokens) }))
     .filter((each) => each.score > 0)
     .sort((first, second) => second.score - first.score)
     .slice(0, limit)
-    .map((each) => each.row);
+    .map((each) => each.item);
+}
+
+/** The repository's listing as the palette holds it: its files alone, by path, or why not. */
+function filesOf(answer: PlanningTreeAnswer): FilesRead {
+  if ("folder" in answer) {
+    return {
+      read: FILES_READ.LISTED,
+      paths: answer.folder.entries
+        .filter((entry) => entry.kind === PLAN_TREE_ENTRY.FILE)
+        .map((entry) => entry.name),
+      truncated: answer.folder.truncated,
+    };
+  }
+  if ("failure" in answer) return { read: FILES_READ.MISSED, notice: FILES_MISSED_LINE };
+  return { read: FILES_READ.MISSED, notice: refusalLine(answer.refusal, answer.branch) };
+}
+
+/** What the Files filter says in place of rows: why there are none to search yet, or nothing. */
+function filesNotice(repositoryOpen: boolean, held: FilesHeld | undefined): string | undefined {
+  if (!repositoryOpen) return NO_REPOSITORY_LINE;
+  if (held === undefined || held.read === FILES_READ.READING) return READING_LINE;
+  return held.read === FILES_READ.MISSED ? held.notice : undefined;
+}
+
+/** A file's row: its type's icon, its name, and its folder after it. */
+function fileRow(path: string, open: (path: string) => void): PaletteRow {
+  const name = fileName(path);
+  return {
+    icon: <FileTypeIcon name={name} />,
+    label: name,
+    detail: path.slice(0, -name.length - 1) || undefined,
+    terms: [path],
+    onChoose: () => open(path),
+  };
 }
 
 /** The filter `step` places from the one given, wrapping at either end. */
@@ -218,6 +311,12 @@ function planRows(plans: PlansControl, open: (planId: string) => void): readonly
   ];
 }
 
+/** Shows one of the side panel's tabs, the version history put away first so the tab is not shown behind it. */
+function shownOverHistory(plans: PlansControl, show: () => void): void {
+  if (plans.history.open) plans.history.onClose();
+  show();
+}
+
 /**
  * The open plan's coding agents, as the column's "+" lists them, then its
  * subagents, as the side panel's "+" lists them, each beside the plan's
@@ -242,10 +341,7 @@ function agentRows(plans: PlansControl, show: (pick: () => void) => void): reado
     standing: true,
   }).map(({ row, onPick }) => ({
     row,
-    onPick: () => {
-      if (plans.history.open) plans.history.onClose();
-      onPick();
-    },
+    onPick: () => shownOverHistory(plans, onPick),
   }));
   const entries = [...agents, ...subagents];
   return entries.map(({ row, onPick }) => ({
@@ -369,6 +465,7 @@ export function CommandPalette({
   onTabChange,
   plans,
   settings,
+  readFiles,
 }: {
   available: boolean;
   tab: PanelTab;
@@ -379,6 +476,8 @@ export function CommandPalette({
     rows: SettingsRowsInput | undefined;
     onViewChange: (view: SettingsView) => void;
   };
+  /** Lists everything in the plan's repository in one read, which the Files rows are. */
+  readFiles: (planId: string) => Promise<PlanningTreeAnswer>;
 }): React.JSX.Element {
   const [open, setOpen] = useState(false);
   if (open && !available) setOpen(false);
@@ -390,6 +489,9 @@ export function CommandPalette({
     setFilter(next);
     setSelected(FIRST_ROW);
   };
+  const [files, setFiles] = useState<FilesHeld | undefined>(undefined);
+  // The read of the files asked last, by its count: only its answer is kept.
+  const filesAsk = useRef(0);
   const invoker = useRef<HTMLElement | null>(null);
   const chosen = useRef<(() => void) | undefined>(undefined);
   const shown = useRef(false);
@@ -402,6 +504,11 @@ export function CommandPalette({
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
           changeFilter(PALETTE_FILTER.ALL);
           setQuery("");
+          // The files are read afresh by the first search of each opening,
+          // since the branch they are listed on moves, and a read still out
+          // from the last opening is not kept.
+          filesAsk.current += 1;
+          setFiles(undefined);
           setOpen(true);
         }
       : undefined,
@@ -468,24 +575,80 @@ export function CommandPalette({
     else changeFilter(steppedFilter(filter, pressed === APP_COMMAND.BACK ? -1 : 1));
   };
 
+  const tokens = searchTokens(query);
+  const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
+  const planId = plans.activePlanId;
+  const repository =
+    [...plans.plans, ...plans.archived].find((plan) => plan.id === planId)?.repository ?? null;
+  // The files held are the open plan's repository's, or none of its.
+  const held =
+    files !== undefined && files.planId === planId && files.repository === repository
+      ? files
+      : undefined;
+  const filesAsked = open && (filter === PALETTE_FILTER.FILES || tokens.length > 0);
+
+  // Note that the repository is read the first time its files are searched
+  // rather than as the palette opens, because most of its uses never ask
+  // for a file, and kept for the opening while the plan and its repository
+  // stay the same. A read that answers after a later one was asked is not
+  // kept, since it may list an older branch than the later one does.
+  useEffect(() => {
+    if (!filesAsked || planId === undefined || repository === null || held !== undefined) return;
+    filesAsk.current += 1;
+    const ask = filesAsk.current;
+    setFiles({ planId, repository, read: FILES_READ.READING });
+    const keep = (read: FilesRead) => {
+      if (filesAsk.current === ask) setFiles({ planId, repository, ...read });
+    };
+    readFiles(planId).then(
+      (answer) => keep(filesOf(answer)),
+      () => keep({ read: FILES_READ.MISSED, notice: FILES_MISSED_LINE }),
+    );
+  }, [filesAsked, planId, repository, held, readFiles]);
+
+  const paths = held?.read === FILES_READ.LISTED ? held.paths : undefined;
+  const fileQuery = filter === PALETTE_FILTER.FILES || tokens.length > 0 ? query : undefined;
+  // Ranked once a query or the listing changes, not on every render, since
+  // a repository may list tens of thousands of paths.
+  const matchedPaths = useMemo(
+    () =>
+      paths === undefined || fileQuery === undefined
+        ? []
+        : ranked(paths, fileQuery, limit, (path) => pathScore(path, fileQuery)),
+    [paths, fileQuery, limit],
+  );
+
   // Each kind's rows, built only for the filter shown and only while open.
-  const sourceOf = {
+  const byRow = (row: PaletteRow, words: readonly string[]) => rowScore(row, query, words);
+  const rowsOf = {
     [PALETTE_FILTER.PLANS]: () =>
-      plans.signedIn ? planRows(plans, (planId) => onPlans(() => plans.onSelect(planId))) : [],
+      plans.signedIn ? planRows(plans, (id) => onPlans(() => plans.onSelect(id))) : [],
     [PALETTE_FILTER.AGENTS]: () => agentRows(plans, onPlans),
+    [PALETTE_FILTER.FILES]: () => [],
     [PALETTE_FILTER.ACTIONS]: () => actionRows((command) => choose(() => runAppCommand(command))),
     [PALETTE_FILTER.SETTINGS]: () => settingRows(settings.rows, land),
   } as const satisfies Record<PaletteKind, () => readonly PaletteRow[]>;
+  // Note that a file found opens in a tab of its own, as one chosen in a
+  // File tab's tree with ⌘ held does, or chooses the tab it has.
+  const openFile = (path: string) =>
+    onPlans(() => shownOverHistory(plans, () => plans.sidePanel.onBrowseFile(path, path, true)));
+  const rowsFor = (kind: PaletteKind): readonly PaletteRow[] =>
+    kind === PALETTE_FILTER.FILES
+      ? matchedPaths.map((path) => fileRow(path, openFile))
+      : ranked(rowsOf[kind](), query, limit, byRow);
   const kinds = PALETTE_FILTERS.filter((each): each is PaletteKind =>
     filter === PALETTE_FILTER.ALL ? each !== PALETTE_FILTER.ALL : each === filter,
   );
-  const limit = filter === PALETTE_FILTER.ALL ? KIND_ROWS.ALL : KIND_ROWS.FILTERED;
   const sections: readonly PaletteSection[] = open
     ? kinds
-        .map((kind) => ({ kind, rows: ranked(sourceOf[kind](), query, limit) }))
+        .map((kind) => ({ kind, rows: rowsFor(kind) }))
         .filter((section) => section.rows.length > 0)
     : [];
-  const tokens = searchTokens(query);
+  const notice =
+    filter === PALETTE_FILTER.FILES
+      ? filesNotice(planId !== undefined && repository !== null, held)
+      : undefined;
+  const cut = filter === PALETTE_FILTER.FILES && held?.read === FILES_READ.LISTED && held.truncated;
   let place = 0;
 
   return (
@@ -511,7 +674,11 @@ export function CommandPalette({
       </div>
       <FilterChips filter={filter} onFilter={changeFilter} />
       <Command.List className="command-palette-list" label="Results">
-        <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
+        {notice === undefined ? (
+          <Command.Empty className="command-palette-empty">Nothing matches.</Command.Empty>
+        ) : (
+          <div className="command-palette-empty">{notice}</div>
+        )}
         {sections.map((section) => (
           <Command.Group key={section.kind} heading={FILTER_LABEL[section.kind]}>
             {section.rows.map((row) => {
@@ -520,6 +687,7 @@ export function CommandPalette({
             })}
           </Command.Group>
         ))}
+        {cut ? <div className="command-palette-notice">{TRUNCATED_LINE}</div> : null}
       </Command.List>
       <PaletteFooter />
     </Command.Dialog>

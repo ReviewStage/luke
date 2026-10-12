@@ -494,8 +494,9 @@ export function App(): React.JSX.Element {
       {/* The window's passing notice: the thank-you after a note lands, what
           came of a change made from a menu, and an update arrived. */}
       <ToastHost />
-      {/* The plans, the open plan's agents, every command the window can
-          run now, and the settings, behind ⌘K, past the sign-in alone. */}
+      {/* The plans, the open plan's agents and files, every command the
+          window can run now, and the settings, behind ⌘K, past the sign-in
+          alone. */}
       <CommandPalette
         available={!accountGated}
         tab={tab}
@@ -505,6 +506,7 @@ export function App(): React.JSX.Element {
           rows: settingsRowsInput({ settings, microphone, account: state.account }),
           onViewChange: setSettingsView,
         }}
+        readFiles={(planId) => act(ACT_KIND.PLANNING_TREE, { planId, path: "", recursive: true })}
       />
     </div>
   );
