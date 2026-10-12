@@ -66,8 +66,13 @@ function tokensOf(turn: RecordedTurn): TurnTokens | undefined {
   if (turn.usage === null) return undefined;
   const usage = decodeUsage(turn.usage);
   if (Option.isNone(usage)) return undefined;
-  const { inputTokens, outputTokens, cachedInputTokens } = usage.value;
-  return { inputTokens, outputTokens, cachedInputTokens };
+  const { inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens } = usage.value;
+  return {
+    inputTokens,
+    outputTokens,
+    cachedInputTokens,
+    ...(cacheWriteTokens === undefined ? undefined : { cacheWriteTokens }),
+  };
 }
 
 /** What the turn ran on and spent, each as far as its row recorded it. */

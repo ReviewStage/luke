@@ -21,6 +21,8 @@ export interface ModelUsage {
   readonly cachedInputTokens?: number;
   /** How much of the output the provider spent reasoning before it wrote, when it says. */
   readonly reasoningTokens?: number;
+  /** How much of the input the provider wrote to its prefix cache, when it says; only some providers do. */
+  readonly cacheWriteTokens?: number;
 }
 
 /**

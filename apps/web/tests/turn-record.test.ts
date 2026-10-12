@@ -46,3 +46,20 @@ test("a row that named no effort, or an empty one, says none", () => {
   assert.equal(turnRecordOf({ ...SETTLED, reasoningEffort: null }).effort, undefined);
   assert.equal(turnRecordOf({ ...SETTLED, reasoningEffort: "" }).effort, undefined);
 });
+
+test("a row's cache writes are said where a step's provider said them, and left unsaid where none did", () => {
+  assert.equal(turnRecordOf(SETTLED).tokens?.cacheWriteTokens, undefined);
+  assert.equal(
+    turnRecordOf({
+      ...SETTLED,
+      usage: {
+        inputTokens: 10,
+        outputTokens: 2,
+        cachedInputTokens: 6,
+        reasoningTokens: 1,
+        cacheWriteTokens: 4,
+      },
+    }).tokens?.cacheWriteTokens,
+    4,
+  );
+});

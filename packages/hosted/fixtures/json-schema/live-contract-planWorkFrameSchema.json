@@ -299,6 +299,10 @@
                           "cachedInputTokens": {
                             "type": "number",
                             "minimum": 0
+                          },
+                          "cacheWriteTokens": {
+                            "type": "number",
+                            "minimum": 0
                           }
                         },
                         "required": [
@@ -357,6 +361,10 @@
               "minimum": 0
             },
             "cachedInputTokens": {
+              "type": "number",
+              "minimum": 0
+            },
+            "cacheWriteTokens": {
               "type": "number",
               "minimum": 0
             }
