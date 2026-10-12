@@ -427,8 +427,14 @@ body,
   white-space: nowrap;
 }
 
+/* A plan's name reads in the body's weight, the open one too, whose fill is
+   what marks it; a plan saved since the developer last looked at it on this
+   Mac takes the heavier weight until they do. */
 .sidebar-plan-name {
   font-size: 13px;
+}
+
+.sidebar-plan[data-unread="true"] .sidebar-plan-name {
   font-weight: 600;
 }
 
@@ -445,7 +451,6 @@ body,
   color: var(--text-primary);
   font-family: inherit;
   font-size: 13px;
-  font-weight: 600;
   outline: none;
 }
 

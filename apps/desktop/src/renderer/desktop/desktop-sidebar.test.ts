@@ -1,20 +1,27 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import {
   ACCOUNT_PROVIDER,
   ACCOUNT_STATUS,
   type AccountSnapshot,
 } from "@sidecar/credentials/snapshot";
-import { act, createElement } from "react";
+import type { Plan, PlanSummary } from "@sidecar/hosted/plan-wire";
+import { Effect } from "effect";
+import { TestClock } from "effect/testing";
+import * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
+import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test } from "vitest";
 import { UPDATE_STATUS, type UpdateSnapshot } from "#shared/messages/update";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { navigationHistory } from "#testing/navigation-history";
 import { plansControl } from "#testing/plans-control";
 import { useAppKeymap } from "../app-commands";
 import { PANEL_TAB, type PanelTab } from "../panel-tabs";
 import { PLANS_PAGE } from "../planning/planning-model";
+import { PLAN_LOOK, usePlanLooks } from "../planning/use-plan-looks";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { DesktopSidebar } from "./desktop-sidebar";
 import { SIDEBAR_WIDTH } from "./sidebar-collapse";
@@ -61,22 +68,26 @@ function unmountAll(): void {
   document.body.innerHTML = "";
 }
 
-function mount(
-  account: AccountSnapshot,
-  options: {
-    update?: UpdateSnapshot;
-    onInstall?: () => void;
-    onTabChange?: (tab: PanelTab) => void;
-    tab?: PanelTab;
-    plans?: Partial<PlansControl>;
-    /** Whether the run keeps none of the sidebar's preferences, as a fixture run does. */
-    staged?: boolean;
-  } = {},
-): HTMLElement {
+interface MountOptions {
+  update?: UpdateSnapshot;
+  onInstall?: () => void;
+  onTabChange?: (tab: PanelTab) => void;
+  tab?: PanelTab;
+  plans?: Partial<PlansControl>;
+  /** Whether the run keeps none of the sidebar's preferences, as a fixture run does. */
+  staged?: boolean;
+  /** The atoms' registry, a fresh one where none is given, so a launch starts from what storage kept. */
+  registry?: AtomRegistry.AtomRegistry;
+  /** What the window draws beside the sidebar: the open plan's region. */
+  beside?: ReactElement;
+}
+
+function mount(account: AccountSnapshot, options: MountOptions = {}): HTMLElement {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
+  const registry = options.registry ?? AtomRegistry.make();
   // The window's keymap stands beside the sidebar, as `App` stands it.
   function Keyed(props: Parameters<typeof DesktopSidebar>[0]) {
     useAppKeymap(true);
@@ -84,32 +95,40 @@ function mount(
   }
   const render = ({ collapsed = false, plans = options.plans }: Restage) =>
     root.render(
-      createElement(Keyed, {
-        sidebar: {
-          collapsed,
-          width: SIDEBAR_WIDTH.DEFAULT,
-          onToggle: () => undefined,
-          onResize: () => undefined,
-          staged: options.staged ?? false,
-        },
-        identity: {
-          speakers: { listening: false, lukeSpeaking: false },
-          voiceActive: { developer: false, luke: false },
-          fixtureSpeaking: false,
-          voiceOpening: false,
-        },
-        history: navigationHistory(),
-        plans: plansControl(plans),
-        tab: options.tab ?? PANEL_TAB.PLANS,
-        onTabChange: options.onTabChange ?? (() => undefined),
-        account,
-        updates: {
-          update: options.update ?? UP_TO_DATE,
-          onCheck: () => Promise.resolve(),
-          onInstall: options.onInstall ?? (() => undefined),
-          onOpenLatest: () => undefined,
-        },
-      }),
+      onRegistry(
+        registry,
+        createElement(
+          "div",
+          null,
+          createElement(Keyed, {
+            sidebar: {
+              collapsed,
+              width: SIDEBAR_WIDTH.DEFAULT,
+              onToggle: () => undefined,
+              onResize: () => undefined,
+              staged: options.staged ?? false,
+            },
+            identity: {
+              speakers: { listening: false, lukeSpeaking: false },
+              voiceActive: { developer: false, luke: false },
+              fixtureSpeaking: false,
+              voiceOpening: false,
+            },
+            history: navigationHistory(),
+            plans: plansControl(plans),
+            tab: options.tab ?? PANEL_TAB.PLANS,
+            onTabChange: options.onTabChange ?? (() => undefined),
+            account,
+            updates: {
+              update: options.update ?? UP_TO_DATE,
+              onCheck: () => Promise.resolve(),
+              onInstall: options.onInstall ?? (() => undefined),
+              onOpenLatest: () => undefined,
+            },
+          }),
+          options.beside,
+        ),
+      ),
     );
   act(() => render({}));
   restages.set(container, (change) => act(() => render(change)));
@@ -134,7 +153,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(unmountAll);
+afterEach(() => {
+  unmountAll();
+  window.localStorage.clear();
+});
 
 test("the account button is the one way to Settings, and pressing it opens Settings", () => {
   const opened: PanelTab[] = [];
@@ -826,3 +848,130 @@ test("Archive plans archives every plan under the header and no other, and Open 
   assert.deepEqual(archived, [["plan-Billing", "plan-Invoices"]], "one archive of them all");
   assert.deepEqual(opened, ["https://github.com/acme/ledger"]);
 });
+
+/** The plans the sidebar draws as unread, by name: the rows whose name takes the heavier weight. */
+function unread(container: HTMLElement): string[] {
+  return [...container.querySelectorAll<HTMLElement>(".sidebar-plan[data-unread='true']")].map(
+    (row) => row.querySelector(".sidebar-plan-name")?.textContent ?? "",
+  );
+}
+
+/** A plan's row of the list, started at `createdAt` and last saved at `updatedAt`. */
+function savedPlan(name: string, createdAt: number, updatedAt: number): PlanSummary {
+  return { id: `plan-${name}`, name, createdAt, updatedAt, repository: null };
+}
+
+/** The open plan's region as the window draws it beside the sidebar: only its look matters here. */
+function Region({ plan }: { plan: Plan }): null {
+  usePlanLooks(plan);
+  return null;
+}
+
+/** `summary` as the open plan's document, with nothing written in it. */
+function opened(summary: PlanSummary): Plan {
+  return { ...summary, document: { body: "", assumptions: [] } };
+}
+
+/** Lets what fell due land and redraw. */
+const landed = Effect.promise(() =>
+  act(async () => {
+    for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+  }),
+);
+
+test("the plans this Mac first lists are read, the open one too, and none is unread before the list is read", () => {
+  const billing = savedPlan("Billing", 1, 50);
+  const invites = { ...savedPlan("Invites", 2, 60), pinnedAt: 70 };
+  const old = { ...savedPlan("Old", 3, 40), archivedAt: 80 };
+  const listed = { plans: [invites, billing], archived: [old] };
+
+  const reading = mount(DEAN, { plans: { ...listed, listRead: false } });
+  assert.deepEqual(unread(reading), []);
+  unmountAll();
+
+  const first = mount(DEAN, {
+    plans: { ...listed, page: PLANS_PAGE.DOCUMENT, activePlanId: billing.id },
+  });
+  const row = first.querySelector<HTMLElement>(".sidebar-plan[aria-current='page']");
+
+  assert.deepEqual(unread(first), []);
+  assert.equal(row?.querySelector(".sidebar-plan-name")?.textContent, "Billing");
+  assert.doesNotMatch(row?.textContent ?? "", /unread/u);
+});
+
+test("a plan saved since this Mac last saw it is unread, and so is one from another Mac with anything saved in it", () => {
+  const listed = [savedPlan("Billing", 1, 50), savedPlan("Invites", 2, 60)];
+  const archived = [{ ...savedPlan("Old", 3, 40), archivedAt: 80 }];
+  mount(DEAN, { plans: { plans: listed, archived } });
+  // The next launch, with the marks the first one kept.
+  unmountAll();
+
+  const later = mount(DEAN, {
+    plans: {
+      plans: [
+        savedPlan("Billing", 1, 90),
+        savedPlan("Invites", 2, 60),
+        savedPlan("Search", 100, 120),
+        savedPlan("Blank", 110, 110),
+      ],
+      archived: [{ ...savedPlan("Old", 3, 95), archivedAt: 80 }],
+    },
+  });
+  const unfold = later.querySelector<HTMLButtonElement>(".sidebar-archived-row");
+  act(() => unfold?.click());
+
+  assert.deepEqual(unread(later), ["Billing", "Search", "Old"]);
+  const billing = [...later.querySelectorAll(".sidebar-plan")].find((row) =>
+    row.textContent?.startsWith("Billing"),
+  );
+  assert.match(billing?.textContent ?? "", /\(unread\)/u);
+});
+
+it.effect(
+  "an unread plan opened is read once it has been looked at, and stays read once left",
+  () =>
+    Effect.gen(function* () {
+      mount(DEAN, { plans: { plans: [savedPlan("Billing", 1, 50)] } });
+      unmountAll();
+      const saved = savedPlan("Billing", 1, 90);
+      const open = { page: PLANS_PAGE.DOCUMENT, activePlanId: saved.id, plans: [saved] };
+
+      const container = mount(DEAN, {
+        plans: open,
+        registry: yield* registryOnTestClock,
+        beside: createElement(Region, { plan: opened(saved) }),
+      });
+      yield* landed;
+      assert.deepEqual(unread(container), ["Billing"], "unread until the look");
+      yield* TestClock.adjust(PLAN_LOOK);
+      yield* landed;
+      assert.deepEqual(unread(container), []);
+      unmountAll();
+
+      assert.deepEqual(unread(mount(DEAN, { plans: { plans: [saved] } })), []);
+    }),
+);
+
+it.effect("a save that lands on the plan the developer is looking at never makes it unread", () =>
+  Effect.gen(function* () {
+    const plan = savedPlan("Billing", 1, 50);
+    mount(DEAN, { plans: { plans: [plan] } });
+    unmountAll();
+    const open = { page: PLANS_PAGE.DOCUMENT, activePlanId: plan.id };
+    const container = mount(DEAN, {
+      plans: { ...open, plans: [plan] },
+      registry: yield* registryOnTestClock,
+      beside: createElement(Region, { plan: opened(plan) }),
+    });
+    yield* landed;
+    yield* TestClock.adjust(PLAN_LOOK);
+    yield* landed;
+
+    // Note that the list's row is read ahead of the document here, as a
+    // refresh reads the list first.
+    restages.get(container)?.({ plans: { ...open, plans: [savedPlan("Billing", 1, 70)] } });
+    yield* landed;
+
+    assert.deepEqual(unread(container), []);
+  }),
+);

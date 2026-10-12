@@ -131,6 +131,7 @@ function sidebarPlan(
       plans,
       plan,
       current,
+      unread: false,
       repositoryShown: true,
       now: plan.updatedAt,
       onOpen: () => asked.opened.push(plan.id),

@@ -91,6 +91,7 @@ export function plansControl(overrides: Partial<PlansControl> = {}): PlansContro
     activePlanId: undefined,
     boundFor: overrides.activePlanId,
     listFailed: false,
+    listRead: true,
     region: { kind: DOCUMENT_REGION.NONE },
     copy: { onPress: ignore },
     edit: () => Promise.resolve({ failure: PLAN_CALL_FAILURE.UNANSWERED }),
