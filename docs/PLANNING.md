@@ -846,9 +846,14 @@ holds both prompts to those words.
   or "No rollout yet" while empty, read-only in the window, last in Copy and
   in what a coding agent is handed, and handed to the planning model beside
   the text once it holds one. The notetaker and a coding agent's `edit_plan`
-  write it through rollout notes ("The notetaker" above). Migration 0096
-  added both columns, every existing plan and
-  revision with an empty rollout.
+  write it through rollout notes ("The notetaker" above). The planning model
+  proposes the cut itself once Interfaces, Hard parts, and Testing are good
+  enough, by their headings ("Cutting the rollout" in
+  `PLANNING_INSTRUCTIONS`): the interfaces grouped by layer in the order the
+  repository confirms, one line per pull request on why it lands green alone,
+  siblings on the one they both need, a single pull request asked once
+  whether it splits; it writes none of it. Migration 0096 added both columns,
+  every existing plan and revision with an empty rollout.
 
 The template replaced one built for the coding agent alone (requirements as
 rules with Given/When/Then examples, a change map, contracts, a decision log,

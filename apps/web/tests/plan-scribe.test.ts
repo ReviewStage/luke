@@ -176,6 +176,68 @@ const cutOnCall = () =>
     }),
   );
 
+const EMAIL: RolloutItem = {
+  title: "Invite email",
+  scope: "The email an invite sends, over the table.",
+  base: 1,
+  acceptance: "The invitee receives a link.",
+};
+
+/**
+ * The cut Luke proposes once the interfaces hold, said on the call and taken:
+ * three pull requests, the route and the email each on the table and not on
+ * each other. The developer then folds the email into the route, which the
+ * notetaker notes as a replace of the one that absorbs it and a remove of
+ * the one folded.
+ */
+const proposedCut = Effect.scoped(
+  Effect.gen(function* () {
+    const { userId, planId } = yield* openPlan;
+    const folded = {
+      ...ROUTE,
+      title: "Invite route and its email",
+      scope: "The route and the email it sends.",
+    };
+    const { scribe } = yield* scribeFor(userId, planId, [
+      {
+        notes: [TABLE, ROUTE, EMAIL].map((item) => ({
+          kind: NOTE_KIND.ADD,
+          field: ROLLOUT_NOTE_FIELD,
+          item,
+        })),
+      },
+      {
+        notes: [
+          { kind: NOTE_KIND.REPLACE, field: ROLLOUT_NOTE_FIELD, find: "route", item: folded },
+          { kind: NOTE_KIND.REMOVE, field: ROLLOUT_NOTE_FIELD, find: EMAIL.title },
+        ],
+      },
+    ]);
+    const rolloutOf = Effect.map(
+      readPlan(userId, planId),
+      (stored) => Option.getOrThrow(stored).plan.rollout,
+    );
+
+    scribe.observe(
+      said(
+        "Three PRs: the invite table on main, green alone with its migration test; " +
+          "the route on the table; the email on the table too, since it needs no route.",
+        0,
+        4_000,
+      ),
+    );
+    scribe.observe(heard("Sounds right.", 4_500, 5_000));
+    yield* quiet;
+    const cut = yield* settledRead(rolloutOf, (rollout) => rollout.length === 3);
+    scribe.observe(heard("Actually fold the email into the route.", 6_000, 7_000));
+    yield* quiet;
+    const after = yield* settledRead(rolloutOf, (rollout) => rollout.length === 2);
+
+    assert.deepEqual(cut, [TABLE, ROUTE, EMAIL]);
+    assert.deepEqual(after, [TABLE, folded]);
+  }),
+);
+
 const scribeFor = (userId: string, planId: string, answers: readonly ScribeAnswer[]) =>
   Effect.gen(function* () {
     const { model, asked, pace } = scriptedScribeModel(answers);
@@ -219,6 +281,11 @@ it.layer(testSqlClient)("the plan's notetaker", (it) => {
   );
 
   it.effect("a rollout cut on the call is saved beside the plan's text, never in it", cutOnCall);
+
+  it.effect(
+    "the three pull requests Luke cut, two siblings on the first, are saved as taken, and a fold leaves two",
+    () => proposedCut,
+  );
 
   it.effect(
     "a call's saves are one revision of the plan, written by the notetaker on the call",

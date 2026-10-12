@@ -3,6 +3,7 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
+  PLAN_HEADING,
   ROLLOUT_NOTE_FIELD,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_FIELD } from "@sidecar/hosted/plan-wire";
@@ -25,7 +26,9 @@ import { RUN_IN_REPOSITORY_TOOL } from "../server/hosted/repository-shell";
  * or never write to. Both are told the marker the sections the developer
  * wrote ride behind in their context, so neither rewrites the developer's
  * words. Both models that read the repository are asked to say
- * what each command is for, in the field the shell takes for it.
+ * what each command is for, in the field the shell takes for it. The
+ * planning model is told to cut the rollout itself once the sections it
+ * stands on hold, naming them by their headings.
  */
 
 test("the planning model is told every section by its heading, what it holds, and when it is done", () => {
@@ -66,5 +69,21 @@ test("the notetaker is told the rollout stands beside the text, its notes, and t
     "write the cut as rollout notes, one per pull request in order, never as prose or a bullet under any heading",
   ]) {
     assert.ok(SCRIBE_INSTRUCTIONS.includes(words), `the notetaker's prompt says ${words}`);
+  }
+});
+
+test("the planning model proposes the rollout once interfaces, hard parts, and testing hold, by heading", () => {
+  for (const words of [
+    `Once the ${PLAN_HEADING.INTERFACES}, ${PLAN_HEADING.HARD_PARTS}, and ${PLAN_HEADING.TESTING} sections of the saved document are good enough to build from, propose the rollout yourself`,
+    `Group what ${PLAN_HEADING.INTERFACES} names by layer, in the dependency order the repository has it`,
+    "Read the code with run_in_repository to confirm the order holds before you propose it.",
+    `Hold each pull request to the ${PLAN_HEADING.ROLLOUT} bar above.`,
+    "Fold one too small to be worth a review into the one beside it, and split one that carries two concerns.",
+    "Two that both need the first and not each other both base on the first, never one on the other.",
+    "one line per pull request: its title, its base, and why it lands green alone.",
+    "When the work is one pull request, queue one question asking whether it splits",
+    "never restate it as prose",
+  ]) {
+    assert.ok(PLANNING_INSTRUCTIONS.includes(words), `the planning prompt says ${words}`);
   }
 });
