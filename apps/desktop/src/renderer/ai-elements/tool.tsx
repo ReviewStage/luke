@@ -1,6 +1,6 @@
 import { XIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode, useState } from "react";
-import { SpinnerRing } from "../spinner";
+import { WorkingMark } from "../working-mark";
 import { CodeBlock } from "./code-block";
 import {
   Fold,
@@ -18,10 +18,10 @@ import { cn } from "./utils";
  * After the AI Elements registry (https://elements.ai-sdk.dev), restyled
  * to Luke's tokens and folded on `fold.tsx`. The row is one line, and
  * the whole of it opens the call: the tool's icon, what the call did in
- * a few words, and where it stands, a spinner while it runs and a red
- * mark if it failed, trailing the words so that only their cut moves when
- * the mark goes; a call that ended well keeps no seat for one. There is no chevron:
- * the icon leads, and a hover fill says the line opens. The body under
+ * a few words, and where it stands, the working mark while it runs and a
+ * red mark if it failed, trailing the words so that only their cut moves
+ * when the mark goes; a call that ended well keeps no seat for one. There
+ * is no chevron: the icon leads, and a hover fill says the line opens. The body under
  * it, set in under the words, is the call's input and its answer in two
  * mono blocks of bounded height, the answer cut to its first lines with
  * the rest behind Show more. What the words say is the caller's decision
@@ -118,9 +118,11 @@ export function Tool({ className, children, ...props }: ToolProps): ReactNode {
 }
 
 /**
- * Where the call stands, at 16px: a spinner while it runs or a red mark if
- * it failed. A call that ended well draws nothing, no empty seat and no gap
- * beside it, since that is every call's end and a mark on each says nothing.
+ * Where the call stands, at 16px: the working mark while it runs or a red
+ * mark if it failed, the two sharing one seat so a call that fails moves
+ * nothing beside it. A call that ended well draws nothing, no empty seat
+ * and no gap beside it, since that is every call's end and a mark on each
+ * says nothing.
  */
 export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
   if (state === TOOL_STATE.OUTPUT_AVAILABLE) return null;
@@ -134,7 +136,9 @@ export function ToolStateMark({ state }: { state: ToolState }): ReactNode {
       {state === TOOL_STATE.OUTPUT_ERROR ? (
         <XIcon className="size-4 text-danger" aria-hidden="true" />
       ) : (
-        <SpinnerRing className="text-muted-foreground" />
+        <span className="text-muted-foreground">
+          <WorkingMark />
+        </span>
       )}
     </span>
   );

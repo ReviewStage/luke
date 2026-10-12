@@ -120,12 +120,12 @@ const drawnCard = (plan: PlanSummary) =>
       repository: container.querySelector(".plan-card-repository")?.textContent,
       agents: lines("Agents"),
       pullRequests: lines("Pull requests"),
-      // Each agent's glyph as a reader and an eye meet it: what it says, and the harness mark it wears.
+      // Each agent's glyph as a reader and an eye meet it: what it says, the harness mark it wears, and whether the working mark stands in its place.
       agentGlyphs: [...container.querySelectorAll("[data-plan-card-agent] .plan-card-glyph")].map(
         (glyph) => ({
           said: glyph.querySelector('[role="img"]')?.getAttribute("aria-label"),
           mark: glyph.querySelector(".provider-mark")?.tagName.toLowerCase(),
-          ring: glyph.querySelector(".spinner-ring") !== null,
+          working: glyph.querySelector("svg.working-mark") !== null,
         }),
       ),
       buttons: () => [...container.querySelectorAll("button")],
@@ -160,15 +160,15 @@ it.effect(
 );
 
 it.effect(
-  "an agent's line leads with its harness's mark as its tab wears it: a ring while it works, the mark alone once done, an alert in its place where it failed, and no dot",
+  "an agent's line leads with its harness's mark as its tab wears it: the working mark in its place while it works, the mark alone once done, an alert in its place where it failed, and no dot",
   () =>
     Effect.gen(function* () {
       const card = yield* drawnCard(PLAN);
 
       assert.deepEqual(card.agentGlyphs, [
-        { said: "Working", mark: "svg", ring: true },
-        { said: undefined, mark: "img", ring: false },
-        { said: "Failed", mark: undefined, ring: false },
+        { said: "Working", mark: undefined, working: true },
+        { said: undefined, mark: "img", working: false },
+        { said: "Failed", mark: undefined, working: false },
       ]);
       card.unmount();
     }),

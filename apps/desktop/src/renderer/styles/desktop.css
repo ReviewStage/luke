@@ -2717,6 +2717,21 @@ body,
   width: var(--summary-rail-width);
 }
 
+/* The rail's chevron wears the working mark's badge in its bottom-right
+   corner while an agent or a subagent of the plan works, clear of the
+   chevron's own strokes and inside the button's rounded fill. */
+.icon-button:has(> .summary-rail-badge) {
+  position: relative;
+}
+
+.summary-rail-badge {
+  position: absolute;
+  right: 3px; /* off-scale */
+  bottom: 3px; /* off-scale */
+  display: flex;
+  pointer-events: none;
+}
+
 /* The toolbar's button is drawn on while the summary is pinned, as it is
    while the card it hangs stands. */
 .summary-toggle[aria-pressed="true"] {
@@ -4234,8 +4249,9 @@ body:has(.confirm-dialog-backdrop) .toast[data-action="true"] {
 }
 
 /* An agent's line leads with its harness's mark wearing where it stands, as
-   its tab does, a size up from the pull request's glyph so the mark still
-   reads inside the working ring. */
+   its tab does, a size up from the pull request's glyph so the harness's
+   mark reads at a glance; the working mark stands centred in the same
+   slot. */
 .plan-card-glyph {
   display: inline-flex;
   width: 14px;

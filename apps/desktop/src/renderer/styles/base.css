@@ -628,7 +628,8 @@ body,
 }
 
 /* Where a piece of work stands, on its own glyph (`state-glyph.tsx`). Working,
-   the glyph shrinks inside the window's one spinner ring turning around it.
+   the working mark stands in the glyph's place, centred in the glyph's own
+   footprint, so a tab or a row moves nothing as its work starts or ends.
    Failed, the alert in the danger colour stands in the glyph's place at the
    glyph's size. */
 .state-glyph {
@@ -647,23 +648,129 @@ body,
   height: 100%;
 }
 
-.state-glyph[data-state="working"] > :not(.spinner-ring) {
-  transform: scale(0.56);
-}
-
 .state-glyph[data-state="failed"] {
   color: var(--danger);
 }
 
-.state-glyph > .spinner-ring {
-  position: absolute;
-  inset: 0;
+/* The mark an agent at work wears (`working-mark.tsx`): two pixels and their
+   fainter tails lapping a faint track, in the ink around it. Its size is
+   fixed and set past a slot's own `svg` rule (`.tab-icon svg`), so no slot
+   ever stretches the grid and its cells and gaps stay whole pixels. Each
+   pixel steps a cell, 4px, on one 200ms beat at either size: the glyph laps
+   its eight cells in 1.6s, the badge its four in 0.8s. An endless motion
+   held by `--loop-motion`; every delay is the pixel's lag behind the lead,
+   less a lap, less 0.3s, so a held mark lands mid-lap, the chasers a cell
+   past their tails, rather than on the first frame. */
+svg.working-mark[data-size] {
+  display: block;
+  width: 12px;
+  height: 12px;
+  flex: none;
+  fill: currentColor;
 }
 
-/* The window's one spinner (`spinner.tsx`): an arc in the ink around it over
-   a faint track, filling whatever box holds it. An endless motion held by
-   `--loop-motion` like every animation with no end of its own, and still
-   reading as a wait while held. */
+svg.working-mark[data-size="badge"] {
+  width: 8px;
+  height: 8px;
+}
+
+/* A mark standing alone, said to a reader on a box that keeps the mark's
+   own size, so it sits in a line of words as the bare mark does. */
+.working-mark-said {
+  display: inline-flex;
+  flex: none;
+}
+
+.working-mark-track {
+  opacity: 0.16;
+}
+
+.working-mark-dot {
+  animation: working-lap 1.6s step-end infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.working-mark-dot[data-dot="lead"] {
+  animation-delay: -1.9s;
+}
+
+.working-mark-dot[data-dot="lead-tail"] {
+  opacity: 0.45;
+  animation-delay: -1.7s;
+}
+
+.working-mark-dot[data-dot="trail"] {
+  animation-delay: -1.1s;
+}
+
+.working-mark-dot[data-dot="trail-tail"] {
+  opacity: 0.45;
+  animation-delay: -0.9s;
+}
+
+.working-mark[data-size="badge"] .working-mark-dot {
+  animation: working-lap-badge 0.8s step-end infinite;
+  animation-play-state: var(--loop-motion);
+}
+
+.working-mark[data-size="badge"] .working-mark-dot[data-dot="lead"] {
+  animation-delay: -1.1s;
+}
+
+.working-mark[data-size="badge"] .working-mark-dot[data-dot="lead-tail"] {
+  animation-delay: -0.9s;
+}
+
+/* The glyph's lap, round the 3×3 grid's edge from its top-left cell. */
+@keyframes working-lap {
+  0%,
+  100% {
+    transform: none;
+  }
+  12.5% {
+    transform: translate(4px, 0);
+  }
+  25% {
+    transform: translate(8px, 0);
+  }
+  37.5% {
+    transform: translate(8px, 4px);
+  }
+  50% {
+    transform: translate(8px, 8px);
+  }
+  62.5% {
+    transform: translate(4px, 8px);
+  }
+  75% {
+    transform: translate(0, 8px);
+  }
+  87.5% {
+    transform: translate(0, 4px);
+  }
+}
+
+/* The badge's lap, round the 2×2 grid from its top-left cell. */
+@keyframes working-lap-badge {
+  0%,
+  100% {
+    transform: none;
+  }
+  25% {
+    transform: translate(4px, 0);
+  }
+  50% {
+    transform: translate(4px, 4px);
+  }
+  75% {
+    transform: translate(0, 4px);
+  }
+}
+
+/* The window's one spinner for a wait (`spinner.tsx`): an arc in the ink
+   around it over a faint track, filling whatever box holds it. An endless
+   motion held by `--loop-motion` like every animation with no end of its
+   own, and still reading as a wait while held. */
 .spinner-ring {
   display: block;
   box-sizing: border-box;

@@ -410,8 +410,9 @@ panel.
 
 - **The head.** The model · the effort · the status, which the tab's glyph
   wears (`state-glyph.tsx`): the mark of the harness the model runs in
-  (Claude Code or Codex), shrunk inside a turning ring while the agent is
-  starting or running, an alert in the danger colour once it failed, and
+  (Claude Code or Codex), giving way in its own slot to the working mark
+  (`working-mark.tsx`) while the agent is starting or running, an alert in
+  the danger colour once it failed, and
   the mark alone once it completed or was stopped; the tab's hint says
   "Working", "Failed", or "Stopped" beside the model. A
   Stop stands while the agent may still write; it asks the service to cancel

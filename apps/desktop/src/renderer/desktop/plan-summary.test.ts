@@ -82,6 +82,17 @@ const WORK: PlansControl["work"] = {
   ],
 };
 
+/** The same work once it ended: the call over, its worker answered. */
+const RESTING_WORK: PlansControl["work"] = {
+  ...WORK,
+  callLive: false,
+  turns: (WORK.turns ?? []).map((turn) => ({
+    ...turn,
+    state: PLAN_WORK_STATE.DONE,
+    parts: turn.parts.map((part) => ({ ...part, state: PLAN_WORK_STATE.DONE })),
+  })),
+};
+
 /** The plan has drawn on its board and been talked through, and nothing else. */
 const HOLDS: PlanHolds = {
   [SIDE_PANEL_TAB.BOARD]: true,
@@ -106,13 +117,17 @@ const SHOWN: PlansControl["shownCode"] = [
 function Page({
   archived,
   shownCode,
+  resting,
 }: {
   archived: boolean;
   shownCode: PlansControl["shownCode"];
+  /** Whether the agent finished and the worker answered, rather than both still at work. */
+  resting: boolean;
 }) {
   const plan = archived ? { ...PLAN, archivedAt: 4 } : PLAN;
+  const work = resting ? RESTING_WORK : WORK;
   const agents = codingAgentsControl({
-    agents: [AGENT],
+    agents: [resting ? { ...AGENT, status: CODING_AGENT_STATUS.COMPLETED } : AGENT],
     agentIds: [AGENT.id],
     ...(archived ? { onUnarchive: () => undefined } : undefined),
   });
@@ -121,7 +136,7 @@ function Page({
     undefined,
     { id: plan.id, holds: HOLDS },
     mainTabs.openAgents,
-    workerCallIds(WORK.turns),
+    workerCallIds(work.turns),
     (shownCode ?? []).map((showing) => showing.code.ref.path),
   );
   const summary = useSummaryPin(false);
@@ -138,7 +153,7 @@ function Page({
         mainTabs,
         sidePanel,
         agents,
-        work: WORK,
+        work,
         shownCode,
       }),
     }),
@@ -146,11 +161,11 @@ function Page({
   );
 }
 
-function mount(archived = false, shownCode = SHOWN): HTMLElement {
+function mount(archived = false, shownCode = SHOWN, resting = false): HTMLElement {
   const container = document.body.appendChild(document.createElement("div"));
   const root = createRoot(container);
   roots.push(root);
-  act(() => root.render(createElement(Page, { archived, shownCode })));
+  act(() => root.render(createElement(Page, { archived, shownCode, resting })));
   return container;
 }
 
@@ -274,6 +289,28 @@ test("the pinned summary lists what the two pickers open, under their headings, 
     const glyph: Element | null = rowNamed(summary, label).querySelector('[role="img"]');
     assert.equal(glyph?.getAttribute("aria-label"), "Working");
   }
+});
+
+test("collapsed to its rail, which hides the agents and subagents, the chevron wears the working badge while one works, said to a reader and in its hint, and none once they rest", () => {
+  const working = mount();
+  act(() => summaryButton(working).click());
+  assert.equal(modeOf(working), "rail");
+  const chevron = working.querySelector<HTMLElement>('[aria-label="Expand summary"]');
+  const badge = chevron?.querySelector(".summary-rail-badge");
+  assert.ok(chevron && badge);
+  assert.equal(badge.getAttribute("aria-label"), "agent working");
+  assert.equal(chevron.getAttribute("aria-describedby"), badge.id, "the chevron says it");
+  assert.equal(hover(chevron), "Expand summary, agent working", "and so does its hint");
+  assert.ok(badge.querySelector('svg.working-mark[data-size="badge"]'), "the badge-sized mark");
+  quit();
+
+  const resting = mount(false, SHOWN, true);
+  if (modeOf(resting) !== "rail") act(() => summaryButton(resting).click());
+  const quiet = resting.querySelector<HTMLElement>('[aria-label="Expand summary"]');
+  assert.ok(quiet);
+  assert.equal(quiet.querySelector(".summary-rail-badge, .working-mark"), null, "no badge");
+  assert.equal(quiet.getAttribute("aria-describedby"), null);
+  assert.equal(hover(quiet), "Expand summary");
 });
 
 test("a panel's row opens the panel on its tab, and a column with room still holds the summary pinned beside it", () => {

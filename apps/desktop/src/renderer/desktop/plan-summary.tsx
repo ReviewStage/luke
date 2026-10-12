@@ -1,10 +1,12 @@
 import { ChevronsLeftIcon, ChevronsRightIcon, ListIcon } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { shownFiles } from "../planning/code-pane-model";
+import { agentStillWriting } from "../planning/coding-agent-model";
 import type { PlansControl } from "../planning/use-plans-tab";
-import { workRowsOf } from "../planning/work-model";
+import { type WorkWorkerBlock, workRowsOf } from "../planning/work-model";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
+import { WORKING_MARK_SIZE, WorkingMark } from "../working-mark";
 import { AGENTS_SECTION, agentEntries } from "./main-tabs";
 import { ADD_SECTION, panelEntries, planWorkers } from "./side-panel";
 import type { AddEntry } from "./strip-tabs";
@@ -32,8 +34,10 @@ import type { AddEntry } from "./strip-tabs";
  * pointer or the keys are on it, that collapses it from the very spot the
  * rail's expands it. Collapsed, or where the column has no such room, it is
  * a rail of the panel's kinds alone, each naming itself in its hint, under a
- * chevron that pins it again where it fits and otherwise hangs the whole
- * summary as a card over the rail's own footprint, the rail expanding in
+ * chevron that wears the working mark as a badge while any of the plan's
+ * agents or subagents works, since the rail hides them all, and that pins
+ * it again where it fits and otherwise hangs the whole summary as a card
+ * over the rail's own footprint, the rail expanding in
  * place, with its own chevron back on the spot the rail's stood. The card
  * goes on that chevron, on Escape, on a row chosen, or on a press anywhere
  * outside it, which still lands where it was pressed. Whether it is pinned
@@ -78,6 +82,9 @@ const CARD_FROM = {
 } as const;
 
 type CardFrom = (typeof CARD_FROM)[keyof typeof CARD_FROM];
+
+/** What the rail's badge says, to a reader and in the chevron's hint, while an agent or subagent the collapsed summary hides is at work. */
+const WORKING_WORDS = "agent working";
 
 /** The heading over the side panel's kinds, which their "+" menu lists under none. */
 const PANELS_SECTION = "Panels";
@@ -253,10 +260,22 @@ interface SummarySection {
   entries: readonly AddEntry[];
 }
 
+/** The plan's planning workers, which the summary lists under Subagents. */
+function summaryWorkers(plans: PlansControl): readonly WorkWorkerBlock[] {
+  const { work } = plans;
+  return planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
+}
+
+/** Whether any agent or subagent the summary lists is at work, which the rail, hiding both, says on its chevron; a delegated worker is no summary row and has its own tab to say it. */
+function summaryWorking(plans: PlansControl): boolean {
+  const agentWorking = (plans.agents.agents ?? []).some((agent) => agentStillWriting(agent.status));
+  return agentWorking || summaryWorkers(plans).some((worker) => worker.call.running);
+}
+
 /** What the summary lists, under its headings in their order, each heading only where it has a row. */
 function summarySections(plans: PlansControl): SummarySection[] {
-  const { sidePanel, mainTabs, agents, work } = plans;
-  const workers = planWorkers(work.turns, workRowsOf(work.turns, work.callLive));
+  const { sidePanel, mainTabs, agents } = plans;
+  const workers = summaryWorkers(plans);
   const entries = [
     ...panelEntries({
       panel: sidePanel,
@@ -432,24 +451,35 @@ function SummaryCard({
 function SummaryChevron({
   layout,
   cardId,
+  working,
 }: {
   layout: SummaryLayout;
   cardId: string;
+  /** Whether an agent or subagent the summary lists is at work, which the rail's chevron alone wears, since the column shows each on its row. */
+  working: boolean;
 }): React.JSX.Element {
   const pinned = layout.mode === SUMMARY_MODE.COLUMN;
   const label = pinned ? "Collapse summary" : "Expand summary";
   const hangs = !pinned && !(layout.wide && layout.card === undefined);
+  const badged = working && !pinned;
+  const badge = useId();
   return (
-    <Tooltip label={label}>
+    <Tooltip label={badged ? `${label}, ${WORKING_WORDS}` : label}>
       <button
         type="button"
         className="icon-button plan-summary-chevron"
         aria-label={label}
+        aria-describedby={badged ? badge : undefined}
         {...(hangs ? cardControl(layout, cardId) : {})}
         data-summary-opener={pinned ? undefined : CARD_FROM.RAIL}
         onClick={pinned ? layout.onToggle : layout.onExpand}
       >
         {pinned ? <ChevronsRightIcon /> : <ChevronsLeftIcon />}
+        {badged ? (
+          <span id={badge} className="summary-rail-badge" role="img" aria-label={WORKING_WORDS}>
+            <WorkingMark size={WORKING_MARK_SIZE.BADGE} />
+          </span>
+        ) : null}
       </button>
     </Tooltip>
   );
@@ -476,7 +506,7 @@ export function PlanSummary({
   return (
     <>
       <aside className="plan-summary" aria-label="Summary" data-mode={layout.mode}>
-        <SummaryChevron layout={layout} cardId={cardId} />
+        <SummaryChevron layout={layout} cardId={cardId} working={summaryWorking(plans)} />
         {layout.mode === SUMMARY_MODE.COLUMN ? (
           <SummaryList sections={sections} />
         ) : kinds.length === 0 ? null : (

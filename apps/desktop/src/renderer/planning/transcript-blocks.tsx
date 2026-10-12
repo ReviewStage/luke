@@ -380,7 +380,7 @@ export type TranscriptSubagentProps = {
   /** What it runs on; none where the row knows no pair. */
   pair: SubagentPair | undefined;
   state: ToolState;
-  /** When the subagent began, which a running row counts from beside its spinner; none where unknown or not counted, when the spinner stands alone. */
+  /** When the subagent began, which a running row counts from beside its working mark; none where unknown or not counted, when the mark stands alone. */
   startedAt?: number | undefined;
   /** Why the call failed, drawn under the row, since a call refused before its worker began leaves no tab to read it in. */
   errorText: string | undefined;
@@ -388,22 +388,11 @@ export type TranscriptSubagentProps = {
   onOpen: (() => void) | undefined;
 };
 
-/** The subagent's glyph: the mark of the harness its model runs in, or the worker's robot, lit while it runs, where no catalog entry names the model. */
-function SubagentGlyph({
-  pair,
-  running,
-}: {
-  pair: SubagentPair | undefined;
-  running: boolean;
-}): ReactNode {
+/** The subagent's glyph: the mark of the harness its model runs in, or the worker's robot where no catalog entry names the model, in the muted ink whether it runs or not, since the row's working mark says which. */
+function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode {
   const listed = pair?.models.find((model) => model.id === pair.choice.model);
   if (listed === undefined) {
-    return (
-      <BotIcon
-        className={cn("size-4 shrink-0", running ? "text-luke" : "text-muted-foreground")}
-        aria-hidden="true"
-      />
-    );
+    return <BotIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />;
   }
   return (
     <span
@@ -418,11 +407,11 @@ function SubagentGlyph({
 /**
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
  * or finished: one line drawn as a call's row is, wearing the mark of the
- * harness its model runs in (the worker's robot, lit while it runs, where
- * the model is unknown), the job, fading where the line cuts it, the model
- * and effort it runs on as every pair is drawn (`model-label.tsx`), and the
- * mark a call's row wears for where it stands, with how long it has worked
- * beside the spinner while it runs (`working-time.tsx`). The whole line is
+ * harness its model runs in (the worker's robot where the model is
+ * unknown), the job, fading where the line cuts it, the model and effort it
+ * runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
+ * row wears for where it stands, with how long it has worked beside the
+ * working mark while it runs (`working-time.tsx`). The whole line is
  * the one button that opens the subagent's tab, which is where its steps
  * and its answer are read, so it folds nothing open in place. Where it
  * opens no tab it is the same line, pressed by nothing. A call that failed
@@ -441,7 +430,7 @@ export function TranscriptSubagent({
   const running = state === TOOL_STATE.INPUT_STREAMING || state === TOOL_STATE.INPUT_AVAILABLE;
   const line = (
     <>
-      <SubagentGlyph pair={pair} running={running} />
+      <SubagentGlyph pair={pair} />
       <span ref={words} className="subagent-job min-w-0 flex-1" data-overflow={String(clipped)}>
         {job}
       </span>
