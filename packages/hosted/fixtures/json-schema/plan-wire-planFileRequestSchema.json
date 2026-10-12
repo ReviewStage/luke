@@ -16,6 +16,11 @@
     },
     "raw": {
       "type": "boolean"
+    },
+    "ref": {
+      "type": "string",
+      "minLength": 40,
+      "maxLength": 40
     }
   },
   "required": [

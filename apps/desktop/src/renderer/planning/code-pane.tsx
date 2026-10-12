@@ -115,7 +115,7 @@ export function CodeLineRows({
 }
 
 /** A card's lines. */
-function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
+export function CodeLines({ code }: { code: PlanCode }): React.JSX.Element {
   return (
     <div className="code-lines">
       <CodeLineRows firstLine={code.firstLine} lines={code.lines} pointed={code.ref} />
@@ -144,13 +144,70 @@ function CopyLinesButton({ lines }: { lines: string }): React.JSX.Element {
   );
 }
 
+/** What a card is called: its path, and the lines pointed at where it names some. */
+export function codeCardName(ref: CodeRef): string {
+  const label = rangeLabel(ref);
+  return label === undefined ? ref.path : `${ref.path}, ${label}`;
+}
+
 /**
- * One snippet: its path, cut from the left so the file's own name stays in
- * sight, with the whole path in its hint; the lines pointed at; their copy;
- * the whole file opened in a tab of its own, from the path or its button;
- * Luke's note, where code shown before notes were asked for has none; and
- * the lines themselves.
+ * A card's header: its path, cut from the left so the file's own name stays
+ * in sight, with the whole path in its hint; the lines pointed at; their
+ * copy, where the card holds them; and the whole file opened in a tab of
+ * its own, from the path or its button, where the card's file can be. The Code tab's cards and an inbox
+ * item's code are both headed by it.
  */
+export function CodeCardHeader({
+  codeRef,
+  copied,
+  onOpen,
+}: {
+  codeRef: CodeRef;
+  /** The lines a copy carries; none where the card holds no lines yet. */
+  copied: string | undefined;
+  /** Opens the whole file; none where the card's file cannot be opened, its path then plain words. */
+  onOpen: (() => void) | undefined;
+}): React.JSX.Element {
+  const label = rangeLabel(codeRef);
+  return (
+    <header className="code-card-header">
+      <Tooltip label={codeRef.path}>
+        {onOpen === undefined ? (
+          <span className="code-card-path">
+            <bdi>{codeRef.path}</bdi>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="code-card-path"
+            aria-label={`Open ${codeRef.path}`}
+            onClick={onOpen}
+          >
+            <bdi>{codeRef.path}</bdi>
+          </button>
+        )}
+      </Tooltip>
+      {label === undefined ? null : <span className="code-card-range">{label}</span>}
+      <span className="code-card-actions">
+        {copied === undefined ? null : <CopyLinesButton lines={copied} />}
+        {onOpen === undefined ? null : (
+          <Tooltip label={OPEN_FILE_LABEL}>
+            <button
+              type="button"
+              className="icon-button code-card-action"
+              aria-label={OPEN_FILE_LABEL}
+              onClick={onOpen}
+            >
+              <FileInputIcon aria-hidden="true" />
+            </button>
+          </Tooltip>
+        )}
+      </span>
+    </header>
+  );
+}
+
+/** One snippet: its header, Luke's note, where code shown before notes were asked for has none, and the lines themselves. */
 function CodeCardContent({
   showing,
   onOpenFile,
@@ -159,39 +216,13 @@ function CodeCardContent({
   onOpenFile: (ref: CodeRef) => void;
 }): React.JSX.Element {
   const { code } = showing;
-  const label = rangeLabel(code.ref);
-  const open = () => onOpenFile(code.ref);
   return (
-    <article
-      className="code-card"
-      aria-label={label === undefined ? code.ref.path : `${code.ref.path}, ${label}`}
-    >
-      <header className="code-card-header">
-        <Tooltip label={code.ref.path}>
-          <button
-            type="button"
-            className="code-card-path"
-            aria-label={`Open ${code.ref.path}`}
-            onClick={open}
-          >
-            <bdi>{code.ref.path}</bdi>
-          </button>
-        </Tooltip>
-        {label === undefined ? null : <span className="code-card-range">{label}</span>}
-        <span className="code-card-actions">
-          <CopyLinesButton lines={copiedLines(code)} />
-          <Tooltip label={OPEN_FILE_LABEL}>
-            <button
-              type="button"
-              className="icon-button code-card-action"
-              aria-label={OPEN_FILE_LABEL}
-              onClick={open}
-            >
-              <FileInputIcon aria-hidden="true" />
-            </button>
-          </Tooltip>
-        </span>
-      </header>
+    <article className="code-card" aria-label={codeCardName(code.ref)}>
+      <CodeCardHeader
+        codeRef={code.ref}
+        copied={copiedLines(code)}
+        onOpen={() => onOpenFile(code.ref)}
+      />
       {code.note === undefined ? null : <p className="code-card-note">{code.note}</p>}
       <CodeLines code={code} />
     </article>

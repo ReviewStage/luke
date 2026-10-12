@@ -64,12 +64,28 @@ const FILE_REFUSAL_LINE = {
   [PLAN_FILE_REFUSAL.UNAVAILABLE]: "GitHub could not be read just now.",
 } as const satisfies Record<PlanFileRefusal, string>;
 
+/** The characters of a commit's SHA a line names it by, as GitHub abbreviates one. */
+const SHORT_COMMIT_CHARS = 7;
+
+/** A commit as a line names it: its SHA cut as GitHub abbreviates one. */
+export function shortCommit(sha: string): string {
+  return sha.slice(0, SHORT_COMMIT_CHARS);
+}
+
 /**
  * What a File tab says in place of a file refused: the table's line, and
  * for a missing file the branch it was looked for on where the service
- * named it, since the snippet was read from a checkout that held it.
+ * named it, since the snippet was read from a checkout that held it, or
+ * the commit it was read at, which an agent may not have pushed.
  */
-export function refusalLine(refusal: PlanFileRefusal, branch: string | undefined): string {
+export function refusalLine(
+  refusal: PlanFileRefusal,
+  branch: string | undefined,
+  commit?: string,
+): string {
+  if (refusal === PLAN_FILE_REFUSAL.MISSING && commit !== undefined) {
+    return `This file is not at commit ${shortCommit(commit)} on GitHub, or the commit was never pushed.`;
+  }
   if (refusal === PLAN_FILE_REFUSAL.MISSING && branch !== undefined) {
     return `This file is not on ${branch}, the branch Luke reads from GitHub.`;
   }

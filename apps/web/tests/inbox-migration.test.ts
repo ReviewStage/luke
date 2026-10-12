@@ -2,13 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
-import {
-  INBOX_BLOCK,
-  INBOX_REPLY,
-  INBOX_RESPONSE,
-  INBOX_STATUS,
-  INBOX_WIRE_VERSION,
-} from "@sidecar/hosted/inbox-wire";
+import { INBOX_BLOCK, INBOX_REPLY, INBOX_RESPONSE, INBOX_STATUS } from "@sidecar/hosted/inbox-wire";
 import { Effect, Layer, Option } from "effect";
 import { FileSystem } from "effect/FileSystem";
 import { Path } from "effect/Path";
@@ -47,6 +41,9 @@ import { unmigratedPgliteSqlClient } from "./support/sql-client";
 /** The migration under test, and the one the database stands at before it. */
 const MIGRATION = "0088_inbox_item_blocks";
 const BEFORE = "0087_account_plan_template";
+
+/** The vocabulary version the migration converts every row to and stamps it with: blocks and a response, before any later block type. */
+const BLOCKS_VERSION = 2;
 
 const JOURNAL_FILE = ["meta", "_journal.json"] as const;
 
@@ -195,7 +192,7 @@ it.effect(
           );
 
           const items = yield* planInboxItems(agent.userId, agent.planId);
-          assert.ok(items.every((item) => item.version === INBOX_WIRE_VERSION));
+          assert.ok(items.every((item) => item.version === BLOCKS_VERSION));
           const byKey = new Map(items.map((item) => [item.key, item]));
           assert.deepEqual(byKey.get("invite-queue")?.blocks, [
             { type: INBOX_BLOCK.MARKDOWN, text: "The repo already runs **Postgres**." },
@@ -246,7 +243,7 @@ it.effect(
           const late = (yield* planInboxItems(agent.userId, agent.planId)).find(
             (item) => item.key === "late",
           );
-          assert.equal(late?.version, INBOX_WIRE_VERSION);
+          assert.equal(late?.version, BLOCKS_VERSION);
           assert.deepEqual(late?.blocks, [{ type: INBOX_BLOCK.MARKDOWN, text: "Still taken." }]);
           assert.deepEqual(late?.response, { type: INBOX_RESPONSE.TASK });
           assert.deepEqual(late?.answer, {

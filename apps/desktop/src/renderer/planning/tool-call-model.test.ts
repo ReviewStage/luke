@@ -221,7 +221,7 @@ test("a plan edit's row sums its notes by what each did, and shows them as JSON"
   );
 });
 
-test("a post to the inbox is a row naming its item, its blocks and options as the body, a link as its label and address and the recommended option saying so; a close names the key and says why", () => {
+test("a post to the inbox is a row naming its item, its blocks and options as the body, a link as its label and address, code as its path, lines, and short commit, and the recommended option saying so; a close names the key and says why", () => {
   const view = toolCallView({
     tool: "post_to_inbox",
     input: {
@@ -230,6 +230,14 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
       blocks: [
         { type: "markdown", text: "Both work." },
         { type: "link", url: "https://github.com/acme/relay/pull/7", label: "The PR" },
+        {
+          type: "code",
+          repo: "acme/relay",
+          path: "src/queue.ts",
+          startLine: 12,
+          endLine: 20,
+          sha: "0123456789abcdef0123456789abcdef01234567",
+        },
       ],
       response: {
         type: "choice",
@@ -247,7 +255,7 @@ test("a post to the inbox is a row naming its item, its blocks and options as th
   );
   assert.deepEqual(view.input, {
     kind: TOOL_BLOCK.TEXT,
-    text: "Both work.\nThe PR: https://github.com/acme/relay/pull/7\n- Postgres (recommended) -- One database.\n- Redis",
+    text: "Both work.\nThe PR: https://github.com/acme/relay/pull/7\nsrc/queue.ts:12-20 at 0123456\n- Postgres (recommended) -- One database.\n- Redis",
   });
   assert.equal(view.output, undefined);
 

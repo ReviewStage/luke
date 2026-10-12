@@ -296,6 +296,25 @@ test("Luke's snippet opening a File tab again keeps its history, and a step to a
   );
 });
 
+test("a file an inbox item's code opens stands on the open plan at the item's commit though Luke never showed it, and on no other; Luke's snippet opening it again reads it at the default branch's head", () => {
+  const commit = "0123456789abcdef0123456789abcdef01234567";
+  const panel = mountStood({ agents: [], subagents: [], files: [] });
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 4, endLine: 6 }, commit));
+  assert.equal(panel.control().open, true);
+  assert.deepEqual(panel.control().tab, { file: INVITE });
+  assert.deepEqual(panel.control().files, [
+    { path: INVITE, range: { startLine: 4, endLine: 6 }, opened: 1, commit, browsedOn: PLAN },
+  ]);
+
+  panel.render({ plan: usedPlan(OTHER), agents: [], subagents: [], files: [] });
+  assert.equal(panel.control().tab, panel.control().tabs[0], "another plan draws no tab of it");
+
+  panel.render({ agents: [], subagents: [], files: [INVITE] });
+  act(() => panel.control().onOpenFile({ path: INVITE, startLine: 9, endLine: 9 }));
+  assert.deepEqual(panel.control().tab, { file: INVITE });
+  assert.equal(panel.control().files[0]?.commit, undefined);
+});
+
 test("a file browsed to stands on the plan it was browsed on, though Luke never showed it, and on no other", () => {
   const panel = mountStood({ agents: [], subagents: [], files: [INVITE] });
   act(() => panel.control().onOpenFile({ path: INVITE }));

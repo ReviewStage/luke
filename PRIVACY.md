@@ -89,8 +89,9 @@ and deleting your account removes them all.
 **A plan's inbox.** When a coding agent you started on a plan needs a
 decision from you, or something only you can do such as changing a setting
 on GitHub, it posts an item to the plan's inbox on our service: its title,
-the context the agent wrote for it as Markdown and links, and the way it asks
-to be answered, with any options or form fields it offers, stored under your
+the context the agent wrote for it as Markdown, links, and references to
+lines of the agent's repository (a path, the lines, and the commit it read
+them at, never the lines themselves), and the way it asks to be answered, with any options or form fields it offers, stored under your
 account and readable by our own operators, like the agent's transcript.
 The agent can change or withdraw its items, and our service keeps each one
 as it last stood. When you answer an item in Luke, your Mac sends your answer
@@ -180,7 +181,10 @@ characters. The file is read a window of at most 500 lines at a time as you
 scroll, is not stored by our service, and is held by Luke on your Mac only
 while its tab is open, never on disk. Because it is read from GitHub as it
 stands now, it may differ from the lines Luke showed if the file has changed
-since.
+since. An inbox item's reference to lines of the repository is read the same
+way, at the commit the agent named rather than the default branch's head,
+both for the lines drawn on the item and for the File tab it opens: nothing
+of the file is stored with the item, or by our service.
 
 **Luke's working memory.** Luke's judgment keeps a working memory of its own
 turns — the model's record of what he read, said, and did, folded into a

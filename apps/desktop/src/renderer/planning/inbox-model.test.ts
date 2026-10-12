@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_REPLY,
@@ -9,9 +10,14 @@ import {
   type InboxItem,
   inboxItemSchema,
 } from "@sidecar/hosted/inbox-wire";
+import { PLAN_CALL_FAILURE } from "@sidecar/hosted/planning-view";
 import { Option, Schema } from "effect";
 import { test } from "vitest";
 import {
+  CODE_READ,
+  codeNotice,
+  codeReadOf,
+  codeWindow,
   EMPTY_INBOX_DRAFT,
   inboxBoard,
   inboxReply,
@@ -264,5 +270,54 @@ test("a note past the wire's bound is no answer, so the card offers no send for 
   assert.equal(
     inboxReply(QUEUE, { ...EMPTY_INBOX_DRAFT, choices: ["Redis"], note: long }),
     undefined,
+  );
+});
+
+test("a code block near the file's top reads from its first line, a file that ends before its lines says so for good, a read that did not land may be read again, and lines of another repository or running backwards are not read", () => {
+  const block = {
+    type: INBOX_BLOCK.CODE,
+    repo: "acme/relay",
+    path: "src/invite.ts",
+    startLine: 2,
+    endLine: 4,
+    sha: "0123456789abcdef0123456789abcdef01234567",
+  } as const;
+  assert.deepEqual(codeWindow(block), {
+    path: "src/invite.ts",
+    firstLine: 1,
+    lastLine: 7,
+    ref: block.sha,
+  });
+  const short = {
+    file: {
+      path: block.path,
+      repository: "acme/relay",
+      branch: block.sha,
+      firstLine: 1,
+      lineCount: 1,
+      lines: [[{ text: "export {};" }]],
+    },
+  };
+  assert.deepEqual(codeReadOf(block, short), {
+    kind: CODE_READ.NOTICE,
+    line: "The file ends before these lines at this commit.",
+    again: false,
+  });
+  assert.equal(codeReadOf({ ...block, startLine: 1 }, short).kind, CODE_READ.READY);
+  assert.deepEqual(codeReadOf(block, { failure: PLAN_CALL_FAILURE.UNANSWERED }), {
+    kind: CODE_READ.NOTICE,
+    line: "These lines could not be read.",
+    again: true,
+  });
+  assert.equal(
+    codeNotice(block, null),
+    "These lines are in acme/relay, which this plan no longer reads.",
+    "a plan that names no repository reads none",
+  );
+  assert.equal(codeNotice(block, "Acme/Relay"), undefined);
+  assert.equal(
+    codeNotice({ ...block, startLine: 9 }, "acme/relay"),
+    "These lines cannot be read.",
+    "lines running backwards are no window to read",
   );
 });

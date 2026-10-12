@@ -181,6 +181,8 @@ const EFFECT_MODULE_SCHEMAS = {
     planRevisionLineSchema: planWire.planRevisionLineSchema,
     planRevisionsAnswerSchema: planWire.planRevisionsAnswerSchema,
     planRevisionAnswerSchema: planWire.planRevisionAnswerSchema,
+    codeLineSchema: planWire.codeLineSchema,
+    commitShaSchema: planWire.commitShaSchema,
     codeRefSchema: planWire.codeRefSchema,
     codeNoteSchema: planWire.codeNoteSchema,
     shownCodeSchema: planWire.shownCodeSchema,

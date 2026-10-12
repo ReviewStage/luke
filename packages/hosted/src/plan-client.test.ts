@@ -402,7 +402,7 @@ it.effect(
 );
 
 it.effect(
-  "a file's window is asked by path and lines, and its whole text with raw, and read as the service answers it, a refusal included, and a window the wire refuses is never sent",
+  "a file's window is asked by path and lines, at a commit with ref, and its whole text with raw, and read as the service answers it, a refusal included, and a window or a ref the wire refuses is never sent",
   () =>
     Effect.gen(function* () {
       const window = {
@@ -423,17 +423,21 @@ it.effect(
           text: "// days\nconst DAYS = 7;\nexport { DAYS };",
         },
       };
+      const commit = "0123456789abcdef0123456789abcdef01234567";
+      const pinned = { file: { ...window.file, branch: commit } };
       const api = fakeCloudApi({
         [`GET /api/plans/${PLAN_ID}/file`]: {
           answer: (request) =>
             request.searchParams.get("raw") === "1"
               ? whole
-              : request.searchParams.get("path") === ".env"
-                ? { refusal: PLAN_FILE_REFUSAL.SECRET }
-                : request.searchParams.get("first") === "2" &&
-                    request.searchParams.get("last") === "3"
-                  ? window
-                  : { error: "invalid-request" },
+              : request.searchParams.get("ref") === commit
+                ? pinned
+                : request.searchParams.get("path") === ".env"
+                  ? { refusal: PLAN_FILE_REFUSAL.SECRET }
+                  : request.searchParams.get("first") === "2" &&
+                      request.searchParams.get("last") === "3"
+                    ? window
+                    : { error: "invalid-request" },
         },
       });
 
@@ -470,6 +474,13 @@ it.effect(
         ),
         whole,
       );
+      const at = (ref: string) =>
+        Effect.provide(
+          client().readFile(PLAN_ID, { path: "src/invites.ts", firstLine: 2, lastLine: 3, ref }),
+          api.layer,
+        );
+      assert.deepEqual(yield* at(commit), pinned);
+      assert.equal(yield* at("main"), undefined, "a branch is no commit");
     }),
 );
 

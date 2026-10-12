@@ -1,10 +1,12 @@
 import {
+  codeLinesReadable,
   fieldValueWords,
   INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_REPLY,
   INBOX_RESPONSE,
   INBOX_STATUS,
+  type InboxCodeBlock,
   type InboxFieldValue,
   type InboxForm,
   type InboxFormValue,
@@ -14,7 +16,10 @@ import {
   inboxReplyRefusal,
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
+import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
+import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { isWireString } from "@sidecar/wire";
+import { refusalLine, refusalPasses } from "./file-tab-model";
 
 /**
  * inbox-model.ts -- the plan's Inbox tab as pure decisions: which items wait on the developer and which are settled, what a card's answer is, and how a settled one reads.
@@ -27,7 +32,9 @@ import { isWireString } from "@sidecar/wire";
  * agent's items go with it. A card's answer is held to the same rule the
  * service holds it to (`inbox-wire.ts`'s `inboxReplyRefusal`), so a press
  * the service would refuse is never offered; an item asking a response
- * this build does not know holds no answer at all. Nothing here draws.
+ * this build does not know holds no answer at all. A code block's lines
+ * are read as the File tab reads a file, at the block's commit, with a few
+ * of the file around them, the lines it points at lit. Nothing here draws.
  */
 
 /** What the developer has put on a card so far: the options picked on a choice, the fields filled on a form, and their note. */
@@ -178,3 +185,99 @@ export function settledWords(item: InboxItem): SettledWords {
   const note = settledNote(answer);
   return { lead, ...(note === undefined ? undefined : { note }) };
 }
+
+/** How many lines of the file a code block's card draws above and below the lines it points at. */
+const CODE_CONTEXT_LINES = 3;
+
+/** Where a code block's card stands with its lines. */
+export const CODE_READ = {
+  READING: "reading",
+  READY: "ready",
+  /** The lines are not drawn, for the reason the card says. */
+  NOTICE: "notice",
+} as const;
+
+export type CodeRead =
+  | { readonly kind: typeof CODE_READ.READING }
+  | { readonly kind: typeof CODE_READ.READY; readonly code: PlanCode }
+  | {
+      readonly kind: typeof CODE_READ.NOTICE;
+      readonly line: string;
+      /** Whether reading again may draw the lines, which the card offers. */
+      readonly again: boolean;
+    };
+
+/** What a code block's card says where its lines did not come back. */
+const CODE_UNREAD = "These lines could not be read.";
+
+/**
+ * The window a code block's card reads: the lines it points at with a few
+ * of the file around them, at the block's commit. Note that the window may
+ * run past the file's end, which the service answers with the lines it has.
+ */
+export function codeWindow(block: InboxCodeBlock): PlanFileRequest {
+  return {
+    path: block.path,
+    firstLine: Math.max(1, block.startLine - CODE_CONTEXT_LINES),
+    lastLine: block.endLine + CODE_CONTEXT_LINES,
+    ref: block.sha,
+  };
+}
+
+/**
+ * Why a code block's lines are not read at all, or nothing where they are
+ * read: the plan reads its own repository alone, which the agent's
+ * repository was when it started but may not be once the plan names
+ * another, and lines that run backwards or past the bound are no window
+ * the File tab's read takes. Note that GitHub spells a repository's name in
+ * any case.
+ */
+export function codeNotice(block: InboxCodeBlock, repository: string | null): string | undefined {
+  if (repository === null || repository.toLowerCase() !== block.repo.toLowerCase()) {
+    return `These lines are in ${block.repo}, which this plan no longer reads.`;
+  }
+  if (!codeLinesReadable(block)) return "These lines cannot be read.";
+  return undefined;
+}
+
+/**
+ * A code block's lines as its card holds them once the read answered: the
+ * window the service read at the block's commit, the block's lines lit in
+ * it; or why they are not drawn, a file that ends before them included, and
+ * whether reading again may draw them.
+ */
+export function codeReadOf(block: InboxCodeBlock, answer: PlanningFileAnswer): CodeRead {
+  if ("refusal" in answer) {
+    return {
+      kind: CODE_READ.NOTICE,
+      line: refusalLine(answer.refusal, answer.branch, block.sha),
+      again: refusalPasses(answer.refusal),
+    };
+  }
+  if (!("file" in answer)) return { kind: CODE_READ.NOTICE, line: CODE_UNREAD, again: true };
+  const { file } = answer;
+  if (file.firstLine + file.lines.length <= block.startLine) {
+    return {
+      kind: CODE_READ.NOTICE,
+      line: "The file ends before these lines at this commit.",
+      again: false,
+    };
+  }
+  return {
+    kind: CODE_READ.READY,
+    code: {
+      ref: { path: block.path, startLine: block.startLine, endLine: block.endLine },
+      repository: file.repository,
+      firstLine: file.firstLine,
+      lineCount: file.lineCount,
+      lines: file.lines,
+    },
+  };
+}
+
+/** A code block's card where the read did not land at all, as main refusing the act leaves it. */
+export const CODE_READ_FAILED: CodeRead = {
+  kind: CODE_READ.NOTICE,
+  line: CODE_UNREAD,
+  again: true,
+};

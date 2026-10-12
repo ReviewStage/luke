@@ -499,11 +499,11 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
       Effect.gen(function* () {
         const found = yield* agentOf(admitted);
         if (Result.isFailure(found)) return inboxRejected(INBOX_REFUSAL.NO_AGENT);
-        const { id: agentId, planId } = found.success;
+        const { id: agentId, planId, repository } = found.success;
         const agent = { userId: admitted.target.userId, planId, agentId };
         switch (call.tool) {
           case INBOX_TOOL.POST:
-            return yield* postToInbox(agent, call.input);
+            return yield* postToInbox({ ...agent, repository }, call.input);
           case INBOX_TOOL.CLOSE:
             return yield* closeInInbox(agent, call.input);
           case INBOX_TOOL.READ:

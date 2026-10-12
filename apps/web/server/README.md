@@ -872,7 +872,9 @@ answer (`planWorkAnswerSchema`).
 the plan's repository for the Mac's File tab (`server/hosted/plan-file.ts`),
 at most 500 lines a window. No sandbox stands outside a planning turn, so it
 reads GitHub's contents API at the head of the default branch, not the
-session's checkout, on a token `repositoryReadToken` mints for that one
+session's checkout, or with `ref=` at that commit, a whole 40-character
+lowercase SHA and nothing a branch or a path could spell, as an inbox item's
+code block pins its lines, on a token `repositoryReadToken` mints for that one
 repository with contents read, after the same reach check the checkout
 makes. The token is used for the one read and enters no answer, log line,
 or trace. What is shown is decided by the rule `show_code` is held to
@@ -880,7 +882,8 @@ or trace. What is shown is decided by the rule `show_code` is held to
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
 its first bytes is refused by name, a path GitHub finds nothing at with the
-branch it was looked for on; and each line is cut to 400 characters.
+branch or the commit it was looked for at; and each line is cut to 400
+characters.
 `packages/hosted/src/plan-wire.ts` declares the request and the answer
 (`planFileRequestSchema`, `planFileAnswerSchema`). The file's `path` query
 reaches the route because the grouped function's dispatcher reads its own

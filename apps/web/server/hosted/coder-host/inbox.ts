@@ -1,5 +1,7 @@
 import {
+  codeLinesReadable,
   INBOX_ANSWER_LEAD,
+  INBOX_BLOCK,
   INBOX_BOUNDS,
   INBOX_FIELD,
   INBOX_RESPONSE,
@@ -8,6 +10,7 @@ import {
   type InboxChoice,
   type InboxForm,
   type InboxItem,
+  type InboxPost,
   type InboxReply,
   inboxCloseInputSchema,
   inboxPostInputSchema,
@@ -57,8 +60,10 @@ export const INBOX_TOOLS = {
       "Put something you need from the developer in their inbox, apart from your transcript, where they answer it. " +
       "key is your own short lowercase slug for the item, such as branch-protection; posting under a key you used before " +
       "replaces that item and opens it again, so keep an item current under its key and never post it twice. " +
-      "blocks is the context they need to act, in order: markdown blocks of short Markdown, and link blocks naming a page, " +
-      "such as the GitHub settings page a task is done on. " +
+      "blocks is the context they need to act, in order: markdown blocks of short Markdown, link blocks naming a page, " +
+      "such as the GitHub settings page a task is done on, and code blocks pointing at the exact lines a decision is about: " +
+      `repo is your repository as owner/name, path is from its root, startLine to endLine spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines, ` +
+      "and sha is the full 40-character commit you read them at, one already on GitHub; they see those lines as GitHub holds them at that commit. " +
       "response is what you ask of them: choice (two to six options, each a short label and an optional detail; name the " +
       "label you recommend; multiple lets them pick several), approval (a yes or no on one step you propose), text (an open " +
       "answer in their words), task (something only they can do by hand, such as changing a GitHub setting or adding a secret: " +
@@ -116,7 +121,8 @@ export type InboxToolResult =
 export const INBOX_REFUSAL = {
   UNREADABLE_POST:
     "Not posted: the item does not read. key is a lowercase slug of letters, digits, dots, dashes, and underscores; " +
-    "blocks are markdown or link; response is one of choice, approval, text, task, form, or none; " +
+    "blocks are markdown, link, or code, a code block's sha the full 40-character lowercase commit; " +
+    "response is one of choice, approval, text, task, form, or none; " +
     `a choice and a select field offer between two and ${INBOX_BOUNDS.MAX_OPTIONS} options.`,
   UNREADABLE_CLOSE: "Not closed: name the item's key and why you close it.",
   TOO_MANY: `Not posted: you hold ${INBOX_BOUNDS.MAX_OPEN_PER_AGENT} open items already. Close one you no longer need first.`,
@@ -126,6 +132,9 @@ export const INBOX_REFUSAL = {
   FIELD_LABELS: "Not posted: a form names each field by a label of its own.",
   SELECT_OPTIONS:
     "Not posted: a select field offers its options, each once, and no other field offers options.",
+  CODE_REPOSITORY:
+    "Not posted: a code block points at lines of your own repository, named as owner/name.",
+  CODE_LINES: `Not posted: a code block's endLine is at or after its startLine, and it spans at most ${INBOX_BOUNDS.MAX_CODE_LINES} lines.`,
   NO_AGENT: "Not done: this conversation is no coding agent's.",
   UNAVAILABLE: "Not done: the service could not reach its store.",
 } as const;
@@ -209,8 +218,26 @@ function formRefusal(form: InboxForm): string | undefined {
   return undefined;
 }
 
-/** A post's own refusal, before the store is asked: what the response's shape admits but the item cannot ask. */
-function postRefusal(post: typeof inboxPostInputSchema.Type): string | undefined {
+/**
+ * A code block's own refusal: lines of another repository than the agent's
+ * own, which the desktop reads through the plan's repository alone, or a
+ * range running backwards or past the bound. Note that GitHub spells a
+ * repository's name in any case, so the names are compared without it.
+ */
+function codeRefusal(block: InboxPost["blocks"], repository: string): string | undefined {
+  const own = repository.toLowerCase();
+  for (const each of block ?? []) {
+    if (each.type !== INBOX_BLOCK.CODE) continue;
+    if (each.repo.toLowerCase() !== own) return INBOX_REFUSAL.CODE_REPOSITORY;
+    if (!codeLinesReadable(each)) return INBOX_REFUSAL.CODE_LINES;
+  }
+  return undefined;
+}
+
+/** A post's own refusal, before the store is asked: what the blocks' and the response's shapes admit but the item cannot carry or ask. */
+function postRefusal(post: InboxPost, repository: string): string | undefined {
+  const blocks = codeRefusal(post.blocks, repository);
+  if (blocks !== undefined) return blocks;
   switch (post.response.type) {
     case INBOX_RESPONSE.CHOICE:
       return choiceRefusal(post.response);
@@ -228,16 +255,22 @@ function storeRefusal(refusal: InboxPostRefusal): string {
     : INBOX_REFUSAL.NO_AGENT;
 }
 
+/** The agent a post is written for: its own, and the repository it works in as `owner/name`, which its code blocks must name. */
+export interface PostingAgent extends InboxAgent {
+  readonly repository: string;
+}
+
 /** Runs one post: the item written under its key and the agent's inbox answered, or why not. */
 export function postToInbox(
-  agent: InboxAgent,
+  agent: PostingAgent,
   input: UnparsedWireValue,
 ): Effect.Effect<InboxToolResult, never, SqlClient.SqlClient> {
   const read = readPost(input);
   if (Result.isFailure(read)) return Effect.succeed(inboxRejected(INBOX_REFUSAL.UNREADABLE_POST));
-  const refused = postRefusal(read.success);
+  const { repository, ...owner } = agent;
+  const refused = postRefusal(read.success, repository);
   if (refused !== undefined) return Effect.succeed(inboxRejected(refused));
-  return Effect.flatMap(postInboxItem(agent, read.success), (posted) =>
+  return Effect.flatMap(postInboxItem(owner, read.success), (posted) =>
     Result.isFailure(posted)
       ? Effect.succeed(inboxRejected(storeRefusal(posted.failure)))
       : accepted(agent),

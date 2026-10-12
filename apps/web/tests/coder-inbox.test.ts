@@ -18,11 +18,12 @@ import { db } from "../server/db/query";
 import {
   closeInInbox,
   INBOX_REFUSAL,
+  type PostingAgent,
   postToInbox,
   readOwnInbox,
 } from "../server/hosted/coder-host/inbox";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
-import { answerInboxItem, type InboxAgent, planInboxItems } from "../server/hosted/inbox-store";
+import { answerInboxItem, planInboxItems } from "../server/hosted/inbox-store";
 import { createPlan, deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
 
@@ -43,7 +44,7 @@ const openUser = Effect.gen(function* () {
   return userId;
 });
 
-/** An account with one plan and one agent started on it. */
+/** An account with one plan and one agent started on it, in its repository. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
   const plan = yield* createPlan(userId, { name: "Teammate invitations" });
@@ -57,7 +58,12 @@ const openAgent = Effect.gen(function* () {
     task: null,
   });
   assert.ok(Option.isSome(started));
-  const agent: InboxAgent = { userId, planId: plan.id, agentId: started.value.agent.id };
+  const agent: PostingAgent = {
+    userId,
+    planId: plan.id,
+    agentId: started.value.agent.id,
+    repository: "acme/relay",
+  };
   return agent;
 });
 
@@ -100,6 +106,24 @@ const CREDENTIALS = {
       { type: INBOX_FIELD.BOOLEAN, label: "Verify certificate" },
     ],
   },
+};
+
+/** Lines of the agent's own repository at a commit, its name spelled in another case than the agent's. */
+const RETRY_LINES = {
+  type: INBOX_BLOCK.CODE,
+  repo: "Acme/Relay",
+  path: "src/invite/send.ts",
+  startLine: 40,
+  endLine: 58,
+  sha: "0123456789abcdef0123456789abcdef01234567",
+};
+
+/** A choice about the lines the agent points at. */
+const RETRIES = {
+  key: "invite-retries",
+  title: "Retry a failed invitation email?",
+  blocks: [RETRY_LINES],
+  response: { type: INBOX_RESPONSE.APPROVAL },
 };
 
 /** A tool's input as eve hands it over. */
@@ -347,6 +371,52 @@ it.layer(testSqlClient)("the coding agent's inbox", (it) => {
           INBOX_REFUSAL.NO_ITEM,
         );
         assert.deepEqual(yield* planInboxItems(agent.userId, agent.planId), []);
+      }),
+  );
+
+  it.effect(
+    "a code block points at lines of the agent's own repository, named in any case, at a commit; one of another repository, a commit not spelled whole in lowercase, or lines running backwards or past the bound is refused with why, writing nothing",
+    () =>
+      Effect.gen(function* () {
+        const agent = yield* openAgent;
+        const refused = (result: { readonly status: string; readonly reason?: string }) =>
+          result.status === ACTION_RESULT_STATUS.REJECTED ? result.reason : undefined;
+        const pointing = (block: Partial<typeof RETRY_LINES>) =>
+          postToInbox(agent, input({ ...RETRIES, blocks: [{ ...RETRY_LINES, ...block }] }));
+        assert.equal(
+          refused(yield* pointing({ repo: "acme/other" })),
+          INBOX_REFUSAL.CODE_REPOSITORY,
+        );
+        assert.equal(
+          refused(yield* pointing({ sha: "0123456" })),
+          INBOX_REFUSAL.UNREADABLE_POST,
+          "a commit is its whole SHA",
+        );
+        assert.equal(
+          refused(yield* pointing({ sha: RETRY_LINES.sha.toUpperCase() })),
+          INBOX_REFUSAL.UNREADABLE_POST,
+          "a commit is spelled in lowercase",
+        );
+        assert.equal(
+          refused(yield* pointing({ sha: "main" + "0".repeat(36) })),
+          INBOX_REFUSAL.UNREADABLE_POST,
+          "a branch's name is no commit",
+        );
+        assert.equal(
+          refused(yield* pointing({ startLine: 58, endLine: 40 })),
+          INBOX_REFUSAL.CODE_LINES,
+        );
+        assert.equal(
+          refused(yield* pointing({ startLine: 1, endLine: INBOX_BOUNDS.MAX_CODE_LINES + 1 })),
+          INBOX_REFUSAL.CODE_LINES,
+        );
+        assert.deepEqual(yield* planInboxItems(agent.userId, agent.planId), []);
+
+        const lastLine = INBOX_BOUNDS.MAX_CODE_LINES;
+        const posted = yield* pointing({ startLine: 1, endLine: lastLine });
+        assert.equal(posted.status, ACTION_RESULT_STATUS.ACCEPTED);
+        const [item] = yield* planInboxItems(agent.userId, agent.planId);
+        assert.deepEqual(item?.blocks, [{ ...RETRY_LINES, startLine: 1, endLine: lastLine }]);
       }),
   );
 

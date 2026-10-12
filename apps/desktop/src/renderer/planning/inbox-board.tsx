@@ -6,6 +6,7 @@ import {
   INBOX_REPLY,
   INBOX_RESPONSE,
   type InboxChoice,
+  type InboxCodeBlock,
   type InboxField,
   type InboxForm,
   type InboxItem,
@@ -14,6 +15,8 @@ import {
   knownBlock,
   knownResponse,
 } from "@sidecar/hosted/inbox-wire";
+import type { CodeRef } from "@sidecar/hosted/plan-wire";
+import { useEffect, useRef, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
@@ -26,11 +29,20 @@ import {
   PromptInputTools,
 } from "../ai-elements/prompt-input";
 import { RetryButton } from "../retry-button";
-import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
+import { BusyLabel, SPINNER_SIZE, Spinner, SpinnerRegion } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentGlyph } from "./agent-tab";
+import { CodeCardHeader, CodeLines, codeCardName } from "./code-pane";
+import { copiedLines } from "./code-pane-model";
 import { agentTabLabel, opensOnGitHub } from "./coding-agent-model";
+import type { ReadFileWindow } from "./file-tab";
 import {
+  CODE_READ,
+  CODE_READ_FAILED,
+  type CodeRead,
+  codeNotice,
+  codeReadOf,
+  codeWindow,
   fieldValueOf,
   type InboxDraft,
   inboxReply,
@@ -51,8 +63,10 @@ import type { PlanInboxControl } from "./use-plan-inbox";
  * one more card of the agent's: each open item is a card the shape of the
  * transcript's (`ai-elements/plan.tsx`), naming the agent that posted it
  * and when, its title, the blocks of context the agent wrote, Markdown as
- * the transcript draws it and a link as the transcript draws one, opened
- * on GitHub alone, and the agent composer's box
+ * the transcript draws it, a link as the transcript draws one, opened on
+ * GitHub alone, and code as the Code tab draws a card (`code-pane.tsx`),
+ * its lines read from GitHub at the agent's commit through the File tab's
+ * own read and opened there in the File tab, and the agent composer's box
  * (`ai-elements/prompt-input.tsx`) for the note. What the item asks for
  * stands between the blocks and the box: a choice's options, one perhaps
  * recommended, pressed one at a time or several where the choice allows; a
@@ -68,8 +82,8 @@ import type { PlanInboxControl } from "./use-plan-inbox";
  * line as a finished turn's steps fold, each a closed card saying what came
  * of it. The tab's own label names it and counts what waits, so no head
  * repeats either. The agent's name opens its tab. Every card shows words an
- * agent wrote, so the board is out of the session recording
- * (`ph-no-capture`).
+ * agent wrote, and a code block the repository's lines, so the board is out
+ * of the session recording (`ph-no-capture`).
  */
 
 /** What an empty inbox says. */
@@ -191,13 +205,96 @@ function LinkBlock({
   );
 }
 
+/** What a code block reads its lines through and opens its file with. */
+export interface InboxCodeDoors {
+  /** The plan's repository, `owner/name`, which the lines are read through; none where the plan names none. */
+  readonly repository: string | null;
+  /** Reads a window of a file of the plan's repository, as the File tab does. */
+  readonly readFile: ReadFileWindow;
+  /** Opens the file in the side panel's File tab at the commit named, the reference's lines lit. */
+  readonly onOpenFile: (ref: CodeRef, commit: string) => void;
+}
+
+/**
+ * A code block: a card as the Code tab draws one, headed by the path and
+ * the lines, the file opened in the File tab at the block's commit from
+ * either, and the lines read from GitHub at that commit with a few around
+ * them, the block's own lit; lines the plan cannot read say why, and open
+ * nothing. Note that the read goes through a ref to the
+ * latest door, so a parent drawing a fresh door does not read again, and
+ * that an answer landing after the block changed or left is dropped.
+ */
+function CodeBlock({
+  block,
+  code,
+}: {
+  block: InboxCodeBlock;
+  code: InboxCodeDoors;
+}): React.JSX.Element {
+  const unread = codeNotice(block, code.repository);
+  const [read, setRead] = useState<CodeRead>({ kind: CODE_READ.READING });
+  const [asked, setAsked] = useState(0);
+  const latest = useRef({ block, readFile: code.readFile });
+  latest.current = { block, readFile: code.readFile };
+  const { path, sha, startLine, endLine } = block;
+  const codeRef = { path, startLine, endLine };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the block's own fields and a retry's press are what ask again; the block and the door are read through the ref.
+  useEffect(() => {
+    if (unread !== undefined) return;
+    let standing = true;
+    const { block: asking, readFile } = latest.current;
+    setRead({ kind: CODE_READ.READING });
+    readFile(codeWindow(asking)).then(
+      (answer) => {
+        if (standing) setRead(codeReadOf(asking, answer));
+      },
+      () => {
+        if (standing) setRead(CODE_READ_FAILED);
+      },
+    );
+    return () => {
+      standing = false;
+    };
+  }, [unread, path, sha, startLine, endLine, asked]);
+
+  const shown: CodeRead =
+    unread === undefined ? read : { kind: CODE_READ.NOTICE, line: unread, again: false };
+  return (
+    <article
+      className="code-card ph-no-capture"
+      aria-label={codeCardName(codeRef)}
+      data-inbox-code=""
+    >
+      <CodeCardHeader
+        codeRef={codeRef}
+        copied={shown.kind === CODE_READ.READY ? copiedLines(shown.code) : undefined}
+        // Note that lines the plan does not read open nothing, because the File tab reads the plan's repository alone.
+        onOpen={unread === undefined ? () => code.onOpenFile(codeRef, sha) : undefined}
+      />
+      {shown.kind === CODE_READ.READY ? (
+        <CodeLines code={shown.code} />
+      ) : shown.kind === CODE_READ.READING ? (
+        <SpinnerRegion label="Loading lines" />
+      ) : (
+        <div className="file-tab-notice border-b-0" role="alert">
+          <p className="m-0">{shown.line}</p>
+          {shown.again ? <RetryButton onRetry={() => setAsked((was) => was + 1)} /> : null}
+        </div>
+      )}
+    </article>
+  );
+}
+
 /** The item's context: each block in turn, drawn as its type is, and a line for one this build does not know. */
 function Blocks({
   item,
   openGitHub,
+  code,
 }: {
   item: InboxItem;
   openGitHub: (url: string) => void;
+  code: InboxCodeDoors;
 }): React.JSX.Element | null {
   if (item.blocks.length === 0) return null;
   return (
@@ -218,6 +315,9 @@ function Blocks({
               <TranscriptWords text={block.text} />
             </div>
           );
+        }
+        if (block.type === INBOX_BLOCK.CODE) {
+          return <CodeBlock key={key} block={block} code={code} />;
         }
         return (
           <p key={key} className="m-0" data-inbox-link="">
@@ -485,6 +585,7 @@ function OpenCard({
   onAnswer,
   onOpenAgent,
   openGitHub,
+  code,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
@@ -497,6 +598,7 @@ function OpenCard({
   onAnswer: PlanInboxControl["onAnswer"];
   onOpenAgent: (agentId: string) => void;
   openGitHub: (url: string) => void;
+  code: InboxCodeDoors;
 }): React.JSX.Element {
   const draft = draftOf(item);
   const setDraft = (next: InboxDraft) => onDraft(item, next);
@@ -513,7 +615,7 @@ function OpenCard({
         <h3 className="m-0 font-medium text-foreground" data-inbox-title="">
           {cardTitle(item.title)}
         </h3>
-        <Blocks item={item} openGitHub={openGitHub} />
+        <Blocks item={item} openGitHub={openGitHub} code={code} />
         <ResponseControls item={item} draft={draft} disabled={sending} onDraft={setDraft} />
         {known ? (
           <PromptInput
@@ -562,10 +664,12 @@ function SettledCard({
   item,
   agent,
   openGitHub,
+  code,
 }: {
   item: InboxItem;
   agent: CodingAgentSummary | undefined;
   openGitHub: (url: string) => void;
+  code: InboxCodeDoors;
 }): React.JSX.Element {
   const words = settledWords(item);
   return (
@@ -578,7 +682,7 @@ function SettledCard({
         {words.note === undefined ? null : <p className="m-0 whitespace-pre-line">{words.note}</p>}
         {item.blocks.length === 0 ? null : (
           <div className="text-muted-foreground">
-            <Blocks item={item} openGitHub={openGitHub} />
+            <Blocks item={item} openGitHub={openGitHub} code={code} />
           </div>
         )}
       </PlanContent>
@@ -592,12 +696,14 @@ export function InboxBoard({
   agents,
   onOpenAgent,
   openGitHub,
+  code,
 }: {
   control: PlanInboxControl;
   agents: CodingAgentsControl;
   onOpenAgent: (agentId: string) => void;
   /** Opens a link block's page on GitHub, the one address the window opens in the browser. */
   openGitHub: (url: string) => void;
+  code: InboxCodeDoors;
 }): React.JSX.Element {
   const now = useMinute();
   const { open, settled } = control.board;
@@ -639,6 +745,7 @@ export function InboxBoard({
           onAnswer={control.onAnswer}
           onOpenAgent={onOpenAgent}
           openGitHub={openGitHub}
+          code={code}
         />
       ))}
       {settled.length === 0 ? null : (
@@ -654,6 +761,7 @@ export function InboxBoard({
                 item={item}
                 agent={agentOf(item)}
                 openGitHub={openGitHub}
+                code={code}
               />
             ))}
           </FoldBody>

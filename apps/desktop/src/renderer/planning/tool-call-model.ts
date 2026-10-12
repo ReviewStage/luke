@@ -17,6 +17,7 @@ import type { PlanNote } from "@sidecar/hosted/plan-template";
 import { isRecord, isWireNumber, isWireString, type WireValue } from "@sidecar/wire";
 import { Option, Schema } from "effect";
 import { TOOL_BLOCK, type ToolBlock } from "../ai-elements/tool";
+import { shortCommit } from "./file-tab-model";
 import { CALL_KIND, type CallKind, commandDescription, pageName } from "./turn-rows";
 
 /**
@@ -263,11 +264,21 @@ function askLines(response: InboxPost["response"]): readonly string[] {
   }
 }
 
-/** A post's context and what it asks as the row's body lists them: each block in turn, a link as its label and address, then the options or the fields. */
+/** One block of a post as the row's body lists it: Markdown as written, a link as its label and address, and code as its path, lines, and commit. */
+function blockLine(block: NonNullable<InboxPost["blocks"]>[number]): string {
+  switch (block.type) {
+    case INBOX_BLOCK.MARKDOWN:
+      return block.text;
+    case INBOX_BLOCK.LINK:
+      return `${block.label}: ${block.url}`;
+    case INBOX_BLOCK.CODE:
+      return `${block.path}:${block.startLine}-${block.endLine} at ${shortCommit(block.sha)}`;
+  }
+}
+
+/** A post's context and what it asks as the row's body lists them: each block in turn, then the options or the fields. */
 function postLines(post: InboxPost): string {
-  const blocks = (post.blocks ?? []).map((block) =>
-    block.type === INBOX_BLOCK.MARKDOWN ? block.text : `${block.label}: ${block.url}`,
-  );
+  const blocks = (post.blocks ?? []).map(blockLine);
   return [...blocks, ...askLines(post.response)].filter((line) => line.trim() !== "").join("\n");
 }
 

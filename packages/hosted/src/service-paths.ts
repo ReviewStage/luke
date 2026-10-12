@@ -118,6 +118,7 @@ export function planFilePath(
     readonly firstLine: number;
     readonly lastLine: number;
     readonly raw?: boolean;
+    readonly ref?: string;
   },
 ): string {
   const query = new URLSearchParams({
@@ -126,6 +127,7 @@ export function planFilePath(
     last: String(window.lastLine),
   });
   if (window.raw === true) query.set("raw", "1");
+  if (window.ref !== undefined) query.set("ref", window.ref);
   return `${planPath(planId)}/file?${query}`;
 }
 
