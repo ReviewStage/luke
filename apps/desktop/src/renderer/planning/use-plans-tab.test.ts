@@ -27,7 +27,7 @@ import { TestClock } from "effect/testing";
 import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, createElement, Fragment, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { ACT_KIND, type ActKind, type ActResultFor } from "#shared/messages/acts";
 import { RUN_PROFILE } from "#shared/messages/app-state";
 import { MICROPHONE_STATUS } from "#shared/messages/audio";
@@ -176,6 +176,7 @@ function mount(
 afterEach(() => {
   document.body.innerHTML = "";
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 /** Lets the clipboard's answer, and the redraw it causes, land with no time passing. */
@@ -994,6 +995,9 @@ it.effect(
         },
         yield* registryOnTestClock,
       );
+      // The wall clock moves on between every two reads, as a slow press may see it do.
+      let now = 1_000;
+      vi.spyOn(Date, "now").mockImplementation(() => (now += 1));
 
       act(() => tab.control().onArchivePlans([PLAN.id, "other"]));
       const drawn = tab.control().archived.map((plan) => plan.id);

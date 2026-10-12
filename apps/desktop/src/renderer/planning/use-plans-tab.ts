@@ -653,12 +653,16 @@ export function usePlansTab(input: {
   // Several plans archived at once answer with one toast rather than one
   // each, so its Undo brings back every plan the service kept, and opens
   // again the open plan where the archive left it. A plan the service
-  // refused goes back where it was, and the toast counts it.
+  // refused goes back where it was, and the toast counts it. Note that the
+  // plans share one stamp, because they were archived by one press, so they
+  // stand under Archived in the order they were listed rather than in an
+  // order set by whether the clock ticked between two of them.
   const archivePlans = (planIds: readonly string[]) => {
     if (fixture !== undefined || planIds.length === 0) return;
+    const at = Date.now();
     const asked = planIds.map((planId) => ({
       planId,
-      next: { ...marks.get(planId), ...pendingMark(PLAN_MARK.ARCHIVE, Date.now()) },
+      next: { ...marks.get(planId), ...pendingMark(PLAN_MARK.ARCHIVE, at) },
     }));
     setMarks(
       (held) => new Map([...held, ...asked.map(({ planId, next }) => [planId, next] as const)]),
