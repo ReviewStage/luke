@@ -50,8 +50,11 @@ const REASONING_SENT = `\n  ${REASONING}\n\n`;
 const COMMAND = "ls src";
 const OUTPUT = "invite.ts";
 
-/** A repository call on the Work tab's wire. */
-function workCall(id: string, command: string) {
+/** What the described call says it is for. */
+const DESCRIPTION = "List the sources";
+
+/** A repository call on the Work tab's wire, with what it is for where the model said it. */
+function workCall(id: string, command: string, description?: string) {
   return {
     type: PLAN_WORK_PART.TOOL,
     id,
@@ -59,18 +62,22 @@ function workCall(id: string, command: string) {
     name: "run_in_repository",
     state: PLAN_WORK_STATE.DONE,
     subject: command,
-    input: JSON.stringify({ command }),
+    input: JSON.stringify({ command, description }),
     output: OUTPUT,
   } as const;
 }
 
 /** The same call on an agent's wire. */
-function agentCall(id: string, command: string): CodingAgentMessage["parts"][number] {
+function agentCall(
+  id: string,
+  command: string,
+  description?: string,
+): CodingAgentMessage["parts"][number] {
   return {
     type: "tool-bash",
     toolCallId: id,
     state: "output-available",
-    input: { command },
+    input: description === undefined ? { command } : { command, description },
     output: {
       status: "completed",
       exitCode: 0,
@@ -81,8 +88,11 @@ function agentCall(id: string, command: string): CodingAgentMessage["parts"][num
   };
 }
 
-/** One finished turn drawn on each tab: the words, the reasoning, then one call; or two calls ahead of the words. */
-function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement])[] {
+/** One finished turn drawn on each tab: the words, the reasoning, then one call, described where asked; or two calls ahead of the words. */
+function surfaces(
+  callsFirst: boolean,
+  description?: string,
+): readonly (readonly [string, ReactElement])[] {
   const work = createElement(PlanWork, {
     callLive: false,
     earlier: undefined,
@@ -105,7 +115,7 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
           : [
               { type: PLAN_WORK_PART.TEXT, text: "Looking at the sources." },
               { type: PLAN_WORK_PART.REASONING, text: REASONING_SENT },
-              workCall("call-1", COMMAND),
+              workCall("call-1", COMMAND, description),
             ],
       },
     ],
@@ -125,7 +135,7 @@ function surfaces(callsFirst: boolean): readonly (readonly [string, ReactElement
           : [
               { type: "text", text: "Looking at the sources." },
               { type: "reasoning", text: REASONING_SENT },
-              agentCall("call-1", COMMAND),
+              agentCall("call-1", COMMAND, description),
             ],
       },
     ],
@@ -162,6 +172,21 @@ test.each(surfaces(false))(
     assert.equal(said().includes(REASONING), false);
     act(() => thought.querySelector("summary")?.click());
     assert.ok(said().includes(REASONING));
+  },
+);
+
+test.each(surfaces(false, DESCRIPTION))(
+  "on %s a command the model described is a row saying what it is for, in words, and the command is what it opens onto",
+  (_surface, element) => {
+    const container = mounted(element);
+
+    const call = foldSaying(container, DESCRIPTION);
+    const line = call.querySelector("summary");
+    assert.equal(line?.textContent, DESCRIPTION);
+    assert.equal(line?.querySelector(".font-mono"), null);
+    act(() => line?.click());
+    assert.equal(call.querySelector("[data-tool-input]")?.textContent, `$ ${COMMAND}`);
+    assert.equal(call.querySelector("[data-tool-output]")?.textContent, OUTPUT);
   },
 );
 

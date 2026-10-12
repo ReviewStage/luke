@@ -151,6 +151,26 @@ it.layer(testSqlClient)("run_in_repository in the session's sandbox", (it) => {
   );
 
   it.effect(
+    "a command given with its description runs as the command alone, the description going nowhere near the sandbox",
+    () =>
+      Effect.gen(function* () {
+        const { call, sandbox } = yield* openPlan(RELAY_FULL_NAME);
+        const description = "List the repository's root";
+
+        const answered = yield* runInRepository(
+          call,
+          unparsedWire({ command: "ls", description }),
+        ).pipe(Effect.provide(reachingGithub().layer));
+
+        assert.deepEqual(answered, { status: REPOSITORY_SHELL_STATUS.RAN, ...LISTING });
+        const ran = sandbox.runs.at(-1);
+        assert.ok(ran);
+        assert.equal(ran.env?.[REPOSITORY_SANDBOX_CONTRACT.VARIABLE.COMMAND], "ls");
+        assert.equal(JSON.stringify(sandbox.runs).includes(description), false);
+      }),
+  );
+
+  it.effect(
     "the token reaches the firewall and nothing else: no run, no output, no result carries it",
     () =>
       Effect.gen(function* () {

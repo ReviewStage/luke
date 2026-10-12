@@ -21,7 +21,11 @@ import { BRAIN_HOST_TURN_POLICY } from "../server/hosted/brain-host/channel";
 import { CODER } from "../server/hosted/coder-host/bounds";
 import { CODER_DEPLOYMENT_TURNS, coderChannelInput } from "../server/hosted/coder-host/channel";
 import { INBOX_TOOLS } from "../server/hosted/coder-host/inbox";
-import { coderInstructions } from "../server/hosted/coder-host/instructions";
+import {
+  coderInstructions,
+  coderWorkerInstructions,
+} from "../server/hosted/coder-host/instructions";
+import { SHELL_INPUT } from "../server/hosted/coder-host/shell";
 import {
   CODER_TOOL,
   CODER_TOOL_SET,
@@ -203,6 +207,18 @@ test("the session is told its shell and its file tools start in the checkout", (
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
   }
+});
+
+test("the session and its worker are asked to say what each command is for, in the field their shell takes beside it", () => {
+  const field = "description";
+  assert.ok(field in SHELL_INPUT.fields);
+  const told = [
+    ...Object.values(CODING_AGENT_BRIEF).map((brief) =>
+      coderInstructions("Acme/Relay", brief, false),
+    ),
+    coderWorkerInstructions(),
+  ];
+  for (const instructions of told) assert.ok(instructions.includes(`\`${field}\``));
 });
 
 test("the worker is hidden behind the delegation tool, authors no token budget of its own beneath the uncapped agent, and authored exactly the read-only tools, with nothing that writes or publishes among them", () => {

@@ -80,6 +80,34 @@ export const CALL_WORDS = {
   [CALL_KIND.OTHER]: { verb: "Used", code: true },
 } as const satisfies Record<CallKind, { verb: string; code: boolean }>;
 
+/** What a call's line says: the verb, if any, then the subject, and whether the subject is code. */
+export interface CallLine {
+  readonly verb: string | undefined;
+  readonly subject: string | undefined;
+  readonly code: boolean;
+}
+
+/**
+ * How a call's line reads: its kind's verb before its subject; or, for a
+ * command the model said the purpose of, those plain words alone, as Claude
+ * Code and Cursor name a command, with the command itself in the row's body.
+ */
+export function callLine(
+  kind: CallKind,
+  subject: string | undefined,
+  description: string | undefined,
+): CallLine {
+  if (description !== undefined) return { verb: undefined, subject: description, code: false };
+  const words = CALL_WORDS[kind];
+  return { verb: words.verb, subject, code: words.code };
+}
+
+/** The plain words a command's input says it is for, or nothing where it says none, as an older call or another harness's does not. */
+export function commandDescription(description: string | undefined): string | undefined {
+  const words = description?.trim();
+  return words === undefined || words === "" ? undefined : words;
+}
+
 /** A page's address as a reader names it: its host and path, without the scheme. */
 export function pageName(url: string): string {
   return url.replace(/^https?:\/\//, "").replace(/\/$/, "");

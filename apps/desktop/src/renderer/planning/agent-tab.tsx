@@ -207,6 +207,7 @@ function ToolCallView({
       state={part.state}
       kind={view.kind}
       subject={view.subject}
+      description={view.description}
       input={view.input}
       output={view.output}
       errorText={part.errorText}

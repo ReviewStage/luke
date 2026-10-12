@@ -17,6 +17,7 @@ import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  commandDescription,
   pageName,
   ROW_PART,
   type RowReading,
@@ -54,6 +55,8 @@ export interface WorkCallRow {
   kind: CallKind;
   /** The input a reader looks for first; absent for a call that has none. */
   subject?: string;
+  /** For a command, the plain words the model said it is for, which its line says in place of the verb and the command; absent where it said none. */
+  description?: string;
   state: PlanWorkState;
   /** Whether the row still moves: the call runs on a call that still stands. */
   running: boolean;
@@ -213,13 +216,19 @@ function startedAgentOf(kind: CallKind, output: string | undefined): string | un
 }
 
 /** The fields of a call's input the tab reads apart from the rest. */
-const INPUT_FIELD = { COMMAND: "command", MESSAGE: "message", TASK: "taskId" } as const;
+const INPUT_FIELD = {
+  COMMAND: "command",
+  DESCRIPTION: "description",
+  MESSAGE: "message",
+  TASK: "taskId",
+} as const;
 
 type InputField = (typeof INPUT_FIELD)[keyof typeof INPUT_FIELD];
 
 /**
  * One string field of a call's input: the command a repository call runs,
- * which its body draws behind a prompt, or the message a subagent was
+ * which its body draws behind a prompt, and the plain words it is for,
+ * which its line says where the model gave them; or the message a subagent was
  * handed, which the service cuts to a subject on its line but carries
  * whole in the input. Nothing where the text is not that JSON.
  */
@@ -263,10 +272,15 @@ function callRowOf(
         ? pageName(part.subject)
         : (stopped ?? part.subject);
   const agent = startedAgentOf(kind, part.output);
+  const description =
+    kind === CALL_KIND.COMMAND
+      ? commandDescription(inputField(part.input, INPUT_FIELD.DESCRIPTION))
+      : undefined;
   return {
     id: part.id,
     kind,
     ...(subject === undefined ? undefined : { subject }),
+    ...(description === undefined ? undefined : { description }),
     state: part.state,
     running: moving && part.state === PLAN_WORK_STATE.RUNNING,
     input: inputBlock(kind, part.input),

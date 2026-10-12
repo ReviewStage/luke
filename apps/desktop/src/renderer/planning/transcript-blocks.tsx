@@ -62,6 +62,7 @@ import {
   CALL_KIND,
   CALL_WORDS,
   type CallKind,
+  callLine,
   groupSummary,
   TURN_ROW,
   type TurnRow,
@@ -171,6 +172,8 @@ const CALL_ICON = {
 export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> &
   Pick<ToolHeaderProps, "state" | "subject"> & {
     kind: CallKind;
+    /** For a command, the plain words the model said it is for, which the row says alone; the command is the body's. */
+    description?: string | undefined;
     input: ToolBlock;
     /** Nothing while the call has not answered. */
     output: ToolBlock | undefined;
@@ -182,21 +185,22 @@ export function TranscriptTool({
   state,
   kind,
   subject,
+  description,
   input,
   output,
   errorText,
   ...props
 }: TranscriptToolProps): ReactNode {
   const Icon = CALL_ICON[kind];
-  const words = CALL_WORDS[kind];
+  const line = callLine(kind, subject, description);
   return (
     <Tool {...props}>
       <ToolHeader
         state={state}
         icon={<Icon aria-hidden="true" />}
-        label={words.verb}
-        subject={subject}
-        subjectIsCode={words.code}
+        label={line.verb}
+        subject={line.subject}
+        subjectIsCode={line.code}
       />
       <ToolContent>
         <ToolInput block={input} />
