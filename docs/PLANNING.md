@@ -884,9 +884,14 @@ rather than judging it.
   or "No rollout yet" while empty, read-only in the window, last in Copy and
   in what a coding agent is handed, and handed to the planning model beside
   the text once it holds one. The notetaker and a coding agent's `edit_plan`
-  write it through rollout notes ("The notetaker" above). Migration 0096
-  added both columns, every existing plan and
-  revision with an empty rollout.
+  write it through rollout notes ("The notetaker" above). The planning
+  model proposes the cut itself once the Interfaces, Hard parts, and Testing
+  sections are good enough, read by heading ("Cutting the rollout" in
+  `PLANNING_INSTRUCTIONS`): the interfaces grouped by layer in the order the
+  repository confirms, one line per pull request on why it lands green alone,
+  siblings on the one they both need, a single pull request asked once
+  whether it splits; it writes none of it. Migration 0096 added both
+  columns, every existing plan and revision with an empty rollout.
   `rolloutStacksOf` (`plan-wire.ts`) cuts it into the GitHub stacks it lands
   as, since a stack is a line: each pull request on main starts a chain on
   main, and at each pull request its lowest-numbered child goes on up the
