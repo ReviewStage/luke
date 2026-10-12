@@ -5,8 +5,7 @@ import { betterAuth } from "better-auth";
 import { organization as organizationPlugin } from "better-auth/plugins";
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/pglite";
-import { Cause, DateTime, Effect, Option } from "effect";
-import { SqlClient } from "effect/unstable/sql";
+import { Effect, Option } from "effect";
 import { authDatabaseAdapter } from "../server/auth-database";
 import { DISABLED_AUTH_PATHS, ORGANIZATION_OPTIONS } from "../server/auth-policy";
 import * as authSchema from "../server/db/auth-schema";
@@ -19,6 +18,7 @@ import {
   personalWorkspaceOf,
 } from "../server/hosted/workspace-store";
 import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./support/sql-client";
+import { fakeWorkspaceSeams, joinWorkspace, WORKSPACE_ROLE } from "./support/workspaces";
 
 /**
  * An account's workspaces over a real dialect: its personal one is made the
@@ -26,65 +26,16 @@ import { openMigratedPglite, sqlClientOverPglite, testSqlClient } from "./suppor
  * made under the account's slug is adopted rather than doubled, and a list
  * marks the account's own workspace and no teammate's as personal.
  *
- * The plugin's write is a fake over the same tables, refusing a slug that is
- * taken as the plugin does, on both dialects, and Better Auth's own plugin
+ * The plugin's write is a fake over the same tables (`support/workspaces.ts`),
+ * refusing a slug that is taken as the plugin does, on both dialects, and Better Auth's own plugin
  * over PGlite in the last case. Synthetic accounts throughout.
  */
-
-const MEMBER_ROLE = {
-  OWNER: "owner",
-  MEMBER: "member",
-} as const;
-
-/** The plugin's server-only create, over the test's own database: the organization, then its owner. */
-const fakeSeams = Effect.gen(function* () {
-  const client = yield* SqlClient.SqlClient;
-  const seams: WorkspaceSeams = {
-    createOrganization: (creation) =>
-      Effect.gen(function* () {
-        const taken = yield* db
-          .select({ id: organization.id })
-          .from(organization)
-          .where(eq(organization.slug, creation.slug));
-        if (taken.length > 0) {
-          return yield* Effect.fail(
-            new Cause.UnknownError(undefined, "Organization already exists"),
-          );
-        }
-        const id = randomUUID();
-        const now = yield* DateTime.nowAsDate;
-        yield* db.insert(organization).values({
-          id,
-          name: creation.name,
-          slug: creation.slug,
-          metadata: JSON.stringify(creation.metadata),
-          createdAt: now,
-        });
-        yield* joinWorkspace(id, creation.userId, MEMBER_ROLE.OWNER);
-        return { id };
-      }).pipe(
-        Effect.catchTag("SqlError", (failure) =>
-          Effect.fail(new Cause.UnknownError(failure, "Failed to create organization")),
-        ),
-        Effect.provideService(SqlClient.SqlClient, client),
-      ),
-  };
-  return seams;
-});
 
 const openUser = (name: string) =>
   Effect.gen(function* () {
     const userId = `user-${randomUUID()}`;
     yield* db.insert(user).values({ id: userId, name, email: `${userId}@luke.test` });
     return userId;
-  });
-
-const joinWorkspace = (organizationId: string, userId: string, role: string) =>
-  Effect.gen(function* () {
-    const now = yield* DateTime.nowAsDate;
-    yield* db
-      .insert(member)
-      .values({ id: randomUUID(), organizationId, userId, role, createdAt: now });
   });
 
 /** A shared workspace the owner made through the plugin, joined by each teammate. */
@@ -101,7 +52,7 @@ const openSharedWorkspace = (
       userId: owner,
       metadata: {},
     });
-    for (const teammate of teammates) yield* joinWorkspace(id, teammate, MEMBER_ROLE.MEMBER);
+    for (const teammate of teammates) yield* joinWorkspace(id, teammate, WORKSPACE_ROLE.MEMBER);
     return id;
   });
 
@@ -110,7 +61,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
     "an account's first ensure makes its personal workspace and the second makes none",
     () =>
       Effect.gen(function* () {
-        const seams = yield* fakeSeams;
+        const seams = yield* fakeWorkspaceSeams;
         const userId = yield* openUser("Ada Lovelace");
         assert.deepEqual(yield* personalWorkspaceOf(userId), Option.none());
 
@@ -128,7 +79,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
 
   it.effect("a personal workspace a racing ensure already made is adopted, not doubled", () =>
     Effect.gen(function* () {
-      const seams = yield* fakeSeams;
+      const seams = yield* fakeWorkspaceSeams;
       const userId = yield* openUser("Grace Hopper");
       const raced = yield* seams.createOrganization({
         name: "Grace Hopper",
@@ -150,7 +101,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
     "a list marks the account's own workspace personal, first, and the shared ones by name",
     () =>
       Effect.gen(function* () {
-        const seams = yield* fakeSeams;
+        const seams = yield* fakeWorkspaceSeams;
         const owner = yield* openUser("Owner");
         const teammate = yield* openUser("Teammate");
         const ownerPersonal = yield* ensurePersonalWorkspace(owner, seams);
@@ -174,7 +125,7 @@ it.layer(testSqlClient)("an account's workspaces over effect/unstable/sql", (it)
 
   it.effect("an account gone has no personal workspace to make", () =>
     Effect.gen(function* () {
-      const seams = yield* fakeSeams;
+      const seams = yield* fakeWorkspaceSeams;
       const gone = `user-${randomUUID()}`;
 
       assert.deepEqual(yield* ensurePersonalWorkspace(gone, seams), Option.none());
@@ -232,7 +183,7 @@ it.effect(
             .select({ userId: member.userId, role: member.role })
             .from(member)
             .where(eq(member.organizationId, adas.value)),
-          [{ userId: ada, role: MEMBER_ROLE.OWNER }],
+          [{ userId: ada, role: WORKSPACE_ROLE.OWNER }],
         );
         assert.deepEqual(yield* listWorkspaces(grace), [
           { id: raced.id, name: "Grace Hopper", personal: true },

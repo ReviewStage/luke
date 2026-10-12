@@ -12,11 +12,20 @@ import { CALL_CARD_UNNAMED, callBarPlanId, callCard, callCardShown } from "./cal
 const INVITES = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 const BILLING = "8c1a6a4f-3d2e-4d8b-8b66-6f4c7a2e3b21";
 
+const WORKSPACE = "workspace-personal";
+
 /** The list as the sidebar holds it, with the billing plan open in the panel. */
 const PLANNING: PlanningView = {
   ...IDLE_PLANNING_VIEW,
   plans: [
-    { id: INVITES, name: "Teammate invitations", createdAt: 1, updatedAt: 2, repository: null },
+    {
+      id: INVITES,
+      workspaceId: WORKSPACE,
+      name: "Teammate invitations",
+      createdAt: 1,
+      updatedAt: 2,
+      repository: null,
+    },
   ],
   activePlanId: BILLING,
 };
@@ -74,6 +83,7 @@ test("a call's plan the list does not hold is named from the open document, or p
       status: PLANNING_READ.READY,
       plan: {
         id: BILLING,
+        workspaceId: WORKSPACE,
         name: "Billing export",
         createdAt: 1,
         updatedAt: 2,

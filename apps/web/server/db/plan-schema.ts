@@ -4,7 +4,7 @@ import type { PlanAgentEdit, PlanFieldWriter } from "@sidecar/hosted/plan-templa
 import type { PlanAssumption, PlanFields } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
-import { user } from "./auth-schema.js";
+import { organization, user } from "./auth-schema.js";
 import { instant } from "./instant.js";
 import { conversations } from "./storage-schema.js";
 
@@ -12,7 +12,7 @@ import { conversations } from "./storage-schema.js";
  * plan-schema.ts -- a named feature plan and its one current document.
  *
  * One row per plan, keyed by a UUID of the service's own and owned by the
- * account that started it: its name, whether it is pinned or archived, and the one
+ * account that started it, in the workspace it was started in: its name, whether it is pinned or archived, and the one
  * document the planning model saves, a Markdown body and the assumptions list
  * beside it, with the template's fields the body was formatted from, who last
  * changed each field, and the journal of the saves coding agents made on it;
@@ -28,7 +28,7 @@ import { conversations } from "./storage-schema.js";
  * The conversation a plan resumes in is the one row it names, attached once
  * the planning model opens it, and a purged conversation leaves the plan
  * standing with none. The row cascades with its account, so deleting an
- * account is still one statement.
+ * account is still one statement, and with its workspace.
  */
 export const plan = pgTable(
   "plan",
@@ -37,6 +37,10 @@ export const plan = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** The workspace the plan belongs to: a Better Auth `organization`, the starter's personal one unless another was named. */
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     /** The document's Markdown body; empty until the first save. */
     body: text("body").notNull().default(""),
@@ -91,6 +95,8 @@ export const plan = pgTable(
   (table) => [
     // The plan list reads one account's plans, newest started first.
     index("plan_user_created").on(table.userId, table.createdAt),
+    // A workspace's plans, newest started first.
+    index("plan_organization_created").on(table.organizationId, table.createdAt),
   ],
 );
 

@@ -41,7 +41,8 @@ import { InstantColumnSchema } from "./store/database.js";
  * row, so they are the account's and read alike on every Mac it signs in on. A plan's repository is kept here as
  * handed and confirmed nowhere here: whether the account reaches it through
  * the Luke GitHub App is the route's to settle before it calls, on the
- * service that reads GitHub (`github/github-app.ts`). A save is one `update` over the row that
+ * service that reads GitHub (`github/github-app.ts`), and so is whether the
+ * account is a member of the workspace a plan starts in. A save is one `update` over the row that
  * stands and never an insert, so a plan deleted before a save lands stays
  * deleted, and a save that fails leaves the document as it was. A plan's
  * conversation is a `plan` conversation of the same account, opened once and
@@ -86,8 +87,9 @@ export interface StoredPlan {
   readonly sectionWriters: readonly PlanSectionWriter[];
 }
 
-/** A plan to start: its name, and the repository it is about where one is chosen. */
+/** A plan to start: the workspace it starts in, its name, and the repository it is about where one is chosen. */
 export interface NewPlan {
+  readonly organizationId: string;
   readonly name: string;
   readonly repository?: string | null;
 }
@@ -109,6 +111,7 @@ export interface PlanChanges {
  */
 const PLAN_SUMMARY_COLUMNS = {
   id: plan.id,
+  organizationId: plan.organizationId,
   name: plan.name,
   repository: plan.repository,
   pinnedAt: plan.pinnedAt,
@@ -133,6 +136,7 @@ const PLAN_COLUMNS = {
 
 const PlanSummaryRowSchema = Schema.Struct({
   id: Schema.String,
+  organizationId: Schema.String,
   name: Schema.String,
   repository: Schema.NullOr(Schema.String),
   pinnedAt: Schema.NullOr(InstantColumnSchema),
@@ -320,6 +324,7 @@ function summaryOf(row: PlanSummaryRow): PlanSummary {
   const createdAt = row.createdAt.getTime();
   return {
     id: row.id,
+    workspaceId: row.organizationId,
     name: row.name,
     createdAt,
     updatedAt: row.updatedAt.getTime(),
@@ -338,6 +343,7 @@ function ownedPlan(userId: string, planId: string) {
 const insertPlan = SqlSchema.findOne({
   Request: Schema.Struct({
     userId: Schema.String,
+    organizationId: Schema.String,
     name: Schema.String,
     repository: Schema.NullOr(Schema.String),
     now: Schema.Date,
@@ -348,6 +354,7 @@ const insertPlan = SqlSchema.findOne({
       .insert(plan)
       .values({
         userId: write.userId,
+        organizationId: write.organizationId,
         name: write.name,
         repository: write.repository,
         assumptions: [],
@@ -567,8 +574,9 @@ const setConversation = SqlSchema.findOneOption({
 });
 
 /**
- * Starts a plan under the account with the fixed template untouched, every
- * field unanswered and nothing assumed, and the repository it was handed;
+ * Starts a plan under the account, in the workspace it was handed, with the
+ * fixed template untouched, every field unanswered and nothing assumed, and
+ * the repository it was handed;
  * it stands first in the list.
  */
 export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Plan> {
@@ -576,6 +584,7 @@ export function createPlan(userId: string, started: NewPlan): PlanStoreEffect<Pl
     const now = yield* DateTime.nowAsDate;
     const row = yield* insertPlan({
       userId,
+      organizationId: started.organizationId,
       name: started.name,
       repository: started.repository ?? null,
       now,

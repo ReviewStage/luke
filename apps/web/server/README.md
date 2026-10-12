@@ -120,6 +120,13 @@ refuses adopts the workspace under the slug. `listWorkspaces` answers every
 workspace the account is a member of, its personal one first and the rest by
 name. `tests/workspace-store.test.ts` holds the three.
 
+Every plan belongs to one workspace: `plan.organization_id`, not null and
+cascading with the organization (migration 0090, which moves every plan
+standing into its starter's personal workspace before it sets the column
+not null). A plan's summary on the wire names it as `workspaceId`.
+`memberOfWorkspace` is the one membership condition, a `member` row, which a
+statement joins into its own where clause.
+
 Dynamic client registration stays disabled. One public client is compiled in:
 **`luke-desktop`** (`server/oauth-clients.ts`), the macOS companion app. It
 accepts loopback callbacks (`http://127.0.0.1/callback`) via a local HTTP server
@@ -858,7 +865,10 @@ started first and the archived ones left out unless `?archived=include` asks
 for them, so a build from before archiving never draws one, `POST /api/plans`
 starts one with its name, the untouched
 template as its document, and the repository it is about where one is
-chosen, `GET /api/plans/{id}` opens one with its saved document,
+chosen, in the workspace its `workspaceId` names, which the account must be
+a member of (`isWorkspaceMember`; one it is not in answers `not-found`), or
+in the account's personal workspace, ensured first, where it names none,
+`GET /api/plans/{id}` opens one with its saved document,
 `PATCH /api/plans/{id}` changes its name, its repository, whether it is
 pinned, whether it is archived, or several at once, each pin and archive a
 stamp on the row (`pinned_at`, `archived_at`) answered as `pinnedAt` and

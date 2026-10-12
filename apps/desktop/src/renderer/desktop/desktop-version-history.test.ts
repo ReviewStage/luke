@@ -143,6 +143,7 @@ let archive: (() => void) | undefined;
 function planOf(document: PlanDocument, fields: PlanFields | undefined, archived: boolean): Plan {
   return {
     id: PLAN_ID,
+    workspaceId: "workspace-personal",
     name: "Teammate invitations",
     createdAt: 0,
     updatedAt: 0,

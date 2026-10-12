@@ -6,6 +6,11 @@
       "minLength": 1,
       "maxLength": 200
     },
+    "workspaceId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
     "repository": {
       "anyOf": [
         {

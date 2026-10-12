@@ -68,6 +68,7 @@ const STARTED = "9d2b7b5a-4e3f-4e9c-9c77-7a5d8b3f4c32";
 function plan(id: string, name: string, body: string, updatedAt: number): Plan {
   return {
     id,
+    workspaceId: "workspace-personal",
     name,
     createdAt: 1_000,
     updatedAt,

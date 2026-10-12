@@ -16,8 +16,9 @@ import {
 } from "../server/hosted/coder-host/inbox";
 import { createCodingAgent } from "../server/hosted/coding-agent-store";
 import { answerInboxItem, type InboxAgent, planInboxItems } from "../server/hosted/inbox-store";
-import { createPlan, deletePlan } from "../server/hosted/plan-store";
+import { deletePlan } from "../server/hosted/plan-store";
 import { testSqlClient } from "./support/sql-client";
+import { startPlan } from "./support/workspaces";
 
 /**
  * The coding agent's inbox tools, through their public functions against a
@@ -39,7 +40,7 @@ const openUser = Effect.gen(function* () {
 /** An account with one plan and one agent started on it. */
 const openAgent = Effect.gen(function* () {
   const userId = yield* openUser;
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const plan = yield* startPlan(userId, { name: "Teammate invitations" });
   const started = yield* createCodingAgent(userId, {
     planId: plan.id,
     idempotencyKey: randomUUID(),

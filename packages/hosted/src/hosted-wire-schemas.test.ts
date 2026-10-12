@@ -145,6 +145,7 @@ const EFFECT_MODULE_SCHEMAS = {
     planEditValueSchema: planEdit.planEditValueSchema,
   } satisfies RecordedEffectJsonSchemas<typeof planEdit>,
   "plan-wire": {
+    workspaceIdSchema: planWire.workspaceIdSchema,
     agentEditLineSchema: planWire.agentEditLineSchema,
     planAssumptionSchema: planWire.planAssumptionSchema,
     planFieldsSchema: planWire.planFieldsSchema,

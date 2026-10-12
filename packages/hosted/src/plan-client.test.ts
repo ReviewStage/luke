@@ -16,6 +16,7 @@ const PLAN_ID = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
 
 const SUMMARY = {
   id: PLAN_ID,
+  workspaceId: "workspace-personal",
   name: "Teammate invitations",
   createdAt: 1_800_000_000_000,
   updatedAt: 1_800_000_100_000,

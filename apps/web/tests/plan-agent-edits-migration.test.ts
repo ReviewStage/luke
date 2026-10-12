@@ -12,6 +12,7 @@ import { db } from "../server/db/query";
 import { readPlan } from "../server/hosted/plan-store";
 import { BULK_IMPORT } from "./support/plan-contents";
 import { testSqlClient } from "./support/sql-client";
+import { openWorkspace } from "./support/workspaces";
 
 /**
  * plan-agent-edits-migration.test.ts -- migration 0084 carries a coding agent's journaled notes onto the new template.
@@ -89,9 +90,10 @@ const insertPlan = (userId: string, edits: StoredEdits) =>
   Effect.gen(function* () {
     const sql = yield* SqlClient.SqlClient;
     const planId = randomUUID();
+    const organizationId = yield* openWorkspace(userId);
     yield* sql`
-      insert into plan (id, user_id, name, body, fields, agent_edits)
-      values (${planId}, ${userId}, ${"Teammate invitations"}, '',
+      insert into plan (id, user_id, organization_id, name, body, fields, agent_edits)
+      values (${planId}, ${userId}, ${organizationId}, ${"Teammate invitations"}, '',
         ${JSON.stringify(BULK_IMPORT.fields)}::jsonb, ${JSON.stringify(edits)}::jsonb)
     `;
     return planId;
