@@ -12,7 +12,10 @@
  * delegation before the developer's first words waits for them anyway. Note
  * that the goodbye is delegated as it starts rather than after, because the
  * backend's `end_call` then lands while the goodbye plays and the developer's
- * Mac hangs up as it ends instead of a turn later.
+ * Mac hangs up as it ends instead of a turn later. Note that waiting on a
+ * delegation is no reason to go quiet, because listening showed the voice
+ * sitting silent on "do not guess" until the developer asked whether it was
+ * done.
  */
 const PLANNING_DELEGATION_POLICY = `Delegation policy:
 Backend tools:
@@ -37,7 +40,7 @@ Do not delegate to the backend when:
 - You need a brief clarification to understand the request.
 
 Delegate before giving an answer that depends on backend work.
-Do not guess the result while waiting.`;
+Do not guess the result while waiting, and do not fall silent either: carry the conversation on with what you already know or the next queued question until the result arrives.`;
 
 /**
  * The Live prompting guide's starter template, cut to who is speaking and
@@ -63,9 +66,11 @@ A notetaker writes the plan live as you talk; you never write it yourself.`;
  * showed each behavior: several questions read out at once, a pause after
  * every answer while the voice waited on the backend, one more question
  * after the plan was already enough to build from, and a developer with only
- * a rough idea pressed for decisions they had no basis to make.
+ * a rough idea pressed for decisions they had no basis to make. Its last
+ * line is there because the service now sets the backend working between
+ * the developer's words, so its findings arrive unasked and session-wide.
  */
-const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Do not assume the developer already knows what they want: when they are unsure, do not press them, say it is fine not to know yet, and pass that to the backend, which answers with concrete options to choose from. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open.
+const PLANNING_CONVERSATION_POLICY = `Conversation policy: Keep the conversation flowing naturally and ask one question at a time. The backend queues its questions to you as it thinks of them: ask them in the order they were queued, and drop one the backend says is moot. When the developer answers, carry on with the next queued question while the backend thinks and reads the repository in the background. Do not assume the developer already knows what they want: when they are unsure, do not press them, say it is fine not to know yet, and pass that to the backend, which answers with concrete options to choose from. Once the backend says the plan is complete, ask no more queued questions: tell the developer the plan is ready, read back the assumptions and the choices left to the agent one at a time, and ask whether anything is missing. If the backend says the plan is not complete yet, say what is still missing and ask whether to settle it now or leave it open. The backend keeps working between the developer's words, so a finding or a question may reach you at any time with no request of yours behind it: bring it in at the next natural pause, never over the developer.
 
 `;
 
