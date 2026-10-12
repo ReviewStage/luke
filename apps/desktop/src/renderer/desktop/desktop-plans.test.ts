@@ -4021,3 +4021,52 @@ test("a planning worker whose session carries a title is drawn by it, on its tab
     "Queue A lets an admin revoke.",
   ]);
 });
+
+test("a coding agent's start on the Work tab opens the agent's tab in the plan's column, which then holds the keys, its tab already chosen or not", () => {
+  installScrollIntoView();
+  const page = mountOpenPlan({
+    staged: { open: true, tabs: SIDE_PANEL_TABS, tab: SIDE_PANEL_TAB.WORK, width: 400 },
+    agents: codingAgentsControl({ agents: [TITLED_AGENT], agentIds: [TITLED_AGENT.id] }),
+    work: {
+      callLive: false,
+      earlier: undefined,
+      onLoadEarlier: () => Promise.resolve(),
+      turns: [
+        {
+          turnId: "turn-1",
+          startedAt: 1_000,
+          state: PLAN_WORK_STATE.RUNNING,
+          earlierOmitted: false,
+          parts: [
+            {
+              type: PLAN_WORK_PART.TOOL,
+              id: "call-start",
+              tool: PLAN_WORK_TOOL.START_AGENT,
+              name: "start_coding_agent",
+              state: PLAN_WORK_STATE.DONE,
+              subject: "Add a sign-out button.",
+              input: "{}",
+              output: JSON.stringify({ status: "accepted", agent: { id: TITLED_AGENT.id } }),
+            },
+          ],
+        },
+      ],
+    },
+  });
+  const start = page.querySelector<HTMLElement>('.side-panel [data-call-id="call-start"]');
+  assert.ok(start);
+  const pressStart = () =>
+    act(() => {
+      start.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      start.click();
+    });
+  pressStart();
+  assert.equal(columnChosen(page), TITLED_AGENT.title);
+
+  // Pressed again with the agent's tab already chosen, nothing in the column moves, and still it holds the keys.
+  pressStart();
+  assert.equal(columnChosen(page), TITLED_AGENT.title);
+  keydown({ key: "t", metaKey: true });
+  assert.ok(document.querySelector(".desktop-toolbar .tab-add-menu"), "the column's + menu");
+  assert.equal(document.querySelector(".side-panel .tab-add-menu"), null);
+});
