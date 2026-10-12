@@ -13,8 +13,10 @@ import { PlusIcon } from "@sidecar/panel";
 import { useEffect, useRef, useState } from "react";
 import { prefersReducedMotion } from "../use-reduced-motion";
 import {
+  BLOCK_CLASS,
   EDITOR_PLACE,
   EditableUnit,
+  type EditorHost,
   type FieldEditing,
   type PlanEditDoor,
   PlanFieldEditor,
@@ -311,6 +313,12 @@ function draftedOnly(target: EditTarget, words: string, ruleCount: number): bool
   return "rule" in target && target.rule >= ruleCount && !words.startsWith("## ");
 }
 
+/** Whether a unit is drawn as a block the developer can select and edit. */
+function editableView(view: UnitView, ruleCount: number): boolean {
+  const target = editTargetOfUnit(view.words, ruleCount);
+  return target !== undefined && !draftedOnly(target, view.words, ruleCount);
+}
+
 /**
  * One unit of the body: drawn as the chase has it, tinted where its field
  * changed since the last look, the editor where it is the one the editor
@@ -325,12 +333,15 @@ function BodyUnit({
   editing,
   ruleCount,
   marks,
+  entry,
 }: {
   view: UnitView;
   editable: boolean;
   editing: FieldEditing;
   ruleCount: number;
   marks: FieldMarks;
+  /** The block where Tab enters the document. */
+  entry: EditorHost | undefined;
 }): React.JSX.Element | null {
   const target = editTargetOfUnit(view.words, ruleCount);
   const changed = target !== undefined && marks.changed.has(target.field);
@@ -372,6 +383,7 @@ function BodyUnit({
       host={view.id}
       label={targetLabel(target, ruleCount)}
       adds={adds}
+      entry={entry === view.id}
       editing={editing}
     >
       {drawn}
@@ -421,12 +433,15 @@ function PlanAssumptions({
   editable,
   editing,
   marks,
+  entry,
 }: {
   assumptions: readonly PlanAssumption[];
   fresh: ReadonlySet<number>;
   editable: boolean;
   editing: FieldEditing;
   marks: FieldMarks;
+  /** The block where Tab enters the document. */
+  entry: EditorHost | undefined;
 }): React.JSX.Element {
   const list =
     assumptions.length === 0 ? (
@@ -457,6 +472,7 @@ function PlanAssumptions({
         host={EDITOR_PLACE.ASSUMPTIONS}
         label={PLAN_FIELD_HEADING.assumptions}
         adds={false}
+        entry={entry === EDITOR_PLACE.ASSUMPTIONS}
         editing={editing}
       >
         {list}
@@ -532,6 +548,33 @@ export function PlanBody({
     };
   }, []);
 
+  // With nothing focused, the arrows select a block, the first in view going
+  // down and the last going up, rather than scroll the page. Note that focus
+  // anywhere else keeps its own arrows, so this never takes them from a
+  // control.
+  useEffect(() => {
+    if (!editable) return;
+    const select = (event: KeyboardEvent) => {
+      if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      const element = scroller.current;
+      if (element === null || document.activeElement !== document.body) return;
+      const shown = element.getBoundingClientRect();
+      const blocks = [...element.querySelectorAll<HTMLElement>(`.${BLOCK_CLASS}`)].filter(
+        (block) => {
+          const at = block.getBoundingClientRect();
+          return at.bottom > shown.top && at.top < shown.bottom;
+        },
+      );
+      const chosen = event.key === "ArrowDown" ? blocks[0] : blocks.at(-1);
+      if (chosen === undefined) return;
+      event.preventDefault();
+      chosen.focus({ preventScroll: true });
+    };
+    window.addEventListener("keydown", select);
+    return () => window.removeEventListener("keydown", select);
+  }, [editable]);
+
   // A pause in the typing hands the view back: the next burst is followed again.
   useEffect(() => {
     if (!behind) scrolledAway.current = false;
@@ -551,6 +594,9 @@ export function PlanBody({
 
   const { assumptions } = plan.document;
   const edited = lastEditOf(plan);
+  // Tab enters the document at the block selected last, or its first block.
+  const first = editable ? views.find((view) => editableView(view, ruleCount))?.id : undefined;
+  const entry = editing.cursor ?? first ?? (editable ? EDITOR_PLACE.ASSUMPTIONS : undefined);
   return (
     <div ref={scroller} className="plan-document-scroll">
       {edited === undefined ? null : <EditedLine edit={edited} onShowHistory={onShowHistory} />}
@@ -564,6 +610,7 @@ export function PlanBody({
             editing={editing}
             ruleCount={ruleCount}
             marks={marks}
+            entry={entry}
           />
         ))}
         {editing.editor !== undefined && editing.host === EDITOR_PLACE.END ? (
@@ -583,6 +630,7 @@ export function PlanBody({
         editable={editable}
         editing={editing}
         marks={marks}
+        entry={entry}
       />
     </div>
   );

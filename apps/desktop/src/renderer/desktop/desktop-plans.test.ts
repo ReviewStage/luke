@@ -1914,7 +1914,7 @@ test("an archived plan reads but takes nothing: no editor, rename, repository, c
     banner.textContent ?? "",
     /Unarchive it to edit, talk with Luke, or start agents\./u,
   );
-  assert.equal(container.querySelector(".plan-unit-edit"), null, "no section opens an editor");
+  assert.equal(container.querySelector(".plan-unit-editable"), null, "no section opens an editor");
   assert.equal(container.querySelector(".plan-add-sections"), null, "no section is added");
   assert.equal(container.querySelector(".call-start"), null, "no call is started");
   assert.equal(container.querySelector('[aria-label="Start a coding agent"]'), null);
@@ -1971,7 +1971,7 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
   render(false);
 
   assert.equal(container.querySelector('[aria-label="This plan is archived"]'), null);
-  assert.ok(container.querySelector(".plan-unit-edit"), "the sections open their editors");
+  assert.ok(container.querySelector(".plan-unit-editable"), "the sections open their editors");
   assert.ok(container.querySelector(".call-start"), "the call starts");
   assert.ok(container.querySelector('[aria-label="Start a coding agent"]'));
   assert.ok(container.querySelector('[aria-label="Message to the agent"]'));
@@ -1981,7 +1981,7 @@ test("an Unarchive gives an archived plan back everything at once: its editors, 
 test("a section editor still open when the plan is archived elsewhere is let go", () => {
   installScrollIntoView();
   const { container, render } = mountArchivable(false, { marked: [], composer: 0 });
-  press(container, ".plan-unit-edit");
+  press(container, ".plan-unit-editable");
   assert.ok(container.querySelector(".plan-field-editor"), "a section editor is open");
 
   render(true);

@@ -195,30 +195,30 @@
   color: var(--text-secondary);
 }
 
-/* A field the developer can edit: its words take the text cursor, a quiet
-   wash says so on hover, and its pencil, the keyboard's way in, shows on
-   hover or focus. Nothing moves: the wash and the pencil fade on opacity. */
+/* A field the developer can edit: its words take the text cursor, and
+   nothing else marks them, since a click into them edits them. A block the
+   keyboard selects wears a soft tint of the focus colour, a little past its
+   words, as a document editor marks a selected block. The rules' plus, which
+   adds a rule, shows on hover or selection. Nothing moves: they fade on
+   opacity. */
 .plan-unit-editable {
   position: relative;
   isolation: isolate;
-  border-radius: 6px;
   cursor: text;
 }
 
-.plan-unit-editable::before {
+.plan-unit-editable:focus-visible {
+  outline: none;
+}
+
+.plan-unit-editable:focus-visible::before {
   position: absolute;
   z-index: -1;
   inset: calc(var(--space-2) * -1) calc(var(--space-6) * -1);
   border-radius: 6px;
-  background: var(--raised);
+  background: color-mix(in srgb, var(--focus-ring) 14%, transparent);
   content: "";
-  opacity: 0;
   pointer-events: none;
-  transition: opacity var(--duration-hover) ease;
-}
-
-.plan-unit-editable:hover::before {
-  opacity: 1;
 }
 
 .plan-unit-edit {
@@ -230,7 +230,7 @@
 }
 
 .plan-unit-editable:hover .plan-unit-edit,
-.plan-unit-edit:focus-visible {
+.plan-unit-editable:focus-visible .plan-unit-edit {
   opacity: 1;
 }
 
@@ -242,12 +242,12 @@
   position: relative;
 }
 
-/* Note that it ends short of the pencil, which hangs past the column's edge
-   by `--space-6` and is a control's width wide. */
+/* Note that it ends at the column's edge, or short of the rules' plus, which
+   hangs past that edge by `--space-6` and is a control's width wide. */
 .plan-unit-byline {
   position: absolute;
   top: 0.35em;
-  right: calc(var(--control-height) - var(--space-6) + var(--space-4));
+  right: 0;
   max-width: 55%;
   overflow: hidden;
   color: var(--text-secondary);
@@ -258,6 +258,10 @@
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--duration-hover) ease;
+}
+
+.plan-unit-editable:has(> .plan-unit-edit) .plan-unit-byline {
+  right: calc(var(--control-height) - var(--space-6) + var(--space-4));
 }
 
 .plan-unit-attributed:hover .plan-unit-byline,

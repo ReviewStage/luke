@@ -570,10 +570,16 @@ the formatter's and a field is the one unit the service stores, the notetaker
 writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
 
 - **Opening.** A click into a field's words that selects nothing opens the
-  field in place, the caret where the click landed; the pencil that shows on
-  hover and on focus (the keyboard's way in, named "Edit Problem", "Edit Rule
-  2", "Edit Assumptions", and so on) opens it with the caret at the end. The
-  heading stays drawn above it. The editor is TipTap, from a bundle of its
+  field in place, the caret where the click landed. Nothing on the words
+  marks them editable; hovering a section shows only who last changed it.
+  The keyboard moves between fields as a document editor moves between
+  blocks: the document is one Tab stop, at the block selected last (the first
+  before any), ↑ and ↓ move between blocks, and with nothing focused ↓
+  selects the first block in view and ↑ the last. A selected block wears a
+  soft tint, and Return opens it with the caret at the end; each block is a
+  group named for its field ("Problem", "Rule 2", "Assumptions"), so a screen
+  reader still reads its words. Esc or ⌘↩ in the editor saves and leaves the
+  block selected. The heading stays drawn above an open field. The editor is TipTap, from a bundle of its
   own (`field-editor.js`) loaded the first time a field is hovered or opened,
   and it draws the field's words exactly as the document draws them, still
   formatted and where they stood, with no box around them. A field opened
@@ -597,8 +603,8 @@ writes, and the editor opens over (`packages/hosted/src/plan-edit.ts`).
     next example after Then; Backspace in an empty example strikes it; Delete
     rule stands under a rule that exists. The rules' own heading carries a
     plus, "Add rule", which opens a new rule that saves after the rules
-    standing. A rule whose statement is left blank is struck, and an example
-    of blank clauses is dropped.
+    standing; Return on that heading does the same. A rule whose statement is
+    left blank is struck, and an example of blank clauses is dropped.
   - Order and Data and migration, which the body leaves out while they hold
     nothing, are offered after the body as buttons that open their editor
     there.

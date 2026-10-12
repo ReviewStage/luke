@@ -89,10 +89,24 @@ function mount(plan: Plan, answers: readonly PlanningEditAnswer[] = [{ saved: tr
   return { container, sent, root, onEdit };
 }
 
-function pencil(container: HTMLElement, heading: string): HTMLButtonElement {
-  const button = container.querySelector<HTMLButtonElement>(`[aria-label="Edit ${heading}"]`);
-  assert.ok(button, `the ${heading} pencil`);
-  return button;
+/** A block of the document, by the field it holds. */
+function block(container: HTMLElement, label: string): HTMLElement {
+  const found = container.querySelector<HTMLElement>(`[role="group"][aria-label="${label}"]`);
+  assert.ok(found, `the ${label} block`);
+  return found;
+}
+
+function pressOn(element: HTMLElement, key: string): void {
+  act(() => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
+  });
+}
+
+/** A block selected by the keyboard and edited with Return. */
+function edit(container: HTMLElement, label: string): void {
+  const selected = block(container, label);
+  act(() => selected.focus());
+  pressOn(selected, "Enter");
 }
 
 /** The editor open now, as the document handed it over. */
@@ -126,13 +140,13 @@ test("a document with no edit door, or from a service that sends no fields, offe
   const { fields: _fields, ...unfielded } = PLAN;
   const { container } = mount(unfielded);
 
-  assert.equal(container.querySelector(".plan-unit-edit"), null);
+  assert.equal(container.querySelector(".plan-unit-editable"), null);
 });
 
-test("a field's pencil opens its Markdown in place, its heading kept, under a block the recording does not capture", () => {
+test("Return on a selected block opens its Markdown in place, its heading kept, under a block the recording does not capture", () => {
   const { container } = mount(PLAN);
 
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
 
   const editor = container.querySelector(".plan-field-editor");
   assert.ok(editor?.classList.contains("ph-no-capture"));
@@ -140,7 +154,7 @@ test("a field's pencil opens its Markdown in place, its heading kept, under a bl
   assert.deepEqual(open().value, text(PROBLEM));
   assert.equal(open().label, "Problem");
   assert.equal(open().at, undefined, "the keyboard's way in puts the caret at the end");
-  assert.ok(container.querySelector('[aria-label="Edit Outcome"]'), "the other fields keep theirs");
+  assert.ok(block(container, "Outcome"), "the other fields stay blocks");
 });
 
 test("a click into a field's words opens it with the caret where the click landed", () => {
@@ -160,7 +174,7 @@ test("a click into a field's words opens it with the caret where the click lande
 
 test("Esc saves the words from what the editor opened on, and closes once the save lands", async () => {
   const { container, sent } = mount(PLAN);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
 
   type(text("- Only an owner can add a member.\n"));
   finish();
@@ -174,7 +188,7 @@ test("Esc saves the words from what the editor opened on, and closes once the sa
 
 test("the words handed over as the developer types save once, as their last words, on Esc", async () => {
   const { container, sent } = mount(PLAN);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
 
   type(text("- Only an"));
   type(text("- Only an owner"));
@@ -190,7 +204,7 @@ test("the words handed over as the developer types save once, as their last word
 
 test("an editor closed with nothing changed saves nothing", async () => {
   const { container, sent } = mount(PLAN);
-  act(() => pencil(container, "Outcome").click());
+  edit(container, "Outcome");
 
   finish();
   await settle();
@@ -202,7 +216,7 @@ test("an editor closed with nothing changed saves nothing", async () => {
 test("a conflict keeps the editor open on the developer's words; Keep mine saves them over Luke's", async () => {
   const lukes = "- Only an admin or an owner can add a member.";
   const { container, sent } = mount(PLAN, [{ conflict: { current: lukes } }, { saved: true }]);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
   finish();
   await settle();
@@ -223,7 +237,7 @@ test("a conflict keeps the editor open on the developer's words; Keep mine saves
 test("Use Luke's closes the editor on his words and saves nothing more", async () => {
   const lukes = "- Only an admin or an owner can add a member.";
   const { container, sent } = mount(PLAN, [{ conflict: { current: lukes } }]);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
   finish();
   await settle();
@@ -240,7 +254,7 @@ test("a save that failed says why and keeps the words; Try again saves them", as
     { failure: PLAN_CALL_FAILURE.UNANSWERED },
     { saved: true },
   ]);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
   finish();
   await settle();
@@ -257,7 +271,7 @@ test("a save that failed says why and keeps the words; Try again saves them", as
 
 test("a save the service refused because the plan is archived says so and keeps the words", async () => {
   const { container } = mount(PLAN, [{ failure: PLAN_CALL_FAILURE.PLAN_ARCHIVED }]);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
   finish();
   await settle();
@@ -268,7 +282,7 @@ test("a save the service refused because the plan is archived says so and keeps 
 
 test("words typed and not yet saved are sent when the developer leaves the plan", async () => {
   const { container, sent, root } = mount(PLAN);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
 
   act(() => root.unmount());
@@ -290,7 +304,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
   act(() =>
     root.render(createElement(PlanBody, { plan: PLAN, live: false, onEdit: door(PLAN.id) })),
   );
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
 
   const other = { ...PLAN, id: "0c4f2e9a-7d1b-4a3e-8f6c-2b9d5e1a7c40" };
@@ -305,7 +319,7 @@ test("words typed in one plan are saved to that plan when another opens", async 
 
 test("Esc and the editor losing focus at once save the words once", async () => {
   const { container, sent } = mount(PLAN);
-  act(() => pencil(container, "Problem").click());
+  edit(container, "Problem");
   type(text("- Only an owner can add a member."));
 
   act(() => {
@@ -339,7 +353,7 @@ const LISTED: Plan = {
 
 test("a rule opens as its statement and examples, its number kept, and saves as the rules with it changed", async () => {
   const { container, sent } = mount(LISTED);
-  act(() => pencil(container, "Rule 1").click());
+  edit(container, "Rule 1");
 
   assert.deepEqual(open().value, {
     kind: FIELD_KIND.RULE,
@@ -372,13 +386,9 @@ test("a rule opens as its statement and examples, its number kept, and saves as 
   ]);
 });
 
-test("the rules' plus adds a rule after the rules standing; Delete rule strikes one", async () => {
+test("Return on the rules' heading adds a rule after the rules standing; Delete rule strikes one", async () => {
   const added = mount(LISTED);
-  act(() => {
-    const plus = added.container.querySelector<HTMLButtonElement>('[aria-label="Add rule"]');
-    assert.ok(plus, "the rules' plus");
-    plus.click();
-  });
+  edit(added.container, "Rules");
   assert.equal(open().label, "New rule");
   type({
     kind: FIELD_KIND.RULE,
@@ -389,7 +399,7 @@ test("the rules' plus adds a rule after the rules standing; Delete rule strikes 
   const addedSent = [...added.sent];
 
   const struck = mount(LISTED);
-  act(() => pencil(struck.container, "Rule 1").click());
+  edit(struck.container, "Rule 1");
   act(() => buttonText(struck.container, "Delete rule").click());
   await settle();
 
@@ -403,7 +413,7 @@ test("the rules' plus adds a rule after the rules standing; Delete rule strikes 
 
 test("the open questions open as Markdown items and the assumptions as plain ones, and save a line as an item", async () => {
   const { container, sent } = mount(LISTED);
-  act(() => pencil(container, "Open questions").click());
+  edit(container, "Open questions");
   assert.deepEqual(open().value, {
     kind: FIELD_KIND.QUESTIONS,
     text: "Who can withdraw an invite?",
@@ -415,7 +425,7 @@ test("the open questions open as Markdown items and the assumptions as plain one
   finish();
   await settle();
 
-  act(() => pencil(container, "Assumptions").click());
+  edit(container, "Assumptions");
   assert.deepEqual(open().value, {
     kind: FIELD_KIND.ASSUMPTIONS,
     text: "Invites reuse memberships.",
@@ -461,6 +471,54 @@ test("a rule only a notetaker's draft holds so far is drawn but not yet offered 
   });
 
   assert.ok(container.textContent?.includes("Invites expire after 7 days."));
-  assert.ok(container.querySelector('[aria-label="Edit Rule 1"]'));
-  assert.equal(container.querySelector('[aria-label="Edit Rule 2"]'), null);
+  assert.ok(block(container, "Rule 1"));
+  assert.equal(container.querySelector('[role="group"][aria-label="Rule 2"]'), null);
+});
+
+test("the document is one Tab stop, at the block selected last, and the arrows move between blocks", () => {
+  const { container } = mount(LISTED);
+  const stops = () =>
+    [...container.querySelectorAll<HTMLElement>('[role="group"]')]
+      .filter((found) => found.tabIndex === 0)
+      .map((found) => found.getAttribute("aria-label"));
+
+  assert.deepEqual(stops(), ["Problem"]);
+  act(() => block(container, "Problem").focus());
+  pressOn(block(container, "Problem"), "ArrowDown");
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Outcome");
+  pressOn(block(container, "Outcome"), "ArrowUp");
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Problem");
+  pressOn(block(container, "Problem"), "ArrowDown");
+
+  assert.deepEqual(stops(), ["Outcome"]);
+});
+
+test("Esc in the editor saves and selects its block again, so the keyboard carries on from it", async () => {
+  const { container, sent } = mount(PLAN);
+  edit(container, "Problem");
+  type(text("- Only an owner can add a member."));
+
+  finish();
+  await settle();
+
+  assert.equal(sent.length, 1);
+  assert.equal(container.querySelector(".plan-field-editor"), null);
+  assert.equal(document.activeElement?.getAttribute("aria-label"), "Problem");
+});
+
+test("a save under way says nothing under the editor", async () => {
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  roots.push(root);
+  const waiting = () => new Promise<PlanningEditAnswer>(() => undefined);
+  act(() => root.render(createElement(PlanBody, { plan: PLAN, live: false, onEdit: waiting })));
+  edit(container, "Problem");
+  type(text("- Only an owner can add a member."));
+
+  finish();
+  await settle();
+
+  assert.ok(container.querySelector(".plan-field-editor"), "the editor waits for its save");
+  assert.equal(container.querySelector(".plan-field-note"), null);
 });
