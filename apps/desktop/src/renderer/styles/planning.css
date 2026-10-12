@@ -721,9 +721,11 @@ button.code-card-path:hover {
    dissolve over `--scroll-fade` just above it, rather than being sliced
    short of the card: a mask, so they fade into whatever ground the panel
    stands on in either appearance. Its foot pads past the fade, so the
-   newest line, scrolled to or followed, stands whole above it. */
+   newest line, scrolled to or followed, stands whole above it, and a
+   control focused from below is scrolled in past the fade as well. */
 .agent-log-over-composer {
   padding-bottom: calc(var(--scroll-fade) + var(--space-4));
+  scroll-padding-bottom: calc(var(--scroll-fade) + var(--space-4));
   mask-image: linear-gradient(to bottom, #000 calc(100% - var(--scroll-fade)), transparent);
 }
 

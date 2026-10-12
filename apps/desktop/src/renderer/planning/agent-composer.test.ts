@@ -571,7 +571,7 @@ test("no bar stands between the transcript and the box: nothing that holds the c
   assert.deepEqual(drawn, []);
 });
 
-test("the log runs right up to the card's top edge and fades over `--scroll-fade` there, its foot padded past the fade so the newest line stands whole above it", async () => {
+test("the log runs right up to the card's top edge and fades over `--scroll-fade` there, its foot padded past the fade so the newest line, or a control focused from below, stands whole above it", async () => {
   const rules = cssRules(await builtStylesheet());
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
   const log = tab.container.querySelector('[role="log"]');
@@ -601,6 +601,8 @@ test("the log runs right up to the card's top edge and fades over `--scroll-fade
   assert.match(mask ?? "", /#000 calc\(100% - var\(--scroll-fade\)\), transparent\)$/u);
   const [foot] = own(log, "padding-bottom");
   assert.match(foot ?? "", /^calc\(var\(--scroll-fade\) \+ var\(--space-\d+\)\)$/u);
+  // A control focused from below is scrolled in past the fade too, not just to the log's edge.
+  assert.deepEqual(own(log, "scroll-padding-bottom"), [foot]);
 });
 
 /** A step that read 620k of a 1M window whose compaction is at 900k. */
