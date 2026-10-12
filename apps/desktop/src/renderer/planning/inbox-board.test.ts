@@ -369,6 +369,34 @@ it.effect(
 );
 
 it.effect(
+  "an approval its agent need not hear back from still has the plan read again once answered, since what it decided was written into the plan; a task decides nothing and asks no read",
+  () =>
+    Effect.gen(function* () {
+      const quietApproval = item({
+        id: "a1b2c3d4-0000-4000-8000-000000000004",
+        key: "drop-legacy",
+        kind: INBOX_KIND.APPROVAL,
+        title: "Drop the legacy table?",
+        needsReply: false,
+        postedAt: 3_000,
+        updatedAt: 3_000,
+      });
+      const { agents, listReads } = service(
+        [{ items: [quietApproval, SETTINGS], cursor: "3000.4" }],
+        [taking(SETTINGS), taking(quietApproval)],
+      );
+      const page = mount(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(buttonNamed(card(page, SETTINGS.id), "Done"));
+      yield* settle;
+      assert.equal(listReads.length, 0, "a task done changes nothing the plan holds");
+      press(buttonNamed(card(page, quietApproval.id), "Approve"));
+      yield* settle;
+      assert.equal(listReads.length, 1, "the decision was written into the plan");
+    }),
+);
+
+it.effect(
   "a plan with no coding agent holds no read of its inbox open, since it has no Inbox tab",
   () =>
     Effect.gen(function* () {

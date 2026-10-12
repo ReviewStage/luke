@@ -3,6 +3,7 @@ import {
   INBOX_REPLY,
   type InboxItem,
   type InboxReply,
+  inboxKindDecides,
   inboxTitleLine,
 } from "@sidecar/hosted/inbox-wire";
 import { NOTE_KIND, type PlanNote } from "@sidecar/hosted/plan-template";
@@ -116,15 +117,8 @@ function approvalNotes(item: InboxItem, reply: InboxReply): readonly PlanNote[] 
  * refused before it was recorded.
  */
 function decisionNotes(item: InboxItem, reply: InboxReply): readonly PlanNote[] {
-  switch (item.kind) {
-    case INBOX_KIND.CHOICE:
-      return choiceNotes(item, reply);
-    case INBOX_KIND.APPROVAL:
-      return approvalNotes(item, reply);
-    case INBOX_KIND.QUESTION:
-    case INBOX_KIND.TASK:
-      return [];
-  }
+  if (!inboxKindDecides(item.kind)) return [];
+  return item.kind === INBOX_KIND.CHOICE ? choiceNotes(item, reply) : approvalNotes(item, reply);
 }
 
 /**

@@ -83,6 +83,11 @@ export const INBOX_KIND = {
 
 export type InboxKind = (typeof INBOX_KIND)[keyof typeof INBOX_KIND];
 
+/** Whether an answer to an item of the kind decides how the work is built, which the service writes into the plan: a choice or an approval does; a question or a task decides nothing of the design. */
+export function inboxKindDecides(kind: InboxKind): boolean {
+  return kind === INBOX_KIND.CHOICE || kind === INBOX_KIND.APPROVAL;
+}
+
 /** Where an item stands. */
 export const INBOX_STATUS = {
   /** Waiting on the developer. */

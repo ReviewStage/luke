@@ -10,6 +10,7 @@ import {
   INBOX_STATUS,
   type InboxItem,
   type InboxReplyKind,
+  inboxKindDecides,
 } from "@sidecar/hosted/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { messageFailureNote } from "./coding-agent-model";
@@ -39,7 +40,10 @@ import {
  * answer to an item its agent changed first is not taken, and the card says
  * so above the item as it now stands. An answer the agent was to hear
  * reached it as one of the developer's messages, which may have started
- * its turn again, so the plan's agents are read again for where they stand.
+ * its turn again, and one that decided something, a choice or an approval,
+ * was written into the plan by the service, so the plan and its agents are
+ * read again for where they stand, as the agent's tab asks after a plan
+ * edit of the agent's own.
  */
 
 /** How one read is asked: the plan and the cursor to read past, answered as the view hears it. */
@@ -132,7 +136,7 @@ export function usePlanInbox(input: {
     readonly agentIds: readonly string[] | undefined;
     readonly readInbox: InboxReader;
     readonly answerInbox: InboxAnswerer;
-    /** Reads the plan's agents again, for where an agent an answer reached stands now. */
+    /** Reads the plan and its agents again, for where an agent an answer reached stands now and for a decision the service wrote into the plan. */
     readonly onRetryList: () => void;
   };
 }): PlanInboxControl {
@@ -231,7 +235,7 @@ export function usePlanInbox(input: {
             next.delete(item.id);
             return next;
           });
-          if (item.needsReply) latest.current.onRetryList();
+          if (item.needsReply || inboxKindDecides(item.kind)) latest.current.onRetryList();
         });
     },
     [sending, note, planId],
