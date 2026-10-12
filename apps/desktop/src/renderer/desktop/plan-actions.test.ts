@@ -384,6 +384,7 @@ test("a right-click on a sidebar plan's Pin or Archive offers the plan's menu, r
 
   assert.deepEqual(labels(), [
     "Rename",
+    "Version history",
     "Pin",
     "Archive",
     "Change repository…",
@@ -981,14 +982,12 @@ test("Change repository… from the ⋯ opens the open plan's chip menu over its
   choose("Change repository…");
   // The tab counts the ask; the toolbar's chip opens on it.
   act(() => {
-    roots
-      .at(-1)
-      ?.render(
-        createElement(DesktopPlans, {
-          looks: NO_LOOKS,
-          plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
-        }),
-      );
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        looks: NO_LOOKS,
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
   });
 
   const picker = container.querySelector(".desktop-toolbar-actions .plan-compose-menu");
@@ -1015,14 +1014,12 @@ test("Change repository… on a plan that still has its chip hands focus back to
   openMenu(more);
   choose("Change repository…");
   act(() => {
-    roots
-      .at(-1)
-      ?.render(
-        createElement(DesktopPlans, {
-          looks: NO_LOOKS,
-          plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
-        }),
-      );
+    roots.at(-1)?.render(
+      createElement(DesktopPlans, {
+        looks: NO_LOOKS,
+        plans: { ...plans, repositoryMenu: { planId: PLAN.id, request: 1 } },
+      }),
+    );
   });
   const search = container.querySelector('input[aria-label="Search repositories"]');
   assert.ok(search, "the picker opened");
