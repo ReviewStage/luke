@@ -205,3 +205,17 @@ test("the filter shows only the files given, every folder open, the tab's file m
   await tree.settled();
   assert.deepEqual(drawnRows(tree.host), ["src/", "README.md"]);
 });
+
+test("a search typed before the folders are listed shows the matches once they land", async () => {
+  const tree = mounted(repository);
+  tree.handle.search("readme");
+  await tree.settled();
+
+  assert.deepEqual(drawnRows(tree.host), ["README.md"]);
+  assert.doesNotMatch(
+    [...tree.host.querySelectorAll<HTMLElement>(".file-tree-notice:not([hidden])")]
+      .map((shown) => shown.textContent)
+      .join(),
+    /No files match/,
+  );
+});

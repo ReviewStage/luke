@@ -115,6 +115,7 @@ function entriesOf(read: ReadFolder, onCut: () => void) {
 function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
   let browse: View | undefined;
   let browser: FolderBrowser | undefined;
+  let unheard: (() => void) | undefined;
   let shown: View | undefined;
   let only: readonly string[] | undefined;
   let query = "";
@@ -148,6 +149,11 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
     browse = viewOf([], "closed");
     empty.hidden = true;
     host.replaceChildren(browse.frame, empty);
+    // Note that a search stands over folders still being listed, so whether
+    // it matches anything is asked again as each listing lands.
+    unheard = browse.tree.subscribe(() => {
+      if (query.trim() !== "") present();
+    });
     browser = browseFolders(
       browse.tree,
       entriesOf(props.readFolder, () => {
@@ -209,6 +215,7 @@ function mount(host: HTMLElement, props: FileTreeProps): FileTreeHandle {
       taken = true;
       host.removeEventListener("click", onClick);
       host.removeEventListener("keydown", onKey);
+      unheard?.();
       browser?.dispose();
       browse?.tree.cleanUp();
       shown?.tree.cleanUp();
