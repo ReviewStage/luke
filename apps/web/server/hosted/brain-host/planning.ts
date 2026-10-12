@@ -239,9 +239,9 @@ You are handed the saved plan as its fields, the call's latest lines, and Luke's
 - add: a new point under a field. In a text field it is one Markdown bullet, a line or two, added after what the field holds. In openQuestions or assumptions it is one item. In rules it is one rule's statement, one sentence that holds in every case.
 - addExample: a concrete example pinning a rule, given, when, and then, the rule named by its number.
 - replace: a correction, where the developer corrected something the plan holds. find is a phrase copied exactly from the saved field, as short as names one place; text is what it becomes.
-- remove: a point the developer retracted. find is a phrase copied exactly from the line, item, rule, or example to strike.
+- remove: a point the developer retracted or rejected. find is a phrase copied exactly from the line, item, rule, or example to strike.
 
-- Write only what the developer stated, agreed to, or clearly implied. Luke's proposals and research count once the developer has agreed to them. Never write a guess.
+- Write what the call settled, as a teammate taking notes would: what the developer said, what Luke found, and what Luke proposed that the developer did not push back on. Never write a guess.
 - Never restate or reword a point the plan already holds. A note is only what is new or what changed.
 - The developer also edits the plan directly. A field named under [fields the developer wrote] holds the developer's own words: never reword or strike them. Add to them, or change them only where the latest lines say to.
 - Keep exact names from Luke's research notes: file paths, functions, tables, commands.
