@@ -14,7 +14,7 @@ import {
   ROLLOUT_BASE,
   type RolloutItem,
 } from "@sidecar/hosted/plan-wire";
-import { Clock, Effect } from "effect";
+import { Clock, Effect, Result } from "effect";
 import { codingAgentRunStartedAt, codingAgentStatusOf } from "./coder-host/status.js";
 import {
   awaitingLinesOf,
@@ -275,6 +275,43 @@ export function rolloutStateOf(
     `Ready to start: ${positionsWords(toStart)}`,
     `Ready to merge: ${positionsWords(toMerge)}`,
   ];
+}
+
+/** Why a position of the rollout cannot start on a base: the rollout names no such position, or the pull request it bases on is not open. */
+export const ROLLOUT_BASE_REFUSAL = {
+  NOT_IN_ROLLOUT: "not-in-rollout",
+  BASE_NOT_OPEN: "base-not-open",
+} as const;
+
+export type RolloutBaseRefusal = (typeof ROLLOUT_BASE_REFUSAL)[keyof typeof ROLLOUT_BASE_REFUSAL];
+
+/**
+ * The branch a worker at `position` bases on, counted from one: none for a
+ * pull request on main, or one on an earlier pull request that has merged,
+ * since the default branch then holds it; the branch of the newest worker at
+ * the base position that published, while its pull request is open. Refused
+ * where the rollout names no such position, or where the base's pull request
+ * is not open, by the rule the ready line reads (`baseBuildable`).
+ */
+export function rolloutBaseBranchOf(
+  rollout: readonly RolloutItem[],
+  position: number,
+  agents: readonly PublishedCodingAgent[],
+): Result.Result<string | undefined, RolloutBaseRefusal> {
+  const item = rollout[position - 1];
+  if (item === undefined) return Result.fail(ROLLOUT_BASE_REFUSAL.NOT_IN_ROLLOUT);
+  if (item.base === ROLLOUT_BASE.MAIN) return Result.succeed(undefined);
+  const base = item.base;
+  const holder = agents.findLast(
+    ({ agent, published }) => agent.position === base && published !== null,
+  );
+  const state = holder?.published?.state;
+  if (state === PULL_REQUEST_STATE.MERGED) return Result.succeed(undefined);
+  const branch = holder?.agent.branch ?? null;
+  if (state === undefined || !BUILDABLE_STATES.has(state) || branch === null) {
+    return Result.fail(ROLLOUT_BASE_REFUSAL.BASE_NOT_OPEN);
+  }
+  return Result.succeed(branch);
 }
 
 /** The plan's rollout workers, in the order started, each read as its position's line reads it; none where the plan has no worker or the account owns no such plan. */

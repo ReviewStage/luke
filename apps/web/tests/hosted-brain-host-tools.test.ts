@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
+import {
+  CHECK_SUMMARY,
+  CODING_AGENT_STATUS,
+  type CodingAgentPullRequest,
+  PULL_REQUEST_STATE,
+  type PullRequestState,
+} from "@sidecar/hosted/coding-agent-wire";
 import { MODEL_PROVIDER } from "@sidecar/hosted/models-wire";
+import { ROLLOUT_BASE, type RolloutItem } from "@sidecar/hosted/plan-wire";
 import { Effect, Layer, Option, Redacted, Result } from "effect";
 import type * as HttpClient from "effect/unstable/http/HttpClient";
 import type { MessageStreamEvent } from "eve/client";
@@ -44,6 +51,7 @@ import { CODER_TOOL, CODER_TOOL_SET } from "../server/hosted/coder-host/tool-set
 import {
   createCodingAgent,
   readCodingAgent,
+  recordCodingAgentPublished,
   updateCodingAgentBranch,
 } from "../server/hosted/coding-agent-store";
 import {
@@ -61,13 +69,14 @@ import {
   modelCatalogOf,
   type OfferedModel,
 } from "../server/hosted/model-catalog";
-import { createPlan, openPlanConversation } from "../server/hosted/plan-store";
+import { createPlan, openPlanConversation, savePlanText } from "../server/hosted/plan-store";
 import { QUEUE_QUESTION_TOOL } from "../server/hosted/queue-question";
 import { type ConversationTarget, storeWriter } from "../server/hosted/store";
 import { listJournals, sentLineStands } from "../server/hosted/store/message-reads";
 import { stampedEveEvent } from "./support/eve-events";
 import { githubReaching, NO_GITHUB, openGithubUser } from "./support/github-app-fake";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
+import { cutRollout } from "./support/plan-rollouts";
 import { insertConversation } from "./support/store-rows";
 import { titleModelAnswering } from "./support/title-model";
 
@@ -107,6 +116,13 @@ const AGENT_WORDS = "Pushed the branch.";
 const INSTRUCTION = "Also add tests for the expiry.";
 const TASK = "Rename the invite email's subject to say who sent it.";
 const SOL = "openai/gpt-6.1-sol";
+
+/** A rollout of three pull requests: the schema on main, and a route and a screen both on the schema. */
+const ROLLOUT: readonly RolloutItem[] = [
+  { title: "Schema", scope: "The invitation table.", base: ROLLOUT_BASE.MAIN, acceptance: null },
+  { title: "Route", scope: "POST /api/invitations.", base: 1, acceptance: null },
+  { title: "Screen", scope: "The invite dialog.", base: 1, acceptance: null },
+];
 
 /** The two models offered a start, each with the efforts it lists. */
 const CATALOG: readonly OfferedModel[] = [
@@ -716,4 +732,75 @@ test("Luke starts an agent on the call's plan as the deployment acting for the a
     reason: START_CODING_AGENT_REFUSAL.NO_SERVICE,
   });
   assert.equal(eve.sent.length, 2);
+});
+
+/** A pull request from a worker's branch, as GitHub last answered it, in the state named. */
+function pullRequestIn(state: PullRequestState): CodingAgentPullRequest {
+  return {
+    number: 415,
+    title: "Schema",
+    url: "https://github.com/Acme/Relay/pull/415",
+    state,
+    checks: CHECK_SUMMARY.PENDING,
+    additions: 1,
+    deletions: 0,
+    changedFiles: 1,
+  };
+}
+
+test("Luke starts a rollout's worker at a position: one on main starts at once with its pull request's brief, one on an earlier pull request is refused until that one is open and then bases on its branch, or on main once it merged; a position the rollout does not name, or one a live worker holds, is refused in words Luke can act on", async () => {
+  const userId = await database.run(openGithubUser());
+  const plan = await planConversation(userId, RELAY_FULL_NAME);
+  await database.run(savePlanText(userId, plan.planId, "## Goal\n\nInvite a teammate.\n"));
+  await database.run(cutRollout(plan.planId, ROLLOUT));
+  const eve = fakeCoderEve();
+  const acting = brainHost({
+    ...seams,
+    deploymentSecret: () => Redacted.make(CRON_SECRET),
+    eveOrigin: () => EVE_ORIGIN,
+  });
+  const call = await callerOn(acting, plan, eve.services, CATALOG);
+  const storedOf = async (answer: WireRecord) =>
+    Option.getOrThrow(await database.run(readCodingAgent(userId, startedAgentOf(answer).id)));
+
+  assert.deepEqual(await call(START_CODING_AGENT_TOOL.name, { position: 2 }, "call-1"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.BASE_NOT_OPEN,
+  });
+  assert.deepEqual(await call(START_CODING_AGENT_TOOL.name, { position: 4 }, "call-2"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.NOT_IN_ROLLOUT,
+  });
+  assert.equal(eve.sent.length, 0);
+
+  const first = await call(START_CODING_AGENT_TOOL.name, { position: 1 }, "call-3");
+  assert.equal(first.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(first));
+  const worker = await storedOf(first);
+  assert.deepEqual([worker.position, worker.baseBranch], [1, null]);
+  assert.match(JSON.parse(eve.sent[0]?.body ?? "").message, /^# Pull request 1 of 3: Schema\n/u);
+  assert.deepEqual(await call(START_CODING_AGENT_TOOL.name, { position: 1 }, "call-4"), {
+    status: ACTION_RESULT_STATUS.REJECTED,
+    reason: START_CODING_AGENT_REFUSAL.POSITION_TAKEN,
+  });
+  assert.equal(eve.sent.length, 1);
+
+  // The worker pushes its branch and opens its pull request, so the route builds on that branch.
+  await database.run(updateCodingAgentBranch(userId, worker.id, BRANCH));
+  await database.run(
+    recordCodingAgentPublished(userId, worker.id, pullRequestIn(PULL_REQUEST_STATE.OPEN)),
+  );
+  const route = await call(START_CODING_AGENT_TOOL.name, { position: 2 }, "call-5");
+  assert.equal(route.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(route));
+  assert.equal((await storedOf(route)).baseBranch, BRANCH);
+  assert.match(JSON.parse(eve.sent[1]?.body ?? "").message, /^# Pull request 2 of 3: Route\n/u);
+
+  // Once the schema merged, the screen builds on main, which holds it.
+  await database.run(
+    recordCodingAgentPublished(userId, worker.id, pullRequestIn(PULL_REQUEST_STATE.MERGED)),
+  );
+  const screen = await call(START_CODING_AGENT_TOOL.name, { position: 3 }, "call-6");
+  assert.equal(screen.status, ACTION_RESULT_STATUS.ACCEPTED, JSON.stringify(screen));
+  const stored = await storedOf(screen);
+  assert.deepEqual([stored.position, stored.baseBranch], [3, null]);
+  assert.equal(eve.sent.length, 3);
 });
