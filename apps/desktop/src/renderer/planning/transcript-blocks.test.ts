@@ -7,10 +7,16 @@ import { PLAN_WORK_PART, PLAN_WORK_STATE, PLAN_WORK_TOOL } from "@sidecar/hosted
 import { act, createElement, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test } from "vitest";
+import { sheetStyle } from "#testing/css-rules";
 import { TOOL_BLOCK, TOOL_STATE } from "../ai-elements/tool";
 import { AgentTranscriptView } from "./agent-tab";
 import { PlanWork } from "./plan-work";
-import { TranscriptReasoning, TranscriptSubagent, TranscriptTool } from "./transcript-blocks";
+import {
+  TranscriptOpeningCall,
+  TranscriptReasoning,
+  TranscriptSubagent,
+  TranscriptTool,
+} from "./transcript-blocks";
 import { CALL_KIND } from "./turn-rows";
 
 /**
@@ -303,6 +309,124 @@ test("a call that is not a command keeps its subject on the open row", () => {
   act(() => summary.click());
   assert.equal(summary.getAttribute("aria-expanded"), "true");
   assert.equal(summary.textContent, "Read src/invite.ts");
+});
+
+/** The inks a muted line is drawn in: the utility's token, and the token it names, which a row written in CSS uses. */
+const MUTED_INK = new Set(["var(--color-muted-foreground)", "var(--text-secondary)"]);
+
+/** One turn of an agent's: words, then a call of each shape a row draws, one of them failed, then a subagent and a to-do list. */
+const MIXED_TURN: CodingAgentMessage = {
+  id: "m-mixed",
+  role: "assistant",
+  parts: [
+    { type: "text", text: "Looking at the sources." },
+    agentCall("call-1", COMMAND),
+    {
+      type: "tool-read_file",
+      toolCallId: "call-2",
+      state: "output-available",
+      input: { filePath: "src/invite.ts" },
+      output: { content: "export const seats = 3;" },
+    },
+    {
+      type: "tool-apply_patch",
+      toolCallId: "call-3",
+      state: "output-available",
+      input: { patchText: "*** Update File: src/invite.ts\n-a\n+b" },
+      output: { files: [{ operation: "update", path: "src/invite.ts" }] },
+    },
+    {
+      type: "tool-grep",
+      toolCallId: "call-4",
+      state: "output-error",
+      input: { pattern: "seats" },
+      errorText: "grep exited 2",
+    },
+    {
+      type: "tool-delegate",
+      toolCallId: "call-5",
+      state: "input-available",
+      input: { task: "Read the docs" },
+    },
+    {
+      type: "tool-write_todos",
+      toolCallId: "call-6",
+      state: "output-available",
+      input: { todos: [{ content: "Count pending invites", status: "pending" }] },
+      output: {},
+    },
+  ],
+};
+
+test("every call's line is drawn in the muted ink, its subject included, while the model's words, an opened body, and an error keep their own", async () => {
+  const style = await sheetStyle();
+  const inkOf = (node: Node): string | undefined => {
+    for (let element = node.parentElement; element !== null; element = element.parentElement) {
+      const color = style(element, "color");
+      if (color !== undefined) return color;
+    }
+    return undefined;
+  };
+  const texts = (root: Element): Text[] => {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const found: Text[] = [];
+    for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+      if (node instanceof Text && node.data.trim() !== "") found.push(node);
+    }
+    return found;
+  };
+  const container = mounted(
+    createElement("div", null, [
+      createElement(AgentTranscriptView, {
+        key: "agent",
+        messages: [MIXED_TURN],
+        reading: false,
+        failed: false,
+        working: true,
+        onRetry: () => undefined,
+        openGitHub: () => undefined,
+      }),
+      createElement(TranscriptOpeningCall, {
+        key: "opening",
+        callId: "call-7",
+        kind: CALL_KIND.START_AGENT,
+        subject: "Invite flow",
+        state: TOOL_STATE.OUTPUT_AVAILABLE,
+        onOpen: () => undefined,
+      }),
+    ]),
+  );
+  for (
+    let fold = container.querySelector("[data-turn-fold]:not([open]) > summary");
+    fold instanceof HTMLElement;
+    fold = container.querySelector("[data-turn-fold]:not([open]) > summary")
+  ) {
+    act(() => fold.click());
+  }
+  const lines = [
+    ...container.querySelectorAll(
+      "details[data-call-id] > summary, [data-subagent-row], button[data-call-id]",
+    ),
+  ];
+  assert.equal(lines.length, 7, "a line for every call");
+  for (const line of lines) {
+    for (const text of texts(line)) {
+      assert.ok(MUTED_INK.has(inkOf(text) ?? ""), `"${text.data}" is drawn in ${inkOf(text)}`);
+    }
+  }
+
+  const words = texts(container).find((text) => text.data.includes("Looking at the sources."));
+  assert.ok(words);
+  assert.equal(MUTED_INK.has(inkOf(words) ?? ""), false, "the model's words are in full ink");
+  for (const id of ["call-2", "call-4"]) {
+    act(() => container.querySelector<HTMLElement>(`[data-call-id="${id}"] > summary`)?.click());
+  }
+  const answer = container.querySelector('[data-call-id="call-2"] [data-tool-output]');
+  const error = container.querySelector('[data-call-id="call-4"] [role="alert"]');
+  assert.ok(answer && error);
+  for (const text of [...texts(answer), ...texts(error)]) {
+    assert.equal(MUTED_INK.has(inkOf(text) ?? ""), false, `"${text.data}" keeps its own ink`);
+  }
 });
 
 const GPT: CatalogModel = {

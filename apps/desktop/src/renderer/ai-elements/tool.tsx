@@ -161,9 +161,14 @@ export type ToolHeaderProps = Omit<FoldSummaryProps, "children"> & {
   subjectInBody?: boolean;
 };
 
-/** How a call's line is set, whether it folds its body open or opens somewhere else. */
+/**
+ * How a call's line is set, whether it folds its body open or opens
+ * somewhere else: in the muted ink, subject and all, since a turn runs
+ * many calls and the model's own words should be the one thing in full
+ * ink; the body under it keeps its own.
+ */
 export const TOOL_LINE_CLASS =
-  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 transition-colors hover:bg-secondary";
+  "flex h-7 cursor-pointer items-center gap-2 rounded-md px-1 text-muted-foreground transition-colors hover:bg-secondary";
 
 /** What a call's line says: its icon, what it did, and where it stands. */
 export function ToolLine({

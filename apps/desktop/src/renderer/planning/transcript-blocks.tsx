@@ -201,12 +201,10 @@ export type TranscriptToolProps = Omit<ComponentProps<typeof Tool>, "children"> 
 
 /**
  * One tool call: its row saying what it did, closed until clicked, and its
- * input and answer under it once opened. A command's row is drawn in the
- * muted ink a thought's line is, its command brightening under the pointer,
- * since a turn runs many and the model's words should read first; an
- * undescribed command is the closed row's preview, dropped once the body
- * under it shows the command whole behind its prompt, while a description
- * stays, since the body does not say it.
+ * input and answer under it once opened. An undescribed command is the
+ * closed row's preview, dropped once the body under it shows the command
+ * whole behind its prompt; a description stays, since the body does not say
+ * it.
  */
 export function TranscriptTool({
   state,
@@ -224,7 +222,6 @@ export function TranscriptTool({
   return (
     <Tool {...props}>
       <ToolHeader
-        className={command ? "text-muted-foreground hover:text-foreground" : undefined}
         state={state}
         icon={<Icon aria-hidden="true" />}
         label={line.verb}
@@ -440,10 +437,10 @@ function SubagentGlyph({ pair }: { pair: SubagentPair | undefined }): ReactNode 
 
 /**
  * A subagent's row, on the Work tab and a coding agent's tab alike, running
- * or finished: one line drawn as a call's row is, wearing the mark of the
- * harness its model runs in (the worker's robot where the model is
- * unknown), the job, fading where the line cuts it, the model and effort it
- * runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
+ * or finished: one line drawn as a call's row is, in its muted ink, wearing
+ * the mark of the harness its model runs in (the worker's robot where the
+ * model is unknown), the job, fading where the line cuts it, the model and
+ * effort it runs on as every pair is drawn (`model-label.tsx`), and the mark a call's
  * row wears for where it stands, with how long it has worked beside the
  * working mark while it runs (`working-time.tsx`). The whole line is
  * the one button that opens the subagent's tab, which is where its steps
@@ -469,7 +466,7 @@ export function TranscriptSubagent({
         {job}
       </span>
       {pair === undefined ? null : (
-        <span className="shrink-0 text-foreground" data-subagent-pair="">
+        <span className="shrink-0" data-subagent-pair="">
           <ModelLabel choice={pair.choice} models={pair.models} />
         </span>
       )}
