@@ -19,7 +19,7 @@ import { afterEach, test } from "vitest";
 import { ACT_KIND, type ActKind, type ActPayload, type ActResultFor } from "#shared/messages/acts";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { ToastHost } from "../toast";
-import { MODEL_CHANGE_FAILED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
+import { MODEL_CHANGE_FAILED, START_ARCHIVED, START_NEEDS_REPOSITORY } from "./coding-agent-model";
 import { type CodingAgentsControl, useCodingAgents } from "./use-coding-agents";
 
 const PLAN = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
@@ -39,6 +39,7 @@ const STARTED: CodingAgentSummary = {
 interface Standing {
   planId: string | undefined;
   repository: string | null;
+  archived?: boolean;
 }
 
 /** One act as the hook asked it. */
@@ -68,6 +69,7 @@ async function settle(): Promise<void> {
 function mount(initial: Standing, registry?: AtomRegistry) {
   const asked: Asked[] = [];
   const started: string[] = [];
+  let unarchives = 0;
   const answers = new Map<ActKind, unknown[]>();
   let keys = 0;
   let control: CodingAgentsControl | undefined;
@@ -91,6 +93,10 @@ function mount(initial: Standing, registry?: AtomRegistry) {
       },
       planId: held.planId,
       repository: held.repository,
+      archived: held.archived === true,
+      onUnarchive: () => {
+        unarchives += 1;
+      },
       onStarted: (agentId) => started.push(agentId),
       mintKey: () => {
         keys += 1;
@@ -106,6 +112,8 @@ function mount(initial: Standing, registry?: AtomRegistry) {
   return {
     asked,
     started,
+    /** How many times the control's Unarchive was pressed. */
+    unarchives: () => unarchives,
     /** Queues the answers one kind gives, in order. */
     answer: (kind: ActKind, ...queued: unknown[]) => {
       answers.set(kind, [...(answers.get(kind) ?? []), ...queued]);
@@ -151,6 +159,36 @@ test("the agents are read when a plan opens, and a plan without a repository has
   act(() => tab.control().start.onPress());
   await settle();
   assert.deepEqual(startPayloads(tab.asked), []);
+});
+
+test("an archived plan starts no agent, by Start or by a draft, and offers Unarchive until it is brought back", async () => {
+  const tab = mount({ planId: PLAN, repository: "acme/relay", archived: true });
+  tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
+  await tab.mount();
+
+  assert.equal(tab.control().start.available, false);
+  assert.equal(tab.control().start.reason, START_ARCHIVED);
+  act(() => tab.control().start.onPress());
+  let draft = "";
+  act(() => {
+    draft = tab.control().onNewDraft();
+  });
+  let failed: string | undefined;
+  await act(async () => {
+    failed = await tab.control().startTask(draft, "Rename the subject.", undefined);
+  });
+  assert.equal(failed, START_ARCHIVED);
+  assert.deepEqual(startPayloads(tab.asked), []);
+  // The agents already started are still read.
+  assert.deepEqual(tab.control().agentIds, [AGENT]);
+
+  act(() => tab.control().onUnarchive?.());
+  assert.equal(tab.unarchives(), 1);
+
+  await tab.stand({ archived: false });
+  assert.equal(tab.control().onUnarchive, undefined);
+  assert.equal(tab.control().start.available, true);
+  assert.equal(tab.control().start.reason, undefined);
 });
 
 test("a press mints one key, a press asked again after no answer carries the same key, and a press of another choice mints its own", async () => {
@@ -387,7 +425,7 @@ it.effect(
       const tab = mount({ planId: PLAN, repository: "acme/relay" }, yield* registryOnTestClock);
       const toast = () => document.querySelector(".toast")?.textContent ?? undefined;
       const refused = { failure: CODING_AGENT_CALL_FAILURE.NOT_FOUND };
-      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] }, { agents: [STARTED] });
+      tab.answer(ACT_KIND.CODING_AGENTS_LIST, { agents: [STARTED] });
       yield* Effect.promise(tab.mount);
 
       tab.answer(ACT_KIND.CODING_AGENTS_STOP, refused);

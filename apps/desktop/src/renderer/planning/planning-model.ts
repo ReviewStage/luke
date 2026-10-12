@@ -539,6 +539,9 @@ export interface MicrophoneButton {
   readonly muted: boolean;
 }
 
+/** What the microphone button says on an archived plan, which no call is about. */
+export const ARCHIVED_CALL_LABEL = "Unarchive the plan to talk about it";
+
 /** The statuses of a call that has a session, the ones whose microphone is either heard or muted. */
 const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
   LIVE_STATUS.MUTED,
@@ -555,12 +558,17 @@ const CALL_STANDING: ReadonlySet<LiveStatus> = new Set([
  * call or hears it again, hanging up another plan's first,
  * which is also how a call that failed or was lost is tried again. Muted is
  * this plan's own call standing with the developer not heard, so the button
- * says so rather than reading as a call not yet begun.
+ * says so rather than reading as a call not yet begun. An archived plan
+ * opens no call, so its press is none until it is brought back; a call of
+ * its own still standing, which only a race leaves, is still muted and
+ * heard again.
  */
 export function microphoneButton(input: {
   voiceAvailable: boolean;
   microphoneStatus: MicrophoneStatus;
   activePlanId: string | undefined;
+  /** Whether the open plan is archived. */
+  archived: boolean;
   listening: boolean;
   /** The plan the standing call is about, as the voice window reports it. */
   callPlanId: string | undefined;
@@ -592,6 +600,9 @@ export function microphoneButton(input: {
   }
   if (ownCall && CALL_STANDING.has(input.voiceStatus)) {
     return { press: MICROPHONE_PRESS.TALK, label: "Unmute the microphone", muted: true };
+  }
+  if (input.archived) {
+    return { press: MICROPHONE_PRESS.NONE, label: ARCHIVED_CALL_LABEL, muted: false };
   }
   return { press: MICROPHONE_PRESS.TALK, label: "Talk about this plan", muted: false };
 }

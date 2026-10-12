@@ -137,7 +137,10 @@ function SidebarPlanMarks({
  * apply to it now. Copy formats the document drawn, so only the open plan
  * offers it, ahead of Rename and Version history; Pin and Archive follow; the repository is
  * changed from any plan and opened on GitHub where there is one; Permanently
- * delete is last and alone.
+ * delete is last and alone. An archived plan takes nothing until it is
+ * brought back, so it offers neither Rename nor Change repository…, only
+ * what reads it, its version history (which restores nothing), Unarchive,
+ * and Permanently delete.
  */
 function planActionGroups(
   plans: PlansControl,
@@ -147,6 +150,8 @@ function planActionGroups(
   const { region } = plans;
   const drawn = region.kind === DOCUMENT_REGION.READY && region.plan.id === planId;
   const plan = planOf(plans, planId);
+  const archived = plan?.archivedAt !== undefined;
+  const copy: MenuAction = { label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress };
   const rename: MenuAction = { label: "Rename", icon: <PencilIcon />, onSelect: doors.rename };
   const versions: MenuAction = {
     label: "Version history",
@@ -158,21 +163,15 @@ function planActionGroups(
     icon: <GitHubMark />,
     onSelect: () => plans.onChangeRepository(planId),
   };
+  const open: MenuAction = {
+    label: "Open on GitHub",
+    icon: <ExternalIcon />,
+    onSelect: () => plans.onOpenOnGitHub(planId),
+  };
   const groups: MenuAction[][] = [
-    drawn
-      ? [{ label: "Copy plan", icon: <CopyIcon />, onSelect: plans.copy.onPress }, rename, versions]
-      : [rename, versions],
+    [...(drawn ? [copy] : []), ...(archived ? [] : [rename]), versions],
     placeActions(plans, plan),
-    (plan?.repository ?? null) === null
-      ? [change]
-      : [
-          change,
-          {
-            label: "Open on GitHub",
-            icon: <ExternalIcon />,
-            onSelect: () => plans.onOpenOnGitHub(planId),
-          },
-        ],
+    [...(archived ? [] : [change]), ...((plan?.repository ?? null) === null ? [] : [open])],
     [
       {
         label: "Permanently delete",

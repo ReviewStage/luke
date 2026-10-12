@@ -3,6 +3,7 @@ import { DocumentIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
+import { ArchivedBanner } from "../planning/archived-plan";
 import { NewPlanForm } from "../planning/new-plan-form";
 import { PlanBody } from "../planning/plan-body";
 import { DOCUMENT_REGION, PLAN_MARK, PLANS_PAGE } from "../planning/planning-model";
@@ -29,6 +30,12 @@ import { Tab, TabStrip } from "./tab-strip";
  * height exactly; the plan's repository is the sidebar's row's to name, so
  * the toolbar draws the repository chip only while the plan has none, and
  * otherwise only the chip's menu, which Change repository… opens.
+ *
+ * An archived plan reads and takes nothing until it is brought back: its
+ * banner under the toolbar says so with Unarchive as its primary button,
+ * and in the meantime the document is not edited, the tab does not rename,
+ * no repository is chosen, Start and the call's start are not drawn, and
+ * a version viewed is not restored (`../planning/archived-plan.tsx`).
  */
 
 /**
@@ -75,6 +82,9 @@ function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
   );
 }
 
+/** What a press on an archived plan's tab does: nothing, since it renames nothing. */
+const NO_RENAME = () => undefined;
+
 /**
  * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
  * opens as its field, and its repository in the hint the pointer resting on
@@ -85,25 +95,28 @@ function PlanTab({
   rename,
 }: {
   plan: PlanSummary;
-  rename: ReturnType<typeof usePlanRename>;
+  /** The rename the tab's press opens; none while the plan is archived, which renames nothing. */
+  rename: ReturnType<typeof usePlanRename> | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
   const refocus = useRef(false);
+  const editing = rename?.editing === true;
   useEffect(() => {
-    if (rename.editing || !refocus.current) return;
+    if (editing || !refocus.current) return;
     refocus.current = false;
     tab.current?.focus();
-  }, [rename.editing]);
-  const editor = rename.editing ? (
-    <PlanNameField
-      name={plan.name}
-      className="tab-field"
-      onEnd={(edit) => {
-        refocus.current = edit.byKey;
-        rename.end(edit);
-      }}
-    />
-  ) : undefined;
+  }, [editing]);
+  const editor =
+    rename?.editing === true ? (
+      <PlanNameField
+        name={plan.name}
+        className="tab-field"
+        onEnd={(edit) => {
+          refocus.current = edit.byKey;
+          rename.end(edit);
+        }}
+      />
+    ) : undefined;
   return (
     <PlanTabStrip
       tab={
@@ -115,37 +128,10 @@ function PlanTab({
           tooltip={plan.repository ?? undefined}
           editor={editor}
           tabRef={tab}
-          onSelect={rename.begin}
+          onSelect={rename?.begin ?? NO_RENAME}
         />
       }
     />
-  );
-}
-
-/**
- * The quiet line over an archived plan's document, saying it is archived
- * with the press that brings it back, the way Codex marks an archived task:
- * the plan reads and works as any other, and only the sidebar keeps it away.
- */
-function ArchivedBanner({
-  plans,
-  plan,
-}: {
-  plans: PlansControl;
-  plan: PlanSummary;
-}): React.JSX.Element | null {
-  if (plan.archivedAt === undefined) return null;
-  return (
-    <div className="desktop-archived-banner" role="status">
-      <span>This plan is archived</span>
-      <button
-        type="button"
-        className="link-button"
-        onClick={() => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE)}
-      >
-        Unarchive
-      </button>
-    </div>
   );
 }
 
@@ -219,6 +205,8 @@ function PlanDocument({
   }
   const { plan } = region;
   const { sidePanel } = plans;
+  const archived = plan.archivedAt !== undefined;
+  const unarchive = () => plans.onMarkPlan(plan.id, PLAN_MARK.UNARCHIVE);
   const repositoryNote = refusal?.planId === plan.id ? refusal.note : undefined;
   const chooseRepository = (repository: string) => {
     const { id: planId } = plan;
@@ -238,7 +226,7 @@ function PlanDocument({
           panel fills the window, and keeps its layout beneath the panel, so
           leaving full screen uncovers it as it was. */}
       <div className="desktop-plan-main" hidden={sidePanel.fullScreen}>
-        <Toolbar heading={<PlanTab plan={plan} rename={rename} />}>
+        <Toolbar heading={<PlanTab plan={plan} rename={archived ? undefined : rename} />}>
           {rename.note !== undefined ? (
             <p className="desktop-toolbar-note" role="alert">
               {rename.note}
@@ -253,36 +241,47 @@ function PlanDocument({
           {/* Keyed once for the chip and the menu alike, so another plan
               starts both afresh and the same plan keeps them. */}
           <Fragment key={plan.id}>
-            <RepositoryChip
-              place={CHIP_PLACE.TOOLBAR}
-              value={plan.repository}
-              chooser={plans.repositories}
-              onChoose={chooseRepository}
-              openRequest={menuRequest}
-            />
-            <StartAgentButton control={plans.agents} />
+            {archived ? null : (
+              <>
+                <RepositoryChip
+                  place={CHIP_PLACE.TOOLBAR}
+                  value={plan.repository}
+                  chooser={plans.repositories}
+                  onChoose={chooseRepository}
+                  openRequest={menuRequest}
+                />
+                <StartAgentButton control={plans.agents} />
+              </>
+            )}
             <PlanActionsButton plans={plans} plan={plan} onRename={rename.begin} />
           </Fragment>
         </Toolbar>
-        <ArchivedBanner plans={plans} plan={plan} />
+        {archived ? <ArchivedBanner onUnarchive={unarchive} /> : null}
         <section className="desktop-document" role="tabpanel" aria-label={plan.name}>
+          {/* Keyed by the archive, so an editor still open when the plan is
+              archived elsewhere is let go rather than left taking words. */}
           <PlanBody
+            key={String(archived)}
             plan={plan}
             live={plans.live}
             onShowHistory={() => plans.history.onOpen(plan.id)}
-            onEdit={(request) => plans.edit(plan.id, request)}
+            {...(archived ? {} : { onEdit: (request) => plans.edit(plan.id, request) })}
             looks={looks}
           />
         </section>
-        <div className="desktop-call-bar">
-          {captions}
-          <CallBar
-            status={plans.status}
-            microphone={plans.microphone}
-            speaker={plans.speaker}
-            stop={plans.stop}
-          />
-        </div>
+        {/* Note that a call of the plan's own still stands, so it can be
+            ended, when only a race left one on a plan just archived. */}
+        {archived && !plans.stop.shown ? null : (
+          <div className="desktop-call-bar">
+            {captions}
+            <CallBar
+              status={plans.status}
+              microphone={plans.microphone}
+              speaker={plans.speaker}
+              stop={plans.stop}
+            />
+          </div>
+        )}
       </div>
       {drawing.panel ? (
         <SidePanel

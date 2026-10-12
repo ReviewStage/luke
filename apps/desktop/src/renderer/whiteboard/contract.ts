@@ -26,6 +26,8 @@ import type { Board } from "@sidecar/hosted/board-wire";
 export interface WhiteboardProps {
   /** The board the canvas opens on. */
   readonly board: Board;
+  /** Whether the canvas only shows the board, as an archived plan's does: nothing on it is drawn, moved, or saved. */
+  readonly viewOnly: boolean;
   /** The scene changed: every element as Excalidraw holds it, and the number of Luke's drawing it holds. */
   readonly onScene: (elements: readonly object[], appliedDrawing: number) => void;
 }

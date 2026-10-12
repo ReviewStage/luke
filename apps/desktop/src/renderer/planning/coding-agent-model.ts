@@ -131,6 +131,9 @@ export function followsAgent(input: { shown: boolean; status: CodingAgentStatus 
 /** What the Start button says while it cannot start: the plan names no repository yet. */
 export const START_NEEDS_REPOSITORY = "Choose a repository first.";
 
+/** Why Start, and a draft's first message, cannot run on an archived plan. */
+export const START_ARCHIVED = "Unarchive the plan to start a coding agent.";
+
 /** What the refusals a Start and a message meet alike say, worded once. */
 const SHARED_FAILURE_NOTE = {
   [CODING_AGENT_CALL_FAILURE.REPOSITORY_NOT_REACHABLE]:

@@ -14,6 +14,7 @@ import {
   type AgentRun,
   MODEL_CHANGE_FAILED,
   RENAME_FAILED,
+  START_ARCHIVED,
   START_FAILED_AWAY,
   START_NEEDS_REPOSITORY,
   STOP_FAILED,
@@ -56,6 +57,11 @@ import type { TranscriptReader } from "./use-agent-transcript";
  * most one draft, held with the words written in it and the choice made on
  * its chip, so a draft keeps them while its tab is away and while the
  * developer visits another plan.
+ *
+ * An archived plan starts no agent and sends none a message: Start is
+ * unavailable and says why, and `onUnarchive` stands, which every place
+ * that would have taken words offers instead. An agent already running
+ * finishes the turn it is on, so its Stop stays.
  */
 
 /** Everything the Start button, the tabs, and the agent tab draw and press. */
@@ -95,8 +101,10 @@ export interface CodingAgentsControl {
     task: string,
     choice: ModelChoice | undefined,
   ) => Promise<string | undefined>;
+  /** Brings the open plan back from the archive; present exactly while it is archived, when nothing is started or sent on it. */
+  onUnarchive: (() => void) | undefined;
   start: {
-    /** Whether a Start could run now: the plan names a repository. */
+    /** Whether a Start could run now: the plan names a repository and is not archived. */
     available: boolean;
     /** Why it cannot, said on the button, while it cannot. */
     reason: string | undefined;
@@ -139,6 +147,17 @@ interface PendingStart {
   choice: ModelChoice | undefined;
 }
 
+/** Why a Start cannot run on the open plan, while it cannot: an archive first, since unarchiving is what would be asked before any repository. */
+function startReason(
+  planId: string | undefined,
+  repository: string | null,
+  archived: boolean,
+): string | undefined {
+  if (planId === undefined) return undefined;
+  if (archived) return START_ARCHIVED;
+  return repository === null ? START_NEEDS_REPOSITORY : undefined;
+}
+
 function sameChoice(a: ModelChoice | undefined, b: ModelChoice | undefined): boolean {
   return a?.model === b?.model && a?.effort === b?.effort;
 }
@@ -149,12 +168,16 @@ export function useCodingAgents(input: {
   planId: string | undefined;
   /** The open plan's repository, or null while it names none. */
   repository: string | null;
+  /** Whether the open plan is archived, which starts nothing on it. */
+  archived: boolean;
+  /** Brings the open plan back from the archive. */
+  onUnarchive: () => void;
   /** Called with the agent a Start made, so its tab opens. */
   onStarted: (agentId: string) => void;
   /** Mints one press's key. */
   mintKey?: () => string;
 }): CodingAgentsControl {
-  const { planId, repository } = input;
+  const { planId, repository, archived } = input;
   const { act } = input.acts;
   const mintKey = input.mintKey ?? (() => crypto.randomUUID());
   const [list, setList] = useState<{
@@ -275,7 +298,7 @@ export function useCodingAgents(input: {
   };
 
   const pressStart = (choice?: ModelChoice) => {
-    if (planId === undefined || repository === null || starting) return;
+    if (planId === undefined || repository === null || archived || starting) return;
     // The key is the press's own, and a press asked again after the service
     // did not answer carries the one it minted, so the service answers the
     // agent it may already have started rather than a second one.
@@ -337,6 +360,7 @@ export function useCodingAgents(input: {
     choice: ModelChoice | undefined,
   ): Promise<string | undefined> => {
     if (planId === undefined || repository === null) return START_NEEDS_REPOSITORY;
+    if (archived) return START_ARCHIVED;
     const answer = await askStart(planId, {
       idempotencyKey: draftId,
       task,
@@ -474,9 +498,10 @@ export function useCodingAgents(input: {
     readModels,
     readDefault,
     writeDefault,
+    onUnarchive: planId !== undefined && archived ? input.onUnarchive : undefined,
     start: {
-      available: planId !== undefined && repository !== null,
-      reason: planId !== undefined && repository === null ? START_NEEDS_REPOSITORY : undefined,
+      available: planId !== undefined && repository !== null && !archived,
+      reason: startReason(planId, repository, archived),
       busy: starting,
       note: note !== undefined && note.planId === planId ? note.note : undefined,
       onPress: pressStart,

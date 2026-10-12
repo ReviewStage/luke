@@ -129,8 +129,11 @@ afterEach(() => {
   delete document.documentElement.dataset.keyboard;
 });
 
-/** The plan as the window draws it, its document as the service holds it now. */
-function planOf(document: PlanDocument): Plan {
+/** Archives the plan the mounted window draws, as another window or Mac would. */
+let archive: (() => void) | undefined;
+
+/** The plan as the window draws it, its document as the service holds it now, archived where asked. */
+function planOf(document: PlanDocument, archived: boolean): Plan {
   return {
     id: PLAN_ID,
     name: "Teammate invitations",
@@ -138,6 +141,7 @@ function planOf(document: PlanDocument): Plan {
     updatedAt: 0,
     repository: null,
     document,
+    ...(archived ? { archivedAt: 0 } : undefined),
   };
 }
 
@@ -146,10 +150,12 @@ function planOf(document: PlanDocument): Plan {
  * service given, its minute on the test's clock; leaving it draws the plan in
  * its place.
  */
-function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry) {
+function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry, archived = false) {
   function Window() {
     const sidebar = useSidebarCollapse(false);
     const [open, setOpen] = useState(true);
+    const [archivedNow, setArchivedNow] = useState(archived);
+    archive = () => setArchivedNow(true);
     const history = usePlanHistory({
       source: service.source,
       planId: PLAN_ID,
@@ -164,7 +170,7 @@ function mount(service: ReturnType<typeof fakeService>, registry: AtomRegistry) 
     const plans = plansControl({
       page: PLANS_PAGE.DOCUMENT,
       activePlanId: PLAN_ID,
-      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current) },
+      region: { kind: DOCUMENT_REGION.READY, plan: planOf(service.current, archivedNow) },
       history: { ...history, open, onOpen: () => setOpen(true), onClose: () => setOpen(false) },
     });
     return createElement(DesktopVersionHistory, {
@@ -441,6 +447,34 @@ it.effect(
       assert.equal(document.querySelector('[role="alertdialog"]'), null);
       assert.equal(service.current, FIRST);
       assert.ok(page.querySelector(".plan-as-it-stands"), "back to the plan");
+    }),
+);
+
+it.effect("an archived plan's versions are read, and none of them offers a restore", () =>
+  Effect.gen(function* () {
+    const page = yield* mount(fakeService(), yield* registryOnTestClock, true);
+
+    yield* press(page, "Luke1d4 changes");
+
+    assert.equal(chosen(page), "Luke");
+    assert.equal(restoreButton(page), undefined);
+  }),
+);
+
+it.effect(
+  "a restore's question still standing when the plan is archived elsewhere is taken down",
+  () =>
+    Effect.gen(function* () {
+      const service = fakeService();
+      const page = yield* mount(service, yield* registryOnTestClock);
+      yield* press(page, "Luke1d4 changes");
+      yield* press(page, "Restore this version");
+      assert.ok(document.querySelector('[role="alertdialog"]'), "the question stands");
+
+      yield* Effect.promise(() => act(async () => archive?.()));
+
+      assert.equal(document.querySelector('[role="alertdialog"]'), null);
+      assert.equal(service.current, LATEST);
     }),
 );
 
