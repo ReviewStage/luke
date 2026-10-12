@@ -125,6 +125,8 @@ function registerQuit(): void {
   app.on("before-quit", (event) => {
     if (quit.stage() === QUIT_STAGE.TORN_DOWN) return;
     event.preventDefault();
+    // A quit a hold asks about first is asked for again once it is agreed to.
+    if (quit.held()) return;
     void quit.teardown().finally(() => app.quit());
   });
   app.on("window-all-closed", () => app.quit());

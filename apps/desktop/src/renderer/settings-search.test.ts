@@ -3,6 +3,7 @@ import { APP_SETTING_SCHEMA, describedSettings, settingFieldForId } from "@sidec
 import { settingsView } from "@sidecar/settings/testing";
 import type { AppSettingsView } from "@sidecar/settings/wire";
 import { test } from "vitest";
+import { APP_COMMAND } from "#shared/shortcuts";
 import {
   type SettingsSearchEntry,
   type SettingsSearchInput,
@@ -156,9 +157,12 @@ test("the rows that are not settings are found by what they are", () => {
   assert.equal(signOut.find((entry) => entry.label === "Sign out")?.page, SETTINGS_VIEW.ROOT);
 });
 
-test("no row offers to quit, which the app menu's Quit already does", () => {
+test("no row offers to quit, which the app menu's Quit already does: the Keyboard shortcuts page only names its chord", () => {
   const entries = settingsSearchEntries(everythingDrawn());
-  assert.equal(searchSettings(entries, "quit")?.matched, 0);
+  assert.deepEqual(
+    found(searchSettings(entries, "quit")).map((entry) => [entry.id, entry.page]),
+    [[APP_COMMAND.QUIT, SETTINGS_VIEW.SHORTCUTS]],
+  );
 });
 
 test("a page's own name finds everything the page holds", () => {

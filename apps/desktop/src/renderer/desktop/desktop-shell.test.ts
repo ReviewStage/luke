@@ -556,14 +556,24 @@ test("Command-comma opens Settings and Command-slash its Keyboard shortcuts page
 
   assert.equal(command("/"), true);
   assert.equal(settingsPage(), "Keyboard shortcuts");
-  // The page lists the window's own chords beside the two keys.
+  // The page lists the window's own chords beside the two keys, and the
+  // system's own the menu bar answers.
   const rows = [...document.body.querySelectorAll(".settings-row .shortcut-name")].map(
     (row) => row.textContent,
   );
   assert.ok(rows.includes("New plan"));
   assert.ok(rows.includes("Toggle panel"));
   assert.ok(rows.includes("New tab"));
-  assert.ok(rows.includes("Exit full screen"));
+  assert.ok(rows.includes("Exit panel full screen"));
+  for (const system of [
+    "Hide Luke",
+    "Hide others",
+    "Quit Luke",
+    "Minimize",
+    "Toggle full screen",
+  ]) {
+    assert.ok(rows.includes(system), `the page lists ${system}`);
+  }
 });
 
 test("Command-N leaves Settings for a new plan", () => {
@@ -574,6 +584,16 @@ test("Command-N leaves Settings for a new plan", () => {
   assert.equal(command("n"), true);
   assert.equal(settingsPage(), undefined);
   assert.equal(newPlans, 1);
+});
+
+test("a held chord's repeats stay the window's once its offer is gone, so a held ⌘W never falls through to close the window", () => {
+  stubBridge();
+  route(PANEL_TAB.SETTINGS);
+
+  // Settings has no tab to close, so the press is the menu bar's, which
+  // closes the window; its repeats are not.
+  assert.equal(command("w"), false);
+  assert.equal(command("w", { repeat: true }), true);
 });
 
 test("a command chosen from the menu bar runs as its chord does, and only where it can", () => {

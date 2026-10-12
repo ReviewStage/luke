@@ -477,7 +477,7 @@ function PanelTabs({
   const kinds = stripTabs({ panel, unread, agents, subagents, files, held, copied });
   const strip = inPlanOrder(kinds, panel.order, (entry) => entry.tab);
   // ⌘W closes the tab chosen, as its menu's Close does; with none, the key
-  // is left to fall through to nothing rather than to the window.
+  // falls through to the menu bar, which closes the window (`app-menu.ts`).
   const chosen = strip.find((entry) => entry.look.selected);
   useAppCommand(APP_COMMAND.CLOSE_TAB, keys ? chosen?.close : undefined);
   const pinOf = ({ tab, look }: DrawnTab): TabPin | undefined => {
