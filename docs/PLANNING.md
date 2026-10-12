@@ -819,6 +819,23 @@ holds both prompts to those words.
   does not apply, is Luke's work, and every proposal Luke takes without the
   developer's view is recorded as an assumption. A filled-in template is not
   evidence that the developer agreed.
+- **The rollout stands beside the text.** A plan's rollout is the pull
+  requests its work lands as, in order, each `{ title, scope, base,
+  acceptance }`: `base` is `"main"` or the position, counted from one, of an
+  earlier pull request it cannot build without, which the schema holds so
+  the rollout has no cycle, and `acceptance` is null while unsaid; at most
+  twenty (`ROLLOUT_BOUNDS`). It is no section of the text: the service keeps
+  it in `plan.rollout`, answers it as the plan's top-level `rollout`, and
+  keeps it on every revision (`plan_revision.rollout`), so the History tab
+  marks what a version changed in it and a restore puts it back with the
+  text. It is drawn after the text and never stored in it (`rolloutSection`
+  in `plan-template.ts`): a `## Rollout` numbered list, `**Title** · base:
+  main` or `· base: #2` with the scope under it and `Done when: …` where set,
+  or "No rollout yet" while empty, read-only in the window, last in Copy and
+  in what a coding agent is handed, and handed to the planning model beside
+  the text once it holds one. Nothing writes it yet; the notetaker's rollout
+  notes come next. Migration 0096 added both columns, every existing plan and
+  revision with an empty rollout.
 
 The template replaced one built for the coding agent alone (requirements as
 rules with Given/When/Then examples, a change map, contracts, a decision log,
@@ -1122,7 +1139,8 @@ The developer chooses `Copy plan` from the ⋯ menu, or presses ⇧⌘C, and the
 toolbar reads `Copied`. The
 clipboard holds the current document as readable Markdown: the body as saved,
 every section of the template in order, then the assumption list, which
-reads `_None recorded_` while the list is empty:
+reads `_None recorded_` while the list is empty, then the rollout, which
+reads `_No rollout yet_` until one is cut:
 
 ```markdown
 <body exactly as saved>
@@ -1133,6 +1151,10 @@ reads `_None recorded_` while the list is empty:
 - Members and admins can both invite.
 - A withdrawn invite shows a generic invalid-invite page.
 - An invite expires after 7 days.
+
+## Rollout
+
+_No rollout yet_
 ```
 
 This is direct formatting of the saved document, not a second model step. It
@@ -1179,7 +1201,7 @@ the exact shape.
 | Plan list and new-plan page | `@sidecar/panel` controls and the existing button, field, and row styles | The list and the form (LUKE-337). |
 | Document body | `MarkdownMessage` (`apps/desktop/src/renderer/markdown-message.tsx`): `react-markdown` with `remark-gfm`, raw HTML not rendered, only `http`/`https` links kept; `styles/markdown.css` | A document-scale style for it. |
 | Assumption list | None; it is drawn from `assumptions`, not from Markdown | A bulleted row with the text. |
-| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352). |
+| Copy | `ACT_KIND.WINDOW_COPY_TEXT` and the clipboard row in `register-desktop-ipc.ts` | The document formatter: body, then `## Assumptions` as `- ` bullets, or "None recorded" (LUKE-352), then `## Rollout`. |
 | Voice state | `VoiceView` and `VOICE_COMMAND` (`apps/desktop/src/shared/messages/voice-view.ts`), which main already forwards unchanged to every panel; `useVoiceView` (`use-voice-view.ts`); `LIVE_STATUS` (`@sidecar/live`) | The status word beside the microphone, for the open plan's call alone. |
 | Captions, levels, errors | The caption strip (`useCaptionPresentation`, `caption-strip.tsx`) and the sidebar's waveform (`desktop/luke-identity.tsx`) | The strip stands above the call bar and yields spoken words to an on-screen Transcript. |
 | Microphone and notices | `microphoneAccessRow`, `voiceAttentionNote`, `MICROPHONE_UNGRANTED_NOTE`, `hostedVoiceUnavailableNote` (`microphone-access.ts`) | None. |

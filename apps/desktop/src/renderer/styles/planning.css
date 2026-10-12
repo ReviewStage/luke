@@ -347,6 +347,10 @@ button.plan-unit-byline:focus-visible {
   color: var(--text-secondary);
 }
 
+.plan-rollout {
+  margin-top: 16px;
+}
+
 /* The Code tab: every code Luke showed on the plan, one card each under the
    call it was shown on, in a log that fills the tab (code-pane.tsx). */
 .code-pane {

@@ -33,6 +33,7 @@ import {
 import { createPlan, deletePlan, readPlan, savePlanText } from "../server/hosted/plan-store";
 import { added } from "./support/plan-contents";
 import { INVITATIONS_TEXT } from "./support/plan-documents";
+import { cutRollout, INVITATIONS_ROLLOUT } from "./support/plan-rollouts";
 import { testSqlClient } from "./support/sql-client";
 
 /**
@@ -504,6 +505,52 @@ it.layer(testSqlClient)("a plan's history", (it) => {
           { seq: 4, actor: PLAN_ACTOR.DEVELOPER, changes: 2 },
         );
         assert.equal(newest?.restoredFrom?.seq, 1);
+      }),
+  );
+
+  const rolloutOf = (userId: string, planId: string) =>
+    Effect.map(readPlan(userId, planId), (stored) => Option.getOrThrow(stored).plan.rollout);
+
+  it.effect("a plan answers its rollout beside its text, and never in it", () =>
+    Effect.gen(function* () {
+      const { userId, planId } = yield* openPlan;
+      const untouched = yield* rolloutOf(userId, planId);
+
+      yield* cutRollout(planId, INVITATIONS_ROLLOUT);
+      const { plan, text } = Option.getOrThrow(yield* readPlan(userId, planId));
+
+      assert.deepEqual(untouched, []);
+      assert.deepEqual(plan.rollout, INVITATIONS_ROLLOUT);
+      assert.ok(!text.includes("Invite route"));
+      assert.ok(!plan.document.body.includes("Invite route"));
+    }),
+  );
+
+  it.effect(
+    "a revision keeps the rollout the plan held, and restoring it brings the rollout back beside the content",
+    () =>
+      Effect.gen(function* () {
+        const { userId, planId } = yield* openPlan;
+        yield* apart(userId, planId, [[PLAN_HEADING.CONTEXT, "Only admins can invite."]]);
+        yield* cutRollout(planId, INVITATIONS_ROLLOUT);
+        yield* apart(userId, planId, [[PLAN_HEADING.GOAL, "Members invite by email."]]);
+
+        const second = Option.getOrThrow(yield* readRevision(userId, planId, 2));
+        const restored = yield* restoreRevision({ userId, planId }, 1);
+
+        assert.deepEqual(second.rollout, INVITATIONS_ROLLOUT);
+        assert.deepEqual(second.previousRollout, []);
+        assert.equal(restored.status, PLAN_SAVE_STATUS.SAVED);
+        assert.deepEqual(yield* rolloutOf(userId, planId), []);
+        const [newest] = yield* revisionsOf(userId, planId);
+        assert.deepEqual(
+          { seq: newest?.seq, changes: newest?.changes },
+          { seq: 3, changes: 2 },
+          "the goal and the rollout",
+        );
+        assert.deepEqual(Option.getOrThrow(yield* readRevision(userId, planId, 3)).rollout, []);
+        yield* restoreRevision({ userId, planId }, 2);
+        assert.deepEqual(yield* rolloutOf(userId, planId), INVITATIONS_ROLLOUT);
       }),
   );
 

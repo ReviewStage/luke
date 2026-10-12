@@ -29,4 +29,5 @@ export const DOCUMENT_PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: `${DOCUMENT_TEXT}\n`, assumptions: [] },
+  rollout: [],
 };

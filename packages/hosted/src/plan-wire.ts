@@ -55,6 +55,59 @@ export const planAssumptionSchema = EffectSchema.Struct({
   text: trimmedText(PLAN_BOUNDS.MAX_ASSUMPTION_CHARS),
 });
 
+/** Bounds on a plan's rollout: the pull requests its work lands as. */
+export const ROLLOUT_BOUNDS = {
+  /** The most pull requests one rollout may name. */
+  MAX_PULL_REQUESTS: 20,
+  /** The most characters a pull request's title may spell. */
+  MAX_TITLE_CHARS: 200,
+  /** The most characters of what one pull request changes, or of what it is done when. */
+  MAX_TEXT_CHARS: 4_000,
+} as const;
+
+/** The branch a pull request bases on where it needs no earlier one of the rollout. */
+export const ROLLOUT_BASE = {
+  MAIN: "main",
+} as const;
+
+/** An earlier pull request of the rollout, by its position counted from one. */
+const ROLLOUT_POSITION = EffectSchema.Int.check(
+  EffectSchema.isGreaterThanOrEqualTo(1),
+  EffectSchema.isLessThanOrEqualTo(ROLLOUT_BOUNDS.MAX_PULL_REQUESTS),
+);
+
+/**
+ * One pull request of the rollout: its title, what it changes, the lowest
+ * pull request it cannot build without (main, or an earlier position), and
+ * what is true once it lands, null while unsaid.
+ */
+export const rolloutItemSchema = EffectSchema.Struct({
+  title: trimmedText(ROLLOUT_BOUNDS.MAX_TITLE_CHARS),
+  scope: trimmedText(ROLLOUT_BOUNDS.MAX_TEXT_CHARS),
+  base: EffectSchema.Union([EffectSchema.Literal(ROLLOUT_BASE.MAIN), ROLLOUT_POSITION]),
+  acceptance: EffectSchema.NullOr(trimmedText(ROLLOUT_BOUNDS.MAX_TEXT_CHARS)),
+});
+
+export type RolloutItem = typeof rolloutItemSchema.Type;
+
+/** Whether every pull request bases on main or on one before it, so the rollout is a graph with no cycle. */
+function basesOnEarlier(items: readonly RolloutItem[]): boolean {
+  return items.every((item, at) => item.base === ROLLOUT_BASE.MAIN || item.base <= at);
+}
+
+/**
+ * A plan's rollout: the pull requests its work lands as, in order, each on
+ * main or on an earlier one. It stands beside the plan's text rather than in
+ * it, and is drawn after the text (`plan-template.ts`'s `rolloutSection`) but
+ * never stored in it.
+ */
+export const rolloutSchema = EffectSchema.Array(rolloutItemSchema).check(
+  EffectSchema.isMaxLength(ROLLOUT_BOUNDS.MAX_PULL_REQUESTS),
+  EffectSchema.makeFilter(basesOnEarlier),
+);
+
+export type Rollout = typeof rolloutSchema.Type;
+
 /**
  * The default template's sections, in its order, by the names the fixed
  * template once kept them under: what its guidance and the prompts are keyed
@@ -346,6 +399,8 @@ export const planSchema = EffectSchema.Struct({
   ),
   /** Absent for a plan nobody has written since history began, and from a service before it. */
   lastEdit: EffectSchema.optionalKey(planLastEditSchema),
+  /** The pull requests the plan's work lands as, beside its text; empty until one is cut. */
+  rollout: rolloutSchema,
   /** The save that last changed each section, for the sections a save has changed; absent from a service before documents. */
   sectionEdits: EffectSchema.optionalKey(
     EffectSchema.Array(planSectionEditSchema).check(
@@ -418,13 +473,15 @@ export type PlanRevisionsAnswer = typeof planRevisionsAnswerSchema.Type;
  * One revision's content (GET `/api/plans/{id}/revisions/{seq}`): the plan
  * as it stood after the revision and as it stood before it, null for the
  * first, each formatted under the plan's name as it stands now, so a rename
- * since is no difference between them.
+ * since is no difference between them, and the rollout beside each.
  */
 export const planRevisionAnswerSchema = EffectSchema.Struct({
   revision: EffectSchema.Struct({
     seq: planRevisionSeqSchema,
     document: planDocumentSchema,
+    rollout: rolloutSchema,
     previous: EffectSchema.NullOr(planDocumentSchema),
+    previousRollout: EffectSchema.NullOr(rolloutSchema),
   }),
 });
 

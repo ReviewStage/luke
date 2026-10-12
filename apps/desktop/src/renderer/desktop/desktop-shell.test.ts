@@ -675,6 +675,7 @@ test("Command-T is claimed on a drawn plan's page alone: not while a version sta
     updatedAt: 2,
     repository: null,
     document: { body: "# Teammate invitations", assumptions: [] },
+    rollout: [],
   };
   const drawn = { region: { kind: DOCUMENT_REGION.READY, plan } };
   show(PANEL_TAB.PLANS, false, drawn);

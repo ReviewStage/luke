@@ -12,6 +12,7 @@ import {
   type Plan,
   type PlanDocument,
   type PlanSectionEdit,
+  type Rollout,
 } from "@sidecar/hosted/plan-wire";
 import { Clock, Effect, Option, Result } from "effect";
 import { SqlClient } from "effect/unstable/sql";
@@ -141,6 +142,13 @@ interface TextTaken {
   readonly text: string;
   readonly changes: number;
   readonly agentEdits?: readonly PlanAgentEdit[];
+  /** The rollout the change leaves beside the text, where it changes it. */
+  readonly rollout?: Rollout;
+}
+
+/** Whether a change takes the rollout to other pull requests than it held. */
+function rolloutMoved(before: Rollout, after: Rollout): boolean {
+  return JSON.stringify(before) !== JSON.stringify(after);
 }
 
 /** One save under the plan's lock, answered: the plan as saved with what the change took, or why nothing was saved. */
@@ -186,14 +194,16 @@ function savedUnderLock<T extends TextTaken, F>(
     const taken = outcome.success;
     const before = stored.value.text;
     const after = taken.text;
+    const rolloutBefore = stored.value.plan.rollout;
+    const rollout = taken.rollout ?? rolloutBefore;
     if (after.length > PLAN_BOUNDS.MAX_BODY_CHARS) return TOO_LONG_RESULT;
-    const moved = after !== before;
+    const moved = after !== before || rolloutMoved(rolloutBefore, rollout);
     if (moved) {
       yield* recordRevision({
         planId: binding.planId,
         writer,
-        before,
-        after,
+        before: { text: before, rollout: rolloutBefore },
+        after: { text: after, rollout },
         changes: taken.changes,
         savedBefore: stored.value.saved
           ? Option.some(new Date(stored.value.plan.updatedAt))
@@ -201,6 +211,7 @@ function savedUnderLock<T extends TextTaken, F>(
       });
     }
     const saved = yield* savePlanText(binding.userId, binding.planId, after, {
+      ...(taken.rollout === undefined ? undefined : { rollout: taken.rollout }),
       ...(taken.agentEdits === undefined ? undefined : { agentEdits: taken.agentEdits }),
       ...(moved
         ? {
@@ -327,13 +338,13 @@ export type PlanRestoreResult =
   | PlanNotSaved;
 
 /**
- * The developer's restore of one of the plan's revisions: the plan's text put
- * back as the revision held it, through the same locked save as notes, and
+ * The developer's restore of one of the plan's revisions: the plan's text and
+ * rollout put back as the revision held them, through the same locked save as notes, and
  * kept as a revision of the developer's naming the one it restored, so the
  * text it replaced stays in the history to restore in turn. A revision that
  * holds what the plan holds now saves nothing new and answers the plan as it
  * stands. Note that a restore's changes are counted by the sections it
- * changes.
+ * changes, and the rollout one more where it changes it.
  */
 export function restoreRevision(
   binding: PlanDocumentBinding,
@@ -348,11 +359,13 @@ export function restoreRevision(
     if (Option.isNone(content)) {
       return { status: PLAN_SAVE_STATUS.NOT_SAVED, reason: PLAN_SAVE_REFUSAL.NO_REVISION } as const;
     }
-    const text = content.value;
-    const take = (stored: StoredPlan): Result.Result<TextTaken, PlanNotSaved> =>
-      archived(stored)
-        ? Result.fail(ARCHIVED_RESULT)
-        : Result.succeed({ text, changes: changedSections(stored.text, text).length });
+    const { text, rollout } = content.value;
+    const take = (stored: StoredPlan): Result.Result<TextTaken, PlanNotSaved> => {
+      if (archived(stored)) return Result.fail(ARCHIVED_RESULT);
+      const rolloutChanges = rolloutMoved(stored.plan.rollout, rollout) ? 1 : 0;
+      const changes = changedSections(stored.text, text).length + rolloutChanges;
+      return Result.succeed({ text, changes, rollout });
+    };
     const saved = yield* savedUnderLock(
       binding,
       { actor: PLAN_ACTOR.DEVELOPER, restoredFrom: seq },

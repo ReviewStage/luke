@@ -155,8 +155,14 @@ const INSTALLATION = { id: 7, login: RELAY.owner, repositories: [RELAY] } as con
 const SAVED =
   "## Goal\n\nInvite a teammate by email.\n\n## Assumptions\n\n- Invites expire after 7 days.\n";
 
-/** The saved plan as Copy writes it, its name as a title over its text, which is what an agent started on the plan is handed. */
-const SNAPSHOT = `# Teammate invitations\n\n${SAVED}`;
+/** The saved plan as Copy writes it, its name as a title over its text and its rollout after, which is what an agent started on the plan is handed. */
+const SNAPSHOT = `# Teammate invitations
+
+${SAVED}
+## Rollout
+
+_No rollout yet_
+`;
 
 const SOL = "openai/gpt-6.1-sol";
 

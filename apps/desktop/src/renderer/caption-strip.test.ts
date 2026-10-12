@@ -41,6 +41,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Invoice export", assumptions: [] },
+  rollout: [],
 };
 
 const LUKE_WORDS = "The export runs nightly and writes one file per account.";

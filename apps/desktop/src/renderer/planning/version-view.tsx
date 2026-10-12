@@ -8,7 +8,13 @@ import {
 } from "../settings/confirm-dialog";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { Tooltip } from "../tooltip";
-import { VERSION_CHANGE, type VersionDiff, versionDiff, versionMoment } from "./plan-history-model";
+import {
+  rolloutDiff,
+  VERSION_CHANGE,
+  type VersionDiff,
+  versionDiff,
+  versionMoment,
+} from "./plan-history-model";
 import { momentText } from "./plan-time";
 import { PlanTitle } from "./plan-title";
 import { HISTORY_READ, type PlanHistoryControl, type ViewedVersion } from "./use-plan-history";
@@ -100,6 +106,23 @@ function VersionBody({
   );
 }
 
+/** The version's rollout, after its document as the plan draws it, with what it changed marked. */
+function VersionRollout({ diff }: { diff: VersionDiff }): React.JSX.Element {
+  return (
+    <section className="plan-body plan-rollout" aria-label="Rollout">
+      {diff.units.map((unit, at) => (
+        <MarkdownMessage
+          // oxlint-disable-next-line react/no-array-index-key -- the units are drawn once per diff, in order.
+          key={at}
+          words={unit.words}
+          className={`plan-unit${CHANGE_CLASS[unit.change]}`}
+          edit={unit.marks.length === 0 ? undefined : { marks: unit.marks }}
+        />
+      ))}
+    </section>
+  );
+}
+
 /** The version's page as quiet blocks while it is read: headings over their lines, in the body's own type. */
 export function VersionSkeleton(): React.JSX.Element {
   return (
@@ -137,12 +160,14 @@ function VersionContent({
     );
   }
   const diff = versionDiff(read.previous, read.document);
+  const rollout = rolloutDiff(read.previousRollout, read.rollout);
   // Note that the first version is compared with nothing, so it is never said to have changed nothing.
-  const unchanged = read.previous !== null && !diff.changed;
+  const unchanged = read.previous !== null && !diff.changed && !rollout.changed;
   return (
     <>
       {unchanged ? <p className="version-note">{NO_CHANGE_LINE}</p> : null}
       <VersionBody diff={diff} title={title} section={section} />
+      {section === undefined ? <VersionRollout diff={rollout} /> : null}
     </>
   );
 }

@@ -46,6 +46,7 @@ const OPEN: Plan = {
   updatedAt: 2,
   repository: "acme/docs",
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 /** Two plans of one name, told apart only by their repositories. */

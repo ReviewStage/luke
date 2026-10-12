@@ -1,6 +1,7 @@
 import type { BoardElement, DrawingElement } from "@sidecar/hosted/board-wire";
 import type { PlanSectionWriter } from "@sidecar/hosted/plan-document";
 import type { PlanAgentEdit } from "@sidecar/hosted/plan-template";
+import type { Rollout } from "@sidecar/hosted/plan-wire";
 import { sql } from "drizzle-orm";
 import { index, integer, jsonb, pgTable, text, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema.js";
@@ -40,6 +41,8 @@ export const plan = pgTable(
       .default(sql`'[]'::jsonb`),
     /** The plan as one free Markdown document, its whole text: no title line, and its assumptions a section like any other (`@sidecar/hosted/plan-document`). */
     document: text("document").notNull(),
+    /** The pull requests the plan's work lands as, beside its text; empty until one is cut. */
+    rollout: jsonb("rollout").$type<Rollout>().notNull().default(sql`'[]'::jsonb`),
     /** Who last changed each section and when, by heading; empty until a save changes one. */
     sectionWriters: jsonb("section_writers")
       .$type<readonly PlanSectionWriter[]>()

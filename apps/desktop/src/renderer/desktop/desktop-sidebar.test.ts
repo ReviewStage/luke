@@ -1868,7 +1868,7 @@ function Region({ plan }: { plan: Plan }): null {
 
 /** `summary` as the open plan's document, with nothing written in it. */
 function opened(summary: PlanSummary): Plan {
-  return { ...summary, document: { body: "", assumptions: [] } };
+  return { ...summary, document: { body: "", assumptions: [] }, rollout: [] };
 }
 
 /** Lets what fell due land and redraw. */

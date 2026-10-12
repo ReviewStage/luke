@@ -77,6 +77,7 @@ function plan(id: string, name: string, body: string, updatedAt: number): Plan {
       body,
       assumptions: [{ text: "An invite expires after 7 days." }],
     },
+    rollout: [],
   };
 }
 
@@ -87,6 +88,7 @@ function summary({
   document: _document,
   agentEdits: _agentEdits,
   lastEdit: _lastEdit,
+  rollout: _rollout,
   ...rest
 }: Plan): PlanSummary {
   return rest;
@@ -1941,7 +1943,9 @@ it.effect(
       service.revisions[2] = {
         seq: 2,
         document: { body: "# Earlier draft", assumptions: [] },
+        rollout: [],
         previous: null,
+        previousRollout: null,
       };
       const { call, told } = yield* openPlan(service);
       const viewsTold = told.length;
@@ -1973,7 +1977,9 @@ it.effect(
       service.revisions[1] = {
         seq: 1,
         document: { body: "# Earlier draft", assumptions: [] },
+        rollout: [],
         previous: null,
+        previousRollout: null,
       };
       const { call, last } = yield* openPlan(service);
 
@@ -2000,7 +2006,9 @@ it.effect(
       service.revisions[1] = {
         seq: 1,
         document: { body: "# Earlier draft", assumptions: [] },
+        rollout: [],
         previous: null,
+        previousRollout: null,
       };
       const { call, last, planning } = yield* openPlan(service);
       yield* call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: INVITES, seq: 1 });

@@ -54,6 +54,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 const OPEN: PlanningView = {
@@ -226,7 +227,9 @@ it.effect("Copy plan puts a plan on the clipboard as its name for a title over i
     act(() => tab.control().copy.onPress());
     yield* landed;
 
-    assert.deepEqual(clipboard.copied, [`# Teammate invitations\n\n${text}`]);
+    assert.deepEqual(clipboard.copied, [
+      `# Teammate invitations\n\n${text}\n## Rollout\n\n_No rollout yet_\n`,
+    ]);
   }),
 );
 
@@ -247,7 +250,9 @@ it.effect(
 
       act(() => tab.control().copy.onPress());
       yield* landed;
-      assert.deepEqual(clipboard.copied, [`# ${PLAN.name}\n\n${reviewed.body}`]);
+      assert.deepEqual(clipboard.copied, [
+        `# ${PLAN.name}\n\n${reviewed.body}\n## Rollout\n\n_No rollout yet_\n`,
+      ]);
       assert.equal(toast(), "Plan copied");
       yield* advance(1_499);
       assert.equal(toast(), "Plan copied");
@@ -306,7 +311,15 @@ it.effect(
           [ACT_KIND.PLANNING_REVISIONS]: () =>
             Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
           [ACT_KIND.PLANNING_REVISION]: () =>
-            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+            Promise.resolve({
+              revision: {
+                seq: 1,
+                document: FIRST_VERSION,
+                rollout: [],
+                previous: null,
+                previousRollout: null,
+              },
+            }),
           [ACT_KIND.PLANNING_RESTORE]: () => Promise.resolve(restoredAnswer.value),
         },
         yield* registryOnTestClock,
@@ -398,7 +411,15 @@ it.effect(
           [ACT_KIND.PLANNING_REVISIONS]: () =>
             Promise.resolve({ revisions: [revisionLine(2), revisionLine(1)] }),
           [ACT_KIND.PLANNING_REVISION]: () =>
-            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+            Promise.resolve({
+              revision: {
+                seq: 1,
+                document: FIRST_VERSION,
+                rollout: [],
+                previous: null,
+                previousRollout: null,
+              },
+            }),
         },
         yield* registryOnTestClock,
       );
@@ -436,7 +457,15 @@ it.effect(
               revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
             }),
           [ACT_KIND.PLANNING_REVISION]: () =>
-            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+            Promise.resolve({
+              revision: {
+                seq: 1,
+                document: FIRST_VERSION,
+                rollout: [],
+                previous: null,
+                previousRollout: null,
+              },
+            }),
         },
         yield* registryOnTestClock,
       );
@@ -477,7 +506,15 @@ it.effect(
               revisions: Array.from({ length: head.seq }, (_, at) => revisionLine(head.seq - at)),
             }),
           [ACT_KIND.PLANNING_REVISION]: () =>
-            Promise.resolve({ revision: { seq: 1, document: FIRST_VERSION, previous: null } }),
+            Promise.resolve({
+              revision: {
+                seq: 1,
+                document: FIRST_VERSION,
+                rollout: [],
+                previous: null,
+                previousRollout: null,
+              },
+            }),
         },
         yield* registryOnTestClock,
       );

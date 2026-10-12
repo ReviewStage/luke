@@ -17,7 +17,6 @@ import { db } from "../server/db/query";
 import { conversations } from "../server/db/storage-schema";
 import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { answerInboxItem, planInboxItems, postInboxItem } from "../server/hosted/inbox-store";
-import { createPlan } from "../server/hosted/plan-store";
 import { unmigratedPgliteSqlClient } from "./support/sql-client";
 
 /**
@@ -78,26 +77,27 @@ const migrationsThrough = (tag: string) =>
   });
 
 /**
- * An account with one plan and one agent. The agent's row is written naming
- * only the columns it had before 0088, as the deployment before it wrote
- * one, since the store's own Start names every column a later migration
- * added and the database here stands before those.
+ * An account with one plan and one agent, each a row written naming only
+ * the columns it had before 0088, as the deployment before it wrote them,
+ * since the store's own writes name every column a later migration added and
+ * the database here stands before those.
  */
 const openAgent = Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient;
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
-  const plan = yield* createPlan(userId, { name: "Teammate invitations" });
+  const planId = randomUUID();
+  yield* sql`insert into plan (id, user_id, name, document) values (${planId}, ${userId}, ${"Teammate invitations"}, '')`;
   const conversationId = randomUUID();
   yield* db
     .insert(conversations)
     .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
   const agentId = randomUUID();
-  const sql = yield* SqlClient.SqlClient;
   yield* sql`
     insert into coding_agent (id, plan_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
-    values (${agentId}, ${plan.id}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})
+    values (${agentId}, ${planId}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})
   `;
-  return { userId, planId: plan.id, agentId };
+  return { userId, planId, agentId };
 });
 
 /** An item in the shape the deployment before 0088 wrote it. */

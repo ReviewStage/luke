@@ -96,6 +96,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "", assumptions: [] },
+  rollout: [],
 };
 
 const CODE: PlanCode = {

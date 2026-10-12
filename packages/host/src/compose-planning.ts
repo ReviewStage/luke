@@ -266,6 +266,7 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
     document: _document,
     agentEdits: _agentEdits,
     lastEdit: _lastEdit,
+    rollout: _rollout,
     ...summary
   }: Plan): PlanningView["plans"][number] {
     return summary;

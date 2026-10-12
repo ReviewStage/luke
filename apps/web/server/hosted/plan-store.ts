@@ -7,6 +7,8 @@ import {
   type PlanLastEdit,
   type PlanSectionEdit,
   type PlanSummary,
+  type Rollout,
+  rolloutSchema,
 } from "@sidecar/hosted/plan-wire";
 import { and, desc, eq, exists, inArray, isNull } from "drizzle-orm";
 import { Data, DateTime, Effect, Option, Schema } from "effect";
@@ -108,6 +110,7 @@ const PLAN_COLUMNS = {
   agentEdits: plan.agentEdits,
   document: plan.document,
   sectionWriters: plan.sectionWriters,
+  rollout: plan.rollout,
   conversationId: plan.conversationId,
 };
 
@@ -130,6 +133,7 @@ const PlanRowSchema = Schema.Struct({
   // Every plan is one document since the backfill, so a row with none is the store breaking its own contract.
   document: Schema.String,
   sectionWriters: Schema.Array(planSectionWriterSchema),
+  rollout: rolloutSchema,
   conversationId: Schema.NullOr(Schema.String),
 });
 
@@ -231,6 +235,7 @@ function storedPlanOf(row: PlanRow): PlanStoreEffect<StoredPlan> {
         ...(Option.isSome(lastEdit) ? { lastEdit: lastEdit.value } : undefined),
         document: { body: row.document, assumptions: [] },
         sectionEdits: row.sectionWriters.map((writer) => sectionEditOf(writer, labels)),
+        rollout: row.rollout,
       },
       text: row.document,
       agentEdits,
@@ -320,16 +325,18 @@ const replaceText = SqlSchema.findOneOption({
     text: Schema.String,
     sectionWriters: Schema.optionalKey(Schema.Array(planSectionWriterSchema)),
     agentEdits: Schema.optionalKey(Schema.Array(planAgentEditSchema)),
+    rollout: Schema.optionalKey(rolloutSchema),
     now: Schema.Date,
   }),
   Result: PlanRowSchema,
-  execute: ({ userId, planId, text, sectionWriters, agentEdits, now }) =>
+  execute: ({ userId, planId, text, sectionWriters, agentEdits, rollout, now }) =>
     db
       .update(plan)
       .set({
         document: text,
         ...(sectionWriters ? { sectionWriters } : undefined),
         ...(agentEdits ? { agentEdits } : undefined),
+        ...(rollout ? { rollout } : undefined),
         updatedAt: now,
       })
       .where(ownedPlan(userId, planId))
@@ -554,11 +561,13 @@ export interface PlanTextSaveExtras {
   readonly sectionWriters?: readonly PlanSectionWriter[];
   /** The coding agents' journal. */
   readonly agentEdits?: readonly PlanAgentEdit[];
+  /** The rollout beside the text. */
+  readonly rollout?: Rollout;
 }
 
 /**
  * Replaces the text of a plan that is one document, with who last changed
- * each section and the agents' journal where they are handed, and answers
+ * each section, the agents' journal, and the rollout where they are handed, and answers
  * the plan as saved, or nothing where the account owns no such plan; nothing
  * is ever created here.
  */

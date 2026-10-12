@@ -26,6 +26,7 @@ const PLAN: Plan = {
   updatedAt: 2,
   repository: null,
   document: { body: "# Teammate invitations", assumptions: [] },
+  rollout: [],
 };
 
 /** The code Luke puts on screen during a call, its pointed lines part way down. */

@@ -1,7 +1,13 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import type { ModelProvider } from "@sidecar/hosted/models-wire";
 import { type PlanSection, planSections } from "@sidecar/hosted/plan-document";
-import { PLAN_ACTOR, type PlanDocument, type PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import { rolloutSection } from "@sidecar/hosted/plan-template";
+import {
+  PLAN_ACTOR,
+  type PlanDocument,
+  type PlanRevisionLine,
+  type Rollout,
+} from "@sidecar/hosted/plan-wire";
 import { diffArrays } from "diff";
 import { MARKDOWN_MARK, type MarkdownMark } from "../markdown-message";
 import { providerOf } from "./coding-agent-model";
@@ -417,4 +423,19 @@ export function sourceLabel(source: RevisionSource, author: RevisionAuthor): str
     case REVISION_SOURCE.WORK:
       return "Open in Work";
   }
+}
+
+/** A rollout as a document of its one section, which a version's rollout is compared as. */
+function rolloutDocument(rollout: Rollout): PlanDocument {
+  return { body: rolloutSection(rollout), assumptions: [] };
+}
+
+/**
+ * A version's rollout drawn against the one before it, or drawn as it is
+ * against nothing for the first version: its section, as the plan draws it
+ * after the document, with each pull request's words marked by how they
+ * stand.
+ */
+export function rolloutDiff(base: Rollout | null, shown: Rollout): VersionDiff {
+  return versionDiff(base === null ? null : rolloutDocument(base), rolloutDocument(shown));
 }

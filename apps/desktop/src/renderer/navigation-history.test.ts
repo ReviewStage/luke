@@ -56,7 +56,9 @@ const OLDER_VERSION = {
   read: {
     kind: HISTORY_READ.READY,
     document: { body: "# Plan", assumptions: [] },
+    rollout: [],
     previous: null,
+    previousRollout: null,
   },
 } as const;
 

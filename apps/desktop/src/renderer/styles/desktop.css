@@ -1673,6 +1673,16 @@ body,
   font-size: 1.05em;
 }
 
+.desktop-document .plan-rollout {
+  margin-top: var(--space-40);
+  padding: var(--space-20) var(--space-24);
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--desktop-well);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* The call bar ------------------------------------------------------------- */
 
 .desktop-call-bar {

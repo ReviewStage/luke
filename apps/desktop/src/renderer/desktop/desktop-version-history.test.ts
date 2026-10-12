@@ -142,7 +142,15 @@ function fakeService(now = NOW, versions: readonly PlanDocument[] = VERSIONS) {
         return Promise.resolve(
           document === undefined
             ? { failure: PLAN_CALL_FAILURE.UNANSWERED }
-            : { revision: { seq, document, previous: versions[seq - 2] ?? null } },
+            : {
+                revision: {
+                  seq,
+                  document,
+                  rollout: [],
+                  previous: versions[seq - 2] ?? null,
+                  previousRollout: versions[seq - 2] === undefined ? null : [],
+                },
+              },
         );
       }),
     restore: (_planId, seq) => {
@@ -183,6 +191,7 @@ function planOf(document: PlanDocument, archived: boolean): Plan {
     updatedAt: 0,
     repository: null,
     document,
+    rollout: [],
     ...(archived ? { archivedAt: 0 } : undefined),
   };
 }

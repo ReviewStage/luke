@@ -6,7 +6,10 @@ import {
   PLAN_FIELD_BAR,
   PLAN_FIELD_HEADING,
   PLAN_FIELD_PURPOSE,
+  PLAN_HEADING,
   type PlanNote,
+  ROLLOUT_BAR,
+  ROLLOUT_PURPOSE,
 } from "@sidecar/hosted/plan-template";
 import { PLAN_ACTOR, PLAN_FIELD } from "@sidecar/hosted/plan-wire";
 import type { UnparsedWireValue, WireRecord } from "@sidecar/wire";
@@ -72,13 +75,18 @@ import { runShowCode, SHOW_CODE_TOOL } from "../show-code.js";
  * document for meaning and never turns a tool result into a requirement.
  */
 
-/** Each section of the default template as the developer reads it, what it holds, and when it is done, for the planning model. */
-const PLAN_SECTIONS = Object.values(PLAN_FIELD)
-  .map(
-    (field) =>
-      `- ${PLAN_FIELD_HEADING[field]}: ${PLAN_FIELD_PURPOSE[field]}\n  Done when: ${PLAN_FIELD_BAR[field]}`,
-  )
-  .join("\n");
+/** One section as the developer reads it, what it holds, and when it is done. */
+function sectionLine(heading: string, purpose: string, bar: string): string {
+  return `- ${heading}: ${purpose}\n  Done when: ${bar}`;
+}
+
+/** Each section of the default template, then the rollout drawn after the text, as the developer reads them, for the planning model. */
+const PLAN_SECTIONS = [
+  ...Object.values(PLAN_FIELD).map((field) =>
+    sectionLine(PLAN_FIELD_HEADING[field], PLAN_FIELD_PURPOSE[field], PLAN_FIELD_BAR[field]),
+  ),
+  sectionLine(PLAN_HEADING.ROLLOUT, ROLLOUT_PURPOSE, ROLLOUT_BAR),
+].join("\n");
 
 /**
  * The instructions a plan conversation's session runs under. "How to plan"
@@ -291,6 +299,8 @@ Transcripts can contain mistakes, unfinished phrases, and later corrections. Fol
 /** The marker the standing context rides behind, so the model reads what follows as the service's data. */
 const PLAN_MARKER = "[plan]";
 const DOCUMENT_MARKER = "[saved document]";
+/** The marker the plan's rollout rides behind, beside the document rather than in it. */
+const ROLLOUT_MARKER = "[rollout]";
 const AGENT_EDITS_MARKER = "[recent edits by coding agents]";
 /** The marker the sections the developer last wrote ride behind, which the brain and the notetaker are each told to keep as written. */
 export const DEVELOPER_FIELDS_MARKER = "[sections the developer wrote]";
@@ -345,7 +355,8 @@ function developerFieldsText(stored: StoredPlan): readonly string[] {
 
 /**
  * What a planning turn is handed beside its instructions every turn: the
- * plan's name, the saved document as JSON, the newest saves coding agents
+ * plan's name, the saved document as JSON, its rollout as JSON where it has
+ * one, the newest saves coding agents
  * made on it (so Luke can raise what an agent asked or decided), the fields
  * the developer last wrote themselves (so Luke treats them as decided), and the
  * whiteboard as the model reads it (`board-text.ts`), each read again every
@@ -365,6 +376,7 @@ export function planningStandingContext(
     `Name: ${plan.name}`,
     DOCUMENT_MARKER,
     JSON.stringify(plan.document),
+    ...(plan.rollout.length === 0 ? [] : [ROLLOUT_MARKER, JSON.stringify(plan.rollout)]),
     ...agentEditsText(stored.agentEdits),
     ...developerFieldsText(stored),
     boardText(board),

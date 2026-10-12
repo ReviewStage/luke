@@ -1,4 +1,4 @@
-import type { PlanDocument, PlanRevisionLine } from "@sidecar/hosted/plan-wire";
+import type { PlanDocument, PlanRevisionLine, Rollout } from "@sidecar/hosted/plan-wire";
 import type {
   PlanningRevisionAnswer,
   PlanningRevisionsAnswer,
@@ -52,7 +52,9 @@ type VersionRead =
   | {
       readonly kind: typeof HISTORY_READ.READY;
       readonly document: PlanDocument;
+      readonly rollout: Rollout;
       readonly previous: PlanDocument | null;
+      readonly previousRollout: Rollout | null;
     };
 
 /** The version the version history draws: its revision, whether it is the plan as it stands, and its content as read. */
@@ -153,7 +155,9 @@ function versionOf(answer: PlanningRevisionAnswer): VersionRead {
     : {
         kind: HISTORY_READ.READY,
         document: answer.revision.document,
+        rollout: answer.revision.rollout,
         previous: answer.revision.previous,
+        previousRollout: answer.revision.previousRollout,
       };
 }
 
