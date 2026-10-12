@@ -1,5 +1,19 @@
 import type { ToolSet } from "ai";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  notExists,
+  or,
+  sql,
+} from "drizzle-orm";
+import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 import { Effect, Option, Schema } from "effect";
 import { type SqlClient, SqlSchema } from "effect/unstable/sql";
 import type { SqlError } from "effect/unstable/sql/SqlError";
@@ -580,12 +594,53 @@ const AwaitingLinesRowSchema = Schema.Struct({
 });
 
 /**
+ * What eve puts between two messages it hands a turn as one: steers that
+ * arrive while a step is under way are coalesced into the next step's input,
+ * their words joined by a blank line (eve's `appendUserContent`), and the
+ * turn receives the joined words as a single message.
+ */
+export const COALESCED_LINE_SEPARATOR = "\n\n";
+
+/** A developer's line and the turn-owned row later in its conversation that may carry its words: one table under the two names the read takes it by. */
+const receipt = alias(messages, "receipt");
+
+/** The words of a row's one text part, as both the line and the receipt hold them, fenced by eve's separator so a whole coalesced segment is matched and never a fragment of one. */
+const fencedWords = (parts: AnyPgColumn) =>
+  sql`${COALESCED_LINE_SEPARATOR} || (${parts} -> 0 ->> 'text') || ${COALESCED_LINE_SEPARATOR}`;
+
+/**
+ * Whether a turnless user row of `messages` still awaits its turn: no later
+ * user row of a turn in its conversation carries its words, whole or as one
+ * of the segments eve coalesced. Such a row is eve's own receipt of the
+ * line, written by the relay where the line was not taken into the turn, so
+ * the line awaits nothing: it must not read the agent as running forever,
+ * and no later turn may take it in the place of the line it did receive.
+ */
+export function noReceiptOfLine() {
+  return notExists(
+    db
+      .select({ id: receipt.id })
+      .from(receipt)
+      .where(
+        and(
+          eq(receipt.conversationId, messages.conversationId),
+          eq(receipt.role, MESSAGE_ROLE.USER),
+          isNotNull(receipt.turnId),
+          gt(receipt.seq, messages.seq),
+          sql`strpos(${fencedWords(receipt.parts)}, ${fencedWords(messages.parts)}) > 0`,
+        ),
+      ),
+  );
+}
+
+/**
  * How many of the developer's lines stand in each coding-agent conversation
  * named with no turn yet: each is a message the session took and the next
  * turn will receive, which is what reads an idle agent as running again
  * until that turn opens. The kind is held here as the writer holds it when
  * it takes such a line, since a planning conversation's turnless user rows
- * are its spoken asks and wait for no turn of eve's.
+ * are its spoken asks and wait for no turn of eve's. A line a turn already
+ * received under another row (`noReceiptOfLine`) is not counted.
  */
 const countAwaitingLines = SqlSchema.findAll({
   Request: Schema.Struct({ userId: Schema.String, conversationIds: Schema.Array(Schema.String) }),
@@ -605,6 +660,7 @@ const countAwaitingLines = SqlSchema.findAll({
           eq(conversations.kind, CONVERSATION_KIND.CODING_AGENT),
           eq(messages.role, MESSAGE_ROLE.USER),
           isNull(messages.turnId),
+          noReceiptOfLine(),
         ),
       )
       .groupBy(messages.conversationId),

@@ -741,14 +741,15 @@ export class StreamRelay {
         }
         return;
       }
-      // A line the developer sent to a running coding agent already stands in the conversation,
-      // awaiting this turn: the receipt takes it into the turn rather than writing it again, and
-      // the turn's own received-line count still moves, so a later line's row keeps its id.
+      // The lines the developer sent to a running coding agent already stand in the conversation,
+      // awaiting this turn, one or several eve coalesced into this one message: the receipt takes
+      // them into the turn rather than writing them again, and the turn's own received-line count
+      // still moves, so a later line's row keeps its id.
       const taken = yield* this.#seams.writer.takeAwaitingLine(standing.target, {
         text,
         turnId: hostTurnId(standing.sessionId, eveTurnId),
       });
-      if (Result.isSuccess(taken) && Option.isSome(taken.success)) return;
+      if (Result.isSuccess(taken) && taken.success.length > 0) return;
       const written = yield* this.#tell(eveTurnId, standing, {
         kind: BRAIN_RUN_EVENT.MESSAGE_COMPLETED,
         message: userMessage(
