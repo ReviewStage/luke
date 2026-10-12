@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   CODING_AGENT_CALL_FAILURE,
   type CodingAgentAgentAnswer,
@@ -770,5 +772,56 @@ test("an open popover is placed again as it grows past the room above its button
     assert.deepEqual(placeOf(layer()), { side: "below", left: 752 - 764, width: 264 });
   } finally {
     restore();
+  }
+});
+
+test("in a full-screen panel whose composer keeps to a centred column, each popover is positioned against the box holding its own button, never the padded composer, so it stands over its button and not at the panel's edge", async () => {
+  // The sheets that position the composer, its chips, and their layers, which jsdom does not load on its own.
+  const sheet = document.createElement("style");
+  sheet.textContent = ["desktop.css", "planning.css"]
+    .map((name) => readFileSync(join(import.meta.dirname, "..", "styles", name), "utf8"))
+    .join("\n");
+  document.head.append(sheet);
+  const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, messages: [PLAN] });
+  tab.container.classList.add("side-panel-content");
+  tab.container.setAttribute("data-popover-room", "");
+  await tab.stand({ context: CONTEXT });
+  const chip = tab.container.querySelector<HTMLButtonElement>(".agent-model-chip button");
+  const ring = tab.container.querySelector<HTMLButtonElement>('button[aria-label="Context usage"]');
+  assert.ok(chip && ring);
+  // A 1400px full-screen panel: the 720px column starts 340px in, so the chip stands far from either edge.
+  const boxes = {
+    room: new DOMRect(0, 0, 1400, 800),
+    chip: new DOMRect(356, 730, 130, 28),
+    ring: new DOMRect(490, 730, 28, 28),
+    height: 320,
+  };
+  /** The class of the box a layer's left and bottom are measured from: its nearest positioned ancestor. */
+  const positionedFrom = (layer: Element) => {
+    for (let at = layer.parentElement; at !== null; at = at.parentElement) {
+      if (getComputedStyle(at).position !== "static") return at.className;
+    }
+    return undefined;
+  };
+  const restore = measureBoxes(boxes);
+  try {
+    act(() => chip.click());
+    const menu = tab.container.querySelector(".anchored-popover");
+    assert.ok(menu);
+    assert.equal(getComputedStyle(menu).position, "absolute");
+    assert.equal(positionedFrom(menu), "agent-model-chip", "measured from the chip's own box");
+    assert.deepEqual(placeOf(menu), { side: "above", left: 0, width: 340 });
+    act(() => chip.click());
+
+    act(() => ring.click());
+    const popover = tab.container.querySelector(".anchored-popover");
+    assert.ok(popover);
+    assert.equal(positionedFrom(popover), "agent-context", "measured from the ring's own box");
+    const place = placeOf(popover);
+    assert.equal(place.side, "above");
+    assert.equal(place.left + place.width, 28, "the popover's trailing edge is the ring's");
+  } finally {
+    restore();
+    sheet.remove();
   }
 });
