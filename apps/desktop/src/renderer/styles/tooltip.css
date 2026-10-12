@@ -6,8 +6,9 @@
    where it fits, then fades in from just short of its size once the pointer
    has rested `--hint-delay`, or at once while the window is warm. Reduced
    motion keeps the wait, which is not motion, and drops the fade with the
-   tokens. It takes no presses: it never stands between the pointer and the
-   control beside it. */
+   tokens. A pill takes no presses: it never stands between the pointer and
+   the control beside it. A card is a surface the pointer crosses onto, so it
+   takes the pointer once it is placed, and its words can be selected. */
 
 .tooltip {
   position: fixed;
@@ -41,6 +42,13 @@
 body:has(.app-stage[data-capture="true"]) .tooltip {
   --duration-quick: 0s;
   --hint-delay: 0s;
+}
+
+.tooltip-card {
+  pointer-events: auto;
+  cursor: default;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .tooltip[data-placed="false"] {

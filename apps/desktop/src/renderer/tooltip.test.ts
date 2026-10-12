@@ -1,12 +1,19 @@
 // @vitest-environment jsdom
 
 import assert from "node:assert/strict";
+import { it } from "@effect/vitest";
 import { MOTION_DELAY_MS } from "@sidecar/surface";
+import { Duration, Effect } from "effect";
+import { TestClock } from "effect/testing";
+import type { AtomRegistry } from "effect/unstable/reactivity/AtomRegistry";
 import { act, type ButtonHTMLAttributes, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, test, vi } from "vitest";
 import { APP_COMMAND } from "#shared/shortcuts";
+import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { Tooltip } from "./tooltip";
+
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 /** The page's clock, which the pill reads to know whether it finished waiting. It only rises, as the page's does. */
 let now = 0;
@@ -75,6 +82,72 @@ function leave(name: string): void {
 
 function rest(milliseconds: number): void {
   now += milliseconds;
+}
+
+/** The pointer moving from one place to another, as React hears it: out of the first, over the second. */
+function cross(from: Element, to: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("pointerout", { bubbles: true, relatedTarget: to }));
+    to.dispatchEvent(new MouseEvent("pointerover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+/** Advances the clock a card's linger waits on, then lets what fell due land and redraw. */
+const advance = (millis: number) =>
+  Effect.andThen(
+    TestClock.adjust(Duration.millis(millis)),
+    Effect.promise(() =>
+      act(async () => {
+        for (let turn = 0; turn < 8; turn += 1) await Promise.resolve();
+      }),
+    ),
+  );
+
+/** What the card a tab hangs says. */
+const CARD_WORDS = "Fix the flaky test, working for 3m";
+
+/**
+ * What the window's one tooltip says, while one stands. Note that a test
+ * compares words rather than elements, because a failed comparison of two
+ * elements prints the whole page.
+ */
+function says(): string | undefined {
+  return pill()?.textContent ?? undefined;
+}
+
+/** A tab that hangs a card, beside a plain icon button, on the test's clock. */
+function mountCardBeside(registry: AtomRegistry): void {
+  const container = document.body.appendChild(document.createElement("div"));
+  root = createRoot(container);
+  act(() => {
+    root?.render(
+      onRegistry(
+        registry,
+        createElement(
+          "div",
+          null,
+          createElement(Tooltip, {
+            label: "Fix the flaky test",
+            card: createElement("p", null, CARD_WORDS),
+            children: button({}, "Fix the flaky test"),
+          }),
+          createElement(Tooltip, {
+            label: "New tab",
+            children: button({ "aria-label": "New tab" }),
+          }),
+        ),
+      ),
+    );
+  });
+}
+
+/** The card on screen, past its wait. */
+function shownCard(): HTMLElement {
+  hover("Fix the flaky test");
+  rest(MOTION_DELAY_MS.HINT);
+  const card = pill();
+  assert.ok(card, "no card");
+  return card;
 }
 
 beforeEach(() => {
@@ -297,3 +370,100 @@ test("a card hung beside its control stands past the control's end, level with i
   hover("Billing export");
   assert.equal(pill()?.style.top, `${window.innerHeight - 200 - 6}px`);
 });
+
+it.effect(
+  "a card stays while the pointer crosses from its control onto it, and goes a moment after the pointer leaves it",
+  () =>
+    Effect.gen(function* () {
+      mountCardBeside(yield* registryOnTestClock);
+      const card = shownCard();
+
+      cross(control("Fix the flaky test"), card);
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS, "the pointer on the card keeps it standing");
+
+      cross(card, document.body);
+      yield* advance(100);
+      assert.equal(says(), CARD_WORDS, "it lingers a moment");
+      yield* advance(100);
+      assert.equal(pill(), null);
+    }),
+);
+
+it.effect(
+  "a card lingers when the pointer leaves its control, and the pointer coming back keeps it",
+  () =>
+    Effect.gen(function* () {
+      mountCardBeside(yield* registryOnTestClock);
+      const card = shownCard();
+
+      leave("Fix the flaky test");
+      yield* advance(100);
+      assert.equal(says(), CARD_WORDS, "it lingers for the pointer crossing to it");
+      hover("Fix the flaky test");
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS);
+
+      cross(card, control("Fix the flaky test"));
+      yield* advance(5_000);
+      assert.equal(says(), CARD_WORDS, "back on its control from the card");
+
+      leave("Fix the flaky test");
+      yield* advance(200);
+      assert.equal(pill(), null);
+    }),
+);
+
+it.effect("a card still waiting goes at once with the pointer, as a pill does", () =>
+  Effect.gen(function* () {
+    mountCardBeside(yield* registryOnTestClock);
+
+    hover("Fix the flaky test");
+    rest(MOTION_DELAY_MS.HINT / 2);
+    leave("Fix the flaky test");
+    assert.equal(pill(), null);
+  }),
+);
+
+it.effect("another control's hint takes a lingering card down at once, so one stands", () =>
+  Effect.gen(function* () {
+    mountCardBeside(yield* registryOnTestClock);
+    shownCard();
+
+    cross(control("Fix the flaky test"), control("New tab"));
+    const shown = [...document.body.querySelectorAll('[role="tooltip"]')];
+    assert.deepEqual(
+      shown.map((each) => each.textContent),
+      ["New tab"],
+    );
+    yield* advance(200);
+    assert.equal(says(), "New tab", "the card's linger takes nothing else down");
+  }),
+);
+
+it.effect(
+  "a key leaves a card the pointer is on standing, Escape takes it down, and a press on it keeps it",
+  () =>
+    Effect.gen(function* () {
+      mountCardBeside(yield* registryOnTestClock);
+      const anchor = control("Fix the flaky test");
+      document.documentElement.dataset.keyboard = "true";
+      act(() => anchor.focus());
+      rest(MOTION_DELAY_MS.HINT);
+      const card = pill();
+      assert.ok(card);
+
+      cross(anchor, card);
+      act(() => {
+        card.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+        anchor.blur();
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "c", metaKey: true }));
+      });
+      assert.equal(says(), CARD_WORDS);
+
+      act(() => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+      });
+      assert.equal(pill(), null);
+    }),
+);
