@@ -305,7 +305,7 @@ export function coderHost(seams: CoderHostSeams): CoderHost {
   /** The instructions the agent's session runs under, composed on what its row names and whether its token reads the repository's CI. */
   const promptOf = (agent: CodingAgent, ciReadable: boolean): CoderSessionPrompt => {
     const brief = agent.task === null ? CODING_AGENT_BRIEF.PLAN : CODING_AGENT_BRIEF.TASK;
-    const text = coderInstructions(agent.repository, brief, ciReadable);
+    const text = coderInstructions(agent, brief, ciReadable);
     return { text, hash: promptHashOf(text), ciReadable };
   };
 

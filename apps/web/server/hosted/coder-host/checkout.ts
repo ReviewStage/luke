@@ -151,12 +151,15 @@ export const agentRepositoryToken = /* @__PURE__ */ Effect.fn("web/agentReposito
 );
 
 /**
- * The agent's repository checked out whole, at its current default branch,
- * into the sandbox, with the developer's commit identity set in it; answers
+ * The agent's repository checked out whole into the sandbox, at the base
+ * branch its row names or at the current default branch where it names
+ * none, with the developer's commit identity set in it; answers
  * the token minted for it, for the caller to set at the firewall for the
  * commands that follow. The checkout is recorded under the name the agent's
- * row holds. Note that the identity is read ahead of the clone, so a
- * developer GitHub cannot name costs no clone.
+ * row holds. Note that a clone of a base is of that one branch, so the
+ * default branch is fetched beside it, which is what a worker rebases onto
+ * once the pull request below its own has merged; and that the identity is
+ * read ahead of the clone, so a developer GitHub cannot name costs no clone.
  */
 export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAgentRepository")(
   function* (
@@ -166,11 +169,13 @@ export const checkOutAgentRepository = /* @__PURE__ */ Effect.fn("web/checkOutAg
   ): Effect.fn.Return<Redacted.Redacted, CheckoutRefused, CheckoutServices> {
     const minted = yield* agentRepositoryToken(target, agent);
     const identity = yield* commitIdentity(target);
+    const branch = agent.baseBranch ?? minted.defaultBranch;
     yield* cloneRepository(
       sandbox,
       {
         fullName: minted.fullName,
-        defaultBranch: minted.defaultBranch,
+        branch,
+        ...(branch === minted.defaultBranch ? undefined : { alsoFetch: minted.defaultBranch }),
         recordedAs: agent.repository,
       },
       minted.token,

@@ -1056,6 +1056,29 @@ it.layer(Layer.mergeAll(testSqlClient, noNetwork))("the coding-agent host", (it)
   );
 
   it.effect(
+    "a rollout's worker is told its base as the branch it is checked out at and opens onto, and a plain agent the default branch",
+    () =>
+      Effect.gen(function* () {
+        const host = yield* hostOverStore();
+        const { agent, admitted } = yield* openAgent(host);
+        const base = "luke/invitations/1-schema";
+
+        const stacked = yield* composedPrompt(host, admitted, {
+          ...agent,
+          position: 2,
+          baseBranch: base,
+        });
+        const plain = yield* composedPrompt(host, admitted, agent);
+
+        assert.ok(stacked.text.includes(`at the branch \`${base}\``));
+        assert.ok(stacked.text.includes(`\`gh pr create --base ${base}\``));
+        assert.ok(plain.text.includes("at its current default branch"));
+        assert.ok(!plain.text.includes(base));
+        assert.notEqual(stacked.hash, plain.hash);
+      }),
+  );
+
+  it.effect(
     "a coding turn lands through the shared relay with no ask record: the plan as the developer's line, the answer with its reasoning, its shell call, and its words, and the turn row naming the agent's model and effort",
     () =>
       Effect.gen(function* () {

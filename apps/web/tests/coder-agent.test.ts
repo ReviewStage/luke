@@ -86,6 +86,12 @@ test("the tools authored for the agent and the Linear connection's calls are exa
   assert.deepEqual(authored, Object.values(CODER_TOOL).sort());
 });
 
+/** A plain agent's row as its instructions read it: the repository, no rollout position, no base. */
+const RELAY_AGENT = { repository: "Acme/Relay", position: null, baseBranch: null } as const;
+
+/** A rollout's third pull request, based on the second's branch. */
+const STACKED_WORKER = { ...RELAY_AGENT, position: 3, baseBranch: "luke/invites/2-route" } as const;
+
 const SECRET = "cron-secret-1";
 const ACCOUNT = "user-a";
 const CONVERSATION = "5f3c2a1e-9b8d-4c7a-8e6f-1a2b3c4d5e6f";
@@ -194,7 +200,7 @@ test("a follow-up steers the turn under way; the deployment's typed line on the 
 
 test("the session is told the checkout's commit identity is the developer's and never its own to change", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of ["user.name", "user.email", "--author", "luke.commitTrailer"]) {
       assert.ok(instructions.includes(kept), `${brief}: ${kept}`);
     }
@@ -203,7 +209,7 @@ test("the session is told the checkout's commit identity is the developer's and 
 
 test("the session is told its shell and its file tools start in the checkout", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of [
       "never open a command with a `cd`",
       "relative path is resolved from the checkout",
@@ -218,7 +224,7 @@ test("the session and its worker are asked to say what each command is for, in t
   assert.ok(field in SHELL_INPUT.fields);
   const told = [
     ...Object.values(CODING_AGENT_BRIEF).map((brief) =>
-      coderInstructions("Acme/Relay", brief, false),
+      coderInstructions(RELAY_AGENT, brief, false),
     ),
     coderWorkerInstructions(),
   ];
@@ -238,7 +244,7 @@ test("the worker is hidden behind the delegation tool, authors no token budget o
 
 test("the session is told when to delegate, how to choose a worker's model, and that a worker is read-only", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of [
       `\`${CODER_TOOL.DELEGATE}\``,
       "run at once",
@@ -252,7 +258,7 @@ test("the session is told when to delegate, how to choose a worker's model, and 
 
 test("the session is told to keep its to-dos for multi-step work, exactly one in progress, written again as each finishes", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of [
       `\`${CODER_TOOL.WRITE_TODOS}\``,
       "exactly one item in progress",
@@ -265,7 +271,7 @@ test("the session is told to keep its to-dos for multi-step work, exactly one in
 
 test("the session is told to put what it needs from the developer in their inbox, keep each item current under its key, close it when done, and never restate it in a message", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of [
       `\`${CODER_TOOL.POST_TO_INBOX}\``,
       `\`${CODER_TOOL.CLOSE_INBOX_ITEM}\``,
@@ -283,7 +289,7 @@ test("the session is told to put what it needs from the developer in their inbox
 test("the session and the post tool are told never to ask for a credential or a secret in a form, since the answer reaches the transcript", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
     assert.ok(
-      coderInstructions("Acme/Relay", brief, false).includes(
+      coderInstructions(RELAY_AGENT, brief, false).includes(
         "Never ask for a credential or a secret in a form",
       ),
       brief,
@@ -305,7 +311,7 @@ test("the post tool tells the model how an answer it needs opens, as the service
 
 test("the session is told to write a worker's task as Markdown the developer can read, its goal one plain sentence on the first line, which the worker's row and tab are named by", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const instructions = coderInstructions("Acme/Relay", brief, false);
+    const instructions = coderInstructions(RELAY_AGENT, brief, false);
     for (const kept of [
       "short Markdown in complete sentences",
       "the goal as one plain sentence on the first line",
@@ -316,16 +322,16 @@ test("the session is told to write a worker's task as Markdown the developer can
 });
 
 test("an agent handed a task is told its job is the developer's task, in the same repository, and is told of no plan", () => {
-  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false);
+  const planned = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false);
   assert.ok(planned.includes("implement the plan given as the first message"));
-  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false);
+  const tasked = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false);
   assert.ok(tasked.includes("carry out the task the developer gave as the first message"));
   assert.ok(tasked.includes("`Acme/Relay`"));
   assert.doesNotMatch(tasked, /\bplan\b/iu);
 });
 
 test("an agent handed the plan is told to take a decision an inbox answer settles into the plan with edit_plan, as a note of its own; one handed a task is not", () => {
-  const planned = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false);
+  const planned = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false);
   const inbox = planned.slice(planned.indexOf("## The developer's inbox"));
   const told = inbox.slice(0, inbox.indexOf("\n## "));
   for (const kept of [
@@ -335,20 +341,18 @@ test("an agent handed the plan is told to take a decision an inbox answer settle
   ]) {
     assert.ok(told.includes(kept), kept);
   }
-  const tasked = coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false);
+  const tasked = coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false);
   assert.ok(!tasked.includes("take that decision into the plan"));
 });
 
 test("an agent handed the plan is told how to update it, and one handed a task is not", () => {
-  assert.ok(
-    coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.PLAN, false).includes("`edit_plan`"),
-  );
-  assert.ok(!coderInstructions("Acme/Relay", CODING_AGENT_BRIEF.TASK, false).includes("edit_plan"));
+  assert.ok(coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.PLAN, false).includes("`edit_plan`"));
+  assert.ok(!coderInstructions(RELAY_AGENT, CODING_AGENT_BRIEF.TASK, false).includes("edit_plan"));
 });
 
 test("the session is told to watch its pull request's checks for the bounded rounds where its token reads them, and that CI was not watched where it does not", () => {
   for (const brief of Object.values(CODING_AGENT_BRIEF)) {
-    const watching = coderInstructions("Acme/Relay", brief, true);
+    const watching = coderInstructions(RELAY_AGENT, brief, true);
     for (const kept of [
       "gh pr checks",
       `${CODER.CI_FIX_ROUNDS} rounds`,
@@ -356,8 +360,27 @@ test("the session is told to watch its pull request's checks for the bounded rou
     ]) {
       assert.ok(watching.includes(kept), `${brief}: ${kept}`);
     }
-    const blind = coderInstructions("Acme/Relay", brief, false);
+    const blind = coderInstructions(RELAY_AGENT, brief, false);
     assert.ok(blind.includes("CI was not watched"), brief);
     assert.ok(!blind.includes("gh pr checks"), brief);
+  }
+});
+
+test("a rollout's worker is told it is checked out at its base, to cut its numbered branch from it and open onto it, and never to push the base or the default branch; a plain agent is told the default branch", () => {
+  for (const brief of Object.values(CODING_AGENT_BRIEF)) {
+    const stacked = coderInstructions(STACKED_WORKER, brief, false);
+    for (const kept of [
+      "at the branch `luke/invites/2-route`",
+      "`luke/<plan-slug>/3-<slug>`, cut from `luke/invites/2-route`",
+      "`gh pr create --base luke/invites/2-route`",
+      "Never commit to or push `luke/invites/2-route` or the default branch",
+    ]) {
+      assert.ok(stacked.includes(kept), `${brief}: ${kept}`);
+    }
+    assert.ok(!stacked.includes("at its current default branch"), brief);
+    const plain = coderInstructions(RELAY_AGENT, brief, false);
+    assert.ok(plain.includes("at its current default branch"), brief);
+    assert.ok(plain.includes("cut from the default branch"), brief);
+    assert.ok(!plain.includes("--base"), brief);
   }
 });

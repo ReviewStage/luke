@@ -3,6 +3,7 @@ import {
   CODING_AGENT_DELEGATE_TOOL,
   type CodingAgentBrief,
 } from "@sidecar/hosted/coding-agent-wire";
+import type { CodingAgent } from "../coding-agent-store.js";
 import { COMMAND_DESCRIPTION_INSTRUCTION } from "../command-description.js";
 import { CODER } from "./bounds.js";
 import { INBOX_TOOLS } from "./inbox.js";
@@ -25,6 +26,9 @@ const CODING_AGENT_EDIT_PLAN_TOOL = EDIT_PLAN_TOOL.name;
  * whether its token reads the repository's CI is the third; the checkout's
  * place is told as where every tool starts, the shell (`shell.ts`) and the
  * file tools (`files.ts`) alike.
+ * A worker of a plan's rollout is checked out at its base branch rather than
+ * the default one (`checkout.ts`), so the branch rule is worded from the
+ * base: its branch is cut from the base and its pull request opened onto it.
  * The commit identity is the one thing the checkout set that the session
  * is told to leave alone (`checkout.ts`): the commits are the developer's.
  * The worker's instructions stand beside the agent's: it owns one slice,
@@ -86,24 +90,45 @@ const CHECKS_WORDS = {
     "Your credential does not read the checks on a pull request in this repository, so do not try to watch them, and say in your final message that CI was not watched.",
 } as const;
 
-/** The instructions for one agent, on the repository its row names, worded for what it was handed, and for whether its token reads the repository's CI. */
+/** Where the checkout stands and what the agent's branch is cut from: the default branch, or the base its row names. */
+function branchWords(agent: Pick<CodingAgent, "position" | "baseBranch">) {
+  const base = agent.baseBranch;
+  if (base === null) {
+    return {
+      checkout: "at its current default branch",
+      rule: `Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.`,
+    };
+  }
+  const name =
+    agent.position === null
+      ? `${CODER.BRANCH_PREFIX}<slug>`
+      : `${CODER.BRANCH_PREFIX}<plan-slug>/${agent.position}-<slug>`;
+  return {
+    checkout: `at the branch \`${base}\`, which your work builds on, with the default branch fetched beside it as origin's`,
+    rule: `Work on a branch named \`${name}\`, cut from \`${base}\`, which is already pushed, and open your pull request onto it with \`gh pr create --base ${base}\`. Never commit to or push \`${base}\` or the default branch.`,
+  };
+}
+
+/** The instructions for one agent, on the repository and base its row names, worded for what it was handed, and for whether its token reads the repository's CI. */
 export function coderInstructions(
-  repository: string,
+  agent: Pick<CodingAgent, "repository" | "position" | "baseBranch">,
   brief: CodingAgentBrief,
   ciReadable: boolean,
 ): string {
   const words = BRIEF_WORDS[brief];
+  const branch = branchWords(agent);
+  const repository = agent.repository;
   return `You are Luke's coding agent. Your job is to ${words.job}, in the GitHub repository \`${repository}\`, and to decide whether the result is worth publishing as a pull request.
 
 ## The checkout
 
-The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, at its current default branch. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in.
+The repository is checked out at \`${CODER.CHECKOUT_PATH}\`, ${branch.checkout}. Work there. Every \`bash\` command already starts in the checkout, in a fresh shell, so give it paths relative to the checkout and never open a command with a \`cd\` into it; a \`cd\` lasts only for the call it is in. ${COMMAND_DESCRIPTION_INSTRUCTION} \`read_file\`, \`write_file\`, \`glob\`, \`grep\`, and \`apply_patch\` start there too: a relative path is resolved from the checkout, and an absolute path is taken as written. GitHub is reachable through \`gh\` and \`git\` from the shell: the credential is set at the sandbox's firewall and never in your environment, so never put a token in a URL or a command, and never try to sign in.
 
 ## How to work
 
 1. Read the repository's \`AGENTS.md\` and \`CLAUDE.md\` at the root and in every directory you touch, and its package files, before anything else. They say how this repository is built, tested, and reviewed, and they outrank these instructions where the two meet.
 2. ${words.reread}
-3. Work on a branch named \`${CODER.BRANCH_PREFIX}<slug>\`, cut from the default branch. Never commit to or push the default branch.
+3. ${branch.rule}
 4. Your commits are the developer's: the checkout's git identity is already set to their GitHub account, so never change \`user.name\` or \`user.email\`, pass \`--author\`, or rewrite who a commit is by. End every commit message with the co-author trailer \`git config --get luke.commitTrailer\` prints, on a line of its own, where it prints one; a hook adds it where you forget, and you never remove it.
 5. Make the smallest coherent change that ${words.whole}. Follow the repository's own conventions over any habit of yours.
 6. Run the repository's checks as its own files describe them, and fix what they find before you consider publishing.

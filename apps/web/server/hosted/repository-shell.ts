@@ -104,8 +104,10 @@ export const REPOSITORY_SANDBOX_CONTRACT = {
   VARIABLE: {
     /** The repository the call is about, `owner/name`, read by the probe and the checkout. */
     REPOSITORY: "LUKE_REPOSITORY",
-    /** The default branch the checkout is of. */
+    /** The branch the checkout is of: the default branch, or a coding agent's base. */
     BRANCH: "LUKE_BRANCH",
+    /** A second branch fetched beside the clone's and tracked as origin's: the default branch, where a coding agent's clone is of its base. */
+    ALSO_FETCH: "LUKE_ALSO_FETCH",
     /** The clone's URL, which carries no credential; its presence is what makes a run the checkout. */
     URL: "LUKE_CLONE_URL",
     /** How deep the clone is; unset, the whole history, which a coding agent's branch and pull request need. */
@@ -168,7 +170,8 @@ const CHECKED_OUT_SCRIPT = [
 /**
  * The checkout: a clone of the one branch, as deep as the depth variable
  * says and whole where it says nothing, into a directory of this call's
- * own, moved into place once whole. Note that a checkout
+ * own, with the second branch the variable names added to what origin
+ * tracks and fetched, moved into place once whole. Note that a checkout
  * another call of the same session finished first is kept and this one's
  * dropped, so two first calls racing (the planning model's and its
  * worker's) end on one checkout; and that a checkout of another repository,
@@ -180,6 +183,10 @@ const CHECKOUT_SCRIPT = [
   'partial="repository.$$"',
   'rm -rf "$partial"',
   `git clone --quiet \${${SANDBOX_VARIABLE.DEPTH}:+--depth "$${SANDBOX_VARIABLE.DEPTH}"} --single-branch --branch "$${SANDBOX_VARIABLE.BRANCH}" "$${SANDBOX_VARIABLE.URL}" "$partial"`,
+  `if [ -n "\${${SANDBOX_VARIABLE.ALSO_FETCH}:-}" ]; then`,
+  `  git -C "$partial" remote set-branches --add origin "$${SANDBOX_VARIABLE.ALSO_FETCH}"`,
+  `  git -C "$partial" fetch --quiet origin "$${SANDBOX_VARIABLE.ALSO_FETCH}"`,
+  "fi",
   'if [ -d repository ]; then rm -rf "$partial"; else mv "$partial" repository; fi',
   "mkdir -p .luke",
   `printf '%s' "$${SANDBOX_VARIABLE.REPOSITORY}" > ${SANDBOX_PATH.CHECKOUT_RECORD}`,
@@ -288,7 +295,9 @@ const PLANNING_CLONE_DEPTH = "1";
 /** A repository as the checkout clones it: the full name as GitHub spells it, the branch the clone is of, and the name the checkout's record keeps where a caller spells it otherwise. */
 export interface CheckoutRepository {
   readonly fullName: string;
-  readonly defaultBranch: string;
+  readonly branch: string;
+  /** A second branch fetched beside the clone's, so a branch cut from one can be rebased onto the other; none when unsaid. */
+  readonly alsoFetch?: string;
   /** What the checkout record names, which the probe compares; GitHub's spelling when unsaid. */
   readonly recordedAs?: string;
 }
@@ -386,8 +395,11 @@ export const cloneRepository = /* @__PURE__ */ Effect.fn("web/cloneRepository")(
       env: {
         ...COMMAND_ENVIRONMENT,
         [SANDBOX_VARIABLE.REPOSITORY]: confirmed.recordedAs ?? confirmed.fullName,
-        [SANDBOX_VARIABLE.BRANCH]: confirmed.defaultBranch,
+        [SANDBOX_VARIABLE.BRANCH]: confirmed.branch,
         [SANDBOX_VARIABLE.URL]: cloneUrl(confirmed.fullName),
+        ...(confirmed.alsoFetch === undefined
+          ? undefined
+          : { [SANDBOX_VARIABLE.ALSO_FETCH]: confirmed.alsoFetch }),
         ...(depth === undefined ? undefined : { [SANDBOX_VARIABLE.DEPTH]: depth }),
       },
     },
@@ -467,9 +479,12 @@ const checkOut = /* @__PURE__ */ Effect.fn("web/repositoryCheckOut")(function* (
   if (Option.isNone(reached))
     return yield* new RepositoryRefusal({ reason: REPOSITORY_REFUSAL.NOT_REACHABLE });
   const { repository: confirmed, token } = reached.value;
-  yield* cloneRepository(sandbox, { ...confirmed, recordedAs: repository }, token, {
-    depth: PLANNING_CLONE_DEPTH,
-  });
+  yield* cloneRepository(
+    sandbox,
+    { fullName: confirmed.fullName, branch: confirmed.defaultBranch, recordedAs: repository },
+    token,
+    { depth: PLANNING_CLONE_DEPTH },
+  );
 });
 
 /** The session's sandbox with a checkout standing in it, and which repository the checkout is of. */

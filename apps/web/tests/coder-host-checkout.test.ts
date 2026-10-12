@@ -47,8 +47,14 @@ function carriesToken(text: string): boolean {
   return text.includes(GITHUB_FIXTURE_INSTALLATION_TOKEN) || text.includes(TOKEN_HEADER);
 }
 
-/** An account with one agent started on a plan of the repository given. */
-const openAgent = (repository: string) =>
+/** The branch the rollout's second pull request stands on, which its third is based on. */
+const BASE_BRANCH = "luke/invitations/2-route";
+
+/** An account with one agent started on a plan of the repository given, at the rollout position and base given where any is. */
+const openAgent = (
+  repository: string,
+  rollout: { readonly position?: number; readonly baseBranch?: string } = {},
+) =>
   Effect.gen(function* () {
     const userId = yield* openGithubUser();
     const plan = yield* createPlan(userId, { name: "Teammate invitations", repository });
@@ -60,6 +66,7 @@ const openAgent = (repository: string) =>
       planSnapshot: "# Teammate invitations\n",
       task: null,
       repository,
+      ...rollout,
     });
     assert.ok(Option.isSome(started));
     const { agent } = started.value;
@@ -127,6 +134,36 @@ it.layer(testSqlClient)("a coding agent's checkout", (it) => {
           repositories: [RELAY.name],
           permissions: { contents: "write", pull_requests: "write" },
         });
+      }),
+  );
+
+  it.effect(
+    "a rollout's worker is cloned whole at its base branch with the default branch fetched beside it, under the token at the firewall for the clone alone, which reaches no command",
+    () =>
+      Effect.gen(function* () {
+        const { agent, target } = yield* openAgent(RELAY_FULL_NAME, {
+          position: 3,
+          baseBranch: BASE_BRANCH,
+        });
+        const github = githubReaching([INSTALLATION]);
+        const sandbox = sandboxDouble(() => undefined);
+
+        yield* checkOutAgentRepository(target, agent, sandbox).pipe(Effect.provide(github.layer));
+
+        assert.deepEqual(sandbox.clones, [
+          {
+            repository: RELAY_FULL_NAME,
+            branch: BASE_BRANCH,
+            url: `https://github.com/${RELAY_FULL_NAME}.git`,
+            alsoFetch: RELAY.defaultBranch,
+          },
+        ]);
+        assert.equal(sandbox.policies.length, 2);
+        assert.equal(sandbox.policies.at(-1), "allow-all");
+        for (const run of sandbox.runs) {
+          assert.equal(carriesToken(JSON.stringify(run)), false);
+        }
+        assert.deepEqual(sandbox.identities, [{ ...DEVELOPER_IDENTITY, trailer: LUKE_TRAILER }]);
       }),
   );
 
