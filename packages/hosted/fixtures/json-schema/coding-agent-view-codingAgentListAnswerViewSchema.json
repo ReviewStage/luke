@@ -77,6 +77,10 @@
                   "plan",
                   "task"
                 ]
+              },
+              "archivedAt": {
+                "type": "number",
+                "minimum": 0
               }
             },
             "required": [

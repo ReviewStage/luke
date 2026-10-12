@@ -31,7 +31,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * and the developer may rename it; a rename is never overwritten, and an
  * empty one clears the title so the tab falls back to the model's name.
  * Each of its workers is given a title the same way, from the task it was
- * handed, which no one renames.
+ * handed, which no one renames. An agent may be archived, which stops a
+ * turn still running and leaves it out of the plan's list unless the list
+ * asks for archived agents, and brought back; its transcript and pull
+ * request are kept.
  *
  * Every request refuses a key it does not name; an answer ignores one a
  * newer service added. Declared directly with Effect's `Schema.Struct` and
@@ -300,6 +303,31 @@ export const codingAgentRenameRequestSchema = EffectSchema.Struct({
 
 export type CodingAgentRenameRequest = typeof codingAgentRenameRequestSchema.Type;
 
+/**
+ * Archiving an agent, or bringing it back (PATCH). Archiving one with a
+ * turn running stops that turn first, as a Stop would, and the answer is
+ * the agent as it then stands. One still starting, or with a message
+ * awaiting its turn, has no turn to stop yet and is refused as not ready,
+ * to be tried again. An archived agent takes no message.
+ */
+export const codingAgentArchiveRequestSchema = EffectSchema.Struct({
+  archived: EffectSchema.Boolean,
+});
+
+/**
+ * The plan's agent list's query (GET): `archived=include` lists the
+ * archived agents among the rest, each carrying its `archivedAt`. Without
+ * it they are left out, which is what a build from before archiving asks.
+ */
+export const CODING_AGENT_LIST_QUERY = {
+  ARCHIVED: "archived",
+} as const;
+
+/** What the list's `archived` query may say. */
+export const CODING_AGENT_LIST_ARCHIVED = {
+  INCLUDE: "include",
+} as const;
+
 /** One agent as the tabs draw it: its title, what it runs on, when it started, where it stands, which turn that is, and when that run began. */
 export const codingAgentSummarySchema = EffectSchema.Struct({
   id: wireUuidSchema,
@@ -338,6 +366,8 @@ export const codingAgentSummarySchema = EffectSchema.Struct({
    * the plan.
    */
   brief: EffectSchema.optionalKey(EffectSchema.Literals(Object.values(CODING_AGENT_BRIEF))),
+  /** Epoch milliseconds the agent was archived; absent while it is not, and from a service before archiving. */
+  archivedAt: EffectSchema.optionalKey(countedNumber),
 });
 
 export type CodingAgentSummary = typeof codingAgentSummarySchema.Type;

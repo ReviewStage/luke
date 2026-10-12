@@ -14,7 +14,8 @@ import {
   webMigrationJournal,
 } from "../server/db/effect-migrator";
 import { db } from "../server/db/query";
-import { createCodingAgent } from "../server/hosted/coding-agent-store";
+import { conversations } from "../server/db/storage-schema";
+import { CONVERSATION_KIND } from "../server/db/storage-vocabulary";
 import { answerInboxItem, planInboxItems, postInboxItem } from "../server/hosted/inbox-store";
 import { createPlan } from "../server/hosted/plan-store";
 import { unmigratedPgliteSqlClient } from "./support/sql-client";
@@ -75,22 +76,27 @@ const migrationsThrough = (tag: string) =>
     return { folder, journal };
   });
 
-/** An account with one plan and one agent, as the store writes them at either migration. */
+/**
+ * An account with one plan and one agent. The agent's row is written naming
+ * only the columns it had before 0088, as the deployment before it wrote
+ * one, since the store's own Start names every column a later migration
+ * added and the database here stands before those.
+ */
 const openAgent = Effect.gen(function* () {
   const userId = `user-${randomUUID()}`;
   yield* db.insert(user).values({ id: userId, name: "Test User", email: `${userId}@luke.test` });
   const plan = yield* createPlan(userId, { name: "Teammate invitations" });
-  const started = yield* createCodingAgent(userId, {
-    planId: plan.id,
-    idempotencyKey: randomUUID(),
-    model: "anthropic/claude-opus-5.5",
-    effort: "high",
-    repository: "acme/relay",
-    planSnapshot: "# Teammate invitations\n",
-    task: null,
-  });
-  assert.ok(Option.isSome(started));
-  return { userId, planId: plan.id, agentId: started.value.agent.id };
+  const conversationId = randomUUID();
+  yield* db
+    .insert(conversations)
+    .values({ id: conversationId, userId, kind: CONVERSATION_KIND.CODING_AGENT });
+  const agentId = randomUUID();
+  const sql = yield* SqlClient.SqlClient;
+  yield* sql`
+    insert into coding_agent (id, plan_id, user_id, conversation_id, model, effort, plan_snapshot, repository, idempotency_key)
+    values (${agentId}, ${plan.id}, ${userId}, ${conversationId}, 'anthropic/claude-opus-5.5', 'high', '# Teammate invitations', 'acme/relay', ${randomUUID()})
+  `;
+  return { userId, planId: plan.id, agentId };
 });
 
 /** An item in the shape the deployment before 0088 wrote it. */

@@ -631,6 +631,13 @@
       "when": 1791390000000,
       "tag": "0090_linear_connection",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1791400000000,
+      "tag": "0091_coding_agent_archived",
+      "breakpoints": true
     }
   ]
 }

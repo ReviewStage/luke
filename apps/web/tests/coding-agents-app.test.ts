@@ -8,6 +8,7 @@ import {
   CODING_AGENT_BOUNDS,
   CODING_AGENT_BRIEF,
   CODING_AGENT_FAILURE,
+  CODING_AGENT_LIST_ARCHIVED,
   CODING_AGENT_STATUS,
   CONTEXT_WINDOW,
   type CodingAgentMessage,
@@ -343,10 +344,12 @@ function request(
     id?: string;
     after?: string;
     call?: string;
+    archived?: string | undefined;
   } = {},
 ): Request {
   const url = new URL(path, ORIGIN);
   if (init.id !== undefined) url.searchParams.set("id", init.id);
+  if (init.archived !== undefined) url.searchParams.set("archived", init.archived);
   if (init.after !== undefined) url.searchParams.set("after", init.after);
   if (init.call !== undefined) url.searchParams.set("call", init.call);
   return new Request(url, {
@@ -1255,6 +1258,152 @@ it.layer(testSqlClient)("the coding-agent routes", (it) => {
       );
       assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
     }),
+  );
+
+  it.effect(
+    "an archived agent is left out of the plan's list and the plans' briefs, listed with its stamp where the list asks for archived agents, still read by its id, and takes no message; bringing it back lists it again, one still starting is not archived yet, and another account's agent is not found",
+    () =>
+      Effect.gen(function* () {
+        const { owner, other, plan, eve, ask } = yield* openPlan();
+        const kept = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        // The list is in the order started, so the second starts a moment after the first.
+        yield* TestClock.adjust(Duration.seconds(1));
+        const agent = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.CREATED,
+          yield* ask(startAs(owner, plan.id, { idempotencyKey: randomUUID() })),
+        ).agent;
+        const archive = (bearer: string, archived: boolean) =>
+          ask(request(AGENT, bearer, { method: "PATCH", id: agent.id, body: { archived } }));
+        const listed = (archived?: string) =>
+          Effect.map(ask(request(PLAN_AGENTS, owner, { id: plan.id, archived })), (answer) =>
+            readAnswer(codingAgentListAnswerSchema, HOSTED_HTTP_STATUS.OK, answer).agents.map(
+              ({ id, archivedAt }) => ({ id, archived: archivedAt !== undefined }),
+            ),
+          );
+
+        assert.deepEqual(
+          yield* archive(other, true),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        // Still starting, its session may yet open a turn no Stop could name, so it is not archived yet.
+        assert.deepEqual(
+          yield* archive(owner, true),
+          refusal(HOSTED_HTTP_STATUS.CONFLICT, HOSTED_API_ERROR.AGENT_NOT_READY),
+        );
+        // Past the grace its first turn never landed in, the agent reads failed, which is what is archived.
+        yield* TestClock.adjust(Duration.sum(CODER.STARTING_GRACE, Duration.seconds(1)));
+        const archived = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* archive(owner, true),
+        );
+        assert.equal(archived.agent.archivedAt, yield* Clock.currentTimeMillis);
+        assert.deepEqual(yield* listed(), [{ id: kept.id, archived: false }]);
+        assert.deepEqual(yield* listed(CODING_AGENT_LIST_ARCHIVED.INCLUDE), [
+          { id: kept.id, archived: false },
+          { id: agent.id, archived: true },
+        ]);
+        const briefs = yield* listPublishedCodingAgents(owner, [plan.id]);
+        assert.deepEqual(
+          briefs.map((brief) => brief.agent.id),
+          [kept.id],
+        );
+        // The transcript still reads by the agent's id, and a message reaches nothing.
+        readAnswer(
+          codingAgentMessagesAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* ask(request(AGENT_MESSAGES, owner, { id: agent.id })),
+        );
+        assert.deepEqual(
+          yield* ask(
+            request(AGENT_MESSAGES, owner, {
+              method: "POST",
+              id: agent.id,
+              body: { text: "Try again.", clientKey: randomUUID() },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.NOT_FOUND, HOSTED_API_ERROR.NOT_FOUND),
+        );
+        assert.deepEqual(eve.sent, []);
+
+        const restored = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* archive(owner, false),
+        );
+        assert.equal(restored.agent.archivedAt, undefined);
+        assert.deepEqual(yield* listed(), [
+          { id: kept.id, archived: false },
+          { id: agent.id, archived: false },
+        ]);
+      }),
+  );
+
+  it.effect(
+    "archiving an agent whose turn runs cancels that turn at eve first, so it reads cancelled and archived; an eve that refuses the cancel leaves it running and unarchived",
+    () =>
+      Effect.gen(function* () {
+        const refusing = fakeEve({ cancels: false });
+        const opened = yield* openPlan();
+        const refused = yield* openPlan({ eve: refusing });
+        /** An agent started on the plan, its session claimed and its first turn running. */
+        const running = (open: typeof opened) =>
+          Effect.gen(function* () {
+            const agent = readAnswer(
+              codingAgentAnswerSchema,
+              HOSTED_HTTP_STATUS.CREATED,
+              yield* open.ask(startAs(open.owner, open.plan.id, { idempotencyKey: randomUUID() })),
+            ).agent;
+            const stored = yield* readCodingAgent(open.owner, agent.id);
+            assert.ok(Option.isSome(stored));
+            const target = { userId: open.owner, conversationId: stored.value.conversationId };
+            const sessionId = open.eve.opened[0]?.sessionId ?? "";
+            assert.equal(yield* claimRuntimeSession(target, sessionId, new Date()), true);
+            const writer = yield* storeWriter({ tools: CODER_TOOL_SET });
+            yield* writer.enqueueTurn(target, { origin: TURN_ORIGIN.TYPED, eveTurnId: "turn_0" });
+            return { agent, sessionId };
+          });
+
+        const { agent, sessionId } = yield* running(opened);
+        const archived = readAnswer(
+          codingAgentAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* opened.ask(
+            request(AGENT, opened.owner, {
+              method: "PATCH",
+              id: agent.id,
+              body: { archived: true },
+            }),
+          ),
+        );
+        assert.deepEqual(opened.eve.cancelled, [[sessionId, "turn_0"]]);
+        assert.equal(archived.agent.status, CODING_AGENT_STATUS.CANCELLED);
+        assert.notEqual(archived.agent.archivedAt, undefined);
+
+        const stuck = yield* running(refused);
+        assert.deepEqual(
+          yield* refused.ask(
+            request(AGENT, refused.owner, {
+              method: "PATCH",
+              id: stuck.agent.id,
+              body: { archived: true },
+            }),
+          ),
+          refusal(HOSTED_HTTP_STATUS.SERVICE_UNAVAILABLE, HOSTED_API_ERROR.UNAVAILABLE),
+        );
+        const listed = readAnswer(
+          codingAgentListAnswerSchema,
+          HOSTED_HTTP_STATUS.OK,
+          yield* refused.ask(request(PLAN_AGENTS, refused.owner, { id: refused.plan.id })),
+        );
+        assert.equal(listed.agents[0]?.status, CODING_AGENT_STATUS.RUNNING);
+        assert.equal(listed.agents[0]?.archivedAt, undefined);
+      }),
   );
 
   it.effect(
