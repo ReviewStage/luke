@@ -731,7 +731,7 @@ function stripTabs(input: {
             },
           },
         ];
-  const subagentTabs = subagents.map(({ tab, label, state, worker }) => {
+  const subagentTabs = subagents.map(({ tab, label, state, stateWords, worker }) => {
     const { delegation } = tab;
     const read = () =>
       delegation === undefined
@@ -754,7 +754,7 @@ function stripTabs(input: {
       look: look(tab, {
         icon: <StateGlyph glyph={<BotIcon />} state={state} />,
         label,
-        tooltip: GLYPH_STATE_WORDS[state],
+        tooltip: stateWords,
       }),
       close: () => panel.onClose(tab),
       copy: copied(read),
@@ -923,16 +923,27 @@ interface DrawnSubagent {
   tab: SubagentSidePanelTab;
   label: string;
   state: GlyphState;
+  /** What its hint says of where it stands, as its own tab's transcript says it. */
+  stateWords: string | undefined;
   worker: WorkWorkerBlock | undefined;
 }
 
 /** Where the open delegated workers stand, by the call that started each, as their tabs' pages last said. */
 type WorkerStandings = ReadonlyMap<string, CodingAgentStatus>;
 
-/** Where a planning worker stands as its tab's glyph wears it: working while its call still moves, failed once it failed. */
-function workerGlyphState(worker: WorkWorkerBlock): GlyphState {
-  if (worker.call.running) return GLYPH_STATE.WORKING;
-  return worker.call.state === PLAN_WORK_STATE.FAILED ? GLYPH_STATE.FAILED : GLYPH_STATE.REST;
+/**
+ * Where a planning worker stands as its tab wears it: working while its
+ * call still moves, and at rest once it ended. Note that a worker whose call
+ * failed is said to have stopped rather than failed, because that is a
+ * worker whose planning call ended under it, as its own transcript's end
+ * line says (`plan-work.tsx`), and no failure of its own.
+ */
+function workerStanding(worker: WorkWorkerBlock): Pick<DrawnSubagent, "state" | "stateWords"> {
+  if (worker.call.running) {
+    return { state: GLYPH_STATE.WORKING, stateWords: GLYPH_STATE_WORDS[GLYPH_STATE.WORKING] };
+  }
+  const stopped = worker.call.state === PLAN_WORK_STATE.FAILED;
+  return { state: GLYPH_STATE.REST, stateWords: stopped ? "Stopped" : undefined };
 }
 
 /** The open subagent tabs the plan draws now (`drawsSubagent`), in the strip's order: each planning worker the work still holds, and each delegated worker whose agent's tab is open. */
@@ -951,6 +962,7 @@ function drawnSubagents(
           tab,
           label: cardTitle(tab.delegation.task),
           state: agentGlyphState(status),
+          stateWords: agentStateWords(status),
           worker: undefined,
         },
       ];
@@ -958,7 +970,7 @@ function drawnSubagents(
     const worker = workerOf(workRows, tab.subagent);
     return worker === undefined
       ? []
-      : [{ tab, label: workerJob(worker.call), state: workerGlyphState(worker), worker }];
+      : [{ tab, label: workerJob(worker.call), ...workerStanding(worker), worker }];
   });
 }
 

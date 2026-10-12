@@ -795,6 +795,34 @@ test("a subagent's tab cuts a long job short and says the whole of it in its hin
   assert.equal(hover(tabNamed(page, job)), `${job} · Working`);
 });
 
+test("a planning worker whose call ended under it wears its glyph at rest and says it stopped, as its transcript does, with no failure alert", () => {
+  const job = "Compare the two queue libraries.";
+  const live = workerWork(job);
+  const turn = live.turns?.[0];
+  const worker = turn?.parts[0];
+  assert.ok(turn && worker?.type === PLAN_WORK_PART.TOOL);
+  const stopped: PlansControl["work"] = {
+    ...live,
+    callLive: false,
+    turns: [
+      {
+        ...turn,
+        state: PLAN_WORK_STATE.FAILED,
+        parts: [{ ...worker, state: PLAN_WORK_STATE.FAILED }],
+      },
+    ],
+  };
+  const page = mountOpenPlan({ work: stopped });
+  press(page, '[aria-label="Show panel"]');
+  act(() => tabNamed(page, "Work").click());
+  press(page, "[data-subagent-row]");
+  const tab = tabNamed(page, job);
+
+  assert.equal(tabState(tab), undefined, "no alert");
+  assert.ok(tab.querySelector("svg.lucide-bot"), "the worker's glyph");
+  assert.equal(hover(tab), "Stopped");
+});
+
 test("a tab's label cut short is marked to fade at its end, while a label shown whole is not", () => {
   const job =
     "Compare the two queue libraries on revocation, retries, and the cost of running each at our volume.";
