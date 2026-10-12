@@ -1,6 +1,7 @@
 import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { RetryButton, RetryRowLabel } from "../retry-button";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import {
@@ -97,7 +98,11 @@ function EdgeRow({
       onClick={() => load.current()}
     >
       <BusyLabel busy={read === EDGE_READ.READING} label="Loading lines">
-        {read === EDGE_READ.FAILED ? "Could not read these lines. Try again" : label}
+        {read === EDGE_READ.FAILED ? (
+          <RetryRowLabel failure="Could not read these lines." />
+        ) : (
+          label
+        )}
       </BusyLabel>
     </button>
   );
@@ -202,9 +207,7 @@ function ReadNotice({
           : "The file could not be read."}
       </p>
       {read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
-        <button type="button" className="toolbar-button" onClick={onRetry}>
-          Try again
-        </button>
+        <RetryButton onRetry={onRetry} />
       ) : null}
     </>
   );

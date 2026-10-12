@@ -168,7 +168,7 @@ test("Use Luke's closes the editor on his words and saves nothing more", async (
   assert.equal(container.querySelector(".plan-field-editor"), null);
 });
 
-test("a save that failed says why and keeps the words; Try again saves them", async () => {
+test("a save that failed says why and keeps the words; Retry saves them", async () => {
   const { container, sent } = mount(PLAN, [
     { failure: PLAN_CALL_FAILURE.UNANSWERED },
     { saved: true },
@@ -180,7 +180,7 @@ test("a save that failed says why and keeps the words; Try again saves them", as
 
   assert.ok(container.textContent?.includes("Not saved: the service did not answer."));
   assert.equal(box(container).value, "- Only an owner can add a member.");
-  act(() => buttonText(container, "Try again").click());
+  act(() => buttonText(container, "Retry").click());
   await settle();
 
   assert.equal(sent.length, 2);

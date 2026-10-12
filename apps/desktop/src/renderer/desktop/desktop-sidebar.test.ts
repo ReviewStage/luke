@@ -996,6 +996,21 @@ test("with every plan archived, the list says nothing of having none, and with n
   assert.match(empty.textContent ?? "", /No plans yet/u);
 });
 
+test("a list that could not be read says so in a sentence of its own, with Retry after it reading the list again", () => {
+  let retries = 0;
+  const container = mount(DEAN, {
+    plans: { listFailed: true, onRetryList: () => (retries += 1) },
+  });
+
+  const alert = container.querySelector(".sidebar-group [role=alert]");
+  assert.equal(alert?.querySelector("p")?.textContent, "Your plans couldn't be loaded.");
+  const retry = alert?.querySelector("button");
+  assert.equal(retry?.textContent, "Retry");
+  assert.doesNotMatch(container.textContent ?? "", /No plans yet/u);
+  act(() => retry?.click());
+  assert.equal(retries, 1);
+});
+
 /** A plan's row of the list on a repository, last updated at `updatedAt`. */
 function onRepository(name: string, repository: string | null, updatedAt = 1) {
   return { id: `plan-${name}`, name, createdAt: 1, updatedAt, repository };

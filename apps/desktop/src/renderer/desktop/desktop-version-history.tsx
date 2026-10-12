@@ -10,6 +10,7 @@ import { DOCUMENT_REGION } from "../planning/planning-model";
 import { HISTORY_READ } from "../planning/use-plan-history";
 import type { PlansControl } from "../planning/use-plans-tab";
 import { VersionSkeleton, VersionView } from "../planning/version-view";
+import { RetryButton, RetryRowLabel } from "../retry-button";
 import { Skeleton, SkeletonRegion } from "../skeleton";
 import { BusyLabel } from "../spinner";
 import { commandKeyshortcuts, ShortcutGlyphs } from "../tooltip";
@@ -127,7 +128,11 @@ function EarlierRow({ onRead }: { onRead: () => Promise<boolean> }): React.JSX.E
   return (
     <button type="button" className="version-earlier" disabled={reading} onClick={read}>
       <BusyLabel busy={reading} label="Loading older versions">
-        {failed ? "Could not read older versions. Try again" : "Show older versions"}
+        {failed ? (
+          <RetryRowLabel failure="Could not read older versions." />
+        ) : (
+          "Show older versions"
+        )}
       </BusyLabel>
     </button>
   );
@@ -214,9 +219,7 @@ function VersionPage({ plans }: { plans: PlansControl }): React.JSX.Element {
         {list.kind === HISTORY_READ.FAILED ? (
           <>
             <p role="alert">The history could not be read.</p>
-            <button type="button" className="primary-button" onClick={history.onRetry}>
-              Try again
-            </button>
+            <RetryButton onRetry={history.onRetry} />
           </>
         ) : (
           <p>{NO_HISTORY_LINE}</p>

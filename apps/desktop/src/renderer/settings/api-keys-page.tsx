@@ -14,6 +14,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ACT_KIND } from "#shared/messages/acts";
 import { useAct } from "../act";
 import { HarnessMark } from "../provider-marks";
+import { RetryButton } from "../retry-button";
 import { SETTINGS_SEARCH_ROW, searchAnchorProps } from "../settings-anchors";
 import { BusyLabel, SpinnerRegion } from "../spinner";
 import { useConfirm } from "./confirm-state";
@@ -38,7 +39,7 @@ import { ConfirmSwap } from "./confirm-swap";
 
 /** What the page says while it cannot read or write, and with no account. */
 const PAGE_LINE = {
-  FAILED: "Your keys could not be read. Try again.",
+  FAILED: "Your keys could not be read.",
   SIGNED_OUT: "Sign in to add your own API keys.",
   NOTE: "A coding agent on a provider's model runs on your own key for that provider when you add one, and usage on it is billed to you by that provider. Without one, it runs on Luke's.",
   SAVE_FAILED: "The key could not be saved. Try again.",
@@ -346,13 +347,7 @@ export function ApiKeysSection({ signedIn }: { signedIn: boolean }): React.JSX.E
           <p className="error-message" role="alert">
             {PAGE_LINE.FAILED}
           </p>
-          <button
-            type="button"
-            className="toolbar-button"
-            onClick={() => setAttempt((count) => count + 1)}
-          >
-            Try again
-          </button>
+          <RetryButton onRetry={() => setAttempt((count) => count + 1)} />
         </>
       ) : (
         <SpinnerRegion label="Loading your keys" />

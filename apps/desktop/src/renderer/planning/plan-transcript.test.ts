@@ -132,7 +132,7 @@ test("a spoken line that reads as a markdown image draws no image, so the tab as
   assert.match(drawn, /Look at/u);
 });
 
-test("the empty and failed states each say where the transcript stands, and a failure offers Try again", () => {
+test("the empty and failed states each say where the transcript stands, and a failure offers Retry", () => {
   const empty = renderToStaticMarkup(
     createElement(PlanTranscript, {
       region: { kind: TRANSCRIPT_REGION.EMPTY },

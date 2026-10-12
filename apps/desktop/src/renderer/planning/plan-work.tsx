@@ -18,6 +18,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { Shimmer } from "../ai-elements/shimmer";
 import { TOOL_BLOCK, TOOL_STATE, type ToolState } from "../ai-elements/tool";
+import { RetryRowLabel } from "../retry-button";
 import { BusyLabel, Spinner } from "../spinner";
 import {
   TranscriptNote,
@@ -310,7 +311,7 @@ type EarlierRead = (typeof EARLIER_READ)[keyof typeof EARLIER_READ];
 /** What the row before the oldest turn drawn says, by where the read stands; a read out draws the spinner over the row's words. */
 const EARLIER_LINE = {
   [EARLIER_READ.IDLE]: "Show earlier work",
-  [EARLIER_READ.FAILED]: "Could not read earlier work. Try again",
+  [EARLIER_READ.FAILED]: "Could not read earlier work.",
 } as const satisfies Record<Exclude<EarlierRead, typeof EARLIER_READ.READING>, string>;
 
 /**
@@ -349,7 +350,11 @@ function EarlierWork({ onLoad }: { onLoad: () => Promise<void> }): React.JSX.Ele
       onClick={() => load.current()}
     >
       <BusyLabel busy={read === EARLIER_READ.READING} label="Loading earlier work">
-        {EARLIER_LINE[read === EARLIER_READ.FAILED ? EARLIER_READ.FAILED : EARLIER_READ.IDLE]}
+        {read === EARLIER_READ.FAILED ? (
+          <RetryRowLabel failure={EARLIER_LINE[EARLIER_READ.FAILED]} />
+        ) : (
+          EARLIER_LINE[EARLIER_READ.IDLE]
+        )}
       </BusyLabel>
     </button>
   );

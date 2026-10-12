@@ -26,6 +26,7 @@ import { Message, MessageContent } from "../ai-elements/message";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
 import { useCopyToast } from "../copy-feedback";
 import { HarnessMark } from "../provider-marks";
+import { RetryButton } from "../retry-button";
 import { SPINNER_SIZE, Spinner } from "../spinner";
 import { StateGlyph } from "../state-glyph";
 import { AgentComposer } from "./agent-composer";
@@ -515,12 +516,10 @@ export function AgentTranscriptView({
           ) : null}
           {footer}
           {failed ? (
-            <p className="agent-note" role="alert">
-              The transcript could not be read.{" "}
-              <button type="button" className="toolbar-button" onClick={onRetry}>
-                Try again
-              </button>
-            </p>
+            <div className="agent-note agent-failure" role="alert">
+              <p className="m-0">The transcript could not be read.</p>
+              <RetryButton onRetry={onRetry} />
+            </div>
           ) : null}
         </ConversationContent>
         <ConversationScrollButton />
@@ -534,9 +533,7 @@ export function AgentTranscriptView({
           <p className="m-0" role="alert">
             The transcript could not be read.
           </p>
-          <button type="button" className="toolbar-button" onClick={onRetry}>
-            Try again
-          </button>
+          <RetryButton onRetry={onRetry} />
         </>
       ) : reading && ended === undefined ? (
         <Spinner label="Loading transcript" size={SPINNER_SIZE.REGION} />

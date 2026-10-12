@@ -232,7 +232,7 @@ test("an agent that has ended is read through once, page by page, and then left 
   );
 });
 
-test("a read that did not answer ends the loop and says so, and Try again reads on from the same cursor", async () => {
+test("a read that did not answer ends the loop and says so, and Retry reads on from the same cursor", async () => {
   const tab = mount({ status: CODING_AGENT_STATUS.RUNNING, shown: true });
   await tab.answer(page([message("a", "Hi")], "1:1", CODING_AGENT_STATUS.RUNNING));
 

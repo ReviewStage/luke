@@ -502,7 +502,7 @@ it.effect(
       );
 
       service.unreachable = false;
-      yield* press(page, "Try again");
+      yield* press(page, "Retry");
       assert.equal(rows(page).length, 3);
 
       service.unreachable = true;

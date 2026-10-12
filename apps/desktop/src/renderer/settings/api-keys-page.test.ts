@@ -248,10 +248,7 @@ test("a read that fails offers to try again, and no account reads nothing", asyn
   const failed = await mount();
   const signedOut = await mount(false);
 
-  assert.equal(
-    failed.querySelector('[role="alert"]')?.textContent,
-    "Your keys could not be read. Try again.",
-  );
+  assert.equal(failed.querySelector('[role="alert"]')?.textContent, "Your keys could not be read.");
   assert.equal(signedOut.textContent, "Sign in to add your own API keys.");
 });
 
