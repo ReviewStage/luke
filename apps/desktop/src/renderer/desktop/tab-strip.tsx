@@ -1,11 +1,18 @@
 import { CloseIcon } from "@sidecar/panel";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
 import { Tooltip } from "../tooltip";
 import { useClipped } from "../use-clipped";
-import { MENU_ALIGN, MENU_DROP, type MenuPlacement } from "./action-menu";
+import {
+  ActionMenu,
+  MENU_ALIGN,
+  MENU_DROP,
+  type MenuAction,
+  type MenuPlacement,
+  type OpenMenu,
+} from "./action-menu";
 import { type TabMove, useTabDrag } from "./use-tab-drag";
 
 /**
@@ -30,8 +37,9 @@ import { type TabMove, useTabDrag } from "./use-tab-drag";
  * reader.
  *
  * A tab with actions of its own offers them on a
- * right-click, or from the keyboard on the menu key or ⇧F10, hanging under
- * the tab.
+ * right-click, or from the keyboard on the menu key or ⇧F10, hanging where
+ * the pointer is or under the tab (`MenuTab`), and closing that menu hands
+ * focus back to the tab.
  *
  * Every tab stands whole, its glyph and its label, a long label cut short
  * and said whole in its hint, or in the card a tab with more to say hangs
@@ -439,5 +447,38 @@ export function Tab({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * A tab with its own actions, in the groups a rule divides, on a right-click
+ * or the keyboard's menu keys, hung where the pointer is or under the tab;
+ * closing the menu hands focus back to the tab. Every other part is `Tab`'s.
+ */
+export function MenuTab({
+  groups,
+  ...tab
+}: Omit<React.ComponentProps<typeof Tab>, "onMenu"> & {
+  groups: MenuAction[][];
+}): React.JSX.Element {
+  const [menu, setMenu] = useState<OpenMenu | undefined>(undefined);
+  const opener = useRef<HTMLElement | null>(null);
+  const close = useCallback((returnFocus: boolean) => {
+    setMenu(undefined);
+    if (returnFocus) opener.current?.focus();
+  }, []);
+  return (
+    <>
+      <Tab
+        {...tab}
+        onMenu={(placement, element) => {
+          opener.current = element;
+          setMenu({ placement, opener: element });
+        }}
+      />
+      {menu === undefined ? null : (
+        <ActionMenu label={`${tab.label} actions`} menu={menu} groups={groups} onClose={close} />
+      )}
+    </>
   );
 }

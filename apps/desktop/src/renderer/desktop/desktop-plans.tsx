@@ -1,5 +1,5 @@
 import type { PlanSummary } from "@sidecar/hosted/plan-wire";
-import { DocumentIcon } from "@sidecar/panel";
+import { DocumentIcon, PencilIcon } from "@sidecar/panel";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { APP_COMMAND } from "#shared/shortcuts";
 import { useAppCommand } from "../app-commands";
@@ -15,7 +15,7 @@ import { PlanActionsButton } from "./plan-actions";
 import { PlanNameField, usePlanRename } from "./plan-name-field";
 import { SidePanel, useSidePanelDrawing } from "./side-panel";
 import { StartAgentButton } from "./start-agent-button";
-import { Tab, TabStrip } from "./tab-strip";
+import { MenuTab, Tab, TabStrip } from "./tab-strip";
 
 /**
  * The work column while Plans is chosen: the open plan's document, with its
@@ -25,15 +25,15 @@ import { Tab, TabStrip } from "./tab-strip";
  * The plan list itself is the sidebar's, and so is moving between plans: the
  * toolbar offers no way out of the open plan, only its actions: Start, which
  * hands the plan to a coding agent, and the ⋯ menu, where Copy plan and the
- * rest stand. Its one tab is the plan's, named for it, and a press on it
- * renames the plan in place. The toolbar is one row, the side panel's bar's
- * height exactly; the plan's repository is the sidebar's row's to name, so
+ * rest stand. Its one tab is the plan's, named for it, whose right-click
+ * renames the plan in place, as the ⋯ menu's Rename does. The toolbar is
+ * one row, the side panel's bar's height exactly; the plan's repository is the sidebar's row's to name, so
  * the toolbar draws the repository chip only while the plan has none, and
  * otherwise only the chip's menu, which Change repository… opens.
  *
  * An archived plan reads and takes nothing until it is brought back: its
  * banner under the toolbar says so with Unarchive as its primary button,
- * and in the meantime the document is not edited, the tab does not rename,
+ * and in the meantime the document is not edited, the plan is not renamed,
  * no repository is chosen, Start and the call's start are not drawn, and
  * a version viewed is not restored (`../planning/archived-plan.tsx`).
  */
@@ -82,20 +82,22 @@ function PlanTabStrip({ tab }: { tab: React.JSX.Element }): React.JSX.Element {
   );
 }
 
-/** What a press on an archived plan's tab does: nothing, since it renames nothing. */
-const NO_RENAME = () => undefined;
+/** What a press on the plan's tab does: nothing, since it is the column's one tab and always the one chosen. */
+const CHOOSE_PLAN = () => undefined;
 
 /**
- * The open plan's tab: its name, which a press, or the ⋯ menu's Rename,
- * opens as its field, and its repository in the hint the pointer resting on
- * it raises. A key that ends the edit hands focus back to the tab.
+ * The open plan's tab: its name, and its repository in the hint the pointer
+ * resting on it raises. A press chooses it, as a press on any tab does,
+ * rather than renaming the plan; its right-click offers Rename, as the ⋯
+ * menu does, which opens the name as its field. A key that ends the edit
+ * hands focus back to the tab.
  */
 function PlanTab({
   plan,
   rename,
 }: {
   plan: PlanSummary;
-  /** The rename the tab's press opens; none while the plan is archived, which renames nothing. */
+  /** The rename the tab's menu opens; none while the plan is archived, which renames nothing. */
   rename: ReturnType<typeof usePlanRename> | undefined;
 }): React.JSX.Element {
   const tab = useRef<HTMLButtonElement | null>(null);
@@ -117,19 +119,27 @@ function PlanTab({
         }}
       />
     ) : undefined;
+  const look = {
+    icon: <DocumentIcon />,
+    label: plan.name,
+    selected: true,
+    quiet: true,
+    tooltip: plan.repository ?? undefined,
+    editor,
+    tabRef: tab,
+    onSelect: CHOOSE_PLAN,
+  };
   return (
     <PlanTabStrip
       tab={
-        <Tab
-          icon={<DocumentIcon />}
-          label={plan.name}
-          selected
-          quiet
-          tooltip={plan.repository ?? undefined}
-          editor={editor}
-          tabRef={tab}
-          onSelect={rename?.begin ?? NO_RENAME}
-        />
+        rename === undefined ? (
+          <Tab {...look} />
+        ) : (
+          <MenuTab
+            {...look}
+            groups={[[{ label: "Rename", icon: <PencilIcon />, onSelect: rename.begin }]]}
+          />
+        )
       }
     />
   );
@@ -174,13 +184,7 @@ function PlanDocument({
           heading={
             <PlanTabStrip
               tab={
-                <Tab
-                  icon={<DocumentIcon />}
-                  label="Plan"
-                  selected
-                  quiet
-                  onSelect={() => undefined}
-                />
+                <Tab icon={<DocumentIcon />} label="Plan" selected quiet onSelect={CHOOSE_PLAN} />
               }
             />
           }
