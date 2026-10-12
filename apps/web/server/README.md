@@ -940,7 +940,7 @@ repositories the account pinned in the sidebar, whose groups of plans stand
 above the rest: `GET` reads them newest pinned first, and `PUT` pins or
 unpins one and answers them all as they then stand. A pin is a row of
 `repository_pin` keyed by the account and the repository's full name
-(`server/hosted/repository-pin-store.ts`), stamped the first time it is made,
+(`packages/database/src/models/repository-pin-store.ts`), stamped the first time it is made,
 deleted when it is undone, bounded at fifty an account, and gone with the
 account. It names the repository and nothing of it, so it asks GitHub
 nothing. It is a path of its own rather than one under `/api/plans/`, whose
