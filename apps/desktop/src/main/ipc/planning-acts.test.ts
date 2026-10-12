@@ -38,6 +38,8 @@ function fixture() {
   const talked: string[] = [];
   const opened: string[] = [];
   const view: OpenPlan = { activePlanId: PLAN_ID };
+  /** Whether the host opens the Workspaces page when asked. */
+  const host = { workspacesOpen: true };
   const start: StartScript = {
     answer: { failure: PLAN_CALL_FAILURE.UNANSWERED },
     voiceReady: true,
@@ -124,6 +126,11 @@ function fixture() {
           asked.push(`restore:${params.seq}`);
           return true;
         }),
+      workspacesManage: () =>
+        Effect.sync(() => {
+          asked.push("manage-workspaces");
+          return host.workspacesOpen;
+        }),
     },
     openExternal: (url) => {
       opened.push(url);
@@ -139,7 +146,7 @@ function fixture() {
   // SAFETY: only the planning rows are under test; the router dispatches on
   // the kind alone, so the kinds this fragment does not answer are never reached.
   const router = createActRouter(rows as ActRows);
-  return { router, asked, talked, opened, view, start };
+  return { router, asked, talked, opened, view, start, host };
 }
 
 it.effect("the Plans tab's asks reach the host and answer what the host answered", () =>
@@ -202,6 +209,25 @@ it.effect("the Plans tab's asks reach the host and answer what the host answered
       `delete:${PLAN_ID}`,
     ]);
   }),
+);
+
+it.effect(
+  "managing workspaces asks the host from a panel, is refused where it did not open, and never from the voice window",
+  () =>
+    Effect.gen(function* () {
+      const f = fixture();
+
+      const managed = yield* f.router.performAct({ kind: ACT_KIND.WORKSPACES_MANAGE }, PANEL);
+      f.host.workspacesOpen = false;
+      const unopened = yield* f.router.performAct({ kind: ACT_KIND.WORKSPACES_MANAGE }, PANEL);
+      const fromVoice = yield* f.router.performAct({ kind: ACT_KIND.WORKSPACES_MANAGE }, VOICE);
+
+      assert.equal(managed.status, ACT_OUTCOME_STATUS.DONE);
+      assert.equal(unopened.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.equal(fromVoice.status, ACT_OUTCOME_STATUS.REFUSED);
+      assert.deepEqual(f.asked, ["manage-workspaces", "manage-workspaces"]);
+      assert.deepEqual(f.opened, []);
+    }),
 );
 
 it.effect(

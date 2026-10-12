@@ -55,6 +55,7 @@ import {
   type RepositoryCallFailure,
 } from "@sidecar/hosted/planning-view";
 import type { PlanTranscript } from "@sidecar/hosted/transcript-wire";
+import type { Workspace } from "@sidecar/hosted/workspace-wire";
 import { unparsedWire, type WireRecord } from "@sidecar/wire";
 import { readEither } from "@sidecar/wire/effect";
 import { Deferred, Duration, Effect, Fiber, Result } from "effect";
@@ -138,7 +139,15 @@ interface FakeService extends PlanningClient {
   pins: RepositoryPin[];
   /** Whether the pins are refused, read and written alike, as a service that did not answer refuses them. */
   pinsFail: boolean;
+  /** The workspaces the account is a member of, as the service lists them; none answers nothing, as a service that did not answer. */
+  memberships: Workspace[] | undefined;
 }
+
+const PERSONAL: Workspace = { id: "workspace-personal", name: "Ada Lovelace", personal: true };
+const ACME: Workspace = { id: "workspace-acme", name: "Acme", personal: false };
+
+/** The service's origin as the fake kernel names it. */
+const SERVICE_BASE_URL = "https://luke.test";
 
 /** The instant the fake service stamps every edit's save with. */
 const EDITED_AT = 7_000;
@@ -188,6 +197,8 @@ function fakeService(plans: Plan[]): FakeService {
     editAnswer: undefined,
     pins: [],
     pinsFail: false,
+    memberships: [PERSONAL],
+    workspaces: () => Effect.sync(() => service.memberships),
     repositoryPins: () => Effect.sync(() => (service.pinsFail ? undefined : service.pins)),
     // The service keeps a pin's first instant, newest pinned first, and answers the pins as they then stand.
     pinRepository: (repository, pinned) =>
@@ -325,9 +336,13 @@ interface StandingCall {
   closing?: Effect.Effect<void>;
 }
 
-function subject(service: FakeService, options: { signedIn?: boolean; call?: StandingCall } = {}) {
+function subject(
+  service: FakeService,
+  options: { signedIn?: boolean; call?: StandingCall; openFails?: boolean } = {},
+) {
   return Effect.gen(function* () {
     const told: PlanningView[] = [];
+    const opened: string[] = [];
     const waiters: {
       wanted: (view: PlanningView) => boolean;
       seen: Deferred.Deferred<PlanningView>;
@@ -336,6 +351,12 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
     const planning = yield* composePlanning({
       kernel: {
         runMode: { sendsNetwork: true },
+        hostedServiceBaseUrl: SERVICE_BASE_URL,
+        openExternalThroughNode: (url) => {
+          if (options.openFails) return Promise.reject(new Error("no node connected"));
+          opened.push(url);
+          return Promise.resolve();
+        },
         emit: (kind, payload) => {
           if (kind !== GATEWAY_EVENT.PLANNING_CHANGED) return;
           const read = readEither(planningViewSchema)(payload);
@@ -370,7 +391,7 @@ function subject(service: FakeService, options: { signedIn?: boolean; call?: Sta
         waiters.push({ wanted, seen });
         return yield* Deferred.await(seen);
       });
-    return { planning, call, told, last, viewWhere };
+    return { planning, call, told, last, viewWhere, opened };
   });
 }
 
@@ -1201,8 +1222,60 @@ it.effect("a sign-out drops the view the window drew", () =>
     assert.deepEqual(last(), {
       plans: [],
       listStatus: PLANNING_READ.IDLE,
+      workspaces: [],
       document: { status: PLANNING_READ.IDLE },
     });
+  }),
+);
+
+it.effect("the list read carries the account's workspaces, and a sign-out clears them", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last, planning } = yield* subject(service);
+
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+
+    yield* planning.reset;
+    assert.deepEqual(last()?.workspaces, []);
+  }),
+);
+
+it.effect("a workspaces read the service did not answer keeps the workspaces already read", () =>
+  Effect.gen(function* () {
+    const service = fakeService([plan(INVITES, "Teammate invitations", "# Draft", 10)]);
+    service.memberships = [PERSONAL, ACME];
+    const { call, last } = yield* subject(service);
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    service.memberships = undefined;
+    service.plans = [];
+    yield* call(GATEWAY_METHOD.PLANNING_REFRESH);
+
+    assert.deepEqual(last()?.plans, []);
+    assert.deepEqual(last()?.workspaces, [PERSONAL, ACME]);
+  }),
+);
+
+it.effect("managing workspaces opens the service's Workspaces page and nothing else", () =>
+  Effect.gen(function* () {
+    const { call, opened, told } = yield* subject(fakeService([]), { signedIn: false });
+
+    const answer = yield* call(GATEWAY_METHOD.WORKSPACES_MANAGE);
+
+    assert.deepEqual(answer, { opened: true });
+    assert.deepEqual(opened, [`${SERVICE_BASE_URL}/workspaces.html`]);
+    assert.deepEqual(told, []);
+  }),
+);
+
+it.effect("a Workspaces page the node could not open answers that it did not open", () =>
+  Effect.gen(function* () {
+    const { call, opened } = yield* subject(fakeService([]), { openFails: true });
+
+    assert.deepEqual(yield* call(GATEWAY_METHOD.WORKSPACES_MANAGE), { opened: false });
+    assert.deepEqual(opened, []);
   }),
 );
 

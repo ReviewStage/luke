@@ -50,6 +50,8 @@ export const GATEWAY_METHOD = {
   PLANNING_RESTORE: "planning.restore",
   /** The developer's scene of the open plan's whiteboard, saved over the revision it was drawn on; the view takes the board as the service answered it. */
   PLANNING_BOARD_SAVE: "planning.boardSave",
+  /** The service's Workspaces page opened in the browser, where the account's workspaces are made and their members managed. */
+  WORKSPACES_MANAGE: "workspaces.manage",
   /** The models a coding agent may run on, read from the service's catalog now. */
   CODING_AGENTS_MODELS: "codingAgents.models",
   /** The account's default model and effort for a coding agent, read from the service now. */

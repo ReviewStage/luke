@@ -8,6 +8,7 @@ import {
 } from "@sidecar/gateway";
 import type {
   HostedPlanClient,
+  HostedWorkspaceClient,
   PlanActivityFrame,
   PlanDraftFrame,
   PlanMarks,
@@ -88,6 +89,10 @@ import type { RunMode } from "./run-mode.js";
  * plan's history is read for the version history that asks and held nowhere
  * here; a revision restored is the one write this concern carries to the
  * service on the developer's word, and the view takes the plan it answers.
+ * The workspaces the account is a member of are read with the list and
+ * carried on the view beside it, and the service's Workspaces page, where
+ * they are made and their members managed, is opened in the browser from
+ * here.
  */
 
 /**
@@ -105,7 +110,13 @@ type PlanMarkStamps = Pick<Plan, "pinnedAt" | "archivedAt">;
 /** Opening or deleting a plan names it and nothing else. */
 const planningOpenParamsSchema = Schema.Struct({ planId: Schema.NonEmptyString });
 
-/** The service's side of the plans, as this concern asks it. */
+/**
+ * The Workspaces page on the service's site, where the account's workspaces
+ * are made and their members managed in the browser's own session.
+ */
+const WORKSPACES_PAGE_PATH = "/workspaces.html";
+
+/** The service's side of the plans, and the workspaces they live in, as this concern asks it. */
 export type PlanningClient = Pick<
   HostedPlanClient,
   | "list"
@@ -128,10 +139,15 @@ export type PlanningClient = Pick<
   | "repositories"
   | "setRepository"
   | "edit"
->;
+> & {
+  /** Every workspace the account is a member of, its personal one first; nothing where the service did not answer. */
+  workspaces: HostedWorkspaceClient["list"];
+};
 
 export interface PlanningDependencies {
-  kernel: Pick<HostKernel, "emit"> & { runMode: Pick<RunMode, "sendsNetwork"> };
+  kernel: Pick<HostKernel, "emit" | "hostedServiceBaseUrl" | "openExternalThroughNode"> & {
+    runMode: Pick<RunMode, "sendsNetwork">;
+  };
   account: Pick<AccountComposer, "capabilitiesActive">;
   client: PlanningClient;
   /**
@@ -274,13 +290,16 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
 
   const readList = Effect.gen(function* () {
     const listed = yield* Effect.provide(client.list(), FetchHttpClient.layer);
+    const workspaces = yield* Effect.provide(client.workspaces(), FetchHttpClient.layer);
     // A failed read keeps the list it last read: the panel says the read
-    // failed beside the plans it already drew rather than emptying them.
-    write(
-      listed.ok
+    // failed beside the plans it already drew rather than emptying them,
+    // and the workspaces those plans name stay as they were read.
+    write({
+      ...(listed.ok
         ? { plans: listed.answer, listStatus: PLANNING_READ.READY }
-        : { listStatus: PLANNING_READ.FAILED },
-    );
+        : { listStatus: PLANNING_READ.FAILED }),
+      ...(workspaces === undefined ? undefined : { workspaces }),
+    });
   });
 
   // A failed read keeps the pins it last read, as a failed list read keeps the plans.
@@ -947,6 +966,18 @@ export const composePlanning = /* @__PURE__ */ Effect.fn("host/composePlanning")
           }),
         );
       }),
+    // The page is the service's own, opened in the browser, where the
+    // account's session is the browser's: nothing of this Mac's account
+    // travels with it, so it opens behind no gate.
+    [GATEWAY_METHOD.WORKSPACES_MANAGE]: () =>
+      Effect.match(
+        Effect.tryPromise(() =>
+          kernel.openExternalThroughNode(
+            new URL(WORKSPACES_PAGE_PATH, kernel.hostedServiceBaseUrl).href,
+          ),
+        ),
+        { onFailure: () => ({ opened: false }), onSuccess: () => ({ opened: true }) },
+      ),
     // A save of another plan than the open one is dropped: its board is not drawn.
     [GATEWAY_METHOD.PLANNING_BOARD_SAVE]: (params) =>
       Effect.gen(function* () {

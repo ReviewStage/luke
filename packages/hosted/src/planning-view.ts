@@ -24,6 +24,7 @@ import {
   shownCodeSchema,
 } from "./plan-wire.js";
 import { planTranscriptSchema } from "./transcript-wire.js";
+import { workspaceSchema } from "./workspace-wire.js";
 
 /**
  * planning-view.ts -- the named plans as one Mac holds them for its panel's Plans tab: the list, the one active plan, and its saved document.
@@ -352,6 +353,8 @@ export const planningViewSchema = EffectSchema.Struct({
   /** The account's plans, newest started first, as the last list read answered. */
   plans: EffectSchema.Array(planSummarySchema),
   listStatus: planningReadSchema,
+  /** The workspaces the account is a member of, its personal one first, as the last list read answered; none before the first lands. */
+  workspaces: EffectSchema.Array(workspaceSchema),
   /** The repositories the account pinned in the sidebar, newest pinned first, as last read or pinned; absent before the first read lands. */
   repositoryPins: EffectSchema.optionalKey(EffectSchema.Array(repositoryPinSchema)),
   /** The one active plan, absent while the window has none open. */
@@ -389,6 +392,7 @@ export type PlanningView = typeof planningViewSchema.Type;
 export const IDLE_PLANNING_VIEW: PlanningView = {
   plans: [],
   listStatus: PLANNING_READ.IDLE,
+  workspaces: [],
   document: { status: PLANNING_READ.IDLE },
 };
 

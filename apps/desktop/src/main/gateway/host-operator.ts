@@ -197,6 +197,8 @@ export interface HostOperator {
   planningRevision(params: PlanningRevisionParams): Effect.Effect<PlanningRevisionAnswer>;
   /** One revision of a plan restored as its content; answers whether the service restored it. */
   planningRestore(params: PlanningRevisionParams): Effect.Effect<boolean>;
+  /** The service's Workspaces page opened in the browser; answers whether it opened. */
+  workspacesManage(): Effect.Effect<boolean>;
   /** The models a coding agent may run on, as the service offers them now; or why there is no list. */
   codingAgentModels(): Effect.Effect<CodingAgentModelsAnswer>;
   /** The account's default model and effort for a coding agent; or why there is none. */
@@ -509,6 +511,11 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_RESTORE, { planId: params.planId, seq: params.seq }),
         (answer) => record(answer)?.restored === true,
       ),
+    workspacesManage: () =>
+      Effect.map(
+        client.call(GATEWAY_METHOD.WORKSPACES_MANAGE),
+        (answer) => record(answer)?.opened === true,
+      ),
     planningSetRepository: (params) =>
       Effect.map(
         client.call(GATEWAY_METHOD.PLANNING_SET_REPOSITORY, {
@@ -539,6 +546,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
         client.call(GATEWAY_METHOD.PLANNING_START, {
           name: request.name,
           ...("repository" in request ? { repository: request.repository } : undefined),
+          ...("workspaceId" in request ? { workspaceId: request.workspaceId } : undefined),
         }),
         (answer): PlanningStartAnswer =>
           (answer.ok

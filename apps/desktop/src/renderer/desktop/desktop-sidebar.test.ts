@@ -1331,6 +1331,81 @@ test("a repository's menu closes when the sidebar folds away, so nothing of a hi
   assert.deepEqual(menuItems(), []);
 });
 
+const PERSONAL = { id: "workspace-personal", name: "Personal", personal: true };
+const ACME = { id: "workspace-acme", name: "Acme", personal: false };
+
+function workspaceSwitcher(container: HTMLElement): HTMLButtonElement | null {
+  return container.querySelector<HTMLButtonElement>(".sidebar-workspace-toggle");
+}
+
+test("the plans are headed by the workspace listed, whose menu lists every workspace, the listed one checked, and chooses another", () => {
+  const chosen: string[] = [];
+  let managed = 0;
+  const container = mount(DEAN, {
+    plans: {
+      plans: [onRepository("Billing", "acme/ledger")],
+      workspaces: [PERSONAL, ACME],
+      workspace: PERSONAL,
+      onChooseWorkspace: (workspaceId) => chosen.push(workspaceId),
+      onManageWorkspaces: () => {
+        managed += 1;
+      },
+    },
+  });
+  const switcher = workspaceSwitcher(container);
+  assert.ok(switcher, "two workspaces draw the switcher");
+
+  act(() => switcher.click());
+  const offered = menuItems().map((item) => [item.textContent, item.querySelector("svg") !== null]);
+  choose("Acme");
+  act(() => switcher.click());
+  choose("Manage workspaces…");
+
+  assert.equal(switcher.textContent, "Personal");
+  assert.deepEqual(offered, [
+    ["Personal", true],
+    ["Acme", false],
+    ["Manage workspaces…", true],
+  ]);
+  assert.deepEqual(chosen, [ACME.id]);
+  assert.equal(managed, 1);
+  assert.ok(
+    switcher.compareDocumentPosition(header(container, "ledger")) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    "the switcher heads the plans",
+  );
+});
+
+test("an account in its personal workspace alone, or signed out, draws no switcher", () => {
+  const alone = mount(DEAN, {
+    plans: {
+      plans: [onRepository("Billing", "acme/ledger")],
+      workspaces: [PERSONAL],
+      workspace: PERSONAL,
+    },
+  });
+  const signedOut = mount(
+    { status: ACCOUNT_STATUS.SIGNED_OUT },
+    { plans: { signedIn: false, workspaces: [PERSONAL, ACME], workspace: PERSONAL } },
+  );
+
+  assert.equal(workspaceSwitcher(alone), null);
+  assert.equal(workspaceSwitcher(signedOut), null);
+});
+
+test("the workspace menu closes when the sidebar folds away", () => {
+  const container = mount(DEAN, { plans: { workspaces: [PERSONAL, ACME], workspace: ACME } });
+  const switcher = workspaceSwitcher(container);
+  assert.ok(switcher);
+  act(() => switcher.click());
+  const opened = menuItems().length;
+
+  restages.get(container)?.({ collapsed: true });
+
+  assert.equal(opened, 3);
+  assert.deepEqual(menuItems(), []);
+});
+
 test("a pinned repository stands above groups updated since, newest pinned first and marked pinned, and its menu asks for the pin or the unpin", () => {
   const asked: [string, boolean][] = [];
   const container = mount(DEAN, {
