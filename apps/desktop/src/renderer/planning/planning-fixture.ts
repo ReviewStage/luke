@@ -90,6 +90,7 @@ const FIXTURE_PLAN: Plan = {
       { text: "An invite expires after 7 days." },
     ],
   },
+  fields: FIXTURE_FIELDS,
 };
 
 const FIXTURE_OTHER_PLANS: readonly PlanSummary[] = [
