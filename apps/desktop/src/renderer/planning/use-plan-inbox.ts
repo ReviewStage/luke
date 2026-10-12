@@ -13,7 +13,13 @@ import {
 } from "@sidecar/hosted/inbox-wire";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { messageFailureNote } from "./coding-agent-model";
-import { type InboxBoardView, type InboxDraft, inboxBoard, inboxReply } from "./inbox-model";
+import {
+  EMPTY_INBOX_DRAFT,
+  type InboxBoardView,
+  type InboxDraft,
+  inboxBoard,
+  inboxReply,
+} from "./inbox-model";
 
 /**
  * use-plan-inbox.ts -- the open plan's inbox as one control: its items, read on the service's held long-poll while the window shows the plans, and the answers on their way back.
@@ -56,8 +62,18 @@ export interface PlanInboxControl {
   readonly sending: ReadonlySet<string>;
   /** Why an answer did not go, or was not taken, by item, said on its card until the next send. */
   readonly notes: ReadonlyMap<string, string>;
+  /** What the developer has put on the item's card so far, at the revision it stands at; an empty card where nothing, or where the agent has changed the item since. */
+  readonly draftOf: (item: InboxItem) => InboxDraft;
+  /** Keeps what the developer has put on the item's card, at its revision. */
+  readonly onDraft: (item: InboxItem, draft: InboxDraft) => void;
   /** Sends the card's answer, with the press where its kind is answered by one; nothing where it holds none or one is out. */
   readonly onAnswer: (item: InboxItem, draft: InboxDraft, press?: InboxReplyKind) => void;
+}
+
+/** A card's draft as the hook keeps it: the revision it was written against, and what it holds. */
+interface KeptDraft {
+  readonly revision: number;
+  readonly draft: InboxDraft;
 }
 
 /** What a card says when its answer was not taken, by what had become of the item. */
@@ -126,6 +142,11 @@ export function usePlanInbox(input: {
   const [attempt, setAttempt] = useState(0);
   const [sending, setSending] = useState<ReadonlySet<string>>(new Set());
   const [notes, setNotes] = useState<ReadonlyMap<string, string>>(new Map());
+  // Note that the drafts are kept here rather than on the cards, because a
+  // card is let go whenever the tab is, and an unsent answer must outlast a
+  // look at another tab; a draft stands only at the revision it was written
+  // against, so a change of the agent's starts its card afresh.
+  const [drafts, setDrafts] = useState<ReadonlyMap<string, KeptDraft>>(new Map());
   const attempts = useRef(new Map<string, Attempt>());
   const latest = useRef(agents);
   latest.current = agents;
@@ -205,6 +226,11 @@ export function usePlanInbox(input: {
             note(item.id, notTakenNote(answer.item));
             return;
           }
+          setDrafts((standing) => {
+            const next = new Map(standing);
+            next.delete(item.id);
+            return next;
+          });
           if (item.needsReply) latest.current.onRetryList();
         });
     },
@@ -225,8 +251,21 @@ export function usePlanInbox(input: {
     latest.current.onRetryList();
   }, [held.items, ids]);
   const board = useMemo(() => inboxBoard(held.items), [held.items]);
+  const draftOf = useCallback(
+    (item: InboxItem): InboxDraft => {
+      const kept = drafts.get(item.id);
+      return kept !== undefined && kept.revision === item.revision ? kept.draft : EMPTY_INBOX_DRAFT;
+    },
+    [drafts],
+  );
+  const onDraft = useCallback((item: InboxItem, draft: InboxDraft) => {
+    setDrafts((standing) => new Map(standing).set(item.id, { revision: item.revision, draft }));
+  }, []);
+
   return {
     board,
+    draftOf,
+    onDraft,
     reading: active && !held.read,
     failed: held.failed,
     onRetry,

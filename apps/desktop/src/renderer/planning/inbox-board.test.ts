@@ -112,22 +112,40 @@ function service(
   return { agents, sent, reads, listReads };
 }
 
-/** The tab as the plan's column draws it: the board over the open plan's inbox. */
-function Tab({ agents, planId = PLAN }: { agents: CodingAgentsControl; planId?: string }) {
+/**
+ * The plan's column as it holds the inbox: the control over the open plan,
+ * standing whichever tab is chosen, and the board drawn while the Inbox tab
+ * is the chosen one.
+ */
+function Tab({
+  agents,
+  planId = PLAN,
+  chosen = true,
+}: {
+  agents: CodingAgentsControl;
+  planId?: string;
+  chosen?: boolean;
+}) {
   const inbox = usePlanInbox({ planId, shown: true, agents });
-  return createElement(InboxBoard, { control: inbox, agents, onOpenAgent: () => undefined });
+  return chosen
+    ? createElement(InboxBoard, { control: inbox, agents, onOpenAgent: () => undefined })
+    : null;
 }
 
-/** The tab mounted on the plan given, answering the page and a way to open another plan in its place. */
+/** The tab mounted on the plan given, answering the page, a way to open another plan in its place, and a way to choose another tab and come back. */
 function mounted(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
-  const open = (planId: string) =>
-    act(() => root.render(onRegistry(registry, createElement(Tab, { agents, planId }))));
-  open(PLAN);
-  return { page: container, open };
+  const draw = (planId: string, chosen: boolean) =>
+    act(() => root.render(onRegistry(registry, createElement(Tab, { agents, planId, chosen }))));
+  draw(PLAN, true);
+  return {
+    page: container,
+    open: (planId: string) => draw(planId, true),
+    choose: (chosen: boolean) => draw(PLAN, chosen),
+  };
 }
 
 function mount(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
@@ -325,7 +343,7 @@ it.effect(
       yield* settle;
       const failed = page.querySelector('[role="alert"]');
       assert.ok(failed?.textContent?.startsWith("The inbox could not be read."));
-      press(buttonNamed(page, "Try again"));
+      press(buttonNamed(page, "Retry"));
       yield* settle;
       assert.equal(page.textContent, "Nothing is waiting on you.");
     }),
@@ -424,5 +442,36 @@ it.effect(
         "Settled · 1",
       );
       assert.ok(!page.textContent?.includes(INBOX_NOT_TAKEN_NOTE.CHANGED));
+    }),
+);
+
+it.effect(
+  "what the developer has put on a card outlasts a look at another tab, and starts afresh once the agent changes the item",
+  () =>
+    Effect.gen(function* () {
+      let change: (page: CodingAgentInboxAnswerView) => void = () => undefined;
+      const agents = codingAgentsControl({
+        agents: [AGENT],
+        agentIds: [AGENT.id],
+        readInbox: ({ after }) =>
+          after === INBOX_CURSOR_START
+            ? Promise.resolve({ items: [QUEUE], cursor: "a" })
+            : new Promise((resolve) => {
+                change = resolve;
+              }),
+      });
+      const { page, choose } = mounted(agents, yield* registryOnTestClock);
+      yield* settle;
+      press(buttonNamed(card(page, QUEUE.id), "Redis"));
+      type(card(page, QUEUE.id).querySelector("textarea"), "Keep it simple.");
+      choose(false);
+      choose(true);
+      const kept = card(page, QUEUE.id);
+      assert.equal(kept.querySelector("textarea")?.value, "Keep it simple.");
+      assert.equal(buttonNamed(kept, "Redis").getAttribute("aria-pressed"), "true");
+
+      change({ items: [{ ...QUEUE, revision: 2, updatedAt: 2_000 }], cursor: "b" });
+      yield* settle;
+      assert.equal(card(page, QUEUE.id).querySelector("textarea")?.value, "");
     }),
 );

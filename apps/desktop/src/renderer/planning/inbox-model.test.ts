@@ -1,5 +1,11 @@
 import assert from "node:assert/strict";
-import { INBOX_KIND, INBOX_REPLY, INBOX_STATUS, type InboxItem } from "@sidecar/hosted/inbox-wire";
+import {
+  INBOX_BOUNDS,
+  INBOX_KIND,
+  INBOX_REPLY,
+  INBOX_STATUS,
+  type InboxItem,
+} from "@sidecar/hosted/inbox-wire";
 import { test } from "vitest";
 import { EMPTY_INBOX_DRAFT, inboxBoard, inboxReply, settledWords } from "./inbox-model";
 
@@ -94,4 +100,11 @@ test("a settled card says what was answered and the note, or that the agent took
     settledWords(item({ id: "b", status: INBOX_STATUS.CLOSED, closedReason: "Found it." })),
     { lead: "Closed by the agent", note: "Found it." },
   );
+});
+
+test("a note past the wire's bound is no answer, so the card offers no send for it", () => {
+  const question = item({ id: "question" });
+  const long = "x".repeat(INBOX_BOUNDS.MAX_NOTE_CHARS + 1);
+  assert.equal(inboxReply(question, { choice: undefined, note: long }), undefined);
+  assert.equal(inboxReply(QUEUE, { choice: "Redis", note: long }), undefined);
 });

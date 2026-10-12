@@ -1,11 +1,11 @@
 import type { CodingAgentSummary } from "@sidecar/hosted/coding-agent-wire";
 import {
+  INBOX_BOUNDS,
   INBOX_KIND,
   INBOX_REPLY,
   type InboxItem,
   type InboxReplyKind,
 } from "@sidecar/hosted/inbox-wire";
-import { Fragment, useState } from "react";
 import { ConversationEmptyState } from "../ai-elements/conversation";
 import { Fold, FoldBody, FoldChevron, FoldSummary } from "../ai-elements/fold";
 import { Plan, PlanContent, PlanHeader, PlanTitle } from "../ai-elements/plan";
@@ -17,11 +17,12 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "../ai-elements/prompt-input";
+import { RetryButton } from "../retry-button";
 import { BusyLabel, SPINNER_SIZE, Spinner } from "../spinner";
 import { Tooltip } from "../tooltip";
 import { AgentGlyph } from "./agent-tab";
 import { agentTabLabel } from "./coding-agent-model";
-import { EMPTY_INBOX_DRAFT, type InboxDraft, inboxReply, settledWords } from "./inbox-model";
+import { type InboxDraft, inboxReply, settledWords } from "./inbox-model";
 import { momentText, sinceText, useMinute } from "./plan-time";
 import { cardTitle } from "./tool-call-model";
 import { TranscriptWords } from "./transcript-blocks";
@@ -207,6 +208,8 @@ function OpenCard({
   now,
   sending,
   note,
+  draftOf,
+  onDraft,
   onAnswer,
   onOpenAgent,
 }: {
@@ -216,10 +219,13 @@ function OpenCard({
   now: number;
   sending: boolean;
   note: string | undefined;
+  draftOf: PlanInboxControl["draftOf"];
+  onDraft: PlanInboxControl["onDraft"];
   onAnswer: PlanInboxControl["onAnswer"];
   onOpenAgent: (agentId: string) => void;
 }): React.JSX.Element {
-  const [draft, setDraft] = useState<InboxDraft>(EMPTY_INBOX_DRAFT);
+  const draft = draftOf(item);
+  const setDraft = (next: InboxDraft) => onDraft(item, next);
   const pressed = item.kind === INBOX_KIND.APPROVAL || item.kind === INBOX_KIND.TASK;
   return (
     <article
@@ -246,6 +252,7 @@ function OpenCard({
           <PromptInputTextarea
             aria-label={NOTE_PLACEHOLDER[item.kind]}
             placeholder={NOTE_PLACEHOLDER[item.kind]}
+            maxLength={INBOX_BOUNDS.MAX_NOTE_CHARS}
             value={draft.note}
             disabled={sending}
             onChange={(event) => setDraft({ ...draft, note: event.currentTarget.value })}
@@ -322,9 +329,7 @@ export function InboxBoard({
             <p className="m-0" role="alert">
               The inbox could not be read.
             </p>
-            <button type="button" className="toolbar-button" onClick={control.onRetry}>
-              Try again
-            </button>
+            <RetryButton onRetry={control.onRetry} />
           </>
         ) : control.reading ? (
           <Spinner label="Loading inbox" size={SPINNER_SIZE.REGION} />
@@ -340,20 +345,19 @@ export function InboxBoard({
         <p className="m-0 text-[12.5px] text-muted-foreground">{NOTHING_WAITS}</p>
       ) : null}
       {open.map((item) => (
-        // Note that the card is keyed by the item's revision inside, so a change of the agent's starts it afresh.
-        <Fragment key={item.id}>
-          <OpenCard
-            key={item.revision}
-            item={item}
-            agent={agentOf(item)}
-            models={agents.models}
-            now={now}
-            sending={control.sending.has(item.id)}
-            note={control.notes.get(item.id)}
-            onAnswer={control.onAnswer}
-            onOpenAgent={onOpenAgent}
-          />
-        </Fragment>
+        <OpenCard
+          key={item.id}
+          item={item}
+          agent={agentOf(item)}
+          models={agents.models}
+          now={now}
+          sending={control.sending.has(item.id)}
+          note={control.notes.get(item.id)}
+          draftOf={control.draftOf}
+          onDraft={control.onDraft}
+          onAnswer={control.onAnswer}
+          onOpenAgent={onOpenAgent}
+        />
       ))}
       {settled.length === 0 ? null : (
         <Fold className="text-[12.5px]" data-inbox-settled="">
@@ -369,12 +373,10 @@ export function InboxBoard({
         </Fold>
       )}
       {control.failed ? (
-        <p className="agent-note" role="alert">
-          The inbox could not be read.{" "}
-          <button type="button" className="toolbar-button" onClick={control.onRetry}>
-            Try again
-          </button>
-        </p>
+        <div className="agent-note agent-failure" role="alert">
+          <p className="m-0">The inbox could not be read.</p>
+          <RetryButton onRetry={control.onRetry} />
+        </div>
       ) : null}
     </div>
   );

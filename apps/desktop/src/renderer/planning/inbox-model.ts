@@ -1,4 +1,5 @@
 import {
+  INBOX_BOUNDS,
   INBOX_KIND,
   INBOX_REPLY,
   INBOX_STATUS,
@@ -72,6 +73,8 @@ export function inboxReply(
   const reply = replyKindOf(item, draft, press);
   if (reply === undefined) return undefined;
   const note = draft.note.trim();
+  // A note past the wire's bound is no answer the service would take, so the card offers no send for it.
+  if (note.length > INBOX_BOUNDS.MAX_NOTE_CHARS) return undefined;
   const answer: InboxReply = {
     reply,
     ...(reply === INBOX_REPLY.CHOSE && draft.choice !== undefined
