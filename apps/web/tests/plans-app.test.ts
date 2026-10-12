@@ -1676,6 +1676,66 @@ it.layer(testSqlClient)("the plan routes", (it) => {
   );
 
   it.effect(
+    "a file read pinned to a commit asks GitHub for that commit and names it where it would name the branch, a file missing there naming it too; a ref that is no whole lowercase commit, or named twice, is refused before GitHub is asked",
+    () =>
+      Effect.gen(function* () {
+        const github = githubReaching(RELAY_REACHED, undefined, {}, contentsOf);
+        const { owner, ask } = yield* openAccounts(github);
+        const planId = startedId(
+          yield* ask(
+            request(PLANS, owner, { method: "POST", body: { ...RELAY, repository: "acme/relay" } }),
+          ),
+        );
+        const commit = "0123456789abcdef0123456789abcdef01234567";
+        const pinned = (path: string, ref: string) =>
+          ask(request(FILE, owner, { id: planId, query: { path, first: "1", last: "2", ref } }));
+        const refs = () =>
+          github.sent
+            .filter((sent) => CONTENTS_PATH.test(new URL(sent.url).pathname))
+            .map((sent) => new URL(sent.url).searchParams.get("ref"));
+
+        assert.deepEqual(
+          readAnswer(
+            planFileAnswerSchema,
+            HOSTED_HTTP_STATUS.OK,
+            yield* pinned("src/invite.ts", commit),
+          ),
+          {
+            file: {
+              path: "src/invite.ts",
+              repository: "Acme/Relay",
+              branch: commit,
+              firstLine: 1,
+              lineCount: 4,
+              lines: ["one", "two"],
+            },
+          },
+        );
+        assert.deepEqual(refs(), [commit]);
+        assert.deepEqual(
+          readAnswer(planFileAnswerSchema, HOSTED_HTTP_STATUS.OK, yield* pinned("gone.ts", commit)),
+          { refusal: PLAN_FILE_REFUSAL.MISSING, branch: commit },
+        );
+
+        const invalid = refusal(HOSTED_HTTP_STATUS.BAD_REQUEST, HOSTED_API_ERROR.INVALID_REQUEST);
+        assert.deepEqual(yield* pinned("src/invite.ts", "main"), invalid, "a branch is no commit");
+        assert.deepEqual(yield* pinned("src/invite.ts", commit.slice(0, 7)), invalid);
+        assert.deepEqual(yield* pinned("src/invite.ts", commit.toUpperCase()), invalid);
+        assert.deepEqual(
+          yield* pinned("src/invite.ts", `${commit.slice(0, 36)}/../`),
+          invalid,
+          "no path rides in a ref",
+        );
+        const twice = request(`${FILE}?ref=${commit}&ref=${commit}`, owner, {
+          id: planId,
+          query: { path: "src/invite.ts", first: "1", last: "2" },
+        });
+        assert.deepEqual(yield* ask(twice), invalid);
+        assert.equal(refs().length, 2, "none of these is asked of GitHub");
+      }),
+  );
+
+  it.effect(
     "a file is refused by the rule show_code keeps: a secret file and a path leaving the tree before GitHub is asked, and a missing file, a directory, a link, and a file too large or not text by name, one GitHub found nothing at naming the branch it was looked for on",
     () =>
       Effect.gen(function* () {

@@ -1,5 +1,7 @@
 import { isWireBoolean, isWireNumber, isWireString } from "@sidecar/wire";
 import { Schema as EffectSchema } from "effect";
+import { githubRepositoryFullNameSchema } from "./github-repositories-wire.js";
+import { CODE_PATH_MAX_CHARS, codeLineSchema, commitShaSchema } from "./plan-wire.js";
 import { countedNumber, wireUuidSchema } from "./service-wire.js";
 
 /**
@@ -13,8 +15,9 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * that item, and reopens it where it was answered or closed, so an item is
  * kept current rather than posted twice. An item is a title, the blocks
  * of context under it, and the response it asks for. The blocks are a
- * closed set of shapes, Markdown and a link today, each a tagged record,
- * so a later block type is one more member rather than a new column. The
+ * closed set of shapes, Markdown, a link, and a reference to lines of the
+ * agent's repository at a commit, each a tagged record, so a later block
+ * type is one more member rather than a new column. The
  * response is a closed set too, each answered its own way: a choice among
  * the agent's options, one or several, or in the developer's own words;
  * an approval or a decline of a step; words; a task the developer does by
@@ -45,9 +48,10 @@ import { countedNumber, wireUuidSchema } from "./service-wire.js";
  * is added, so a desktop reading an item written under a later one knows
  * what it cannot draw was written for a newer Luke. Version 1 was the
  * fixed kinds, a choice, an approval, a question, and a task, with one
- * Markdown details field; version 2 is blocks and a response.
+ * Markdown details field; version 2 is blocks and a response; version 3
+ * adds the code block.
  */
-export const INBOX_WIRE_VERSION = 2;
+export const INBOX_WIRE_VERSION = 3;
 
 export const INBOX_BOUNDS = {
   /** The most characters an item's key may spell: a short slug the agent chooses. */
@@ -60,6 +64,8 @@ export const INBOX_BOUNDS = {
   MAX_MARKDOWN_CHARS: 8_000,
   /** The most characters a link's address may spell. */
   MAX_URL_CHARS: 2_000,
+  /** The most lines a code block points at: the exact lines that matter, never a file. */
+  MAX_CODE_LINES: 60,
   /** The most characters a label may spell: a link's, an option's, a field's, a select's option, or a box's placeholder. */
   MAX_LABEL_CHARS: 160,
   /** The most options a choice or a select may offer: a choice a person makes at a glance. */
@@ -102,6 +108,8 @@ export const INBOX_BLOCK = {
   MARKDOWN: "markdown",
   /** An address with a label, such as the GitHub page a task is done on. */
   LINK: "link",
+  /** Lines of a file of the agent's repository, as they stood at a commit. */
+  CODE: "code",
 } as const;
 
 /** The responses an item asks for, each answered its own way. */
@@ -199,7 +207,14 @@ export const inboxKeySchema = EffectSchema.String.check(
 /** A link's address: a web page, and nothing a desktop would hand to another scheme. */
 const WEB_ADDRESS = /^https?:\/\/\S+$/u;
 
-/** One block of an item's context: words in Markdown, or a link with its label. */
+/**
+ * One block of an item's context: words in Markdown, a link with its label,
+ * or the lines of a file the agent points at, in its repository as
+ * `owner/name`, from its first line to its last, at the commit it read
+ * them at, so the reference never moves under a later push. Note that a
+ * code block carries no line of the file: the desktop reads them from
+ * GitHub at that commit, as its File tab reads a file.
+ */
 export const inboxBlockSchema = EffectSchema.Union([
   EffectSchema.Struct({
     type: EffectSchema.Literal(INBOX_BLOCK.MARKDOWN),
@@ -213,9 +228,28 @@ export const inboxBlockSchema = EffectSchema.Union([
     ),
     label: filledText(INBOX_BOUNDS.MAX_LABEL_CHARS),
   }),
+  EffectSchema.Struct({
+    type: EffectSchema.Literal(INBOX_BLOCK.CODE),
+    repo: githubRepositoryFullNameSchema,
+    path: filledText(CODE_PATH_MAX_CHARS),
+    startLine: codeLineSchema,
+    endLine: codeLineSchema,
+    sha: commitShaSchema,
+  }),
 ]);
 
 export type InboxBlock = typeof inboxBlockSchema.Type;
+
+/** A code block as an item carries it: the repository, the path, the lines, and the commit. */
+export type InboxCodeBlock = Extract<InboxBlock, { type: typeof INBOX_BLOCK.CODE }>;
+
+/** Whether a code block's lines run forward from its first and are few enough to read at a glance. */
+export function codeLinesReadable(block: Pick<InboxCodeBlock, "startLine" | "endLine">): boolean {
+  return (
+    block.endLine >= block.startLine &&
+    block.endLine - block.startLine < INBOX_BOUNDS.MAX_CODE_LINES
+  );
+}
 
 /** An item's context: its blocks in order, few. */
 export const inboxBlocksSchema = EffectSchema.Array(inboxBlockSchema).check(

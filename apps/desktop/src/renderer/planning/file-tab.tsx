@@ -30,9 +30,11 @@ import type { OpenFile } from "./use-side-panel";
  * at a time (`ACT_KIND.PLANNING_FILE`), first the window holding the
  * snippet's lines, then the window above or below as the developer scrolls
  * to the top or the bottom of what is drawn, so a long file costs one
- * window until it is read further. Note that the service reads the file
- * from GitHub as it stands now on the repository's default branch, not from
- * the checkout the snippet was read from: a file changed since is drawn as
+ * window until it is read further. A file an inbox item's code opened is
+ * read at the commit the agent named, so its lines are the ones it meant.
+ * Note that the service otherwise reads the file from GitHub as it stands
+ * now on the repository's default branch, not from the checkout the
+ * snippet was read from: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
  * one the service refuses, says so in the file's place, over the lines Luke
  * showed of it where the plan holds them. The tab draws no heading of its
@@ -198,16 +200,19 @@ function FileLinesView({
 /** Why a file read is not drawn, and the offer to read again where the reason may pass. */
 function ReadNotice({
   read,
+  commit,
   onRetry,
 }: {
   read: Exclude<FileRead, { kind: typeof FILE_READ.READY | typeof FILE_READ.READING }>;
+  /** The commit the file was read at, where one pinned it. */
+  commit: string | undefined;
   onRetry: () => void;
 }): React.JSX.Element {
   return (
     <>
       <p className="m-0">
         {read.kind === FILE_READ.REFUSED
-          ? refusalLine(read.refusal, read.branch)
+          ? refusalLine(read.refusal, read.branch, commit)
           : "The file could not be read."}
       </p>
       {read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
@@ -329,12 +334,12 @@ export function FileTab({
         <SpinnerRegion label="Loading file" />
       ) : snippet === undefined ? (
         <div className="side-panel-empty" role="alert">
-          <ReadNotice read={read} onRetry={readLit} />
+          <ReadNotice read={read} commit={file.commit} onRetry={readLit} />
         </div>
       ) : (
         <>
           <div className="file-tab-notice" role="alert">
-            <ReadNotice read={read} onRetry={readLit} />
+            <ReadNotice read={read} commit={file.commit} onRetry={readLit} />
           </div>
           <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
           <div className="code-lines file-tab-lines" {...look}>

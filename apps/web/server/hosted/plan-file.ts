@@ -27,7 +27,7 @@ import {
 import { logStoreFailure } from "./store-failure.js";
 
 /**
- * plan-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now.
+ * plan-file.ts -- a whole file of a plan's repository for the Mac's File tab, read a window at a time from GitHub as it stands now or at a commit.
  *
  * The Code tab shows the lines `show_code` read from the planning session's
  * checkout; the File tab opens the whole file they came from. Outside a
@@ -50,7 +50,10 @@ import { logStoreFailure } from "./store-failure.js";
  * Note that GitHub's head may differ from the checkout the snippet was read
  * from, whose clone is the default branch as it stood when the session first
  * read the repository: the window is the file as it is now, and a file gone
- * since reads as missing, naming the branch GitHub found nothing on.
+ * since reads as missing, naming the branch GitHub found nothing on. A read
+ * that names a commit, as an inbox item's code reference does so that the
+ * lines it points at never move, is read at that commit instead, through the
+ * same reach, and names the commit where it would name the branch.
  */
 
 /** Each reason the shared rule refuses a file, as the File tab hears it. */
@@ -82,7 +85,7 @@ function reachRefusal(failure: GitHubUserReadFailure): Effect.Effect<PlanFileRef
 
 /**
  * The window of the file the request names, of the plan's repository as
- * GitHub holds it now, or why it is not shown; nothing where the account
+ * GitHub holds it now or at the commit it names, or why it is not shown; nothing where the account
  * owns no such plan.
  */
 export function readPlanFile(
@@ -162,7 +165,8 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
   const reach = yield* reachPlanRepository(userId, repository);
   if ("refused" in reach) return reach.refused;
   const { token, repository: confirmed } = reach.reached;
-  const file = yield* readRepositoryFile(token, confirmed, request.path);
+  const at = request.ref ?? confirmed.defaultBranch;
+  const file = yield* readRepositoryFile(token, confirmed, at, request.path);
   const content = file.regular ? file.content : undefined;
   const refusal = shownFileRefusal({
     path: request.path,
@@ -170,14 +174,11 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     bytes: file.regular ? file.bytes : 0,
     binary: content === undefined || holdsNul(content),
   });
-  // Note that a file GitHub found nothing at names the branch it was looked
-  // for on, because the snippet's checkout may hold a file that branch no
-  // longer does; a link or a directory there is missing on no branch.
+  // Note that a file GitHub found nothing at names the branch or the commit
+  // it was looked for at, because the snippet's checkout may hold a file that
+  // branch no longer does; a link or a directory there is missing on no branch.
   if (refusal === SHOWN_FILE_REFUSAL.MISSING && !file.regular && file.notFound) {
-    return {
-      refusal: PLAN_FILE_REFUSAL.MISSING,
-      branch: confirmed.defaultBranch,
-    } satisfies PlanFileAnswer;
+    return { refusal: PLAN_FILE_REFUSAL.MISSING, branch: at } satisfies PlanFileAnswer;
   }
   if (refusal !== undefined) return refused(FILE_REFUSAL_OF[refusal]);
   // A regular file GitHub carried no bytes of is past the bound, which the rule refused above.
@@ -187,7 +188,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     const raw = content === undefined ? undefined : rawText(content);
     if (raw === undefined) return refused(PLAN_FILE_REFUSAL.NOT_TEXT);
     return {
-      text: { path: request.path, repository, branch: confirmed.defaultBranch, text: raw },
+      text: { path: request.path, repository, branch: at, text: raw },
     } satisfies PlanFileAnswer;
   }
   const all = fileLines(new TextDecoder().decode(content));
@@ -196,7 +197,7 @@ const readWindow = /* @__PURE__ */ Effect.fn("web/planFileWindow")(function* (
     file: {
       path: request.path,
       repository,
-      branch: confirmed.defaultBranch,
+      branch: at,
       firstLine: request.firstLine,
       lineCount: all.length,
       lines,

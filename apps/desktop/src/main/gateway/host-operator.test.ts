@@ -108,24 +108,29 @@ it.effect("every clearable plain setting reaches the host when cleared", () =>
   }),
 );
 
-it.effect("a file read raw carries raw to the host, and a window read carries none", () =>
-  Effect.gen(function* () {
-    const { client, requests } = recordingClient();
-    const operator = operatorOver(client);
-    const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
-    const window = { planId, path: "src/invite.ts", firstLine: 1, lastLine: 1 };
+it.effect(
+  "a file read raw carries raw to the host, one read at a commit carries the commit, and a window read carries neither",
+  () =>
+    Effect.gen(function* () {
+      const { client, requests } = recordingClient();
+      const operator = operatorOver(client);
+      const planId = "7b0f5f3e-2c1d-4c7a-9a55-5e3b6f1d2a10";
+      const window = { planId, path: "src/invite.ts", firstLine: 1, lastLine: 1 };
+      const ref = "0123456789abcdef0123456789abcdef01234567";
 
-    yield* operator.planningFile({ ...window, raw: true });
-    yield* operator.planningFile(window);
+      yield* operator.planningFile({ ...window, raw: true });
+      yield* operator.planningFile({ ...window, ref });
+      yield* operator.planningFile(window);
 
-    assert.deepEqual(
-      requests.map((request) => [request.method, request.params]),
-      [
-        [GATEWAY_METHOD.PLANNING_FILE, { ...window, raw: true }],
-        [GATEWAY_METHOD.PLANNING_FILE, window],
-      ],
-    );
-  }),
+      assert.deepEqual(
+        requests.map((request) => [request.method, request.params]),
+        [
+          [GATEWAY_METHOD.PLANNING_FILE, { ...window, raw: true }],
+          [GATEWAY_METHOD.PLANNING_FILE, { ...window, ref }],
+          [GATEWAY_METHOD.PLANNING_FILE, window],
+        ],
+      );
+    }),
 );
 
 it.effect(

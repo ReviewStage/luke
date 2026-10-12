@@ -85,8 +85,8 @@ import { ANY_METHOD, type WebRoutes } from "./route.js";
  * showed, read back from the plan's conversation
  * (`hosted/plan-work-store.ts`). `/api/plans/{id}/file` is a window of one
  * file of the plan's repository for the File tab, read from GitHub as it
- * stands now through the App, under the rule `show_code` is held to
- * (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
+ * stands now, or at the commit an inbox item's code reference pins, through
+ * the App, under the rule `show_code` is held to (`hosted/plan-file.ts`), and `/api/plans/{id}/tree` one folder of it for
  * the tree beside that tab, listed where and as the file is read
  * (`hosted/plan-tree.ts`). `/api/plans/{id}/revisions` is the plan's history
  * for the History tab, a page at a time; `/api/plans/{id}/revisions/{seq}`
@@ -157,6 +157,8 @@ const FILE_QUERY = {
   LAST_LINE: "last",
   /** `1` asks the file's whole text, its lines uncut, in place of the window. */
   RAW: "raw",
+  /** The commit the file is read at, its whole SHA; the default branch's head where it is absent. */
+  REF: "ref",
 } as const;
 
 /** The query naming a folder of the repository from its root, the root itself where it is absent or empty. */
@@ -415,7 +417,8 @@ const fileRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
     return named.length === 1 ? named[0] : undefined;
   };
   const raw = query.getAll(FILE_QUERY.RAW);
-  if (raw.length > 1 || (raw.length === 1 && raw[0] !== "1")) {
+  const ref = query.getAll(FILE_QUERY.REF);
+  if (raw.length > 1 || (raw.length === 1 && raw[0] !== "1") || ref.length > 1) {
     return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);
   }
   const read = readEither(planFileRequestSchema)(
@@ -424,6 +427,7 @@ const fileRequestOf = /* @__PURE__ */ Effect.fnUntraced(function* (
       firstLine: Number(once(FILE_QUERY.FIRST_LINE)),
       lastLine: Number(once(FILE_QUERY.LAST_LINE)),
       ...(raw.length === 1 ? { raw: true } : undefined),
+      ...(ref.length === 1 ? { ref: ref[0] } : undefined),
     }),
   );
   if (Result.isFailure(read)) return yield* Effect.fail(HOSTED_REFUSAL.INVALID_REQUEST);

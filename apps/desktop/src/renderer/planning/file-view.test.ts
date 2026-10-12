@@ -2,7 +2,11 @@
 
 import assert from "node:assert/strict";
 import { it } from "@effect/vitest";
-import { PLAN_FILE_REFUSAL, PLAN_TREE_ENTRY } from "@sidecar/hosted/plan-wire";
+import {
+  PLAN_FILE_REFUSAL,
+  PLAN_TREE_ENTRY,
+  type PlanFileRequest,
+} from "@sidecar/hosted/plan-wire";
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { Effect } from "effect";
 import type * as AtomRegistry from "effect/unstable/reactivity/AtomRegistry";
@@ -162,7 +166,8 @@ function mounted(
   function View({ start }: { start: OpenFile }) {
     const [treeOpen, setTreeOpen] = useState(false);
     const [walk, setWalk] = useState({ files: [start], at: 0 });
-    const file = walk.files[walk.at] ?? start;
+    // The file first drawn follows the draw until the view walks away from it, as the panel's tab does when opened again.
+    const file = walk.files.length === 1 ? start : (walk.files[walk.at] ?? start);
     useAppKeymap(true);
     const view = createElement(FileView, {
       planId: PLAN,
@@ -204,9 +209,10 @@ function mounted(
       view,
     );
   }
-  const draw = async (path: string, range?: OpenFile["range"], opened = 1) => {
+  const draw = async (path: string, range?: OpenFile["range"], opened = 1, commit?: string) => {
     await act(async () => {
-      const view = createElement(View, { key: path, start: { path, range, opened } });
+      const start = { path, range, opened, ...(commit === undefined ? undefined : { commit }) };
+      const view = createElement(View, { key: path, start });
       root.render(registry === undefined ? view : onRegistry(registry, view));
       for (let turn = 0; turn < 4; turn += 1) await Promise.resolve();
     });
@@ -337,6 +343,68 @@ test("the GitHub button opens the file on the branch it was read on, its lit lin
   );
   await refused.draw("src/moved.ts");
   assert.equal(refused.button("Open on GitHub")?.disabled, true);
+});
+
+test("a file opened at a commit is read at it, opened on GitHub there, and said missing there in the commit's words; opened at another commit it is read afresh, no line of the first kept", async () => {
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  const first = "0123456789abcdef0123456789abcdef01234567";
+  const second = "89abcdef0123456789abcdef0123456789abcdef";
+  const asked: PlanFileRequest[] = [];
+  const readFile: ReadFileWindow = (window) => {
+    asked.push(window);
+    const at = window.ref ?? "main";
+    if (window.raw === true) {
+      return Promise.resolve({
+        text: { path: window.path, repository: REPOSITORY, branch: at, text: "x" },
+      });
+    }
+    return Promise.resolve({
+      file: {
+        path: window.path,
+        repository: REPOSITORY,
+        branch: at,
+        firstLine: 1,
+        lineCount: 2,
+        lines: [[{ text: `${at} one` }], [{ text: `${at} two` }]],
+      },
+    });
+  };
+  const view = mounted([], undefined, readFile);
+  await view.draw(FILE, { startLine: 2, endLine: 2 }, 1, first);
+  await view.press(view.button("Open on GitHub"));
+  assert.deepEqual(view.github, [
+    `https://github.com/acme/relay/blob/${first}/apps/web/server/plans-app.ts#L2`,
+  ]);
+  assert.deepEqual(
+    asked.map((window) => window.ref),
+    [first],
+  );
+
+  await view.draw(FILE, { startLine: 1, endLine: 1 }, 2, second);
+  await view.settle();
+  assert.deepEqual(
+    asked.map((window) => window.ref),
+    [first, second],
+  );
+  assert.deepEqual(
+    [...view.container.querySelectorAll(".code-line-text")].map((line) => line.textContent),
+    [`${second} one`, `${second} two`],
+  );
+
+  const gone = mounted([], undefined, (window) =>
+    Promise.resolve({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: window.ref ?? "main" }),
+  );
+  await gone.draw("src/moved.ts", undefined, 1, first);
+  assert.equal(
+    gone.container.querySelector("[role='alert'] p")?.textContent,
+    "This file is not at commit 0123456 on GitHub, or the commit was never pushed.",
+  );
 });
 
 test("the tree hears a folder in the File tab's words, a refusal saying whether listing again may help, and a file it opens is browsed to", async () => {

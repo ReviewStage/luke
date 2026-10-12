@@ -1,6 +1,6 @@
 import type { PlanCode, PlanCodeShowing, PlanningTreeAnswer } from "@sidecar/hosted/planning-view";
 import { ArrowLeftIcon, ArrowRightIcon, SidePanelIcon } from "@sidecar/panel";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState } from "react";
 import { GitHubMark } from "../account-marks";
 import { Tooltip } from "../tooltip";
 import { shownFiles } from "./code-pane-model";
@@ -39,7 +39,9 @@ import { FILE_HISTORY_STEP, type FileHistoryStep, type OpenFile } from "./use-si
  * tree is open or closed for every File tab alike, as the
  * panel holds it, and stands across them, since the tab beside it is keyed
  * by its file and the tree is not. A plan with no repository draws the tab
- * alone, its path plain in the bar.
+ * alone, its path plain in the bar. A file opened at a commit, as an inbox
+ * item's code opens it, is read at that commit, its GitHub page and its
+ * copy too, and drawn afresh when the same file is opened at another.
  */
 
 /** The bar's button that shows or hides the tree, which stands under it at the bar's end. */
@@ -108,11 +110,15 @@ function HistoryButtons({ history }: { history: FileHistory }): React.JSX.Elemen
   );
 }
 
-/** The file as the tab last told its read, a read of a file shown before standing for nothing. */
+/** The file as the tab last told its read, a read of a file or a commit shown before standing for nothing. */
 interface TabRead {
   readonly path: string;
+  readonly commit: string | undefined;
   readonly read: FileRead;
 }
+
+/** What the tab is keyed by while it reads the default branch's head rather than a commit. */
+const HEAD_READ = "head";
 
 export function FileView({
   planId,
@@ -177,16 +183,21 @@ export function FileView({
     [shownCode, repository],
   );
 
+  const commit = file.commit;
   const [told, setTold] = useState<TabRead | undefined>(undefined);
-  const read = told?.path === file.path ? told.read : { kind: FILE_READ.READING };
+  const read =
+    told?.path === file.path && told.commit === commit ? told.read : { kind: FILE_READ.READING };
   const onRead = useCallback(
-    (next: FileRead) => setTold({ path: file.path, read: next }),
-    [file.path],
+    (next: FileRead) => setTold({ path: file.path, commit, read: next }),
+    [file.path, commit],
   );
+  // Every read of the tab's file asks it at the tab's commit, where one pins it.
+  const readAt: ReadFileWindow = (window) =>
+    readFile(commit === undefined ? window : { ...window, ref: commit });
   // The whole text, for a copy or a download, read raw through the tab's
   // door in one read, the window it names standing for nothing.
   const readText = (): Promise<WholeText> =>
-    readFile({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
+    readAt({ path: file.path, firstLine: 1, lastLine: 1, raw: true }).then(wholeTextOf, () => ({
       kind: WHOLE_TEXT.UNREAD,
     }));
 
@@ -228,13 +239,18 @@ export function FileView({
         </div>
       </header>
       <div className="file-view-body">
-        <FileTab
-          key={file.path}
-          file={file}
-          snippet={snippet}
-          readFile={readFile}
-          onRead={onRead}
-        />
+        {/* Keyed by the file, then by the commit it is read at, so lines read
+            at one commit are never laid beside another's. Luke's snippet was
+            read from his own checkout, which no commit pins. */}
+        <Fragment key={file.path}>
+          <FileTab
+            key={commit ?? HEAD_READ}
+            file={file}
+            snippet={commit === undefined ? snippet : undefined}
+            readFile={readAt}
+            onRead={onRead}
+          />
+        </Fragment>
         {browsing && treeOpen ? (
           <FileTreePane
             file={file.path}

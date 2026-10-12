@@ -486,6 +486,7 @@ export function createHostOperator(options: HostOperatorOptions): HostOperator {
           firstLine: params.firstLine,
           lastLine: params.lastLine,
           ...(params.raw === undefined ? undefined : { raw: params.raw }),
+          ...(params.ref === undefined ? undefined : { ref: params.ref }),
         }),
         (answer): PlanningFileAnswer =>
           (answer.ok

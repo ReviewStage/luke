@@ -131,7 +131,7 @@ function PlanDocument({
   const { region } = plans;
   const drawing = useSidePanelDrawing(plans.sidePanel);
   const views = useTabViews();
-  const { tell } = useAct();
+  const { act, tell } = useAct();
   const inbox = usePlanInbox({
     planId: region.kind === DOCUMENT_REGION.READY ? region.plan.id : undefined,
     shown: plans.shown,
@@ -340,6 +340,12 @@ function PlanDocument({
                   agents={agents}
                   onOpenAgent={(agent) => mainTabs.onChoose({ agent })}
                   openGitHub={(url) => tell(ACT_KIND.GITHUB_OPEN, { url })}
+                  code={{
+                    repository: plan.repository,
+                    readFile: (window) =>
+                      act(ACT_KIND.PLANNING_FILE, { planId: plan.id, ...window }),
+                    onOpenFile: sidePanel.onOpenFile,
+                  }}
                 />
               </section>
             ) : null}

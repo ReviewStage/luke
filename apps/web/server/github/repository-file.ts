@@ -1,5 +1,5 @@
 /**
- * repository-file.ts -- one file of a repository as GitHub holds it on a branch, read through the contents API on a token the App minted for that repository alone.
+ * repository-file.ts -- one file of a repository as GitHub holds it on a branch or at a commit, read through the contents API on a token the App minted for that repository alone.
  *
  * The read answers facts and bytes, never a decision: whether the path is a
  * regular file of the tree, its size, and its bytes where GitHub carries
@@ -71,17 +71,18 @@ function contentsPath(path: string): string | undefined {
   return repositorySegments(path)?.map(encodeURIComponent).join("/");
 }
 
-/** The repository's file at the path on the branch named, as the contents API holds it. */
+/** The repository's file at the path on the branch or at the commit named, as the contents API holds it. */
 export function readRepositoryFile(
   token: Redacted.Redacted,
-  repository: { readonly fullName: string; readonly defaultBranch: string },
+  repository: { readonly fullName: string },
+  ref: string,
   path: string,
 ): Effect.Effect<RepositoryFile, GitHubUnavailable, HttpClient.HttpClient> {
   return Effect.gen(function* () {
     const encoded = contentsPath(path);
     if (encoded === undefined) return NOT_REGULAR;
     const request = githubRead(`/repos/${repository.fullName}/contents/${encoded}`, token).pipe(
-      HttpClientRequest.setUrlParams({ ref: repository.defaultBranch }),
+      HttpClientRequest.setUrlParams({ ref }),
     );
     const client = yield* HttpClient.HttpClient;
     return yield* Effect.scoped(

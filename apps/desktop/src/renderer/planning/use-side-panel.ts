@@ -142,8 +142,10 @@ export interface OpenFile {
   readonly path: string;
   readonly range: { readonly startLine: number; readonly endLine: number } | undefined;
   readonly opened: number;
-  /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs; none for a file opened from Luke's snippet. */
+  /** The plan the file was browsed to on, from a File tab's tree or breadcrumbs or an inbox item's code; none for a file opened from Luke's snippet. */
   readonly browsedOn?: string | undefined;
+  /** The commit the file is read at, as an inbox item's code pins it; none reads the default branch's head. */
+  readonly commit?: string | undefined;
   /** The files this tab showed before this one, the latest last, which its Back walks. */
   readonly back?: readonly FileVisit[];
   /** The files Back walked away from, the latest last, which its Forward walks again. */
@@ -151,7 +153,7 @@ export interface OpenFile {
 }
 
 /** A file a File tab showed, as its history holds it to show again. */
-type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn">;
+type FileVisit = Pick<OpenFile, "path" | "range" | "browsedOn" | "commit">;
 
 /** Which way a File tab's history is walked. */
 export const FILE_HISTORY_STEP = {
@@ -397,8 +399,13 @@ export interface SidePanelControl {
   onUnpin: (planId: string, tab: PinnableTab) => void;
   /** Names each agent pinned on the plan as its tab is named now, by agent id; an agent named nowhere keeps the name it has. */
   onRenamePins: (planId: string, labels: ReadonlyMap<string, string>) => void;
-  /** Shows the panel on the file's tab, opening one at the strip's end where none stands, its lit lines the reference's. */
-  onOpenFile: (ref: CodeRef) => void;
+  /**
+   * Shows the panel on the file's tab, opening one at the strip's end where
+   * none stands, its lit lines the reference's; with `commit`, as an inbox
+   * item's code opens it, the file as it stood at that commit, drawn on the
+   * open plan though Luke never showed it there.
+   */
+  onOpenFile: (ref: CodeRef, commit?: string) => void;
   /**
    * Shows the file browsed to from the File tab of `from`: its own tab
    * where one stands, else in `from`'s tab, in its place, or in a tab of
@@ -608,14 +615,23 @@ function rangeOf(ref: CodeRef): OpenFile["range"] {
     : { startLine: ref.startLine, endLine: ref.endLine };
 }
 
-/** The state with the file's tab open and chosen, its lit lines the reference's, opened once more, its history kept. */
-function withFileOpened(held: HeldState, ref: CodeRef): HeldState {
+/**
+ * The state with the file's tab open and chosen, its lit lines the
+ * reference's, opened once more, its history kept; at the commit named,
+ * and drawn on the plan named, where a commit pins it.
+ */
+function withFileOpened(
+  held: HeldState,
+  ref: CodeRef,
+  pin: { readonly commit: string; readonly planId: string | undefined } | undefined,
+): HeldState {
   const standing = held.files.find((each) => each.path === ref.path);
   // Note that the tab keeps the way it came, since it shows the same file.
   const opened: OpenFile = {
     path: ref.path,
     range: rangeOf(ref),
     opened: (standing?.opened ?? 0) + 1,
+    ...(pin === undefined ? undefined : { commit: pin.commit, browsedOn: pin.planId }),
     ...(standing?.back === undefined ? undefined : { back: standing.back }),
     ...(standing?.forward === undefined ? undefined : { forward: standing.forward }),
   };
@@ -649,7 +665,7 @@ function withOpenFileChosen(
 
 /** What a File tab's history holds of the file it shows. */
 function visitOf(file: OpenFile): FileVisit {
-  return { path: file.path, range: file.range, browsedOn: file.browsedOn };
+  return { path: file.path, range: file.range, browsedOn: file.browsedOn, commit: file.commit };
 }
 
 /**
@@ -1105,9 +1121,15 @@ export function useSidePanel(
     [update, drawn],
   );
   const onOpenFile = useCallback(
-    (ref: CodeRef) =>
-      update((held) => withFileOpened(withChosenViewed(held, { file: ref.path }, drawn), ref)),
-    [update, drawn],
+    (ref: CodeRef, commit?: string) =>
+      update((held) =>
+        withFileOpened(
+          withChosenViewed(held, { file: ref.path }, drawn),
+          ref,
+          commit === undefined ? undefined : { commit, planId },
+        ),
+      ),
+    [update, drawn, planId],
   );
   // Note that a file with a tab of its own is chosen there, because a file
   // stands in one tab at most, and one opened in a tab of its own is viewed

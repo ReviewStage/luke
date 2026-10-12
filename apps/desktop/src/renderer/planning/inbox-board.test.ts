@@ -20,13 +20,15 @@ import {
   type InboxItem,
   inboxItemSchema,
 } from "@sidecar/hosted/inbox-wire";
+import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
+import type { PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { Effect, Schema } from "effect";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach } from "vitest";
 import { onRegistry, registryOnTestClock } from "#testing/copy-feedback";
 import { codingAgentsControl } from "#testing/plans-control";
-import { InboxBoard } from "./inbox-board";
+import { InboxBoard, type InboxCodeDoors } from "./inbox-board";
 import type { CodingAgentsControl } from "./use-coding-agents";
 import { INBOX_NOT_TAKEN_NOTE, usePlanInbox } from "./use-plan-inbox";
 
@@ -138,6 +140,57 @@ const NEWER = Schema.decodeUnknownSync(inboxItemSchema)({
   response: { type: "schedule" },
 });
 
+/** The commit a code block's agent read its lines at. */
+const COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+/** A code block of the agent's repository, its name spelled in another case than the plan's. */
+const RETRY_LINES = {
+  type: INBOX_BLOCK.CODE,
+  repo: "Acme/Relay",
+  path: "src/invite/send.ts",
+  startLine: 5,
+  endLine: 6,
+  sha: COMMIT,
+} as const;
+
+const RETRIES = item({
+  id: "a1b2c3d4-0000-4000-8000-000000000008",
+  key: "invite-retries",
+  title: "Retry a failed invitation email?",
+  blocks: [RETRY_LINES],
+  response: { type: INBOX_RESPONSE.APPROVAL },
+});
+
+/** A file's window as the host answers it, coloured, from `firstLine`, of a file `lineCount` long. */
+function fileWindow(path: string, firstLine: number, lineCount: number): PlanningFileAnswer {
+  const lines = Array.from({ length: lineCount - firstLine + 1 }, (_, at) => [
+    { text: `line ${firstLine + at}` },
+  ]);
+  return {
+    file: { path, repository: "Acme/Relay", branch: COMMIT, firstLine, lineCount, lines },
+  };
+}
+
+/**
+ * The doors a code block reads and opens through, over the plan's
+ * repository: each read answered by the next of the path's `answers`,
+ * held past them, every window and every file opened recorded.
+ */
+function fileDoors(answers: Readonly<Record<string, PlanningFileAnswer[]>> = {}) {
+  const reads: PlanFileRequest[] = [];
+  const opened: { readonly ref: unknown; readonly commit: string }[] = [];
+  const doors: InboxCodeDoors = {
+    repository: "acme/relay",
+    readFile: (window) => {
+      reads.push(window);
+      const next = answers[window.path]?.shift();
+      return next === undefined ? new Promise(() => undefined) : Promise.resolve(next);
+    },
+    onOpenFile: (ref, commit) => opened.push({ ref, commit }),
+  };
+  return { doors, reads, opened };
+}
+
 const roots: Root[] = [];
 
 afterEach(() => {
@@ -190,10 +243,12 @@ function Tab({
   agents,
   planId = PLAN,
   chosen = true,
+  code,
 }: {
   agents: CodingAgentsControl;
   planId?: string;
   chosen?: boolean;
+  code: InboxCodeDoors;
 }) {
   const inbox = usePlanInbox({ planId, shown: true, agents });
   return chosen
@@ -202,18 +257,25 @@ function Tab({
         agents,
         onOpenAgent: () => undefined,
         openGitHub: (url) => opened.push(url),
+        code,
       })
     : null;
 }
 
 /** The tab mounted on the plan given, answering the page, a way to open another plan in its place, and a way to choose another tab and come back. */
-function mounted(agents: CodingAgentsControl, registry: Parameters<typeof onRegistry>[0]) {
+function mounted(
+  agents: CodingAgentsControl,
+  registry: Parameters<typeof onRegistry>[0],
+  code: InboxCodeDoors = fileDoors().doors,
+) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
   roots.push(root);
   const draw = (planId: string, chosen: boolean) =>
-    act(() => root.render(onRegistry(registry, createElement(Tab, { agents, planId, chosen }))));
+    act(() =>
+      root.render(onRegistry(registry, createElement(Tab, { agents, planId, chosen, code }))),
+    );
   draw(PLAN, true);
   return {
     page: container,
@@ -649,5 +711,106 @@ it.effect(
       assert.equal(newer.querySelector("textarea"), null);
       assert.equal(newer.querySelectorAll("button.primary-button").length, 0);
       assert.ok(buttonNamed(card(page, SETTINGS.id), "Done"));
+    }),
+);
+
+it.effect(
+  "a code block is drawn as the Code tab draws a card, headed by its path and lines, the lines read at the agent's commit through the plan with a few of the file around them and its own lit, out of the recording; its path and its Open open the File tab there at that commit",
+  () =>
+    Effect.gen(function* () {
+      const { agents } = service([{ items: [RETRIES], cursor: "a" }], []);
+      const files = fileDoors({ [RETRY_LINES.path]: [fileWindow(RETRY_LINES.path, 2, 8)] });
+      const page = mounted(agents, yield* registryOnTestClock, files.doors).page;
+      yield* settle;
+
+      assert.deepEqual(files.reads, [
+        { path: RETRY_LINES.path, firstLine: 2, lastLine: 9, ref: COMMIT },
+      ]);
+      const code = card(page, RETRIES.id).querySelector<HTMLElement>("[data-inbox-code]");
+      assert.ok(code, "no code block");
+      assert.ok(code.classList.contains("ph-no-capture"), "the recording leaves the lines out");
+      assert.equal(code.getAttribute("aria-label"), "src/invite/send.ts, Lines 5–6");
+      assert.equal(code.querySelector(".code-card-range")?.textContent, "Lines 5–6");
+      const numbers = (selector: string) =>
+        [...code.querySelectorAll(selector)].map((line) => line.textContent);
+      assert.deepEqual(numbers(".code-line-number"), ["2", "3", "4", "5", "6", "7", "8"]);
+      assert.deepEqual(numbers("[data-pointed='true'] .code-line-number"), ["5", "6"]);
+      assert.ok(buttonNamed(code, "Copy lines"));
+
+      press(buttonNamed(code, "Open file"));
+      press(buttonNamed(code, "Open src/invite/send.ts"));
+      const at = { ref: { path: RETRY_LINES.path, startLine: 5, endLine: 6 }, commit: COMMIT };
+      assert.deepEqual(files.opened, [at, at]);
+    }),
+);
+
+it.effect(
+  "a code block whose lines GitHub could not give just now says so and reads again on Retry; one at a commit GitHub lacks says so with no Retry; and one of another repository than the plan's is read from nowhere, says where it is, and opens nothing",
+  () =>
+    Effect.gen(function* () {
+      const elsewhere = item({
+        id: "a1b2c3d4-0000-4000-8000-000000000009",
+        key: "other-repository",
+        title: "Port this from the other service?",
+        blocks: [{ ...RETRY_LINES, repo: "acme/billing", path: "src/charge.ts" }],
+        response: { type: INBOX_RESPONSE.APPROVAL },
+        postedAt: 2_000,
+      });
+      const unpushed = item({
+        id: "a1b2c3d4-0000-4000-8000-00000000000a",
+        key: "unpushed",
+        title: "Keep this guard?",
+        blocks: [{ ...RETRY_LINES, path: "src/guard.ts" }],
+        response: { type: INBOX_RESPONSE.APPROVAL },
+        postedAt: 3_000,
+      });
+      const { agents } = service([{ items: [RETRIES, elsewhere, unpushed], cursor: "a" }], []);
+      const files = fileDoors({
+        [RETRY_LINES.path]: [
+          { refusal: PLAN_FILE_REFUSAL.UNAVAILABLE },
+          fileWindow(RETRY_LINES.path, 2, 8),
+        ],
+        "src/guard.ts": [{ refusal: PLAN_FILE_REFUSAL.MISSING, branch: COMMIT }],
+      });
+      const page = mounted(agents, yield* registryOnTestClock, files.doors).page;
+      yield* settle;
+      const notice = (id: string) =>
+        card(page, id).querySelector("[data-inbox-code] [role='alert']");
+
+      assert.equal(
+        notice(RETRIES.id)?.textContent?.includes("GitHub could not be read just now."),
+        true,
+      );
+      assert.equal(
+        notice(unpushed.id)?.textContent,
+        "This file is not at commit 0123456 on GitHub, or the commit was never pushed.",
+      );
+      assert.equal(
+        notice(elsewhere.id)?.textContent,
+        "These lines are in acme/billing, which this plan no longer reads.",
+      );
+      assert.deepEqual(
+        files.reads.map((read) => read.path),
+        [RETRY_LINES.path, "src/guard.ts"],
+        "nothing is read of another repository",
+      );
+      assert.equal(
+        [...card(page, unpushed.id).querySelectorAll("button")].some(
+          (button) => button.textContent?.trim() === "Retry",
+        ),
+        false,
+      );
+      assert.equal(
+        [...card(page, elsewhere.id).querySelectorAll("button")].some(
+          (button) => button.getAttribute("aria-label")?.startsWith("Open") === true,
+        ),
+        false,
+        "the File tab reads the plan's repository alone, so nothing opens",
+      );
+
+      press(buttonNamed(card(page, RETRIES.id), "Retry"));
+      yield* settle;
+      assert.equal(notice(RETRIES.id), null);
+      assert.equal(card(page, RETRIES.id).querySelectorAll(".code-line").length, 7);
     }),
 );

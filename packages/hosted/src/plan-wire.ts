@@ -491,7 +491,19 @@ const CODE_REF_MAX_LINES = 200;
 /** The most characters of a path one code reference names: macOS's own bound. */
 export const CODE_PATH_MAX_CHARS = 1_024;
 
-const codeLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+/** A line of a file, counted from one. */
+export const codeLineSchema = EffectSchema.Int.check(EffectSchema.isGreaterThanOrEqualTo(1));
+
+/**
+ * A commit as GitHub names it: its whole SHA-1 in lowercase hex, and nothing
+ * a branch, a tag, or a path could spell, so a read pinned to one asks
+ * GitHub for exactly that commit.
+ */
+export const commitShaSchema = EffectSchema.String.check(
+  EffectSchema.isMinLength(40),
+  EffectSchema.isMaxLength(40),
+  EffectSchema.isPattern(/^[0-9a-f]{40}$/u),
+);
 
 /** Whether a reference names both of its lines or neither, in order and within the bound. */
 function codeRangeIsReadable(ref: { startLine?: number; endLine?: number }): boolean {
@@ -619,7 +631,9 @@ function fileWindowIsReadable(window: { firstLine: number; lastLine: number }): 
  * One window of a file of the plan's repository, as the File tab asks it
  * (GET `/api/plans/{id}/file`): the path, and its first and last line; or,
  * with `raw`, the file's whole text, its lines uncut, as a copy or a
- * download of the file asks it, the window then standing for nothing.
+ * download of the file asks it, the window then standing for nothing. With
+ * `ref`, the file is read as it stood at that commit, as an inbox item's
+ * code reference pins it, rather than at the default branch's head.
  */
 export const planFileRequestSchema = EffectSchema.Struct({
   path: EffectSchema.String.check(
@@ -629,14 +643,15 @@ export const planFileRequestSchema = EffectSchema.Struct({
   firstLine: codeLineSchema,
   lastLine: codeLineSchema,
   raw: EffectSchema.optionalKey(EffectSchema.Boolean),
+  ref: EffectSchema.optionalKey(commitShaSchema),
 }).check(EffectSchema.makeFilter(fileWindowIsReadable));
 
 export type PlanFileRequest = typeof planFileRequestSchema.Type;
 
 /**
  * A window of a file of the plan's repository as it stands now on its
- * default branch, read through the Luke GitHub App: the path, the
- * repository and the branch read, the line the first carried line is, how
+ * default branch, or at the commit the request pinned, read through the
+ * Luke GitHub App: the path, the repository and the branch or commit read, the line the first carried line is, how
  * many lines the whole file has, and the lines, each cut as `show_code`
  * cuts it. A window past the file's end carries no lines.
  */
