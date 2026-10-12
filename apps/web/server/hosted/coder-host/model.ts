@@ -1,5 +1,9 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
+import {
+  PROVIDER_KEY_UNREADABLE,
+  type ProviderKeyUnreadable,
+} from "@sidecar/database/models/provider-key-seal";
 import { MODEL_PROVIDER, type ModelChoice, type ModelProvider } from "@sidecar/hosted/models-wire";
 import { PROVIDER_KEY_STATUS, type ProviderKeyStatus } from "@sidecar/hosted/provider-key-wire";
 import {
@@ -11,7 +15,6 @@ import {
 import { Redacted, Result } from "effect";
 import type { AgentModelOptionsDefinition } from "eve";
 import { FAST_PROVIDERS, type ProviderModel, providerModelOf } from "../model-catalog.js";
-import { PROVIDER_KEY_UNREADABLE, type ProviderKeyUnreadable } from "../provider-key-seal.js";
 import { CODER_REFUSAL, type CoderRefusal } from "./bounds.js";
 
 /**

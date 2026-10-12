@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { PROVIDER_KEY_UNREADABLE } from "@sidecar/database/models/provider-key-seal";
 import { CODING_AGENT_FAILURE, CODING_AGENT_STATUS } from "@sidecar/hosted/coding-agent-wire";
 import { jsonResponse } from "@sidecar/wire/testing";
 import { generateText } from "ai";
@@ -12,7 +13,6 @@ import {
   type ProviderKeys,
 } from "../server/hosted/coder-host/model";
 import { codingAgentFailureOf, codingAgentStatusOf } from "../server/hosted/coder-host/status";
-import { PROVIDER_KEY_UNREADABLE } from "../server/hosted/provider-key-seal";
 import { REPOSITORY_REFUSAL } from "../server/hosted/repository-shell";
 
 /**

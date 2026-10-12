@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { parseKeyRing, sealProviderKey } from "@sidecar/database/models/provider-key-seal";
 import {
   PROVIDER_KEY_PROVIDER,
   PROVIDER_KEY_STATUS,
@@ -11,7 +12,6 @@ import { afterAll, test } from "vitest";
 import { accountProviderKeys } from "../server/hosted/coder-host/account-keys";
 import { CODER_REFUSAL } from "../server/hosted/coder-host/bounds";
 import { coderModel, type LukeKeys } from "../server/hosted/coder-host/model";
-import { parseKeyRing, sealProviderKey } from "../server/hosted/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "../server/hosted/provider-key-store";
 import { openHostedStoreTestDatabase } from "./support/hosted-store-database";
 

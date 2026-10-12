@@ -1,3 +1,4 @@
+import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "@sidecar/database/models/provider-key-seal";
 import { Config, ConfigProvider, Context, Effect, Layer, Option, Redacted } from "effect";
 import { GITHUB_APP_ENVIRONMENT } from "../auth-deployment.js";
 import { text } from "../core.js";
@@ -5,7 +6,6 @@ import { HOSTED_ANTHROPIC_ENVIRONMENT } from "./anthropic.js";
 import { CRON_ENVIRONMENT } from "./maintenance-bounds.js";
 import { HOSTED_OPENAI_ENVIRONMENT } from "./openai.js";
 import { POSTHOG_ENVIRONMENT } from "./posthog.js";
-import { PROVIDER_KEY_ENCRYPTION_ENVIRONMENT } from "./provider-key-seal.js";
 
 /**
  * What the deployment's environment says about the hosted tier, read once as

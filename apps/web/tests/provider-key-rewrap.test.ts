@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { it } from "@effect/vitest";
 import { db } from "@sidecar/database/core/query";
+import {
+  type KeyRing,
+  openProviderKey,
+  parseKeyRing,
+  sealProviderKey,
+} from "@sidecar/database/models/provider-key-seal";
 import { accountProviderKey } from "@sidecar/database/schemas/account-provider-key";
 import { user } from "@sidecar/database/schemas/auth";
 import { getTestDB } from "@sidecar/database/testing";
@@ -13,12 +19,6 @@ import {
   type ProviderKeyRewrapOptions,
   rewrapProviderKeys,
 } from "../server/hosted/provider-key-rewrap";
-import {
-  type KeyRing,
-  openProviderKey,
-  parseKeyRing,
-  sealProviderKey,
-} from "../server/hosted/provider-key-seal";
 import { listProviderKeyRows, saveProviderKey } from "../server/hosted/provider-key-store";
 
 /**
