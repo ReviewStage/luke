@@ -1,17 +1,17 @@
 import type { PlanFileRequest } from "@sidecar/hosted/plan-wire";
-import type { PlanningFileAnswer } from "@sidecar/hosted/planning-view";
+import type { PlanCode, PlanningFileAnswer } from "@sidecar/hosted/planning-view";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Tooltip } from "../tooltip";
 import { CodeLineRows, centreWithin } from "./code-pane";
 import { rangeLabel } from "./code-pane-model";
 import {
   FILE_READ,
-  FILE_REFUSAL_LINE,
   type FileLines,
   type FileRead,
   type FileWindow,
   holdsLines,
   lastLineOf,
+  refusalLine,
   refusalPasses,
   windowAt,
   withWindow,
@@ -31,7 +31,8 @@ import type { OpenFile } from "./use-side-panel";
  * from GitHub as it stands now on the repository's default branch, not from
  * the checkout the snippet was read from: a file changed since is drawn as
  * it is now, the snippet's lines lit where they fall, and a file gone, or
- * one the service refuses, says so in the file's place. Every line here is
+ * one the service refuses, says so in the file's place, over the lines Luke
+ * showed of it where the plan holds them. Every line here is
  * the repository's, so the root is left out of the screen recording
  * (`ph-no-capture`) as a second line behind the recording's text masking.
  */
@@ -40,6 +41,9 @@ import type { OpenFile } from "./use-side-panel";
 const SOURCE_LABEL = "Latest on GitHub";
 const SOURCE_HINT =
   "The file as it stands now on the repository's default branch, which may have changed since Luke showed it.";
+
+/** What stands over the lines Luke showed, drawn where the file cannot be. */
+const SNIPPET_LABEL = "The lines Luke showed, from his copy of the repository";
 
 /** Where a read of the lines above or below the drawn ones stands. */
 const EDGE_READ = {
@@ -105,7 +109,9 @@ function EdgeRow({
 /** The run of lines held after a window's answer, or why there is none. */
 function afterAnswer(held: FileRead, answer: PlanningFileAnswer): FileRead {
   if ("file" in answer) return { kind: FILE_READ.READY, ...withWindow(held, answer.file) };
-  if ("refusal" in answer) return { kind: FILE_READ.REFUSED, refusal: answer.refusal };
+  if ("refusal" in answer) {
+    return { kind: FILE_READ.REFUSED, refusal: answer.refusal, branch: answer.branch };
+  }
   return { kind: FILE_READ.FAILED };
 }
 
@@ -168,12 +174,39 @@ function FileLinesView({
   );
 }
 
-/** The tab: its file's heading, then the file, or why it is not shown. */
+/** Why a file read is not drawn, and the offer to read again where the reason may pass. */
+function ReadNotice({
+  read,
+  onRetry,
+}: {
+  read: Exclude<FileRead, { kind: typeof FILE_READ.READY | typeof FILE_READ.READING }>;
+  onRetry: () => void;
+}): React.JSX.Element {
+  return (
+    <>
+      <p className="m-0">
+        {read.kind === FILE_READ.REFUSED
+          ? refusalLine(read.refusal, read.branch)
+          : "The file could not be read."}
+      </p>
+      {read.kind === FILE_READ.FAILED || refusalPasses(read.refusal) ? (
+        <button type="button" className="toolbar-button" onClick={onRetry}>
+          Try again
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/** The tab: its file's heading, then the file, or why it is not shown over the lines Luke showed of it. */
 export function FileTab({
   file,
+  snippet,
   readFile,
 }: {
   file: OpenFile;
+  /** The lines Luke showed of the file, drawn where the file cannot be. */
+  snippet: PlanCode | undefined;
   readFile: ReadFileWindow;
 }): React.JSX.Element {
   const [read, setRead] = useState<FileRead>({ kind: FILE_READ.READING });
@@ -258,25 +291,28 @@ export function FileTab({
       </header>
       {read.kind === FILE_READ.READY ? (
         <FileLinesView file={file} held={read} readWindow={readWindow} />
-      ) : (
-        <div
-          className="side-panel-empty"
-          role={read.kind === FILE_READ.READING ? undefined : "alert"}
-        >
-          {read.kind === FILE_READ.READING ? <p className="m-0">Reading the file…</p> : null}
-          {read.kind === FILE_READ.REFUSED ? (
-            <p className="m-0">{FILE_REFUSAL_LINE[read.refusal]}</p>
-          ) : null}
-          {read.kind === FILE_READ.FAILED ? (
-            <p className="m-0">The file could not be read.</p>
-          ) : null}
-          {read.kind === FILE_READ.FAILED ||
-          (read.kind === FILE_READ.REFUSED && refusalPasses(read.refusal)) ? (
-            <button type="button" className="toolbar-button" onClick={readLit}>
-              Try again
-            </button>
-          ) : null}
+      ) : read.kind === FILE_READ.READING ? (
+        <div className="side-panel-empty">
+          <p className="m-0">Reading the file…</p>
         </div>
+      ) : snippet === undefined ? (
+        <div className="side-panel-empty" role="alert">
+          <ReadNotice read={read} onRetry={readLit} />
+        </div>
+      ) : (
+        <>
+          <div className="file-tab-notice" role="alert">
+            <ReadNotice read={read} onRetry={readLit} />
+          </div>
+          <p className="file-tab-snippet-label">{SNIPPET_LABEL}</p>
+          <div className="code-lines file-tab-lines">
+            <CodeLineRows
+              firstLine={snippet.firstLine}
+              lines={snippet.lines}
+              pointed={snippet.ref}
+            />
+          </div>
+        </>
       )}
     </section>
   );

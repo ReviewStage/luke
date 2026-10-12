@@ -723,9 +723,13 @@ or trace. What is shown is decided by the rule `show_code` is held to
 (`server/hosted/shown-file.ts`): a secret file is refused before GitHub is
 asked, and so is a path with an empty, `.`, or `..` segment; a link, a
 directory, a missing file, a file past a megabyte, or one with a NUL among
-its first bytes is refused by name; and each line is cut to 400
-characters. `packages/hosted/src/plan-wire.ts` declares the request and
-the answer (`planFileRequestSchema`, `planFileAnswerSchema`).
+its first bytes is refused by name, a missing one with the branch it was
+looked for on; and each line is cut to 400 characters.
+`packages/hosted/src/plan-wire.ts` declares the request and the answer
+(`planFileRequestSchema`, `planFileAnswerSchema`). The file's `path` query
+reaches the route because the grouped function's dispatcher reads its own
+path override from `route-path` (`server/function-dispatch.ts`): it once
+read `path`, and every File tab read was answered 404.
 
 `GET /api/plans/{id}/revisions` reads the plan's history for the Mac's
 History tab (`server/hosted/plan-revisions.ts`): fifty revisions a page,

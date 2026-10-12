@@ -1,7 +1,31 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { test } from "vitest";
 import { DISPATCH_QUERY, dispatchRoutes } from "../server/function-dispatch";
+import { readApiRewritesTable } from "../server/function-rewrites";
 import type { Route } from "../server/route";
+
+const WEB = join(import.meta.dirname, "..");
+
+/** A File tab's read as a released desktop sends it: the file named in a `path` query. */
+const FILE_READ_PATH = "/api/plans/p1/file?path=apps%2Fweb%2Fcoder%2Fagent.ts&first=1&last=500";
+
+/**
+ * A client path as the platform lands it on its function: the first rewrite
+ * of the committed table whose pattern matches the whole path, its groups
+ * written into the destination, and the caller's own query merged after it.
+ */
+async function landed(clientPath: string): Promise<Request> {
+  const asked = new URL(clientPath, "https://luke.test");
+  for (const rewrite of await readApiRewritesTable(WEB)) {
+    const pattern = new RegExp(`^${rewrite.src}$`);
+    if (!pattern.test(asked.pathname)) continue;
+    const url = new URL(asked.pathname.replace(pattern, rewrite.dest), asked.origin);
+    for (const [name, value] of asked.searchParams) url.searchParams.append(name, value);
+    return new Request(url);
+  }
+  throw new Error(`no rewrite serves ${clientPath}`);
+}
 
 function recording() {
   const requests: Request[] = [];
@@ -51,6 +75,24 @@ test("a path parameter replaces the key in the restored path, for the auth catch
   const url = new URL(auth.requests[0]?.url ?? "");
   assert.equal(url.pathname, "/api/auth/sign-in/social");
   assert.deepEqual([...url.searchParams.entries()], [["x", "1"]]);
+});
+
+test("a caller's own query reaches the route whatever it names, the File tab's file path among them", async () => {
+  const file = recording();
+  const dispatcher = dispatchRoutes(new Map([["plans/file", file.route]]));
+  const response = await dispatcher.fetch(await landed(FILE_READ_PATH));
+  assert.equal(response.status, 200);
+  const url = new URL(file.requests[0]?.url ?? "");
+  assert.equal(url.pathname, "/api/plans/file");
+  assert.deepEqual(
+    [...url.searchParams.entries()],
+    [
+      ["id", "p1"],
+      ["path", "apps/web/coder/agent.ts"],
+      ["first", "1"],
+      ["last", "500"],
+    ],
+  );
 });
 
 test("a key the function does not hold, or no key at all, is a 404 and reaches no member", async () => {

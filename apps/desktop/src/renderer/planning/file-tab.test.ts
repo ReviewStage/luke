@@ -2,11 +2,17 @@
 
 import assert from "node:assert/strict";
 import { PLAN_FILE_REFUSAL, type PlanFileRequest } from "@sidecar/hosted/plan-wire";
-import { PLAN_CALL_FAILURE, type PlanningFileAnswer } from "@sidecar/hosted/planning-view";
+import {
+  PLAN_CALL_FAILURE,
+  type PlanCode,
+  type PlanCodeShowing,
+  type PlanningFileAnswer,
+} from "@sidecar/hosted/planning-view";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, test, vi } from "vitest";
 import { FileTab } from "./file-tab";
+import { snippetOf } from "./file-tab-model";
 import type { OpenFile } from "./use-side-panel";
 
 /** A synthetic file of `lineCount` lines, each saying its own number. */
@@ -65,8 +71,11 @@ function watchedRows() {
   };
 }
 
-/** The tab drawn over a service that answers `answer`, every window asked written down. */
-function mounted(answer: (window: PlanFileRequest) => PlanningFileAnswer | Promise<never>) {
+/** The tab drawn over a service that answers `answer`, every window asked written down, with the lines Luke showed of the file where given. */
+function mounted(
+  answer: (window: PlanFileRequest) => PlanningFileAnswer | Promise<never>,
+  snippet?: PlanCode,
+) {
   const asked: string[] = [];
   const container = document.createElement("div");
   document.body.append(container);
@@ -79,7 +88,9 @@ function mounted(answer: (window: PlanFileRequest) => PlanningFileAnswer | Promi
   // Each draw hands the tab a fresh door, as a parent drawing again does.
   const draw = async (file: OpenFile) => {
     await act(async () => {
-      root.render(createElement(FileTab, { file, readFile: (window) => readFile(window) }));
+      root.render(
+        createElement(FileTab, { file, snippet, readFile: (window) => readFile(window) }),
+      );
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -168,7 +179,7 @@ test("a parent drawing the tab again with a fresh door asks nothing more, a refu
   assert.deepEqual(gone.asked, ["1-500"]);
   assert.equal(
     gone.container.querySelector("[role='alert']")?.textContent,
-    "This file is no longer in the repository.",
+    "This file is not on the repository's default branch.",
   );
 
   const read = mounted(numberedFile(3));
@@ -193,4 +204,60 @@ test("a file shortened since its snippet opens on the window holding its last li
     lines.some((line) => line.endsWith("lit")),
     false,
   );
+});
+
+test("a file not on the branch read names the branch over the lines Luke showed of it, which are drawn lit; a read that did not land draws them too, under its offer to read again", async () => {
+  const snippet: PlanCode = {
+    ref: { path: "apps/web/coder/agent.ts", startLine: 8, endLine: 9 },
+    repository: "acme/relay",
+    firstLine: 7,
+    lineCount: 41,
+    lines: [[{ text: "seven" }], [{ text: "eight" }], [{ text: "nine" }], [{ text: "ten" }]],
+  };
+  const file = { path: "apps/web/coder/agent.ts", range: { startLine: 8, endLine: 9 }, opened: 1 };
+
+  const gone = mounted(() => ({ refusal: PLAN_FILE_REFUSAL.MISSING, branch: "main" }), snippet);
+  await gone.draw(file);
+  assert.equal(
+    gone.container.querySelector("[role='alert']")?.textContent,
+    "This file is not on main, the branch Luke reads from GitHub.",
+  );
+  assert.deepEqual(drawnLines(gone.container), ["7", "8 lit", "9 lit", "10"]);
+
+  const unanswered = mounted(() => ({ failure: PLAN_CALL_FAILURE.UNANSWERED }), snippet);
+  await unanswered.draw(file);
+  const alert = unanswered.container.querySelector("[role='alert']");
+  assert.equal(alert?.querySelector("p")?.textContent, "The file could not be read.");
+  assert.equal(alert?.querySelector("button")?.textContent, "Try again");
+  assert.deepEqual(drawnLines(unanswered.container), ["7", "8 lit", "9 lit", "10"]);
+});
+
+test("the lines a File tab draws in its file's place are the newest showing of the lines it was opened on, else the newest of the file", () => {
+  const showing = (path: string, startLine: number, callId: string): PlanCodeShowing => ({
+    callId,
+    turnId: "t1",
+    shownAt: 1,
+    code: {
+      ref: { path, startLine, endLine: startLine },
+      repository: "acme/relay",
+      firstLine: startLine,
+      lineCount: 40,
+      lines: [[{ text: callId }]],
+    },
+  });
+  const shown = [
+    showing("src/invite.ts", 8, "first"),
+    showing("src/invite.ts", 8, "again"),
+    showing("src/invite.ts", 20, "later"),
+    showing("src/other.ts", 8, "other"),
+  ];
+  const opened = (startLine: number) => ({
+    path: "src/invite.ts",
+    range: { startLine, endLine: startLine },
+    opened: 1,
+  });
+
+  assert.equal(snippetOf(shown, opened(8))?.lines[0]?.[0]?.text, "again");
+  assert.equal(snippetOf(shown, opened(30))?.lines[0]?.[0]?.text, "later");
+  assert.equal(snippetOf(shown, { path: "src/gone.ts", range: undefined, opened: 1 }), undefined);
 });

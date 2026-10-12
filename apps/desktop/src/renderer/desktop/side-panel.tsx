@@ -42,6 +42,7 @@ import { fileName, shownFiles } from "../planning/code-pane-model";
 import { agentStillWriting, agentTabLabel, modelLabel } from "../planning/coding-agent-model";
 import { DRAFT_TAB_LABEL, DraftAgentTab } from "../planning/draft-agent-tab";
 import { FileTab } from "../planning/file-tab";
+import { snippetOf } from "../planning/file-tab-model";
 import { HistoryTab } from "../planning/history-tab";
 import { PlanBoard } from "../planning/plan-board";
 import { PlanTranscript } from "../planning/plan-transcript";
@@ -966,6 +967,7 @@ function TabContent({
         <FileTab
           key={file.path}
           file={file}
+          snippet={snippetOf(shownCode, file)}
           readFile={(window) => act(ACT_KIND.PLANNING_FILE, { planId, ...window })}
         />
       </Fragment>

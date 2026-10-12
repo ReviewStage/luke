@@ -59,6 +59,9 @@
             "sign-in-required",
             "unavailable"
           ]
+        },
+        "branch": {
+          "type": "string"
         }
       },
       "required": [

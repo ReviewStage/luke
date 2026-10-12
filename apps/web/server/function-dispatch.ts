@@ -4,11 +4,15 @@ import type { Route } from "./route.js";
  * The query parameters a `vercel.json` rewrite adds when it lands a client
  * path on a grouped function: the route key the request is for, and, where
  * the client path carried more than the key names (the auth catch-all), the
- * path to hand the route in the key's place.
+ * path to hand the route in the key's place. Note that the platform merges
+ * them into the caller's own query and the dispatcher takes them back out,
+ * so a name here is one no route may read: the path is `route-path` and not
+ * `path`, because a File tab names its file in a `path` query, which the
+ * dispatcher once read as the route's path and answered 404 for.
  */
 export const DISPATCH_QUERY = {
   ROUTE: "route",
-  PATH: "path",
+  PATH: "route-path",
 } as const;
 
 const API_PREFIX = "/api/";
